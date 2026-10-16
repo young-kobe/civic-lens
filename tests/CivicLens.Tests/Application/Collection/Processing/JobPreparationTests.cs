@@ -2,6 +2,7 @@ using System.Text;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
+using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
 using CivicLens.Application.Documents;
@@ -22,9 +23,13 @@ public sealed class JobPreparationTests
     private const string CosponsorUrl = SourceUrl + "/119/hr/1/cosponsors?format=json&limit=250";
     private const string ActionsUrl = SourceUrl + "/119/hr/1/actions?format=json&limit=250";
     private const string SummariesUrl = SourceUrl + "/119/hr/1/summaries?format=json&limit=1";
+    private const string VoteListUrl = HouseVoteFixtures.SourceUrl + "/119/1?format=json&limit=250";
+    private const string VoteDetailUrl = HouseVoteFixtures.SourceUrl + "/119/1/100?format=json";
+    private const string VoteMembersUrl = HouseVoteFixtures.SourceUrl + "/119/1/100/members?format=json";
     private static readonly DateOnly Backfill = new(2025, 1, 3);
     private static readonly string ListUrl = new BillStreamWindow(Backfill, Backfill).RequestUrl(SourceUrl);
     private readonly RecordingBillAdmissions admissions = new();
+    private readonly RecordingVoteAdmissions votes = new();
     private readonly ThrowingProcessingStore processing = new();
     private readonly RecordingExtractions extractions = new();
 
@@ -260,8 +265,100 @@ public sealed class JobPreparationTests
         { ApiResource.Bill, DetailUrl, Detail("Z000009", BillGateFixtures.TrackedPolicyArea, 0) },
         { ApiResource.BillCosponsors, CosponsorUrl, Cosponsors("Z000009", next: null) },
         { ApiResource.BillActions, ActionsUrl, """{"actions":[],"pagination":{}}""" },
-        { ApiResource.BillSummaries, SummariesUrl, """{"summaries":[],"pagination":{}}""" }
+        { ApiResource.BillSummaries, SummariesUrl, """{"summaries":[],"pagination":{}}""" },
+        { ApiResource.HouseVoteList, VoteListUrl, """{"houseRollCallVotes":[],"pagination":{}}""" },
+        { ApiResource.HouseVoteDetail, VoteDetailUrl, HouseVoteFixtures.Detail() },
+        { ApiResource.HouseVoteMembers, VoteMembersUrl, HouseVoteFixtures.Members() }
     };
+
+    [Fact]
+    public async Task AVoteListPageIsParsedAgainstItsSessionAndPassedToTheStoreWithItsJob()
+    {
+        var result = await Prepare(ApiResource.HouseVoteList, VoteListUrl, """
+            {"houseRollCallVotes":[{"congress":119,"sessionNumber":1,"rollCallNumber":100,"updateDate":"2025-06-24T08:34:41-04:00"}],
+             "pagination":{}}
+            """, null);
+
+        Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
+        var call = Assert.Single(votes.ListPages);
+        Assert.Equal("job", call.JobId);
+        Assert.Equal(HouseVoteFixtures.Roll100, Assert.Single(call.Page.Votes).Roll);
+    }
+
+    [Fact]
+    public async Task AVoteDetailIsParsedAgainstTheRollOfItsUrlAndNeedsNoIssueConfiguration()
+    {
+        var result = await Prepare(ApiResource.HouseVoteDetail, VoteDetailUrl, HouseVoteFixtures.Detail(), null);
+
+        Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
+        Assert.Equal(("job", HouseVoteFixtures.Vote(100, HouseVoteFixtures.Updated)), Assert.Single(votes.Details));
+        Assert.Equal((1, 0), (result.AdmittedCount, result.DuplicateCount));
+    }
+
+    [Fact]
+    public async Task AVoteDetailIsExtractedOnceAndTheStoreGetsThatExtractionSoTheCandidateBindsTheExactEvidence()
+    {
+        _ = await Prepare(ApiResource.HouseVoteDetail, VoteDetailUrl, HouseVoteFixtures.Detail(), null);
+
+        var saved = Assert.Single(extractions.Saved);
+        Assert.Equal((HouseVoteParser.Version, HouseVoteRenderer.NormalizationVersion, "attempt"),
+            (saved.ParserVersion, saved.NormalizationVersion, saved.SourceAttempt.AttemptId));
+        Assert.StartsWith("House vote: 119 1 100\nUpdated: 2025-06-24T12:34:41Z\n", saved.Text, StringComparison.Ordinal);
+        Assert.Equal(saved.ExtractionId, Assert.Single(votes.ExtractionIds));
+    }
+
+    [Fact]
+    public async Task VoteMembersAreExtractedOnceAndTheStoreGetsThatExtraction()
+    {
+        _ = await Prepare(ApiResource.HouseVoteMembers, VoteMembersUrl, HouseVoteFixtures.Members(), null);
+
+        var saved = Assert.Single(extractions.Saved);
+        Assert.Equal((HouseVoteMembersParser.Version, HouseVoteRenderer.NormalizationVersion, "attempt"),
+            (saved.ParserVersion, saved.NormalizationVersion, saved.SourceAttempt.AttemptId));
+        Assert.Contains("\nMember: A000148, Jake Auchincloss, D, MA, Nay\n", saved.Text, StringComparison.Ordinal);
+        Assert.Equal(saved.ExtractionId, Assert.Single(votes.ExtractionIds));
+    }
+
+    [Fact]
+    public async Task VoteMembersCarryTheirOwnUpdateDateToTheStoreSoAVersionMismatchWithTheDetailCanBeRefused()
+    {
+        _ = await Prepare(ApiResource.HouseVoteMembers, VoteMembersUrl, HouseVoteFixtures.Members("2025-06-25T08:34:41-04:00"), null);
+
+        var call = Assert.Single(votes.Members);
+        Assert.NotEqual(HouseVoteFixtures.Updated, call.Vote.UpdateDate);
+        Assert.Equal(HouseVoteFixtures.Updated.AddDays(1), call.Vote.UpdateDate);
+    }
+
+    [Fact]
+    public async Task VoteMembersAreParsedAgainstTheRollOfTheirUrlAndPassedToTheStoreWithTheirJob()
+    {
+        var result = await Prepare(ApiResource.HouseVoteMembers, VoteMembersUrl, HouseVoteFixtures.Members(), null);
+
+        Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
+        Assert.Equal(("job", HouseVoteFixtures.Vote(100, HouseVoteFixtures.Updated)), Assert.Single(votes.Members));
+    }
+
+    [Theory]
+    [InlineData(ApiResource.HouseVoteList, VoteListUrl)]
+    [InlineData(ApiResource.HouseVoteDetail, VoteDetailUrl)]
+    [InlineData(ApiResource.HouseVoteMembers, VoteMembersUrl)]
+    public async Task AMalformedVoteResponseIsInvalidDataSoTheWorkerBlocksThePermanentFailure(ApiResource resource, string url)
+    {
+        await Assert.ThrowsAsync<InvalidDataException>(() => Prepare(resource, url, """{"unexpected":true}""", null));
+
+        Assert.Empty(votes.ListPages);
+        Assert.Empty(votes.Details);
+        Assert.Empty(votes.Members);
+    }
+
+    [Fact]
+    public async Task ARollCallOtherThanTheOneInTheJobUrlIsInvalidDataSoNoVersionIsRecordedForTheWrongVote()
+    {
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            Prepare(ApiResource.HouseVoteDetail, VoteDetailUrl, HouseVoteFixtures.Detail(roll: 101), null));
+
+        Assert.Empty(votes.Details);
+    }
 
     [Fact]
     public void EveryApiResourceHasACaseInTheNeverExtractedTheory()
@@ -285,7 +382,9 @@ public sealed class JobPreparationTests
         IssueConfigurationRevision? issues, string? fragmentText = null)
     {
         var textExtractor = new FakeTextExtractor(fragmentText);
-        var configured = new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", Backfill);
+        var configured = IsHouseVote(resource)
+            ? new ConfiguredCollectionSource(HouseVoteFixtures.Configuration(), HouseVoteFixtures.SourceId, Backfill)
+            : new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", Backfill);
         var definition = resource is null
             ? configured.CreateJobDefinition(Backfill)
             : configured.CreateApiJobDefinition(resource.Value, url, Backfill);
@@ -293,10 +392,13 @@ public sealed class JobPreparationTests
             new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
         var job = new CollectionJobRecord("job", definition, "key", CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,
             false, [attempt]);
-        var preparation = new JobPreparation(new SingleJob(job), new CapturedAttempts(), new NoDiscoveryAdmissions(), admissions,
+        var preparation = new JobPreparation(new SingleJob(job), new CapturedAttempts(), new NoDiscoveryAdmissions(), admissions, votes,
             new FixedBody(body), processing, extractions, textExtractor, issues);
         return await preparation.PrepareAsync("job", "artifacts", default);
     }
+
+    private static bool IsHouseVote(ApiResource? resource) =>
+        resource is ApiResource.HouseVoteList or ApiResource.HouseVoteDetail or ApiResource.HouseVoteMembers;
 
     private static string Detail(string sponsor, string policyArea, int cosponsors, string updateDate = "2025-01-03T12:00:00Z") =>
         $$$"""
@@ -365,6 +467,37 @@ public sealed class JobPreparationTests
             CongressBillSummariesPage page, string extractionId, CancellationToken cancellationToken)
         {
             SummaryPages.Add((pageJobId, page));
+            ExtractionIds.Add(extractionId);
+            return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
+        }
+    }
+
+    private sealed class RecordingVoteAdmissions : IHouseVoteAdmissionStore
+    {
+        public List<(string JobId, HouseVoteListPage Page)> ListPages { get; } = [];
+        public List<(string JobId, HouseVote Vote)> Details { get; } = [];
+        public List<(string JobId, HouseVote Vote)> Members { get; } = [];
+        public List<string> ExtractionIds { get; } = [];
+
+        public Task<DiscoveryAdmissionResult> AdmitListPageAsync(ConfiguredCollectionSource source, string listJobId,
+            HouseVoteListPage page, CancellationToken cancellationToken)
+        {
+            ListPages.Add((listJobId, page));
+            return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
+        }
+
+        public Task<DiscoveryAdmissionResult> AdmitDetailAsync(ConfiguredCollectionSource source, string detailJobId,
+            HouseVote vote, string extractionId, CancellationToken cancellationToken)
+        {
+            Details.Add((detailJobId, vote));
+            ExtractionIds.Add(extractionId);
+            return Task.FromResult(new DiscoveryAdmissionResult([new DiscoveryAdmissionJob("members", "https://x")], 0, 0));
+        }
+
+        public Task<DiscoveryAdmissionResult> AdmitMembersAsync(ConfiguredCollectionSource source, string membersJobId,
+            HouseVote vote, string extractionId, CancellationToken cancellationToken)
+        {
+            Members.Add((membersJobId, vote));
             ExtractionIds.Add(extractionId);
             return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
         }

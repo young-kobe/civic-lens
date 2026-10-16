@@ -28,6 +28,7 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     private PostgresCollectionJobStore store = null!;
     private PostgresDocumentExtractionStore extractions = null!;
     private StatementCandidateSeeder seeder = null!;
+    private JobExtractionSeeder jobExtractions = null!;
     private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "bill-stream-" + Guid.NewGuid().ToString("N"));
 
     public async Task InitializeAsync()
@@ -38,6 +39,7 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
         extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
         Directory.CreateDirectory(captureRoot);
         seeder = new StatementCandidateSeeder(attempts, extractions, connectionString, captureRoot);
+        jobExtractions = new JobExtractionSeeder(store, extractions, seeder, connectionString, captureRoot);
     }
 
     public async Task DisposeAsync()
@@ -1179,18 +1181,8 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
         return ExtractionAsync(jobId, text, text, "parser", "normalizer");
     }
 
-    private async Task<string> ExtractionAsync(string jobId, string body, string text, string parserVersion, string normalizationVersion)
-    {
-        var captured = await seeder.ImportAsync(body, "https://example.test/pages/a", CandidateJobKind.None);
-        var request = (await store.GetAsync(jobId, default))!.Definition.CreateRequest(captured.AttemptId, captureRoot);
-        var requestJson = JsonSerializer.Serialize(request, CollectionProtocol.JsonOptions);
-        await ExecuteAsync(connectionString, $$"""
-            INSERT INTO collection_job_attempts (attempt_id, job_id, sequence, request_json, started_at, resolution_json, completed_at)
-            VALUES ('{{captured.AttemptId}}', '{{jobId}}',
-                    (SELECT COALESCE(MAX(sequence), 0) + 1 FROM collection_job_attempts WHERE job_id = '{{jobId}}'), '{{requestJson}}', 0, '{}', 0)
-            """);
-        return (await extractions.SaveAsync(new DocumentExtraction(captured, parserVersion, normalizationVersion, text), default)).ExtractionId;
-    }
+    private Task<string> ExtractionAsync(string jobId, string body, string text, string parserVersion, string normalizationVersion) =>
+        jobExtractions.SaveAsync(jobId, body, text, parserVersion, normalizationVersion);
 
     private async Task<(string Decision, string? Reason)> GateOfAsync(string detailJobId)
     {

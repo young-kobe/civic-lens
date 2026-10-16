@@ -159,6 +159,28 @@ WHERE g.decision = 'Passed'
 ORDER BY g.congress, g.bill_type, g.bill_number;
 ```
 
+### Congress.gov House vote stream
+
+The source `congress-house-votes` in `config/federal-coverage.json` and `config/federal-pilot.json` follows the House roll-call votes of the Congress.gov `house-vote` API. It ships with `enabled: false`. To enable it:
+
+1. Get a key at api.congress.gov/sign-up.
+2. Set `CIVIC_LENS_CONGRESS_API_KEY` in the protected environment of the worker. Do not put the key in configuration.
+3. Set `enabled` to `true` for `congress-house-votes` and restart the worker. A restart reads the configuration again.
+
+The source needs no issue file. Each day it reads the whole vote list of every session from `backfillFrom` on, about 4 list pages a day today. The first day admits one detail job and one members job for every roll call. [Votes](architecture/votes.md) holds the sweep and candidate rules.
+
+Configuration loading rejects a vote source whose `admissionPolicy` cannot hold the [251-job rule](architecture/votes.md#admission). Set `maxJobs` and the request, byte, and time totals to fit it.
+
+To list vote versions that have a detail but no candidate yet, run this query. A row can be a members job that is still pending, failed, or blocked:
+
+```sql
+SELECT v.detail_job_id, v.congress, v.session_number, v.roll_call_number
+FROM house_votes v
+LEFT JOIN house_vote_candidates c ON c.detail_job_id = v.detail_job_id
+WHERE c.detail_job_id IS NULL
+ORDER BY v.congress, v.session_number, v.roll_call_number;
+```
+
 ## Postgres adapter and migrations
 
 Set `CIVIC_LENS_DATABASE` in your local environment to a Postgres connection string with Host and Database, and with authentication for your local server. Runtime commands need this variable and have no default database. Keep credentials out of committed files, command arguments, and captured output. The commands need a reachable Postgres server and enough database permissions. They do not install or start Postgres.

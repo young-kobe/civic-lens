@@ -1579,6 +1579,168 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.ToTable("collection_discoveries", (string)null);
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.HouseVotes.HouseVoteCandidateRow", b =>
+                {
+                    b.Property<string>("CandidateId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("candidate_id");
+
+                    b.Property<int?>("BillNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("bill_number");
+
+                    b.Property<string>("BillType")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("bill_type");
+
+                    b.Property<string>("ConfigurationRevisionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("configuration_revision_id");
+
+                    b.Property<int>("Congress")
+                        .HasColumnType("integer")
+                        .HasColumnName("congress");
+
+                    b.Property<long>("CreatedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_at_utc_ticks");
+
+                    b.Property<string>("DetailExtractionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("detail_extraction_id");
+
+                    b.Property<string>("DetailJobId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("detail_job_id");
+
+                    b.Property<string>("MembersExtractionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("members_extraction_id");
+
+                    b.Property<string>("MembersJobId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("members_job_id");
+
+                    b.Property<int>("RollCallNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("roll_call_number");
+
+                    b.Property<int>("SessionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("session_number");
+
+                    b.Property<string>("SourceId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("source_id");
+
+                    b.Property<long>("UpdateDateUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("update_date_utc_ticks");
+
+                    b.HasKey("CandidateId");
+
+                    b.HasIndex("ConfigurationRevisionId");
+
+                    b.HasIndex("DetailExtractionId");
+
+                    b.HasIndex("DetailJobId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_house_vote_candidates_detail_job");
+
+                    b.HasIndex("MembersExtractionId");
+
+                    b.HasIndex("MembersJobId");
+
+                    b.ToTable("house_vote_candidates", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_house_vote_candidates_bill", "(bill_type IS NULL) = (bill_number IS NULL) AND (bill_number IS NULL OR bill_number >= 1)");
+
+                            t.HasCheckConstraint("ck_house_vote_candidates_created", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_house_vote_candidates_id", "candidate_id ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_house_vote_candidates_roll", "congress >= 1 AND session_number IN (1, 2) AND roll_call_number >= 1");
+
+                            t.HasCheckConstraint("ck_house_vote_candidates_update", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.HouseVotes.HouseVoteRow", b =>
+                {
+                    b.Property<string>("DetailJobId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("detail_job_id");
+
+                    b.Property<int?>("BillNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("bill_number");
+
+                    b.Property<string>("BillType")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("bill_type");
+
+                    b.Property<int>("Congress")
+                        .HasColumnType("integer")
+                        .HasColumnName("congress");
+
+                    b.Property<string>("ExtractionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("extraction_id");
+
+                    b.Property<int>("RollCallNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("roll_call_number");
+
+                    b.Property<int>("SessionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("session_number");
+
+                    b.Property<string>("SourceId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("source_id");
+
+                    b.Property<long>("UpdateDateUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("update_date_utc_ticks");
+
+                    b.HasKey("DetailJobId");
+
+                    b.HasIndex("ExtractionId");
+
+                    b.HasIndex("SourceId", "Congress", "SessionNumber", "RollCallNumber", "UpdateDateUtcTicks")
+                        .IsUnique()
+                        .HasDatabaseName("ux_house_votes_version");
+
+                    b.ToTable("house_votes", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_house_votes_bill", "(bill_type IS NULL) = (bill_number IS NULL) AND (bill_number IS NULL OR bill_number >= 1)");
+
+                            t.HasCheckConstraint("ck_house_votes_roll", "congress >= 1 AND session_number IN (1, 2) AND roll_call_number >= 1");
+
+                            t.HasCheckConstraint("ck_house_votes_update", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.Jobs.Persistence.CollectionScheduleRow", b =>
                 {
                     b.Property<string>("SourceId")
@@ -3112,6 +3274,55 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Collection.Persistence.AttemptRow", null)
                         .WithOne()
                         .HasForeignKey("CivicLens.Infrastructure.Collection.Discovery.DiscoveryRow", "AttemptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.HouseVotes.HouseVoteCandidateRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Collection.Jobs.Persistence.ConfigurationRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ConfigurationRevisionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_house_vote_candidates_configuration_revision");
+
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("DetailExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Collection.HouseVotes.HouseVoteRow", null)
+                        .WithMany()
+                        .HasForeignKey("DetailJobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("MembersExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Collection.Jobs.Persistence.JobRow", null)
+                        .WithMany()
+                        .HasForeignKey("MembersJobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.HouseVotes.HouseVoteRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Collection.Jobs.Persistence.JobRow", null)
+                        .WithMany()
+                        .HasForeignKey("DetailJobId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

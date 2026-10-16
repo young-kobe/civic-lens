@@ -1,5 +1,6 @@
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection.Jobs.Persistence;
@@ -133,6 +134,10 @@ public sealed partial class PostgresCollectionJobStore
                 var window = BillStreamWindow.Next(cursor, source.BackfillFrom!.Value, now);
                 return window is null ? null : configured.CreateApiJobDefinition(
                     ApiResource.BillList, window.Value.RequestUrl(source.Url), currentDate);
+            case ApiParser.CongressHouseVoteList:
+                var first = HouseVoteSession.FirstOfSweep(source.BackfillFrom!.Value, currentDate, source.MinimumCongress!.Value);
+                return first is null ? null : configured.CreateApiJobDefinition(
+                    ApiResource.HouseVoteList, HouseVoteListUrl.FirstPage(source.Url, first.Value), currentDate);
             default:
                 throw new ArgumentOutOfRangeException(nameof(source));
         }

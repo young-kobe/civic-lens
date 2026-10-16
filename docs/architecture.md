@@ -33,6 +33,7 @@ Implemented:
 
 - configured collection with durable jobs, discovery, and admission
 - the Congress.gov bill stream with its relevance gate and action candidates
+- the Congress.gov House vote stream with its vote candidates
 - text extraction, history, and comparison
 - AI drafting of document-change accounts
 - the statement gate and statement drafting
@@ -309,12 +310,16 @@ This is the only navigation index.
 | Preparation, extraction and comparison stages | [Collection](architecture/collection.md#preparation) | `src/CivicLens.Application/Collection/Processing/JobPreparation.cs` |
 | Sources page | [Collection](architecture/collection.md#sources-page) | `src/CivicLens.Host/Collection/SourcesPage.razor` |
 | CLI collect and import commands | [Collection](architecture/collection.md#cli-composition) | `src/CivicLens.Host/Program.cs` |
-| Generated schema: tables, keys, checks, indexes, triggers | [collection](architecture/schema/collection.md), [bills](architecture/schema/bills.md), [documents](architecture/schema/documents.md), [analysis](architecture/schema/analysis.md), [statements](architecture/schema/statements.md), [actions](architecture/schema/actions.md), [briefs](architecture/schema/briefs.md), [review](architecture/schema/review.md), [publication](architecture/schema/publication.md) | `tests/CivicLens.Tests/Infrastructure/SchemaReferenceTests.cs` |
+| Generated schema: tables, keys, checks, indexes, triggers | [collection](architecture/schema/collection.md), [bills](architecture/schema/bills.md), [votes](architecture/schema/votes.md), [documents](architecture/schema/documents.md), [analysis](architecture/schema/analysis.md), [statements](architecture/schema/statements.md), [actions](architecture/schema/actions.md), [briefs](architecture/schema/briefs.md), [review](architecture/schema/review.md), [publication](architecture/schema/publication.md) | `tests/CivicLens.Tests/Infrastructure/SchemaReferenceTests.cs` |
 | Collection tables and the import lock | [Collection](architecture/collection.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Collection/PostgresCollectionAttemptStore.cs` |
 | Congress.gov bill list, window, cursor | [Bills](architecture/bills.md#daily-window) | `src/CivicLens.Application/Collection/Bills/BillStreamWindow.cs` |
 | Bill gate and follow-on pages | [Bills](architecture/bills.md#bill-gate) | `src/CivicLens.Application/Collection/Bills/BillGate.cs` |
 | Bill page extraction text | [Bills](architecture/bills.md#extraction) | `src/CivicLens.Application/Collection/Bills/CongressBillRenderer.cs` |
 | Action candidates | [Bills](architecture/bills.md#action-candidate) | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ActionCandidates.cs` |
+| Congress.gov House vote sweep, sessions, URLs | [Votes](architecture/votes.md#daily-sweep) | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteSession.cs` |
+| House vote parsers and admission | [Votes](architecture/votes.md#parsing) | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteParser.cs` |
+| Vote candidates | [Votes](architecture/votes.md#admission) | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.HouseVotes.cs` |
+| Vote tables: versions and candidates | [Votes](architecture/votes.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Collection/HouseVotes/` |
 | Action drafting | [Actions](architecture/actions.md#step) | `src/CivicLens.Application/Actions/ActionDraftStep.cs` |
 | Action revisions and the person edit rule | [Actions](architecture/actions.md#revision-and-append) | `src/CivicLens.Core/Actions/ActionDraftRevision.cs` |
 | Action review pages, bulk approval, sponsorship-only view | [Actions](architecture/actions.md#action-review) | `src/CivicLens.Host/Review/ActionEditor.razor` |

@@ -1,5 +1,6 @@
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
+using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
 
@@ -89,6 +90,28 @@ public sealed class ConfiguredCollectionSource
         new(BillStreamJobKeys.NextBillPage(SourceId, resource, parentJobId),
             CreateApiJobDefinition(resource, nextUrl, currentDate));
 
+    public ApiJobBatch CreateHouseVoteListBatch(string listJobId, HouseVoteListPage page, DateOnly currentDate)
+    {
+        var source = ReadHouseVoteSource();
+        var template = PrepareDefinition(source, currentDate, null, article: false);
+        var details = page.Votes
+            .Select(vote => new ApiJob(HouseVoteJobKeys.Detail(SourceId, vote),
+                template with { ApiResource = ApiResource.HouseVoteDetail, Url = HouseVoteRollUrl.Detail(source.Url, vote.Roll) }))
+            .DistinctBy(job => job.IdempotencyKey);
+        var nextUrl = page.Next ?? FollowingSessionUrl(source, page.Session, currentDate);
+        var nextPage = nextUrl is null
+            ? null
+            : new ApiJob(HouseVoteJobKeys.NextPage(SourceId, listJobId),
+                CreateApiJobDefinition(ApiResource.HouseVoteList, nextUrl, currentDate));
+        return new ApiJobBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), template,
+            nextPage is null ? [.. details] : [.. details, nextPage]);
+    }
+
+    public ApiJob CreateHouseVoteMembersJob(HouseVote vote, DateOnly currentDate) =>
+        new(HouseVoteJobKeys.Members(SourceId, vote),
+            CreateApiJobDefinition(ApiResource.HouseVoteMembers, HouseVoteRollUrl.Members(ReadHouseVoteSource().Url, vote.Roll),
+                currentDate));
+
     public ApiJobBatch CreateApiBatch(IReadOnlyList<ApiJob> jobs, DateOnly currentDate)
     {
         var source = ReadApiSource();
@@ -125,6 +148,14 @@ public sealed class ConfiguredCollectionSource
         definition.Validate();
         return definition;
     }
+
+    private static string? FollowingSessionUrl(WatchedSourceConfiguration source, HouseVoteSession session, DateOnly today) =>
+        session.Following(today) is { } following ? HouseVoteListUrl.FirstPage(source.Url, following) : null;
+
+    private WatchedSourceConfiguration ReadHouseVoteSource() =>
+        ReadSource() is { ApiParser: ApiParser.CongressHouseVoteList } source
+            ? source
+            : throw new ArgumentException("House vote admission requires a configured Congress House vote source.");
 
     private WatchedSourceConfiguration ReadApiSource() =>
         ReadSource() is { ApiParser: not null } source

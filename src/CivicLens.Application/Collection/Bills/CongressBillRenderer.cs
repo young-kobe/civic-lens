@@ -1,12 +1,11 @@
 using System.Globalization;
-using System.Text.RegularExpressions;
+using static CivicLens.Application.Collection.RenderedText;
 
 namespace CivicLens.Application.Collection.Bills;
 
-public static partial class CongressBillRenderer
+public static class CongressBillRenderer
 {
     public const string NormalizationVersion = "congress-bill-render-v1";
-    private const string DateFormat = "yyyy-MM-dd";
     private const string TimeFormat = "HH:mm:ss";
     internal const string UpdateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'";
 
@@ -103,17 +102,6 @@ public static partial class CongressBillRenderer
     private static string Page(CongressBillListItem bill, IEnumerable<string> factLines) =>
         string.Join('\n', factLines.Prepend(IdentityLine(bill.Congress, bill.Type, bill.Number)));
 
-    private static string Date(DateOnly date) => date.ToString(DateFormat, CultureInfo.InvariantCulture);
-
     private static string IdentityLine(int congress, string type, int number) =>
         Line("Bill", string.Join(' ', Count(congress), type, Count(number)));
-
-    private static string Line(string label, string value) => $"{label}: {SingleLine(value)}".TrimEnd();
-
-    private static string SingleLine(string value) => LineBreaks().Replace(value, " ").Trim();
-
-    private static string Count(int value) => value.ToString(CultureInfo.InvariantCulture);
-
-    [GeneratedRegex(@"\r\n|[\r\n\v\f\u0085\u2028\u2029]")]
-    private static partial Regex LineBreaks();
 }

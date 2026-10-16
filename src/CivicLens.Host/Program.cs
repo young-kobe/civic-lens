@@ -196,7 +196,7 @@ try
         var comparisons = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
         var processingStore = PostgresEvidenceProcessingStore.FromConnectionString(connectionString);
         var processing = new EvidenceProcessingWorker(jobs,
-            new JobPreparation(jobs, attempts, jobs, jobs, new CaptureBodyReader(), processingStore, extractions, textExtractor, issues),
+            new JobPreparation(jobs, attempts, jobs, jobs, jobs, new CaptureBodyReader(), processingStore, extractions, textExtractor, issues),
             processingStore,
             new ExtractDocument(attempts, textExtractor, extractions),
             new GetDocumentHistory(PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
