@@ -221,13 +221,13 @@ public sealed partial class PostgresBillStreamTests
     private async Task DraftAsync(DateTimeOffset updatedAt, string output, string? title = null)
     {
         _ = await ReadableCandidateAsync("A000001", updatedAt, title: title);
-        Assert.Single((await RunActionWorkerAsync(new FakeActionDraftModel().Draft(output))).Requests);
+        Assert.Single((await RunActionWorkerAsync(new FakeHeadlineSummaryModel().Draft(output))).Requests);
     }
 
     private async Task AddSponsorAsync(DateTimeOffset updatedAt)
     {
         _ = await ReadableCandidateAsync("A000001", updatedAt, cosponsor: "B000002");
-        Assert.Empty((await RunActionWorkerAsync(new FakeActionDraftModel())).Requests);
+        Assert.Empty((await RunActionWorkerAsync(new FakeHeadlineSummaryModel())).Requests);
     }
 
     private Task<ReviewDecision> DecideAsync(int revision, int stateVersion, ReviewDecisionKind kind, string? note = null) =>

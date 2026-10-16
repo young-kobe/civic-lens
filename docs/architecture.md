@@ -38,6 +38,7 @@ Implemented:
 - AI drafting of document-change accounts
 - the statement gate and statement drafting
 - AI drafting of bill action records
+- AI drafting of House vote records, one for each roll call, from the vote candidates
 - action review, with bulk approval of sponsorship-only revisions
 - brief review: person edits, version-bound decisions, and a derived flag for changed cited records
 - AI drafting of weekly briefs from the records published in a closed week
@@ -181,7 +182,7 @@ The analysis queues share the `civic_lens_analysis` channel. The notify trigger 
 The keys, in their declared order:
 
 - `civic-lens-collection-jobs`: `PostgresCollectionJobStore` takes it at the start of each admission, claim, and settlement transaction. Discovery admission needs no other key, because this key already serializes every admission.
-- Review keys: `civic-lens-document-change-review`, `civic-lens-statement-review`, `civic-lens-action-review`, and `civic-lens-brief-review`. Publication takes all four in the order of `PostgresAdvisoryLock.ReviewKeysInOrder`: document change, statement, action, then brief.
+- Review keys: `civic-lens-document-change-review`, `civic-lens-statement-review`, `civic-lens-action-review`, `civic-lens-vote-review`, and `civic-lens-brief-review`. Publication takes the document change, statement, action, and brief keys in the order of `PostgresAdvisoryLock.ReviewKeysInOrder`. The vote key is declared before the brief key. Only vote drafting takes it today. Vote publication will add it to that order.
 - `civic-lens-collection-import`: the import store takes it for each write. No transaction holds it with another key.
 
 A transaction that takes a brief queue row lock takes it before `civic-lens-brief-review`. The worker settlement locks its row and then takes the brief key. A publication commit, a release activation, and a review decision that must requeue a brief therefore lock every brief queue row in key order first. They use `BriefStaleness.TakeLocksAsync` and then take the brief key. The commit and the activation take the earlier review keys (`PostgresAdvisoryLock.ReviewKeysBeforeBriefs`), then the brief rows, then the brief key.
@@ -247,6 +248,10 @@ Before the first production deploy ([R-23](roadmap.md#later)), reset the develop
 | Action draft task | `action-draft-v2` | `src/CivicLens.Application/Actions/ActionDraftTask.cs` | Action analysis runs and queue entries | Task flow or output handling changes |
 | Action draft prompt | `action-draft-prompt-v2` | same file | Action analysis runs | Prompt text or input framing changes |
 | Action draft schema | `action-draft-schema-v1` | same file | Action analysis runs | The model output schema changes |
+| Vote draft task | `vote-draft-v1` | `src/CivicLens.Application/Votes/VoteDraftTask.cs` | Vote analysis runs and queue entries | Task flow or output handling changes |
+| Vote draft prompt | `vote-draft-prompt-v1` | same file | Vote analysis runs | Prompt text or input framing changes |
+| Vote draft schema | `vote-draft-schema-v1` | same file | Vote analysis runs | The model output schema changes |
+| Vote fingerprint | `vote-fingerprint-v1` | `src/CivicLens.Application/Votes/VoteFingerprint.cs` | The run input hash of a draft that makes no call | The canonical text of the fingerprint changes |
 | Sponsorship fingerprint | `action-fingerprint-v1` | `src/CivicLens.Application/Collection/Bills/ActionFingerprint.cs` | The fingerprint in each action revision | The canonical text of an entry changes |
 | Brief draft task | `brief-draft-v1` | `src/CivicLens.Application/Briefs/BriefDraftTask.cs` | Brief analysis runs and queue entries | Task flow or output handling changes |
 | Brief draft prompt | `brief-draft-prompt-v1` | same file | Brief analysis runs | Prompt text or input framing changes |
@@ -320,6 +325,10 @@ This is the only navigation index.
 | House vote parsers and admission | [Votes](architecture/votes.md#parsing) | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteParser.cs` |
 | Vote candidates | [Votes](architecture/votes.md#admission) | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.HouseVotes.cs` |
 | Vote tables: versions and candidates | [Votes](architecture/votes.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Collection/HouseVotes/` |
+| Vote drafting, facts, and the member-vote copy | [Votes](architecture/votes.md#drafting) | `src/CivicLens.Application/Votes/VoteDraftStep.cs` |
+| Vote revisions and the append | [Votes](architecture/votes.md#record-and-append) | `src/CivicLens.Core/Votes/VoteDraftRevision.cs` |
+| Vote queue outcomes and codes | [Votes](architecture/votes.md#outcomes) | `src/CivicLens.Application/Votes/VoteDraftErrorCodes.cs` |
+| Vote drafting tables: queue, runs, budget, drafts, revisions, decisions | [Votes](architecture/votes.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Votes/` |
 | Action drafting | [Actions](architecture/actions.md#step) | `src/CivicLens.Application/Actions/ActionDraftStep.cs` |
 | Action revisions and the person edit rule | [Actions](architecture/actions.md#revision-and-append) | `src/CivicLens.Core/Actions/ActionDraftRevision.cs` |
 | Action review pages, bulk approval, sponsorship-only view | [Actions](architecture/actions.md#action-review) | `src/CivicLens.Host/Review/ActionEditor.razor` |

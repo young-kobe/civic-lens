@@ -15,7 +15,7 @@ namespace CivicLens.Tests.Infrastructure.Collection.HouseVotes;
 
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
-public sealed class PostgresHouseVoteTests(PostgresCollection postgres) : IAsyncLifetime
+public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private const string SourceUrl = HouseVoteFixtures.SourceUrl;
     private const string TestJobKeyPrefix = "test-job/";

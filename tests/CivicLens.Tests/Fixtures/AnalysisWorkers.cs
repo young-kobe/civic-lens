@@ -4,6 +4,7 @@ using CivicLens.Application.Analysis;
 using CivicLens.Application.Briefs;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Statements;
+using CivicLens.Application.Votes;
 using CivicLens.Core.Analysis;
 
 namespace CivicLens.Tests.Fixtures;
@@ -26,6 +27,10 @@ internal static class AnalysisWorkers
     public static AnalysisWorker<ActionDraftRun> ActionDrafting(IActionDraftStore store, IAnalysisStatusStore status, ActionBillReader reader,
         IActionDraftModel model, ActionDraftSettings settings, IssueConfigurationRevision issues, TimeProvider clock) =>
         new(new ActionDraftStep(store, reader, model, settings, issues), status, clock);
+
+    public static AnalysisWorker<VoteDraftRun> VoteDrafting(IVoteDraftStore store, IAnalysisStatusStore status, VoteReader reader,
+        IVoteDraftModel model, VoteDraftSettings settings, TimeProvider clock) =>
+        new(new VoteDraftStep(store, reader, model, settings), status, clock);
 
     public static AnalysisWorker<BriefDraftRun> BriefDrafting(IBriefDraftStore store, IAnalysisStatusStore status, IBriefDraftModel model,
         BriefDraftSettings settings, IReadOnlyDictionary<string, string> officialNames, TimeProvider clock) =>

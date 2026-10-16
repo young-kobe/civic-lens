@@ -1,4 +1,3 @@
-using System.Text.Json;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Review;
@@ -12,7 +11,7 @@ public static class ActionDraftResolver
         DateTimeOffset createdAtUtc)
     {
         var snapshot = context.Snapshot;
-        var output = Parse(outputJson);
+        var output = HeadlineSummaryOutput.Parse(outputJson);
         if (output is null)
             return AnalysisResolution<ActionDraftRevision>.Reject(["The output is not valid JSON for the action schema."], false);
         var errors = new List<string>();
@@ -33,7 +32,7 @@ public static class ActionDraftResolver
             (current.Headline, current.Summary, current.TextOrigin, current.Suggestion));
     }
 
-    private static ActionDraftRevision Assemble(ActionDraftOutput output, ActionDraftContext context, string runId,
+    private static ActionDraftRevision Assemble(HeadlineSummaryOutput output, ActionDraftContext context, string runId,
         DateTimeOffset createdAtUtc)
     {
         var current = context.Evidence.Current;
@@ -80,14 +79,4 @@ public static class ActionDraftResolver
 
     private static HashSet<string> SponsorIdsOf(ActionBillSnapshot snapshot) =>
         snapshot.Sponsorships.Where(item => item.Role == ActionSponsorshipRole.Sponsor).Select(item => item.PersonId).ToHashSet(StringComparer.Ordinal);
-
-    private static ActionDraftOutput? Parse(string outputJson)
-    {
-        try
-        {
-            var output = JsonSerializer.Deserialize<ActionDraftOutput>(outputJson, OutputJson);
-            return output is { Headline: not null, Summary: not null } ? output : null;
-        }
-        catch (JsonException) { return null; }
-    }
 }

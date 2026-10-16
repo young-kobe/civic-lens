@@ -117,15 +117,15 @@ public sealed partial class PostgresBillStreamTests
     public async Task ADelayedOlderCandidateIsSupersededSoItsStaleContentNeverBecomesTheNewestRevision()
     {
         var march3 = await ReadableCandidateAsync(sponsor: "A000001");
-        await RunActionWorkerAsync(new FakeActionDraftModel().Draft(DraftableOutput));
+        await RunActionWorkerAsync(new FakeHeadlineSummaryModel().Draft(DraftableOutput));
         var march4 = await ReadableCandidateAsync(sponsor: "B000002", UpdatedAt.AddDays(1));
         var march5 = await ReadableCandidateAsync(sponsor: "A000001", UpdatedAt.AddDays(2));
         await ExecuteAsync(connectionString,
             $"UPDATE action_analysis SET status = 'RetryWaiting', retry_at = 3155378975999999999 WHERE candidate_id = '{march4}'");
-        Assert.Empty((await RunActionWorkerAsync(new FakeActionDraftModel())).Requests);
+        Assert.Empty((await RunActionWorkerAsync(new FakeHeadlineSummaryModel())).Requests);
         await ExecuteAsync(connectionString, $"UPDATE action_analysis SET status = 'Pending', retry_at = NULL WHERE candidate_id = '{march4}'");
 
-        var model = await RunActionWorkerAsync(new FakeActionDraftModel());
+        var model = await RunActionWorkerAsync(new FakeHeadlineSummaryModel());
 
         Assert.Empty(model.Requests);
         var queue = (await QueueAsync()).ToDictionary(row => row.CandidateId, row => (row.Status, row.ErrorCode));
@@ -155,7 +155,7 @@ public sealed partial class PostgresBillStreamTests
         var store = ActionStore();
         Assert.Equal([older, newer], (await store.GetEligibleAsync(10, default)).Select(row => row.SubjectId));
 
-        var model = await RunActionWorkerAsync(new FakeActionDraftModel().Draft(DraftableOutput));
+        var model = await RunActionWorkerAsync(new FakeHeadlineSummaryModel().Draft(DraftableOutput));
 
         Assert.Single(model.Requests);
         var current = (await store.ReadEvidenceAsync(older, default))!.Current!;
@@ -170,7 +170,7 @@ public sealed partial class PostgresBillStreamTests
     {
         var candidate = await ReadableCandidateAsync(sponsor: "Z000009");
 
-        var model = await RunActionWorkerAsync(new FakeActionDraftModel());
+        var model = await RunActionWorkerAsync(new FakeHeadlineSummaryModel());
 
         Assert.Empty(model.Requests);
         Assert.Equal([(candidate, "action-draft", "Succeeded", ActionDraftErrorCodes.NoTrackedOfficial, 0)], await QueueAsync());
@@ -186,10 +186,10 @@ public sealed partial class PostgresBillStreamTests
     public async Task AnUnchangedBillSettlesWithABypassedRunThatKeepsTheSameContextAsTheDraftedRun()
     {
         var candidate = await ReadableCandidateAsync(sponsor: "A000001");
-        await RunActionWorkerAsync(new FakeActionDraftModel().Draft(DraftableOutput));
+        await RunActionWorkerAsync(new FakeHeadlineSummaryModel().Draft(DraftableOutput));
         await ExecuteAsync(connectionString, $"UPDATE action_analysis SET status = 'Pending' WHERE candidate_id = '{candidate}'");
 
-        var model = await RunActionWorkerAsync(new FakeActionDraftModel());
+        var model = await RunActionWorkerAsync(new FakeHeadlineSummaryModel());
 
         Assert.Empty(model.Requests);
         Assert.Equal([(candidate, "action-draft", "Succeeded", ActionDraftErrorCodes.Unchanged, 0)], await QueueAsync());
@@ -221,7 +221,7 @@ public sealed partial class PostgresBillStreamTests
         Assert.True(await store.CheckpointAsync(AnalysisCheckpoint.From(claim, State.Blocked, ActionDraftErrorCodes.ExtractionVersionChanged),
             null, default));
 
-        var model = await RunActionWorkerAsync(new FakeActionDraftModel());
+        var model = await RunActionWorkerAsync(new FakeHeadlineSummaryModel());
 
         Assert.Empty(model.Requests);
         Assert.Equal(("Succeeded", ActionDraftErrorCodes.SupersededByNewerCandidate),
@@ -415,7 +415,7 @@ public sealed partial class PostgresBillStreamTests
         await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, $"{insert} VALUES ('NOT-A-HASH', '{SourceId}', 119, 'hr', 8, 1, 0, 'AwaitingReview', 0, 0)"));
     }
 
-    private static readonly string DraftableOutput = ActionDraftOutputs.Output(headline: "A sponsored a housing measure", summary: "A filed this measure.");
+    private static readonly string DraftableOutput = HeadlineSummaryOutputs.Output(headline: "A sponsored a housing measure", summary: "A filed this measure.");
 
     private static string RecordId => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"{SourceId.Length}:{SourceId}119:hr:7")));
 
@@ -477,7 +477,7 @@ public sealed partial class PostgresBillStreamTests
             CongressBillRenderer.NormalizationVersion);
     }
 
-    private async Task<FakeActionDraftModel> RunActionWorkerAsync(FakeActionDraftModel model)
+    private async Task<FakeHeadlineSummaryModel> RunActionWorkerAsync(FakeHeadlineSummaryModel model)
     {
         var reader = new ActionBillReader(store, new ApiResponseReader(PostgresCollectionAttemptStore.FromConnectionString(connectionString),
             new CaptureBodyReader()), new ActionBillWorld.FragmentExtractor(), captureRoot);

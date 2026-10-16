@@ -57,7 +57,7 @@ public sealed class ActionBillReader(ICollectionJobStore jobs, ApiResponseReader
         return new(bill, sponsorships, ActionFingerprint.Compute(sponsorships), newest,
             newest is null ? null : BillSummarySelection.VersionOf(newest.Summary),
             newestPage is null ? null : ActionCitations.SummaryBlock(newestPage, newest!.Summary),
-            bill.PolicyArea is null ? null : ActionCitations.Line(detailPage, detailLines, "Policy area: "),
+            bill.PolicyArea is null ? null : LineCitations.Line(detailPage.ExtractionId, detailLines, "Policy area: "),
             configuredPeople.Where(person => involved.Contains(person.Id)).ToImmutableDictionary(person => person.Id, person => person.Name),
             [.. configuredPeople.Where(person => !involved.Contains(person.Id)).Select(person => person.Name)]);
     }
@@ -70,7 +70,7 @@ public sealed class ActionBillReader(ICollectionJobStore jobs, ApiResponseReader
     {
         foreach (var person in people.Where(person => bill.SponsorBioguideIds.Contains(person.BioguideId!)))
             yield return new ActionSponsorship(person.Id, person.BioguideId!, ActionSponsorshipRole.Sponsor, false, bill.IntroducedDate, null,
-                [ActionCitations.Line(detailPage, detailLines, $"Sponsor: {person.BioguideId}")!, ActionCitations.Line(detailPage, detailLines, "Introduced: ")!]);
+                [LineCitations.Line(detailPage.ExtractionId, detailLines, $"Sponsor: {person.BioguideId}")!, LineCitations.Line(detailPage.ExtractionId, detailLines, "Introduced: ")!]);
     }
 
     private async Task<(string? ErrorCode, IEnumerable<ActionSponsorship> Sponsorships)> ReadCosponsorPageAsync(ActionDraftPage page,
@@ -81,7 +81,7 @@ public sealed class ActionBillReader(ICollectionJobStore jobs, ApiResponseReader
         var bill = PageBillOf(source, ApiResource.BillCosponsors, job);
         var parsed = CongressBillCosponsorsParser.Parse(response.Body, response.Request, source.SourceUrl, bill);
         if (TextError(page, CongressBillRenderer.RenderCosponsors(bill, parsed)) is { } error) return (error, []);
-        var citations = ActionCitations.ExactLines(page);
+        var citations = LineCitations.ExactLines(page.ExtractionId, page.Text);
         var found = parsed.Cosponsors.Join(people, cosponsor => cosponsor.BioguideId, person => person.BioguideId,
             (cosponsor, person) => new ActionSponsorship(person.Id, person.BioguideId!, ActionSponsorshipRole.Cosponsor,
                 cosponsor.IsOriginalCosponsor, cosponsor.SponsorshipDate, cosponsor.SponsorshipWithdrawnDate,

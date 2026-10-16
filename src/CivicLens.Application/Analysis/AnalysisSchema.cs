@@ -18,4 +18,24 @@ public static class AnalysisSchema
         if (values.Length > 0) id["enum"] = new JsonArray([.. values.Select(value => (JsonNode)value)]);
         return id;
     }
+
+    public static string HeadlineAndSummary()
+    {
+        var schema = new JsonObject
+        {
+            ["type"] = "object",
+            ["additionalProperties"] = false,
+            ["required"] = new JsonArray("headline", "summary"),
+            ["properties"] = new JsonObject { ["headline"] = TextWithConfidence(), ["summary"] = TextWithConfidence() }
+        };
+        return schema.ToJsonString(AnalysisPromptText.CompactJson);
+    }
+
+    private static JsonObject TextWithConfidence() => new()
+    {
+        ["type"] = "object",
+        ["additionalProperties"] = false,
+        ["required"] = new JsonArray("text", "confidence"),
+        ["properties"] = new JsonObject { ["text"] = new JsonObject { ["type"] = "string" }, ["confidence"] = Number() }
+    };
 }

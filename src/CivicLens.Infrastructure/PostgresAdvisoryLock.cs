@@ -12,6 +12,7 @@ internal static class PostgresAdvisoryLock
     internal const string DocumentChangeReview = "civic-lens-document-change-review";
     internal const string StatementReview = "civic-lens-statement-review";
     internal const string ActionReview = "civic-lens-action-review";
+    internal const string VoteReview = "civic-lens-vote-review";
     internal const string BriefReview = "civic-lens-brief-review";
     // No transaction holds this with another key.
     internal const string CollectionImport = "civic-lens-collection-import";
