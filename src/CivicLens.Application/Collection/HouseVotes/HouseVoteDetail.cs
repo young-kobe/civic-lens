@@ -9,4 +9,5 @@ public sealed record HouseVoteDetail(
     string? LegislationType,
     string? LegislationNumber,
     IReadOnlyList<HouseVotePartyTotal> PartyTotals,
+    IReadOnlyList<HouseVoteCandidateTotal> CandidateTotals,
     string? SourceDataUrl);

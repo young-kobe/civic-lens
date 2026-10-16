@@ -20,18 +20,36 @@ public static class HouseVoteParser
         public string? VoteType { get; init; }
         public string? Result { get; init; }
         public string? SourceDataUrl { get; init; }
-        public WirePartyTotal?[]? VotePartyTotal { get; init; }
+        public WireTotal?[]? VotePartyTotal { get; init; }
 
-        public HouseVoteDetail ToDetail(HouseVoteRoll expected) => new(ToVote(expected), StartDate, VoteQuestion, VoteType, Result,
-            LegislationType, LegislationNumber, ReadPartyTotals(), SourceDataUrl);
+        public HouseVoteDetail ToDetail(HouseVoteRoll expected)
+        {
+            var totals = (VotePartyTotal ?? []).Select(ReadTotal).ToArray();
+            return new(ToVote(expected), StartDate, VoteQuestion, VoteType, Result, LegislationType, LegislationNumber,
+                [.. totals.Where(total => total.IsParty).Select(total => total.ToPartyTotal())],
+                [.. totals.Where(total => !total.IsParty).Select(total => total.ToCandidateTotal())], SourceDataUrl);
+        }
 
-        private HouseVotePartyTotal[] ReadPartyTotals() => [.. (VotePartyTotal ?? []).Select(ReadPartyTotal)];
-
-        private static HouseVotePartyTotal ReadPartyTotal(WirePartyTotal? total) =>
-            total is { VoteParty: { } party } && !string.IsNullOrWhiteSpace(party)
-                ? new HouseVotePartyTotal(party, total.YeaTotal, total.NayTotal, total.PresentTotal, total.NotVotingTotal)
-                : throw new InvalidDataException("House vote party totals must name a party.");
+        private static WireTotal ReadTotal(WireTotal? total)
+        {
+            if (total is null) throw new InvalidDataException("House vote totals must be objects.");
+            if (total.IsParty == total.IsCandidate)
+                throw new InvalidDataException("House vote totals must name a party or a candidate, not both or neither.");
+            if (total.IsCandidate && total.Total is not >= 0)
+                throw new InvalidDataException("House vote candidate totals must have a total of 0 or more.");
+            return total;
+        }
     }
 
-    private sealed record WirePartyTotal(string? VoteParty, int? YeaTotal, int? NayTotal, int? PresentTotal, int? NotVotingTotal);
+    private sealed record WireTotal(string? VoteParty, int? YeaTotal, int? NayTotal, int? PresentTotal, int? NotVotingTotal,
+        string? Candidate, int? Total)
+    {
+        public bool IsParty => !string.IsNullOrWhiteSpace(VoteParty);
+
+        public bool IsCandidate => !string.IsNullOrWhiteSpace(Candidate);
+
+        public HouseVotePartyTotal ToPartyTotal() => new(VoteParty!, YeaTotal, NayTotal, PresentTotal, NotVotingTotal);
+
+        public HouseVoteCandidateTotal ToCandidateTotal() => new(Candidate!, Total!.Value);
+    }
 }

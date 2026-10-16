@@ -16,6 +16,7 @@ public static class HouseVoteRenderer
         AddLine(lines, "Result", detail.Result);
         AddLine(lines, "Legislation", LegislationOf(detail));
         lines.AddRange(detail.PartyTotals.Select(PartyTotalLine).Order(StringComparer.Ordinal));
+        lines.AddRange(detail.CandidateTotals.Select(CandidateTotalLine).Order(StringComparer.Ordinal));
         AddLine(lines, "Source data", detail.SourceDataUrl);
         return string.Join('\n', lines);
     }
@@ -49,6 +50,9 @@ public static class HouseVoteRenderer
         var present = counts.Where(count => count.Value is not null).Select(count => $"{count.Label} {Count(count.Value!.Value)}");
         return Line($"Party total {total.Party}", string.Join(", ", present));
     }
+
+    private static string CandidateTotalLine(HouseVoteCandidateTotal total) =>
+        Line($"Candidate total {SingleLine(total.Candidate)}", Count(total.Total));
 
     private static string MemberLine(HouseVoteMember member)
     {

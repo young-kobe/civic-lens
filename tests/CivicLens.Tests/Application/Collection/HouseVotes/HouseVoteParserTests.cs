@@ -54,6 +54,29 @@ public sealed class HouseVoteParserTests
         Assert.Throws<InvalidDataException>(() => Parse(HouseVoteFixtures.Detail(legislation: legislation)));
     }
 
+    [Fact]
+    public void TheSpeakerElectionParsesWithCandidateTotalsAndNoPartyTotalsBecauseItHasNoParties()
+    {
+        var vote = ParseSpeakerElection("""{"candidate":"Jeffries","total":215},{"candidate":"Emmer","total":1},{"candidate":"Johnson (LA)","total":218}""");
+
+        Assert.Empty(vote.PartyTotals);
+        Assert.Equal(
+            [new HouseVoteCandidateTotal("Jeffries", 215), new HouseVoteCandidateTotal("Emmer", 1), new HouseVoteCandidateTotal("Johnson (LA)", 218)],
+            vote.CandidateTotals);
+    }
+
+    [Theory]
+    [InlineData("""{"candidate":"Jeffries","total":215,"voteParty":"D"}""")]
+    [InlineData("""{"yeaTotal":1}""")]
+    [InlineData("""{"candidate":" ","total":1}""")]
+    [InlineData("""{"candidate":"Jeffries"}""")]
+    [InlineData("""{"candidate":"Jeffries","total":-1}""")]
+    [InlineData("null")]
+    public void ATotalMustBeExactlyOneOfAPartyTotalOrACandidateTotalWithACountSoNoCountIsMisfiled(string total)
+    {
+        Assert.Throws<InvalidDataException>(() => ParseSpeakerElection(total));
+    }
+
     [Theory]
     [InlineData("{")]
     [InlineData("null")]
@@ -71,6 +94,12 @@ public sealed class HouseVoteParserTests
     {
         Assert.Throws<InvalidDataException>(() => Parse(HouseVoteFixtures.Detail(roll: roll, session: session)));
     }
+
+    private static HouseVoteDetail ParseSpeakerElection(string totals) => HouseVoteParser.Parse(Encoding.UTF8.GetBytes($$$"""
+        {"houseRollCallVote":{"congress":119,"result":"Johnson (LA)","rollCallNumber":2,"sessionNumber":1,
+         "updateDate":"2025-06-24T08:44:27-04:00","votePartyTotal":[{{{totals}}}],
+         "voteQuestion":"Election of the Speaker","voteType":"Yea-and-Nay"}}
+        """), new HouseVoteRoll(HouseVoteFixtures.FirstSession, 2));
 
     private static HouseVoteDetail Parse(string json) =>
         HouseVoteParser.Parse(Encoding.UTF8.GetBytes(json), HouseVoteFixtures.Roll100);
