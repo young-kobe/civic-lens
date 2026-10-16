@@ -265,4 +265,5 @@ All are owner commands. Variables and examples are in [operations](../operations
 - The prompt does not include the candidate update date, and no page renders it yet.
 - Sponsorship changes draft at once. Measure how often an approved record gets a new revision within a few days. Add a waiting window only if that rate is high.
 - After the first action slice, build in this order: House votes, reviewed relationships between statements and actions, then Congressional Record articles as a statement connector. Cosponsorship is cheap position-taking, so votes carry most of the signal about whether words match deeds. Floor speeches cover every member, including officials with no usable web source.
-- Offices and dated terms are a separate step before House votes. Senate votes need senate.gov data and a `lis_member_id` crosswalk, because Congress.gov has neither.
+- House votes do not need dated terms. Each House Clerk vote record gives the bioguide ID, party, and state of each member on the vote date. Votes match people by bioguide ID, as sponsorships do, and keep the party and state from the record.
+- Senate votes need senate.gov data and a `lis_member_id` crosswalk, because Congress.gov has neither. The generated roster ([R-14](../roadmap.md#later)) will supply that crosswalk.

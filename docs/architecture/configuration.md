@@ -131,7 +131,8 @@ The file has a `version` (only 1 is supported), a list of `policyAreas` (`id`, `
 
 ## Limits and planned work
 
-- Terms will come from captured Congress.gov member records.
+- A generator will keep the roster and dated terms current ([R-14](../roadmap.md#later)). Choose its source and storage when R-14 starts. Congress.gov member terms give years only.
+- The roster lists current members only. A member who leaves stays covered until a person edits the configuration.
 - Agencies and committees will get an institution owner in the schema, not a synthetic person.
 - The first tracked-issue list in `config/issues.json` is a proposal for the owner to edit before use.
 - Verify the policy area names against the Congress.gov API before use ([R-29](../roadmap.md#next)). The bill gate compares them by exact name.
