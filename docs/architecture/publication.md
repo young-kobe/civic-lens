@@ -25,9 +25,8 @@ The publication feature turns approved revisions into immutable, cumulative stat
 - Official names in every record kind come from the current `PublicationCatalog`, not from stored revisions. The action `policyAreaIds` filter comes from the policy area ID that the draft stored. Drafting resolved it through `IssueConfiguration.PolicyAreaIdFor`, and the reviewer approved it with the revision. Publish never reads the issue configuration. A label that the configuration lacked at draft time gives an empty filter.
 - A record ID is unique across all kinds, because all kinds share the flat `records/{id}` paths.
 - A brief record embeds no source text. It holds the wording that a person approved and a list of citations. Each citation names a published record by kind, ID, and revision, and carries a copy of the cited headline. A brief is a weekly summary over other records, so it publishes only when the new release holds every record that it cites; see [briefs](briefs.md#publication).
-- A brief kept manifest schema version 3 for the same reason as actions. Versions flatten later under roadmap R-23.
 - An action record embeds the full text of each cited extraction once. Each citation names its extraction, and the contract checks the quote against that source.
-- Actions kept manifest schema version 3, because every reader ships with or after the release it reads. The publisher reads releases that it or an older publisher wrote. `app.js` ships inside each release. An older publisher fails loudly on the unknown kind.
+- The manifest schema version is 3. Actions and briefs added record kinds without a version bump, because every reader ships with or after the release it reads. Versions flatten under roadmap R-23. The publisher reads releases that it or an older publisher wrote. `app.js` ships inside each release. An older publisher fails loudly on the unknown kind.
 - Release JSON uses relaxed escaping (`JavaScriptEncoder.UnsafeRelaxedJsonEscaping`), so non-ASCII letters and punctuation take UTF-8 bytes, not 6-byte `\uXXXX` escapes. This is safe because release JSON is fetched as JSON and never inlined in HTML or a script tag. Readers do not change.
 - Unreviewed proposals, internal reviewer notes, operational job details, and mutation controls stay private.
 - Public serving reads release contracts only. It never reads operational storage or private notes.
@@ -47,7 +46,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - The contract limits for actions equal the Core limits. No enforcer; the constants are separate copies. Test: `PublishedActionTests.ContractLimitsEqualTheCoreLimits`.
 - An action sponsorship is never withdrawn before it began. Enforced by `ActionDraftRevision.ValidateShape` and, at the trust boundary, `PublishedAction.Validate`. Tests: `ActionDraftRevisionTests.ASponsorshipCannotBeWithdrawnBeforeItBegan` and `PublishedActionTests.ASponsorshipCannotBeWithdrawnBeforeItBegan`.
 - The action `policyAreaIds` filter holds the policy area ID that the approved revision stored. Enforced by `PublishedActionBuilder` and `PublishedAction.ToEntry`. Tests: `PublishActionTests.AnActionFillsItsSearchFiltersFromTheRevisionItPublishesAndNamesOnlyItsSponsor` and `PublishActionTests.AnActionWithoutAStoredAreaIDPublishesNoAreaFilterBecauseTheReviewerApprovedNone`.
-- A brief publishes only when every citation is current in the new release. Current means that the release holds the cited kind, record, and revision, and that the latest decision on that revision is an approval. The loader checks this at build and in the ready list. The store checks it again at commit. Enforced by `BriefRecordLoader` and `PostgresPublicationStore.RequireCurrentCitationsAsync`, both through `BriefRecordReader.FindChangedAsync`. Tests: `PublishBriefTests.ABriefIsRefusedWhenTheSamePublishReplacesItsCitedRecordWithANewerRevision` and `PostgresBriefPublicationTests.TheCommitRefusesABriefWhenACitedRecordChangedBetweenTheBuildAndTheCommit`.
+- A brief publishes only when every citation is current in the new release. Current means that the release holds the cited kind, record, and revision, and that the latest decision on that revision is an approval. The loader checks this at build and in the ready list. The store checks it again at commit. Enforced by `BriefRecordLoader` and `PostgresPublicationStore.RequireCurrentCitationsAsync`, both through `BriefRecordReader.FindChangedAsync`. Tests: `PublishBriefTests.ABriefIsRefusedWhenTheSamePublishReplacesItsCitedRecordWithANewerRevision` and `PostgresBriefPublicationTests.TheCommitRefusesABriefWhenACitedRecordChangedBetweenTheBuildAndTheCommit`, `PublishBriefTests.ABriefIsRefusedWhenTheNewReleaseDoesNotHoldTheCitedRecordBecauseThePageWouldLinkToNothing`, `PublishBriefTests.ABriefThatIsNotApprovedIsRefusedBecauseNoModelOrDraftMaySpeakForTheSite`, and `PostgresBriefPublicationTests.APublishRefusesABriefWhoseCitedRevisionWasWithdrawnAfterTheBriefWasApproved`.
 - A brief entry fills only `eventDate`, with the Monday of its week. Enforced by `PublishedBrief.ToEntry`. Tests: `PublishedBriefTests.TheEntryFillsOnlyTheWeekStartAsTheEventDate` and `PublishBriefTests.ABriefFillsOnlyItsWeekAsTheEventDateAndCopiesTheHeadlineOfEachCitedRecord`.
 - A brief file holds 1 to `PublishedBrief.MaximumParagraphs` paragraphs and 1 to `PublishedBrief.MaximumCitations` citations. Each paragraph cites listed IDs, and each listed ID is cited. Enforced by `PublishedBrief.Validate`. Tests: `PublishedBriefTests.RequiresOneToTwelveParagraphsSoThePageStaysBounded`, `PublishedBriefTests.RejectsAParagraphThatCitesAnIdTheBriefDoesNotListBecauseTheLinkWouldHaveNoTarget`, and `PublishedBriefTests.RejectsAListedCitationThatNoParagraphUsesBecauseThePageWouldListARecordTheTextNeverCites`.
 - The contract limits for briefs equal the Core limits. No enforcer; the constants are separate copies. Test: `PublishedBriefTests.ContractLimitsEqualTheCoreLimits`.
@@ -76,12 +75,11 @@ A document-change record shows both versions, and observation history where need
 - Each document-change record carries the full extracted text of both versions, their source URLs, and their observation times. Changed regions are offsets into those texts.
 - A citation holds an extraction ID, UTF-16 offsets, and the quoted text. The contract rejects a quote that does not match its offsets.
 - Records show the approval date and the first-publication date. The release index shows the release date.
-- A release holds at most 20,000 records.
 - The index lists 50 records on each page, newest first. The pages are `index.html`, then `page-2.html` and so on, with relative previous and next links.
 - Officials appear by their configured name. Issues appear by their configured identifier.
 - Only the release manifest shows the schema version.
 
-A release holds four kinds of record. Each manifest entry has a `kind`: `documentChange`, `statement`, `action`, or `brief`, a lowercase camel string. All kinds share the `records/` folder, the record data path, and the record page path. A record ID is therefore unique across all kinds.
+A release holds four kinds of record. Each manifest entry has a `kind`: `documentChange`, `statement`, `action`, or `brief`, a lowercase camel string. All kinds share the `records/` folder, the record data path, and the record page path.
 
 | Kind | Record ID |
 |---|---|
@@ -204,13 +202,12 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - How the static file server runs locally is not decided. It must send the precompressed manifest, for example Caddy `file_server { precompressed br gzip }` or nginx `gzip_static on`. Compression by the server is the fallback.
 - Issue, official, and briefing pages are planned. Readers will start with a weekly briefing and recent reviewed developments. Issue pages will connect related records across officials and institutions. Official pages will show dated statements, actions, and reviewed relationships.
 - Search filter pages, timelines, expandable evidence, and shareable records are planned against published releases.
-- Public search is an MVP requirement. Readers search all published records from the public pages. Search reads the published release only, so it works while the operational application is down.
-- Search filters: record kind, official, issue, policy area, date range, and source. Filters are easy to combine and easy to clear. The page works at phone width.
-- Results show the kind, headline, officials, issues, and dates of each record, and link to the record page.
+- Public filter pages are an MVP requirement; see R-20.
 - Planned, not built: a source filter and filters that are easy to clear, on the R-20 filter pages.
-- Later, after the first MVP deploy: a public search service with its own Postgres database, fed from releases. It gives full-text search over the whole processed corpus.
+- The R-20 pages will work at phone width. Each result will show the kind, headline, officials, issues, and dates of its record.
+- Later, in [R-20](../roadmap.md#next) after the first cloud deployment: a public search service with its own Postgres database, fed from releases. It gives full-text search over the whole processed corpus.
 - Split the manifest by kind when it grows over 4 MB.
-- Measured entry sizes have two officials, two issues, two policy areas, a host, and a date. An 80-character headline gives 528 bytes. A 256-character punctuated headline with non-ASCII letters gives 731 bytes. Default escaping would make the second one 824 bytes. At 20,000 entries the worst realistic manifest takes about 14.6 MB, under three quarters of the 32 MB cap. An entry at the filter limits can take far more, about 2.3 KB with eight long issue IDs. `PublishRelease` refuses a manifest over the cap, so such a release fails before it stages anything.
+- At 20,000 entries the worst realistic manifest is about 14.6 MB, under three quarters of the 32 MB cap. `PublishRelease` refuses a manifest over the cap.
 - Issue and policy area filters show raw IDs, because the manifest has no names for them. R-20 owns the fix.
 - After the first deploy, the public search service replaces the client search and the schema 3 filter fields. Delete them then.
 - Each release row stores `records_json`, about 2 MB at 20,000 records. Review queries expand the active one.
@@ -221,7 +218,7 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - Public MCP cannot start collection, inference, or edits. It bounds and pages responses, limits requests, and accepts record IDs, not arbitrary fetch URLs. It treats source passages as untrusted attributed content.
 - Public MCP will search the same manifest entries as the website. The website and public MCP will share one release, and clients can pin it across calls.
 - Public MCP needs request compute, but never the local database or AI inference.
-- Local Postgres and capture files need coordinated backups and a tested restore. Production backup rules are in [host](host.md#limits-and-planned-work).
+- Postgres and capture files need coordinated backups and a tested restore. Production backup rules are in [host](host.md#limits-and-planned-work).
 - Retention must keep the evidence that published releases reference. Disposable captures follow an explicit policy, which is not agreed yet.
 - Monitoring must cover freshness, skipped and deferred work, source failures, storage, and spend.
 - See [roadmap](../roadmap.md) for order.

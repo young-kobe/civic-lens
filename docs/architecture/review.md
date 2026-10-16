@@ -18,7 +18,7 @@ The review feature is the private editorial workspace. People draft, revise, and
 - Decisions are immutable. They cannot be edited or deleted.
 - A saved revision never resolves a concern by itself. Only an explicit approval with a resolution note does.
 - Shared Application handlers own these rules for the UI, the CLI, and future MCP callers.
-- Document changes, statements, and actions share one decision policy, `ReviewPolicy`.
+- Document changes, statements, actions, and briefs share one decision policy, `ReviewPolicy`. Briefs reach it through `ReviewRecords`.
 - A review cycle starts at the latest approval. Reads load the current revision, the last approved revision, and the decisions since that approval. A cycle has no revision cap. The open-concern cap bounds its decisions.
 - One step appends a revision and computes `review_status` again. Person saves and analysis appends both use it.
 - `review_status` and `has_changes` are stored columns that C# computes. SQL filters read them, so SQL keeps no copy of the policy.
@@ -139,6 +139,8 @@ A new change is a complete comparison with at least one text hunk and no draft. 
 
 The Review home page lists new changes, drafts, source health, and recent activity. The owner also sees the latest root job of each configured source; see [collection](collection.md#sources-page). The recent activity feed reads the newest events of each kind from the review tables. For the owner only, it also reads the job and processing tables. Application merges the events by time.
 
+`RecordRoutes.Editor` maps a record kind and a record ID to its review page. It calls `DocumentRoutes`, `StatementRoutes`, `ActionRoutes`, or `BriefRoutes`.
+
 ### Workspace forms
 
 The editor shows the saved account and its exact selected passages as the approval target. It keeps them apart from editable or recovered unsaved wording. Reviewers judge substantive change, wording, attribution, dates, interpretation, and evidence limits. Automatic citation and revision checks establish integrity, not semantic correctness.
@@ -188,7 +190,7 @@ The Host uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.12 for th
 | Paging | `src/CivicLens.Application/Paging/PageCursor.cs`, `src/CivicLens.Application/Paging/KeysetSlice.cs`, `src/CivicLens.Application/Paging/PageLimit.cs` |
 | Shared store core | `src/CivicLens.Infrastructure/Review/ReviewRecords.cs`, `src/CivicLens.Infrastructure/Review/ReviewHistory.cs`, `src/CivicLens.Core/Review/IReviewRevision.cs`, `src/CivicLens.Infrastructure/Review/Persistence/IReviewDraftRow.cs`, `src/CivicLens.Infrastructure/Review/Persistence/IReviewRevisionRow.cs`, `src/CivicLens.Infrastructure/Review/Persistence/IReviewDecisionRow.cs` |
 | Postgres store and helpers | `src/CivicLens.Infrastructure/Review/PostgresDocumentChangeReviewStore.cs`, `src/CivicLens.Infrastructure/Review/ReviewIdempotency.cs`, `src/CivicLens.Infrastructure/Review/ReviewDecisionHistory.cs`, `src/CivicLens.Infrastructure/Review/ReviewKeyset.cs`, `src/CivicLens.Infrastructure/Review/ReviewJson.cs`, `src/CivicLens.Infrastructure/Review/ReviewQueries.cs` |
-| Pages | `src/CivicLens.Host/Review/ReviewHome.razor`, `src/CivicLens.Host/Review/DraftEditor.razor`, `src/CivicLens.Host/Review/ReviewDecisionPanel.razor`, `src/CivicLens.Host/Review/ReviewHistoryPanel.razor`, `src/CivicLens.Host/Review/ReviewRecordPage.cs`, `src/CivicLens.Host/Review/DocumentRoutes.cs` |
+| Pages | `src/CivicLens.Host/Review/ReviewHome.razor`, `src/CivicLens.Host/Review/DraftEditor.razor`, `src/CivicLens.Host/Review/ReviewDecisionPanel.razor`, `src/CivicLens.Host/Review/ReviewHistoryPanel.razor`, `src/CivicLens.Host/Review/ReviewRecordPage.cs`, `src/CivicLens.Host/Review/DocumentRoutes.cs`, `src/CivicLens.Host/Review/RecordRoutes.cs` |
 | Brief review | `src/CivicLens.Host/Review/BriefList.razor`, `src/CivicLens.Host/Review/BriefEditor.razor`, `src/CivicLens.Infrastructure/Briefs/PostgresBriefReviewStore.cs`; see [briefs](briefs.md#code-map) |
 | Workspace settings | `src/CivicLens.Host/Review/ReviewWorkspace.cs`, `src/CivicLens.Host/Review/ReviewWorkspaceSettings.cs` |
 
@@ -200,7 +202,7 @@ The Host uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.12 for th
 - Local MCP will inspect jobs, explain processing, inspect source health, compare analysis runs, and run explicitly budgeted evaluations.
 - MCP review tools will list and read cases, propose corrections, and record explicit decisions. Mutations will use expected versions and idempotency keys. Initial local tooling is read-only.
 - AI suggestions, model predictions, and human decisions stay distinct records.
-- Planned reviewer experience: a source-to-review path that a nontechnical reviewer understands, dynamic search across retained evidence and review records, and integrated visual comparison.
+- R-19 plans a source-to-review path that a nontechnical reviewer understands. D-03 decides the dynamic search across retained evidence and review records. Integrated visual comparison is planned and has no roadmap item.
 - Global search and expanded reviewer source visibility are pending decisions. Add an evidence library page once document search exists.
 - Review volume is large. Bulk approval exists for action revisions that change only sponsorships; see [actions](actions.md#action-review). Wider bulk tools are planned here. They will show the automatic citation and classification checks beside each draft, and sort the riskiest drafts first.
 - A reviewer approves a weekly brief on its own. A brief cites records that are already published, and each cited record keeps its own decision bound to its exact revision. Approval needs every cited revision to be approved and in the active release. Model output never approves or publishes. See [briefs](briefs.md#limits-and-planned-work).

@@ -4,9 +4,17 @@ Political transparency through officials' statements and actions, document chang
 
 The approved product direction serves regular citizens seeking transparency in U.S. national politics. Public readers start with reviewed accounts and can inspect the supporting evidence; authorized reviewers assess the proposed public record beside its sources. State and local coverage are possible future extensions. The [editorial experience](docs/architecture/publication.md#public-reader-experience) defines the agreed flow. A restrained monochrome identity is selected for both surfaces.
 
-**Current state:** a durable worker collects configured official sources and the Congress.gov bill list through a separate bounded collector. It stores immutable captures, extracts text, and compares versions in Postgres, with schema changes applied by checked-in EF migrations. Claude drafts document-change accounts and statement records inside daily token limits, and a person edits, approves, and publishes each draft in an authenticated review workspace. Approved records publish as immutable static releases. The worker also drafts one action record for each tracked Congress.gov bill, with every tracked official's sponsorship and cosponsorship. A person reviews, approves, and publishes each action record, and bulk approval covers revisions that change only sponsorships. The worker also drafts one weekly brief for each closed week, from the records that releases published in that week. A person reviews and approves each brief, and the owner publishes it with its cited records. Live Auth0 verification, production deployment, and MCP are pending. See [status](docs/architecture.md#status) for the full list. The prior implementation is preserved in [civic-lens-legacy](https://github.com/young-kobe/civic-lens-legacy).
+**Current state:** A durable worker collects configured official sources and the Congress.gov bill list. A separate bounded collector fetches them. The worker stores immutable captures, extracts text, and compares versions in Postgres. Checked-in EF migrations apply schema changes.
 
-Immutable document text extraction is also available: local commands verify imported captures, retain versioned HTML/plain-text extractions in Postgres, and return exact text-span citations. Configuration v2 supports reusable content-selection profiles whose exact revisions are retained with HTML extractions. Local document history now groups consecutive identical text within matching processing revisions while retaining every observation. Explicit comparisons persist bounded contextual diffs with exact text offsets. These are text-change records, not substantive-change judgments or human approvals. The review workspace shows saved versions, saved text, saved comparisons, and exact citations on read-only evidence pages.
+Claude drafts document-change accounts and statement records inside daily token limits. A person edits, approves, and publishes each draft in an authenticated review workspace. Approved records publish as immutable static releases.
+
+The worker drafts one action record for each tracked Congress.gov bill. Each record lists every tracked official's sponsorship and cosponsorship. A person reviews, approves, and publishes each action record. Bulk approval covers revisions that change only sponsorships.
+
+The worker drafts one weekly brief for each closed week. It uses the records that releases published in that week. A person reviews and approves each brief. The owner publishes it with its cited records.
+
+Live Auth0 verification, production deployment, and MCP are pending. See [status](docs/architecture.md#status) for the full list. The prior implementation is preserved in [civic-lens-legacy](https://github.com/young-kobe/civic-lens-legacy).
+
+Immutable document text extraction is also available: local commands verify imported captures, retain versioned HTML/plain-text extractions in Postgres, and return exact text-span citations. Configuration v2 supports reusable content-selection profiles whose exact revisions are retained with HTML extractions. Local document history groups consecutive identical text within matching processing revisions while retaining every observation. Explicit comparisons persist bounded contextual diffs with exact text offsets. These are text-change records, not substantive-change judgments or human approvals. The review workspace shows saved versions, saved text, saved comparisons, and exact citations on read-only evidence pages.
 
 The separate `review [port]` command provides an Auth0-protected review dashboard and draft editor with immutable revisions, exact evidence bindings, version-checked review decisions, and explicit concern resolution. It requires an HTTPS reverse proxy and configured identities; publishing uses the separate `releases` command.
 
@@ -34,17 +42,17 @@ No credentials, database, or paid services are required for the tracer. Tests ne
 
 | Path | Responsibility |
 |---|---|
-| `src/CivicLens.Core` | `Analysis/` owns immutable model runs; `Collection/` owns immutable collection attempt results and import decisions; `Registry/` owns immutable date ranges and dated names; `Documents/` owns immutable text extractions and citation spans |
+| `src/CivicLens.Core` | Domain rules and immutable types |
 | `src/CivicLens.Collection.Contracts` | Versioned collection types and shared receipt validation |
-| `src/CivicLens.Publication.Contracts` | Public release boundary, currently empty |
-| `src/CivicLens.Application` | `Analysis/` owns the drafting queue lifecycle, versioned prompt, and citation resolver; `Collection/` groups configuration and collection/import use cases; `Documents/` coordinates extraction and citations through external interfaces |
-| `src/CivicLens.Infrastructure` | `Analysis/` holds the drafting queue store and the Claude API adapter; `Collection/` implements process execution, capture verification, and Postgres persistence; `Documents/` parses verified captures and persists text extractions |
+| `src/CivicLens.Publication.Contracts` | The public release contract: manifest, record and brief types, schema version, and limits |
+| `src/CivicLens.Application` | Use cases and external interfaces |
+| `src/CivicLens.Infrastructure` | Postgres stores, process execution, parsers, and the Claude API adapter |
 | `src/CivicLens.Host` | CLI, worker, authenticated Blazor review workspace, and static release builder |
 | `src/CivicLens.Collector` | `Http/` contains bounded collection and immutable capture production |
 | `tests/CivicLens.Tests` | Tests mirror their owning layer and feature; `Architecture/` checks dependencies |
 | `tools/render-architecture.py` | Shared diagram definitions and offline visual generator |
 
-Projects define architectural layers; feature folders group related code within them. Small contract projects stay flat. Read `AGENTS.md` before implementation or delegation. The solution is the authoritative project inventory. Add source/configuration/fixture directories only when a feature needs them.
+Projects define architectural layers; feature folders group related code within them. The feature folders in Core, Application, and Infrastructure mirror the lookup table in [docs/architecture.md](docs/architecture.md#lookup-table). Small contract projects stay flat. Read `AGENTS.md` before implementation or delegation. The solution is the authoritative project inventory. Add source/configuration/fixture directories only when a feature needs them.
 
 ## Reference
 

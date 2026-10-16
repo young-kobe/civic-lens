@@ -4,7 +4,7 @@ This page holds pending work only. Current behavior and agreed designs are in th
 
 ## MVP definition
 
-The MVP delivers the full product: officials' statements, authoritative actions, substantive document changes, and evidence-backed weekly briefs. A release with document changes only is a milestone, not the MVP. Coverage may start small, but all four record kinds must work end to end. Each one collects evidence, keeps exact inspectable provenance, gets human review, and publishes in a static release. AI drafts every record kind, and people edit, approve, and publish. Only human approval stays manual, so review must handle a large volume. Reach MVP features, correctness, and a sufficient citizen and reviewer UI locally before production work starts.
+The MVP delivers the full product: officials' statements, authoritative actions, substantive document changes, and evidence-backed weekly briefs. A release with document changes only is a milestone, not the MVP. Coverage may start small, but all four record kinds must work end to end. Each one collects evidence, keeps exact inspectable provenance, gets human review, and publishes in a static release. AI drafts every record kind, and people edit, approve, and publish. Only human approval stays manual, so review must handle a large volume. The dev box reaches MVP features, correctness, and a sufficient citizen and reviewer UI before the first cloud deployment. The document-change criterion is checked after that deployment.
 
 Exit criteria:
 
@@ -24,28 +24,29 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 
 ### Now
 
+- R-15: House roll-call votes as actions. Depends on: none stated. It does not need R-14. [Actions](architecture/actions.md#limits-and-planned-work)
+
 ### Next
 
-- R-15: House roll-call votes as actions. Depends on: none stated. [Actions](architecture/actions.md#limits-and-planned-work)
 - R-16: Reviewed relationships between statements and actions, and timelines. Depends on: R-15. [Statements](architecture/statements.md#limits-and-planned-work)
 - R-17: Congressional Record articles as a statement connector. Depends on: R-16. [Actions](architecture/actions.md#limits-and-planned-work)
 - R-18: Engine policies for broad coverage: spending ceilings, backlog limits, source fairness, live reload, and a health view. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-19: Review volume tools beyond the sponsorship-only bulk approval of actions, and a clearer source-to-review path. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
-- R-20: Public search and filter pages. Depends on: none stated. [Publication](architecture/publication.md#limits-and-planned-work)
+- R-20: Public filter pages, a source filter on the index search panel, and names for the issue and policy area filters. The panel already filters by kind, official, issue, policy area, and date range. After the first cloud deployment, a public search service with its own Postgres database, fed from releases, replaces the client search. Depends on: none stated. The search service depends on R-24. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-21: Process view of collection and AI stages from retained state. Depends on: none stated. [Host](architecture/host.md#limits-and-planned-work)
-- R-29: Verify the policy area names against the Congress.gov API; nothing shows this is done. Depends on: none stated. [Configuration](architecture/configuration.md#limits-and-planned-work)
+- R-29: Check each policy area name against the Congress.gov API. Depends on: none stated. [Configuration](architecture/configuration.md#limits-and-planned-work)
 - R-30: Fix the remaining format and parser limits that the federal coverage found. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
 
 ### Later
 
-- R-14: A generated member roster with dated terms. Capture an outside member dataset as a collection source, as bills are captured. Parse it into tables of offices, dated terms, and Senate member IDs, and each row cites its capture. A generator proposes members who join or leave as a configuration diff. Choose the dataset when R-14 starts. Depends on: none stated. Official pages and Senate votes need it. [Configuration](architecture/configuration.md#limits-and-planned-work)
+- R-14: A generated member roster with dated terms. Capture an outside member dataset as a collection source, as bills are captured. Parse it into tables of offices, dated terms, and Senate member IDs, and each row cites its capture. A generator proposes members who join or leave as a configuration diff. Choose the dataset when R-14 starts. Depends on: none stated. Official pages and Senate votes need it. The configuration keeps tracked people and their bioguide IDs. [Configuration](architecture/configuration.md#limits-and-planned-work)
 - R-13: Measure document change, then gate it. Check the House press index pages and about 300 press release URLs daily for 2 to 4 weeks. Count byte, text, and line changes for each source, and label about 100 changes by hand. Add rules for the churn found. Add a model tier only if the changes that pass the rules are too many for people to review. Depends on: the first cloud deployment (R-24). [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-22: Ordered row locks in the job store, after the MVP. Depends on: lock waits measured on a bills-only collection run. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-23: Baseline versions before the first production deploy. Depends on: none stated. It must come before the first production deploy. [Behavior versions](architecture.md#behavior-versions)
-- R-24: Production on the Hetzner CPX21 with containers, Terraform, CI, off-server backups, and live Auth0 verification. Depends on: the MVP. [Host](architecture/host.md#limits-and-planned-work)
-- R-25: Public MCP over published releases, with source health, backup and restore, and worker service management. Depends on: the MVP. [Publication](architecture/publication.md#limits-and-planned-work)
+- R-24: Production on the Hetzner CPX21 with containers, Terraform, CI, off-server backups, and live Auth0 verification. Depends on: the MVP exit criteria other than the document-change criterion. [Host](architecture/host.md#limits-and-planned-work)
+- R-25: Public MCP over published releases, with source health, backup and restore, and worker service management. Depends on: the MVP exit criteria other than the document-change criterion. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-26: Read-only local MCP inspection. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
-- R-27: Automatic discovery of official sources, and check cadence from measured change rates. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
+- R-27: Automatic discovery of official sources, and check cadence from measured change rates. It needs runtime writes, so people, sources, and coverage then move to tables. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-28: Datasets and fine-tuning from labels and review history. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-31: Remove the redundant hunk and context copy in saved comparisons. Depends on: none stated. [Documents](architecture/documents.md#limits-and-planned-work)
 - R-32: Correction and withdrawal releases for all record kinds. No kind can publish one yet. Depends on: none stated. [Publication](architecture/publication.md#limits-and-planned-work)

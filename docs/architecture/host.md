@@ -19,7 +19,7 @@ The Host is the composition root, the CLI, and the authenticated web workspace. 
 - AI uses hosted inference first. Evaluation can change the model for each task.
 - The off-server backup destination will be a Hetzner service. S3 is not planned.
 - The first deployment accepts single-host downtime during maintenance or failure.
-- Build and validate MVP features and UI locally first. Live infrastructure is not a prerequisite for feature work.
+- Build and validate MVP features and the UI on the dev box first. The dev box is for development only. Live infrastructure is not a prerequisite for feature work.
 
 ## Invariants
 

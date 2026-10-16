@@ -179,7 +179,7 @@ Ordinary tests use a fake model at the port. One live smoke test runs only with 
 
 `DocumentChangeRevisionComparison` in Core/Review lists the fields that differ between two revisions. Selections and citations compare as sets. An approved draft is unchanged when no field differs from revision 1. Application/Analysis tallies the outcomes, and `AwaitingReviewWithConcerns` counts as awaiting review.
 
-Infrastructure reads AI drafts in keyset pages of 100. Each page costs four queries, whatever its size. It reuses the history validation of the review store and `ReviewPolicy` for the status. These metrics are the base for later calibration of the stated confidence.
+Infrastructure reads AI drafts in keyset pages of 100. Each page costs four queries, whatever its size. It reuses the history validation of the review store and `ReviewPolicy` for the status.
 
 ## Storage and contracts
 
@@ -221,7 +221,7 @@ The shared wakeup and lease mechanics are in [Shared worker mechanics](../archit
 
 The [roadmap](../roadmap.md) holds the delivery order. These design rules apply to the planned work:
 
-- In the MVP, a classifier gates document changes. A change classified as nonsubstantive skips review. Routing supports process, defer, and skip-expensive-analysis, with reasons and retained input references.
+- Rules from measured change history gate document changes. A model tier follows only if the R-13 measurement shows a need (D-05). A change classified as nonsubstantive skips review. Routing supports process, defer, and skip-expensive-analysis, with reasons and retained input references.
 - Skipped changes stay visible and inspectable, and a reviewer can return one to review. Audit a sample of skipped records.
 - Structured actions bypass relevance models. Explicitly watched documents keep their versions whatever the relevance decision.
 - Humans give classification labels under a written, versioned rubric of narrow typed questions. Labels are separate from editorial approval, and model output is never a label.

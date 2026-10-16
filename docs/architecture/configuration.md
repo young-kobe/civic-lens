@@ -17,7 +17,7 @@ Configuration defines the people, sources, coverage, profiles, and tracked issue
 - Registry data never enters collector requests.
 - An institutional account is not an alias of a person.
 - Issue definitions are the future classification rubric, so a wording change creates a new revision.
-- Offices, terms, and institutional ownership come with the features that use them.
+- Offices and dated terms come from the R-14 member dataset, not from configuration.
 
 ## Invariants
 
@@ -137,7 +137,7 @@ The file has a `version` (only 1 is supported), a list of `policyAreas` (`id`, `
 - Agencies and committees will get an institution owner in the schema, not a synthetic person.
 - The first tracked-issue list in `config/issues.json` is a proposal for the owner to edit before use.
 - Verify the policy area names against the Congress.gov API before use ([R-29](../roadmap.md#next)). The bill gate compares them by exact name.
-- Offices, affiliations, other external identifiers, institutional ownership, and historical identity resolution are planned.
+- Affiliations, other external identifiers, institutional ownership, and historical identity resolution are planned.
 - Configuration work estimates and bounded backfill workflows are planned.
 - Public visibility is a separate future control.
 - Classification will bind to the issue revision later.
