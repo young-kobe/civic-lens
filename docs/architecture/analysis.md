@@ -227,7 +227,7 @@ The [roadmap](../roadmap.md) holds the delivery order. These design rules apply 
 - Humans give classification labels under a written, versioned rubric of narrow typed questions. Labels are separate from editorial approval, and model output is never a label.
 - The classifier makes decisions only. It does not extract quotations or write briefs.
 - Classification is a separate stage in the same queue, with its own task versions, budgets, and escalation policy.
-- The planned ladder is deterministic rules, then a cheap probability tier, then a stronger model, then a person. A bake-off selects the models and thresholds for each tier.
+- The planned ladder is deterministic rules, then a cheap probability tier, then a stronger model, then a person. The model tiers depend on the R-13 measurement. A bake-off selects the models and thresholds for each tier.
 - Deterministic rules include learned churn regions. A two-state Markov chain (stable or churning) over check history models each page region. Recurring churn, such as timestamps or rotating widgets, then needs no hand-written profile for each source.
 - When the engine is unsure, the change goes to review. The engine never drops a change silently.
 - The rubric asks narrow typed questions. Examples: navigation or boilerplate, date or timestamp only, a changed number, obligation, named person, or policy claim. Others: removed content and touched configured issues.
@@ -238,14 +238,15 @@ The [roadmap](../roadmap.md) holds the delivery order. These design rules apply 
 - A confidence is shown as a score only after a calibration map for that task exists. The map is fitted on human outcomes and versioned. Code-checked results are verified or failed, not scored.
 - A labeled eval set follows the rubric. A prompt or model change runs against it on demand, within a budget, and ships only without a regression.
 - Weekly briefs reuse the same adapter and the same checks. Statement and action extraction will reuse them too.
-- The document-change gate comes after statements and actions. Most observed source change is new press releases, not in-place edits. Our own check history produces the in-place edits to label.
+- The document-change gate starts with measurement, after the first cloud deployment. Most observed source change is new press releases, not in-place edits. On 2026-10-16 the dev database held no document change: 361 pages checked again minutes later had the same bytes. That data cannot show change rates over days. Our own check history produces the in-place edits to measure and label.
+- Model tiers are added only if the changes that pass the rules are too many for people to review.
 
 Classification first steps:
 
-1. [ ] Write the labeling rubric, and label 150 to 200 changes from our own check history across the federal coverage.
-2. [ ] Implement deterministic change features: share of text changed, longest change, and configured issue terms added or removed. Also link changes (with a removed self-link) and HTTP status or redirect changes.
-3. [ ] Run a budgeted bake-off on the labeled set: deterministic features alone, logistic regression over them, Cloudflare Clef-flash and Clef, and Haiku 5.5.
-4. [ ] Set the ladder tiers and thresholds from the measured results.
+1. [ ] After the first cloud deployment, check the House press index pages and about 300 press release URLs daily for 2 to 4 weeks. Count byte, text, and line changes for each source.
+2. [ ] Write the labeling rubric, and label about 100 changes from that check history.
+3. [ ] Implement rules for the churn found, and deterministic change features: share of text changed, longest change, and configured issue terms added or removed. Also link changes (with a removed self-link) and HTTP status or redirect changes.
+4. [ ] Do this step only if the changes that pass the rules are too many for people to review. Run a budgeted bake-off on the labeled set: logistic regression over the features, Cloudflare Clef-flash and Clef, and Haiku 5.5. Then set the ladder tiers and thresholds from the results.
 
 Classification acceptance:
 
