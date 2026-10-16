@@ -108,7 +108,7 @@ A summary has `versionCode`, `actionDate`, `actionDesc`, `updateDate` (an exact 
 
 ### Admission
 
-`IBillStreamAdmissionStore` admits one page in one transaction, with the same job coordination lock as article admission. Follow-on jobs use `AdmitApiJobsAsync`, the same code path as list page admission.
+`IBillStreamAdmissionStore` admits one page in one transaction, with the same job coordination lock as article admission. Follow-on jobs use `AdmitApiJobsAsync`, the same code path as list page admission. It takes an `ApiJobBatch`: the admission policy, a template definition, and `ApiJob` rows of an idempotency key and a definition.
 
 For each list item with a congress of at least `minimumCongress`, the store admits one detail job. A known key is a duplicate and is skipped, so a bill admitted with the same update date is not admitted again. When the page has a `next` link, the store admits one page job. When there is no `next` link, it applies the cursor rule. If a job fails to save, the jobs and the cursor change roll back together.
 
@@ -120,7 +120,7 @@ These jobs never register statement candidates, because only the key prefix `dis
 
 ### Job keys
 
-`BillStreamJobKeys` owns the keys. A replayed preparation finds the known keys and creates no job.
+`BillStreamJobKeys` owns the keys. `ApiJobKeys.ExactTime` owns the update date format. A replayed preparation finds the known keys and creates no job.
 
 | Job | Key |
 |---|---|
@@ -233,7 +233,7 @@ The write that creates a candidate also adds its `action_analysis` queue row in 
 - The store writes the `bill_follow_on_jobs` row in the transaction that inserts the job. A page job without a row is invalid data.
 - `bill_pages` holds one row for the detail and one for each admitted follow-on page. Each row names its chain root, its role, its order, its extraction, and whether it closes the chain.
 - `action_candidates` holds one row for each passed bill version with complete evidence, and a second row when its summaries chain closes later.
-- The candidate ID is a SHA-256 hash of the source and the bill identity plus the exact update date (`PostgresCollectionJobStore.HashActionCandidate`), framed like `HashCandidate`. A candidate with summaries adds the suffix `:summaries` to the hashed text.
+- The candidate ID is a SHA-256 hash of the source and the bill identity plus the exact update date. `PostgresCollectionJobStore.HashActionCandidate` builds it on `HashIdentity`, framed like `HashCandidate`. A candidate with summaries adds the suffix `:summaries` to the hashed text.
 - A bill version has at most two candidates: one without and one with summaries. The evidence of a candidate is the page rows of its root.
 - The index `ix_action_candidates_bill` on the source, the bill, and the update date serves the newest-candidate check of [action drafting](actions.md#queue).
 - Version constants are listed in [Behavior versions](../architecture.md#behavior-versions).
@@ -242,7 +242,7 @@ The write that creates a candidate also adds its `action_analysis` queue row in 
 
 | Concern | Files |
 |---|---|
-| Window, page query, URLs, keys | `src/CivicLens.Application/Collection/Bills/BillStreamWindow.cs`, `src/CivicLens.Application/Collection/ApiPageQuery.cs`, `src/CivicLens.Application/Collection/Bills/BillPageUrl.cs`, `src/CivicLens.Application/Collection/Bills/BillStreamJobKeys.cs`, `src/CivicLens.Application/Collection/ApiJobKeys.cs` |
+| Window, page query, URLs, keys | `src/CivicLens.Application/Collection/Bills/BillStreamWindow.cs`, `src/CivicLens.Application/Collection/ApiPageQuery.cs`, `src/CivicLens.Application/Collection/ApiJob.cs`, `src/CivicLens.Application/Collection/ApiJobBatch.cs`, `src/CivicLens.Application/Collection/Bills/BillPageUrl.cs`, `src/CivicLens.Application/Collection/Bills/BillStreamJobKeys.cs`, `src/CivicLens.Application/Collection/ApiJobKeys.cs` |
 | Parsers | `src/CivicLens.Application/Collection/Bills/CongressBillListParser.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillParser.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillCosponsorsParser.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillActionsParser.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillSummariesParser.cs` |
 | Gate and renderer | `src/CivicLens.Application/Collection/Bills/BillGate.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillRenderer.cs` |
 | Resource kinds and parser list | `src/CivicLens.Application/Collection/ApiResource.cs`, `src/CivicLens.Application/Collection/ApiParser.cs` |
