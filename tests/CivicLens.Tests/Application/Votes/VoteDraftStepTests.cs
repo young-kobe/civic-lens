@@ -6,7 +6,7 @@ using CivicLens.Core.Votes;
 using CivicLens.Tests.Application.Actions;
 using CivicLens.Tests.Application.Analysis;
 using CivicLens.Tests.Fixtures;
-using static CivicLens.Tests.Fixtures.ActionDraftOutputs;
+using static CivicLens.Tests.Fixtures.HeadlineSummaryOutputs;
 using static CivicLens.Tests.Fixtures.VoteWorld;
 using State = CivicLens.Application.Analysis.AnalysisState;
 
@@ -21,7 +21,7 @@ public sealed class VoteDraftStepTests
     [Fact]
     public async Task TheFirstDraftCallsTheModelAndWritesRevisionOneWithTheCandidateIdentityAndNoGate()
     {
-        var (store, model) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Drafted));
+        var (store, model) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Drafted));
 
         var revision = Assert.Single(store.Revisions);
         Assert.Equal((1, "civic-lens:analysis", HeadlineText, SummaryText), (revision.RevisionNumber, revision.AuthorSubject, revision.Headline, revision.Summary));
@@ -36,7 +36,7 @@ public sealed class VoteDraftStepTests
     [Fact]
     public async Task ConfidenceStaysInTheRunOutputAndNeverReachesTheRevision()
     {
-        var (store, _) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Output(headline: HeadlineText, summary: SummaryText, headlineConfidence: 0.77)));
+        var (store, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output(headline: HeadlineText, summary: SummaryText, headlineConfidence: 0.77)));
 
         Assert.Contains("0.77", Assert.Single(store.Runs).Run.OutputJson, StringComparison.Ordinal);
         Assert.DoesNotContain("onfidence", JsonSerializer.Serialize(Assert.Single(store.Revisions)), StringComparison.Ordinal);
@@ -47,7 +47,7 @@ public sealed class VoteDraftStepTests
     {
         var world = Create();
 
-        var (store, _) = await RunAsync(world, new FakeActionDraftModel().Draft(Drafted));
+        var (store, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Drafted));
 
         var revision = Assert.Single(store.Revisions);
         Assert.Equal([
@@ -65,20 +65,17 @@ public sealed class VoteDraftStepTests
     }
 
     [Fact]
-    public async Task MembersWhomNobodyTracksNeverEnterTheRecordOrThePromptBecauseOnlyTrackedVotesAreCited()
+    public async Task MembersWhomNobodyTracksNeverEnterTheRecordBecauseOnlyTrackedVotesAreCited()
     {
-        var (store, model) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Drafted));
+        var (store, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Drafted));
 
         Assert.DoesNotContain(Amodei, Assert.Single(store.Revisions).Members.Select(member => member.BioguideId));
-        var prompt = Assert.Single(model.Requests).UserPrompt;
-        Assert.Contains("Robert Aderholt", prompt, StringComparison.Ordinal);
-        Assert.DoesNotContain("Amodei", prompt, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task ThePromptHoldsOnlyTheAgreedFactLinesAndTheTrackedNamesBecauseCodeOwnsTheVotes()
+    public async Task ThePromptHoldsOnlyTheAgreedFactLinesAndNoMemberBecauseCodeOwnsTheMembersAndTheirVotes()
     {
-        var (_, model) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Drafted));
+        var (_, model) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Drafted));
 
         var prompt = Assert.Single(model.Requests).UserPrompt;
         Assert.Contains("Question: On Motion to Concur", prompt, StringComparison.Ordinal);
@@ -87,12 +84,24 @@ public sealed class VoteDraftStepTests
         Assert.DoesNotContain("Updated:", prompt, StringComparison.Ordinal);
         Assert.DoesNotContain(Aderholt, prompt, StringComparison.Ordinal);
         Assert.DoesNotContain("Member:", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Aderholt", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Amodei", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CoverageIsCheckedOnTheVoteDayBecauseALaterCorrectionMustNotChangeWhoWasTrackedForTheVote()
+    {
+        var (store, model) = await RunAsync(Create(backfillFrom: new DateOnly(2025, 5, 1)), new FakeHeadlineSummaryModel());
+
+        Assert.Empty(model.Requests);
+        Assert.Equal((State.Succeeded, "noTrackedMember"), (store.Entries[0].Status, store.Entries[0].ErrorCode));
+        Assert.Empty(store.Revisions);
     }
 
     [Fact]
     public async Task ARollCallWithNoTrackedMemberSettlesSucceededWithoutACallOrARevision()
     {
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
         var world = Create(members: [new(Amodei, "Mark", "Amodei", "Yea")]);
 
         var (store, _) = await RunAsync(world, model);
@@ -108,7 +117,7 @@ public sealed class VoteDraftStepTests
     public async Task ARecollectedVoteWithTheSameFactsAndVotesSettlesWithoutACallEvenWhenItsUpdateDateMoved()
     {
         var current = await FirstRevisionAsync(Create());
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
 
         var (store, _) = await RunAsync(Create(), model, current, updatedAt: UpdatedAt.AddDays(1));
 
@@ -123,7 +132,7 @@ public sealed class VoteDraftStepTests
     public async Task ACorrectedMemberVoteAppendsAtOnceWithoutAModelCallAndKeepsTheTextBecauseCodeOwnsTheVotes()
     {
         var current = await FirstRevisionAsync(Create());
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
         var corrected = Create(members: [new(Aderholt, "Robert", "Aderholt", "Nay"), new(Auchincloss, "Jake", "Auchincloss", "Nay")]);
 
         var (store, _) = await RunAsync(corrected, model, current, updatedAt: UpdatedAt.AddDays(1));
@@ -141,7 +150,7 @@ public sealed class VoteDraftStepTests
     public async Task AMemberVoteChangeTogetherWithAChangedResultStillCallsTheModel()
     {
         var current = await FirstRevisionAsync(Create());
-        var model = new FakeActionDraftModel().Draft(Output(headline: "The House rejected a concurrent resolution", summary: SummaryText));
+        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: "The House rejected a concurrent resolution", summary: SummaryText));
         var changed = Create(result: "Failed", members: [new(Aderholt, "Robert", "Aderholt", "Nay"), new(Auchincloss, "Jake", "Auchincloss", "Nay")]);
 
         var (store, _) = await RunAsync(changed, model, current, updatedAt: UpdatedAt.AddDays(1));
@@ -151,28 +160,31 @@ public sealed class VoteDraftStepTests
     }
 
     [Fact]
-    public async Task AChangedTrackedMemberSetCallsTheModelBecauseTheTextMayNameTheMembers()
+    public async Task AChangedTrackedMemberSetCopiesTheTextWithoutACallBecauseTheTextNamesNoMember()
     {
         var current = await FirstRevisionAsync(Create());
-        var model = new FakeActionDraftModel().Draft(Drafted);
+        var model = new FakeHeadlineSummaryModel();
 
         var (store, _) = await RunAsync(Create(members: [new(Aderholt, "Robert", "Aderholt", "Yea")]), model, current,
             updatedAt: UpdatedAt.AddDays(1));
 
-        Assert.Single(model.Requests);
-        Assert.Equal(Aderholt, Assert.Single(Assert.Single(store.Revisions).Members).BioguideId);
+        Assert.Empty(model.Requests);
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal((current.Headline, current.Summary), (revision.Headline, revision.Summary));
+        Assert.Equal(Aderholt, Assert.Single(revision.Members).BioguideId);
     }
 
     [Theory]
     [InlineData("Nancy Pelosi called a vote")]
     [InlineData("NANCY PELOSI called a vote")]
-    public async Task TextThatNamesAConfiguredPersonWhoIsNotInTheFactsIsRejectedAndTheRetryRuns(string headline)
+    [InlineData("Robert Aderholt voted Yea")]
+    public async Task TextThatNamesAnyConfiguredPersonIsRejectedSoNoCopiedTextCanStateAStaleVote(string headline)
     {
-        var model = new FakeActionDraftModel().Draft(Output(headline: headline, summary: SummaryText)).Draft(Drafted);
+        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: headline, summary: SummaryText)).Draft(Drafted);
 
         var (store, _) = await RunAsync(Create(), model);
 
-        Assert.Contains("who is not an official in the facts", model.Requests[1].UserPrompt, StringComparison.Ordinal);
+        Assert.Contains("so name no person", model.Requests[1].UserPrompt, StringComparison.Ordinal);
         Assert.Equal([AnalysisRunOutcome.OutputRejected, AnalysisRunOutcome.Drafted], store.Runs.Select(run => run.Run.Outcome));
         Assert.Single(store.Revisions);
     }
@@ -180,19 +192,11 @@ public sealed class VoteDraftStepTests
     [Fact]
     public async Task ANameInTheSummaryIsRejectedToo()
     {
-        var model = new FakeActionDraftModel().Draft(Output(headline: HeadlineText, summary: "Nancy Pelosi presided.")).Draft(Drafted);
+        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: HeadlineText, summary: "Nancy Pelosi presided.")).Draft(Drafted);
 
         var (store, _) = await RunAsync(Create(), model);
 
         Assert.Contains("The summary names \"Nancy Pelosi\"", model.Requests[1].UserPrompt, StringComparison.Ordinal);
-        Assert.Single(store.Revisions);
-    }
-
-    [Fact]
-    public async Task ATrackedMemberInTheFactsMayBeNamed()
-    {
-        var (store, _) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Output(headline: HeadlineText, summary: "Robert Aderholt took part.")));
-
         Assert.Single(store.Revisions);
     }
 
@@ -201,7 +205,7 @@ public sealed class VoteDraftStepTests
     [InlineData(-0.1)]
     public async Task AConfidenceOutsideZeroToOneIsRejected(double confidence)
     {
-        var model = new FakeActionDraftModel().Draft(Output(headlineConfidence: confidence)).Draft(Output(summaryConfidence: 2));
+        var model = new FakeHeadlineSummaryModel().Draft(Output(headlineConfidence: confidence)).Draft(Output(summaryConfidence: 2));
 
         var (store, _) = await RunAsync(Create(), model);
 
@@ -213,7 +217,7 @@ public sealed class VoteDraftStepTests
     [Fact]
     public async Task TextWithANulOrOverTheBoundIsRejected()
     {
-        var model = new FakeActionDraftModel().Draft(Output(headline: "bad\0text"))
+        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: "bad\0text"))
             .Draft(Output(summary: new string('x', VoteDraftRevision.MaximumSummaryLength + 1)));
 
         var (store, _) = await RunAsync(Create(), model);
@@ -225,7 +229,7 @@ public sealed class VoteDraftStepTests
     [Fact]
     public async Task AnAnswerThatIsNotTheSchemaIsRejectedLikeAnyOtherOutputError()
     {
-        var model = new FakeActionDraftModel().Draft("not json").Draft(Drafted);
+        var model = new FakeHeadlineSummaryModel().Draft("not json").Draft(Drafted);
 
         var (store, _) = await RunAsync(Create(), model);
 
@@ -238,7 +242,7 @@ public sealed class VoteDraftStepTests
     {
         var world = Create();
         world.TamperWithSavedText("members", "House vote members: 119 1 100\nMember: A000055, Robert Aderholt, R, AL, Nay");
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
 
         var (store, _) = await RunAsync(world, model);
 
@@ -256,7 +260,7 @@ public sealed class VoteDraftStepTests
         var world = Create();
         world.SetVersion(changedJob, "older-version");
         world.ReplaceCapturedBody(unreadableJob, "not json");
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
 
         var (store, _) = await RunAsync(world, model);
 
@@ -267,7 +271,7 @@ public sealed class VoteDraftStepTests
     [Fact]
     public async Task ACandidateWithANewerCandidateOfTheSameRollCallIsSupersededWithoutACall()
     {
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
 
         var (store, _) = await RunAsync(Create(), model, hasNewerCandidate: true);
 
@@ -279,7 +283,7 @@ public sealed class VoteDraftStepTests
     [Fact]
     public async Task AFactOverTheRevisionLimitBlocksBeforeAnyCallOrBudgetReservation()
     {
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
         var world = Create(question: new string('q', VoteDraftRevision.MaximumFactLength));
 
         var (store, _) = await RunAsync(world, model);
@@ -292,7 +296,7 @@ public sealed class VoteDraftStepTests
     [Fact]
     public async Task FactsThatAloneExceedTheByteCapBlockWithoutACall()
     {
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
         var settings = new VoteDraftSettings(10_000_000, VoteDraftPrompt.MinimumReservation, 1);
 
         var (store, _) = await RunAsync(Create(), model, settings: settings);
@@ -306,7 +310,7 @@ public sealed class VoteDraftStepTests
     {
         var world = Create();
         var store = new FakeVoteDraftStore(world.Evidence()) { Charged = 9_999_999 };
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
 
         await AnalysisWorkers.VoteDrafting(store, new FakeAnalysisStatusStore(), world.Reader(), model,
             new VoteDraftSettings(10_000_000, concurrency: 1), TimeProvider.System).ExecuteAsync(once: true);
@@ -320,18 +324,18 @@ public sealed class VoteDraftStepTests
     {
         var current = await FirstRevisionAsync(Create());
 
-        var (store, _) = await RunAsync(Create(result: "Failed"), new FakeActionDraftModel().Draft(Drafted), current, updatedAt: UpdatedAt.AddDays(1));
+        var (store, _) = await RunAsync(Create(result: "Failed"), new FakeHeadlineSummaryModel().Draft(Drafted), current, updatedAt: UpdatedAt.AddDays(1));
 
         Assert.Equal(2, Assert.Single(store.Revisions).RevisionNumber);
     }
 
     private static async Task<VoteDraftRevision> FirstRevisionAsync(VoteWorld world)
     {
-        var (store, _) = await RunAsync(world, new FakeActionDraftModel().Draft(Drafted));
+        var (store, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Drafted));
         return Assert.Single(store.Revisions);
     }
 
-    private static async Task<(FakeVoteDraftStore Store, FakeActionDraftModel Model)> RunAsync(VoteWorld world, FakeActionDraftModel model,
+    private static async Task<(FakeVoteDraftStore Store, FakeHeadlineSummaryModel Model)> RunAsync(VoteWorld world, FakeHeadlineSummaryModel model,
         VoteDraftRevision? current = null, DateTimeOffset? updatedAt = null, VoteDraftSettings? settings = null, bool hasNewerCandidate = false)
     {
         var store = new FakeVoteDraftStore(world.Evidence(current, updatedAt, hasNewerCandidate));

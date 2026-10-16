@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The votes feature collects House roll-call votes from the Congress.gov `house-vote` API. It fetches the detail and the member votes of each roll call as durable jobs. Each roll call version with both pages captured becomes a vote candidate. The `worker` drafts one vote record for each roll call from these candidates. Review and publication of vote records are planned.
+The votes feature collects House roll-call votes from the Congress.gov `house-vote` API. It fetches the detail and the member votes of each roll call as durable jobs. Each roll call version with both pages captured becomes a vote candidate. The `worker` drafts one vote record for each source and roll call from these candidates. Review and publication of vote records are planned.
 
 ## Decisions
 
@@ -25,10 +25,10 @@ The votes feature collects House roll-call votes from the Congress.gov `house-vo
 - The Speaker election has totals by candidate, not by party. The parser reads them as candidate totals, and the renderer writes one line for each. The parser and render versions stay at v1. No input that gave a v1 extraction renders other text. A party item that also names a candidate is now invalid. No captured vote has that shape.
 - Preparation renders each detail and each members response into extraction text, as the [bills](bills.md#extraction) connector does for its pages. The candidate binds both extractions. Drafting cites the exact lines of these extractions.
 - Drafting copies [action drafting](actions.md#step): its own queue, budget and run tables, the shared analysis worker, and the shared revision store `ReviewRecords`.
-- One vote record exists for each roll call. A re-collected vote with a newer update time appends a revision to the same record.
+- One vote record exists for each source and roll call. A re-collected vote with a newer update time appends a revision to the same record.
 - Every candidate is drafted. No gate exists. The only candidate that settles without a revision is a roll call with no tracked member.
 - Code produces every fact with its citation. The model writes only the headline and a plain summary of the question.
-- The model sees the fact lines and the names of the tracked members. It does not see how they voted. It may name only the tracked members that are in the facts.
+- The model sees only the fact lines. It sees no member and no vote, and its text may name no configured person. Code lists the tracked members and their votes beside the text. So copied text can never state a vote that a later correction changed.
 - When only the votes of tracked members change, drafting makes no model call. It copies the text of the current revision, as action drafting does for sponsorships.
 - The vote record has no text origin, no suggestion, and no person edit rule yet. The review change adds them with the review pages.
 - The vote record has no owner command yet. A Blocked entry stays Blocked until a later change adds `votes draft requeue`.
@@ -53,14 +53,15 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - The sweep covers every session from `backfillFrom` to today, also across a year boundary. Enforced by `HouseVoteSession`. Test: `HouseVoteSessionTests.TheSweepFollowsSessionByStepUntilTheSessionOfToday`.
 - Vote admission never defers a job; a deferral fails the transaction. Enforced by `PostgresCollectionJobStore`. Test: `PostgresHouseVoteTests.AFullPageWithItsNextPageJobFitsTheBudgetButOneMoreJobIsAnInvalidDeferralThatSavesNothing`.
 - The shipped source budgets hold a full page and its next-page job. Enforced by `CollectionConfiguration.Validate`. Test: `PostgresHouseVoteTests.ShippedSourceBudgetsAdmitAFullPageAndItsNextPage`.
-- One vote record exists for each roll call. Enforced by `ux_vote_drafts_roll` and `VoteDraftRows.AppendAnalysisRevisionAsync`. Tests: `PostgresHouseVoteTests.TheDatabaseAllowsOneDraftForEachRollCallAndRefusesABadRecordId` and `PostgresHouseVoteTests.ACollectedAgainVoteAppendsRevisionTwoToTheSameDraftBecauseTheRecordIsOnePerRollCall`.
+- One vote record exists for each source and roll call. Enforced by `ux_vote_drafts_roll` and `VoteDraftRows.AppendAnalysisRevisionAsync`. Tests: `PostgresHouseVoteTests.TheDatabaseAllowsOneDraftForEachRollCallAndRefusesABadRecordId` and `PostgresHouseVoteTests.ACollectedAgainVoteAppendsRevisionTwoToTheSameDraftBecauseTheRecordIsOnePerRollCall`.
 - Each candidate gets one queue row in the transaction that writes it. Enforced by `PostgresCollectionJobStore.AdmitMembersAsync` and `VoteDraftQueueRows`. Tests: `PostgresHouseVoteTests.TheCandidateWriteQueuesOnePendingDraftRowInTheSameTransactionAndReplayKeepsIt` and `VoteDraftingMigrationTests.BackfillQueuesOnePendingDraftRowForEveryVoteCandidateThatExistedBeforeTheMigration`.
 - Code writes every fact and cites its exact line in the saved extraction. Enforced by `VoteReader`. Test: `VoteDraftStepTests.CitationsPointAtTheExactRenderedLinesSoAReaderCanCheckEveryFactAgainstTheSavedExtraction`.
-- Only tracked members enter the record and the prompt. Enforced by `VoteReader`. Test: `VoteDraftStepTests.MembersWhomNobodyTracksNeverEnterTheRecordOrThePromptBecauseOnlyTrackedVotesAreCited`.
-- The prompt holds only the agreed fact lines and the tracked names. Enforced by `VoteDraftPrompt`. Test: `VoteDraftStepTests.ThePromptHoldsOnlyTheAgreedFactLinesAndTheTrackedNamesBecauseCodeOwnsTheVotes`.
-- The text names no configured person who is outside the facts. Enforced by `VoteDraftResolver` through `AnalysisAnswerRules.CheckNamesOutsideFacts`. Test: `VoteDraftStepTests.TextThatNamesAConfiguredPersonWhoIsNotInTheFactsIsRejectedAndTheRetryRuns`.
+- Only tracked members enter the record. Enforced by `VoteReader`. Test: `VoteDraftStepTests.MembersWhomNobodyTracksNeverEnterTheRecordBecauseOnlyTrackedVotesAreCited`.
+- A member is tracked when the source covers the member on the vote day. Enforced by `VoteReader`, which uses the start time of the vote and the update time only when the start time is missing. Test: `VoteDraftStepTests.CoverageIsCheckedOnTheVoteDayBecauseALaterCorrectionMustNotChangeWhoWasTrackedForTheVote`.
+- The prompt holds only the agreed fact lines. Enforced by `VoteDraftPrompt`. Test: `VoteDraftStepTests.ThePromptHoldsOnlyTheAgreedFactLinesAndNoMemberBecauseCodeOwnsTheMembersAndTheirVotes`.
+- The text names no configured person. Enforced by `VoteDraftResolver`. Test: `VoteDraftStepTests.TextThatNamesAnyConfiguredPersonIsRejectedSoNoCopiedTextCanStateAStaleVote`.
 - A change of member votes alone makes no model call and keeps the text. Enforced by `VoteDraftContext.ChangeSinceCurrent` and `VoteDraftStep`. Test: `VoteDraftStepTests.ACorrectedMemberVoteAppendsAtOnceWithoutAModelCallAndKeepsTheTextBecauseCodeOwnsTheVotes`.
-- A change of any other fact, or of the tracked member set, calls the model. Enforced by `VoteDraftContext.ChangeSinceCurrent`. Tests: `VoteDraftStepTests.AMemberVoteChangeTogetherWithAChangedResultStillCallsTheModel` and `VoteDraftStepTests.AChangedTrackedMemberSetCallsTheModelBecauseTheTextMayNameTheMembers`.
+- A change of any fact calls the model. A change of the tracked member set alone copies the text, because the text names no member. Enforced by `VoteDraftContext.ChangeSinceCurrent`. Tests: `VoteDraftStepTests.AMemberVoteChangeTogetherWithAChangedResultStillCallsTheModel` and `VoteDraftStepTests.AChangedTrackedMemberSetCopiesTheTextWithoutACallBecauseTheTextNamesNoMember`.
 - A re-collected vote with the same facts and votes writes nothing. Enforced by `VoteDraftContext.ChangeSinceCurrent`. Test: `VoteDraftStepTests.ARecollectedVoteWithTheSameFactsAndVotesSettlesWithoutACallEvenWhenItsUpdateDateMoved`.
 - A roll call with no tracked member writes no revision and makes no call. Enforced by `VoteDraftStep`. Test: `VoteDraftStepTests.ARollCallWithNoTrackedMemberSettlesSucceededWithoutACallOrARevision`.
 - The saved extraction text must equal the new render of its capture. Enforced by `VoteReader`. Test: `VoteDraftStepTests.ARenderedTextThatDiffersFromTheSavedExtractionBlocksBeforeAnyCall`.
@@ -187,16 +188,16 @@ The update date is the exact UTC time as `yyyy-MM-ddTHH:mm:ssZ`. `BillStreamJobK
 1. `PostgresVoteDraftStore.ReadEvidenceAsync` returns the candidate, the configuration revision, the saved detail and members pages, the current revision of the record, and whether a newer candidate exists. A missing candidate blocks with `evidenceUnavailable`. A newer candidate settles as `supersededByNewerCandidate`.
 2. `VoteReader` checks that both pages were saved by the current parser and normalization. It parses both captures again and renders them. A render that differs from the saved text blocks with `renderedTextMismatch`.
 3. `VoteReader` takes the facts. A fact is a line of the detail text that starts with `Started: `, `Question: `, `Result: `, `Legislation: `, or `Party total `. Each fact keeps its text and a span of its line. The vote type, the update time, and the source data line are not facts.
-4. `VoteReader` takes the member votes. The tracked people are those of `CollectionConfiguration.CoveredBioguidePeopleOf` on the update day of the candidate. Each tracked member in the members response gives the person, the bioguide ID, the cast, and a span of the member line. The order is the bioguide ID order.
+4. `VoteReader` takes the member votes. The tracked people are those of `CollectionConfiguration.CoveredBioguidePeopleOf` on the vote day. That is the date of the start time in the offset that the API gives. A vote without a start time uses the UTC date of its update time. Each tracked member in the members response gives the person, the bioguide ID, the cast, and a span of the member line. The order is the bioguide ID order.
 5. The fingerprint is the SHA-256 of the fact lines and the member votes (`VoteFingerprint`, version `vote-fingerprint-v1`). It is the input hash of a run that makes no call.
 6. No tracked member settles `Succeeded` with `noTrackedMember`, a bypassed run, and no revision. More than 600 members block with `tooManyMembers`. More than 64 facts, or a fact over 2,000 characters, block with `factTooLong`.
-7. `VoteDraftContext.ChangeSinceCurrent` compares the snapshot with the current revision. Equal fact texts, equal members, and equal casts give `unchanged`. Equal fact texts and members with other casts give `memberVotesChanged`. Anything else, or no current revision, drafts with the model.
+7. `VoteDraftContext.ChangeSinceCurrent` compares the snapshot with the current revision. Equal fact texts, equal members, and equal casts give `unchanged`. Equal fact texts with other members or casts give `memberVotesChanged`. Anything else, or no current revision, drafts with the model.
 
-`memberVotesChanged` appends a revision at once. `VoteDraftResolver.CopyText` keeps the headline and the summary. The run is bypassed with zero charged tokens. A change of the tracked set is not a vote-only change, because the text may name the members.
+`memberVotesChanged` appends a revision at once. `VoteDraftResolver.CopyText` keeps the headline and the summary. The run is bypassed with zero charged tokens. A change of the tracked set is also a member change, because the text names no member.
 
-The prompt holds the fact lines and the names of the tracked members. It tells the model not to state how a member voted, because code lists the votes beside the text. The task is `vote-draft` with the model `claude-haiku-5-5`, set as `VoteDraftTask.Model`. It allows two passes and 2,000 output tokens. The shared `AnalysisValidationLoop` runs them.
+The prompt holds the fact lines only. It tells the model to name no person, because code lists the tracked members and their votes beside the text. The task is `vote-draft` with the model `claude-haiku-5-5`, set as `VoteDraftTask.Model`. It allows two passes and 2,000 output tokens. The shared `AnalysisValidationLoop` runs them.
 
-`VoteDraftResolver` rejects an answer that is not the schema. It rejects text over its bound or with a NUL. It rejects a confidence outside 0 to 1. It rejects a configured person outside the facts. It matches full names with `AnalysisAnswerRules.CheckNamesOutsideFacts`. A rejection retries once with the reasons. A second rejection fails the entry with `outputRejected`.
+`VoteDraftResolver` rejects an answer that is not the schema. It rejects text over its bound or with a NUL. It rejects a confidence outside 0 to 1. It rejects text that names any configured person. It matches full names, without regard to case. A rejection retries once with the reasons. A second rejection fails the entry with `outputRejected`.
 
 ### Outcomes
 
@@ -208,7 +209,7 @@ The prompt holds the fact lines and the names of the tracked members. It tells t
 | Succeeded | `supersededByNewerCandidate` | The roll call has a candidate with a later update time |
 | RetryWaiting | `revisionConflict` | Another writer appended first |
 | Blocked | `evidenceUnavailable`, `tooManyMembers`, `factTooLong`, `extractionVersionChanged`, `renderedTextMismatch`, `overByteCap` | The input cannot be drafted |
-| Failed | `outputRejected`, a stop code, or `attemptsExhausted` | The entry stays Failed until `RequeueFailedAsync` runs |
+| Failed | `outputRejected`, a stop code, or `attemptsExhausted` | The entry stays Failed. No command can requeue it yet; the vote review PR adds one |
 
 A run that makes no call has the reason `unchanged`, `noTrackedMember`, or `memberVotesChanged`.
 
@@ -233,7 +234,7 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 - The store writes no page rows. The two extractions and the captures of the two jobs are the evidence of a candidate.
 - `ix_house_vote_candidates_roll` serves the newer-candidate check of a roll call.
 - `vote_analysis`, `vote_analysis_runs`, and `vote_analysis_budget` hold the queue, the runs, and the daily charge of the task `vote-draft`. They have the shape of the [action tables](actions.md#storage-and-contracts). A run has the reason column for a bypassed run.
-- `vote_drafts` holds one record for each roll call. `vote_revisions` holds its revisions as JSON, each with the run of its analysis author. `vote_review_decisions` is empty until review exists. It completes the shape that `ReviewRecords` needs.
+- `vote_drafts` holds one record for each source and roll call. `vote_revisions` holds its revisions as JSON, each with the run of its analysis author. `vote_review_decisions` is empty until review exists. It completes the shape that `ReviewRecords` needs.
 - The migration queues every vote candidate that existed when it ran. The first run can spend up to the daily limit on them.
 
 ## Code map
@@ -262,10 +263,11 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 ## Limits and planned work
 
 - Planned ([R-15](../roadmap.md#now)): review pages and publication of vote records. They reuse the shared review and publication machinery. The revision then gets a text origin, a suggestion, and the person edit rule, as for [actions](actions.md#revision-and-append).
-- Planned: an owner command `votes draft` with `status`, `list`, and `requeue`. Until then a Blocked entry stays Blocked, and the vote lifecycle does not allow a requeue of a Blocked or Succeeded entry. The publication lock rule must add `civic-lens-vote-review` to the review keys.
+- Planned: an owner command `votes draft` with `status`, `list`, and `requeue`. Until then a Blocked or Failed entry stays as it is. The vote lifecycle allows no requeue of a Blocked or Succeeded entry. The publication lock rule must add `civic-lens-vote-review` to the review keys.
 - Planned: a vote record keeps the bill identity, so it can link to the action record of that bill. The link is not built yet.
 - Planned: measure the noise of drafting every roll call before adding a gate. The 119th Congress had 362 roll calls in session 1 and 314 so far in session 2 on 2026-10-16.
 - A roll call with no tracked member has no record. The record needs at least one member vote.
+- When a newer version of a roll call has no tracked member, the earlier revision stays current with its earlier votes. Actions behave the same way with `noTrackedOfficial`.
 - The `house-vote` API is a beta. Its shape can change. A changed shape makes a parser raise invalid data, which blocks the job.
 - A roll call with an unknown legislation type has no bill link, so it does not link to an action record.
 - A members response that is newer than the recorded detail blocks its job until the next sweep admits the newer detail.

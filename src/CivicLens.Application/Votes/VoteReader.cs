@@ -26,9 +26,12 @@ public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader respo
 
         var configuration = evidence.ConfigurationRevision.Configuration;
         var source = configuration.Sources.Single(item => item.Id == candidate.SourceId);
-        var tracked = configuration.CoveredBioguidePeopleOf(source, DateOnly.FromDateTime(candidate.UpdateDate.UtcDateTime));
+        var tracked = configuration.CoveredBioguidePeopleOf(source, VoteDayOf(detail, candidate.UpdateDate));
         return new(Assemble(evidence, members, tracked, configuration.People), null);
     }
+
+    private static DateOnly VoteDayOf(HouseVoteDetail detail, DateTimeOffset updateDate) =>
+        detail.StartDate is { } start ? DateOnly.FromDateTime(start.DateTime) : DateOnly.FromDateTime(updateDate.UtcDateTime);
 
     private static VoteSnapshot Assemble(VoteDraftEvidence evidence, HouseVoteMemberVotes members, PersonConfiguration[] tracked,
         PersonConfiguration[] configuredPeople)
@@ -38,7 +41,7 @@ public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader respo
         var involved = memberVotes.Select(item => item.PersonId).ToHashSet(StringComparer.Ordinal);
         return new(facts, memberVotes, VoteFingerprint.Compute(facts, memberVotes),
             configuredPeople.Where(person => involved.Contains(person.Id)).ToImmutableDictionary(person => person.Id, person => person.Name),
-            [.. configuredPeople.Where(person => !involved.Contains(person.Id)).Select(person => person.Name)]);
+            [.. configuredPeople.Select(person => person.Name)]);
     }
 
     private static ImmutableArray<VoteFact> FactsOf(VoteDraftPage page) =>

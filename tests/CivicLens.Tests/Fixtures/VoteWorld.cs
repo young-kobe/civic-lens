@@ -53,9 +53,12 @@ internal sealed class VoteWorld
     };
 
     public static VoteWorld Create(MemberSpec[]? members = null, string result = "Passed", string? question = null,
-        string legislation = HouseVoteFixtures.Legislation)
+        string legislation = HouseVoteFixtures.Legislation, DateOnly? backfillFrom = null)
     {
-        var world = new VoteWorld(CollectionConfigurationRevision.Create(Configuration()));
+        var configuration = Configuration();
+        if (backfillFrom is { } from)
+            configuration = configuration with { Sources = [configuration.Sources[0] with { BackfillFrom = from }] };
+        var world = new VoteWorld(CollectionConfigurationRevision.Create(configuration));
         var detail = HouseVoteFixtures.Detail(legislation: legislation).Replace("\"result\":\"Passed\"", $"\"result\":\"{result}\"", StringComparison.Ordinal);
         if (question is not null)
             detail = detail.Replace("On Motion to Concur in the Senate Amendment", question, StringComparison.Ordinal);
@@ -121,8 +124,9 @@ internal sealed class VoteWorld
 
     private void Add(string jobId, ApiResource resource, string url, string body, string renderedText)
     {
-        var configured = new ConfiguredCollectionSource(Revision, SourceId, HouseVoteFixtures.Backfill);
-        var definition = configured.CreateApiJobDefinition(resource, url, HouseVoteFixtures.Backfill);
+        var coveredFrom = Revision.Configuration.Sources.Single().BackfillFrom!.Value;
+        var configured = new ConfiguredCollectionSource(Revision, SourceId, coveredFrom);
+        var definition = configured.CreateApiJobDefinition(resource, url, coveredFrom);
         var attempt = new CollectionJobAttempt("attempt-" + jobId, definition.CreateRequest(jobId, Path.GetFullPath("captures")),
             new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
         jobs[jobId] = new CollectionJobRecord(jobId, definition, "key-" + jobId, CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,

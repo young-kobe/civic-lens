@@ -7,14 +7,13 @@ public sealed record VoteDraftContext(VoteDraftEvidence Evidence, VoteSnapshot S
     public VoteChange ChangeSinceCurrent()
     {
         var previous = Evidence.Current;
-        if (previous is null || !previous.Facts.Select(fact => fact.Text).SequenceEqual(Snapshot.Facts.Select(fact => fact.Text)) ||
-            !previous.Members.Select(IdentityOf).SequenceEqual(Snapshot.Members.Select(IdentityOf)))
+        if (previous is null || !previous.Facts.Select(fact => fact.Text).SequenceEqual(Snapshot.Facts.Select(fact => fact.Text)))
             return VoteChange.Other;
-        return previous.Members.Select(member => member.Cast).SequenceEqual(Snapshot.Members.Select(member => member.Cast))
-            ? VoteChange.None : VoteChange.MemberVotesOnly;
+        return previous.Members.Select(VoteOf).SequenceEqual(Snapshot.Members.Select(VoteOf)) ? VoteChange.None : VoteChange.MemberVotesOnly;
     }
 
-    private static (string PersonId, string BioguideId) IdentityOf(MemberVote member) => (member.PersonId, member.BioguideId);
+    private static (string PersonId, string BioguideId, string Cast) VoteOf(MemberVote member) =>
+        (member.PersonId, member.BioguideId, member.Cast);
 }
 
 public enum VoteChange { None, MemberVotesOnly, Other }

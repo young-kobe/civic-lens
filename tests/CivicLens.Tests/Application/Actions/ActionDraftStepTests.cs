@@ -9,7 +9,7 @@ using CivicLens.Core.Statements;
 using CivicLens.Tests.Application.Analysis;
 using CivicLens.Tests.Fixtures;
 using static CivicLens.Tests.Fixtures.ActionBillWorld;
-using static CivicLens.Tests.Fixtures.ActionDraftOutputs;
+using static CivicLens.Tests.Fixtures.HeadlineSummaryOutputs;
 using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Tests.Application.Actions;
@@ -24,7 +24,7 @@ public sealed class ActionDraftStepTests
     public async Task TheFirstDraftAlwaysCallsTheModelAndWritesRevisionOneWithTheFingerprintAndNoSuggestion()
     {
         var world = Create(cosponsorPages: [[MarkeyOriginal]], summaries: [Summary]);
-        var (store, model) = await RunAsync(world, new FakeActionDraftModel().Draft(Output()));
+        var (store, model) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output()));
 
         var revision = Assert.Single(store.Revisions);
         Assert.Equal((1, "civic-lens:analysis", ReviewTextOrigin.Model, null), (revision.RevisionNumber, revision.AuthorSubject, revision.TextOrigin, revision.Suggestion));
@@ -43,7 +43,7 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task APolicyAreaLabelThatTheConfigurationLacksStoresNoAreaIDSoThePublishedFilterNeverGuesses()
     {
-        var (store, _) = await RunAsync(Create(policyArea: "Public Lands"), new FakeActionDraftModel().Draft(Output()));
+        var (store, _) = await RunAsync(Create(policyArea: "Public Lands"), new FakeHeadlineSummaryModel().Draft(Output()));
 
         var revision = Assert.Single(store.Revisions);
         Assert.Equal(("Public Lands", null), (revision.PolicyArea, revision.PolicyAreaId));
@@ -53,10 +53,10 @@ public sealed class ActionDraftStepTests
     public async Task ADifferentConfiguredAreaIDDraftsAgainBecauseTheStoredIDIsPartOfWhatTheReviewerApproved()
     {
         var world = Create(cosponsorPages: [[MarkeyOriginal]]);
-        var (first, _) = await RunAsync(world, new FakeActionDraftModel().Draft(Output()));
+        var (first, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output()));
         var staleAreaId = Assert.Single(first.Revisions) with { PolicyAreaId = "old-housing" };
 
-        var (second, model) = await RunAsync(world, new FakeActionDraftModel().Draft(Output()), staleAreaId);
+        var (second, model) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output()), staleAreaId);
 
         Assert.Single(model.Requests);
         Assert.Equal("housing", Assert.Single(second.Revisions).PolicyAreaId);
@@ -65,7 +65,7 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task ConfidenceStaysInTheRunOutputAndNeverReachesTheRevision()
     {
-        var (store, _) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Output(headlineConfidence: 0.77)));
+        var (store, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output(headlineConfidence: 0.77)));
 
         Assert.Contains("0.77", Assert.Single(store.Runs).Run.OutputJson, StringComparison.Ordinal);
         Assert.DoesNotContain("onfidence", JsonSerializer.Serialize(Assert.Single(store.Revisions)), StringComparison.Ordinal);
@@ -75,7 +75,7 @@ public sealed class ActionDraftStepTests
     public async Task CitationsPointAtTheExactRenderedLinesOfTheSavedExtractions()
     {
         var world = Create(cosponsorPages: [[MarkeyOriginal]], summaries: [Summary]);
-        var (store, _) = await RunAsync(world, new FakeActionDraftModel().Draft(Output()));
+        var (store, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output()));
 
         var revision = Assert.Single(store.Revisions);
         var warren = revision.Sponsorships.Single(item => item.BioguideId == Warren);
@@ -91,7 +91,7 @@ public sealed class ActionDraftStepTests
     public async Task AWithdrawnCosponsorshipIsListedAndCitedWithBothDates()
     {
         var world = Create(sponsors: [Stranger], cosponsorPages: [[new(Markey, "2025-01-04", Original: false, Withdrawn: "2025-02-10")]]);
-        var (store, model) = await RunAsync(world, new FakeActionDraftModel().Draft(UnnamedOutput));
+        var (store, model) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(UnnamedOutput));
 
         var markey = Assert.Single(Assert.Single(store.Revisions).Sponsorships);
         Assert.Equal((new DateOnly(2025, 1, 4), new DateOnly(2025, 2, 10)), (markey.SponsoredOn, markey.WithdrawnOn));
@@ -104,7 +104,7 @@ public sealed class ActionDraftStepTests
     {
         var world = Create(cosponsorPages: [[MarkeyOriginal with { Withdrawn = "2025-02-10" }]]);
 
-        var (_, model) = await RunAsync(world, new FakeActionDraftModel().Draft(Output()));
+        var (_, model) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output()));
 
         var prompt = Assert.Single(model.Requests).UserPrompt;
         Assert.Contains("Elizabeth Warren", prompt, StringComparison.Ordinal);
@@ -119,8 +119,8 @@ public sealed class ActionDraftStepTests
         var withStranger = Create(sponsors: [Warren, Stranger], cosponsorPages: [[new(Stranger, "2025-01-09"), MarkeyOriginal]]);
         var withoutStranger = Create(sponsors: [Warren], cosponsorPages: [[MarkeyOriginal]]);
 
-        var (store, model) = await RunAsync(withStranger, new FakeActionDraftModel().Draft(Output()));
-        var (other, _) = await RunAsync(withoutStranger, new FakeActionDraftModel().Draft(Output()));
+        var (store, model) = await RunAsync(withStranger, new FakeHeadlineSummaryModel().Draft(Output()));
+        var (other, _) = await RunAsync(withoutStranger, new FakeHeadlineSummaryModel().Draft(Output()));
 
         var revision = Assert.Single(store.Revisions);
         Assert.Equal([Markey, Warren], revision.Sponsorships.Select(item => item.BioguideId).Order());
@@ -131,7 +131,7 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task ABillWithNoTrackedOfficialSettlesSucceededWithoutACallOrARevision()
     {
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
         var (store, _) = await RunAsync(Create(sponsors: [Stranger]), model);
 
         Assert.Equal((State.Succeeded, "noTrackedOfficial"), (store.Entries[0].Status, store.Entries[0].ErrorCode));
@@ -145,9 +145,9 @@ public sealed class ActionDraftStepTests
     public async Task AMatchingFingerprintAndSummaryVersionSettleWithoutAModelCall()
     {
         var world = Create(cosponsorPages: [[MarkeyOriginal]], summaries: [Summary]);
-        var (first, _) = await RunAsync(world, new FakeActionDraftModel().Draft(Output()));
+        var (first, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output()));
         var current = Assert.Single(first.Revisions);
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
 
         var (second, _) = await RunAsync(world, model, current, updatedAt: UpdatedAt.AddDays(1));
 
@@ -162,9 +162,9 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task ANewSponsorshipAppendsAtOnceWithoutAModelCallAndKeepsTheTextBecauseCodeOwnsTheSponsorshipList()
     {
-        var (first, _) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Output()));
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
         var current = Assert.Single(first.Revisions);
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
 
         var (second, _) = await RunAsync(Create(cosponsorPages: [[MarkeyOriginal]]), model, current, updatedAt: UpdatedAt.AddDays(1));
 
@@ -182,14 +182,14 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task ASponsorshipChangeKeepsAPersonsTextAndTheSuggestionUnchangedWithItsRunId()
     {
-        var (first, _) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Output()));
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
         var suggestion = new ActionTextSuggestion("Model headline", "Model summary.", Assert.Single(first.Runs).Run.RunId,
             Assert.Single(first.Revisions).Fingerprint);
         var edited = ActionRevisionFixtures.PersonEditOf(Assert.Single(first.Revisions), "Edited headline", "Edited summary.") with
         {
             Suggestion = suggestion
         };
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
 
         var (second, _) = await RunAsync(Create(cosponsorPages: [[MarkeyOriginal]]), model, edited, updatedAt: UpdatedAt.AddDays(1));
 
@@ -206,8 +206,8 @@ public sealed class ActionDraftStepTests
         var active = Create(sponsors: [Stranger], cosponsorPages: [[MarkeyOriginal]]);
         var withdrawn = Create(sponsors: [Stranger], cosponsorPages: [[MarkeyOriginal with { Withdrawn = "2025-02-10" }]]);
 
-        var (first, _) = await RunAsync(active, new FakeActionDraftModel().Draft(UnnamedOutput));
-        var (second, model) = await RunAsync(withdrawn, new FakeActionDraftModel(), Assert.Single(first.Revisions), updatedAt: UpdatedAt.AddDays(1));
+        var (first, _) = await RunAsync(active, new FakeHeadlineSummaryModel().Draft(UnnamedOutput));
+        var (second, model) = await RunAsync(withdrawn, new FakeHeadlineSummaryModel(), Assert.Single(first.Revisions), updatedAt: UpdatedAt.AddDays(1));
 
         Assert.Equal(new DateOnly(2025, 2, 10), Assert.Single(Assert.Single(second.Revisions).Sponsorships).WithdrawnOn);
         Assert.Empty(model.Requests);
@@ -216,8 +216,8 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task ANewSponsorCallsTheModelBecauseTheTextNamesTheSponsors()
     {
-        var (first, _) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Output()));
-        var model = new FakeActionDraftModel().Draft(Output(headline: "Warren and Markey sponsor a bill"));
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
+        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: "Warren and Markey sponsor a bill"));
 
         var (second, _) = await RunAsync(Create(sponsors: [Warren, Markey]), model, Assert.Single(first.Revisions), updatedAt: UpdatedAt.AddDays(1));
 
@@ -228,8 +228,8 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task ASponsorshipChangeTogetherWithAnotherFactStillCallsTheModel()
     {
-        var (first, _) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Output()));
-        var model = new FakeActionDraftModel().Draft(Output(headline: "Warren and Markey back a renamed bill"));
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
+        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: "Warren and Markey back a renamed bill"));
 
         var (second, _) = await RunAsync(Create(cosponsorPages: [[MarkeyOriginal]], title: "A renamed housing bill"), model,
             Assert.Single(first.Revisions), updatedAt: UpdatedAt.AddDays(1));
@@ -243,9 +243,9 @@ public sealed class ActionDraftStepTests
     {
         var older = Create(summaries: [Summary]);
         var newer = Create(summaries: [Summary, new SummarySpec("01", "2025-02-01", "2025-02-02T10:00:00Z", "<p>Amended.</p>")]);
-        var (first, _) = await RunAsync(older, new FakeActionDraftModel().Draft(Output()));
+        var (first, _) = await RunAsync(older, new FakeHeadlineSummaryModel().Draft(Output()));
 
-        var (second, model) = await RunAsync(newer, new FakeActionDraftModel().Draft(Output(headline: "Revised")), Assert.Single(first.Revisions));
+        var (second, model) = await RunAsync(newer, new FakeHeadlineSummaryModel().Draft(Output(headline: "Revised")), Assert.Single(first.Revisions));
 
         Assert.Equal("01@2025-02-02T10:00:00Z", Assert.Single(second.Revisions).SummaryVersion);
         Assert.Contains("Amended.", model.Requests[0].UserPrompt, StringComparison.Ordinal);
@@ -262,7 +262,7 @@ public sealed class ActionDraftStepTests
             new("09", "2025-01-01", "2025-09-02T10:00:00Z", "<p>Old action.</p>")
         ]);
 
-        var (_, model) = await RunAsync(world, new FakeActionDraftModel().Draft(Output()));
+        var (_, model) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output()));
 
         Assert.Contains("Third.", model.Requests[0].UserPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("Second.", model.Requests[0].UserPrompt, StringComparison.Ordinal);
@@ -272,7 +272,7 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task TheModelGetsNoLatestActionAndNoOtherFactsThanTheAgreedOnes()
     {
-        var (_, model) = await RunAsync(Create(summaries: [Summary]), new FakeActionDraftModel().Draft(Output()));
+        var (_, model) = await RunAsync(Create(summaries: [Summary]), new FakeHeadlineSummaryModel().Draft(Output()));
 
         using var document = JsonDocument.Parse(model.Requests[0].UserPrompt["Facts:\n".Length..]);
         Assert.Equal(["bill", "trackedIssues", "sponsors", "summary"], document.RootElement.EnumerateObject().Select(item => item.Name));
@@ -283,7 +283,7 @@ public sealed class ActionDraftStepTests
     {
         var world = Create(cosponsorPages: [[MarkeyOriginal]]);
         world.TamperWithSavedText("cosponsors-0", "Bill: 119 hr 1\nCosponsor: M000133, 2025-01-04");
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
 
         var (store, _) = await RunAsync(world, model);
 
@@ -295,7 +295,7 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task ACandidateWithANewerCandidateOfTheSameBillIsSupersededWithoutACall()
     {
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
 
         var (store, _) = await RunAsync(Create(), model, hasNewerCandidate: true);
 
@@ -312,7 +312,7 @@ public sealed class ActionDraftStepTests
         var world = Create(summaries: summaries);
         for (var index = 0; index < summaries.Length; index++) world.ReplaceCapturedBody($"summaries-{index}", "not json");
         world.SetVersion("summaries-0", "older-version");
-        var model = new FakeActionDraftModel().Draft(Output());
+        var model = new FakeHeadlineSummaryModel().Draft(Output());
 
         var (store, _) = await RunAsync(world, model);
 
@@ -330,7 +330,7 @@ public sealed class ActionDraftStepTests
     {
         var summaries = Enumerable.Range(0, 20).Select(index => new SummarySpec($"{index:00}", "2025-01-03", "2025-01-05T10:00:00Z", "<p>x</p>")).ToArray();
 
-        var (store, _) = await RunAsync(Create(summaries: summaries), new FakeActionDraftModel().Draft(Output()));
+        var (store, _) = await RunAsync(Create(summaries: summaries), new FakeHeadlineSummaryModel().Draft(Output()));
 
         Assert.Single(store.Revisions);
     }
@@ -339,10 +339,10 @@ public sealed class ActionDraftStepTests
     public async Task APersonsTextIsKeptAndTheModelsNewTextBecomesASuggestion()
     {
         var world = Create(cosponsorPages: [[MarkeyOriginal]], title: "A renamed housing bill");
-        var (first, _) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Output()));
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
         var edited = ActionRevisionFixtures.PersonEditOf(Assert.Single(first.Revisions), "Edited headline", "Edited summary.");
 
-        var (second, _) = await RunAsync(world, new FakeActionDraftModel().Draft(Output(headline: "Model headline", summary: "Model summary.")), edited);
+        var (second, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output(headline: "Model headline", summary: "Model summary.")), edited);
 
         var revision = Assert.Single(second.Revisions);
         Assert.Equal(("Edited headline", "Edited summary.", ReviewTextOrigin.Person), (revision.Headline, revision.Summary, revision.TextOrigin));
@@ -355,14 +355,14 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task ALaterRunStillKeepsThePersonsTextBecauseTheTextOriginTravelsWithTheRevision()
     {
-        var (first, _) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Output()));
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
         var edited = ActionRevisionFixtures.PersonEditOf(Assert.Single(first.Revisions), "Edited headline", "Edited summary.");
-        var (second, _) = await RunAsync(Create(title: "One title"), new FakeActionDraftModel().Draft(Output(headline: "One")), edited);
+        var (second, _) = await RunAsync(Create(title: "One title"), new FakeHeadlineSummaryModel().Draft(Output(headline: "One")), edited);
         var keptByAnalysis = Assert.Single(second.Revisions);
         Assert.Equal("civic-lens:analysis", keptByAnalysis.AuthorSubject);
 
         var third = Create(title: "Two title");
-        var (last, _) = await RunAsync(third, new FakeActionDraftModel().Draft(Output(headline: "Two", summary: "Two.")), keptByAnalysis);
+        var (last, _) = await RunAsync(third, new FakeHeadlineSummaryModel().Draft(Output(headline: "Two", summary: "Two.")), keptByAnalysis);
 
         var revision = Assert.Single(last.Revisions);
         Assert.Equal(("Edited headline", "Edited summary.", 4), (revision.Headline, revision.Summary, revision.RevisionNumber));
@@ -376,7 +376,7 @@ public sealed class ActionDraftStepTests
     public async Task TextThatNamesAConfiguredPersonWhoIsNotInTheFactsIsRejectedAndTheRetryRuns(string headline)
     {
         var world = Create();
-        var model = new FakeActionDraftModel().Draft(Output(headline: headline)).Draft(Output());
+        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: headline)).Draft(Output());
 
         var (store, _) = await RunAsync(world, model);
 
@@ -388,7 +388,7 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task ANameInTheSummaryIsRejectedToo()
     {
-        var model = new FakeActionDraftModel().Draft(Output(summary: "Elizabeth Warren sponsored it with Ed Markey.")).Draft(Output());
+        var model = new FakeHeadlineSummaryModel().Draft(Output(summary: "Elizabeth Warren sponsored it with Ed Markey.")).Draft(Output());
 
         var (store, _) = await RunAsync(Create(), model);
 
@@ -400,7 +400,7 @@ public sealed class ActionDraftStepTests
     public async Task ASponsorMayBeNamedAndAPartOfTheirNameIsNotAnotherPerson()
     {
         var (store, _) = await RunAsync(Create(sponsors: [Warren], cosponsorPages: [[MarkeyOriginal]]),
-            new FakeActionDraftModel().Draft(Output(summary: "Elizabeth Warren sponsored it. Warren is a senator.")));
+            new FakeHeadlineSummaryModel().Draft(Output(summary: "Elizabeth Warren sponsored it. Warren is a senator.")));
 
         Assert.Single(store.Revisions);
     }
@@ -410,7 +410,7 @@ public sealed class ActionDraftStepTests
     {
         var world = Create(sponsors: [Warren, Markey], cosponsorPages: [[MarkeyOriginal]]);
 
-        var (store, _) = await RunAsync(world, new FakeActionDraftModel().Draft(Output(summary: "Ed Markey sponsored it.")));
+        var (store, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output(summary: "Ed Markey sponsored it.")));
 
         Assert.Single(store.Revisions);
     }
@@ -420,7 +420,7 @@ public sealed class ActionDraftStepTests
     {
         var world = Create(sponsors: [ExtraBioguide(10)], cosponsorPages: [[new(ExtraBioguide(1), "2025-01-04", Original: true)]], extraPeople: 10);
 
-        var (store, _) = await RunAsync(world, new FakeActionDraftModel().Draft(Output(summary: "Extra Person 10 sponsored it.")));
+        var (store, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output(summary: "Extra Person 10 sponsored it.")));
 
         Assert.Single(store.Revisions);
     }
@@ -430,7 +430,7 @@ public sealed class ActionDraftStepTests
     [InlineData("Backed by ED MARKEY")]
     public async Task TextThatNamesATrackedCosponsorIsRejectedBecauseCodeOwnsTheCosponsorList(string headline)
     {
-        var model = new FakeActionDraftModel().Draft(Output(headline: headline)).Draft(Output());
+        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: headline)).Draft(Output());
 
         var (store, _) = await RunAsync(Create(sponsors: [Warren], cosponsorPages: [[MarkeyOriginal]]), model);
 
@@ -443,7 +443,7 @@ public sealed class ActionDraftStepTests
     [InlineData(-0.1)]
     public async Task AConfidenceOutsideZeroToOneIsRejected(double confidence)
     {
-        var model = new FakeActionDraftModel().Draft(Output(headlineConfidence: confidence)).Draft(Output(summaryConfidence: 2));
+        var model = new FakeHeadlineSummaryModel().Draft(Output(headlineConfidence: confidence)).Draft(Output(summaryConfidence: 2));
 
         var (store, _) = await RunAsync(Create(), model);
 
@@ -455,7 +455,7 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task TextWithANulOrOverTheBoundIsRejected()
     {
-        var model = new FakeActionDraftModel().Draft(Output(headline: "bad\0text")).Draft(Output(summary: new string('x', 8_001)));
+        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: "bad\0text")).Draft(Output(summary: new string('x', 8_001)));
 
         var (store, _) = await RunAsync(Create(), model);
 
@@ -466,7 +466,7 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task AnAnswerThatIsNotTheSchemaIsRejectedLikeAnyOtherOutputError()
     {
-        var model = new FakeActionDraftModel().Draft("not json").Draft(Output());
+        var model = new FakeHeadlineSummaryModel().Draft("not json").Draft(Output());
 
         var (store, _) = await RunAsync(Create(), model);
 
@@ -479,7 +479,7 @@ public sealed class ActionDraftStepTests
     {
         var text = new string('x', 150_000);
         var big = Create(summaries: [new("00", "2025-01-03", "2025-01-05T10:00:00Z", "<p>" + text + "</p>")]);
-        var model = new FakeActionDraftModel().Draft(Output());
+        var model = new FakeHeadlineSummaryModel().Draft(Output());
 
         var (store, _) = await RunAsync(big, model);
 
@@ -496,7 +496,7 @@ public sealed class ActionDraftStepTests
     public async Task RejectedRunsWithoutTheSummaryKeepTheReasonThroughTheRetryAndTheFailure()
     {
         var big = Create(summaries: [new("00", "2025-01-03", "2025-01-05T10:00:00Z", "<p>" + new string('x', 150_000) + "</p>")]);
-        var model = new FakeActionDraftModel().Draft(Output(headline: "Ed Markey cosponsored a bill")).Draft(Output(headline: "Ed Markey cosponsored a bill"));
+        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: "Ed Markey cosponsored a bill")).Draft(Output(headline: "Ed Markey cosponsored a bill"));
 
         var (store, _) = await RunAsync(big, model);
 
@@ -509,9 +509,9 @@ public sealed class ActionDraftStepTests
     public async Task OnlyTheRunWhosePromptDroppedTheSummaryCarriesTheReason()
     {
         var world = Create(summaries: [new("00", "2025-01-03", "2025-01-05T10:00:00Z", "<p>" + new string('x', 2_000) + "</p>")]);
-        var (_, probe) = await RunAsync(world, new FakeActionDraftModel().Draft(Output()));
+        var (_, probe) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output()));
         var justFits = new ActionDraftSettings(10_000_000, probe.Requests[0].ReservedTokens + 10, 1);
-        var model = new FakeActionDraftModel().Draft(Output(headline: "Ed Markey cosponsored a bill")).Draft(Output(headline: "Ed Markey cosponsored a bill"));
+        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: "Ed Markey cosponsored a bill")).Draft(Output(headline: "Ed Markey cosponsored a bill"));
 
         var (store, _) = await RunAsync(world, model, settings: justFits);
 
@@ -523,7 +523,7 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task ASummaryThatFitsIsNeverOmittedAndLeavesNoReasonOnTheRun()
     {
-        var (store, model) = await RunAsync(Create(summaries: [Summary]), new FakeActionDraftModel().Draft(Output()));
+        var (store, model) = await RunAsync(Create(summaries: [Summary]), new FakeHeadlineSummaryModel().Draft(Output()));
 
         Assert.Contains("It funds rent aid.", model.Requests[0].UserPrompt, StringComparison.Ordinal);
         Assert.Null(Assert.Single(store.Runs).Reason);
@@ -532,7 +532,7 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task FactsThatAloneExceedTheByteCapStillBlockWithoutACall()
     {
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
         var settings = new ActionDraftSettings(10_000_000, ActionDraftPrompt.MinimumReservation, 1);
 
         var (store, _) = await RunAsync(Create(summaries: [Summary]), model, settings: settings);
@@ -547,7 +547,7 @@ public sealed class ActionDraftStepTests
         var pages = new[] { 1..250, 251..500, 501..601 }.Select(range =>
             Enumerable.Range(range.Start.Value, range.End.Value - range.Start.Value + 1).Select(index => new CosponsorSpec(ExtraBioguide(index), "2025-01-04")).ToArray()).ToArray();
         var world = Create(sponsors: [Stranger], cosponsorPages: pages, extraPeople: 601);
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
 
         var (store, _) = await RunAsync(world, model);
 
@@ -559,7 +559,7 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task ATitleOverTheRevisionLimitBlocksBeforeAnyCallOrBudgetReservation()
     {
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
 
         var (store, _) = await RunAsync(Create(title: new string('t', ActionDraftRevision.MaximumTitleLength + 1)), model);
 
@@ -571,7 +571,7 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task ATitleAtTheRevisionLimitIsStillDrafted()
     {
-        var (store, _) = await RunAsync(Create(title: new string('t', ActionDraftRevision.MaximumTitleLength)), new FakeActionDraftModel().Draft(Output()));
+        var (store, _) = await RunAsync(Create(title: new string('t', ActionDraftRevision.MaximumTitleLength)), new FakeHeadlineSummaryModel().Draft(Output()));
 
         Assert.Single(store.Revisions);
     }
@@ -579,10 +579,10 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task ARenamedIssueWithTheSameIdDraftsAgainBecauseTheRevisionMustNameTheIssueConfigurationItUsed()
     {
-        var (first, _) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Output()));
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
         var original = BillGateFixtures.Issues();
         var renamed = IssueConfigurationRevision.Create(original with { Issues = [original.Issues[0] with { Name = "Rent and housing costs" }] });
-        var model = new FakeActionDraftModel().Draft(Output());
+        var model = new FakeHeadlineSummaryModel().Draft(Output());
 
         var (second, _) = await RunAsync(Create(), model, Assert.Single(first.Revisions), issues: renamed);
 
@@ -595,8 +595,8 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task ABioguideIdMappedToAnotherPersonDraftsAgainBecauseTheRecordNamesOfficialsByPersonId()
     {
-        var (first, _) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Output()));
-        var model = new FakeActionDraftModel().Draft(Output());
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
+        var model = new FakeHeadlineSummaryModel().Draft(Output());
 
         var (second, _) = await RunAsync(Create(warrenPersonId: "elizabeth-warren"), model, Assert.Single(first.Revisions));
 
@@ -607,9 +607,9 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task ABillTitleThatChangedDraftsAgainEvenWhenNothingElseChanged()
     {
-        var (first, _) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Output()));
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
 
-        var (second, model) = await RunAsync(Create(title: "A renamed housing bill"), new FakeActionDraftModel().Draft(Output()), Assert.Single(first.Revisions));
+        var (second, model) = await RunAsync(Create(title: "A renamed housing bill"), new FakeHeadlineSummaryModel().Draft(Output()), Assert.Single(first.Revisions));
 
         Assert.Equal("A renamed housing bill", Assert.Single(second.Revisions).BillTitle);
         Assert.Single(model.Requests);
@@ -618,10 +618,10 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task APolicyAreaAssignedLaterDraftsAgain()
     {
-        var (first, _) = await RunAsync(Create(policyArea: null), new FakeActionDraftModel().Draft(Output()));
+        var (first, _) = await RunAsync(Create(policyArea: null), new FakeHeadlineSummaryModel().Draft(Output()));
         Assert.Null(Assert.Single(first.Revisions).PolicyArea);
 
-        var (second, _) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Output()), Assert.Single(first.Revisions));
+        var (second, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()), Assert.Single(first.Revisions));
 
         var revision = Assert.Single(second.Revisions);
         Assert.Equal((BillGateFixtures.TrackedPolicyArea, 2), (revision.PolicyArea, revision.RevisionNumber));
@@ -630,10 +630,10 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task AChangeInTheTrackedIssuesOfTheIssueConfigurationDraftsAgain()
     {
-        var (first, _) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Output()));
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
         var inactive = IssueConfigurationRevision.Create(BillGateFixtures.Issues(startsOn: new DateOnly(2030, 1, 1)));
 
-        var (second, _) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Output()), Assert.Single(first.Revisions), issues: inactive);
+        var (second, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()), Assert.Single(first.Revisions), issues: inactive);
 
         var revision = Assert.Single(second.Revisions);
         Assert.Empty(revision.TrackedIssueIds);
@@ -643,8 +643,8 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task TheSameTitlePolicyAreaAndIssuesStillSettleAsUnchanged()
     {
-        var (first, _) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Output()));
-        var model = new FakeActionDraftModel();
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
+        var model = new FakeHeadlineSummaryModel();
 
         var (second, _) = await RunAsync(Create(), model, Assert.Single(first.Revisions));
 
@@ -657,7 +657,7 @@ public sealed class ActionDraftStepTests
     {
         var world = Create();
         var store = new FakeActionDraftStore(world.Evidence()) { Charged = 9_999_999 };
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
 
         await AnalysisWorkers.ActionDrafting(store, new FakeAnalysisStatusStore(), world.Reader(), model,
             new ActionDraftSettings(10_000_000, concurrency: 1), BillGateFixtures.Revision(), TimeProvider.System).ExecuteAsync(once: true);
@@ -669,8 +669,8 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task TheRevisionFollowsTheCurrentRevisionNumberAndNeverTheModelsChoice()
     {
-        var (first, _) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Output()));
-        var (second, _) = await RunAsync(Create(title: "A renamed housing bill"), new FakeActionDraftModel().Draft(Output()), Assert.Single(first.Revisions));
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
+        var (second, _) = await RunAsync(Create(title: "A renamed housing bill"), new FakeHeadlineSummaryModel().Draft(Output()), Assert.Single(first.Revisions));
 
         Assert.Equal(2, Assert.Single(second.Revisions).RevisionNumber);
     }
@@ -685,7 +685,7 @@ public sealed class ActionDraftStepTests
             new("02", "2025-02-01", "2025-02-02T10:00:00Z", "<p>Third.</p>")
         ]);
 
-        var (store, _) = await RunAsync(world, new FakeActionDraftModel().Draft(Output()));
+        var (store, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output()));
 
         var citation = Assert.Single(store.Revisions).SummaryCitation!;
         Assert.Equal(ExtractionIdOf("summaries-1"), citation.ExtractionId);
@@ -702,7 +702,7 @@ public sealed class ActionDraftStepTests
             new("01", "2025-03-01", "2025-03-02T10:00:00Z", "<p>Newest.</p>")
         ]);
 
-        var (store, _) = await RunAsync(world, new FakeActionDraftModel().Draft(Output()));
+        var (store, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output()));
 
         Assert.Equal(ExtractionIdOf("summaries-1"), Assert.Single(store.Revisions).SummaryCitation!.ExtractionId);
     }
@@ -715,7 +715,7 @@ public sealed class ActionDraftStepTests
     {
         var world = Create(cosponsorPages: [[MarkeyOriginal]], summaries: [Summary]);
         world.SetVersion(jobId, "older-version");
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
 
         var (store, _) = await RunAsync(world, model);
 
@@ -734,7 +734,7 @@ public sealed class ActionDraftStepTests
         var world = Create(cosponsorPages: [[MarkeyOriginal]], summaries: [Summary]);
         world.SetVersion(changedJob, "older-version");
         world.ReplaceCapturedBody(unreadableJob, "not json");
-        var model = new FakeActionDraftModel();
+        var model = new FakeHeadlineSummaryModel();
 
         var (store, _) = await RunAsync(world, model);
 
@@ -748,7 +748,7 @@ public sealed class ActionDraftStepTests
         var world = Create(summaries: [Summary]);
         world.TamperWithSavedText("detail", "Bill: 119 hr 1\nTitle: Changed");
 
-        var (store, _) = await RunAsync(world, new FakeActionDraftModel());
+        var (store, _) = await RunAsync(world, new FakeHeadlineSummaryModel());
 
         Assert.Equal("renderedTextMismatch", store.Entries[0].ErrorCode);
     }
@@ -758,7 +758,7 @@ public sealed class ActionDraftStepTests
     {
         var world = Create(sponsors: [Stranger], cosponsorPages: [[new(Markey, "2025-01-04", Original: true, Withdrawn: "2025-02-10"), new(Markey, "2025-02-20")]]);
 
-        var (store, _) = await RunAsync(world, new FakeActionDraftModel().Draft(UnnamedOutput));
+        var (store, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(UnnamedOutput));
 
         var entries = Assert.Single(store.Revisions).Sponsorships;
         Assert.Equal(2, entries.Length);
@@ -773,8 +773,8 @@ public sealed class ActionDraftStepTests
         var once = Create(sponsors: [Stranger], cosponsorPages: [[MarkeyOriginal]]);
         var twice = Create(sponsors: [Stranger], cosponsorPages: [[MarkeyOriginal], [MarkeyOriginal]]);
 
-        var (single, _) = await RunAsync(once, new FakeActionDraftModel().Draft(UnnamedOutput));
-        var (doubled, _) = await RunAsync(twice, new FakeActionDraftModel().Draft(UnnamedOutput));
+        var (single, _) = await RunAsync(once, new FakeHeadlineSummaryModel().Draft(UnnamedOutput));
+        var (doubled, _) = await RunAsync(twice, new FakeHeadlineSummaryModel().Draft(UnnamedOutput));
 
         Assert.Single(Assert.Single(doubled.Revisions).Sponsorships);
         Assert.Equal(Assert.Single(single.Revisions).Fingerprint, Assert.Single(doubled.Revisions).Fingerprint);
@@ -783,7 +783,7 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task AConfiguredPersonsLastNameAloneIsNotTheirFullNameSoItPasses()
     {
-        var (store, _) = await RunAsync(Create(), new FakeActionDraftModel().Draft(Output(summary: "Elizabeth Warren sponsored it. Sanders is not part of it.")));
+        var (store, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output(summary: "Elizabeth Warren sponsored it. Sanders is not part of it.")));
 
         Assert.Single(store.Revisions);
     }
@@ -791,7 +791,7 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task AnActNamedAfterAConfiguredPersonWhoIsNotInTheFactsIsRejectedBecauseTheCheckMatchesFullNames()
     {
-        var model = new FakeActionDraftModel().Draft(Output(headline: "Warren sponsored the Bernie Sanders Housing Act")).Draft(Output());
+        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: "Warren sponsored the Bernie Sanders Housing Act")).Draft(Output());
 
         var (store, _) = await RunAsync(Create(), model);
 
@@ -799,8 +799,8 @@ public sealed class ActionDraftStepTests
         Assert.Single(store.Revisions);
     }
 
-    private static async Task<(FakeActionDraftStore Store, FakeActionDraftModel Model)> RunAsync(ActionBillWorld world,
-        FakeActionDraftModel model, ActionDraftRevision? current = null, DateTimeOffset? updatedAt = null, ActionDraftSettings? settings = null,
+    private static async Task<(FakeActionDraftStore Store, FakeHeadlineSummaryModel Model)> RunAsync(ActionBillWorld world,
+        FakeHeadlineSummaryModel model, ActionDraftRevision? current = null, DateTimeOffset? updatedAt = null, ActionDraftSettings? settings = null,
         IssueConfigurationRevision? issues = null, bool hasNewerCandidate = false)
     {
         var store = new FakeActionDraftStore(world.Evidence(current, updatedAt, hasNewerCandidate));
