@@ -205,7 +205,7 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - Public filter pages are an MVP requirement; see R-20.
 - Planned, not built: a source filter and filters that are easy to clear, on the R-20 filter pages.
 - The R-20 pages will work at phone width. Each result will show the kind, headline, officials, issues, and dates of its record.
-- Later, after the first MVP deploy: a public search service with its own Postgres database, fed from releases. It gives full-text search over the whole processed corpus.
+- Later, in [R-20](../roadmap.md#next) after the first cloud deployment: a public search service with its own Postgres database, fed from releases. It gives full-text search over the whole processed corpus.
 - Split the manifest by kind when it grows over 4 MB.
 - At 20,000 entries the worst realistic manifest is about 14.6 MB, under three quarters of the 32 MB cap. `PublishRelease` refuses a manifest over the cap.
 - Issue and policy area filters show raw IDs, because the manifest has no names for them. R-20 owns the fix.
