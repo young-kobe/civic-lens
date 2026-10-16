@@ -267,6 +267,7 @@ Pending decisions for the ladder are [D-05](../roadmap.md#pending-decisions).
 - Cache keys include input hashes, task, model, and schema versions, and the relevant configuration and context.
 - Store model responses and provider metadata, because hosted aliases can change. Enforce limits for each task and each run. Budget exhaustion leaves visible pending work.
 - Measure false negatives, precision, calibration, latency, downstream savings, and review workload on held-out examples. Group examples so that document versions do not leak across splits.
+- Planned ([D-13](../roadmap.md#pending-decisions)): a benchmark of classifiers for the statement issue gate, with a Clef model fine-tuned on our labels. The gate is the costliest stage for each item, about 7,800 charged tokens for each call on 2026-10-16.
 - Planned dataset work will curate validation sets, golden sets, and training or fine-tuning datasets from retained evidence and attributed editorial history. Clef has open weights, so fine-tuning on our labels is possible.
 - Publication approval and dataset acceptance are separate judgments.
 - Dataset exports, task labels, eligibility rules, source-use permissions, provenance manifests, correction handling, and leakage-resistant splits are not designed yet. No dataset export or training workflow exists. Agree on them before any dataset export.

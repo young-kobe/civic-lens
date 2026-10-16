@@ -64,6 +64,7 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 - D-10: Vote kind from code (procedural, amendment, or passage) and one spelling for vote casts. [Votes](architecture/votes.md#limits-and-planned-work)
 - D-11: Drafting the past votes of a member who is added to tracking later. [Votes](architecture/votes.md#limits-and-planned-work)
 - D-12: Content profiles for the 282 of 1,392 page, HTML, and feed sources that have none. [Documents](architecture/documents.md#limits-and-planned-work)
+- D-13: A classifier benchmark for the statement issue gate, to run as soon as possible. Label about 100 gate decisions by hand, starting from the 48 measured ones. Compare a feature baseline, Cloudflare Clef-flash, Clef, a Clef model fine-tuned on our labels, and Haiku 5.5. The fine-tuning needs the dataset rules of [R-28](#later) agreed first. [Analysis](architecture/analysis.md#limits-and-planned-work)
 - D-08: Deployment topology: one cloud deployment, separate services, or services split across cloud providers, chosen by cost and operational needs. [Host](architecture/host.md#limits-and-planned-work)
 
 ## Product direction
