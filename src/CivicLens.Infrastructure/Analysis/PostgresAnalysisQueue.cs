@@ -19,14 +19,21 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
 
     private readonly string lockRowsSql =
         $"SELECT * FROM {mapping.Table} WHERE task = {{0}} AND status = {{1}} AND (CAST({{2}} AS text) IS NULL OR error_code = {{2}}) " +
-        $"AND (CAST({{3}} AS text) IS NULL OR {mapping.KeyColumn} = {{3}}) FOR UPDATE";
+        $"AND (CAST({{3}} AS text) IS NULL OR {mapping.KeyColumn} = {{3}}) ORDER BY {mapping.KeyColumn} FOR UPDATE";
+
+    private readonly string lockTaskSql =
+        $"SELECT 1 FROM {mapping.Table} WHERE task = {{0}} ORDER BY {mapping.KeyColumn} FOR UPDATE";
+
+    private readonly string lockSubjectsSql =
+        $"SELECT * FROM {mapping.Table} WHERE task = {{0}} AND status = ANY({{1}}) AND {mapping.KeyColumn} = ANY({{2}}) " +
+        $"ORDER BY {mapping.KeyColumn} FOR UPDATE";
 
     private readonly string ensureDaySql = mapping.BudgetTask is null
         ? $"INSERT INTO {mapping.BudgetTable} (day_utc, charged_tokens) VALUES ({{0}}, 0) ON CONFLICT DO NOTHING"
         : $"INSERT INTO {mapping.BudgetTable} (day_utc, task, charged_tokens) VALUES ({{0}}, {{1}}, 0) ON CONFLICT DO NOTHING";
 
     private readonly string releaseWaitsSql =
-        $"SELECT * FROM {mapping.Table} WHERE task = {{0}} AND status = 'WaitingForBudget' FOR UPDATE";
+        $"SELECT * FROM {mapping.Table} WHERE task = {{0}} AND status = 'WaitingForBudget' ORDER BY {mapping.KeyColumn} FOR UPDATE";
 
     private readonly string readDaySql = ReadDaySql(mapping);
 
@@ -68,16 +75,22 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
             .ToArrayAsync(cancellationToken);
         var selected = narrow is null ? locked : await narrow(db, locked, cancellationToken);
         var clock = await DatabaseClock.ReadAsync(db, cancellationToken);
-        var requeued = 0;
-        foreach (var row in selected.Where(row => Transition(row, Unclaimed(row, State.Pending), clock)))
-        {
-            row.Attempts = 0;
-            row.RetryOfRunId = null;
-            requeued++;
-        }
+        var requeued = selected.Count(row => TryRequeue(db, row, clock));
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return requeued;
+    }
+
+    public Task LockRowsAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken) =>
+        db.Database.ExecuteSqlRawAsync(lockTaskSql, [mapping.Identity.Task], cancellationToken);
+
+    public async Task<int> RequeueInAsync(CollectionAttemptDbContext db, State[] statuses, string[] subjectIds,
+        CancellationToken cancellationToken)
+    {
+        var rows = await db.Set<TRow>().FromSqlRaw(lockSubjectsSql, mapping.Identity.Task,
+            statuses.Select(status => status.ToString()).ToArray(), subjectIds).ToArrayAsync(cancellationToken);
+        var clock = await DatabaseClock.ReadAsync(db, cancellationToken);
+        return rows.Count(row => TryRequeue(db, row, clock));
     }
 
     public async Task<AnalysisClaim?> TryClaimAsync(string subjectId, TimeSpan leaseDuration, CancellationToken cancellationToken)
@@ -193,6 +206,17 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return released;
+    }
+
+    private bool TryRequeue(CollectionAttemptDbContext db, TRow row, DatabaseTime clock)
+    {
+        var pending = Unclaimed(row, State.Pending);
+        if (!mapping.CanTransition(ToRecord(row), pending)) return false;
+        if (row.ReservedTokens > 0) Interrupt(db, row, clock.Ticks);
+        _ = Transition(row, pending, clock);
+        row.Attempts = 0;
+        row.RetryOfRunId = null;
+        return true;
     }
 
     private static AnalysisRecord ToRecord(TRow row) => new(row.SubjectId, row.Task, row.Status, row.LeaseToken, row.Fence, row.Attempts,

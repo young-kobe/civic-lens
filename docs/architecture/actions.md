@@ -240,7 +240,7 @@ All are owner commands. Variables and examples are in [operations](../operations
 
 | Concern | Files |
 |---|---|
-| Revision and sponsorships | `src/CivicLens.Core/Actions/ActionDraftRevision.cs`, `src/CivicLens.Core/Actions/ActionSponsorship.cs`, `src/CivicLens.Core/Actions/ActionSponsorshipRole.cs`, `src/CivicLens.Core/Actions/ActionTextOrigin.cs`, `src/CivicLens.Core/Actions/ActionTextSuggestion.cs` |
+| Revision and sponsorships | `src/CivicLens.Core/Actions/ActionDraftRevision.cs`, `src/CivicLens.Core/Actions/ActionSponsorship.cs`, `src/CivicLens.Core/Actions/ActionSponsorshipRole.cs`, `src/CivicLens.Core/Review/ReviewTextOrigin.cs`, `src/CivicLens.Core/Actions/ActionTextSuggestion.cs` |
 | Step and evidence read | `src/CivicLens.Application/Actions/ActionDraftStep.cs`, `src/CivicLens.Application/Actions/ActionDraftContext.cs`, `src/CivicLens.Application/Actions/ActionBillReader.cs`, `src/CivicLens.Application/Actions/ActionBillSnapshot.cs`, `src/CivicLens.Application/Actions/ActionCitations.cs` |
 | Prompt, resolver, lifecycle, settings | `src/CivicLens.Application/Actions/ActionDraftPrompt.cs`, `src/CivicLens.Application/Actions/ActionDraftResolver.cs`, `src/CivicLens.Application/Actions/ActionDraftLifecycle.cs`, `src/CivicLens.Application/Actions/ActionDraftSettings.cs`, `src/CivicLens.Application/Actions/ActionDraftTask.cs` |
 | Store and model ports | `src/CivicLens.Application/Actions/IActionDraftStore.cs`, `src/CivicLens.Application/Actions/IActionDraftModel.cs` |

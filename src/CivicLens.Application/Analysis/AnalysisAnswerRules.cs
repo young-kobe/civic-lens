@@ -25,6 +25,18 @@ public static class AnalysisAnswerRules
         if (!double.IsFinite(value) || value < 0 || value > 1) errors.Add($"{name} must be a number from 0 to 1.");
     }
 
+    public static void CheckNamesOutsideFacts(string text, string field, IEnumerable<string> excludedNames, IEnumerable<string> listedNames,
+        List<string> errors)
+    {
+        var listed = listedNames.ToArray();
+        foreach (var name in excludedNames.Where(name => !IsPartOfListedName(name, listed)))
+            if (text.Contains(name, StringComparison.OrdinalIgnoreCase))
+                errors.Add($"The {field} names \"{Shorten(name)}\", who is not an official in the facts. Name only the listed officials.");
+    }
+
+    public static bool IsPartOfListedName(string name, IEnumerable<string> listedNames) =>
+        listedNames.Any(listed => listed.Contains(name, StringComparison.OrdinalIgnoreCase));
+
     public static void AddCitationError(string message, List<string> errors, List<string> citationErrors)
     {
         errors.Add(message);

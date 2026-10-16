@@ -1,8 +1,12 @@
 using System.Collections.Immutable;
 using System.Text.Json;
+using CivicLens.Application.Briefs;
 using CivicLens.Application.Publication;
-using CivicLens.Infrastructure.Actions.Persistence;
 using CivicLens.Core.Review;
+using CivicLens.Infrastructure.Actions.Persistence;
+using CivicLens.Infrastructure.Analysis;
+using CivicLens.Infrastructure.Briefs;
+using CivicLens.Infrastructure.Briefs.Persistence;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Publication.Persistence;
 using CivicLens.Infrastructure.Review;
@@ -15,13 +19,25 @@ using Npgsql;
 
 namespace CivicLens.Infrastructure.Publication;
 
-public sealed class PostgresPublicationStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
-    : IPublicationStore
+public sealed class PostgresPublicationStore : IPublicationStore
 {
     private const string PublishOperation = "publish-release";
     private const int MaximumPageSize = 100;
     private const string UniqueViolation = PostgresErrorCodes.UniqueViolation;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
+    private readonly PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue;
+
+    public PostgresPublicationStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
+        : this(contextFactory, new(contextFactory, new BriefDraftQueueMapping())) { }
+
+    private PostgresPublicationStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
+        PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue)
+    {
+        this.contextFactory = contextFactory;
+        this.briefQueue = briefQueue;
+    }
 
     public static PostgresPublicationStore FromConnectionString(string connectionString)
     {
@@ -52,13 +68,16 @@ public sealed class PostgresPublicationStore(IDbContextFactory<CollectionAttempt
     public async Task<PublicationReleaseSummary> ActivateAsync(int releaseNumber, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.ReviewKeysInOrder, cancellationToken);
+        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.ReviewKeysBeforeBriefs, cancellationToken);
+        await BriefStaleness.TakeLocksAsync(briefQueue, db, cancellationToken);
         var row = await db.Set<PublicationReleaseRow>().AsNoTracking()
             .SingleOrDefaultAsync(candidate => candidate.ReleaseNumber == releaseNumber, cancellationToken)
             ?? throw new ArgumentException($"Release {releaseNumber} has not been committed.", nameof(releaseNumber));
+        await BriefStaleness.RequeueAfterActivationAsync(briefQueue, db, releaseNumber, cancellationToken);
         await ClearActiveAsync(db, cancellationToken);
         await db.Set<PublicationReleaseRow>().Where(candidate => candidate.ReleaseNumber == releaseNumber)
             .ExecuteUpdateAsync(update => update.SetProperty(candidate => candidate.IsActive, true), cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return ToSummary(row);
     }
@@ -93,7 +112,8 @@ public sealed class PostgresPublicationStore(IDbContextFactory<CollectionAttempt
             throw new UnauthorizedAccessException("A model author cannot publish.");
         ValidateCommit(commit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.ReviewKeysInOrder, cancellationToken);
+        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.ReviewKeysBeforeBriefs, cancellationToken);
+        await BriefStaleness.TakeLocksAsync(briefQueue, db, cancellationToken);
         var replay = await ReviewIdempotency.ReadReplayAsync<PublicationReleaseSummary>(db, actorSubject, PublishOperation, idempotencyKey,
             payloadHash, cancellationToken);
         if (replay is not null)
@@ -104,10 +124,11 @@ public sealed class PostgresPublicationStore(IDbContextFactory<CollectionAttempt
 
         await RequireUnchangedReleasesAsync(db, commit, cancellationToken);
         await RequireUnchangedReviewStateAsync(db, commit.AddedRecords, cancellationToken);
+        await BriefStaleness.RequeueAfterPublicationAsync(briefQueue, db, commit, cancellationToken);
         await ClearActiveAsync(db, cancellationToken);
-        var summary = new PublicationReleaseSummary(commit.ReleaseNumber, commit.DirectoryName,
-            commit.PublishedAtUtc, commit.Records.Length);
-        db.Add(ToRow(actorSubject, commit));
+        var publishedAt = await DatabaseClock.ReadAsync(db, cancellationToken);
+        var summary = new PublicationReleaseSummary(commit.ReleaseNumber, commit.DirectoryName, publishedAt.Offset, commit.Records.Length);
+        db.Add(ToRow(actorSubject, commit, publishedAt));
         ReviewIdempotency.Add(db, actorSubject, PublishOperation, idempotencyKey, payloadHash, ReviewJson.Serialize(summary));
         await SaveAsync(db, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -199,12 +220,12 @@ public sealed class PostgresPublicationStore(IDbContextFactory<CollectionAttempt
     private static string[] IdsOf(ImmutableArray<ReviewStateExpectation> expectations, PublishedRecordKind kind) =>
         [.. expectations.Where(expectation => expectation.Kind == kind).Select(expectation => expectation.RecordId)];
 
-    private static PublicationReleaseRow ToRow(string actorSubject, PublicationCommit commit) => new()
+    private static PublicationReleaseRow ToRow(string actorSubject, PublicationCommit commit, DatabaseTime publishedAt) => new()
     {
         ReleaseNumber = commit.ReleaseNumber,
         DirectoryName = commit.DirectoryName,
         ActorSubject = actorSubject,
-        PublishedAtUtcTicks = commit.PublishedAtUtc.UtcTicks,
+        PublishedAtUtcTicks = publishedAt.Ticks,
         RecordCount = commit.Records.Length,
         RecordsJson = JsonSerializer.Serialize(commit.Records, JsonOptions),
         IsActive = true
@@ -225,7 +246,5 @@ public sealed class PostgresPublicationStore(IDbContextFactory<CollectionAttempt
             throw new ArgumentException("Release directory name does not match the release number.", nameof(commit));
         if (commit.Records.IsDefault || commit.AddedRecords.IsDefault)
             throw new ArgumentException("Release records are required.", nameof(commit));
-        if (commit.PublishedAtUtc.Offset != TimeSpan.Zero)
-            throw new ArgumentException("Publish time must be UTC.", nameof(commit));
     }
 }

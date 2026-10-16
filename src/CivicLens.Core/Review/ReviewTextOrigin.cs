@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace CivicLens.Core.Actions;
+namespace CivicLens.Core.Review;
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
-public enum ActionTextOrigin { Model, Person }
+public enum ReviewTextOrigin { Model, Person }

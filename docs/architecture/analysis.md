@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The analysis feature runs model tasks over retained evidence through durable, budgeted queues. Today the worker drafts an account of each complete document change. Statement tasks use the same machinery; see [statements](statements.md). A model prediction is never a human decision.
+The analysis feature runs model tasks over retained evidence through durable, budgeted queues. Today the worker drafts an account of each complete document change. Statement, action, and brief tasks use the same machinery; see [statements](statements.md), [actions](actions.md), and [briefs](briefs.md). A model prediction is never a human decision.
 
 ## Decisions
 
@@ -31,7 +31,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A reservation is set or cleared as a whole. Enforced by `ck_<table>_reservation` on every queue table. No test.
 - A run charges at least the tokens it used. Enforced by `ck_document_change_analysis_runs_tokens` and `AnalysisRun`. Test: `AnalysisRunTests.ARunCannotChargeLessThanTheTokensItUsed`.
 - At most one run exists for each draft revision. Enforced by the unique index `IX_document_change_analysis_runs_draft_id_revision_number` on `(draft_id, revision_number)`. A run without a draft has a null `draft_id`. No test.
-- Only a human owner requeues. Enforced by `RequeueAnalyses` and `RequeueBlockedActionDrafts`. Tests: `RequeueAnalysesTests.OnlyAHumanOwnerRequeues` and `ActionCommandTests.TheAiDrafterCannotActAsTheOwner`.
+- Only a human owner requeues. Enforced by `RequeueAnalyses`, `RequeueBlockedActionDrafts`, and `RedraftBrief`. Tests: `RequeueAnalysesTests.OnlyAHumanOwnerRequeues`, `ActionCommandTests.TheAiDrafterCannotActAsTheOwner`, and `RedraftBriefTests.OnlyTheOwnerMayRedraftAWeek`.
 
 ## Behavior
 
@@ -55,8 +55,8 @@ The states are the values of `ck_<table>_status`, the same for every queue table
 | Running | Succeeded, Blocked, Failed | Settlement |
 | WaitingForBudget | Pending | Budget wait release at worker startup |
 | Failed | Pending | Owner requeue (`analyses requeue`) |
-| Succeeded | Pending | Only where the feature lifecycle allows it: a skipped statement gate (`statements regate`) and any action draft |
-| Blocked | Pending | Only where the feature lifecycle allows it: an action draft (`actions draft requeue --blocked`) |
+| Succeeded | Pending | Only where the feature lifecycle allows it: a skipped statement gate (`statements regate`), any action draft, and any brief draft |
+| Blocked | Pending | Only where the feature lifecycle allows it: an action draft (`actions draft requeue --blocked`) and a brief draft (`brief redraft`) |
 
 These events count as attempts: a durable retry, a reclaim of an expired lease, a release with tokens reserved, and a rejected draft. The claim owns the limit. A claim of an entry with eight attempts fails it as `attemptsExhausted` with no call.
 
@@ -67,6 +67,8 @@ These events count as attempts: a durable retry, a reclaim of an expired lease, 
 The drafting executor is `AnalysisWorker<AnalysisRun>` with `DocumentChangeDraftStep`. The worker owns the drain loop, the claim, and lease renewal. It also owns the daily budget check, token reservation and settlement, the retry delay, the pauses, and release on shutdown. The step owns only its evidence read, its prompt, its model call, and the resolution of the answer. The worker gives the step an `IAnalysisAttempt<TRun>` for the reserve-and-call and settle operations.
 
 The executor runs beside the collection loop in the `worker` process. Its wakeup uses the `civic_lens_analysis` channel with the payload `document_change_analysis:draft`. Collection therefore never waits for a model call. With `--once`, collection drains first and drafting drains next. If one loop fails, both stop.
+
+`AnalysisWorker` takes an optional hook that runs before each drain pass, inside the same error handling as the eligible read. The brief executor uses it to queue the closed weeks. No other executor sets it.
 
 At most `CIVIC_LENS_ANALYSIS_CONCURRENCY` calls run at a time. The default is 2 and the maximum is 4. On shutdown the executor releases claimed entries.
 
@@ -83,7 +85,7 @@ The loop returns one of four ends:
 - Exhausted: a second rejection, or a retry prompt over the cap.
 - Not sent: the first prompt is over the cap, or the resumed retry prompt is.
 
-The step decides what each end means. The drafting steps for document changes, statements, and actions call `AnalysisValidationLoop.FailAsync`, which fails the entry with the rejection code. The statement gate fails open.
+The step decides what each end means. The drafting steps for document changes, statements, actions, and briefs call `AnalysisValidationLoop.FailAsync`, which fails the entry with the rejection code. The statement gate fails open.
 
 ### Prompt and output
 
@@ -235,7 +237,7 @@ The [roadmap](../roadmap.md) holds the delivery order. These design rules apply 
 - Self-hosted encoders are out of scope for now, because of the CPX21 memory limit.
 - A confidence is shown as a score only after a calibration map for that task exists. The map is fitted on human outcomes and versioned. Code-checked results are verified or failed, not scored.
 - A labeled eval set follows the rubric. A prompt or model change runs against it on demand, within a budget, and ships only without a regression.
-- Weekly briefs and statement and action extraction reuse the same adapter and citation rules.
+- Weekly briefs reuse the same adapter and the same checks. Statement and action extraction will reuse them too.
 - The document-change gate comes after statements and actions. Most observed source change is new press releases, not in-place edits. Our own check history produces the in-place edits to label.
 
 Classification first steps:
@@ -255,9 +257,9 @@ Classification acceptance:
 Pending decisions for the ladder are [D-05](../roadmap.md#pending-decisions).
 
 - Model extraction is planned. Extraction returns validated source evidence.
-- The worker will also draft action records and weekly briefs as proposed revisions. Each published record still needs a human approval bound to its exact revision.
+- The worker drafts action records and weekly briefs as proposed revisions. Each published record still needs a human approval bound to its exact revision.
 - Match statements and actions on identifiers, people, dates, jurisdiction, and issue candidates before any model comparison. Relationship assessments need editorial context.
-- Briefs use bounded evidence selections and citation IDs.
+- Briefs use bounded evidence selections and citation IDs; see [briefs](briefs.md#selection).
 - Do not silently truncate long documents. Record chunk coverage and extraction failures.
 - The data model will separate observations, document versions, changes, statements, actions, proposed relationships, analysis runs, reviews, briefs, and releases. Evidence points to exact versioned text spans or page locations.
 - Event time, publisher time, observed time, and last-checked time stay distinct.

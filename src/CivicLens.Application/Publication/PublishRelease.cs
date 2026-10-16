@@ -54,7 +54,7 @@ public sealed class PublishRelease
 
         var number = state.LatestReleaseNumber + 1;
         var (directory, entries) = await StageAsync(number, now, previous, carried, additions, cancellationToken);
-        var commit = new PublicationCommit(number, state.Active?.ReleaseNumber, directory, now,
+        var commit = new PublicationCommit(number, state.Active?.ReleaseNumber, directory,
             [.. entries.Select(entry => new PublishedRevisionBinding(entry.Kind, entry.RecordId, entry.RevisionNumber))],
             [.. additions.Select(addition => addition.Expectation)]);
         var summary = await CommitAsync(actor, commit, request.IdempotencyKey, payloadHash, cancellationToken);

@@ -26,6 +26,8 @@ public sealed partial class SchemaReferenceTests(PostgresCollection postgres) : 
             "statement_drafts", "statement_review_decisions", "statement_revisions"]),
         ("actions", ["action_analysis", "action_analysis_budget", "action_analysis_runs", "action_drafts", "action_review_decisions",
             "action_revisions"]),
+        ("briefs", ["brief_analysis", "brief_analysis_budget", "brief_analysis_runs", "brief_drafts",
+            "brief_review_decisions", "brief_revisions", "brief_schedule"]),
         ("review", ["document_change_drafts", "document_change_review_decisions", "document_change_review_idempotency",
             "document_change_revisions"]),
         ("publication", ["publication_releases"])

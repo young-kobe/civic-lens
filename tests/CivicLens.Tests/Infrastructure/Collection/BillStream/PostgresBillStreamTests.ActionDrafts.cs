@@ -6,6 +6,7 @@ using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Processing;
+using CivicLens.Core.Review;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Documents;
@@ -509,7 +510,7 @@ public sealed partial class PostgresBillStreamTests
     private static ActionDraftRevision Revision(string candidate, int number, bool includesSummaries = false)
     {
         var extraction = new string('c', 64);
-        return new(RecordId, number, "civic-lens:analysis", UpdatedAt.AddMinutes(number), "Headline", "Summary.", ActionTextOrigin.Model, null,
+        return new(RecordId, number, "civic-lens:analysis", UpdatedAt.AddMinutes(number), "Headline", "Summary.", ReviewTextOrigin.Model, null,
             SourceId, 119, "hr", 7, candidate, UpdatedAt, includesSummaries, new string('d', 64), null, null, null, null, null, [], BillGateFixtures.Revision().Id,
             [new("warren", "W000817", ActionSponsorshipRole.Sponsor, false, new DateOnly(2025, 1, 3), null,
                 [new SourceSpan(extraction, 0, 5)])], "A bill");

@@ -1,24 +1,28 @@
-using System.Data;
 using System.Collections.Immutable;
+using System.Data;
 using System.Text.Json;
+using CivicLens.Application.Briefs;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
+using CivicLens.Infrastructure.Analysis;
+using CivicLens.Infrastructure.Briefs;
+using CivicLens.Infrastructure.Briefs.Persistence;
 using CivicLens.Infrastructure.Collection;
-using CivicLens.Infrastructure.Documents.Persistence;
 using CivicLens.Infrastructure.Documents;
+using CivicLens.Infrastructure.Documents.Persistence;
 using CivicLens.Infrastructure.Review.Persistence;
+using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace CivicLens.Infrastructure.Review;
 
 /// <summary>Transactional persistence for immutable document-change revisions and review decisions.</summary>
-public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
-    : IDocumentChangeReviewStore
+public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewStore
 {
     internal static readonly ReviewRecords<DocumentChangeDraftRow, DocumentChangeRevisionRow, ReviewDecisionRow, DocumentChangeDraftRevision>
         Records = new(PostgresAdvisoryLock.DocumentChangeReview, "Document-change", nameof(DocumentChangeDraftRow.DraftId));
@@ -26,6 +30,19 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
     private const string CreateOperation = "create";
     private const string SaveOperation = "save";
     private const string DecideOperation = "decide";
+
+    private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
+    private readonly PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue;
+
+    public PostgresDocumentChangeReviewStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
+        : this(contextFactory, new(contextFactory, new BriefDraftQueueMapping())) { }
+
+    private PostgresDocumentChangeReviewStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
+        PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue)
+    {
+        this.contextFactory = contextFactory;
+        this.briefQueue = briefQueue;
+    }
 
     public static PostgresDocumentChangeReviewStore FromConnectionString(string connectionString)
     {
@@ -74,7 +91,7 @@ public sealed class PostgresDocumentChangeReviewStore(IDbContextFactory<Collecti
                 if (current.OfficialIds.Any(id => !allowedOfficialIds.Contains(id)) || current.IssueIds.Any(id => !allowedIssueIds.Contains(id)))
                     throw new ArgumentException("The saved revision includes selections that are no longer configured.");
                 current.ValidateForApproval();
-            }, NewDecisionRow, cancellationToken);
+            }, NewDecisionRow, BriefStaleness.AfterDecision(briefQueue, PublishedRecordKind.DocumentChange), cancellationToken);
 
     public async Task<DocumentChangeReview?> GetAsync(string draftId, CancellationToken cancellationToken)
     {

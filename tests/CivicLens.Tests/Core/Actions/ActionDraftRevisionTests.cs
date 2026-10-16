@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CivicLens.Core.Review;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Statements;
 using CivicLens.Tests.Fixtures;
@@ -25,7 +26,7 @@ public sealed class ActionDraftRevisionTests
         var earlier = new ActionTextSuggestion("Old", "Old summary.", new string('2', 32), Fingerprint);
         var person = PersonEditOf(Model(), "Edited headline", "Edited summary.") with { Suggestion = earlier };
         var suggestion = new ActionTextSuggestion("New", "New summary.", new string('1', 32), Fingerprint);
-        var kept = Model(3) with { Headline = person.Headline, Summary = person.Summary, TextOrigin = ActionTextOrigin.Person, Suggestion = suggestion };
+        var kept = Model(3) with { Headline = person.Headline, Summary = person.Summary, TextOrigin = ReviewTextOrigin.Person, Suggestion = suggestion };
 
         kept.ValidateAsAnalysisRevision(person);
 
@@ -41,8 +42,8 @@ public sealed class ActionDraftRevisionTests
         var person = PersonEditOf(Model(), "Edited headline", "Edited summary.");
         var withSuggestion = person with { Suggestion = suggestion };
 
-        (Model(3) with { Headline = person.Headline, Summary = person.Summary, TextOrigin = ActionTextOrigin.Person }).ValidateAsAnalysisRevision(person);
-        (Model(3) with { Headline = person.Headline, Summary = person.Summary, TextOrigin = ActionTextOrigin.Person, Suggestion = suggestion })
+        (Model(3) with { Headline = person.Headline, Summary = person.Summary, TextOrigin = ReviewTextOrigin.Person }).ValidateAsAnalysisRevision(person);
+        (Model(3) with { Headline = person.Headline, Summary = person.Summary, TextOrigin = ReviewTextOrigin.Person, Suggestion = suggestion })
             .ValidateAsAnalysisRevision(withSuggestion);
         Model(2).ValidateAsAnalysisRevision(Model());
     }
@@ -77,14 +78,14 @@ public sealed class ActionDraftRevisionTests
 
         Assert.Throws<ArgumentException>(() => (PersonEditOf(previous, "h", "s") with { AuthorSubject = "civic-lens:analysis" }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (PersonEditOf(previous, "h", "s") with { RevisionNumber = 3 }).ValidatePersonEditOf(previous));
-        Assert.Throws<ArgumentException>(() => (PersonEditOf(previous, "h", "s") with { TextOrigin = ActionTextOrigin.Model }).ValidatePersonEditOf(previous));
+        Assert.Throws<ArgumentException>(() => (PersonEditOf(previous, "h", "s") with { TextOrigin = ReviewTextOrigin.Model }).ValidatePersonEditOf(previous));
     }
 
     [Fact]
     public void APersonMayKeepOrClearTheSuggestionButNeverChangeItBecauseOnlyTheModelWritesSuggestions()
     {
         var suggestion = new ActionTextSuggestion("New", "New summary.", new string('1', 32), Fingerprint);
-        var previous = Model(2) with { TextOrigin = ActionTextOrigin.Person, Suggestion = suggestion };
+        var previous = Model(2) with { TextOrigin = ReviewTextOrigin.Person, Suggestion = suggestion };
         var edit = PersonEditOf(previous, "Mine", "My summary.");
 
         edit.ValidatePersonEditOf(previous);
@@ -216,7 +217,7 @@ public sealed class ActionDraftRevisionTests
     {
         var revision = Model() with
         {
-            TextOrigin = ActionTextOrigin.Person,
+            TextOrigin = ReviewTextOrigin.Person,
             Suggestion = new("S", "S.", new string('1', 32), Fingerprint),
             Sponsorships = [Sponsorship() with { Role = ActionSponsorshipRole.Cosponsor, WithdrawnOn = new DateOnly(2025, 2, 1) }]
         };

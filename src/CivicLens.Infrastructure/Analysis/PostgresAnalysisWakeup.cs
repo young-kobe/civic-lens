@@ -6,7 +6,7 @@ public static class PostgresAnalysisWakeup
 {
     private const string Channel = "civic_lens_analysis";
 
-    public static IWorkerWakeup FromConnectionString(string connectionString, string table, string task)
+    public static IWorkerWakeup FromConnectionString(string connectionString, string table, string task, string? extraDeadlineSql = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
         ArgumentException.ThrowIfNullOrWhiteSpace(table);
@@ -21,6 +21,7 @@ public static class PostgresAnalysisWakeup
             UNION ALL
             SELECT lease_expires_at FROM {table}
              WHERE lease_expires_at IS NOT NULL AND task = '{task}'
+            {(extraDeadlineSql is null ? "" : $"UNION ALL SELECT {extraDeadlineSql}")}
             """, $"{table}:{task}");
     }
 }

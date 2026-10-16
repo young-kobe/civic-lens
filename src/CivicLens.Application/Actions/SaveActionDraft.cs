@@ -24,7 +24,7 @@ public sealed class SaveActionDraft(IActionReviewStore store)
             CreatedAtUtc = DateTimeOffset.UtcNow,
             Headline = request.Headline,
             Summary = request.Summary,
-            TextOrigin = ActionTextOrigin.Person,
+            TextOrigin = ReviewTextOrigin.Person,
             Suggestion = request.KeepSuggestion ? expected.Suggestion : null
         };
         revision.ValidatePersonEditOf(expected);

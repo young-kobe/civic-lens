@@ -38,10 +38,11 @@ Implemented:
 - the statement gate and statement drafting
 - AI drafting of bill action records
 - action review, with bulk approval of sponsorship-only revisions
+- AI drafting of weekly briefs from the records published in a closed week
 - the authenticated review workspace
 - static release publication of document changes, statements, and actions
 
-Pending: live Auth0 tenant verification, production deployment, AI classification, correction and withdrawal releases, weekly briefs, and MCP. The [roadmap](roadmap.md) holds the order.
+Pending: live Auth0 tenant verification, production deployment, AI classification, correction and withdrawal releases, brief review and publication, and MCP. The [roadmap](roadmap.md) holds the order.
 
 ## Layers and dependency rules
 
@@ -61,7 +62,7 @@ Core holds domain invariants. Application holds use cases and the interfaces of 
 <!-- diagrams:start -->
 ### Collection to publication (target)
 
-Target workflow. Implemented: configured collection with durable jobs, discovery, and admission; the Congress.gov bill stream with its gate and action candidates; text extraction, history, and comparison; AI drafting of document-change accounts; the statement gate and statement drafting; AI drafting of bill action records; version-bound review of all three record kinds; and static release publication of all three. Planned: classification, weekly briefs, and private and public MCP.
+Target workflow. Implemented: configured collection with durable jobs, discovery, and admission; the Congress.gov bill stream with its gate and action candidates; text extraction, history, and comparison; AI drafting of document-change accounts; the statement gate and statement drafting; AI drafting of bill action records; AI drafting of weekly briefs; version-bound review of all three record kinds; and static release publication of all three. Planned: classification, brief review and publication, and private and public MCP.
 
 ```mermaid
 flowchart LR
@@ -178,14 +179,18 @@ The analysis queues share the `civic_lens_analysis` channel. The notify trigger 
 The keys, in their declared order:
 
 - `civic-lens-collection-jobs`: `PostgresCollectionJobStore` takes it at the start of each admission, claim, and settlement transaction. Discovery admission needs no other key, because this key already serializes every admission.
-- Review keys: `civic-lens-document-change-review`, `civic-lens-statement-review`, and `civic-lens-action-review`. Publication takes all three in the order of `PostgresAdvisoryLock.ReviewKeysInOrder`: document change, statement, then action.
+- Review keys: `civic-lens-document-change-review`, `civic-lens-statement-review`, `civic-lens-action-review`, and `civic-lens-brief-review`. Publication takes all four in the order of `PostgresAdvisoryLock.ReviewKeysInOrder`: document change, statement, action, then brief.
 - `civic-lens-collection-import`: the import store takes it for each write. No transaction holds it with another key.
+
+A transaction that takes a brief queue row lock takes it before `civic-lens-brief-review`. The worker settlement locks its row and then takes the brief key. A publication commit, a release activation, and a review decision that must requeue a brief therefore lock every brief queue row in key order first. They use `BriefStaleness.TakeLocksAsync` and then take the brief key. The commit and the activation take the earlier review keys (`PostgresAdvisoryLock.ReviewKeysBeforeBriefs`), then the brief rows, then the brief key.
 
 Extraction and comparison saves take no advisory lock. Each uses `INSERT ... ON CONFLICT DO NOTHING` in one ReadCommitted transaction. See [documents](architecture/documents.md#invariants).
 
 No transaction holds a review key with a collection key.
 
 An analysis settlement can add a draft row or append a revision. It then takes its queue row lock (`FOR UPDATE` in `PostgresAnalysisQueue`) before the review key of its record kind. Review and publication writes take review keys only and never lock queue rows, so no lock cycle exists.
+
+The requeue of stale briefs takes the brief key last. A review decision takes the key of its own record kind first. The requeue changes only the queue rows of finished weeks, which no worker holds.
 
 ## Invariants
 
@@ -241,6 +246,10 @@ Before the first production deploy ([R-23](roadmap.md#later)), reset the develop
 | Action draft prompt | `action-draft-prompt-v2` | same file | Action analysis runs | Prompt text or input framing changes |
 | Action draft schema | `action-draft-schema-v1` | same file | Action analysis runs | The model output schema changes |
 | Sponsorship fingerprint | `action-fingerprint-v1` | `src/CivicLens.Application/Collection/Bills/ActionFingerprint.cs` | The fingerprint in each action revision | The canonical text of an entry changes |
+| Brief draft task | `brief-draft-v1` | `src/CivicLens.Application/Briefs/BriefDraftTask.cs` | Brief analysis runs and queue entries | Task flow or output handling changes |
+| Brief draft prompt | `brief-draft-prompt-v1` | same file | Brief analysis runs | Prompt text or input framing changes |
+| Brief draft schema | `brief-draft-schema-v1` | same file | Brief analysis runs | The model output schema changes |
+| Brief fingerprint | `brief-fingerprint-v1` | `src/CivicLens.Application/Briefs/BriefFingerprint.cs` | The fingerprint in each brief revision | The canonical text of the fingerprint changes |
 | Gate task | `statement-gate-v1` | `src/CivicLens.Application/Statements/StatementGateTask.cs` | Statement analysis runs and queue entries | Task flow or output handling changes |
 | Gate prompt | `statement-gate-prompt-v1` | same file | Statement analysis runs | Prompt text or input framing changes |
 | Gate schema | `statement-gate-schema-v1` | same file | Statement analysis runs | The model output schema changes |
@@ -299,7 +308,7 @@ This is the only navigation index.
 | Preparation, extraction and comparison stages | [Collection](architecture/collection.md#preparation) | `src/CivicLens.Application/Collection/Processing/JobPreparation.cs` |
 | Sources page | [Collection](architecture/collection.md#sources-page) | `src/CivicLens.Host/Collection/SourcesPage.razor` |
 | CLI collect and import commands | [Collection](architecture/collection.md#cli-composition) | `src/CivicLens.Host/Program.cs` |
-| Generated schema: tables, keys, checks, indexes, triggers | [collection](architecture/schema/collection.md), [bills](architecture/schema/bills.md), [documents](architecture/schema/documents.md), [analysis](architecture/schema/analysis.md), [statements](architecture/schema/statements.md), [actions](architecture/schema/actions.md), [review](architecture/schema/review.md), [publication](architecture/schema/publication.md) | `tests/CivicLens.Tests/Infrastructure/SchemaReferenceTests.cs` |
+| Generated schema: tables, keys, checks, indexes, triggers | [collection](architecture/schema/collection.md), [bills](architecture/schema/bills.md), [documents](architecture/schema/documents.md), [analysis](architecture/schema/analysis.md), [statements](architecture/schema/statements.md), [actions](architecture/schema/actions.md), [briefs](architecture/schema/briefs.md), [review](architecture/schema/review.md), [publication](architecture/schema/publication.md) | `tests/CivicLens.Tests/Infrastructure/SchemaReferenceTests.cs` |
 | Collection tables and the import lock | [Collection](architecture/collection.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Collection/PostgresCollectionAttemptStore.cs` |
 | Congress.gov bill list, window, cursor | [Bills](architecture/bills.md#daily-window) | `src/CivicLens.Application/Collection/Bills/BillStreamWindow.cs` |
 | Bill gate and follow-on pages | [Bills](architecture/bills.md#bill-gate) | `src/CivicLens.Application/Collection/Bills/BillGate.cs` |
@@ -312,6 +321,14 @@ This is the only navigation index.
 | Action queue outcomes and codes | [Actions](architecture/actions.md#outcomes) | `src/CivicLens.Application/Actions/ActionDraftErrorCodes.cs` |
 | Bill stream tables: cursors, gates, pages, candidates | [Bills](architecture/bills.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Collection/BillStream/` |
 | Action tables: queue, runs, budget, drafts, revisions, decisions | [Actions](architecture/actions.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Actions/` |
+| Weekly brief drafting and the week rule | [Briefs](architecture/briefs.md#step) | `src/CivicLens.Application/Briefs/BriefDraftStep.cs` |
+| Brief selection, grouping, and fingerprint | [Briefs](architecture/briefs.md#selection) | `src/CivicLens.Application/Briefs/BriefSelection.cs` |
+| Brief revisions and citations | [Briefs](architecture/briefs.md#revision-and-append) | `src/CivicLens.Core/Briefs/BriefRevision.cs` |
+| Brief weekly enqueue and the Monday wakeup | [Briefs](architecture/briefs.md#queue) | `src/CivicLens.Infrastructure/Briefs/PostgresBriefDraftStore.cs` |
+| Brief staleness after a publication, an activation, or a review decision | [Briefs](architecture/briefs.md#staleness) | `src/CivicLens.Infrastructure/Briefs/BriefStaleness.cs` |
+| Brief commands | [Briefs](architecture/briefs.md#commands) | `src/CivicLens.Host/Briefs/BriefCommand.cs` |
+| Brief queue outcomes and codes | [Briefs](architecture/briefs.md#outcomes) | `src/CivicLens.Application/Briefs/BriefDraftErrorCodes.cs` |
+| Brief tables: queue, runs, budget, status, drafts, revisions, citations | [Briefs](architecture/briefs.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Briefs/` |
 | Text extraction, profiles, citations | [Documents](architecture/documents.md#extraction) | `src/CivicLens.Application/Documents/ExtractDocument.cs` |
 | Document history and comparisons | [Documents](architecture/documents.md#history) | `src/CivicLens.Core/Documents/DocumentComparison.cs` |
 | Evidence pages under `/Documents` | [Documents](architecture/documents.md#evidence-pages) | `src/CivicLens.Host/Documents/ComparisonPage.razor` |

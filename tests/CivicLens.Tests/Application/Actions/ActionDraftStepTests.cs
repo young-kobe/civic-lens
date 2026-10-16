@@ -2,6 +2,7 @@ using System.Text.Json;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Issues;
+using CivicLens.Core.Review;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Statements;
@@ -26,7 +27,7 @@ public sealed class ActionDraftStepTests
         var (store, model) = await RunAsync(world, new FakeActionDraftModel().Draft(Output()));
 
         var revision = Assert.Single(store.Revisions);
-        Assert.Equal((1, "civic-lens:analysis", ActionTextOrigin.Model, null), (revision.RevisionNumber, revision.AuthorSubject, revision.TextOrigin, revision.Suggestion));
+        Assert.Equal((1, "civic-lens:analysis", ReviewTextOrigin.Model, null), (revision.RevisionNumber, revision.AuthorSubject, revision.TextOrigin, revision.Suggestion));
         Assert.Equal(("congress-bills", 119, "hr", 1), (revision.SourceId, revision.Congress, revision.BillType, revision.BillNumber));
         Assert.Equal(new DateTimeOffset(2025, 3, 3, 12, 0, 0, TimeSpan.Zero), revision.CandidateUpdateDate);
         Assert.Matches("^[0-9a-f]{64}$", revision.Fingerprint);
@@ -169,7 +170,7 @@ public sealed class ActionDraftStepTests
 
         Assert.Empty(model.Requests);
         var revision = Assert.Single(second.Revisions);
-        Assert.Equal((2, current.Headline, current.Summary, ActionTextOrigin.Model, null),
+        Assert.Equal((2, current.Headline, current.Summary, ReviewTextOrigin.Model, null),
             (revision.RevisionNumber, revision.Headline, revision.Summary, revision.TextOrigin, revision.Suggestion));
         Assert.Equal([Markey, Warren], revision.Sponsorships.Select(item => item.BioguideId).Order());
         Assert.NotEqual(current.Fingerprint, revision.Fingerprint);
@@ -194,7 +195,7 @@ public sealed class ActionDraftStepTests
 
         Assert.Empty(model.Requests);
         var revision = Assert.Single(second.Revisions);
-        Assert.Equal(("Edited headline", "Edited summary.", ActionTextOrigin.Person, suggestion),
+        Assert.Equal(("Edited headline", "Edited summary.", ReviewTextOrigin.Person, suggestion),
             (revision.Headline, revision.Summary, revision.TextOrigin, revision.Suggestion));
         Assert.Equal("civic-lens:analysis", revision.AuthorSubject);
     }
@@ -344,7 +345,7 @@ public sealed class ActionDraftStepTests
         var (second, _) = await RunAsync(world, new FakeActionDraftModel().Draft(Output(headline: "Model headline", summary: "Model summary.")), edited);
 
         var revision = Assert.Single(second.Revisions);
-        Assert.Equal(("Edited headline", "Edited summary.", ActionTextOrigin.Person), (revision.Headline, revision.Summary, revision.TextOrigin));
+        Assert.Equal(("Edited headline", "Edited summary.", ReviewTextOrigin.Person), (revision.Headline, revision.Summary, revision.TextOrigin));
         Assert.Equal(("Model headline", "Model summary."), (revision.Suggestion!.Headline, revision.Suggestion.Summary));
         Assert.Equal(Assert.Single(second.Runs).Run.RunId, revision.Suggestion.RunId);
         Assert.Equal(revision.Fingerprint, revision.Suggestion.Fingerprint);
