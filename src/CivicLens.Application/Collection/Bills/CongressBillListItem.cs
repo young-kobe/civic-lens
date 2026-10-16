@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace CivicLens.Application.Collection.Bills;
 
 public sealed record CongressBillListItem(int Congress, string Type, int Number, DateOnly UpdateDate)
@@ -27,22 +25,14 @@ public sealed record CongressBillListItem(int Congress, string Type, int Number,
         return parts.Length == 3 ? TryReadIdentity(parts[0], parts[1], parts[2]) : null;
     }
 
-    internal static CongressBillListItem? TryReadIdentity(string congress, string type, string number)
-    {
-        if (!IsKnownType(type) ||
-            !int.TryParse(congress, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedCongress) ||
-            !int.TryParse(number, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedNumber))
-            return null;
-        var identity = new CongressBillListItem(parsedCongress, type, parsedNumber, default);
-        return identity.IsIdentityText(congress, number) ? identity : null;
-    }
+    internal static CongressBillListItem? TryReadIdentity(string congress, string type, string number) =>
+        IsKnownType(type) && ApiPageQuery.TryReadNumber(congress) is { } parsedCongress &&
+        ApiPageQuery.TryReadNumber(number) is { } parsedNumber
+            ? new CongressBillListItem(parsedCongress, type, parsedNumber, default)
+            : null;
 
     public bool IsSameBillAs(CongressBillListItem other) =>
         Congress == other.Congress && Type == other.Type && Number == other.Number;
 
     public string DetailUrl(string sourceUrl) => $"{sourceUrl}/{Congress}/{Type}/{Number}{DetailQuery}";
-
-    private bool IsIdentityText(string congress, string number) =>
-        congress == Congress.ToString(CultureInfo.InvariantCulture) &&
-        number == Number.ToString(CultureInfo.InvariantCulture);
 }

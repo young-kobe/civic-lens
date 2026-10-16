@@ -1,4 +1,5 @@
 using System.Text;
+using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Collection.Contracts;
 
@@ -63,7 +64,7 @@ public sealed class CongressBillListParserTests
     public void MoreItemsThanTheRequestLimitAreInvalidBecauseAdmissionBudgetsAssumeTheLimit()
     {
         var item = """{"congress":119,"type":"HR","number":"1","updateDate":"2025-01-03"}""";
-        var json = "{\"bills\":[" + string.Join(",", Enumerable.Repeat(item, BillPageQuery.PageLimit + 1)) + "],\"pagination\":{}}";
+        var json = "{\"bills\":[" + string.Join(",", Enumerable.Repeat(item, ApiPageQuery.PageLimit + 1)) + "],\"pagination\":{}}";
 
         Assert.Throws<InvalidDataException>(() => Parse(json));
     }

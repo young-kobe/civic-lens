@@ -310,13 +310,13 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
             File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "config", "federal-pilot.json")), ConfigurationJson.Options)!;
         pilot = pilot with { Sources = [.. pilot.Sources.Where(source => source.Id == SourceId).Select(source => source with { Enabled = true })] };
         var window = new BillStreamWindow(Backfill, Backfill);
-        var page = new CongressBillListPage([.. Enumerable.Range(1, BillPageQuery.PageLimit).Select(number => Bill(119, number))],
+        var page = new CongressBillListPage([.. Enumerable.Range(1, ApiPageQuery.PageLimit).Select(number => Bill(119, number))],
             window.RequestUrl(SourceUrl) + "&offset=250", StartsPass: true);
 
         var result = await AdmitAsync(new ConfiguredCollectionSource(pilot, SourceId, Backfill.AddDays(400)),
             "full", window, page);
 
-        Assert.Equal(BillPageQuery.PageLimit + 1, result.AdmittedCount);
+        Assert.Equal(ApiPageQuery.PageLimit + 1, result.AdmittedCount);
         Assert.Equal(0, result.DeferredCount);
     }
 
@@ -324,12 +324,12 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     public async Task AFullPageStoresItsConfigurationRevisionOnceInsteadOfOncePerJob()
     {
         var window = new BillStreamWindow(Backfill, Backfill);
-        var page = new CongressBillListPage([.. Enumerable.Range(1, BillPageQuery.PageLimit).Select(number => Bill(119, number))],
+        var page = new CongressBillListPage([.. Enumerable.Range(1, ApiPageQuery.PageLimit).Select(number => Bill(119, number))],
             window.RequestUrl(SourceUrl) + "&offset=250", StartsPass: true);
 
         var result = await AdmitAsync(Source(), "full", window, page);
 
-        Assert.Equal(BillPageQuery.PageLimit + 1, result.AdmittedCount);
+        Assert.Equal(ApiPageQuery.PageLimit + 1, result.AdmittedCount);
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM collection_configuration_revisions"));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM collection_jobs WHERE definition_json::jsonb -> 'configurationRevision' IS NOT NULL"));
         var expected = CollectionConfigurationRevision.Create(Configuration());

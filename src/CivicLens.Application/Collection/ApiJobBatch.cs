@@ -1,9 +1,9 @@
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.Jobs;
 
-namespace CivicLens.Application.Collection.Bills;
+namespace CivicLens.Application.Collection;
 
-public sealed record BillStreamBatch(
+public sealed record ApiJobBatch(
     DiscoveryAdmissionPolicy Policy,
     CollectionJobDefinition Template,
-    IReadOnlyList<BillStreamJob> Jobs);
+    IReadOnlyList<ApiJob> Jobs);

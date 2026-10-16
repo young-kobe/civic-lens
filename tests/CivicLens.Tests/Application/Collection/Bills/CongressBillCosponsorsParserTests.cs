@@ -1,6 +1,8 @@
 using System.Text;
+using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Collection.Contracts;
+using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Collection.Bills;
 
@@ -53,7 +55,7 @@ public sealed class CongressBillCosponsorsParserTests
     [Fact]
     public void MoreRowsThanTheRequestLimitAreInvalid()
     {
-        var rows = string.Join(",", Enumerable.Repeat(Row, BillPageQuery.PageLimit + 1));
+        var rows = string.Join(",", Enumerable.Repeat(Row, ApiPageQuery.PageLimit + 1));
 
         Assert.Throws<InvalidDataException>(() => Parse("{\"cosponsors\":[" + rows + "],\"pagination\":{}}"));
     }

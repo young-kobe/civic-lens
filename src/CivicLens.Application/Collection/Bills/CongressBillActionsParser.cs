@@ -19,7 +19,7 @@ public static class CongressBillActionsParser
         var wire = Deserialize(json);
         if (wire.Actions is null || wire.Pagination is null)
             throw new InvalidDataException("Action page must contain actions and pagination.");
-        if (wire.Actions.Length > BillPageQuery.PageLimit)
+        if (wire.Actions.Length > ApiPageQuery.PageLimit)
             throw new InvalidDataException("Action page holds more actions than the request limit.");
         var actions = wire.Actions.Select(ToAction).ToArray();
         var next = BillPageUrl.ReadNext(wire.Pagination.Next, scope, sourceUrl, ApiResource.BillActions, expected);

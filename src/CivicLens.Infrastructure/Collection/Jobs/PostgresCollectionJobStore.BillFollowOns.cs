@@ -41,7 +41,7 @@ public sealed partial class PostgresCollectionJobStore
             var gate = await ReadGateOfPageJobAsync(db, pageJobId, cancellationToken);
             await RecordPageAsync(db, gate.DetailJobId, pageJobId, BillPageRole.Cosponsors, extractionId, page.Next is null,
                 cancellationToken);
-            var jobs = new List<BillStreamJob>();
+            var jobs = new List<ApiJob>();
             if (page.Next is not null)
                 jobs.Add(source.CreateNextPageJob(ApiResource.BillCosponsors, pageJobId, page.Next, Today(now)));
             if (gate.Decision == BillGateDecision.Pending && SettleAtCosponsorPage(gate, page, source, now))
@@ -78,7 +78,7 @@ public sealed partial class PostgresCollectionJobStore
         {
             var detailJobId = await ReadDetailJobIdOfPageJobAsync(db, pageJobId, cancellationToken);
             await RecordPageAsync(db, detailJobId, pageJobId, role, extractionId, next is null, cancellationToken);
-            BillStreamJob[] jobs = next is null
+            ApiJob[] jobs = next is null
                 ? []
                 : [source.CreateNextPageJob(resource, pageJobId, next, Today(now))];
             var result = await AdmitFollowOnsAsync(db, source, detailJobId, jobs, now, cancellationToken);
@@ -92,12 +92,12 @@ public sealed partial class PostgresCollectionJobStore
     }
 
     private static async Task<DiscoveryAdmissionResult> AdmitFollowOnsAsync(CollectionAttemptDbContext db,
-        ConfiguredCollectionSource source, string detailJobId, IReadOnlyList<BillStreamJob> jobs, DateTimeOffset now,
+        ConfiguredCollectionSource source, string detailJobId, IReadOnlyList<ApiJob> jobs, DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         if (jobs.Count == 0) return NoAdmission;
-        var batch = source.CreateBillStreamBatch(jobs, Today(now));
-        var (result, admitted) = await AdmitBillStreamJobsAsync(db, batch, int.MaxValue, now, cancellationToken);
+        var batch = source.CreateApiBatch(jobs, Today(now));
+        var (result, admitted) = await AdmitApiJobsAsync(db, batch, int.MaxValue, now, cancellationToken);
         if (result.DeferredCount > 0)
             throw new InvalidDataException($"Source '{source.SourceId}' admission policy cannot hold the follow-on jobs of a bill.");
         foreach (var item in admitted)
@@ -105,10 +105,10 @@ public sealed partial class PostgresCollectionJobStore
         return result;
     }
 
-    private static List<BillStreamJob> DetailFollowOns(ConfiguredCollectionSource source, CongressBill bill,
+    private static List<ApiJob> DetailFollowOns(ConfiguredCollectionSource source, CongressBill bill,
         BillGateOutcome gate, BillGateRow row, DateTimeOffset now)
     {
-        var jobs = new List<BillStreamJob>();
+        var jobs = new List<ApiJob>();
         if (row.HasCosponsorChain)
             jobs.Add(source.CreateFirstPageJob(ApiResource.BillCosponsors, IdentityOf(bill), bill.UpdateDate, Today(now)));
         if (gate.IsPassed) jobs.AddRange(PassedFirstPages(source, row, now));
@@ -127,7 +127,7 @@ public sealed partial class PostgresCollectionJobStore
         return outcome.IsPassed;
     }
 
-    private static IEnumerable<BillStreamJob> PassedFirstPages(ConfiguredCollectionSource source, BillGateRow gate,
+    private static IEnumerable<ApiJob> PassedFirstPages(ConfiguredCollectionSource source, BillGateRow gate,
         DateTimeOffset now)
     {
         yield return source.CreateFirstPageJob(ApiResource.BillActions, IdentityOf(gate), UpdateDateOf(gate), Today(now));

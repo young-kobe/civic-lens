@@ -19,7 +19,7 @@ public static class CongressBillCosponsorsParser
         var wire = Deserialize(json);
         if (wire.Cosponsors is null || wire.Pagination is null)
             throw new InvalidDataException("Cosponsor page must contain cosponsors and pagination.");
-        if (wire.Cosponsors.Length > BillPageQuery.PageLimit)
+        if (wire.Cosponsors.Length > ApiPageQuery.PageLimit)
             throw new InvalidDataException("Cosponsor page holds more cosponsors than the request limit.");
         var cosponsors = wire.Cosponsors.Select(ToCosponsor).ToArray();
         var next = BillPageUrl.ReadNext(wire.Pagination.Next, scope, sourceUrl, ApiResource.BillCosponsors, expected);

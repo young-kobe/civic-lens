@@ -84,7 +84,7 @@ public sealed record CollectionConfiguration
             source.JobPolicy?.Validate(request);
             source.AdmissionPolicy?.Validate();
             if (source.ApiParser == ApiParser.CongressBillList)
-                ValidateBillListAdmissionCapacity(source);
+                ValidateListAdmissionCapacity(source);
             if (source.CheckIntervalSeconds is { } interval && interval is
                 < WatchedSourceConfiguration.MinimumCheckIntervalSeconds or
                 > WatchedSourceConfiguration.MaximumCheckIntervalSeconds)
@@ -156,14 +156,14 @@ public sealed record CollectionConfiguration
         switch (source.ApiParser)
         {
             case ApiParser.CongressBillList:
-                ValidateCongressBillList(source);
+                ValidateCongressApiSource(source);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(source));
         }
     }
 
-    private static void ValidateCongressBillList(WatchedSourceConfiguration source)
+    private static void ValidateCongressApiSource(WatchedSourceConfiguration source)
     {
         if (source.MinimumCongress is not >= 1 || source.BackfillFrom is null)
             throw new ArgumentException($"Source '{source.Id}' needs a minimum Congress of 1 or more and a backfill date.");
@@ -171,10 +171,10 @@ public sealed record CollectionConfiguration
             throw new ArgumentException($"Source '{source.Id}' covers every person with a bioguide ID and cannot list people.");
     }
 
-    private static void ValidateBillListAdmissionCapacity(WatchedSourceConfiguration source)
+    private static void ValidateListAdmissionCapacity(WatchedSourceConfiguration source)
     {
         var policy = source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy();
-        if (!policy.CanReserve(CollectionJobDefinition.FromSource(source), BillPageQuery.PageLimit + 1))
+        if (!policy.CanReserve(CollectionJobDefinition.FromSource(source), ApiPageQuery.PageLimit + 1))
             throw new ArgumentException($"Source '{source.Id}' admission policy must hold a full bill list page and its next-page job.");
     }
 
