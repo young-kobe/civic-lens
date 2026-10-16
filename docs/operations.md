@@ -459,7 +459,7 @@ The `worker` command drafts AI accounts of changed comparisons. [Analysis](archi
 | Variable | Meaning |
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude API key |
-| `CIVIC_LENS_ANALYSIS_DAILY_TOKENS` | Daily token limit for all drafting calls, per UTC day |
+| `CIVIC_LENS_ANALYSIS_DAILY_TOKENS` | Daily token limit for document-change drafting calls, per UTC day. Each other drafting stage has its own limit. |
 | `CIVIC_LENS_ANALYSIS_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller; at most the daily limit) |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time (default 2, 1 to 4) |
 | `CIVIC_LENS_ISSUES_CONFIG`, `CIVIC_LENS_REVIEW_OFFICIALS` | The same issue file and official IDs that the review host reads |
@@ -588,6 +588,21 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- ac
 `status` prints the daily limit, any pause, the tokens charged today, and the count of entries in each outcome. `list` takes `drafted`, `unchanged`, `superseded`, `no-official`, `pending`, or `failed`, and a limit up to 500 (default 100). `requeue` moves Failed and no other rows back to Pending. `requeue --blocked --code <block-code>` moves Blocked rows with that code back to Pending. Fix the cause first, or the entry blocks again. The code is required, so one command cannot requeue every Blocked entry. Use a code from the [outcomes](architecture/actions.md#outcomes) table, or the exception type name that `list failed` shows for an unexpected error. A mistyped code requeues nothing and prints `{"requeued":0}`. A paused or waiting stage follows the same table as document-change drafting: fix the key or the credit and restart the worker, or wait for the next UTC day.
 
 The [live test](#verification) for action drafting sends one paid request.
+
+## Vote drafting
+
+The `worker` command drafts one vote record for each House roll call that has a candidate. [Votes](architecture/votes.md#drafting) holds the rules. Vote drafting runs when both required variables below are set in the worker's protected environment. A limit without `ANTHROPIC_API_KEY` stops the worker with exit code 2. The tracked members come from the configuration revision of the candidate.
+
+| Variable | Meaning |
+|---|---|
+| `ANTHROPIC_API_KEY` | Claude API key, shared with the other stages |
+| `CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS` | Daily token limit for vote drafting calls, per UTC day. It is separate from the other limits. Start low. |
+| `CIVIC_LENS_VOTE_DRAFTING_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the prompt byte cap. |
+| `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
+
+Drafting uses Claude Haiku 5.5. The migration queued every vote candidate that existed when it ran, and the first run can spend up to the daily limit on them. The stage runs after action drafting and before brief drafting. A roll call with no tracked member, and a re-collected vote with the same facts, settle without a call. The [outcomes](architecture/votes.md#outcomes) table lists every code.
+
+No owner command exists for vote drafting yet. The status row of the task `vote-draft` shows the daily limit and any pause. A paused or waiting stage follows the same table as document-change drafting: fix the key or the credit and restart the worker, or wait for the next UTC day.
 
 ## Brief drafting
 

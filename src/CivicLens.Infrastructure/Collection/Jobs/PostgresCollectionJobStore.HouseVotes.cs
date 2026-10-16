@@ -2,6 +2,7 @@ using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Infrastructure.Collection.HouseVotes;
+using CivicLens.Infrastructure.Votes;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Collection.Jobs;
@@ -58,7 +59,9 @@ public sealed partial class PostgresCollectionJobStore : IHouseVoteAdmissionStor
             if (await db.Set<HouseVoteCandidateRow>().AnyAsync(candidate => candidate.DetailJobId == row.DetailJobId, cancellationToken))
                 return NoAdmission with { DuplicateCount = 1 };
             await EnsureExtractionIsOfJobAsync(db, membersJobId, extractionId, cancellationToken);
-            db.Add(NewHouseVoteCandidate(source, row, membersJobId, extractionId, now));
+            var candidate = NewHouseVoteCandidate(source, row, membersJobId, extractionId, now);
+            db.Add(candidate);
+            VoteDraftQueueRows.Add(db, candidate.CandidateId, Ticks(now));
             return NoAdmission;
         }, cancellationToken);
     }
@@ -66,6 +69,9 @@ public sealed partial class PostgresCollectionJobStore : IHouseVoteAdmissionStor
     private static string HashHouseVoteCandidate(string sourceId, int congress, int sessionNumber, int rollCallNumber,
         long updateDateUtcTicks) =>
         HashIdentity($"house-vote:{sourceId.Length}:{sourceId}{congress}:{sessionNumber}:{rollCallNumber}:{updateDateUtcTicks}");
+
+    internal static string HashHouseVoteRecord(string sourceId, int congress, int sessionNumber, int rollCallNumber) =>
+        HashIdentity($"house-vote-record:{sourceId.Length}:{sourceId}{congress}:{sessionNumber}:{rollCallNumber}");
 
     private static Task<HouseVoteRow?> FindHouseVoteAsync(CollectionAttemptDbContext db, string sourceId, HouseVote vote,
         CancellationToken cancellationToken)

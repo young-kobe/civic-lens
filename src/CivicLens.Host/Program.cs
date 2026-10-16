@@ -20,6 +20,7 @@ using CivicLens.Application.Actions;
 using CivicLens.Host;
 using CivicLens.Host.Actions;
 using CivicLens.Host.Briefs;
+using CivicLens.Host.Votes;
 using CivicLens.Application.Briefs;
 using CivicLens.Infrastructure.Briefs;
 using CivicLens.Infrastructure.Actions;
@@ -94,6 +95,7 @@ if (args is [] or ["--help"] or ["help"])
         worker requires CIVIC_LENS_ISSUES_CONFIG when a Congress.gov bill list source is enabled.
         worker also drafts statements when CIVIC_LENS_STATEMENT_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         worker also drafts bill actions when CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
+        worker also drafts House votes when CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         worker also drafts weekly briefs when CIVIC_LENS_BRIEF_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         documents commands require the database. Citations use UTF-16 offsets into immutable extracted text.
         Exit codes: 0 success, 1 failed/deferred collection or operational failure, 2 invalid input/configuration.
@@ -180,9 +182,13 @@ try
         var statementDrafting = StatementDraftComposition.Create(analysisContexts, connectionString);
         await using var statementDraftingWakeup = statementDrafting.Wakeup;
         var textExtractor = new CaptureDocumentTextExtractor();
-        var actionDrafting = ActionDraftComposition.Create(analysisContexts, connectionString, jobs,
-            new ApiResponseReader(attempts, new CaptureBodyReader()), textExtractor, issues, CollectionWorkerCommand.ArtifactRootOf(args));
+        var apiResponses = new ApiResponseReader(attempts, new CaptureBodyReader());
+        var artifactRoot = CollectionWorkerCommand.ArtifactRootOf(args);
+        var actionDrafting = ActionDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, textExtractor, issues,
+            artifactRoot);
         await using var actionDraftingWakeup = actionDrafting.Wakeup;
+        var voteDrafting = VoteDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, artifactRoot);
+        await using var voteDraftingWakeup = voteDrafting.Wakeup;
         var briefDrafting = BriefDraftComposition.Create(analysisContexts, connectionString, workerConfiguration);
         await using var briefDraftingWakeup = briefDrafting.Wakeup;
         executing = true;
@@ -191,6 +197,7 @@ try
         await gate.RecordStartAsync(cancellation.Token);
         await statementDrafting.RecordStartAsync(cancellation.Token);
         await actionDrafting.RecordStartAsync(cancellation.Token);
+        await voteDrafting.RecordStartAsync(cancellation.Token);
         await briefDrafting.RecordStartAsync(cancellation.Token);
         var extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
         var comparisons = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
@@ -210,6 +217,7 @@ try
                 AnalysisStage.For("gate", gate.Worker),
                 AnalysisStage.For("statementDrafting", statementDrafting.Worker),
                 AnalysisStage.For("actionDrafting", actionDrafting.Worker),
+                AnalysisStage.For("voteDrafting", voteDrafting.Worker),
                 AnalysisStage.For("briefDrafting", briefDrafting.Worker)
             }.OfType<AnalysisStage>()]);
     }

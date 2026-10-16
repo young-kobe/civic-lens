@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The analysis feature runs model tasks over retained evidence through durable, budgeted queues. Today the worker drafts an account of each complete document change. Statement, action, and brief tasks use the same machinery; see [statements](statements.md), [actions](actions.md), and [briefs](briefs.md). A model prediction is never a human decision.
+The analysis feature runs model tasks over retained evidence through durable, budgeted queues. Today the worker drafts an account of each complete document change. Statement, action, vote, and brief tasks use the same machinery; see [statements](statements.md), [actions](actions.md), [votes](votes.md#drafting), and [briefs](briefs.md). A model prediction is never a human decision.
 
 ## Decisions
 
@@ -85,7 +85,7 @@ The loop returns one of four ends:
 - Exhausted: a second rejection, or a retry prompt over the cap.
 - Not sent: the first prompt is over the cap, or the resumed retry prompt is.
 
-The step decides what each end means. The drafting steps for document changes, statements, actions, and briefs call `AnalysisValidationLoop.FailAsync`, which fails the entry with the rejection code. The statement gate fails open.
+The step decides what each end means. The drafting steps for document changes, statements, actions, votes, and briefs call `AnalysisValidationLoop.FailAsync`, which fails the entry with the rejection code. The statement gate fails open.
 
 ### Prompt and output
 
@@ -258,7 +258,7 @@ Classification acceptance:
 Pending decisions for the ladder are [D-05](../roadmap.md#pending-decisions).
 
 - Model extraction is planned. Extraction returns validated source evidence.
-- The worker drafts action records and weekly briefs as proposed revisions. Each published record still needs a human approval bound to its exact revision.
+- The worker drafts action records, vote records, and weekly briefs as proposed revisions. Each published record still needs a human approval bound to its exact revision.
 - Match statements and actions on identifiers, people, dates, jurisdiction, and issue candidates before any model comparison. Relationship assessments need editorial context.
 - Briefs use bounded evidence selections and citation IDs; see [briefs](briefs.md#selection).
 - Do not silently truncate long documents. Record chunk coverage and extraction failures.

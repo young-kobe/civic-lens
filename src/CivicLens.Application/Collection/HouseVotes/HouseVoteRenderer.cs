@@ -54,7 +54,7 @@ public static class HouseVoteRenderer
     private static string CandidateTotalLine(HouseVoteCandidateTotal total) =>
         Line($"Candidate total {SingleLine(total.Candidate)}", Count(total.Total));
 
-    private static string MemberLine(HouseVoteMember member)
+    public static string MemberLine(HouseVoteMember member)
     {
         var name = SingleLine($"{member.FirstName} {member.LastName}");
         var fields = new[] { member.BioguideId, name, member.Party ?? "", member.State ?? "", member.VoteCast };

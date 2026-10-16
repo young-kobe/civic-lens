@@ -2,7 +2,6 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Actions;
 
@@ -30,7 +29,7 @@ public static class ActionDraftPrompt
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         var user = BuildUserPrompt(snapshot, trackedIssues, previousErrors, includeSummary);
-        var schema = BuildSchema();
+        var schema = AnalysisSchema.HeadlineAndSummary();
         var bytes = Encoding.UTF8.GetByteCount(SystemInstructions) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;
         var hash = AnalysisPromptHash.Compute(ActionDraftTask.Model, ActionDraftTask.Effort, ActionDraftTask.MaximumOutputTokens,
@@ -78,26 +77,6 @@ public static class ActionDraftPrompt
         var builder = new StringBuilder("Facts:\n").Append(JsonSerializer.Serialize(document, AnalysisPromptText.EvidenceJson));
         return AnalysisPromptText.WithRejectionReasons(builder, previousErrors);
     }
-
-    private static string BuildSchema()
-    {
-        var schema = new JsonObject
-        {
-            ["type"] = "object",
-            ["additionalProperties"] = false,
-            ["required"] = new JsonArray("headline", "summary"),
-            ["properties"] = new JsonObject { ["headline"] = TextWithConfidence(), ["summary"] = TextWithConfidence() }
-        };
-        return schema.ToJsonString(AnalysisPromptText.CompactJson);
-    }
-
-    private static JsonObject TextWithConfidence() => new()
-    {
-        ["type"] = "object",
-        ["additionalProperties"] = false,
-        ["required"] = new JsonArray("text", "confidence"),
-        ["properties"] = new JsonObject { ["text"] = new JsonObject { ["type"] = "string" }, ["confidence"] = AnalysisSchema.Number() }
-    };
 
     private static string Date(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 }

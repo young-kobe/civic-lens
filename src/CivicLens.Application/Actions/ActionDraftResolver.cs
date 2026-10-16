@@ -33,7 +33,7 @@ public static class ActionDraftResolver
             (current.Headline, current.Summary, current.TextOrigin, current.Suggestion));
     }
 
-    private static ActionDraftRevision Assemble(ActionDraftOutput output, ActionDraftContext context, string runId,
+    private static ActionDraftRevision Assemble(HeadlineSummaryOutput output, ActionDraftContext context, string runId,
         DateTimeOffset createdAtUtc)
     {
         var current = context.Evidence.Current;
@@ -81,11 +81,11 @@ public static class ActionDraftResolver
     private static HashSet<string> SponsorIdsOf(ActionBillSnapshot snapshot) =>
         snapshot.Sponsorships.Where(item => item.Role == ActionSponsorshipRole.Sponsor).Select(item => item.PersonId).ToHashSet(StringComparer.Ordinal);
 
-    private static ActionDraftOutput? Parse(string outputJson)
+    private static HeadlineSummaryOutput? Parse(string outputJson)
     {
         try
         {
-            var output = JsonSerializer.Deserialize<ActionDraftOutput>(outputJson, OutputJson);
+            var output = JsonSerializer.Deserialize<HeadlineSummaryOutput>(outputJson, OutputJson);
             return output is { Headline: not null, Summary: not null } ? output : null;
         }
         catch (JsonException) { return null; }

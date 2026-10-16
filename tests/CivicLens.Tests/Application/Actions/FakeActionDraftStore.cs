@@ -1,5 +1,6 @@
 using CivicLens.Application.Actions;
 using CivicLens.Application.Analysis;
+using CivicLens.Application.Votes;
 using CivicLens.Core.Actions;
 using CivicLens.Tests.Application.Analysis;
 using CivicLens.Tests.Fixtures;
@@ -40,7 +41,7 @@ internal sealed class FakeActionDraftStore : FakeAnalysisQueue<ActionDraftRun>, 
     }
 }
 
-internal sealed class FakeActionDraftModel : IActionDraftModel
+internal sealed class FakeActionDraftModel : IActionDraftModel, IVoteDraftModel
 {
     private readonly Queue<Func<AnalysisModelRequest, Task<AnalysisModelResponse>>> replies = new();
     private readonly List<AnalysisModelRequest> requests = [];
