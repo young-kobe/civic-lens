@@ -69,7 +69,7 @@ public sealed class SourcesPageTests(PostgresCollection postgres) : IAsyncLifeti
 
         Assert.Equal(HttpStatusCode.Redirect, denied.StatusCode);
         Assert.Contains("access-denied", denied.Headers.Location!.ToString(), StringComparison.Ordinal);
-        Assert.DoesNotContain("Ada", await denied.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.DoesNotContain("img src=x onerror=alert(1)", await denied.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }
 
     // Configuration is operator input, but names still reach a browser and must never become markup.
