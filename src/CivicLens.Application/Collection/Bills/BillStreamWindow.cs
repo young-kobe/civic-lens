@@ -30,7 +30,7 @@ public readonly record struct BillStreamWindow(DateOnly FirstDay, DateOnly LastD
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return null;
         var query = HttpUtility.ParseQueryString(uri.Query);
-        if (!BillPageQuery.IsValid(query, BillPageQuery.PageLimit, FromParameter, ToParameter, SortParameter) ||
+        if (!ApiPageQuery.IsValid(query, ApiPageQuery.PageLimit, FromParameter, ToParameter, SortParameter) ||
             query[SortParameter] != OldestUpdateFirst)
             return null;
         if (!TryReadDay(query[FromParameter], out var from) || !TryReadDay(query[ToParameter], out var to)) return null;
@@ -43,14 +43,14 @@ public readonly record struct BillStreamWindow(DateOnly FirstDay, DateOnly LastD
 
     public static bool StartsPass(string url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
-        BillPageQuery.ReadOffset(HttpUtility.ParseQueryString(uri.Query)) == 0;
+        ApiPageQuery.ReadOffset(HttpUtility.ParseQueryString(uri.Query)) == 0;
 
     public bool IsBehind(DateTimeOffset now) => LastDay < LastClosedDay(now);
 
     public string RequestUrl(string sourceUrl) =>
         $"{sourceUrl}?{FromParameter}={Format(FirstDay.AddDays(-1))}&{ToParameter}={Format(LastDay.AddDays(1))}" +
         $"&{SortParameter}={HttpUtility.UrlEncode(OldestUpdateFirst)}" +
-        $"&{BillPageQuery.LimitParameter}={BillPageQuery.PageLimit}&{BillPageQuery.FormatParameter}=json";
+        $"&{ApiPageQuery.LimitParameter}={ApiPageQuery.PageLimit}&{ApiPageQuery.FormatParameter}=json";
 
     public bool Matches(string url) => TryRead(url) == this;
 

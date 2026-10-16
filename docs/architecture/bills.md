@@ -82,9 +82,9 @@ The configuration binding check requires the exact URL form of each kind:
 - `billList`: the source URL, a query, and a window with the fixed sort (`BillStreamWindow.IsRequestUrl`).
 - `bill`: exactly the detail form `{source url}/{congress}/{type}/{number}?format=json` that `CongressBillListItem.DetailUrl` builds (`CongressBillListItem.IsDetailUrl`).
 - Follow-on pages: `{source url}/{congress}/{type}/{number}/cosponsors`, `/actions`, or `/summaries`, with `format=json&limit=250` and optionally one `offset` of 0 or more.
-- `billSummaries` uses `limit=1` (`BillPageQuery.SummariesPageLimit`, chosen through `BillPageQuery.LimitOf`). A summaries page with another `limit` is not a valid page URL.
+- `billSummaries` uses `limit=1` (`BillPageUrl.SummariesPageLimit`, chosen through `BillPageUrl.LimitOf`). A summaries page with another `limit` is not a valid page URL.
 
-`BillPageUrl` builds the first page and reads every page, including the `next` form of the API, which orders the parameters differently. Numbers must be canonical, and the type must be known. Any other or repeated parameter, including `api_key`, fails. `BillPageQuery` owns the page parameter rule (`limit`, `format`, and `offset`), and the list window uses it too.
+`BillPageUrl` builds the first page and reads every page, including the `next` form of the API, which orders the parameters differently. Numbers must be canonical, and the type must be known. Any other or repeated parameter, including `api_key`, fails. `ApiPageQuery` owns the page parameter rule (`limit`, `format`, and `offset`) and the canonical number rule. It also owns the page split. It owns the next link check too: scope, exact form, same series, and advancing offset. `BillPageUrl` adds the bill identity and resource segment. The list window uses `ApiPageQuery` too.
 
 The enum `ApiResource` in Application/Collection has its own camelCase JSON converter, because job definitions use the collector JSON options.
 
@@ -108,11 +108,11 @@ A summary has `versionCode`, `actionDate`, `actionDesc`, `updateDate` (an exact 
 
 ### Admission
 
-`IBillStreamAdmissionStore` admits one page in one transaction, with the same job coordination lock as article admission. Follow-on jobs use `AdmitBillStreamJobsAsync`, the same code path as list page admission.
+`IBillStreamAdmissionStore` admits one page in one transaction, with the same job coordination lock as article admission. Follow-on jobs use `AdmitApiJobsAsync`, the same code path as list page admission.
 
 For each list item with a congress of at least `minimumCongress`, the store admits one detail job. A known key is a duplicate and is skipped, so a bill admitted with the same update date is not admitted again. When the page has a `next` link, the store admits one page job. When there is no `next` link, it applies the cursor rule. If a job fails to save, the jobs and the cursor change roll back together.
 
-The aggregate budgets come from the source `admissionPolicy` through `DiscoveryAdmissionPolicy`, the same owner as [article admission](collection.md#discovery-and-admission). A page of 250 items plus the next page needs 251 jobs. `CollectionConfiguration.Validate` rejects a bill list source whose policy cannot reserve `BillPageQuery.PageLimit + 1` jobs. A source without `admissionPolicy` uses the small defaults and fails this check.
+The aggregate budgets come from the source `admissionPolicy` through `DiscoveryAdmissionPolicy`, the same owner as [article admission](collection.md#discovery-and-admission). A page of 250 items plus the next page needs 251 jobs. `CollectionConfiguration.Validate` rejects a bill list source whose policy cannot reserve `ApiPageQuery.PageLimit + 1` jobs. A source without `admissionPolicy` uses the small defaults and fails this check.
 
 The configured source sets `maxJobs` 251, and request, byte, and time totals for 251 jobs with two attempts each. A follow-on page admits at most three jobs, so the 251 job limit holds. The worker treats an admission that throws `InvalidDataException` as a permanent failure.
 
@@ -242,14 +242,14 @@ The write that creates a candidate also adds its `action_analysis` queue row in 
 
 | Concern | Files |
 |---|---|
-| Window, page query, URLs, keys | `src/CivicLens.Application/Collection/Bills/BillStreamWindow.cs`, `src/CivicLens.Application/Collection/Bills/BillPageQuery.cs`, `src/CivicLens.Application/Collection/Bills/BillPageUrl.cs`, `src/CivicLens.Application/Collection/Bills/BillStreamJobKeys.cs` |
+| Window, page query, URLs, keys | `src/CivicLens.Application/Collection/Bills/BillStreamWindow.cs`, `src/CivicLens.Application/Collection/ApiPageQuery.cs`, `src/CivicLens.Application/Collection/Bills/BillPageUrl.cs`, `src/CivicLens.Application/Collection/Bills/BillStreamJobKeys.cs`, `src/CivicLens.Application/Collection/ApiJobKeys.cs` |
 | Parsers | `src/CivicLens.Application/Collection/Bills/CongressBillListParser.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillParser.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillCosponsorsParser.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillActionsParser.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillSummariesParser.cs` |
 | Gate and renderer | `src/CivicLens.Application/Collection/Bills/BillGate.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillRenderer.cs` |
 | Resource kinds and parser list | `src/CivicLens.Application/Collection/ApiResource.cs`, `src/CivicLens.Application/Collection/ApiParser.cs` |
 | Coverage exception | `src/CivicLens.Application/Collection/CollectionConfiguration.cs` |
 | Preparation | `src/CivicLens.Application/Collection/Processing/JobPreparation.cs`, `src/CivicLens.Application/Collection/Processing/ApiResponseReader.cs` |
 | Admission port | `src/CivicLens.Application/Collection/Bills/IBillStreamAdmissionStore.cs`, `src/CivicLens.Application/Collection/Bills/BillStreamAdmission.cs` |
-| Postgres admission, follow-ons, candidates | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.BillStream.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.BillFollowOns.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ActionCandidates.cs` |
+| Postgres admission, follow-ons, candidates | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.BillStream.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ApiJobs.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.BillFollowOns.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ActionCandidates.cs` |
 | Table rows | `src/CivicLens.Infrastructure/Collection/BillStream/` |
 
 ## Limits and planned work

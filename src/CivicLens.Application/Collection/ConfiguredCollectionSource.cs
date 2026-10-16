@@ -66,12 +66,12 @@ public sealed class ConfiguredCollectionSource
         var source = ReadBillStreamSource();
         var template = PrepareDefinition(source, currentDate, null, article: false);
         var bills = page.Bills.Where(bill => bill.Congress >= source.MinimumCongress)
-            .Select(bill => new BillStreamJob(BillStreamJobKeys.Detail(SourceId, bill),
+            .Select(bill => new ApiJob(BillStreamJobKeys.Detail(SourceId, bill),
                 template with { ApiResource = ApiResource.Bill, Url = bill.DetailUrl(source.Url) }))
             .DistinctBy(job => job.IdempotencyKey);
         var nextPage = page.Next is null
             ? null
-            : new BillStreamJob(BillStreamJobKeys.NextPage(SourceId, listJobId),
+            : new ApiJob(BillStreamJobKeys.NextPage(SourceId, listJobId),
                 CreateApiJobDefinition(ApiResource.BillList, page.Next, currentDate));
         var policy = source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy();
         return new BillStreamAdmission(SourceId, policy, template, window, page.StartsPass, [.. bills], nextPage);
@@ -80,19 +80,19 @@ public sealed class ConfiguredCollectionSource
     public IReadOnlySet<string> CoveredBioguideIdsOn(DateOnly day) =>
         Revision.Configuration.CoveredBioguideIdsOf(ReadSource(), day);
 
-    public BillStreamJob CreateFirstPageJob(ApiResource resource, CongressBillListItem bill, DateTimeOffset updateDate,
+    public ApiJob CreateFirstPageJob(ApiResource resource, CongressBillListItem bill, DateTimeOffset updateDate,
         DateOnly currentDate) =>
         new(BillStreamJobKeys.FirstBillPage(SourceId, resource, bill, updateDate),
             CreateApiJobDefinition(resource, BillPageUrl.FirstPage(ReadBillStreamSource().Url, resource, bill), currentDate));
 
-    public BillStreamJob CreateNextPageJob(ApiResource resource, string parentJobId, string nextUrl, DateOnly currentDate) =>
+    public ApiJob CreateNextPageJob(ApiResource resource, string parentJobId, string nextUrl, DateOnly currentDate) =>
         new(BillStreamJobKeys.NextBillPage(SourceId, resource, parentJobId),
             CreateApiJobDefinition(resource, nextUrl, currentDate));
 
-    public BillStreamBatch CreateBillStreamBatch(IReadOnlyList<BillStreamJob> jobs, DateOnly currentDate)
+    public ApiJobBatch CreateApiBatch(IReadOnlyList<ApiJob> jobs, DateOnly currentDate)
     {
-        var source = ReadBillStreamSource();
-        return new BillStreamBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(),
+        var source = ReadApiSource();
+        return new ApiJobBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(),
             PrepareDefinition(source, currentDate, null, article: false), jobs);
     }
 
@@ -125,6 +125,11 @@ public sealed class ConfiguredCollectionSource
         definition.Validate();
         return definition;
     }
+
+    private WatchedSourceConfiguration ReadApiSource() =>
+        ReadSource() is { ApiParser: not null } source
+            ? source
+            : throw new ArgumentException("API admission requires a configured Congress API source.");
 
     private WatchedSourceConfiguration ReadBillStreamSource() =>
         ReadSource() is { ApiParser: ApiParser.CongressBillList } source

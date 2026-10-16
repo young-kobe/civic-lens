@@ -26,7 +26,7 @@ public static class CongressBillSummariesParser
         var wire = Deserialize(json);
         if (wire.Summaries is null || wire.Pagination is null)
             throw new InvalidDataException("Summary page must contain summaries and pagination.");
-        if (wire.Summaries.Length > BillPageQuery.SummariesPageLimit)
+        if (wire.Summaries.Length > BillPageUrl.SummariesPageLimit)
             throw new InvalidDataException("Summary page holds more summaries than the request limit.");
         var summaries = wire.Summaries.Select(ToSummary).ToArray();
         var next = BillPageUrl.ReadNext(wire.Pagination.Next, scope, sourceUrl, ApiResource.BillSummaries, expected);

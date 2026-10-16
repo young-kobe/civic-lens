@@ -1,6 +1,6 @@
 using CivicLens.Collection.Contracts;
 
-namespace CivicLens.Tests.Application.Collection.Bills;
+namespace CivicLens.Tests.Fixtures;
 
 internal static class BillPageScope
 {

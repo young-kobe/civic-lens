@@ -9,10 +9,10 @@ public sealed record BillStreamAdmission(
     CollectionJobDefinition Template,
     BillStreamWindow Window,
     bool StartsPass,
-    IReadOnlyList<BillStreamJob> Bills,
-    BillStreamJob? NextPage)
+    IReadOnlyList<ApiJob> Bills,
+    ApiJob? NextPage)
 {
     public bool EndsWindow => NextPage is null;
 
-    public BillStreamBatch Batch => new(Policy, Template, NextPage is null ? Bills : [.. Bills, NextPage]);
+    public ApiJobBatch Batch => new(Policy, Template, NextPage is null ? Bills : [.. Bills, NextPage]);
 }

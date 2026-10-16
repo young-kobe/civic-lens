@@ -1,5 +1,7 @@
 using System.Text;
+using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Collection.Bills;
 
@@ -64,7 +66,7 @@ public sealed class CongressBillSummariesParserTests
     [Fact]
     public void MoreRowsThanTheRequestLimitAreInvalid()
     {
-        var rows = string.Join(",", Enumerable.Repeat(Row, BillPageQuery.SummariesPageLimit + 1));
+        var rows = string.Join(",", Enumerable.Repeat(Row, BillPageUrl.SummariesPageLimit + 1));
 
         Assert.Throws<InvalidDataException>(() => Parse("{\"summaries\":[" + rows + "],\"pagination\":{}}"));
     }

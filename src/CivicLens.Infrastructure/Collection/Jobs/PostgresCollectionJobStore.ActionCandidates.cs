@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Infrastructure.Actions;
@@ -16,14 +14,11 @@ public sealed partial class PostgresCollectionJobStore
 
     internal static string HashActionCandidate(string sourceId, int congress, string billType, int billNumber,
         long updateDateUtcTicks, bool includesSummaries) =>
-        HashActionIdentity($"{sourceId.Length}:{sourceId}{congress}:{billType}:{billNumber}:{updateDateUtcTicks}" +
+        HashIdentity($"{sourceId.Length}:{sourceId}{congress}:{billType}:{billNumber}:{updateDateUtcTicks}" +
             (includesSummaries ? ":summaries" : ""));
 
     internal static string HashActionRecord(string sourceId, int congress, string billType, int billNumber) =>
-        HashActionIdentity($"{sourceId.Length}:{sourceId}{congress}:{billType}:{billNumber}");
-
-    private static string HashActionIdentity(string identity) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
+        HashIdentity($"{sourceId.Length}:{sourceId}{congress}:{billType}:{billNumber}");
 
     private static BillPageRow NewPageRow(string detailJobId, string jobId, BillPageRole role, int order, string extractionId,
         bool closesChain) => new()
