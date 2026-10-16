@@ -115,13 +115,13 @@
                             </Head>
                             <Row Context="draft">
                                 <td>
-                                    <a class="cell-title" href="@($"/Review/{draft.DraftId}")">@DraftStatusDisplay.DraftName(draft.CurrentRevision.Headline)</a>
+                                    <a class="cell-title" href="@DocumentRoutes.Editor(draft.DraftId)">@DraftStatusDisplay.DraftName(draft.CurrentRevision.Headline)</a>
                                     <span class="cell-sub">@(string.IsNullOrWhiteSpace(draft.CurrentRevision.Summary) ? "Add a plain-language summary before approval." : draft.CurrentRevision.Summary)</span>
                                 </td>
                                 <td><StatusBadge Tone="DraftStatusDisplay.Tone(draft.CurrentStatus)" Text="@DraftStatusDisplay.Label(draft.CurrentStatus, draft.UnresolvedConcernCount)" /></td>
                                 <td class="num hide-narrow">@draft.CurrentRevision.RevisionNumber</td>
                                 <td class="time"><Timestamp Value="draft.CurrentRevision.CreatedAtUtc" /></td>
-                                <td class="act"><Button Small="true" Href="@($"/Review/{draft.DraftId}")">Open</Button></td>
+                                <td class="act"><Button Small="true" Href="@DocumentRoutes.Editor(draft.DraftId)">Open</Button></td>
                             </Row>
                             <Empty>
                                 <EmptyState Title="@DraftsEmpty.Title" Text="@DraftsEmpty.Text" />

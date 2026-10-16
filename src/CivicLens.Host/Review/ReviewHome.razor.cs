@@ -121,10 +121,10 @@ public sealed partial class ReviewHome
                 throw new ArgumentException("Choose a saved comparison to create a draft.");
             var revision = await CreateDraft.ExecuteAsync(actor!, new CreateDocumentChangeDraftRequest(
                 StartComparisonId, $"{StartKey}:{StartComparisonId}"), cancellationToken);
-            return "/Review/" + revision.DraftId;
+            return DocumentRoutes.Editor(revision.DraftId);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (DocumentChangeDraftExistsException existing) { return "/Review/" + existing.DraftId; }
+        catch (DocumentChangeDraftExistsException existing) { return DocumentRoutes.Editor(existing.DraftId); }
         catch (ArgumentException) { return "/Review?status=invalid"; }
         catch (Exception) { return "/Review?status=unavailable"; }
     }
