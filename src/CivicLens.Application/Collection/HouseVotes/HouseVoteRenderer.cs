@@ -52,7 +52,7 @@ public static class HouseVoteRenderer
     }
 
     private static string CandidateTotalLine(HouseVoteCandidateTotal total) =>
-        Line($"Candidate total {total.Candidate}", Count(total.Total));
+        Line($"Candidate total {SingleLine(total.Candidate)}", Count(total.Total));
 
     private static string MemberLine(HouseVoteMember member)
     {
