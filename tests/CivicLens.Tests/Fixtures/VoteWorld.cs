@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
@@ -53,13 +54,15 @@ internal sealed class VoteWorld
     };
 
     public static VoteWorld Create(MemberSpec[]? members = null, string result = "Passed", string? question = null,
-        string legislation = HouseVoteFixtures.Legislation, DateOnly? backfillFrom = null)
+        string legislation = HouseVoteFixtures.Legislation, DateOnly? backfillFrom = null, string? totals = null)
     {
         var configuration = Configuration();
         if (backfillFrom is { } from)
             configuration = configuration with { Sources = [configuration.Sources[0] with { BackfillFrom = from }] };
         var world = new VoteWorld(CollectionConfigurationRevision.Create(configuration));
         var detail = HouseVoteFixtures.Detail(legislation: legislation).Replace("\"result\":\"Passed\"", $"\"result\":\"{result}\"", StringComparison.Ordinal);
+        if (totals is not null)
+            detail = Regex.Replace(detail, @"""votePartyTotal"":\[.*?\}\],", $"\"votePartyTotal\":{totals},", RegexOptions.Singleline);
         if (question is not null)
             detail = detail.Replace("On Motion to Concur in the Senate Amendment", question, StringComparison.Ordinal);
         var roll = HouseVoteFixtures.Roll100;

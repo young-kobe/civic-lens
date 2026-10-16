@@ -11,7 +11,7 @@ namespace CivicLens.Application.Votes;
 
 public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader responses, string artifactRoot)
 {
-    private static readonly string[] FactPrefixes = ["Started: ", "Question: ", "Result: ", "Legislation: ", "Party total "];
+    private static readonly string[] FactPrefixes = ["Started: ", "Question: ", "Result: ", "Legislation: ", "Party total ", "Candidate total "];
 
     public async Task<VoteRead> ReadAsync(VoteDraftEvidence evidence, CancellationToken cancellationToken)
     {

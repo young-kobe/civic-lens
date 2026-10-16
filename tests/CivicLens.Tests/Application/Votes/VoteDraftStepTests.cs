@@ -43,6 +43,20 @@ public sealed class VoteDraftStepTests
     }
 
     [Fact]
+    public async Task TheSpeakerElectionCitesItsCandidateTotalsBecauseTheyAreItsOnlyTotals()
+    {
+        var world = Create(totals: """[{"candidate":"Johnson (LA)","total":218},{"candidate":"Jeffries","total":215}]""");
+
+        var (store, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Drafted));
+
+        var facts = Assert.Single(store.Revisions).Facts;
+        Assert.Equal(["Candidate total Jeffries: 215", "Candidate total Johnson (LA): 218"],
+            facts.Select(fact => fact.Text).Where(text => text.StartsWith("Candidate total ", StringComparison.Ordinal)));
+        Assert.DoesNotContain(facts, fact => fact.Text.StartsWith("Party total ", StringComparison.Ordinal));
+        Assert.Equal(facts.Select(fact => fact.Text), facts.Select(fact => world.Quote(fact.Citation)));
+    }
+
+    [Fact]
     public async Task CitationsPointAtTheExactRenderedLinesSoAReaderCanCheckEveryFactAgainstTheSavedExtraction()
     {
         var world = Create();
