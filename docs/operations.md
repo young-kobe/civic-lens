@@ -299,7 +299,7 @@ If an import fails, use `receipts replay`; no new fetch is needed. If an admissi
 
 ## Federal source pilot
 
-`config/federal-pilot.json` holds a small live-source configuration for Elizabeth Warren and Ted Cruz. It is a collection pilot, not representative national coverage. The coverage start date records when this project began to monitor these sources, not when either senator took office. Office press releases show what an office published. Claims about enacted legislation or completed government actions need corroborating authoritative records before publication. The pilot verified captures of both newsroom pages, and a worker pass parsed 16 candidate links from the Warren listing.
+`config/federal-pilot.json` holds a small live-source configuration for Elizabeth Warren and Ted Cruz. It also tracks Hakeem Jeffries, a House member with no sources, so that the House vote stream has a tracked member. It is a collection pilot, not representative national coverage. The coverage start date records when this project began to monitor these sources, not when either senator took office. Office press releases show what an office published. Claims about enacted legislation or completed government actions need corroborating authoritative records before publication. The pilot verified captures of both newsroom pages, and a worker pass parsed 16 candidate links from the Warren listing.
 
 | Source ID | Purpose |
 |---|---|
