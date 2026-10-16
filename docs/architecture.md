@@ -63,7 +63,7 @@ Core holds domain invariants. Application holds use cases and the interfaces of 
 <!-- diagrams:start -->
 ### Collection to publication (target)
 
-Target workflow. Implemented: configured collection with durable jobs, discovery, and admission; the Congress.gov bill stream with its gate and action candidates; text extraction, history, and comparison; AI drafting of document-change accounts; the statement gate and statement drafting; AI drafting of bill action records; AI drafting of weekly briefs; version-bound review of all three record kinds and of weekly briefs; and static release publication of all three record kinds and of weekly briefs. Planned: classification and private and public MCP.
+Target workflow. Implemented: configured collection with durable jobs, discovery, and admission; the Congress.gov bill stream with its gate and action candidates; text extraction, history, and comparison; AI drafting of document-change accounts; the statement gate and statement drafting; AI drafting of bill action records; AI drafting of weekly briefs; version-bound review of all four record kinds, including weekly briefs; and static release publication of all four record kinds. Planned: classification and private and public MCP.
 
 ```mermaid
 flowchart LR
@@ -132,7 +132,7 @@ flowchart LR
 | Presentation | Blazor static server-side rendering with one interactive Blazor Server page; shared Razor component library and design tokens |
 | Operational database | Postgres with EF Core and Npgsql; application-owned durable jobs |
 | Captures | Compressed content-addressed files; immutable source and extraction versions |
-| Classification (planned) | Deterministic rules first, then models chosen by a bake-off of feature-based logistic regression, Cloudflare Clef-flash and Clef, and Claude Haiku 5.5 |
+| Classification (planned) | Rules from measured change history first. A model tier only if the R-13 measurement shows a need (D-05) |
 | Drafting | Claude models through the official `Anthropic` C# SDK in Infrastructure; model extraction is planned; the model for each task can change after evaluation |
 | Public website | C# release builder renders shared Razor components to static HTML; small JS modules add the theme toggle and comparison control |
 | Local MCP (planned) | Official C# SDK; separate local development and review registration |
