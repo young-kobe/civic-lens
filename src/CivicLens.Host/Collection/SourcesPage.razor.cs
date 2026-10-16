@@ -157,12 +157,12 @@ public sealed partial class SourcesPage : IAsyncDisposable
         {
             var draft = await Services.GetRequiredService<CreateDocumentChangeDraft>().ExecuteAsync(actor!,
                 new CreateDocumentChangeDraftRequest(comparisonId, RequestKey("draft:" + comparisonId)), disposal.Token);
-            Navigation.NavigateTo($"/Review/{draft.DraftId}", forceLoad: true);
+            Navigation.NavigateTo(DocumentRoutes.Editor(draft.DraftId), forceLoad: true);
         }
         catch (OperationCanceledException) when (disposal.IsCancellationRequested) { }
         catch (DocumentChangeDraftExistsException existing)
         {
-            Navigation.NavigateTo($"/Review/{existing.DraftId}", forceLoad: true);
+            Navigation.NavigateTo(DocumentRoutes.Editor(existing.DraftId), forceLoad: true);
         }
         catch (ArgumentException)
         {

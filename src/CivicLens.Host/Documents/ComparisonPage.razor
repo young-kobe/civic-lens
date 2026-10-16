@@ -91,12 +91,12 @@
         {
             var actor = Actors.GetActor(HttpContext.User);
             var draft = await CreateDraft.ExecuteAsync(actor, new CreateDocumentChangeDraftRequest(comparison!.ComparisonId, IdempotencyKey!), Aborted);
-            Navigation.NavigateTo($"/Review/{draft.DraftId}");
+            Navigation.NavigateTo(DocumentRoutes.Editor(draft.DraftId));
         }
         catch (OperationCanceledException) when (Aborted.IsCancellationRequested) { throw; }
         catch (DocumentChangeDraftExistsException existing)
         {
-            Navigation.NavigateTo($"/Review/{existing.DraftId}");
+            Navigation.NavigateTo(DocumentRoutes.Editor(existing.DraftId));
         }
         catch (ArgumentException)
         {

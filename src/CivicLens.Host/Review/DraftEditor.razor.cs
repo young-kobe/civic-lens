@@ -137,7 +137,7 @@ public sealed partial class DraftEditor
     {
         if (comparison is null) throw new ArgumentException("The saved comparison is unavailable.");
         _ = await SaveDraft.ExecuteAsync(actor, BuildSaveRequest(Input ?? new DraftInput()), RequestAborted);
-        return $"/Review/{DraftId}?status=saved";
+        return DocumentRoutes.Editor(DraftId, "saved");
     }
 
     private Task ReloadAfterSaveConflictAsync()
@@ -196,7 +196,7 @@ public sealed partial class DraftEditor
         var request = new DecideDocumentChangeReviewRequest(DraftId, DecideExpectedRevision, DecideExpectedStateVersion,
             ParseDecisionKind(Kind), EmptyToNull(Decision?.Note), [.. Decision?.ResolvedDecisionIds ?? []], DecideKey ?? "");
         _ = await DecideReview.ExecuteAsync(actor, request, RequestAborted);
-        return $"/Review/{DraftId}?status=decided";
+        return DocumentRoutes.Editor(DraftId, "decided");
     }
 
     private Task ReloadAfterDecideConflictAsync()
