@@ -26,8 +26,7 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 
 ### Next
 
-- R-14: Offices and dated terms. Depends on: none stated. [Configuration](architecture/configuration.md#limits-and-planned-work)
-- R-15: House roll-call votes as actions. Depends on: R-14. [Actions](architecture/actions.md#limits-and-planned-work)
+- R-15: House roll-call votes as actions. Depends on: none stated. [Actions](architecture/actions.md#limits-and-planned-work)
 - R-16: Reviewed relationships between statements and actions, and timelines. Depends on: R-15. [Statements](architecture/statements.md#limits-and-planned-work)
 - R-17: Congressional Record articles as a statement connector. Depends on: R-16. [Actions](architecture/actions.md#limits-and-planned-work)
 - R-18: Engine policies for broad coverage: spending ceilings, backlog limits, source fairness, live reload, and a health view. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
@@ -39,6 +38,7 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 
 ### Later
 
+- R-14: A generated member roster with dated terms. Capture an outside member dataset as a collection source, as bills are captured. Parse it into tables of offices, dated terms, and Senate member IDs, and each row cites its capture. A generator proposes members who join or leave as a configuration diff. Choose the dataset when R-14 starts. Depends on: none stated. Official pages and Senate votes need it. [Configuration](architecture/configuration.md#limits-and-planned-work)
 - R-13: Measure document change, then gate it. Check the House press index pages and about 300 press release URLs daily for 2 to 4 weeks. Count byte, text, and line changes for each source, and label about 100 changes by hand. Add rules for the churn found. Add a model tier only if the changes that pass the rules are too many for people to review. Depends on: the first cloud deployment (R-24). [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-22: Ordered row locks in the job store, after the MVP. Depends on: lock waits measured on a bills-only collection run. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-23: Baseline versions before the first production deploy. Depends on: none stated. It must come before the first production deploy. [Behavior versions](architecture.md#behavior-versions)
