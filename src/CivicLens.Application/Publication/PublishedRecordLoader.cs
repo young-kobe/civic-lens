@@ -33,7 +33,7 @@ internal abstract class PublishedRecordLoader<TCandidate, TAddition>(PublishedRe
         CancellationToken cancellationToken)
     {
         if (recordIds.IsEmpty) return [];
-        var found = await GetForPublicationAsync(recordIds, cancellationToken);
+        var found = await GetForPublicationAsync(recordIds, build, cancellationToken);
         var pending = new List<PendingRecord>(recordIds.Length);
         foreach (var recordId in recordIds)
         {
@@ -49,7 +49,7 @@ internal abstract class PublishedRecordLoader<TCandidate, TAddition>(PublishedRe
     protected abstract ReadyToPublishRecord? ToReady(TCandidate candidate);
 
     protected abstract Task<IReadOnlyDictionary<string, TAddition>> GetForPublicationAsync(ImmutableArray<string> recordIds,
-        CancellationToken cancellationToken);
+        PublicationBuild build, CancellationToken cancellationToken);
 
     protected abstract Task<PendingRecord> BuildAsync(string recordId, TAddition addition, PublicationBuild build,
         CancellationToken cancellationToken);

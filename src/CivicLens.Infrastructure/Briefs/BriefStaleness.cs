@@ -65,6 +65,7 @@ internal static class BriefStaleness
     private static async Task RequeueWeeksOfAsync(BriefQueue queue, CollectionAttemptDbContext db,
         (PublishedRecordKind Kind, string RecordId)[] records, CancellationToken cancellationToken)
     {
+        records = [.. records.Where(record => BriefCitationKinds.IsCitable(record.Kind))];
         if (records.Length == 0) return;
         var briefIds = await db.Database.SqlQueryRaw<string>(ReadStaleBriefIdsSql, records.Select(record => record.Kind.ToString()).ToArray(),
             records.Select(record => record.RecordId).ToArray(), BriefDraftTask.Task).ToArrayAsync(cancellationToken);

@@ -46,7 +46,7 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
                 if (decision.Kind != ReviewDecisionKind.Approve) return;
                 var current = history.CurrentRevision!;
                 current.ValidateForApproval();
-                if ((await BriefRecordReader.FindChangedAsync(db, current.Citations, cancellationToken)).Count > 0)
+                if ((await BriefRecordReader.FindChangedInActiveReleaseAsync(db, current.Citations, cancellationToken)).Count > 0)
                     throw new ArgumentException("Approval needs every cited revision to be approved and in the active release.");
             }, NewDecisionRow, (_, _, _, _) => Task.CompletedTask, cancellationToken);
 
@@ -61,7 +61,7 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
         var suggested = current.Suggestion?.Citations ?? [];
         var bindings = current.Citations.Concat(suggested).Select(BriefRecordReader.BindingOf).Distinct().ToImmutableArray();
         var records = await BriefRecordReader.ReadExactAsync(db, bindings, cancellationToken);
-        var changed = await BriefRecordReader.FindChangedAsync(db, current.Citations.Concat(suggested), cancellationToken);
+        var changed = await BriefRecordReader.FindChangedInActiveReleaseAsync(db, current.Citations.Concat(suggested), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new(ToReview(draft, history), CitedRecordsOf(current.Citations, records, changed), CitedRecordsOf(suggested, records, changed));
     }
@@ -75,7 +75,7 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
             ? await Records.PageAsync(db, cursor, limit, filter, row => row.LastRevisedAtUtcTicks, cancellationToken)
             : await Records.PageAsync(db, cursor, limit, filter, cancellationToken);
         var histories = await Records.ReadHistoriesAsync(db, slice.Items, cancellationToken);
-        var changed = await BriefRecordReader.FindChangedAsync(db,
+        var changed = await BriefRecordReader.FindChangedInActiveReleaseAsync(db,
             histories.Values.SelectMany(history => history.CurrentRevision!.Citations), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new([.. slice.Items.Select(row => new BriefReviewItem(ToReview(row, histories[row.RecordId]),
@@ -89,6 +89,36 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
         var needsAction = await Records.Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken);
         var approved = await Records.Drafts(db, DraftStatusFilter.Approved).CountAsync(cancellationToken);
         return new(needsAction, approved);
+    }
+
+    public async Task<IReadOnlyList<UnpublishedApprovedBrief>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken)
+    {
+        PageLimit.Validate(limit);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var records = await Records.ReadUnpublishedApprovedAsync(db, BriefReviewQueries.UnpublishedApproved, limit, cancellationToken);
+        var changed = await BriefRecordReader.FindChangedInActiveReleaseAsync(db,
+            records.SelectMany(record => record.History.CurrentRevision!.Citations), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return [.. records.Select(record => new UnpublishedApprovedBrief(ToReview(record.Draft, record.History), record.PublishedRevisionNumber,
+            record.History.CurrentRevision!.Citations.Any(citation => changed.Contains(BriefRecordReader.BindingOf(citation)))))];
+    }
+
+    public async Task<IReadOnlyDictionary<string, PublishableBrief>> GetForPublicationAsync(ImmutableArray<string> recordIds,
+        ImmutableArray<PublishedRevisionBinding> releaseRecords, CancellationToken cancellationToken)
+    {
+        if (recordIds.IsDefaultOrEmpty || recordIds.Length > PublishRelease.MaximumRecords)
+            throw new ArgumentOutOfRangeException(nameof(recordIds));
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var drafts = await Records.ReadDraftsAsync(db, [.. recordIds], cancellationToken);
+        var histories = await Records.ReadHistoriesAsync(db, drafts, cancellationToken);
+        var citations = histories.Values.SelectMany(history => history.CurrentRevision!.Citations).ToArray();
+        var records = await BriefRecordReader.ReadExactAsync(db, [.. citations.Select(BriefRecordReader.BindingOf).Distinct()], cancellationToken);
+        var changed = await BriefRecordReader.FindChangedAsync(db, citations, releaseRecords, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return drafts.ToDictionary(draft => draft.RecordId, draft => new PublishableBrief(ToReview(draft, histories[draft.RecordId]),
+            CitedRecordsOf(histories[draft.RecordId].CurrentRevision!.Citations, records, changed)), StringComparer.Ordinal);
     }
 
     private static ImmutableDictionary<string, BriefCitedRecord> CitedRecordsOf(IEnumerable<BriefCitation> citations,

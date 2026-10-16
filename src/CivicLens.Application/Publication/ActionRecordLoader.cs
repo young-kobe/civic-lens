@@ -18,7 +18,7 @@ internal sealed class ActionRecordLoader(IActionReviewStore actions)
             candidate.Action.CurrentRevision.Headline, candidate.Action.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber);
 
     protected override Task<IReadOnlyDictionary<string, PublishableAction>> GetForPublicationAsync(
-        ImmutableArray<string> recordIds, CancellationToken cancellationToken) =>
+        ImmutableArray<string> recordIds, PublicationBuild build, CancellationToken cancellationToken) =>
         actions.GetForPublicationAsync(recordIds, cancellationToken);
 
     protected override async Task<PendingRecord> BuildAsync(string recordId, PublishableAction addition,

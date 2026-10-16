@@ -17,7 +17,7 @@ internal sealed class DocumentChangeRecordLoader(IDocumentChangeReviewStore revi
             candidate.Draft.CurrentRevision.Headline, candidate.Draft.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber);
 
     protected override Task<IReadOnlyDictionary<string, PublishableDocumentChange>> GetForPublicationAsync(
-        ImmutableArray<string> recordIds, CancellationToken cancellationToken) =>
+        ImmutableArray<string> recordIds, PublicationBuild build, CancellationToken cancellationToken) =>
         reviews.GetForPublicationAsync(recordIds, cancellationToken);
 
     protected override async Task<PendingRecord> BuildAsync(string recordId, PublishableDocumentChange addition,

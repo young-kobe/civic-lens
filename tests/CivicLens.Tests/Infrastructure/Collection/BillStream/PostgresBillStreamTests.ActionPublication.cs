@@ -3,6 +3,8 @@ using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
 using CivicLens.Host.Publication;
+using CivicLens.Infrastructure.Analysis;
+using CivicLens.Infrastructure.Briefs;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Statements;
@@ -71,7 +73,8 @@ public sealed partial class PostgresBillStreamTests
         var releases = new FileReleaseDirectory(Path.Combine(captureRoot, "releases"));
         var publisher = new PublishRelease(PostgresPublicationStore.FromConnectionString(connectionString), releases, new ReleaseRenderer(),
             new PublishedRecordLoaders(PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
-                PostgresStatementReviewStore.FromConnectionString(connectionString), ActionReviews()),
+                PostgresStatementReviewStore.FromConnectionString(connectionString), ActionReviews(),
+                new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString))),
             new PublicationCatalog(names), TimeProvider.System);
 
         var summary = await publisher.ExecuteAsync(PublicationScenario.Owner,

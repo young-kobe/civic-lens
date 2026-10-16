@@ -34,7 +34,7 @@ public static class PublicationProtocol
     internal static bool IsRecordId(PublishedRecordKind kind, string? value) => kind switch
     {
         PublishedRecordKind.DocumentChange => IsLowerHex(value, 32),
-        PublishedRecordKind.Statement or PublishedRecordKind.Action => IsSha256(value),
+        PublishedRecordKind.Statement or PublishedRecordKind.Action or PublishedRecordKind.Brief => IsSha256(value),
         _ => false
     };
 

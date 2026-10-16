@@ -20,7 +20,7 @@ internal sealed class StatementRecordLoader(IStatementReviewStore statements)
             : null;
 
     protected override Task<IReadOnlyDictionary<string, PublishableStatement>> GetForPublicationAsync(
-        ImmutableArray<string> recordIds, CancellationToken cancellationToken) =>
+        ImmutableArray<string> recordIds, PublicationBuild build, CancellationToken cancellationToken) =>
         statements.GetForPublicationAsync(recordIds, cancellationToken);
 
     protected override async Task<PendingRecord> BuildAsync(string recordId, PublishableStatement addition,

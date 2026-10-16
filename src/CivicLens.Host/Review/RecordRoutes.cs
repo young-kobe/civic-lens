@@ -9,6 +9,7 @@ internal static class RecordRoutes
         PublishedRecordKind.DocumentChange => $"/Review/{recordId}",
         PublishedRecordKind.Statement => StatementRoutes.Editor(recordId),
         PublishedRecordKind.Action => ActionRoutes.Editor(recordId),
+        PublishedRecordKind.Brief => BriefRoutes.Editor(recordId),
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no review page.")
     };
 }

@@ -289,7 +289,8 @@ internal static class ReviewWorkspace
         var officialNames = collection.Configuration.People.ToDictionary(person => person.Id, person => person.Name, StringComparer.Ordinal);
         services.AddScoped(_ => new ListPublicationReleases(publications, releases));
         services.AddSingleton(provider => new PublishedRecordLoaders(provider.GetRequiredService<IDocumentChangeReviewStore>(),
-            provider.GetRequiredService<IStatementReviewStore>(), provider.GetRequiredService<IActionReviewStore>()));
+            provider.GetRequiredService<IStatementReviewStore>(), provider.GetRequiredService<IActionReviewStore>(),
+            provider.GetRequiredService<IBriefReviewStore>()));
         services.AddScoped(provider => new PublishRelease(publications, releases, new ReleaseRenderer(),
             provider.GetRequiredService<PublishedRecordLoaders>(), new PublicationCatalog(officialNames), TimeProvider.System));
         services.AddScoped<ListPublishable>();
