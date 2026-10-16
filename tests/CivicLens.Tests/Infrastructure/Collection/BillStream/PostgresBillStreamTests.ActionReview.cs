@@ -127,7 +127,7 @@ public sealed partial class PostgresBillStreamTests
     {
         await DraftAsync(UpdatedAt, DraftableOutput);
         await DecideAsync(1, 0, ReviewDecisionKind.Approve);
-        await SaveAsync(1, keepSuggestion: true, "save-2");
+        await SaveAsync(1, SuggestionChoice.Keep, "save-2");
         await AddSponsorAsync(UpdatedAt.AddDays(1));
         var missing = new string('9', 64);
 
@@ -167,14 +167,14 @@ public sealed partial class PostgresBillStreamTests
     public async Task APersonSaveMayKeepOrClearTheSuggestionButTheStoreRefusesAChangedOne()
     {
         await DraftAsync(UpdatedAt, DraftableOutput);
-        await SaveAsync(1, keepSuggestion: true, "save-2");
+        await SaveAsync(1, SuggestionChoice.Keep, "save-2");
         await DraftAsync(UpdatedAt.AddDays(1), DraftableOutput, title: "A renamed bill");
         var withSuggestion = (await ActionReviews().GetRevisionAsync(RecordId, 3, default))!;
         Assert.Equal(("Person headline", ReviewTextOrigin.Person), (withSuggestion.Headline, withSuggestion.TextOrigin));
         Assert.NotNull(withSuggestion.Suggestion);
 
-        var kept = await SaveAsync(3, keepSuggestion: true, "save-4");
-        var cleared = await SaveAsync(4, keepSuggestion: false, "save-5");
+        var kept = await SaveAsync(3, SuggestionChoice.Keep, "save-4");
+        var cleared = await SaveAsync(4, SuggestionChoice.Dismiss, "save-5");
 
         Assert.Equal(withSuggestion.Suggestion, kept.Suggestion);
         Assert.Null(cleared.Suggestion);
@@ -182,6 +182,28 @@ public sealed partial class PostgresBillStreamTests
         await Assert.ThrowsAsync<ArgumentException>(() =>
             ActionReviews().SaveRevisionAsync(Reviewer.Subject, forged, 5, "save-6", new string('6', 64), default));
         Assert.Equal(5, await ScalarAsync($"SELECT current_revision_number FROM action_drafts WHERE record_id = '{RecordId}'"));
+    }
+
+    [Fact]
+    public async Task UsingTheSuggestionSavesItsStoredTextAndClearsItEvenWhenThePostedTextDiffers()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+        await SaveAsync(1, SuggestionChoice.Keep, "save-2");
+        await DraftAsync(UpdatedAt.AddDays(1), DraftableOutput, title: "A renamed bill");
+        var suggestion = (await ActionReviews().GetRevisionAsync(RecordId, 3, default))!.Suggestion!;
+
+        var used = await SaveAsync(3, SuggestionChoice.Use, "save-4", headline: "Posted headline", summary: "Posted summary.");
+
+        Assert.Equal((suggestion.Headline, suggestion.Summary, ReviewTextOrigin.Person), (used.Headline, used.Summary, used.TextOrigin));
+        Assert.Null(used.Suggestion);
+    }
+
+    [Fact]
+    public async Task UsingASuggestionThatTheRevisionDoesNotHaveIsRefused()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => SaveAsync(1, SuggestionChoice.Use, "save-2"));
     }
 
     [Fact]
@@ -215,7 +237,8 @@ public sealed partial class PostgresBillStreamTests
     private async Task<IReadOnlyList<ActionApprovalResult>> BulkApproveAsync(params ActionApprovalTarget[] targets) =>
         await new ApproveSponsorshipChanges(ActionReviews()).ExecuteAsync(Reviewer, new([.. targets], Guid.NewGuid().ToString("N")));
 
-    private Task<ActionDraftRevision> SaveAsync(int expected, bool keepSuggestion, string key) =>
+    private Task<ActionDraftRevision> SaveAsync(int expected, SuggestionChoice suggestion, string key,
+        string headline = "Person headline", string summary = "Person summary.") =>
         new SaveActionDraft(ActionReviews()).ExecuteAsync(Reviewer,
-            new(RecordId, expected, "Person headline", "Person summary.", keepSuggestion, key));
+            new(RecordId, expected, headline, summary, suggestion, key));
 }

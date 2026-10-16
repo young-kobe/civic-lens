@@ -51,6 +51,22 @@ internal static class BriefFixtures
         [new("R1", BriefCitationKind.Statement, new string('1', 64), 1), new("R2", BriefCitationKind.DocumentChange, new string('2', 32), 3)],
         new(5, 4, 2));
 
+    public static readonly string CitedStatement = BriefWorldSeeder.StatementId('2');
+    public static readonly string CitedAction = BriefWorldSeeder.ActionId('b');
+    public static readonly string CitedDocumentChange = BriefWorldSeeder.DocumentChangeId('d');
+
+    public static BriefRevision ReviewableRevision(DateOnly? week = null)
+    {
+        var start = week ?? Week;
+        var window = Window() with { WeekStart = start };
+        return new(BriefWeek.RecordIdOf(start), 1, ReviewAuthor.AnalysisSubject, Created, window, Fingerprint, "A week of housing news",
+            ReviewTextOrigin.Model, null,
+            [new("Warren backed a rent cap.", ["R1"]), new("A rule changed and a bill moved.", ["R2", "R3"])],
+            [new("R1", BriefCitationKind.Statement, CitedStatement, 1), new("R2", BriefCitationKind.DocumentChange, CitedDocumentChange, 1),
+                new("R3", BriefCitationKind.Action, CitedAction, 1)],
+            new(3, 3, 3));
+    }
+
     public static string Output(string headline = "A week of housing news", double confidence = 0.8, params (string Text, string[] Ids)[] paragraphs)
     {
         var body = paragraphs.Length > 0 ? paragraphs : [("A paragraph.", ["R1"])];

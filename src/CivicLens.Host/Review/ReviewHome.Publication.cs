@@ -41,13 +41,6 @@ public sealed partial class ReviewHome
         else selectionStale = true;
     }
 
-    private static string RecordHref(ReadyToPublishRecord item) => item.Kind switch
-    {
-        PublishedRecordKind.Statement => StatementRoutes.Editor(item.RecordId),
-        PublishedRecordKind.Action => ActionRoutes.Editor(item.RecordId),
-        _ => $"/Review/{item.RecordId}"
-    };
-
     private async Task PublishAsync() => Navigation.NavigateTo(await PublishTargetAsync());
 
     private async Task<string> PublishTargetAsync()

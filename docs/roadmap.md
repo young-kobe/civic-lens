@@ -26,7 +26,7 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 
 ### Next
 
-- R-12: Weekly briefs. Storage, the weekly queue, evidence selection, cited drafting, redraft, and staleness are implemented. Remaining: review of briefs, corrections, then release assembly and publication with verified citation links. Depends on: none stated. [Briefs](architecture/briefs.md#limits-and-planned-work)
+- R-12: Weekly briefs. Storage, the weekly queue, evidence selection, cited drafting, redraft, staleness, and review of briefs are implemented. Remaining: corrections, then release assembly and publication with verified citation links. Publication must refuse a brief whose cited records changed. Depends on: none stated. [Briefs](architecture/briefs.md#limits-and-planned-work)
 - R-13: Document-change classification gate: rubric, labels, features, bake-off, and ladder. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-14: Offices and dated terms. Depends on: none stated. [Configuration](architecture/configuration.md#limits-and-planned-work)
 - R-15: House roll-call votes as actions. Depends on: R-14. [Actions](architecture/actions.md#limits-and-planned-work)

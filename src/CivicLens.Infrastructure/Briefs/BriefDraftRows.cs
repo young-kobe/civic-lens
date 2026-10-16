@@ -10,10 +10,6 @@ namespace CivicLens.Infrastructure.Briefs;
 
 internal static class BriefDraftRows
 {
-    private static readonly ReviewRecords<BriefDraftRow, BriefRevisionRow, BriefReviewDecisionRow, BriefRevision> Records =
-        new(PostgresAdvisoryLock.BriefReview, "Brief", nameof(BriefDraftRow.RecordId),
-            (draft, revision) => draft.LastRevisedAtUtcTicks = revision.CreatedAtUtc.UtcTicks);
-
     public static async Task<string?> AppendAnalysisRevisionAsync(CollectionAttemptDbContext db, BriefRevision revision, string runId,
         CancellationToken cancellationToken)
     {
@@ -22,7 +18,8 @@ internal static class BriefDraftRows
         var draft = await db.Set<BriefDraftRow>().SingleOrDefaultAsync(row => row.RecordId == revision.RecordId, cancellationToken);
         if ((draft?.CurrentRevisionNumber ?? 0) != revision.RevisionNumber - 1) return BriefDraftErrorCodes.RevisionConflict;
         if (draft is null) db.Add(draft = NewDraft(revision));
-        Records.AppendRevision(db, draft, revision, NewRevision(revision, runId), await Records.ReadCycleAsync(db, draft, cancellationToken));
+        var records = PostgresBriefReviewStore.Records;
+        records.AppendRevision(db, draft, revision, NewRevision(revision, runId), await records.ReadCycleAsync(db, draft, cancellationToken));
         return null;
     }
 
@@ -43,7 +40,7 @@ internal static class BriefDraftRows
         CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
     };
 
-    private static BriefRevisionRow NewRevision(BriefRevision revision, string runId) => new()
+    public static BriefRevisionRow NewRevision(BriefRevision revision, string? runId) => new()
     {
         RecordId = revision.RecordId,
         RevisionNumber = revision.RevisionNumber,

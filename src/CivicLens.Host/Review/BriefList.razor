@@ -1,0 +1,47 @@
+@page "/Review/Briefs"
+@using CivicLens.Application.Briefs
+
+<TopBarTitle Crumbs="Crumbs" />
+
+<div class="content">
+    <PageHeader Title="Briefs" Lede="Weekly briefs that the AI drafter wrote from the records published in each closed week. Each week has one entry, which shows its newest revision." />
+    @if (error is not null)
+    {
+        <Notice Tone="Tone.Bad">@error</Notice>
+    }
+
+    @if (drafts is not null && counts is not null)
+    {
+        <Panel Title="Briefs" Id="drafts">
+            <Aside><FilterTabs Label="Filter weekly briefs" Tabs="DraftTabs" /></Aside>
+            <ChildContent>
+                <DataTable Items="drafts.Items" Caption="Weekly briefs">
+                    <Head>
+                        <th>Brief</th>
+                        <th class="fit hide-narrow">Week of</th>
+                        <th>Status</th>
+                        <th class="num">Open concerns</th>
+                        <th class="act"><span class="visually-hidden">Open</span></th>
+                    </Head>
+                    <Row Context="item">
+                        <td>
+                            <a class="cell-title" href="@BriefRoutes.Editor(item.Review.RecordId)">@item.Review.CurrentRevision.Headline</a>
+                            @if (item.CitedRecordsChanged)
+                            {
+                                <StatusBadge Tone="Tone.Warn" Text="Cited records changed" />
+                            }
+                        </td>
+                        <td class="fit hide-narrow">@Moment.Iso(item.Review.CurrentRevision.Window.WeekStart)</td>
+                        <td><StatusBadge Tone="DraftStatusDisplay.Tone(item.Review.CurrentStatus)" Text="@DraftStatusDisplay.Label(item.Review.CurrentStatus, item.Review.UnresolvedConcerns.Length)" /></td>
+                        <td class="num">@item.Review.UnresolvedConcerns.Length</td>
+                        <td class="act"><Button Small="true" Href="@BriefRoutes.Editor(item.Review.RecordId)">Open</Button></td>
+                    </Row>
+                    <Empty>
+                        <EmptyState Title="@DraftsEmpty.Title" Text="@DraftsEmpty.Text" />
+                    </Empty>
+                </DataTable>
+                <Pager Label="Weekly brief pages" NewerHref="@DraftsHref(drafts.NewerCursor)" OlderHref="@DraftsHref(drafts.OlderCursor)" />
+            </ChildContent>
+        </Panel>
+    }
+</div>

@@ -258,6 +258,20 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     }
 
     [Fact]
+    public async Task ADecisionOnAnActiveRevisionTakesTheBriefLockBeforeItWritesSoABriefApprovalNeverInterleavesWithIt()
+    {
+        var (candidate, _) = await PublishedApprovedAsync();
+        await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-brief-review");
+
+        var withdrawing = Decide.ExecuteAsync(Owner, new(candidate, 2, 1, ReviewDecisionKind.WithdrawApproval, "Wrong date.", [], "withdraw"));
+        await HeldAdvisoryLock.WaitForWaiterAsync(connectionString, "civic-lens-brief-review");
+
+        Assert.False(withdrawing.IsCompleted);
+        await holder.DisposeAsync();
+        _ = await withdrawing;
+    }
+
+    [Fact]
     public async Task ADecisionLeavesAnApprovedBriefAloneBecauseAReviewerAlreadyOwnsIt()
     {
         var (candidate, briefs) = await PublishedApprovedAsync(briefApproved: true);
