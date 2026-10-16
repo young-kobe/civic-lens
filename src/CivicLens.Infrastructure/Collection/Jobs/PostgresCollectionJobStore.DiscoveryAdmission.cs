@@ -121,6 +121,12 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var hash = candidateHashes[candidateIndex++];
+                var definition = request.ArticleTemplate with { Url = url };
+                if (definition.IsRoot())
+                {
+                    duplicates++;
+                    continue;
+                }
                 if (existingCandidates.TryGetValue(hash, out var existing))
                 {
                     if (!string.Equals(existing.SourceId, request.ArticleTemplate.SourceId, StringComparison.Ordinal) ||
@@ -139,7 +145,6 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                     }
                 }
 
-                var definition = request.ArticleTemplate with { Url = url };
                 if (!budget.TryReserve())
                 {
                     deferred++;
