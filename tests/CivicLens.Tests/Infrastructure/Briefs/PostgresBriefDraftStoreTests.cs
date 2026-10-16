@@ -94,6 +94,25 @@ public sealed class PostgresBriefDraftStoreTests(PostgresCollection postgres) : 
     }
 
     [Fact]
+    public async Task ARecordBelongsOnlyToTheWeekOfItsFirstReleaseEvenWhenAnEarlierReleaseDroppedItAndALaterOneListsItAgain()
+    {
+        var laterWeek = Week.AddDays(14);
+        await seeder.StatementAsync(S1, 1, "Kept statement", "warren");
+        await seeder.StatementAsync(S2, 1, "Returned statement", "warren");
+        await seeder.ReleaseAsync(1, InWeek, active: false, Binding(PublishedRecordKind.Statement, S1, 1), Binding(PublishedRecordKind.Statement, S2, 1));
+        await seeder.ReleaseAsync(2, InWeek.AddDays(7), active: false, Binding(PublishedRecordKind.Statement, S1, 1));
+        await seeder.ReleaseAsync(3, InWeek.AddDays(14), active: true, Binding(PublishedRecordKind.Statement, S1, 1), Binding(PublishedRecordKind.Statement, S2, 1));
+        await seeder.QueueWeekAsync(Week);
+        await seeder.QueueWeekAsync(laterWeek);
+
+        var first = (await store.ReadEvidenceAsync(BriefWeek.RecordIdOf(Week), default))!;
+        var later = (await store.ReadEvidenceAsync(BriefWeek.RecordIdOf(laterWeek), default))!;
+
+        Assert.Equal([S1, S2], first.Records.Select(record => record.RecordId).Order(StringComparer.Ordinal));
+        Assert.Empty(later.Records);
+    }
+
+    [Fact]
     public async Task AReleaseAfterTheWeekEndsNeverEntersTheWeek()
     {
         await SeedWeekAsync();

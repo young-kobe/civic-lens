@@ -1,4 +1,5 @@
 using CivicLens.Application.Briefs;
+using CivicLens.Core.Briefs;
 using CivicLens.Tests.Fixtures;
 using static CivicLens.Tests.Fixtures.BriefFixtures;
 
@@ -67,6 +68,16 @@ public sealed class BriefSelectionTests
 
         Assert.Equal(["a1", "a2"], selection.Sent.Select(item => item.Record.RecordId));
         Assert.Equal(5, selection.Considered);
+    }
+
+    [Fact]
+    public void FillingStopsAtTheCitationLimitAndTheRestCountAsConsidered()
+    {
+        var records = Enumerable.Range(0, BriefRevision.MaximumCitations + 1).Select(index => Statement($"s{index:D4}")).ToArray();
+
+        var selection = BriefSelection.Select(records, _ => true);
+
+        Assert.Equal((BriefRevision.MaximumCitations, BriefRevision.MaximumCitations + 1), (selection.Sent.Length, selection.Considered));
     }
 
     [Fact]

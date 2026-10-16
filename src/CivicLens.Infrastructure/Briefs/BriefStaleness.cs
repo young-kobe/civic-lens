@@ -18,14 +18,7 @@ internal static class BriefStaleness
     private static readonly AnalysisState[] RequeuedStates = [AnalysisState.Succeeded, AnalysisState.Running, AnalysisState.Blocked];
 
     private static readonly string ReadStaleBriefIdsSql = $$"""
-        WITH wanted AS (SELECT k.kind, k.record_id FROM unnest({0}, {1}) AS k(kind, record_id)),
-        first_published AS (
-            SELECT (SELECT r.published_at_utc_ticks FROM publication_releases r
-                    WHERE EXISTS (SELECT 1 FROM (
-                        SELECT {{ReviewQueries.ReleaseRecordColumns}} FROM jsonb_array_elements(r.records_json::jsonb) e) listed
-                        WHERE lower(listed.kind) = lower(w.kind) AND listed.record_id = w.record_id)
-                    ORDER BY r.release_number LIMIT 1) AS ticks
-            FROM wanted w)
+        WITH {{BriefFirstRelease.WantedFirstPublishedCtes}}
         SELECT b.record_id AS "Value" FROM {{PostgresBriefDraftStore.Table}} b
         WHERE b.task = {2}
           AND (b.status <> 'Blocked' OR b.error_code = '{{BriefDraftErrorCodes.NoCitableRecords}}')

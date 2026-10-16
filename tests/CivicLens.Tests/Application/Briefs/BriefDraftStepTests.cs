@@ -131,6 +131,19 @@ public sealed class BriefDraftStepTests
     }
 
     [Fact]
+    public async Task AWeekOfMoreRecordsThanABriefCanCiteOffersOnlyTheLimitSoAnAnswerCitingThemAllGetsTheCorrectiveRetry()
+    {
+        var many = Enumerable.Range(0, BriefRevision.MaximumCitations + 1).Select(index => Statement($"s{index:D4}")).ToArray();
+        var everyId = Enumerable.Range(1, many.Length).Select(index => $"R{index}").ToArray();
+        var model = new FakeBriefDraftModel().Draft(Output(paragraphs: [("Text.", everyId)])).Draft(Output());
+
+        var (store, _) = await RunAsync(many, model);
+
+        Assert.Equal([AnalysisRunOutcome.CitationRejected, AnalysisRunOutcome.Drafted], store.Runs.Select(run => run.Run.Outcome));
+        Assert.Equal((many.Length, BriefRevision.MaximumCitations), (store.Revisions[0].Coverage.Considered, store.Revisions[0].Coverage.SentToModel));
+    }
+
+    [Fact]
     public async Task ASecondRejectionFailsTheWeekWithNoRevision()
     {
         var model = new FakeBriefDraftModel().Draft(Output(paragraphs: [("Text.", ["R9"])])).Draft(Output(paragraphs: [("Text.", [])]));

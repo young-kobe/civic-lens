@@ -41,6 +41,15 @@ public static class BriefDraftResolver
             CheckNamesOutsideFacts(paragraphs[index].Text ?? "", name, context.ExcludedNames, context.ListedOfficials.Values, errors);
             CheckCitationIds(paragraphs[index].CitationIds, known, name, errors, citationErrors);
         }
+        CheckCitationCount(paragraphs, errors, citationErrors);
+    }
+
+    private static void CheckCitationCount(ImmutableArray<BriefDraftOutputParagraph> paragraphs, List<string> errors, List<string> citationErrors)
+    {
+        var distinct = paragraphs.Where(paragraph => !paragraph.CitationIds.IsDefaultOrEmpty)
+            .SelectMany(paragraph => paragraph.CitationIds).Distinct(StringComparer.Ordinal).Count();
+        if (distinct > BriefRevision.MaximumCitations)
+            AddCitationError($"The brief cites {distinct} IDs. Cite at most {BriefRevision.MaximumCitations} IDs.", errors, citationErrors);
     }
 
     private static void CheckCitationIds(ImmutableArray<string> ids, HashSet<string> known, string name, List<string> errors,

@@ -135,6 +135,25 @@ public sealed class BriefStalenessTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
+    public async Task ARecordDroppedAndPublishedAgainInALaterWeekRequeuesOnlyTheWeekThatFirstPublishedIt()
+    {
+        var laterWeek = Week.AddDays(14);
+        await seeder.ExecuteAsync("UPDATE publication_releases SET is_active = false WHERE release_number = 2");
+        await seeder.ReleaseAsync(3, InWeek.AddDays(7), active: false, Binding(PublishedRecordKind.Statement, P1, 1),
+            Binding(PublishedRecordKind.Statement, S1, 1), Binding(PublishedRecordKind.DocumentChange, D1, 1), Binding(PublishedRecordKind.Action, A1, 1));
+        await seeder.ReleaseAsync(4, InWeek.AddDays(14), active: true, Binding(PublishedRecordKind.Statement, P1, 1),
+            Binding(PublishedRecordKind.Statement, S1, 1), Binding(PublishedRecordKind.Statement, S2, 1),
+            Binding(PublishedRecordKind.DocumentChange, D1, 1), Binding(PublishedRecordKind.Action, A1, 1));
+        await seeder.BriefAsync(Week);
+        await seeder.BriefAsync(laterWeek);
+
+        _ = await CommitAsync(5, 4, Binding(PublishedRecordKind.Statement, P1, 1), Binding(PublishedRecordKind.Statement, S1, 1),
+            Binding(PublishedRecordKind.Statement, S2, 2), Binding(PublishedRecordKind.DocumentChange, D1, 1), Binding(PublishedRecordKind.Action, A1, 1));
+
+        Assert.Equal(("Pending:0", "Succeeded:3"), (await seeder.BriefQueueStatusAsync(Week), await seeder.BriefQueueStatusAsync(laterWeek)));
+    }
+
+    [Fact]
     public async Task ABriefThatIsApprovedIsNeverRequeuedByAPublishOrARollbackBecauseAReviewerHasAlreadyTakenResponsibilityForIt()
     {
         await seeder.BriefAsync(Week, reviewStatus: "Approved");

@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CivicLens.Application.Briefs;
 using CivicLens.Core.Briefs;
 using CivicLens.Core.Review;
@@ -58,6 +59,21 @@ public sealed class BriefDraftResolverTests
         var revision = BriefDraftResolver.Resolve(Output(paragraphs: [("Text.", ["R1"])]), context, RunId, Created).Accepted!;
 
         Assert.Equal((5, 3, 1, 2), (revision.Coverage.Considered, revision.Coverage.SentToModel, revision.Coverage.Cited, revision.Coverage.Omitted));
+    }
+
+    [Fact]
+    public void AnAnswerThatCitesMoreIdsThanABriefCanListIsRejectedInsteadOfThrowing()
+    {
+        var records = Enumerable.Range(0, BriefRevision.MaximumCitations + 1).Select(index => Statement($"s{index:D4}")).ToArray();
+        var sent = records.Select((record, index) => new BriefSelectedRecord($"R{index + 1}", record)).ToImmutableArray();
+        var context = BriefDraftContext.Create(Evidence(records), new BriefSelection(sent, records.Length), Officials);
+        var paragraphs = sent.Chunk(sent.Length / BriefRevision.MaximumParagraphs + 1)
+            .Select(chunk => ("Text.", chunk.Select(item => item.CitationId).ToArray())).ToArray();
+
+        var resolution = BriefDraftResolver.Resolve(Output(paragraphs: paragraphs), context, RunId, Created);
+
+        Assert.False(resolution.IsAccepted);
+        Assert.True(resolution.HasCitationErrors);
     }
 
     [Fact]

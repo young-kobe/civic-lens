@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Globalization;
+using CivicLens.Core.Briefs;
 
 namespace CivicLens.Application.Briefs;
 
@@ -12,7 +13,7 @@ public sealed record BriefSelection(ImmutableArray<BriefSelectedRecord> Sent, in
         foreach (var group in OrderedGroups(records))
         {
             var candidate = sent.AddRange(group.Records.Select((record, index) => Selected(record, sent.Length + index)));
-            if (!fits(candidate)) break;
+            if (candidate.Length > BriefRevision.MaximumCitations || !fits(candidate)) break;
             sent = candidate;
         }
         return new(sent, records.Count);

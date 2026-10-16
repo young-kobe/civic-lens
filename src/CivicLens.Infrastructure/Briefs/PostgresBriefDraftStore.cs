@@ -43,6 +43,11 @@ public sealed class PostgresBriefDraftStore : PostgresAnalysisStore<BriefDraftRu
         FROM w
         """;
 
+    private static readonly string ReadFirstPublishedInWeekSql = $$"""
+        WITH {{BriefFirstRelease.WantedFirstPublishedCtes}}
+        SELECT f.kind AS "Kind", f.record_id AS "RecordId" FROM first_published f WHERE f.ticks >= {2} AND f.ticks < {3}
+        """;
+
     private static readonly State[] RedraftableStates = [State.Succeeded, State.Blocked, State.Failed];
 
     private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
@@ -115,10 +120,10 @@ public sealed class PostgresBriefDraftStore : PostgresAnalysisStore<BriefDraftRu
     {
         if (bounds.CutoffReleaseNumber is not { } cutoff || cutoff == bounds.PreviousReleaseNumber) return [];
         var published = await ReviewQueries.ReadReleaseRecordsAsync(db, cutoff, cancellationToken);
-        var previous = bounds.PreviousReleaseNumber is { } number
-            ? await ReviewQueries.ReadReleaseRecordsAsync(db, number, cancellationToken) : [];
-        var known = previous.Select(binding => (binding.Kind, binding.RecordId)).ToHashSet();
-        return [.. published.Where(binding => !known.Contains((binding.Kind, binding.RecordId)))];
+        var firstPublishedInWeek = (await db.Database.SqlQueryRaw<KindRecordRow>(ReadFirstPublishedInWeekSql,
+            published.Select(binding => binding.Kind.ToString()).ToArray(), published.Select(binding => binding.RecordId).ToArray(),
+            bounds.StartTicks, bounds.EndTicks).ToArrayAsync(cancellationToken)).Select(row => (row.Kind, row.RecordId)).ToHashSet();
+        return [.. published.Where(binding => firstPublishedInWeek.Contains((binding.Kind.ToString(), binding.RecordId)))];
     }
 
     private static async Task<ImmutableArray<PublishedRevisionBinding>> AtActiveRevisionsAsync(CollectionAttemptDbContext db,
@@ -141,6 +146,12 @@ public sealed class PostgresBriefDraftStore : PostgresAnalysisStore<BriefDraftRu
         public long EndTicks { get; set; }
         public int? CutoffReleaseNumber { get; set; }
         public int? PreviousReleaseNumber { get; set; }
+    }
+
+    private sealed class KindRecordRow
+    {
+        public string Kind { get; set; } = "";
+        public string RecordId { get; set; } = "";
     }
 
     private sealed class ScheduleRow
