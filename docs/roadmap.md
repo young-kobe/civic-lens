@@ -12,7 +12,7 @@ Exit criteria:
 - [ ] The public release stays usable during an outage of the operational application.
 - [ ] Human approval binds to the exact evidence version. Model output never counts as approval.
 - [ ] Statements and actions support reviewed relationships and timelines.
-- [ ] Document changes separate substantive edits from navigation churn and parser upgrades, through the classification gate.
+- [ ] Document changes separate substantive edits from navigation churn and parser upgrades. Separate extraction streams isolate parser upgrades. Rules from measured change history filter churn, and a model tier is added only when the measurement shows a need. This criterion is checked after the first cloud deployment.
 - [ ] A weekly brief publishes with verified citation links, an explicit sample and cutoff, and versioned editorial decisions.
 - [ ] Readers search and filter all published records from the public pages.
 - [ ] The review queue handles the drafted volume with bulk tools.
@@ -26,7 +26,6 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 
 ### Next
 
-- R-13: Document-change classification gate: rubric, labels, features, bake-off, and ladder. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-14: Offices and dated terms. Depends on: none stated. [Configuration](architecture/configuration.md#limits-and-planned-work)
 - R-15: House roll-call votes as actions. Depends on: R-14. [Actions](architecture/actions.md#limits-and-planned-work)
 - R-16: Reviewed relationships between statements and actions, and timelines. Depends on: R-15. [Statements](architecture/statements.md#limits-and-planned-work)
@@ -40,6 +39,7 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 
 ### Later
 
+- R-13: Measure document change, then gate it. Check the House press index pages and about 300 press release URLs daily for 2 to 4 weeks. Count byte, text, and line changes for each source, and label about 100 changes by hand. Add rules for the churn found. Add a model tier only if the changes that pass the rules are too many for people to review. Depends on: the first cloud deployment (R-24). [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-22: Ordered row locks in the job store, after the MVP. Depends on: lock waits measured on a bills-only collection run. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-23: Baseline versions before the first production deploy. Depends on: none stated. It must come before the first production deploy. [Behavior versions](architecture.md#behavior-versions)
 - R-24: Production on the Hetzner CPX21 with containers, Terraform, CI, off-server backups, and live Auth0 verification. Depends on: the MVP. [Host](architecture/host.md#limits-and-planned-work)
@@ -54,7 +54,7 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 
 - D-03: Global search and expanded reviewer source visibility. [Review](architecture/review.md#limits-and-planned-work)
 - D-04: Bounded storage: store each distinct extraction text once, keyed by its hash. Keep raw capture bytes forever only when a gated change, draft, or release uses them or they are the latest version. Delete other bytes after a set period and keep the observation record. [Collection](architecture/collection.md#limits-and-planned-work)
-- D-05: Classification ladder: the uncertainty signal for each tier, where the escalation policy and thresholds live, and the stronger model for the reasoning tier. [Analysis](architecture/analysis.md#limits-and-planned-work)
+- D-05: Classification ladder, only if the R-13 measurement shows that a model tier is needed: the uncertainty signal for each tier, where the escalation policy and thresholds live, and the stronger model for the reasoning tier. [Analysis](architecture/analysis.md#limits-and-planned-work)
 - D-06: The Hetzner backup destination, chosen by cost and recovery needs. [Host](architecture/host.md#limits-and-planned-work)
 - D-07: How the static file server runs locally and in production, and the release retention policy. [Publication](architecture/publication.md#limits-and-planned-work)
 - D-08: Deployment topology: one cloud deployment, separate services, or services split across cloud providers, chosen by cost and operational needs. [Host](architecture/host.md#limits-and-planned-work)
