@@ -10,6 +10,11 @@
       "id": "ted-cruz",
       "name": "Ted Cruz",
       "bioguideId": "C001098"
+    },
+    {
+      "id": "hakeem-jeffries",
+      "name": "Hakeem Jeffries",
+      "bioguideId": "J000294"
     }
   ],
   "sources": [
