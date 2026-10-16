@@ -13,6 +13,7 @@ The statements feature finds articles that may hold an official's statement and 
 - Statements mirror the document-change feature: their own queue, runs, drafts, revisions, and review pages, in the same shape. They share only parts that already have one owner. These are the Core review actor and decision policy, the Anthropic adapter, the citation span checks, and the budget mechanics.
 - The gate fails open on two invalid answers or an oversized prompt. A doubtful article then goes to drafting, not to a silent skip.
 - Provider, auth, and budget problems are not fail-open. They follow the shared retry and pause rules.
+- The gate also keeps a release about a bill or a recorded vote when no tracked issue matches. Two rules decide this: the model answer `namesBillOrVote`, and a bill number that `BillNumberFinder` finds in the text. The bill number rule needs no model and is a floor. Each pass path has its own reason code, so a measurement can count each path.
 - A skipped article stays visible with a code reason, so a person can inspect it.
 - A rubric change queues nothing by itself. `statements regate` is an explicit owner command.
 - The speakers come from the configuration revision that admitted the article, not the current file. A later configuration change cannot change the speakers of an admitted article.
@@ -27,6 +28,9 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A statement candidate is the source plus the URL, and it never repeats. Enforced by the primary key of `statement_candidates`. Test: `PostgresStatementCandidateRegistrationTests.ConcurrentSavesForTheSameSourceAndUrlLeaveOneCandidate`.
 - Only discovery-admitted jobs become candidates. Enforced by `PostgresStatementCandidateRegistration`. Test: `PostgresStatementCandidateRegistrationTests.ExtractionFromAWatchedPageJobRegistersNoCandidate`.
 - A Succeeded gate has a known reason. Enforced by `StatementGateLifecycle`. Test: `StatementGateLifecycleTests.ASucceededGateNeedsAKnownReason`.
+- A release with a bill number passes the gate without the model answer. Enforced by `StatementGateResolver`. Test: `StatementGateResolverTests.ABillNumberInTheTextPassesWithoutTheModelAnswerSoTheFloorHoldsWhenTheModelMissesIt`.
+- Each of the three pass paths has its own reason. Enforced by `StatementGateResolver` and `ck_statement_analysis_runs_reason`. Test: `StatementGateResolverTests.TheThreePassPathsRecordThreeDistinctReasonsSoAMeasurementCanCountEachPath`.
+- A draft from a bill or vote pass accepts an empty issue list. Enforced by `StatementGateCarryOver`. Test: `StatementDraftStepTests.ADraftFromABillOrVotePassHasNoIssueIdsBecauseNoTrackedIssueMatched`.
 - Only a skipped gate returns from Succeeded to Pending. Enforced by `StatementGateLifecycle`. Test: `StatementGateLifecycleTests.OnlyASkippedGateMayReturnToPendingForRegate`.
 - A pass adds exactly one Pending draft entry in the same transaction. Enforced by `StatementGateQueueMapping`. Test: `PostgresStatementGateStoreTests.APassSettlesTheGateAndInsertsExactlyOnePendingDraftRowInTheSameTransaction`.
 - Only an analysis revision has a run ID, and one revision exists for each run. Enforced by `ck_statement_revisions_run` and `IX_statement_revisions_run_id`. Test: `PostgresStatementDraftStoreTests.TheDatabaseRefusesAnAiRevisionThatHasNoRun`.
@@ -46,7 +50,7 @@ The first extraction of a candidate is the one whose attempt has the earliest ob
 
 ### Issue gate
 
-The gate reads the first extraction of each candidate and decides whether the article touches a tracked issue. A pass queues the `statement-draft` task.
+The gate reads the first extraction of each candidate and decides whether the article touches a tracked issue. It also decides whether the article names a bill or a recorded vote. A pass queues the `statement-draft` task.
 
 The gate executor is `AnalysisWorker<StatementGateRun>` with `StatementGateStep`. It runs beside the collection and drafting loops in the `worker` process. It has its own status row, daily limit, and wakeup. It uses `CIVIC_LENS_ANALYSIS_CONCURRENCY`, the same setting as drafting (default 2, maximum 4). The wakeup uses the `civic_lens_analysis` channel with the payload `statement_analysis:gate`. Its deadline query reads the `gate` rows of `statement_analysis`.
 
@@ -60,7 +64,7 @@ The gate runs only when `CIVIC_LENS_STATEMENT_GATE_DAILY_TOKENS`, `ANTHROPIC_API
 
 The adapter marks the end of the system prompt with an ephemeral `cache_control` breakpoint (5-minute TTL). The JSON schema holds only the ID enums of the active issues and the policy areas. Two articles with the same active issue set therefore get a byte-identical system prompt and schema. A change to the schema clears the cache. Each run records cache read and cache write tokens, and both count toward the charge. A golden test pins the system prompt, the schema, and one input hash to the prompt and schema versions.
 
-**Output.** Structured outputs fix these fields: `trackedIssues` (each with `id`, `quote`, `confidence`), `policyAreas` (each with `id`, `confidence`), and a `confidence` for the whole answer. There is no free-text reason.
+**Output.** Structured outputs fix these fields: `trackedIssues` (each with `id`, `quote`, `confidence`), `policyAreas` (each with `id`, `confidence`), `namesBillOrVote`, and a `confidence` for the whole answer. `namesBillOrVote` is true when the release reports a speaker action on a specific bill, resolution, or recorded vote. The actions are to introduce, cosponsor, vote, or state a position. The run output keeps the answer. It can label examples for a later benchmark ([D-13](../roadmap.md#pending-decisions)). There is no free-text reason.
 
 Code rejects an unlisted ID, a repeated ID, and a confidence that is not finite or is outside 0 to 1. It rejects a quote that is empty, longer than 2,000 characters, missing, or ambiguous, or that splits a character. A quote must occur exactly once in the extraction text. Code then computes the UTF-16 offsets and checks them with `DocumentTextSpan`. Code never repairs an answer.
 
@@ -69,9 +73,13 @@ Code rejects an unlisted ID, a repeated ID, and a confidence that is not finite 
 | Reason | Meaning | `statement-draft` row |
 |---|---|---|
 | `passed` | At least one matched tracked issue with a verified quote | Inserted |
-| `no-tracked-issue` | No tracked issue matched, or none is active on the capture date (no model call) | None |
+| `passed-bill-or-vote` | No tracked issue matched, and the model answered `namesBillOrVote` true | Inserted |
+| `passed-bill-number` | No tracked issue matched, the model answered false, and the text holds a bill number | Inserted |
+| `no-tracked-issue` | No tracked issue matched, the model answered false, and the text holds no bill number. Also none is active on the capture date (no model call). | None |
 | `over-byte-cap` | The prompt is over the byte cap, so there is no model call | Inserted |
 | `gate-failed-open` | Two invalid answers, or a retry prompt over the cap | Inserted |
+
+The resolver picks the reason in this order: a verified issue, then the model answer, then the bill number. A release that passes only by a bill or a vote has no tracked issue, and its draft starts with an empty issue list. When no tracked issue is active on the capture date, the gate makes no model call and does not look for a bill number.
 
 The byte cap is the smaller of two values: 100,000 UTF-8 bytes for the full prompt, and the run token limit minus the output allowance. The settlement and the `statement-draft` insert share one transaction. A repeat insert keeps one row.
 
@@ -137,7 +145,7 @@ A span is a `DirectQuotation` when it lies entirely inside one quoted passage. E
 
 **Bill numbers.** `BillNumberFinder` finds `H.R.`, `S.`, `H.Res.`, `S.Res.`, `H.J.Res.`, `S.J.Res.`, `H.Con.Res.`, and `S.Con.Res.` numbers of 1 to 5 digits in the article text. It accepts spacing variants and writes each number in one form, such as `H.R. 1234`. It does not accept a form without periods, such as `HR 1234`. Each number appears once, in order of first use. The revision keeps them in `billNumbers`.
 
-**Gate carry-over.** The revision starts with the issue IDs and policy area IDs of the gate. `PostgresStatementDraftStore` reads the latest gate run that has a reason. `StatementGateCarryOver` takes the verified tracked issue IDs and the policy area IDs only when the reason is `passed`. A failed-open or over-cap gate gives empty lists. Reviewers edit the lists later.
+**Gate carry-over.** The revision starts with the issue IDs and policy area IDs of the gate. `PostgresStatementDraftStore` reads the latest gate run that has a reason. `StatementGateCarryOver` takes the verified tracked issue IDs and the policy area IDs when the reason is one of the three pass reasons. The two bill or vote reasons give an empty issue list. A failed-open or over-cap gate gives empty lists. Reviewers edit the lists later.
 
 **Settlement.** A drafted settlement runs in one transaction in the C# store. It adds the draft, revision 1, the run with its link, the queue settlement, and the budget change. A draft that exists before the call succeeds the entry as `humanDraftExists`, with no call. A draft that appears during the call keeps the run as `DraftDiscarded` and adds no second draft. The entry then succeeds as `draftDiscarded`.
 
@@ -289,7 +297,7 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 - Actions are in [actions](actions.md). Relationships and weekly briefs are planned; see [roadmap](../roadmap.md).
 - Planned: structured statement extraction, temporal identity resolution, candidate matching, reviewed relationships, and timelines.
 - Each quotation stays addressable for later matching with actions.
-- Planned ([R-34](../roadmap.md#now)): the issue gate keeps a release that names a bill or a House vote, also when no tracked issue matches. A code rule decides this, not the model.
+- The bill or vote answer of the model is unmeasured. The `passed-bill-or-vote` and `passed-bill-number` counts show how often each path fires. The bill number rule finds only the forms that `BillNumberFinder` accepts.
 - Measured on 2026-10-16 with 30 House press feeds: the gate dropped 25 of 48 candidates. Most were grants and events. It also dropped a release about a farm bill vote, two bill introductions, and a Senate inquiry.
 - Measured on 2026-10-16: 4 of 21 drafts carry a bill number. 2 of them name a bill with a collected House vote, and both members voted on it.
 - Measured on 2026-10-16: some issue tags are doubtful. For example, a post office closure was tagged `elections-and-voting`.

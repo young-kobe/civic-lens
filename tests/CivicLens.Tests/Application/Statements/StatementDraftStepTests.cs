@@ -43,6 +43,21 @@ public sealed class StatementDraftStepTests
     }
 
     [Fact]
+    public async Task ADraftFromABillOrVotePassHasNoIssueIdsBecauseNoTrackedIssueMatched()
+    {
+        var carryOver = new StatementGateCarryOver([], ["housing-and-community-development"]);
+        var store = new FakeStatementDraftStore(DraftEvidence(carryOver: carryOver));
+        var model = new FakeStatementDraftModel().Draft(Output());
+
+        await Worker(store, model).ExecuteAsync(once: true);
+
+        Assert.Equal((State.Succeeded, null), (store.Entries.Single().Status, store.Entries.Single().ErrorCode));
+        var revision = Assert.Single(store.Revisions);
+        Assert.Empty(revision.IssueIds);
+        Assert.Equal(["housing-and-community-development"], revision.PolicyAreaIds.ToArray());
+    }
+
+    [Fact]
     public async Task OneCoveredOfficialIsSetByCodeAndTheModelIsNotAskedForASpeaker()
     {
         var store = new FakeStatementDraftStore(DraftEvidence());

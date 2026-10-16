@@ -9,7 +9,7 @@ public sealed record StatementGateCarryOver(ImmutableArray<string> IssueIds, Imm
 
     public static StatementGateCarryOver From(StatementGateRun? gateRun)
     {
-        if (gateRun is not { Reason: StatementGateReasons.Passed, Run.OutputJson: { } outputJson }) return None;
+        if (gateRun is not { Run.OutputJson: { } outputJson } || !StatementGateReasons.IsPass(gateRun.Reason)) return None;
         var output = StatementGateResolver.Parse(outputJson)
             ?? throw new InvalidDataException("The stored output of a passed gate run is not valid.");
         return new([.. gateRun.Quotes.Select(quote => quote.IssueId)], [.. output.PolicyAreas.Select(area => area.Id)]);

@@ -79,6 +79,46 @@ public sealed class StatementGateResolverTests
     }
 
     [Fact]
+    public void TheModelsBillOrVoteYesPassesAReleaseWithNoTrackedIssueSoItIsNotDroppedForLackingAnIssue()
+    {
+        var result = StatementGateResolver.Resolve(OutputNamingBillOrVote([HealthArea]), Evidence(Article), Rubric());
+
+        Assert.Equal(StatementGateReasons.PassedBillOrVote, result.Reason);
+        Assert.Empty(result.Quotes);
+    }
+
+    [Fact]
+    public void ABillNumberInTheTextPassesWithoutTheModelAnswerSoTheFloorHoldsWhenTheModelMissesIt()
+    {
+        var result = StatementGateResolver.Resolve(Output(), Evidence(Article + " She introduced H.R. 1234."), Rubric());
+
+        Assert.Equal(StatementGateReasons.PassedBillNumber, result.Reason);
+    }
+
+    [Fact]
+    public void AReleaseWithNoIssueNoModelYesAndNoBillNumberIsStillDropped()
+    {
+        var result = StatementGateResolver.Resolve(Output(), Evidence(Article + " HR 1234 has no periods."), Rubric());
+
+        Assert.Equal(StatementGateReasons.NoTrackedIssue, result.Reason);
+    }
+
+    [Fact]
+    public void TheThreePassPathsRecordThreeDistinctReasonsSoAMeasurementCanCountEachPath()
+    {
+        var withBill = Evidence(Article + " See S. 99.");
+
+        string[] reasons =
+        [
+            StatementGateResolver.Resolve(Output([], 0.5, (RentIssue, "help tenants")), withBill, Rubric()).Reason!,
+            StatementGateResolver.Resolve(OutputNamingBillOrVote(), Evidence(Article), Rubric()).Reason!,
+            StatementGateResolver.Resolve(Output(), withBill, Rubric()).Reason!
+        ];
+
+        Assert.Equal([StatementGateReasons.Passed, StatementGateReasons.PassedBillOrVote, StatementGateReasons.PassedBillNumber], reasons);
+    }
+
+    [Fact]
     public void AnAnswerWithNoTrackedIssueIsASkipEvenWhenPolicyAreasMatch()
     {
         var result = StatementGateResolver.Resolve(Output([HealthArea]), Evidence(Article), Rubric());

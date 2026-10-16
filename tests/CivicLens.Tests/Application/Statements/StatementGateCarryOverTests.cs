@@ -19,6 +19,19 @@ public sealed class StatementGateCarryOverTests
     }
 
     [Theory]
+    [InlineData(StatementGateReasons.PassedBillOrVote)]
+    [InlineData(StatementGateReasons.PassedBillNumber)]
+    public void ABillOrVotePassCarriesThePolicyAreasAndNoIssueBecauseNoIssueMatched(string reason)
+    {
+        var run = GateRun(reason, OutputNamingBillOrVote([HousingArea]), []);
+
+        var carried = StatementGateCarryOver.From(run);
+
+        Assert.Empty(carried.IssueIds);
+        Assert.Equal([HousingArea], carried.PolicyAreaIds.ToArray());
+    }
+
+    [Theory]
     [InlineData(StatementGateReasons.FailedOpen)]
     [InlineData(StatementGateReasons.OverByteCap)]
     [InlineData(StatementGateReasons.NoTrackedIssue)]
@@ -36,7 +49,7 @@ public sealed class StatementGateCarryOverTests
     public void AStoredPassedRunWithUnreadableOutputFailsLoudInsteadOfDroppingTheIssues() =>
         Assert.Throws<InvalidDataException>(() => StatementGateCarryOver.From(GateRun(StatementGateReasons.Passed, "not json", RentIssue)));
 
-    private static StatementGateRun GateRun(string reason, string outputJson, string issueId)
+    private static StatementGateRun GateRun(string reason, string outputJson, params string[] issueIds)
     {
         var evidence = Evidence(Article);
         var run = new CivicLens.Core.Analysis.AnalysisRun(new string('a', 32), evidence.CandidateId, StatementGateTask.Task,
@@ -44,6 +57,6 @@ public sealed class StatementGateCarryOverTests
             evidence.Extraction.TextSha256, null, CivicLens.Core.Analysis.AnalysisRunOutcome.Classified,
             CivicLens.Core.Analysis.AnalysisTokenUsage.None, 0, "end_turn", null, outputJson, [], "{}", DateTimeOffset.UnixEpoch,
             DateTimeOffset.UnixEpoch);
-        return new(run, Revision().Id, reason, [new(issueId, evidence.Extraction.ExtractionId, 0, 3)]);
+        return new(run, Revision().Id, reason, [.. issueIds.Select(issueId => new StatementGateQuote(issueId, evidence.Extraction.ExtractionId, 0, 3))]);
     }
 }

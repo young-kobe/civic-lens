@@ -367,7 +367,7 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
 
     private async Task<string> SkippedAsync()
     {
-        var candidate = await seeder.SeedAsync($"{Article} Release {++candidateCount}.", $"https://example.test/pages/{candidateCount}");
+        var candidate = await seeder.SeedAsync($"The office announced a rent cap for tenants. Release {++candidateCount}.", $"https://example.test/pages/{candidateCount}");
         await StatementAiDrafting.SkipGateAsync(gates);
         return candidate;
     }

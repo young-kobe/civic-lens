@@ -25,8 +25,7 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 ### Now
 
 - R-33: Bill titles on vote records. Fetch the Congress.gov bill detail of every voted bill, also when no tracked member sponsors it. Code gives the vote record its title and policy area as cited facts. Depends on: none stated. It comes before R-15 review. [Votes](architecture/votes.md#limits-and-planned-work)
-- R-34: The statement gate keeps releases about a bill or a vote. A code rule passes a release that names a bill or a House vote when no tracked issue matches. Depends on: none stated. It comes before R-15 review. [Statements](architecture/statements.md#limits-and-planned-work)
-- R-15: House roll-call votes as actions. Collection, vote candidates, and drafting are done. Review and publication remain, after R-33 and R-34. Depends on: R-33 and R-34. It does not need R-14. [Votes](architecture/votes.md#limits-and-planned-work)
+- R-15: House roll-call votes as actions. Collection, vote candidates, and drafting are done. Review and publication remain, after R-33. Depends on: R-33. It does not need R-14. [Votes](architecture/votes.md#limits-and-planned-work)
 
 ### Next
 
@@ -64,7 +63,7 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 - D-10: Vote kind from code (procedural, amendment, or passage) and one spelling for vote casts. [Votes](architecture/votes.md#limits-and-planned-work)
 - D-11: Drafting the past votes of a member who is added to tracking later. [Votes](architecture/votes.md#limits-and-planned-work)
 - D-12: Content profiles for the 282 of 1,392 page, HTML, and feed sources that have none. [Documents](architecture/documents.md#limits-and-planned-work)
-- D-13: A classifier benchmark for the statement issue gate, to run as soon as possible. Label about 100 gate decisions by hand, starting from the 48 measured ones. Compare a feature baseline, Cloudflare Clef-flash, Clef, a Clef model fine-tuned on our labels, and Haiku 5.5. The fine-tuning needs the dataset rules of [R-28](#later) agreed first. [Analysis](architecture/analysis.md#limits-and-planned-work)
+- D-13: A classifier benchmark for the statement issue gate, to run as soon as possible. Label about 100 gate decisions by hand, starting from the 48 measured ones. Compare Haiku 5.5, Clef-flash, Clef-omni, Clef, a fine-tuned Clef, Strands Decider 2B, a fine-tuned ModernBERT, and a feature baseline. The issue list is configuration. A decision model takes the options in each request, so it needs no retraining when the list changes. A model that runs inside the worker (ONNX Runtime) needs a reviewed boundary change first. The fine-tuning needs the dataset rules of [R-28](#later) agreed first. [Analysis](architecture/analysis.md#limits-and-planned-work)
 - D-08: Deployment topology: one cloud deployment, separate services, or services split across cloud providers, chosen by cost and operational needs. [Host](architecture/host.md#limits-and-planned-work)
 
 ## Product direction

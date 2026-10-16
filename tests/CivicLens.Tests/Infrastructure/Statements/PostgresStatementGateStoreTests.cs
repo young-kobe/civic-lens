@@ -176,6 +176,18 @@ public sealed class PostgresStatementGateStoreTests(PostgresCollection postgres)
         Assert.Equal(Revision().Id, Assert.Single(skipped).IssueRevisionId);
     }
 
+    [Fact]
+    public async Task ABillOrVotePassIsStoredWithItsOwnReasonQueuesTheDraftAndCountsAsPassed()
+    {
+        var candidate = await seeder.SeedAsync(Article + " one", "https://example.test/pages/one");
+
+        await Worker(new FakeStatementGateModel().Classify(OutputNamingBillOrVote([])), Revision()).ExecuteAsync(once: true);
+
+        Assert.Equal([("gate", "Succeeded", StatementGateReasons.PassedBillOrVote), (StatementDraftTask.Task, "Pending", null)], await RowsAsync(candidate));
+        Assert.Equal(StatementGateReasons.PassedBillOrVote, (await store.GetRunAsync(await RunIdAsync(candidate), default))!.Reason);
+        Assert.Equal(1, (await store.CountAsync(default))[StatementGateView.Passed]);
+    }
+
     private AnalysisWorker<StatementGateRun> Worker(FakeStatementGateModel model, CivicLens.Application.Issues.IssueConfigurationRevision revision,
         StatementGateSettings? settings = null) =>
         AnalysisWorkers.Gate(store, new FakeAnalysisStatusStore(), model, settings ?? new StatementGateSettings(10_000_000, concurrency: 1),

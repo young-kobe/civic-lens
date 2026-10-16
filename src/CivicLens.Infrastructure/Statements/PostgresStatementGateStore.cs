@@ -86,10 +86,12 @@ public sealed class PostgresStatementGateStore : PostgresAnalysisStore<Statement
         return captured.ToHashSet(StringComparer.Ordinal);
     }
 
+    private static readonly string[] passReasons = StatementGateReasons.PassReasons();
+
     private static Expression<Func<StatementAnalysisRow, bool>> InView(StatementGateView view) => view switch
     {
         StatementGateView.Pending => AnalysisQueueStates.IsPending<StatementAnalysisRow>(),
-        StatementGateView.Passed => row => row.Status == State.Succeeded && row.ErrorCode == StatementGateReasons.Passed,
+        StatementGateView.Passed => row => row.Status == State.Succeeded && passReasons.Contains(row.ErrorCode!),
         StatementGateView.Skipped => row => row.Status == State.Succeeded && row.ErrorCode == StatementGateReasons.NoTrackedIssue,
         StatementGateView.FailedOpen => row => row.Status == State.Succeeded && row.ErrorCode == StatementGateReasons.FailedOpen,
         StatementGateView.OverCap => row => row.Status == State.Succeeded && row.ErrorCode == StatementGateReasons.OverByteCap,
@@ -100,7 +102,7 @@ public sealed class PostgresStatementGateStore : PostgresAnalysisStore<Statement
     {
         State.Succeeded => errorCode switch
         {
-            StatementGateReasons.Passed => StatementGateView.Passed,
+            var pass when StatementGateReasons.IsPass(pass) => StatementGateView.Passed,
             StatementGateReasons.NoTrackedIssue => StatementGateView.Skipped,
             StatementGateReasons.FailedOpen => StatementGateView.FailedOpen,
             _ => StatementGateView.OverCap

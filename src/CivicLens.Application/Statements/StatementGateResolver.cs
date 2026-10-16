@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Documents;
+using CivicLens.Core.Statements;
 using static CivicLens.Application.Analysis.AnalysisAnswerRules;
 
 namespace CivicLens.Application.Statements;
@@ -20,7 +21,15 @@ public static class StatementGateResolver
         CheckPolicyAreas(output.PolicyAreas, rubric, errors);
         var quotes = ResolveIssues(output.TrackedIssues, evidence, rubric, errors, citationErrors);
         if (errors.Count > 0) return Rejected(errors, citationErrors.Count > 0);
-        return new(quotes.IsEmpty ? StatementGateReasons.NoTrackedIssue : StatementGateReasons.Passed, quotes, [], false);
+        return new(PassReason(output, quotes, evidence), quotes, [], false);
+    }
+
+    private static string PassReason(StatementGateOutput output, ImmutableArray<StatementGateQuote> quotes, StatementArticle evidence)
+    {
+        if (!quotes.IsEmpty) return StatementGateReasons.Passed;
+        if (output.NamesBillOrVote) return StatementGateReasons.PassedBillOrVote;
+        return BillNumberFinder.Find(evidence.Extraction.Text).IsEmpty
+            ? StatementGateReasons.NoTrackedIssue : StatementGateReasons.PassedBillNumber;
     }
 
     internal static StatementGateOutput? Parse(string outputJson)

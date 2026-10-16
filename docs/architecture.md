@@ -258,8 +258,8 @@ Before the first production deploy ([R-23](roadmap.md#later)), reset the develop
 | Brief draft schema | `brief-draft-schema-v1` | same file | Brief analysis runs | The model output schema changes |
 | Brief fingerprint | `brief-fingerprint-v1` | `src/CivicLens.Application/Briefs/BriefFingerprint.cs` | The fingerprint in each brief revision | The canonical text of the fingerprint changes |
 | Gate task | `statement-gate-v1` | `src/CivicLens.Application/Statements/StatementGateTask.cs` | Statement analysis runs and queue entries | Task flow or output handling changes |
-| Gate prompt | `statement-gate-prompt-v1` | same file | Statement analysis runs | Prompt text or input framing changes |
-| Gate schema | `statement-gate-schema-v1` | same file | Statement analysis runs | The model output schema changes |
+| Gate prompt | `statement-gate-prompt-v2` | same file | Statement analysis runs | Prompt text or input framing changes |
+| Gate schema | `statement-gate-schema-v2` | same file | Statement analysis runs | The model output schema changes |
 
 ## Glossary
 

@@ -47,6 +47,35 @@ public sealed class StatementGateStepTests
     }
 
     [Fact]
+    public async Task ABillOrVoteYesQueuesTheDraftWithNoIssueQuotesAndTheStoredOutputKeepsTheAnswerForLaterLabels()
+    {
+        var store = new FakeStatementGateStore(Article);
+        var model = new FakeStatementGateModel().Classify(OutputNamingBillOrVote([HealthArea]));
+
+        await Worker(store, model).ExecuteAsync(once: true);
+
+        var entry = store.Entries.Single();
+        Assert.Equal((State.Succeeded, StatementGateReasons.PassedBillOrVote), (entry.Status, entry.ErrorCode));
+        Assert.Equal([entry.SubjectId], store.QueuedDrafts);
+        var run = Assert.Single(store.Runs);
+        Assert.Empty(run.Quotes);
+        Assert.Contains("\"namesBillOrVote\":true", run.Run.OutputJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ABillNumberQueuesTheDraftEvenWhenTheModelAnswersNo()
+    {
+        var store = new FakeStatementGateStore(Article + " It follows H.R. 1234.");
+        var model = new FakeStatementGateModel().Classify(Output());
+
+        await Worker(store, model).ExecuteAsync(once: true);
+
+        var entry = store.Entries.Single();
+        Assert.Equal((State.Succeeded, StatementGateReasons.PassedBillNumber), (entry.Status, entry.ErrorCode));
+        Assert.Equal([entry.SubjectId], store.QueuedDrafts);
+    }
+
+    [Fact]
     public async Task AnArticleOverTheByteCapMakesNoModelCallAndStillQueuesTheDraft()
     {
         var store = new FakeStatementGateStore(new string('x', 5_000));
