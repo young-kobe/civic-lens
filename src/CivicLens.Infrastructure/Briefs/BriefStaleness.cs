@@ -15,7 +15,7 @@ namespace CivicLens.Infrastructure.Briefs;
 
 internal static class BriefStaleness
 {
-    private static readonly AnalysisState[] RequeuedStates = [AnalysisState.Succeeded, AnalysisState.Running];
+    private static readonly AnalysisState[] RequeuedStates = [AnalysisState.Succeeded, AnalysisState.Running, AnalysisState.Blocked];
 
     private static readonly string ReadStaleBriefIdsSql = $$"""
         WITH wanted AS (SELECT k.kind, k.record_id FROM unnest({0}, {1}) AS k(kind, record_id)),
@@ -28,6 +28,7 @@ internal static class BriefStaleness
             FROM wanted w)
         SELECT b.record_id AS "Value" FROM {{PostgresBriefDraftStore.Table}} b
         WHERE b.task = {2}
+          AND (b.status <> 'Blocked' OR b.error_code = '{{BriefDraftErrorCodes.NoCitableRecords}}')
           AND NOT EXISTS (SELECT 1 FROM brief_drafts d WHERE d.record_id = b.record_id AND d.review_status = 'Approved')
           AND EXISTS (SELECT 1 FROM first_published f
                       WHERE f.ticks >= {{BriefWeekSql.StartTicks("b.week_start")}} AND f.ticks < {{BriefWeekSql.EndTicks("b.week_start")}})

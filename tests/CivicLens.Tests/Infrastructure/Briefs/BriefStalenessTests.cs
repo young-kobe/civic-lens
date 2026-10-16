@@ -94,6 +94,20 @@ public sealed class BriefStalenessTests(PostgresCollection postgres) : IAsyncLif
         Assert.Equal("Pending:0", await seeder.BriefQueueStatusAsync(Week));
     }
 
+    [Theory]
+    [InlineData(BriefDraftErrorCodes.NoCitableRecords, "Pending:0")]
+    [InlineData(BriefDraftErrorCodes.OverByteCap, "Blocked:3")]
+    public async Task AChangedRecordRequeuesABlockedWeekOnlyWhenItHadNoRecordToCite(string errorCode, string expected)
+    {
+        await seeder.BriefAsync(Week);
+        await seeder.ExecuteAsync($"UPDATE brief_analysis SET status = 'Blocked', error_code = '{errorCode}'");
+
+        await CommitAsync(Binding(PublishedRecordKind.Statement, P1, 1), Binding(PublishedRecordKind.Statement, S1, 1),
+            Binding(PublishedRecordKind.Statement, S2, 2), Binding(PublishedRecordKind.DocumentChange, D1, 1), Binding(PublishedRecordKind.Action, A1, 1));
+
+        Assert.Equal(expected, await seeder.BriefQueueStatusAsync(Week));
+    }
+
     [Fact]
     public async Task APublishThatOnlyAddsARecordLeavesTheFinishedBriefAloneBecauseTheNewRecordBelongsToTheOpenWeek()
     {
