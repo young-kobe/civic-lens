@@ -91,6 +91,43 @@ internal sealed class BriefWorldSeeder(string connectionString)
         VALUES (@id, 1, 'auth0|editor', 'Person', NULL, 'x', 1);
         """, ("id", BriefWeek.RecordIdOf(week)), ("week", week), ("queue", queueStatus), ("review", reviewStatus));
 
+    public async Task ReleaseCitedRecordsAsync()
+    {
+        await StatementAsync(BriefFixtures.CitedStatement, 1, "Rent cap", "warren");
+        await ActionAsync(BriefFixtures.CitedAction, 1, 7, "warren", "markey");
+        await DocumentChangeAsync(BriefFixtures.CitedDocumentChange, 1, "A rule changed");
+        await ReleaseAsync(1, BriefFixtures.InWeek, active: true, Binding(PublishedRecordKind.Statement, BriefFixtures.CitedStatement, 1),
+            Binding(PublishedRecordKind.Action, BriefFixtures.CitedAction, 1),
+            Binding(PublishedRecordKind.DocumentChange, BriefFixtures.CitedDocumentChange, 1));
+    }
+
+    public Task ReviewableBriefAsync(BriefRevision revision, string reviewStatus = "AwaitingReview") => ExecuteAsync("""
+        SET session_replication_role = replica;
+        INSERT INTO brief_analysis (record_id, task, week_start, status, fence, attempts, reserved_tokens, created_at_utc_ticks)
+        VALUES (@id, 'brief-draft', @week, 'Succeeded', 0, 3, 0, 1);
+        INSERT INTO brief_drafts (record_id, week_start, current_revision_number, review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
+        VALUES (@id, @week, @number, 0, @review, @created, @created);
+        INSERT INTO brief_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
+        VALUES (@id, @number, @author, 'Analysis', substr(@id, 1, 32), @json, @created);
+        """, ("id", revision.RecordId), ("week", revision.Window.WeekStart), ("number", revision.RevisionNumber),
+        ("review", reviewStatus), ("created", revision.CreatedAtUtc.UtcTicks), ("author", revision.AuthorSubject),
+        ("json", JsonSerializer.Serialize(revision, Web)));
+
+    public Task AppendRevisionAsync(BriefRevision revision) => ExecuteAsync("""
+        SET session_replication_role = replica;
+        UPDATE brief_drafts SET current_revision_number = @number WHERE record_id = @id;
+        INSERT INTO brief_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
+        VALUES (@id, @number, @author, 'Analysis', substr(md5(@id || @number::text), 1, 32), @json, @created);
+        """, ("id", revision.RecordId), ("number", revision.RevisionNumber), ("created", revision.CreatedAtUtc.UtcTicks),
+        ("author", revision.AuthorSubject), ("json", JsonSerializer.Serialize(revision, Web)));
+
+    public async Task ReplaceActiveReleaseAsync(int number, DateTimeOffset publishedAt, params PublishedRevisionBinding[] records)
+    {
+        await ReleaseWithoutApprovalsAsync(number, publishedAt, active: false, records);
+        await ExecuteAsync("UPDATE publication_releases SET is_active = false");
+        await ExecuteAsync("UPDATE publication_releases SET is_active = true WHERE release_number = @number", ("number", number));
+    }
+
     public async Task<long> DatabaseTicksAsync()
     {
         await using var connection = new NpgsqlConnection(connectionString);
@@ -115,6 +152,14 @@ internal sealed class BriefWorldSeeder(string connectionString)
     }
 
     public static PublishedRevisionBinding Binding(PublishedRecordKind kind, string id, int revision) => new(kind, id, revision);
+
+    public async Task<long> ScalarAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        return Convert.ToInt64(await command.ExecuteScalarAsync());
+    }
 
     public Task ExecuteAsync(string sql, params (string Name, object Value)[] parameters) => RunAsync(connectionString, sql, parameters);
 

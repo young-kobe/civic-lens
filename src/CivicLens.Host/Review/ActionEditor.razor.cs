@@ -71,14 +71,9 @@ public sealed partial class ActionEditor
         return ActionRoutes.Editor(RecordId, "saved");
     }
 
-    private SaveActionDraftRequest BuildSaveRequest(ActionInput input) => input.SuggestionAction switch
-    {
-        SuggestionActions.Use when Revision.Suggestion is { } suggestion =>
-            new(RecordId, SaveExpectedRevision, suggestion.Headline, suggestion.Summary, false, SaveKey ?? ""),
-        SuggestionActions.Use => throw new ArgumentException("This revision has no suggestion."),
-        SuggestionActions.Dismiss => new(RecordId, SaveExpectedRevision, input.Headline ?? "", input.Summary ?? "", false, SaveKey ?? ""),
-        _ => new(RecordId, SaveExpectedRevision, input.Headline ?? "", input.Summary ?? "", true, SaveKey ?? "")
-    };
+    private SaveActionDraftRequest BuildSaveRequest(ActionInput input) =>
+        new(RecordId, SaveExpectedRevision, input.Headline ?? "", input.Summary ?? "",
+            SuggestionActions.ChoiceOf(input.SuggestionAction), SaveKey ?? "");
 
     private Task ReloadAfterSaveConflictAsync()
     {
@@ -143,12 +138,6 @@ public sealed partial class ActionEditor
     private IReadOnlyList<ReviewHistoryEntry> History => ReviewHistoryEntry.Newest(
         detail!.Review.Revisions.Select(item => ReviewHistoryEntry.ForRevision(item.CreatedAtUtc, item.RevisionNumber, item.AuthorSubject, item.Headline)),
         detail.Review.Decisions);
-
-    public static class SuggestionActions
-    {
-        public const string Use = "use";
-        public const string Dismiss = "dismiss";
-    }
 
     public sealed class ActionInput
     {

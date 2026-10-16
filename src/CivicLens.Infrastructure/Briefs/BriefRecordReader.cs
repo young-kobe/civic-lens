@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using CivicLens.Application.Briefs;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Actions;
+using CivicLens.Core.Briefs;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Infrastructure.Collection;
@@ -16,48 +17,88 @@ namespace CivicLens.Infrastructure.Briefs;
 
 internal static class BriefRecordReader
 {
-    public static async Task<ImmutableArray<BriefRecord>> ReadAsync(CollectionAttemptDbContext db,
-        ImmutableArray<PublishedRevisionBinding> bindings, CancellationToken cancellationToken)
+    public static Task<ImmutableArray<BriefRecord>> ReadAsync(CollectionAttemptDbContext db, ImmutableArray<PublishedRevisionBinding> bindings,
+        CancellationToken cancellationToken) => ReadKindsAsync(db, bindings, approvedOnly: true, cancellationToken);
+
+    public static Task<ImmutableArray<BriefRecord>> ReadExactAsync(CollectionAttemptDbContext db,
+        ImmutableArray<PublishedRevisionBinding> bindings, CancellationToken cancellationToken) =>
+        ReadKindsAsync(db, bindings, approvedOnly: false, cancellationToken);
+
+    public static PublishedRevisionBinding BindingOf(BriefCitation citation) =>
+        new(BriefCitationKinds.PublishedKindOf(citation.Kind), citation.RecordId, citation.RevisionNumber);
+
+    public static async Task<HashSet<PublishedRevisionBinding>> FindChangedAsync(CollectionAttemptDbContext db,
+        IEnumerable<BriefCitation> citations, CancellationToken cancellationToken)
+    {
+        var bindings = citations.Select(BindingOf).Distinct().ToArray();
+        if (bindings.Length == 0) return [];
+        var active = (await ReviewQueries.ReadActiveReleaseRecordsAsync(db, cancellationToken))
+            .ToDictionary(binding => (binding.Kind, binding.RecordId), binding => binding.RevisionNumber);
+        var changed = bindings.Where(binding => active.GetValueOrDefault((binding.Kind, binding.RecordId)) != binding.RevisionNumber).ToHashSet();
+        foreach (var kind in bindings.Select(binding => binding.Kind).Distinct())
+            changed.UnionWith(await ReadNotApprovedAsync(db, kind, [.. bindings.Where(binding => binding.Kind == kind)], cancellationToken));
+        return changed;
+    }
+
+    private static async Task<ImmutableArray<BriefRecord>> ReadKindsAsync(CollectionAttemptDbContext db,
+        ImmutableArray<PublishedRevisionBinding> bindings, bool approvedOnly, CancellationToken cancellationToken)
     {
         var records = new List<BriefRecord>();
         records.AddRange(await ReadKindAsync<DocumentChangeRevisionRow, DocumentChangeDraftRevision>(db, bindings,
-            PublishedRecordKind.DocumentChange, "document_change_revisions", "document_change_review_decisions", "draft_id", BriefRecord.From, cancellationToken));
+            PublishedRecordKind.DocumentChange, approvedOnly, BriefRecord.From, cancellationToken));
         records.AddRange(await ReadKindAsync<StatementRevisionRow, StatementDraftRevision>(db, bindings,
-            PublishedRecordKind.Statement, "statement_revisions", "statement_review_decisions", "candidate_id", BriefRecord.From, cancellationToken));
+            PublishedRecordKind.Statement, approvedOnly, BriefRecord.From, cancellationToken));
         records.AddRange(await ReadKindAsync<ActionRevisionRow, ActionDraftRevision>(db, bindings,
-            PublishedRecordKind.Action, "action_revisions", "action_review_decisions", "record_id", BriefRecord.From, cancellationToken));
+            PublishedRecordKind.Action, approvedOnly, BriefRecord.From, cancellationToken));
         return [.. records.OrderBy(record => record.Kind).ThenBy(record => record.RecordId, StringComparer.Ordinal)];
     }
 
     private static async Task<IReadOnlyList<BriefRecord>> ReadKindAsync<TRow, TRevision>(CollectionAttemptDbContext db,
-        ImmutableArray<PublishedRevisionBinding> bindings, PublishedRecordKind kind, string table, string decisionTable, string idColumn,
+        ImmutableArray<PublishedRevisionBinding> bindings, PublishedRecordKind kind, bool approvedOnly,
         Func<TRevision, BriefRecord> toRecord, CancellationToken cancellationToken)
         where TRow : class, IReviewRevisionRow
         where TRevision : class, IReviewRevision
     {
         var requested = bindings.Where(binding => binding.Kind == kind).ToArray();
-        if (requested.Length == 0) return [];
-        var notApproved = await ReadNotApprovedAsync(db, requested, decisionTable, idColumn, cancellationToken);
-        var wanted = requested.Where(binding => !notApproved.Contains(binding.RecordId)).ToArray();
+        var wanted = approvedOnly
+            ? requested.Except(await ReadNotApprovedAsync(db, kind, requested, cancellationToken)).ToArray() : requested;
         if (wanted.Length == 0) return [];
+        var (table, _, idColumn) = SourceOf(kind);
         var sql = $"SELECT r.* FROM {table} r JOIN unnest({{0}}, {{1}}) AS k(id, number) ON r.{idColumn} = k.id AND r.revision_number = k.number";
         var rows = await db.Set<TRow>().FromSqlRaw(sql, wanted.Select(binding => binding.RecordId).ToArray(),
             wanted.Select(binding => binding.RevisionNumber).ToArray()).AsNoTracking().ToArrayAsync(cancellationToken);
         if (rows.Length != wanted.Length)
-            throw new InvalidDataException($"A release names a {kind} revision that is not stored.");
+            throw new InvalidDataException(approvedOnly
+                ? $"A release names a {kind} revision that is not stored."
+                : $"A brief cites a {kind} revision that is not stored.");
         return [.. rows.Select(row => toRecord(ReviewJson.Deserialize<TRevision>(row.RevisionJson, "revision")))];
     }
 
-    private static async Task<HashSet<string>> ReadNotApprovedAsync(CollectionAttemptDbContext db, PublishedRevisionBinding[] bindings,
-        string decisionTable, string idColumn, CancellationToken cancellationToken)
+    private static async Task<PublishedRevisionBinding[]> ReadNotApprovedAsync(CollectionAttemptDbContext db, PublishedRecordKind kind,
+        PublishedRevisionBinding[] requested, CancellationToken cancellationToken)
     {
+        if (requested.Length == 0) return [];
+        var (_, decisionTable, idColumn) = SourceOf(kind);
         var sql = $$"""
-            SELECT k.id AS "Value" FROM unnest({0}, {1}) AS k(id, number)
+            SELECT k.id AS "RecordId", k.number AS "RevisionNumber" FROM unnest({0}, {1}) AS k(id, number)
             WHERE (SELECT d.kind FROM {{decisionTable}} d WHERE d.{{idColumn}} = k.id AND d.revision_number = k.number
                    ORDER BY d.review_state_version DESC LIMIT 1) IS DISTINCT FROM 'Approve'
             """;
-        var ids = await db.Database.SqlQueryRaw<string>(sql, bindings.Select(binding => binding.RecordId).ToArray(),
-            bindings.Select(binding => binding.RevisionNumber).ToArray()).ToArrayAsync(cancellationToken);
-        return [.. ids];
+        var rows = await db.Database.SqlQueryRaw<NotApprovedRow>(sql, requested.Select(binding => binding.RecordId).ToArray(),
+            requested.Select(binding => binding.RevisionNumber).ToArray()).ToArrayAsync(cancellationToken);
+        return [.. rows.Select(row => new PublishedRevisionBinding(kind, row.RecordId, row.RevisionNumber))];
+    }
+
+    private static (string Table, string DecisionTable, string IdColumn) SourceOf(PublishedRecordKind kind) => kind switch
+    {
+        PublishedRecordKind.DocumentChange => ("document_change_revisions", "document_change_review_decisions", "draft_id"),
+        PublishedRecordKind.Statement => ("statement_revisions", "statement_review_decisions", "candidate_id"),
+        _ => ("action_revisions", "action_review_decisions", "record_id")
+    };
+
+    private sealed class NotApprovedRow
+    {
+        public string RecordId { get; set; } = "";
+        public int RevisionNumber { get; set; }
     }
 }

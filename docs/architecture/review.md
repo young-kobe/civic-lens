@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The review feature is the private editorial workspace. People draft, revise, and decide on proposed public records beside their evidence. Every decision binds to an exact immutable revision. This page covers document changes and the decision rules that statements and actions share. Statement-specific review is in [statements](statements.md#statement-review). Action-specific review is in [actions](actions.md#action-review).
+The review feature is the private editorial workspace. People draft, revise, and decide on proposed public records beside their evidence. Every decision binds to an exact immutable revision. This page covers document changes and the decision rules that statements and actions share. Statement-specific review is in [statements](statements.md#statement-review). Action-specific review is in [actions](actions.md#action-review). Brief-specific review is in [briefs](briefs.md#brief-review).
 
 ## Decisions
 
@@ -48,7 +48,7 @@ The workspace centers the proposed public record beside its supporting evidence.
 
 - For a document change, reviewers separate a substantive source edit from navigation churn or a processing change.
 - For a relationship, reviewers verify the claimed connection.
-- For a brief, reviewers verify each assertion and the coverage description. Briefs are drafted today; their review pages are planned.
+- For a brief, reviewers verify each assertion against the cited revision and read the coverage description. A brief shows a flag when a cited record changed.
 
 An explanation of significance is an editorial judgment that needs review. A text difference never makes it automatic. A comparison alone does not show substantive significance.
 
@@ -189,6 +189,7 @@ The Host uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.12 for th
 | Shared store core | `src/CivicLens.Infrastructure/Review/ReviewRecords.cs`, `src/CivicLens.Infrastructure/Review/ReviewHistory.cs`, `src/CivicLens.Core/Review/IReviewRevision.cs`, `src/CivicLens.Infrastructure/Review/Persistence/IReviewDraftRow.cs`, `src/CivicLens.Infrastructure/Review/Persistence/IReviewRevisionRow.cs`, `src/CivicLens.Infrastructure/Review/Persistence/IReviewDecisionRow.cs` |
 | Postgres store and helpers | `src/CivicLens.Infrastructure/Review/PostgresDocumentChangeReviewStore.cs`, `src/CivicLens.Infrastructure/Review/ReviewIdempotency.cs`, `src/CivicLens.Infrastructure/Review/ReviewDecisionHistory.cs`, `src/CivicLens.Infrastructure/Review/ReviewKeyset.cs`, `src/CivicLens.Infrastructure/Review/ReviewJson.cs`, `src/CivicLens.Infrastructure/Review/ReviewQueries.cs` |
 | Pages | `src/CivicLens.Host/Review/ReviewHome.razor`, `src/CivicLens.Host/Review/DraftEditor.razor`, `src/CivicLens.Host/Review/ReviewDecisionPanel.razor`, `src/CivicLens.Host/Review/ReviewHistoryPanel.razor`, `src/CivicLens.Host/Review/ReviewRecordPage.cs` |
+| Brief review | `src/CivicLens.Host/Review/BriefList.razor`, `src/CivicLens.Host/Review/BriefEditor.razor`, `src/CivicLens.Infrastructure/Briefs/PostgresBriefReviewStore.cs`; see [briefs](briefs.md#code-map) |
 | Workspace settings | `src/CivicLens.Host/Review/ReviewWorkspace.cs`, `src/CivicLens.Host/Review/ReviewWorkspaceSettings.cs` |
 
 ## Limits and planned work
@@ -202,5 +203,5 @@ The Host uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.12 for th
 - Planned reviewer experience: a source-to-review path that a nontechnical reviewer understands, dynamic search across retained evidence and review records, and integrated visual comparison.
 - Global search and expanded reviewer source visibility are pending decisions. Add an evidence library page once document search exists.
 - Review volume is large. Bulk approval exists for action revisions that change only sponsorships; see [actions](actions.md#action-review). Wider bulk tools are planned here. They will show the automatic citation and classification checks beside each draft, and sort the riskiest drafts first.
-- A reviewer will approve a weekly brief on its own. A brief cites records that are already published, and each cited record keeps its own decision bound to its exact revision. Model output never approves or publishes. See [briefs](briefs.md#limits-and-planned-work).
+- A reviewer approves a weekly brief on its own. A brief cites records that are already published, and each cited record keeps its own decision bound to its exact revision. Approval needs every cited revision to be approved and in the active release. Model output never approves or publishes. See [briefs](briefs.md#limits-and-planned-work).
 - See [roadmap](../roadmap.md) for order.

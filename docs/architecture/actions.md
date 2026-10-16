@@ -185,7 +185,7 @@ Action review uses the shared decision rules and review cycles in [review](revie
 
 **Ownership.** Core/Actions holds `ActionReview`, the aggregate of one record, and the review rules on `ActionDraftRevision`. Application/Actions holds `SaveActionDraft`, `DecideActionReview`, `ApproveSponsorshipChanges`, `GetActionReview`, `ListActionReviews`, `GetActionReviewCounts`, and the store boundary `IActionReviewStore`. Infrastructure/Actions holds `PostgresActionReviewStore` on the shared `ReviewRecords` core. A person cannot create an action draft, so the store has no create.
 
-**Save.** `SaveActionDraft` reads the expected revision and copies it with the new headline and summary. The request says whether to keep the suggestion. The store checks the edit against the current revision again under the lock, because another writer can append first.
+**Save.** `SaveActionDraft` reads the expected revision and copies it with the new headline and summary. The request holds one `SuggestionChoice`: `Keep`, `Dismiss`, or `Use`. `Keep` keeps the stored suggestion. `Dismiss` clears it. `Use` takes the headline and the summary from the stored suggestion, ignores the posted text, and clears the suggestion. `Use` fails when the revision has no suggestion. The store checks the edit against the current revision again under the lock, because another writer can append first.
 
 **Decide.** `DecideActionReview` mirrors the statement handler. An approval runs `ActionDraftRevision.ValidateForApproval` and checks every citation against its saved extraction.
 
@@ -202,7 +202,7 @@ Action review uses the shared decision rules and review cycles in [review](revie
 - the evidence: each sponsorship with its cited lines, the policy area, and the CRS summary
 - the shared `ReviewDecisionPanel` and `ReviewHistoryPanel`
 
-"Use suggestion" saves the suggestion text and clears the suggestion. "Dismiss" saves the form text and clears the suggestion. The plain save keeps the suggestion. The forms use the static post-back pattern of the statement pages, and `ReviewRecordPage` maps the failures. The rail has an Actions link.
+"Use suggestion" saves the stored suggestion text and clears the suggestion. "Dismiss" saves the form text and clears the suggestion. The plain save keeps the suggestion. The forms use the static post-back pattern of the statement pages, and `ReviewRecordPage` maps the failures. The rail has an Actions link.
 
 ### Publication
 

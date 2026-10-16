@@ -45,6 +45,9 @@ internal static class ReviewValidation
         return value;
     }
 
+    public static T RequireSuggestion<T>(T? suggestion) where T : class =>
+        suggestion ?? throw new ArgumentException("This revision has no suggestion.");
+
     public static string ValidateCandidateId(string value) => ValidateHash(value, nameof(value));
 
     public static string ValidateDraftId(string value) => DocumentChangeDraftRevision.ValidateDraftId(value);

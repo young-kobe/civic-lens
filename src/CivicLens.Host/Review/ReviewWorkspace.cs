@@ -2,6 +2,7 @@ using System.Net;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Activity;
 using CivicLens.Application.Analysis;
+using CivicLens.Application.Briefs;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Publication;
@@ -10,6 +11,7 @@ using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
 using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Analysis;
+using CivicLens.Infrastructure.Briefs;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
@@ -221,6 +223,7 @@ internal static class ReviewWorkspace
         var contexts = AnalysisDbContextFactory.Create(connectionString);
         ConfigureStatementReview(services, contexts);
         ConfigureActionReview(services, contexts);
+        ConfigureBriefReview(services, contexts);
         var collection = ReviewCollectionSettings.FromEnvironment();
         if (collection is null)
         {
@@ -263,6 +266,16 @@ internal static class ReviewWorkspace
         services.AddScoped<GetActionReview>();
         services.AddScoped<ListActionReviews>();
         services.AddScoped<GetActionReviewCounts>();
+    }
+
+    private static void ConfigureBriefReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)
+    {
+        services.AddSingleton<IBriefReviewStore>(new PostgresBriefReviewStore(contexts));
+        services.AddScoped<SaveBriefDraft>();
+        services.AddScoped<DecideBriefReview>();
+        services.AddScoped<GetBriefReview>();
+        services.AddScoped<ListBriefReviews>();
+        services.AddScoped<GetBriefReviewCounts>();
     }
 
     // The owner publish section needs a release directory and the configured official names.

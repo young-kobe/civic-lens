@@ -17,15 +17,16 @@ public sealed class SaveActionDraft(IActionReviewStore store)
         // The edit copies the expected revision. The store compares the edit with the current revision under the review lock.
         var expected = await store.GetRevisionAsync(recordId, request.ExpectedRevisionNumber, cancellationToken)
             ?? throw new KeyNotFoundException("Action draft revision was not found.");
+        var used = request.Suggestion == SuggestionChoice.Use ? ReviewValidation.RequireSuggestion(expected.Suggestion) : null;
         var revision = expected with
         {
             RevisionNumber = expected.RevisionNumber + 1,
             AuthorSubject = actor.Subject,
             CreatedAtUtc = DateTimeOffset.UtcNow,
-            Headline = request.Headline,
-            Summary = request.Summary,
+            Headline = used?.Headline ?? request.Headline,
+            Summary = used?.Summary ?? request.Summary,
             TextOrigin = ReviewTextOrigin.Person,
-            Suggestion = request.KeepSuggestion ? expected.Suggestion : null
+            Suggestion = request.Suggestion == SuggestionChoice.Keep ? expected.Suggestion : null
         };
         revision.ValidatePersonEditOf(expected);
         return await store.SaveRevisionAsync(actor.Subject, revision, request.ExpectedRevisionNumber, request.IdempotencyKey,

@@ -47,7 +47,29 @@ public sealed partial record BriefRevision(string RecordId, int RevisionNumber, 
             throw new ArgumentException("Model text has no suggestion.");
     }
 
+    public void ValidatePersonEditOf(BriefRevision previous)
+    {
+        ArgumentNullException.ThrowIfNull(previous);
+        ValidateShape();
+        if (AuthorKind != ReviewAuthorKind.Person || RevisionNumber != previous.RevisionNumber + 1)
+            throw new ArgumentException("A person revision follows the current revision.");
+        if (!HasSameCodeOwnedPartAs(previous))
+            throw new ArgumentException("A person edits only the headline, the paragraphs, and the listed citations of each paragraph.");
+        if (!AdoptsSuggestionOf(previous) && !Citations.All(previous.Citations.Contains))
+            throw new ArgumentException("A person may keep only the citations that the brief already lists, or adopt the suggestion as a whole.");
+        if (Suggestion is not null && Suggestion != previous.Suggestion)
+            throw new ArgumentException("A person may keep or clear the suggestion, but never change it.");
+    }
+
     public void ValidateForApproval() => ValidateShape();
+
+    private bool AdoptsSuggestionOf(BriefRevision previous) =>
+        previous.Suggestion is { } suggestion && Suggestion is null && Headline == suggestion.Headline &&
+        Paragraphs.SequenceEqual(suggestion.Paragraphs) && Citations.SequenceEqual(suggestion.Citations);
+
+    private bool HasSameCodeOwnedPartAs(BriefRevision other) =>
+        RecordId == other.RecordId && Window == other.Window && Fingerprint == other.Fingerprint &&
+        Coverage.Considered == other.Coverage.Considered && Coverage.SentToModel == other.Coverage.SentToModel;
 
     private void ValidateIdentity()
     {
