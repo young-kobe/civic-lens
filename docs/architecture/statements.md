@@ -289,6 +289,21 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 - Actions are in [actions](actions.md). Relationships and weekly briefs are planned; see [roadmap](../roadmap.md).
 - Planned: structured statement extraction, temporal identity resolution, candidate matching, reviewed relationships, and timelines.
 - Each quotation stays addressable for later matching with actions.
+- Planned ([R-34](../roadmap.md#now)): the issue gate keeps a release that names a bill or a House vote, also when no tracked issue matches. A code rule decides this, not the model.
+- Measured on 2026-10-16 with 30 House press feeds: the gate dropped 25 of 48 candidates. Most were grants and events. It also dropped a release about a farm bill vote, two bill introductions, and a Senate inquiry.
+- Measured on 2026-10-16: 4 of 21 drafts carry a bill number. 2 of them name a bill with a collected House vote, and both members voted on it.
+- Measured on 2026-10-16: some issue tags are doubtful. For example, a post office closure was tagged `elections-and-voting`.
+
+R-16 decisions, accepted on 2026-10-16. The build starts after vote review, so that vote links are in the first release.
+
+- A relationship has a named type and no verdict. The types are "describes own bill", "states position on", "claims credit for", and "statement about a vote". A stance such as consistent or inconsistent needs a method note first.
+- Code finds the pairs: the same official and a shared bill number. A bill number without a Congress takes the Congress from the statement date. Pairs that share only a tracked issue wait for a measurement. Matching by bill title is pending as [D-09](../roadmap.md#pending-decisions).
+- The model proposes the type and one cited sentence of reason. A person approves or rejects the relationship.
+- A relationship cites the exact revision of each side, as a brief does. A changed flag is derived at each read. An approved relationship stays approved until a person withdraws it.
+- Relationships are their own record kind, with tables, revisions, review pages, a review lock, and publication.
+- Publication refuses a relationship when the release lacks either cited revision, or when its changed flag is set.
+- Timelines are built from published records by official, issue, and date when a page renders. They need no review, because they only order records.
+- Drafting uses Haiku with its own queue, budget table, and variable. No gate runs before it.
 
 Statements and actions acceptance:
 
