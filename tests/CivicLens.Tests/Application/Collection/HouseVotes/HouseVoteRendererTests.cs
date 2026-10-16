@@ -36,10 +36,44 @@ public sealed class HouseVoteRendererTests
     }
 
     [Fact]
+    public void CandidateTotalsRenderInOrdinalOrderWhateverOrderTheApiSentSoTheSpeakerElectionTextIsStable()
+    {
+        var detail = HouseVoteParser.Parse(Encoding.UTF8.GetBytes("""
+            {"houseRollCallVote":{"congress":119,"result":"Johnson (LA)","rollCallNumber":2,"sessionNumber":1,
+             "sourceDataURL":"https://clerk.house.gov/evs/2025/roll002.xml","updateDate":"2025-06-24T08:44:27-04:00",
+             "votePartyTotal":[{"candidate":"Jeffries","total":215},{"candidate":"Johnson (LA)","total":218},{"candidate":"Emmer","total":1}],
+             "voteQuestion":"Election of the Speaker","voteType":"Yea-and-Nay"}}
+            """), new HouseVoteRoll(HouseVoteFixtures.FirstSession, 2));
+
+        Assert.Equal("""
+            House vote: 119 1 2
+            Updated: 2025-06-24T12:44:27Z
+            Question: Election of the Speaker
+            Vote type: Yea-and-Nay
+            Result: Johnson (LA)
+            Candidate total Emmer: 1
+            Candidate total Jeffries: 215
+            Candidate total Johnson (LA): 218
+            Source data: https://clerk.house.gov/evs/2025/roll002.xml
+            """.ReplaceLineEndings("\n"), HouseVoteRenderer.RenderDetail(detail));
+    }
+
+    [Fact]
+    public void ALineBreakInACandidateNameBecomesASpaceSoTheTotalStaysOneCitableLine()
+    {
+        var detail = HouseVoteParser.Parse(Encoding.UTF8.GetBytes("""
+            {"houseRollCallVote":{"congress":119,"rollCallNumber":2,"sessionNumber":1,"updateDate":"2025-06-24T08:44:27-04:00",
+             "votePartyTotal":[{"candidate":" Johnson\n(LA) ","total":218}]}}
+            """), new HouseVoteRoll(HouseVoteFixtures.FirstSession, 2));
+
+        Assert.Contains("\nCandidate total Johnson (LA): 218", HouseVoteRenderer.RenderDetail(detail));
+    }
+
+    [Fact]
     public void ADetailWithoutOptionalFactsRendersNoEmptyLineForThem()
     {
         var bare = new HouseVoteDetail(HouseVoteFixtures.Vote(100, HouseVoteFixtures.Updated, null, null), null, null, null, null,
-            null, null, [], null);
+            null, null, [], [], null);
 
         Assert.Equal("House vote: 119 1 100\nUpdated: 2025-06-24T12:34:41Z", HouseVoteRenderer.RenderDetail(bare));
     }
