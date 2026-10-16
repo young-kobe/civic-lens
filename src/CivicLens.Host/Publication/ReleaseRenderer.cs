@@ -43,6 +43,16 @@ public sealed class ReleaseRenderer : IReleaseRenderer
         });
     }
 
+    public Task<string> RenderBriefAsync(PublishedBrief record, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        record.Validate();
+        return RenderAsync<PublishedBriefPage>(new Dictionary<string, object?>
+        {
+            [nameof(PublishedBriefPage.Record)] = record
+        });
+    }
+
     public Task<string> RenderIndexAsync(PublicationRelease release, int page, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(release);

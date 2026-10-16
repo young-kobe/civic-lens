@@ -41,9 +41,9 @@ Implemented:
 - brief review: person edits, version-bound decisions, and a derived flag for changed cited records
 - AI drafting of weekly briefs from the records published in a closed week
 - the authenticated review workspace
-- static release publication of document changes, statements, and actions
+- static release publication of document changes, statements, actions, and weekly briefs
 
-Pending: live Auth0 tenant verification, production deployment, AI classification, correction and withdrawal releases, brief publication, and MCP. The [roadmap](roadmap.md) holds the order.
+Pending: live Auth0 tenant verification, production deployment, AI classification, correction and withdrawal releases, and MCP. The [roadmap](roadmap.md) holds the order.
 
 ## Layers and dependency rules
 
@@ -63,7 +63,7 @@ Core holds domain invariants. Application holds use cases and the interfaces of 
 <!-- diagrams:start -->
 ### Collection to publication (target)
 
-Target workflow. Implemented: configured collection with durable jobs, discovery, and admission; the Congress.gov bill stream with its gate and action candidates; text extraction, history, and comparison; AI drafting of document-change accounts; the statement gate and statement drafting; AI drafting of bill action records; AI drafting of weekly briefs; version-bound review of all three record kinds and of weekly briefs; and static release publication of all three record kinds. Planned: classification, brief publication, and private and public MCP.
+Target workflow. Implemented: configured collection with durable jobs, discovery, and admission; the Congress.gov bill stream with its gate and action candidates; text extraction, history, and comparison; AI drafting of document-change accounts; the statement gate and statement drafting; AI drafting of bill action records; AI drafting of weekly briefs; version-bound review of all three record kinds and of weekly briefs; and static release publication of all three record kinds and of weekly briefs. Planned: classification and private and public MCP.
 
 ```mermaid
 flowchart LR
@@ -328,6 +328,7 @@ This is the only navigation index.
 | Brief weekly enqueue and the Monday wakeup | [Briefs](architecture/briefs.md#queue) | `src/CivicLens.Infrastructure/Briefs/PostgresBriefDraftStore.cs` |
 | Brief review pages, person edits, approval gate, and changed-citation flag | [Briefs](architecture/briefs.md#brief-review) | `src/CivicLens.Host/Review/BriefEditor.razor`, `src/CivicLens.Infrastructure/Briefs/PostgresBriefReviewStore.cs` |
 | Brief staleness after a publication, an activation, or a review decision | [Briefs](architecture/briefs.md#staleness) | `src/CivicLens.Infrastructure/Briefs/BriefStaleness.cs` |
+| Brief publication: ready list, citation recheck, record, and page | [Briefs](architecture/briefs.md#publication) | `src/CivicLens.Application/Publication/BriefRecordLoader.cs` |
 | Brief commands | [Briefs](architecture/briefs.md#commands) | `src/CivicLens.Host/Briefs/BriefCommand.cs` |
 | Brief queue outcomes and codes | [Briefs](architecture/briefs.md#outcomes) | `src/CivicLens.Application/Briefs/BriefDraftErrorCodes.cs` |
 | Brief tables: queue, runs, budget, status, drafts, revisions, citations | [Briefs](architecture/briefs.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Briefs/` |

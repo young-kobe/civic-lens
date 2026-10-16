@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using CivicLens.Application.Briefs;
 using CivicLens.Application.Publication;
+using CivicLens.Core.Briefs;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Actions.Persistence;
 using CivicLens.Infrastructure.Analysis;
@@ -124,6 +125,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
 
         await RequireUnchangedReleasesAsync(db, commit, cancellationToken);
         await RequireUnchangedReviewStateAsync(db, commit.AddedRecords, cancellationToken);
+        await RequireCurrentCitationsAsync(db, commit, cancellationToken);
         await BriefStaleness.RequeueAfterPublicationAsync(briefQueue, db, commit, cancellationToken);
         await ClearActiveAsync(db, cancellationToken);
         var publishedAt = await DatabaseClock.ReadAsync(db, cancellationToken);
@@ -176,6 +178,22 @@ public sealed class PostgresPublicationStore : IPublicationStore
         }
     }
 
+    private static async Task RequireCurrentCitationsAsync(CollectionAttemptDbContext db, PublicationCommit commit,
+        CancellationToken cancellationToken)
+    {
+        var briefs = commit.AddedRecords.Where(expectation => expectation.Kind == PublishedRecordKind.Brief).ToArray();
+        if (briefs.Length == 0) return;
+        var rows = await db.Set<BriefRevisionRow>().FromSqlRaw(
+                "SELECT r.* FROM brief_revisions r JOIN unnest({0}, {1}) AS k(id, number) ON r.record_id = k.id AND r.revision_number = k.number",
+                briefs.Select(brief => brief.RecordId).ToArray(), briefs.Select(brief => brief.RevisionNumber).ToArray())
+            .AsNoTracking().ToArrayAsync(cancellationToken);
+        var revisions = rows.Select(row => ReviewJson.Deserialize<BriefRevision>(row.RevisionJson, "revision"));
+        var changed = await BriefRecordReader.FindChangedAsync(db, revisions.SelectMany(revision => revision.Citations),
+            commit.Records, cancellationToken);
+        if (changed.Count > 0)
+            throw new PublicationConflictException("A cited record changed after the release was built. Rebuild it.");
+    }
+
     private static async Task<Dictionary<(PublishedRecordKind Kind, string RecordId), (int RevisionNumber, int ReviewStateVersion)>>
         ReadCurrentReviewStatesAsync(CollectionAttemptDbContext db, ImmutableArray<ReviewStateExpectation> expectations,
             CancellationToken cancellationToken)
@@ -184,6 +202,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         await AddDocumentChangeStatesAsync(db, IdsOf(expectations, PublishedRecordKind.DocumentChange), current, cancellationToken);
         await AddStatementStatesAsync(db, IdsOf(expectations, PublishedRecordKind.Statement), current, cancellationToken);
         await AddActionStatesAsync(db, IdsOf(expectations, PublishedRecordKind.Action), current, cancellationToken);
+        await AddBriefStatesAsync(db, IdsOf(expectations, PublishedRecordKind.Brief), current, cancellationToken);
         return current;
     }
 
@@ -215,6 +234,16 @@ public sealed class PostgresPublicationStore : IPublicationStore
             .Where(row => recordIds.Contains(row.RecordId)).ToArrayAsync(cancellationToken);
         foreach (var row in actions)
             current[(PublishedRecordKind.Action, row.RecordId)] = (row.CurrentRevisionNumber, row.ReviewStateVersion);
+    }
+
+    private static async Task AddBriefStatesAsync(CollectionAttemptDbContext db, string[] recordIds,
+        Dictionary<(PublishedRecordKind, string), (int, int)> current, CancellationToken cancellationToken)
+    {
+        if (recordIds.Length == 0) return;
+        var briefs = await db.Set<BriefDraftRow>().AsNoTracking()
+            .Where(row => recordIds.Contains(row.RecordId)).ToArrayAsync(cancellationToken);
+        foreach (var row in briefs)
+            current[(PublishedRecordKind.Brief, row.RecordId)] = (row.CurrentRevisionNumber, row.ReviewStateVersion);
     }
 
     private static string[] IdsOf(ImmutableArray<ReviewStateExpectation> expectations, PublishedRecordKind kind) =>

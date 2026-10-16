@@ -5,6 +5,10 @@ namespace CivicLens.Application.Briefs;
 
 public static class BriefCitationKinds
 {
+    private static readonly PublishedRecordKind[] Citable = [.. Enum.GetValues<BriefCitationKind>().Select(PublishedKindOf)];
+
+    public static bool IsCitable(PublishedRecordKind kind) => Citable.Contains(kind);
+
     public static PublishedRecordKind PublishedKindOf(BriefCitationKind kind) => kind switch
     {
         BriefCitationKind.DocumentChange => PublishedRecordKind.DocumentChange,

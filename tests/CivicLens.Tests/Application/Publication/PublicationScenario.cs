@@ -1,6 +1,9 @@
 using CivicLens.Application.Paging;
 using System.Collections.Immutable;
 using CivicLens.Application.Actions;
+using CivicLens.Application.Briefs;
+using CivicLens.Core.Briefs;
+using CivicLens.Tests.Application.Briefs;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CivicLens.Application.Publication;
@@ -29,9 +32,10 @@ internal sealed class PublicationScenario
     public FakeReviewStore Reviews { get; } = new();
     public FakeStatementReviewStore Statements { get; } = new();
     public FakeActionReviewStore Actions { get; } = new();
+    public FakeBriefReviewStore Briefs { get; } = new();
     public Dictionary<string, string> OfficialNames { get; } = new() { ["mayor"] = "Mayor Example", ["chair"] = "Council Chair Example" };
 
-    public PublishedRecordLoaders Loaders() => new(Reviews, Statements, Actions);
+    public PublishedRecordLoaders Loaders() => new(Reviews, Statements, Actions, Briefs);
 
     public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer(), Loaders(),
         new PublicationCatalog(OfficialNames), Clock);
@@ -147,16 +151,17 @@ internal sealed class PublicationScenario
         return draftId;
     }
 
-    public string AddStatement(char id, ImmutableArray<ReviewDecision>? decisions = null, string[]? speakerIds = null)
+    public string AddStatement(char id, ImmutableArray<ReviewDecision>? decisions = null, string[]? speakerIds = null,
+        int revisionNumber = 1)
     {
         var candidateId = new string(id, 64);
         var extraction = Extraction($"Mayor said: housing matters.\nOther text {id}.\n", $"statement-{id}");
-        var revision = new StatementDraftRevision(candidateId, 1, "author", ApprovedAt, $"Statement {id}", "Summary", null, null,
+        var revision = new StatementDraftRevision(candidateId, revisionNumber, "author", ApprovedAt, $"Statement {id}", "Summary", null, null,
             [.. speakerIds ?? ["mayor"]], ["Council Member"], ["housing"], ["land-use"],
             [new(new(extraction.ExtractionId, 12, 15), StatementQuotationKind.DirectQuotation)], ["HB 12"]);
-        var all = decisions ?? [Decision(candidateId, 1, ReviewDecisionKind.Approve)];
+        var all = decisions ?? [Decision(candidateId, 1, ReviewDecisionKind.Approve, revisionNumber)];
         var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
-        var review = new StatementReview(candidateId, revision, all.Length, ReviewPolicy.GetCurrentStatus(1, all, concerns),
+        var review = new StatementReview(candidateId, revision, all.Length, ReviewPolicy.GetCurrentStatus(revisionNumber, all, concerns),
             [revision], all, concerns);
         Statements.Publishable[candidateId] = new(review, "https://example.test/article", extraction);
         return candidateId;
@@ -191,8 +196,25 @@ internal sealed class PublicationScenario
         return recordId;
     }
 
-    public static ReviewDecision Decision(string draftId, int stateVersion, ReviewDecisionKind kind) =>
-        new(new string((char)('a' + stateVersion), 32), draftId, 1, stateVersion, kind, "reviewer",
+    public string AddBrief(DateOnly week, PublishedRevisionBinding[] cited, ReviewDecisionKind decision = ReviewDecisionKind.Approve)
+    {
+        var recordId = BriefWeek.RecordIdOf(week);
+        var citations = cited.Select((binding, index) => new BriefCitation($"R{index + 1}",
+            Enum.Parse<BriefCitationKind>(binding.Kind.ToString()), binding.RecordId, binding.RevisionNumber)).ToImmutableArray();
+        var revision = new BriefRevision(recordId, 1, ReviewAuthor.AnalysisSubject, ApprovedAt, BriefFixtures.Window() with { WeekStart = week },
+            BriefFixtures.Fingerprint, $"Brief of {week:yyyy-MM-dd}", ReviewTextOrigin.Model, null,
+            [.. citations.Select(citation => new BriefParagraph($"Paragraph for {citation.Id}.", [citation.Id]))], citations,
+            new(citations.Length + 2, citations.Length + 1, citations.Length));
+        var all = ImmutableArray.Create(Decision(recordId, 1, decision));
+        var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
+        var review = new BriefReview(recordId, revision, null, [revision], 1, ReviewPolicy.GetCurrentStatus(1, all, concerns), all, concerns);
+        Briefs.Publishable[recordId] = new(review, citations.ToImmutableDictionary(citation => citation.Id,
+            citation => new BriefCitedRecord($"Cited {citation.Id}", "Summary", false), StringComparer.Ordinal));
+        return recordId;
+    }
+
+    public static ReviewDecision Decision(string draftId, int stateVersion, ReviewDecisionKind kind, int revisionNumber = 1) =>
+        new(new string((char)('a' + stateVersion), 32), draftId, revisionNumber, stateVersion, kind, "reviewer",
             kind == ReviewDecisionKind.Approve ? null : "Needs work.", [], ApprovedAt);
 
     internal static DocumentExtraction Extraction(string text, string attemptId, string url = "https://example.test/") => new(
@@ -210,6 +232,8 @@ internal sealed class FakeRenderer : IReleaseRenderer
         Task.FromResult($"<html>statement {record.RecordId}</html>");
     public Task<string> RenderActionAsync(PublishedAction record, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>action {record.RecordId}</html>");
+    public Task<string> RenderBriefAsync(PublishedBrief record, CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>brief {record.RecordId}</html>");
     public Task<string> RenderIndexAsync(PublicationRelease release, int page, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>index {page} {release.Records.Length}</html>");
 }

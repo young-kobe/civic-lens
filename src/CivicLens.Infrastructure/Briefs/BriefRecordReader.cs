@@ -27,16 +27,23 @@ internal static class BriefRecordReader
     public static PublishedRevisionBinding BindingOf(BriefCitation citation) =>
         new(BriefCitationKinds.PublishedKindOf(citation.Kind), citation.RecordId, citation.RevisionNumber);
 
+    public static async Task<HashSet<PublishedRevisionBinding>> FindChangedInActiveReleaseAsync(CollectionAttemptDbContext db,
+        IEnumerable<BriefCitation> citations, CancellationToken cancellationToken) =>
+        await FindChangedAsync(db, citations, await ReviewQueries.ReadActiveReleaseRecordsAsync(db, cancellationToken), cancellationToken);
+
     public static async Task<HashSet<PublishedRevisionBinding>> FindChangedAsync(CollectionAttemptDbContext db,
-        IEnumerable<BriefCitation> citations, CancellationToken cancellationToken)
+        IEnumerable<BriefCitation> citations, ImmutableArray<PublishedRevisionBinding> releaseRecords, CancellationToken cancellationToken)
     {
         var bindings = citations.Select(BindingOf).Distinct().ToArray();
         if (bindings.Length == 0) return [];
-        var active = (await ReviewQueries.ReadActiveReleaseRecordsAsync(db, cancellationToken))
-            .ToDictionary(binding => (binding.Kind, binding.RecordId), binding => binding.RevisionNumber);
-        var changed = bindings.Where(binding => active.GetValueOrDefault((binding.Kind, binding.RecordId)) != binding.RevisionNumber).ToHashSet();
-        foreach (var kind in bindings.Select(binding => binding.Kind).Distinct())
-            changed.UnionWith(await ReadNotApprovedAsync(db, kind, [.. bindings.Where(binding => binding.Kind == kind)], cancellationToken));
+        var released = releaseRecords.ToDictionary(binding => (binding.Kind, binding.RecordId), binding => binding.RevisionNumber);
+        var changed = bindings.Where(binding => released.GetValueOrDefault((binding.Kind, binding.RecordId)) != binding.RevisionNumber).ToHashSet();
+        foreach (var kind in Enum.GetValues<BriefCitationKind>())
+        {
+            var publishedKind = BriefCitationKinds.PublishedKindOf(kind);
+            changed.UnionWith(await ReadNotApprovedAsync(db, kind, [.. bindings.Where(binding => binding.Kind == publishedKind)],
+                cancellationToken));
+        }
         return changed;
     }
 
@@ -45,21 +52,22 @@ internal static class BriefRecordReader
     {
         var records = new List<BriefRecord>();
         records.AddRange(await ReadKindAsync<DocumentChangeRevisionRow, DocumentChangeDraftRevision>(db, bindings,
-            PublishedRecordKind.DocumentChange, approvedOnly, BriefRecord.From, cancellationToken));
+            BriefCitationKind.DocumentChange, approvedOnly, BriefRecord.From, cancellationToken));
         records.AddRange(await ReadKindAsync<StatementRevisionRow, StatementDraftRevision>(db, bindings,
-            PublishedRecordKind.Statement, approvedOnly, BriefRecord.From, cancellationToken));
+            BriefCitationKind.Statement, approvedOnly, BriefRecord.From, cancellationToken));
         records.AddRange(await ReadKindAsync<ActionRevisionRow, ActionDraftRevision>(db, bindings,
-            PublishedRecordKind.Action, approvedOnly, BriefRecord.From, cancellationToken));
+            BriefCitationKind.Action, approvedOnly, BriefRecord.From, cancellationToken));
         return [.. records.OrderBy(record => record.Kind).ThenBy(record => record.RecordId, StringComparer.Ordinal)];
     }
 
     private static async Task<IReadOnlyList<BriefRecord>> ReadKindAsync<TRow, TRevision>(CollectionAttemptDbContext db,
-        ImmutableArray<PublishedRevisionBinding> bindings, PublishedRecordKind kind, bool approvedOnly,
+        ImmutableArray<PublishedRevisionBinding> bindings, BriefCitationKind kind, bool approvedOnly,
         Func<TRevision, BriefRecord> toRecord, CancellationToken cancellationToken)
         where TRow : class, IReviewRevisionRow
         where TRevision : class, IReviewRevision
     {
-        var requested = bindings.Where(binding => binding.Kind == kind).ToArray();
+        var publishedKind = BriefCitationKinds.PublishedKindOf(kind);
+        var requested = bindings.Where(binding => binding.Kind == publishedKind).ToArray();
         var wanted = approvedOnly
             ? requested.Except(await ReadNotApprovedAsync(db, kind, requested, cancellationToken)).ToArray() : requested;
         if (wanted.Length == 0) return [];
@@ -74,7 +82,7 @@ internal static class BriefRecordReader
         return [.. rows.Select(row => toRecord(ReviewJson.Deserialize<TRevision>(row.RevisionJson, "revision")))];
     }
 
-    private static async Task<PublishedRevisionBinding[]> ReadNotApprovedAsync(CollectionAttemptDbContext db, PublishedRecordKind kind,
+    private static async Task<PublishedRevisionBinding[]> ReadNotApprovedAsync(CollectionAttemptDbContext db, BriefCitationKind kind,
         PublishedRevisionBinding[] requested, CancellationToken cancellationToken)
     {
         if (requested.Length == 0) return [];
@@ -86,14 +94,15 @@ internal static class BriefRecordReader
             """;
         var rows = await db.Database.SqlQueryRaw<NotApprovedRow>(sql, requested.Select(binding => binding.RecordId).ToArray(),
             requested.Select(binding => binding.RevisionNumber).ToArray()).ToArrayAsync(cancellationToken);
-        return [.. rows.Select(row => new PublishedRevisionBinding(kind, row.RecordId, row.RevisionNumber))];
+        return [.. rows.Select(row => new PublishedRevisionBinding(BriefCitationKinds.PublishedKindOf(kind), row.RecordId, row.RevisionNumber))];
     }
 
-    private static (string Table, string DecisionTable, string IdColumn) SourceOf(PublishedRecordKind kind) => kind switch
+    private static (string Table, string DecisionTable, string IdColumn) SourceOf(BriefCitationKind kind) => kind switch
     {
-        PublishedRecordKind.DocumentChange => ("document_change_revisions", "document_change_review_decisions", "draft_id"),
-        PublishedRecordKind.Statement => ("statement_revisions", "statement_review_decisions", "candidate_id"),
-        _ => ("action_revisions", "action_review_decisions", "record_id")
+        BriefCitationKind.DocumentChange => ("document_change_revisions", "document_change_review_decisions", "draft_id"),
+        BriefCitationKind.Statement => ("statement_revisions", "statement_review_decisions", "candidate_id"),
+        BriefCitationKind.Action => ("action_revisions", "action_review_decisions", "record_id"),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Citation kind has no record tables.")
     };
 
     private sealed class NotApprovedRow

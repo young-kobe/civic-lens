@@ -111,7 +111,7 @@ public sealed class ReleaseRendererTests
         Assert.Equal(PublicationProtocol.ManifestPath, form.GetAttribute("data-release-search"));
         Assert.Equal(PublicationProtocol.RecordPagePath("{id}"), form.GetAttribute("data-record-page"));
         Assert.True(form.Closest("section")!.HasAttribute("hidden"));
-        Assert.Equal(["", "documentChange", "statement", "action"],
+        Assert.Equal(["", "documentChange", "statement", "action", "brief"],
             document.QuerySelectorAll("#search-kind option").Select(option => option.GetAttribute("value")));
         Assert.Equal(["text", "kind", "official", "issue", "policyArea", "from", "to"],
             form.QuerySelectorAll("input, select").Select(control => control.GetAttribute("name")));
@@ -247,6 +247,38 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task BriefPageShowsEachCitationAsALinkToItsRecordPageWithTheCopiedHeadlineTheWeekTheCutoffAndTheSampleNote()
+    {
+        var html = await new ReleaseRenderer().RenderBriefAsync(Brief(), CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.Equal("A week of <housing> news", document.QuerySelector("h1")!.TextContent);
+        var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
+            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
+        Assert.Equal("Starts Monday 2026-10-05, New York time", facts["Week"]);
+        Assert.Equal("3", facts["Cutoff release"]);
+        Assert.Equal(("5", "4", "2"), (facts["Records considered"], facts["Records sent to the drafting model"], facts["Records cited"]));
+        var citations = document.QuerySelectorAll("[aria-labelledby='citations-title'] li")
+            .Select(item => (item.Id, item.QuerySelector("a")!.GetAttribute("href"), item.QuerySelector("a")!.TextContent)).ToArray();
+        Assert.Equal([("citation-R1", $"../records/{new string('1', 64)}.html", "Rent cap <statement>"),
+            ("citation-R2", $"../records/{new string('2', 32)}.html", "Zoning rule change")], citations);
+        var paragraphs = document.QuerySelectorAll("[aria-labelledby='brief-title'] p")
+            .Select(paragraph => paragraph.QuerySelectorAll("a").Select(link => link.GetAttribute("href")).ToArray()).ToArray();
+        Assert.Equal([["#citation-R1"], ["#citation-R1", "#citation-R2"]], paragraphs);
+        Assert.Contains("This brief is a sample, not a full account of the week. It cites 2 of the 5 new records", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<housing>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BriefPageRejectsAParagraphThatCitesAnIdTheBriefDoesNotList()
+    {
+        var brief = Brief();
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => new ReleaseRenderer().RenderBriefAsync(
+            brief with { Paragraphs = [.. brief.Paragraphs, new() { Text = "More.", CitationIds = ["R9"] }] }, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task IndexPageLabelsEachEntryWithItsKindSoReadersKnowWhatTheyOpen()
     {
         var release = ReleaseOf(2);
@@ -325,6 +357,28 @@ public sealed class ReleaseRendererTests
         Assert.True(match.Success, $"No mark with id {id}.");
         return match.Groups[1].Value;
     }
+
+    private static PublishedBrief Brief() => new()
+    {
+        RecordId = CivicLens.Core.Briefs.BriefWeek.RecordIdOf(new DateOnly(2026, 10, 5)),
+        RevisionNumber = 1,
+        Headline = "A week of <housing> news",
+        WeekStart = new DateOnly(2026, 10, 5),
+        CutoffReleaseNumber = 3,
+        Coverage = new() { Considered = 5, SentToModel = 4, Cited = 2 },
+        Paragraphs =
+        [
+            new() { Text = "Warren backed a rent cap.", CitationIds = ["R1"] },
+            new() { Text = "A rule changed.", CitationIds = ["R1", "R2"] }
+        ],
+        Citations =
+        [
+            new() { Id = "R1", Kind = PublishedRecordKind.Statement, RecordId = new string('1', 64), RevisionNumber = 1, Headline = "Rent cap <statement>" },
+            new() { Id = "R2", Kind = PublishedRecordKind.DocumentChange, RecordId = new string('2', 32), RevisionNumber = 3, Headline = "Zoning rule change" }
+        ],
+        ApprovedAtUtc = DateTimeOffset.UnixEpoch,
+        FirstPublishedAtUtc = DateTimeOffset.UnixEpoch
+    };
 
     private static PublishedAction Action()
     {

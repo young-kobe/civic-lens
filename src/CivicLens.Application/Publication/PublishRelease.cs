@@ -55,7 +55,7 @@ public sealed class PublishRelease
         var number = state.LatestReleaseNumber + 1;
         var (directory, entries) = await StageAsync(number, now, previous, carried, additions, cancellationToken);
         var commit = new PublicationCommit(number, state.Active?.ReleaseNumber, directory,
-            [.. entries.Select(entry => new PublishedRevisionBinding(entry.Kind, entry.RecordId, entry.RevisionNumber))],
+            [.. entries.Select(PublishedRevisionBinding.Of)],
             [.. additions.Select(addition => addition.Expectation)]);
         var summary = await CommitAsync(actor, commit, request.IdempotencyKey, payloadHash, cancellationToken);
         await ServeActiveReleaseAsync(cancellationToken);
@@ -87,7 +87,7 @@ public sealed class PublishRelease
     {
         var additions = new List<PendingRecord>(references.Length);
         foreach (var loader in loaders.All)
-            additions.AddRange(await loader.LoadAsync(IdsOf(references, loader.Kind), build, cancellationToken));
+            additions.AddRange(await loader.LoadAsync(IdsOf(references, loader.Kind), build.WithAdded(additions), cancellationToken));
         return additions;
     }
 

@@ -5,6 +5,7 @@ using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using CivicLens.Host.Publication;
 using CivicLens.Infrastructure.Actions;
+using CivicLens.Infrastructure.Briefs;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Publication;
@@ -90,7 +91,8 @@ public sealed class PublishedReleaseOutlivesDatabaseTests : IAsyncLifetime
 
         var publish = new PublishRelease(PostgresPublicationStore.FromConnectionString(connectionString),
             new FileReleaseDirectory(releasesRoot), new ReleaseRenderer(),
-            new PublishedRecordLoaders(reviews, new PostgresStatementReviewStore(factory), new PostgresActionReviewStore(factory)),
+            new PublishedRecordLoaders(reviews, new PostgresStatementReviewStore(factory), new PostgresActionReviewStore(factory),
+                new PostgresBriefReviewStore(factory)),
             new PublicationCatalog(new Dictionary<string, string> { ["mayor"] = "Mayor Example" }), TimeProvider.System);
         return await publish.ExecuteAsync(Owner, new PublishReleaseRequest([new(PublishedRecordKind.DocumentChange, saved.DraftId)], "publish"));
     }

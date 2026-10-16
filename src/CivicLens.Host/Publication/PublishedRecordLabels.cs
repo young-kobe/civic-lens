@@ -9,6 +9,7 @@ public static class PublishedRecordLabels
         PublishedRecordKind.DocumentChange => "Document change",
         PublishedRecordKind.Statement => "Statement",
         PublishedRecordKind.Action => "Action",
+        PublishedRecordKind.Brief => "Weekly brief",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no label.")
     };
 

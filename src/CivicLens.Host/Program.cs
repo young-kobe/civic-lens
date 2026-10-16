@@ -279,7 +279,8 @@ try
         var publish = new PublishRelease(publications, releases, new ReleaseRenderer(), new PublishedRecordLoaders(
                 PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
                 PostgresStatementReviewStore.FromConnectionString(connectionString),
-                PostgresActionReviewStore.FromConnectionString(connectionString)),
+                PostgresActionReviewStore.FromConnectionString(connectionString),
+                new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString))),
             new PublicationCatalog(officialNames), TimeProvider.System);
         executing = true;
         return await ReleaseCommand.ExecuteAsync(args, publish, new ListPublicationReleases(publications, releases),

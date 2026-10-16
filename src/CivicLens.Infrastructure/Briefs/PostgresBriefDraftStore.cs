@@ -119,7 +119,8 @@ public sealed class PostgresBriefDraftStore : PostgresAnalysisStore<BriefDraftRu
         CancellationToken cancellationToken)
     {
         if (bounds.CutoffReleaseNumber is not { } cutoff || cutoff == bounds.PreviousReleaseNumber) return [];
-        var published = await ReviewQueries.ReadReleaseRecordsAsync(db, cutoff, cancellationToken);
+        var published = (await ReviewQueries.ReadReleaseRecordsAsync(db, cutoff, cancellationToken))
+            .Where(binding => BriefCitationKinds.IsCitable(binding.Kind)).ToImmutableArray();
         var firstPublishedInWeek = (await db.Database.SqlQueryRaw<KindRecordRow>(ReadFirstPublishedInWeekSql,
             published.Select(binding => binding.Kind.ToString()).ToArray(), published.Select(binding => binding.RecordId).ToArray(),
             bounds.StartTicks, bounds.EndTicks).ToArrayAsync(cancellationToken)).Select(row => (row.Kind, row.RecordId)).ToHashSet();

@@ -1,4 +1,6 @@
 using CivicLens.Application.Actions;
+using CivicLens.Core.Briefs;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
@@ -184,26 +186,29 @@ public sealed class ListPublishableTests
     }
 
     [Fact]
-    public async Task ThreeKindsShareTheLimitEquallyWhenEachHasMoreThanItsShare()
+    public async Task FourKindsShareTheLimitEquallyWhenEachHasMoreThanItsShare()
     {
         var scenario = new PublicationScenario();
         var action = ActionTemplate(scenario);
+        var brief = BriefTemplate(scenario);
         for (var index = 0; index < 40; index++)
         {
             scenario.Reviews.Unpublished.Add(Candidate(index.ToString("x32")));
             scenario.Statements.Unpublished.Add(StatementCandidate(index.ToString("x64")));
             scenario.Actions.Unpublished.Add(ActionCandidate(action, (index + 100).ToString("x64")));
+            scenario.Briefs.Unpublished.Add(new(brief with { RecordId = (index + 200).ToString("x64") }, null, false));
         }
 
         var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
 
-        Assert.Equal([21, 21, 22], KindCounts(list));
+        Assert.Equal([16, 16, 16, 16], KindCounts(list));
         Assert.True(list.HasMore);
         Assert.Equal(PublishRelease.MaximumRecords + 1, scenario.Actions.UnpublishedLimit);
+        Assert.Equal(PublishRelease.MaximumRecords + 1, scenario.Briefs.UnpublishedLimit);
     }
 
     [Fact]
-    public async Task AKindWithFewReadyRecordsGivesItsUnusedShareToBothOtherKinds()
+    public async Task AKindWithFewReadyRecordsGivesItsUnusedShareToTheOtherKinds()
     {
         var scenario = new PublicationScenario();
         var action = ActionTemplate(scenario);
@@ -217,7 +222,7 @@ public sealed class ListPublishableTests
 
         var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
 
-        Assert.Equal([29, 5, 30], KindCounts(list));
+        Assert.Equal([29, 5, 30, 0], KindCounts(list));
         Assert.True(list.HasMore);
     }
 
@@ -238,6 +243,38 @@ public sealed class ListPublishableTests
         var item = Assert.Single(list.Items);
         Assert.Equal((PublishedRecordKind.Action, action.RecordId, true), (item.Kind, item.RecordId, item.IsReplacement));
     }
+
+    [Fact]
+    public async Task AnApprovedBriefIsListedWithItsKindAndABriefWhoseCitedRecordsChangedIsNotBecausePublishWouldRefuseIt()
+    {
+        var scenario = new PublicationScenario();
+        var brief = BriefTemplate(scenario);
+        scenario.Briefs.Unpublished.Add(new(brief, 1, false));
+        scenario.Briefs.Unpublished.Add(new(brief with { RecordId = new string('e', 64) }, null, true));
+
+        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+
+        var item = Assert.Single(list.Items);
+        Assert.Equal((PublishedRecordKind.Brief, brief.RecordId, true), (item.Kind, item.RecordId, item.IsReplacement));
+    }
+
+    [Fact]
+    public async Task ABriefWithAnUnresolvedConcernIsNotReady()
+    {
+        var scenario = new PublicationScenario();
+        var brief = BriefTemplate(scenario);
+        scenario.Briefs.Unpublished.Add(new(brief with
+        {
+            UnresolvedConcerns = [PublicationScenario.Decision(brief.RecordId, 2, ReviewDecisionKind.RequestChanges)]
+        }, null, false));
+
+        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+
+        Assert.Empty(list.Items);
+    }
+
+    private static BriefReview BriefTemplate(PublicationScenario scenario) =>
+        scenario.Briefs.Publishable[scenario.AddBrief(BriefFixtures.Week, [new(PublishedRecordKind.Statement, new string('1', 64), 1)])].Review;
 
     private static ActionReview ActionTemplate(PublicationScenario scenario) =>
         scenario.Actions.Publishable[scenario.AddAction('c')].Review;

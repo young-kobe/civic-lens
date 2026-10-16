@@ -26,7 +26,6 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 
 ### Next
 
-- R-12: Weekly briefs. Storage, the weekly queue, evidence selection, cited drafting, redraft, staleness, and review of briefs are implemented. Remaining: corrections, then release assembly and publication with verified citation links. Publication must refuse a brief whose cited records changed. Depends on: none stated. [Briefs](architecture/briefs.md#limits-and-planned-work)
 - R-13: Document-change classification gate: rubric, labels, features, bake-off, and ladder. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-14: Offices and dated terms. Depends on: none stated. [Configuration](architecture/configuration.md#limits-and-planned-work)
 - R-15: House roll-call votes as actions. Depends on: R-14. [Actions](architecture/actions.md#limits-and-planned-work)
@@ -49,6 +48,7 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 - R-27: Automatic discovery of official sources, and check cadence from measured change rates. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-28: Datasets and fine-tuning from labels and review history. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-31: Remove the redundant hunk and context copy in saved comparisons. Depends on: none stated. [Documents](architecture/documents.md#limits-and-planned-work)
+- R-32: Correction and withdrawal releases for all record kinds. No kind can publish one yet. Depends on: none stated. [Publication](architecture/publication.md#limits-and-planned-work)
 
 ## Pending decisions
 
