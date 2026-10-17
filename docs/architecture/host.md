@@ -101,7 +101,7 @@ Precise public layouts are not built yet. The temporary HTML prototype shows the
 Production hosting is agreed but not implemented. The [roadmap](../roadmap.md) holds the order. The agreed design:
 
 - Containers host the application, the collection and background jobs, and PostgreSQL with persistent storage.
-- Terraform manages the infrastructure, and CI automates deployment.
+- Terraform defines all infrastructure at every vendor, and CI automates deployment. Services can use more than one vendor, such as Hetzner, Cloudflare, or AWS, when cost or resilience favors it.
 - Production collection, review, publication, and recovery run without the developer workstation. Local development stays supported.
 - One CPX21 is the starting point. Separate services, or services split across cloud providers, are open in [D-08](../roadmap.md#pending-decisions).
 - Both reviewers reach the shared workspace through their browsers. Live Auth0 tenant login and proxy verification happen in the infrastructure stage.
