@@ -376,7 +376,7 @@ R-16 decisions, accepted on 2026-10-16. The build starts after vote review, so t
 
 Statements and actions acceptance:
 
-- [ ] Every statement and action has exact, inspectable provenance.
-- [ ] Quotation validity and interpretation are separate checks.
-- [ ] Human review binds to the reviewed version.
-- [ ] Adding or removing tracked officials needs no code change and keeps history.
+- [x] Every statement and action has exact, inspectable provenance.
+- [x] Quotation validity and interpretation are separate checks.
+- [x] Human review binds to the reviewed version.
+- [x] Adding or removing tracked officials needs no code change and keeps history.

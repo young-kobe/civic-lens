@@ -517,9 +517,9 @@ The shared wakeup and lease mechanics are in [Shared worker mechanics](../archit
 
 Collection acceptance:
 
-- [ ] Add an official through configuration only.
-- [ ] Collect one feed and one watched page.
-- [ ] Show cancellation and restart without duplicate imports.
-- [ ] Show conditional 304 handling, 429 backoff, bounded discovery, and explicit incomplete-download errors.
-- [ ] Validate registry behavior with hundreds of fixture identities, without hundreds of live requests.
+- [x] Add an official through configuration only.
+- [x] Collect one feed and one watched page.
+- [x] Show cancellation and restart without duplicate imports.
+- [x] Show conditional 304 handling, 429 backoff, bounded discovery, and explicit incomplete-download errors.
+- [x] Validate registry behavior with hundreds of fixture identities, without hundreds of live requests.
 - Live Auth0 tenant login for the Sources page still needs deployment verification.

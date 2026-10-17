@@ -119,7 +119,7 @@ Production hosting is agreed but not implemented. The [roadmap](../roadmap.md) h
 Before the shared workspace opens, verify:
 
 - [ ] access controls and live Auth0 login
-- [ ] controlled migrations
+- [x] controlled migrations
 - [ ] worker restart and recovery
 - [ ] Hetzner off-server backups and a restoration
 - [ ] operation with the developer workstation off

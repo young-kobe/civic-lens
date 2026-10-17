@@ -150,8 +150,8 @@ Document-change acceptance:
 
 - [ ] Inspect and publish a real substantive edit with both versions and valid citations.
 - [ ] Navigation churn and parser upgrades cannot pass as source changes.
-- [ ] A reader can tell observation time from an established event or edit time, and sees relevant evidence gaps.
-- [ ] A reviewer assesses the proposed public wording beside its sources. A change to approved content or evidence needs review of the new version.
-- [ ] Approval alone does not publish. Public output stays usable during an outage of the operational application.
+- [x] A reader can tell observation time from an established event or edit time, and sees relevant evidence gaps.
+- [x] A reviewer assesses the proposed public wording beside its sources. A change to approved content or evidence needs review of the new version.
+- [x] Approval alone does not publish. Public output stays usable during an outage of the operational application.
 - Large histories need a future pagination design.
 - Substantive-change judgments belong to the planned classifier; see [roadmap](../roadmap.md).

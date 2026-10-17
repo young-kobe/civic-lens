@@ -22,7 +22,7 @@ Exit criteria:
 
 Each item gives its outcome, what it depends on, and where the design lives. Present the design choices before building R-22 only.
 
-The path to the first deploy is R-15, R-16, R-19 and R-20, R-36, R-37, R-23 and R-18, then R-24. Decide D-06, D-07, and D-08 before R-24.
+The path to the first deploy is R-15, R-16, R-19 and R-20, R-36, R-23 and R-18, then R-24. Decide D-06, D-07, and D-08 before R-24.
 
 ### Now
 
@@ -36,7 +36,7 @@ The path to the first deploy is R-15, R-16, R-19 and R-20, R-36, R-37, R-23 and 
 - R-19: Review volume tools beyond the sponsorship-only bulk approval of actions, and a clearer source-to-review path. One reviewer cannot approve every draft, so a priority rule orders the queue. It uses tracked issues, recency, and links between statements and votes. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
 - R-20: Public filter pages, a source filter on the index search panel, and names for the issue and policy area filters. The panel already filters by kind, official, issue, policy area, and date range. After the first cloud deployment, a public search service with its own Postgres database, fed from releases, replaces the client search. Depends on: none stated. The search service depends on R-24. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-36: Public briefing, official, issue, and record pages for citizens. Readers start with a weekly briefing and recent reviewed developments, and each record shows its evidence and timeline. Decide at the start whether official pages wait for R-14. Depends on: R-16. [Publication](architecture/publication.md#limits-and-planned-work)
-- R-37: Audit the acceptance checklists in the feature docs. 26 items in 6 docs are open, and none is ticked. Tick each item that passes, and turn the others into work items. Depends on: none stated. It must come before R-24. [MVP definition](#mvp-definition)
+- R-39: An `analyses redraft --stale` owner command requeues finished drafts whose last run used an older task, prompt, or schema version. It covers document changes, statements, actions, votes, and briefs. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-21: Process view of collection and AI stages from retained state. Depends on: none stated. [Host](architecture/host.md#limits-and-planned-work)
 - R-29: Check each policy area name against the Congress.gov API. Depends on: none stated. [Configuration](architecture/configuration.md#limits-and-planned-work)
 - R-30: Fix the remaining format and parser limits that the federal coverage found. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
@@ -47,7 +47,7 @@ The path to the first deploy is R-15, R-16, R-19 and R-20, R-36, R-37, R-23 and 
 - R-13: Measure document change, then gate it. Check the House press index pages and about 300 press release URLs daily for 2 to 4 weeks. Count byte, text, and line changes for each source, and label about 100 changes by hand. Add rules for the churn found. Add a model tier only if the changes that pass the rules are too many for people to review. Depends on: the first cloud deployment (R-24). [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-22: Ordered row locks in the job store, after the MVP. Depends on: lock waits measured on a bills-only collection run. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-23: Baseline versions before the first production deploy. Depends on: none stated. It must come before the first production deploy. [Behavior versions](architecture.md#behavior-versions)
-- R-24: Production on the Hetzner CPX21 with containers, Terraform, CI, off-server backups, and live Auth0 verification. Depends on: the MVP exit criteria other than the document-change criterion, R-18, R-23, and R-37. [Host](architecture/host.md#limits-and-planned-work)
+- R-24: Production on the Hetzner CPX21 with containers, Terraform, CI, off-server backups, and live Auth0 verification. The open host checklist items are its exit checks. Also stop the worker during a job and show that the deployed container recovers it. Depends on: the MVP exit criteria other than the document-change criterion, R-18, and R-23. [Host](architecture/host.md#limits-and-planned-work)
 - R-25: Public MCP over published releases, with source health, backup and restore, and worker service management. Depends on: the MVP exit criteria other than the document-change criterion. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-26: Read-only local MCP inspection. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
 - R-27: Automatic discovery of official sources, and check cadence from measured change rates. It needs runtime writes, so people, sources, and coverage then move to tables. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
