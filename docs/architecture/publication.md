@@ -200,7 +200,7 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - An action record embeds at most `PublishedAction.MaximumSources` sources. The worst case is the detail page, 3 cosponsor pages (250 rows), and the summaries page, which is 5 sources. A record over the cap fails publish loudly.
 - Correction and withdrawal releases come later. No kind can publish one yet. See R-32 in the [roadmap](../roadmap.md).
 - How the static file server runs locally is not decided. It must send the precompressed manifest, for example Caddy `file_server { precompressed br gzip }` or nginx `gzip_static on`. Compression by the server is the fallback.
-- Issue, official, and briefing pages are planned. Readers will start with a weekly briefing and recent reviewed developments. Issue pages will connect related records across officials and institutions. Official pages will show dated statements, actions, and reviewed relationships.
+- Issue, official, and briefing pages are planned in [R-36](../roadmap.md#next). Readers will start with a weekly briefing and recent reviewed developments. Issue pages will connect related records across officials and institutions. Official pages will show dated statements, actions, and reviewed relationships.
 - Search filter pages, timelines, expandable evidence, and shareable records are planned against published releases.
 - Public filter pages are an MVP requirement; see R-20.
 - Planned, not built: a source filter and filters that are easy to clear, on the R-20 filter pages.
