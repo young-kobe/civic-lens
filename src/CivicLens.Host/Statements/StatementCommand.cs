@@ -7,12 +7,13 @@ namespace CivicLens.Host.Statements;
 
 internal sealed class StatementCommand(AnalysisQueueCommands<StatementGateRun, StatementGateView, StatementGateListItem> gates,
     AnalysisQueueCommands<StatementDraftRun, StatementDraftView, StatementDraftListItem> drafts, RegateStatementCandidates regate,
-    ReviewActor owner, string? currentIssueRevisionId)
+    ExportGateLabels exportLabels, ReviewActor owner, string? currentIssueRevisionId, string runtimeDirectory)
 {
     private const string Usage = "Use statements status, statements list [passed|skipped|failed-open|over-cap|pending|failed] [limit], " +
         "statements run <run-id>, statements requeue <candidate-id|--all>, statements regate [--since yyyy-MM-dd], " +
         "statements draft status, statements draft list [drafted|over-cap|existing|pending|failed] [limit], " +
-        "statements draft run <run-id>, or statements draft requeue <candidate-id|--all>.";
+        "statements draft run <run-id>, statements draft requeue <candidate-id|--all>, or statements labels export <path>, " +
+        "where the path is inside .runtime.";
     private const int DefaultListLimit = 100;
 
     public static bool Matches(string[] args) => args is ["statements", ..];
@@ -72,11 +73,22 @@ internal sealed class StatementCommand(AnalysisQueueCommands<StatementGateRun, S
                 case ["statements", "draft", "requeue", var candidateId]:
                     CommandOutput.Write(new { requeued = await drafts.Requeue.ExecuteAsync(owner, candidateId, cancellationToken) });
                     return 0;
+                case ["statements", "labels", "export", var path]:
+                    return await ExportLabelsAsync(path, cancellationToken);
                 default:
                     Console.Error.WriteLine(Usage);
                     return 2;
             }
         });
+
+    private async Task<int> ExportLabelsAsync(string path, CancellationToken cancellationToken)
+    {
+        var target = GateLabelExport.ResolveTarget(path, runtimeDirectory);
+        var rows = await exportLabels.ExecuteAsync(owner, cancellationToken);
+        await GateLabelExport.WriteAsync(rows, target, cancellationToken);
+        CommandOutput.Write(new { exported = rows.Count });
+        return 0;
+    }
 
     private Task<int> RegateAsync(DateOnly? since, CancellationToken cancellationToken) =>
         regate.ExecuteAsync(owner, currentIssueRevisionId

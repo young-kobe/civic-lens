@@ -255,6 +255,10 @@ internal static class ReviewWorkspace
         services.AddScoped<GetStatementReview>();
         services.AddScoped<ListStatementReviews>();
         services.AddScoped<ListStatementsNotInReview>();
+        services.AddSingleton<IGateLabelStore>(new PostgresGateLabelStore(contexts));
+        services.AddScoped<SaveGateLabel>();
+        services.AddScoped<ListGateLabelQueue>();
+        services.AddScoped<GetGateLabelTask>();
     }
 
     private static void ConfigureActionReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)

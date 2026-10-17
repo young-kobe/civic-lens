@@ -1,0 +1,86 @@
+@page "/Review/GateLabels/{CandidateId}"
+
+<TopBarTitle Crumbs="Crumbs" />
+
+<div class="content">
+    @if (task is null)
+    {
+        @if (error is not null)
+        {
+            <Notice Tone="Tone.Bad">@error</Notice>
+        }
+        @if (notFound)
+        {
+            <Panel Label="Release not found">
+                <EmptyState Title="Release not found" Text="This release does not exist, or its link is not valid.">
+                    <Action><Button Href="@GateLabelRoutes.List">Go to Gate labels</Button></Action>
+                </EmptyState>
+            </Panel>
+            <form @formname="label" @onsubmit="SaveAsync" hidden></form>
+        }
+    }
+    else
+    {
+        <PageHeader Title="Label this release" Meta="HeaderMeta" />
+
+        @if (StatusMessage is not null)
+        {
+            <Notice Tone="Tone.Ok" Dismissible="true">@StatusMessage</Notice>
+        }
+        @if (error is not null)
+        {
+            <Notice Tone="Tone.Bad">@error</Notice>
+        }
+        @if (task.HeldOut)
+        {
+            <Notice Tone="Tone.Warn">This release is held out. It is part of the test set, so no model label is shown. Label it from the text alone.</Notice>
+        }
+        else if (task.HumanLabel is null && task.ModelLabel is not null)
+        {
+            <Notice Tone="Tone.Warn">A model suggested the label below. Check it against the text. Saving it confirms it or corrects it.</Notice>
+        }
+
+        <div class="split">
+            <Panel Label="Label" Padded="true">
+                <form id="label-form" class="form" method="post" @formname="label" @onsubmit="SaveAsync">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="extractionId" value="@task.ExtractionId" />
+                    <FieldSet Legend="Tracked issues" Hint="@(Issues.Issues.Length == 0 ? "No issues are configured." : "Tick every issue that the release speaks to.")">
+                        <div class="chips">
+                            @foreach (var issue in Issues.Issues)
+                            {
+                                <Chip Name="Input.IssueIds" Value="@issue.Id" Text="@issue.Name" Checked="@(Input?.IssueIds?.Contains(issue.Id) == true)" />
+                            }
+                        </div>
+                    </FieldSet>
+                    <FieldSet Legend="Names a bill or a vote" Hint="Yes when the release reports a speaker action on a specific bill, resolution, or recorded vote.">
+                        <ul class="choices">
+                            <li><Choice Name="Input.NamesBillOrVote" Value="yes" Radio="true" Label="Yes" Checked="@(Input?.NamesBillOrVote == "yes")" /></li>
+                            <li><Choice Name="Input.NamesBillOrVote" Value="no" Radio="true" Label="No" Checked="@(Input?.NamesBillOrVote == "no")" /></li>
+                        </ul>
+                    </FieldSet>
+                    <div class="actions">
+                        <Button Variant="ButtonVariant.Primary" Type="submit">Save label</Button>
+                        <Button Href="@GateLabelRoutes.List">Back to the list</Button>
+                    </div>
+                </form>
+            </Panel>
+
+            <Panel Title="Release text" Id="release-text" Padded="true" Raised="true" Class="split-sticky">
+                <p class="small muted"><a href="@task.Url">@task.Url</a></p>
+                <DocumentText Label="Saved release text" Runs="@CitedText.Split(task.Text, [])" />
+            </Panel>
+        </div>
+    }
+</div>
+
+@code {
+    private RenderFragment HeaderMeta =>
+        @<text>
+            <StatusBadge Tone="@(task!.HeldOut ? Tone.Warn : Tone.Neutral)" Text="@(task.HeldOut ? "Held out" : "Open")" />
+            @if (task.HumanLabel is not null)
+            {
+                <span class="muted small">Labeled. Saving adds a newer label.</span>
+            }
+        </text>;
+}

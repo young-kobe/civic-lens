@@ -444,7 +444,7 @@ Without the collection configuration, the Sources page reports that source check
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- review 5081
 ```
 
-Open `/Review` through the configured HTTPS origin. Keep the separate `worker` running, because it collects, extracts, and compares automatically. `/Review/Sources` is the owner Sources page. `/Review/Statements` lists statements, and `/Review/Statements/{candidate-id}` shows one statement for editing and decisions. `/Review/Actions` lists action records and approves sponsorship-only revisions in bulk, and `/Review/Actions/{record-id}` shows one record.
+Open `/Review` through the configured HTTPS origin. Keep the separate `worker` running, because it collects, extracts, and compares automatically. `/Review/Sources` is the owner Sources page. `/Review/GateLabels` is the owner page for gate labels. `/Review/Statements` lists statements, and `/Review/Statements/{candidate-id}` shows one statement for editing and decisions. `/Review/Actions` lists action records and approves sponsorship-only revisions in bulk, and `/Review/Actions/{record-id}` shows one record.
 
 A record allows at most 64 open concerns. An approval resolves them and starts a new cycle. When a limit rejects a write, do not discard history to continue. Browsing comparisons may return an empty batch with a continuation when the batch holds only unchanged, incompatible, or limited results. Use the continuation; the empty batch does not prove that no changes exist.
 
@@ -535,6 +535,18 @@ CIVIC_LENS_ISSUES_CONFIG=/abs/config/issues.json dotnet run --no-build --configu
 `status` prints the daily limit, any pause, the tokens charged today, and the count of candidates in each outcome. `list` takes `passed`, `skipped`, `failed-open`, `over-cap`, `pending`, or `failed`, and a limit up to 500 (default 100). `run` prints one run with its output, rubric revision, reason, and verified quote spans. `requeue` moves Failed gate rows back to Pending. `regate` moves skipped candidates back to Pending when their latest run used another issue revision or another gate prompt version. To apply a rubric change, edit the issue file, run `regate`, and let the worker run.
 
 The [live test](#verification) for the gate sends two paid requests. It fails unless the second request reads the prompt cache.
+
+## Gate labels
+
+The owner labels releases by hand to measure the gate. [Statements](architecture/statements.md#gate-labels) holds the rules. Open `/Review/GateLabels` as the owner. Held-out releases come first. Tick the tracked issues of a release, choose yes or no for a named bill or vote, and save. The page then opens the next release.
+
+The export needs `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`. Run it from the repository root. The path must be inside `.runtime`, or the command stops with exit code 2.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- statements labels export .runtime/benchmark/gate-labels.jsonl
+```
+
+The file has one JSON line for each release that has a human label. Each line holds the candidate ID, the extraction ID, the held-out flag, the issue IDs, `namesBillOrVote`, and the public release text. It never holds the author, a review note, or a credential. Only this text and these labels may go to Cloudflare.
 
 ## Statement drafting
 

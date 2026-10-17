@@ -1,0 +1,41 @@
+@page "/Review/GateLabels"
+
+<TopBarTitle Crumbs="Crumbs" />
+
+<div class="content">
+    <PageHeader Title="Gate labels" Lede="Label what the statement gate should decide for each release. Held-out releases come first. They are the test set, so they never get a model label." />
+    @if (StatusMessage is not null)
+    {
+        <Notice Tone="Tone.Ok" Dismissible="true">@StatusMessage</Notice>
+    }
+    @if (error is not null)
+    {
+        <Notice Tone="Tone.Bad">@error</Notice>
+    }
+
+    @if (queue is not null)
+    {
+        <Panel Title="Unlabeled releases" Id="unlabeled">
+            <Aside>@queue.UnlabeledCount unlabeled</Aside>
+            <ChildContent>
+                <DataTable Items="queue.Items" Caption="Unlabeled releases">
+                    <Head>
+                        <th>Release</th>
+                        <th class="fit hide-narrow">Source</th>
+                        <th>Set</th>
+                        <th class="act"><span class="visually-hidden">Action</span></th>
+                    </Head>
+                    <Row Context="item">
+                        <td><a class="cell-title" href="@GateLabelRoutes.Editor(item.CandidateId)">@item.Url</a></td>
+                        <td class="fit hide-narrow">@item.SourceId</td>
+                        <td>@(item.HeldOut ? "Held out" : "Open")</td>
+                        <td class="act"><Button Small="true" Href="@GateLabelRoutes.Editor(item.CandidateId)">Label</Button></td>
+                    </Row>
+                    <Empty>
+                        <EmptyState Title="Every release is labeled" Text="New releases show here after the gate collects them." />
+                    </Empty>
+                </DataTable>
+            </ChildContent>
+        </Panel>
+    }
+</div>
