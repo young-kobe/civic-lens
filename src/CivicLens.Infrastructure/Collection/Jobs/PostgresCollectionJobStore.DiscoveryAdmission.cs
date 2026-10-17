@@ -122,7 +122,7 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                 cancellationToken.ThrowIfCancellationRequested();
                 var hash = candidateHashes[candidateIndex++];
                 var definition = request.ArticleTemplate with { Url = url };
-                if (definition.IsRoot())
+                if (definition.IsListingPage())
                 {
                     duplicates++;
                     continue;

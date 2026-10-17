@@ -247,26 +247,14 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
     [Fact]
     public async Task ASourceListingThatLinksToItselfAdmitsOnlyItsArticlesBecauseAnArticleJobMustNeverBeARootCheck()
     {
-        var template = Template();
-        var configuration = new CollectionConfiguration
-        {
-            People = [new PersonConfiguration { Id = "person", Name = "Official" }],
-            Sources = [new WatchedSourceConfiguration
-            {
-                Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = template.Url,
-                AllowedOrigin = template.AllowedOrigin, AllowedPathPrefix = template.AllowedPathPrefix,
-                Mode = CollectionMode.Html, MaxRequests = template.MaxRequests, MaxBytes = template.MaxBytes,
-                TimeoutSeconds = template.TimeoutSeconds, MinDelayMilliseconds = template.MinDelayMilliseconds,
-                JobPolicy = template.Policy
-            }]
-        };
-        var configured = new ConfiguredCollectionSource(configuration, "source", new DateOnly(2026, 10, 8));
+        var template = Template("/articles");
+        var configured = ConfiguredSource(template);
         string[] listing = [template.Url, "https://example.test/articles/story"];
 
-        var manual = await jobs.AdmitAsync(configured, await SaveDiscoveryAsync(listing, CollectionMode.Html),
+        var manual = await jobs.AdmitAsync(configured, await SaveDiscoveryAsync(listing, CollectionMode.Html, pathPrefix: "/articles"),
             "listing-manual", default);
         var automatic = await jobs.AdmitAutomaticCheckAsync(configured,
-            await SaveDiscoveryAsync(listing, CollectionMode.Html), "listing-automatic", default);
+            await SaveDiscoveryAsync(listing, CollectionMode.Html, pathPrefix: "/articles"), "listing-automatic", default);
 
         var article = Assert.Single(manual.Jobs);
         Assert.Equal("https://example.test/articles/story", article.Url);
@@ -274,6 +262,23 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         Assert.Equal(1, manual.DuplicateCount);
         Assert.Empty(automatic.Jobs);
         Assert.Equal(2, automatic.DuplicateCount);
+    }
+
+    [Fact]
+    public async Task AnIndexPageOfTheSourceIsNotAStatementSoOnlyTheArticlesOfTheListingAreAdmitted()
+    {
+        var configured = ConfiguredSource(Template("/articles"));
+        string[] listing =
+        [
+            "https://example.test/articles", "https://example.test/articles/",
+            "https://example.test/articles/template?DocumentTypeID=1951", "https://example.test/articles/story"
+        ];
+
+        var manual = await jobs.AdmitAsync(configured, await SaveDiscoveryAsync(listing, CollectionMode.Html, pathPrefix: "/articles"),
+            "index-manual", default);
+
+        Assert.Equal("https://example.test/articles/story", Assert.Single(manual.Jobs).Url);
+        Assert.Equal(3, manual.DuplicateCount);
     }
 
     [Fact]
@@ -390,7 +395,7 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         => await SaveDiscoveryAsync(urls, CollectionMode.Feed, status);
 
     private async Task<string> SaveDiscoveryAsync(string[] urls, CollectionMode mode,
-        DiscoveryStatus status = DiscoveryStatus.Parsed, int version = CollectionProtocol.Version)
+        DiscoveryStatus status = DiscoveryStatus.Parsed, int version = CollectionProtocol.Version, string pathPrefix = "/")
     {
         var attemptId = "feed-" + Interlocked.Increment(ref feedSequence);
         var request = new CollectionRequest
@@ -398,9 +403,9 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
             Version = version,
             JobId = "feed-job-" + feedSequence,
             SourceId = "source",
-            Url = "https://example.test/feed.xml",
+            Url = "https://example.test" + pathPrefix.TrimEnd('/') + "/feed.xml",
             AllowedOrigin = "https://example.test",
-            AllowedPathPrefix = "/",
+            AllowedPathPrefix = pathPrefix,
             ArtifactDirectory = artifacts,
             Mode = mode,
             MinDelayMilliseconds = 0
@@ -496,6 +501,20 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(expired, attempt, "new-expired", default));
         await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(expired, "different-attempt", "legacy-revision", default));
     }
+
+    private static ConfiguredCollectionSource ConfiguredSource(CollectionJobDefinition template) => new(
+        new CollectionConfiguration
+        {
+            People = [new PersonConfiguration { Id = "person", Name = "Official" }],
+            Sources = [new WatchedSourceConfiguration
+            {
+                Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = template.Url,
+                AllowedOrigin = template.AllowedOrigin, AllowedPathPrefix = template.AllowedPathPrefix,
+                Mode = CollectionMode.Html, MaxRequests = template.MaxRequests, MaxBytes = template.MaxBytes,
+                TimeoutSeconds = template.TimeoutSeconds, MinDelayMilliseconds = template.MinDelayMilliseconds,
+                JobPolicy = template.Policy
+            }]
+        }, "source", new DateOnly(2026, 10, 8));
 
     private static CollectionJobDefinition Template(string path = "/") => new()
     {

@@ -59,7 +59,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 
 ### Candidate queue
 
-`PostgresDocumentExtractionStore.SaveAsync` calls `PostgresStatementCandidateRegistration` after it inserts a new extraction, in the same transaction. An attempt came from admission when its job has an idempotency key that starts with `discovery-admission/`. The job is found through `collection_job_attempts`. Admission never admits the configured page of a source, so a listing page never becomes a candidate. See [collection](collection.md#discovery-and-admission).
+`PostgresDocumentExtractionStore.SaveAsync` calls `PostgresStatementCandidateRegistration` after it inserts a new extraction, in the same transaction. An attempt came from admission when its job has an idempotency key that starts with `discovery-admission/`. The job is found through `collection_job_attempts`. Admission never admits a listing page of a source, so the configured page and the allowed path prefix never become candidates. See [collection](collection.md#discovery-and-admission).
 
 The registration inserts the candidate with `ON CONFLICT (candidate_id) DO NOTHING`. When that insert adds a row, it also inserts the Pending `gate` row in `statement_analysis`. A failure rolls back the extraction, the candidate, and the gate row together.
 
@@ -350,7 +350,7 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 - The label page offers every tracked issue of the issue file. It does not hide an issue that was inactive on the capture date.
 - The label queue reads every unlabeled candidate (ID, source, and URL) on each list load and each save, because code computes the split. Revisit this if labeling moves to a large set.
 - Two labels with equal timestamps fall back to label ID order. This is acceptable for a single owner.
-- Listing pages reach the candidate queue as releases, and the gate sees them ([R-35](../roadmap.md#next)). In a preview, about half of the releases where models disagreed were listing pages.
+- Pages outside the URL rule of admission, such as `/news/email` subscribe pages, can still reach the gate. The gate does not reliably reject listing pages. In a preview, about half of the releases where models disagreed were listing pages.
 - The labeling rules for unnamed bills, bills cited as credit, and sidebars are stricter than the gate prompt. A later prompt version may adopt them after the benchmark.
 - A label save has no idempotency key. A double submit adds two equal rows, and the newest is the label of record.
 - The export path check compares full paths. It does not resolve symbolic links.

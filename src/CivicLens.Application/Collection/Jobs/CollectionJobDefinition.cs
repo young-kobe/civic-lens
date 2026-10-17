@@ -33,9 +33,22 @@ public sealed record CollectionJobDefinition
     public PacingGroupConfiguration? ResolvePacingGroup() =>
         ConfigurationRevision?.Configuration.PacingGroupOf(AllowedOrigin);
 
+    private string? ConfiguredUrl =>
+        ConfigurationRevision?.Configuration.Sources.FirstOrDefault(source => source.Id == SourceId)?.Url;
+
     public bool IsRoot() =>
-        ApiResource is Collection.ApiResource.BillList or Collection.ApiResource.HouseVoteList ||
-        ConfigurationRevision?.Configuration.Sources.FirstOrDefault(source => source.Id == SourceId)?.Url == Url;
+        ApiResource is Collection.ApiResource.BillList or Collection.ApiResource.HouseVoteList || ConfiguredUrl == Url;
+
+    public bool IsListingPage()
+    {
+        var path = PathOf(Url);
+        return path == ComparablePath(AllowedPathPrefix) || ConfiguredUrl is not null && path == PathOf(ConfiguredUrl);
+    }
+
+    private static string PathOf(string url) =>
+        ComparablePath(Uri.TryCreate(url, UriKind.Absolute, out var parsed) ? parsed.AbsolutePath : url);
+
+    private static string ComparablePath(string path) => Uri.UnescapeDataString(path).TrimEnd('/');
 
     public static CollectionJobDefinition FromConfiguration(CollectionConfiguration configuration, string sourceId,
         DateOnly? asOf = null)
