@@ -167,7 +167,7 @@ The source `congress-house-votes` in `config/federal-coverage.json` and `config/
 2. Set `CIVIC_LENS_CONGRESS_API_KEY` in the protected environment of the worker. Do not put the key in configuration.
 3. Set `enabled` to `true` for `congress-house-votes` and restart the worker. A restart reads the configuration again.
 
-The source needs no issue file. Votes on a bill draft only when the `congress-bills` source is enabled and has saved the detail of that bill. Each day it reads the whole vote list of every session from `backfillFrom` on, about 4 list pages a day today. The first day admits one detail job and one members job for every roll call. [Votes](architecture/votes.md) holds the sweep and candidate rules.
+The source needs no issue file, but [vote drafting](#vote-drafting) does. Each day it reads the whole vote list of every session from `backfillFrom` on, about 4 list pages a day today. The first day admits one detail job and one members job for every roll call. [Votes](architecture/votes.md) holds the sweep and candidate rules.
 
 Configuration loading rejects a vote source whose `admissionPolicy` cannot hold the [251-job rule](architecture/votes.md#admission). Set `maxJobs` and the request, byte, and time totals to fit it.
 

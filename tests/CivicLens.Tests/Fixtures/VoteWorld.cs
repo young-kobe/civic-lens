@@ -24,7 +24,7 @@ internal sealed class VoteWorld
     public const string Amodei = "A000369";
     public const string SourceId = HouseVoteFixtures.SourceId;
     public const string BillTitle = "A concurrent resolution on rent";
-    public static readonly DateTimeOffset BillUpdatedAt = new(2025, 3, 3, 12, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset BillUpdatedAt = new(2025, 3, 3, 12, 0, 0, TimeSpan.Zero);
     private static readonly CollectionConfigurationRevision BillRevision =
         CollectionConfigurationRevision.Create(ActionBillWorld.Configuration());
     public static readonly string RecordId = new('a', 64);
