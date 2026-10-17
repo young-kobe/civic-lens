@@ -33,22 +33,22 @@ public sealed record CollectionJobDefinition
     public PacingGroupConfiguration? ResolvePacingGroup() =>
         ConfigurationRevision?.Configuration.PacingGroupOf(AllowedOrigin);
 
+    private string? ConfiguredUrl =>
+        ConfigurationRevision?.Configuration.Sources.FirstOrDefault(source => source.Id == SourceId)?.Url;
+
     public bool IsRoot() =>
-        ApiResource is Collection.ApiResource.BillList or Collection.ApiResource.HouseVoteList ||
-        ConfigurationRevision?.Configuration.Sources.FirstOrDefault(source => source.Id == SourceId)?.Url == Url;
+        ApiResource is Collection.ApiResource.BillList or Collection.ApiResource.HouseVoteList || ConfiguredUrl == Url;
 
     public bool IsListingPage()
     {
-        var path = ComparablePath(Url);
-        var configuredUrl = ConfigurationRevision?.Configuration.Sources.FirstOrDefault(source => source.Id == SourceId)?.Url;
-        return path == ComparablePath(AllowedPathPrefix) || configuredUrl is not null && path == ComparablePath(configuredUrl);
+        var path = PathOf(Url);
+        return path == ComparablePath(AllowedPathPrefix) || ConfiguredUrl is not null && path == PathOf(ConfiguredUrl);
     }
 
-    private static string ComparablePath(string urlOrPath)
-    {
-        var path = Uri.TryCreate(urlOrPath, UriKind.Absolute, out var url) ? url.AbsolutePath : urlOrPath;
-        return Uri.UnescapeDataString(path).TrimEnd('/');
-    }
+    private static string PathOf(string url) =>
+        ComparablePath(Uri.TryCreate(url, UriKind.Absolute, out var parsed) ? parsed.AbsolutePath : url);
+
+    private static string ComparablePath(string path) => Uri.UnescapeDataString(path).TrimEnd('/');
 
     public static CollectionJobDefinition FromConfiguration(CollectionConfiguration configuration, string sourceId,
         DateOnly? asOf = null)

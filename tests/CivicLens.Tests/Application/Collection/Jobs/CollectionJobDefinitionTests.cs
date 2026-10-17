@@ -115,6 +115,33 @@ public sealed class CollectionJobDefinitionTests
         Assert.Equal(expected, (definition with { Url = url }).IsListingPage());
     }
 
+    [Theory]
+    [InlineData("https://example.test/", true)]
+    [InlineData("https://example.test/?x=1", true)]
+    [InlineData("https://example.test/story", false)]
+    public void ASiteRootPrefixMakesOnlyTheSiteRootAnIndexPage(string url, bool expected)
+    {
+        var definition = CollectionJobDefinition.FromConfiguration(Config(), "first", new DateOnly(2026, 7, 1)) with
+        {
+            AllowedPathPrefix = "/"
+        };
+
+        Assert.Equal(expected, (definition with { Url = url, ConfigurationRevision = null, CoverageAsOf = null }).IsListingPage());
+    }
+
+    [Fact]
+    public void WithoutAConfigurationRevisionOnlyThePrefixPathMakesAnIndexPage()
+    {
+        var definition = CollectionJobDefinition.FromConfiguration(Config(), "first", new DateOnly(2026, 7, 1)) with
+        {
+            ConfigurationRevision = null,
+            CoverageAsOf = null
+        };
+
+        Assert.True((definition with { Url = "https://example.test/page/" }).IsListingPage());
+        Assert.False((definition with { Url = "https://example.test/page/article" }).IsListingPage());
+    }
+
     [Fact]
     public void LegacyReplayMatchesExecutionSettingsWithoutInventingProvenance()
     {
