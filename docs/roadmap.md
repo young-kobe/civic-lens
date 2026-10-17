@@ -35,6 +35,7 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 - R-19: Review volume tools beyond the sponsorship-only bulk approval of actions, and a clearer source-to-review path. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
 - R-20: Public filter pages, a source filter on the index search panel, and names for the issue and policy area filters. The panel already filters by kind, official, issue, policy area, and date range. After the first cloud deployment, a public search service with its own Postgres database, fed from releases, replaces the client search. Depends on: none stated. The search service depends on R-24. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-21: Process view of collection and AI stages from retained state. Depends on: none stated. [Host](architecture/host.md#limits-and-planned-work)
+- R-35: Keep listing pages out of the statement candidates. Press release indexes, news pages, issue pages, and newsletter archives reach the gate as releases. Find where discovery or extraction lets them through, and stop them there. Depends on: none stated. [Statements](architecture/statements.md#limits-and-planned-work)
 - R-29: Check each policy area name against the Congress.gov API. Depends on: none stated. [Configuration](architecture/configuration.md#limits-and-planned-work)
 - R-30: Fix the remaining format and parser limits that the federal coverage found. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
 

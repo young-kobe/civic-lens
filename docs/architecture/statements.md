@@ -259,6 +259,14 @@ The store refuses a model label for a held-out release. A person still labels a 
 
 `/Review/GateLabels/{CandidateId}` shows the saved text, a checkbox for each tracked issue of the issue file, and a yes or no choice for `namesBillOrVote`. The yes or no choice has no default. The form is prefilled with the human label, or else with the model label when the release is not held out. A save always adds a human row. It confirms or corrects the prefill. After a save, the page opens the next unlabeled release.
 
+**Labeling rules.** People, model pre-labels, and judges use the same rules. They apply where the gate prompt is open to more than one reading.
+
+- A listing page has no issue and no bill. Examples are press release indexes, news pages, issue pages, and newsletter archives. A listing page is not a statement, so the gate must skip it.
+- Count the body of the release, including a background paragraph. Ignore sidebars, related links, and navigation.
+- `namesBillOrVote` needs a bill title, a bill number, or a roll call that the text identifies. A bill with no name or number gives false.
+- `namesBillOrVote` needs the speaker's own action or position on the bill, such as "I voted for" or "I introduced". A law that only funds an announced grant gives false.
+- Tag every issue that matches. A conflict tags both `foreign-policy-and-war` and its narrower issue, as the issue file says.
+
 **Export.** `statements labels export <path>` writes one JSON line for each release that has a human label. A line holds `candidateId`, `extractionId`, `heldOut`, `issueIds`, `namesBillOrVote`, and `text`. The text is the public release text. The command refuses a path that is not inside the `.runtime` directory under the current directory. Run it from the repository root.
 
 ### Commands
@@ -342,6 +350,8 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 - The label page offers every tracked issue of the issue file. It does not hide an issue that was inactive on the capture date.
 - The label queue reads every unlabeled candidate (ID, source, and URL) on each list load and each save, because code computes the split. Revisit this if labeling moves to a large set.
 - Two labels with equal timestamps fall back to label ID order. This is acceptable for a single owner.
+- Listing pages reach the candidate queue as releases, and the gate sees them ([R-35](../roadmap.md#next)). In a preview, about half of the releases where models disagreed were listing pages.
+- The labeling rules for unnamed bills, bills cited as credit, and sidebars are stricter than the gate prompt. A later prompt version may adopt them after the benchmark.
 - A label save has no idempotency key. A double submit adds two equal rows, and the newest is the label of record.
 - The export path check compares full paths. It does not resolve symbolic links.
 - The split is a hash, so the held-out share is near 30 percent but not exact.
