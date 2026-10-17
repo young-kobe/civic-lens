@@ -252,7 +252,7 @@ Classification acceptance:
 
 - [ ] An AI draft of a real substantive edit passes the citation checks, and a person approves and publishes it.
 - [ ] The false negatives of the gate are measured on held-out labeled examples and visible in the skipped-change sample.
-- [ ] Budget exhaustion leaves a visible, resumable backlog.
+- [x] Budget exhaustion leaves a visible, resumable backlog.
 - [ ] A change of one task version reruns only the affected work.
 
 Pending decisions for the ladder are [D-05](../roadmap.md#pending-decisions).
