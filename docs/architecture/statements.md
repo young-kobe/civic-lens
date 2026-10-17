@@ -29,6 +29,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - Only discovery-admitted jobs become candidates. Enforced by `PostgresStatementCandidateRegistration`. Test: `PostgresStatementCandidateRegistrationTests.ExtractionFromAWatchedPageJobRegistersNoCandidate`.
 - A Succeeded gate has a known reason. Enforced by `StatementGateLifecycle`. Test: `StatementGateLifecycleTests.ASucceededGateNeedsAKnownReason`.
 - When a valid answer has no verified issue and namesBillOrVote is false, a bill number in the text still passes the release. Enforced by `StatementGateResolver`. Test: `StatementGateResolverTests.ABillNumberInTheTextPassesWithoutTheModelAnswerSoTheFloorHoldsWhenTheModelMissesIt`.
+- A live gate answer must hold namesBillOrVote. Enforced by `StatementGateResolver`. Test: `StatementGateResolverTests.ALiveAnswerWithoutTheBillOrVoteFieldIsRejectedSoOnlyStoredRunsMayLackIt`.
 - Each of the three pass paths has its own reason. Enforced by `StatementGateResolver` and `ck_statement_analysis_runs_reason`. Test: `StatementGateResolverTests.TheThreePassPathsRecordThreeDistinctReasonsSoAMeasurementCanCountEachPath`.
 - A draft from a bill or vote pass accepts an empty issue list. Enforced by the draft step and the revision rules. Test: `StatementDraftStepTests.ADraftFromABillOrVotePassHasNoIssueIdsBecauseNoTrackedIssueMatched`.
 - Only a skipped gate returns from Succeeded to Pending. Enforced by `StatementGateLifecycle`. Test: `StatementGateLifecycleTests.OnlyASkippedGateMayReturnToPendingForRegate`.
@@ -238,13 +239,13 @@ All statement commands are owner commands.
 | `statements list [outcome] [limit]` | Gate rows. Outcomes: `passed` (all three pass reasons), `skipped`, `failed-open`, `over-cap`, `pending`, `failed` |
 | `statements run <run-id>` | One gate run |
 | `statements requeue <candidate-id\|--all>` | Failed gate rows back to Pending |
-| `statements regate [--since <date>]` | Skipped gate rows back to Pending when the latest run used another issue revision than the current file, or an older gate prompt version |
+| `statements regate [--since <date>]` | Skipped gate rows back to Pending when the latest run used another issue revision than the current file, or another gate prompt version |
 | `statements draft status` | Drafting status |
 | `statements draft list [view] [limit]` | Draft rows. Views: `drafted`, `over-cap`, `existing`, `pending`, `failed` |
 | `statements draft run <run-id>` | One draft run |
 | `statements draft requeue <candidate-id\|--all>` | Failed draft rows back to Pending. It never moves a gate row. |
 
-With `--since`, `regate` moves only candidates first captured on or after that UTC date. A skip made under an older gate prompt moves too, because the new prompt may find a bill or a vote. `regate` never runs by itself, and it needs `CIVIC_LENS_ISSUES_CONFIG`. A passed, failed-open, or over-cap gate row never moves.
+With `--since`, `regate` moves only candidates first captured on or after that UTC date. A skip made under another gate prompt version moves too, because the new prompt may find a bill or a vote. `regate` never runs by itself, and it needs `CIVIC_LENS_ISSUES_CONFIG`. A passed, failed-open, or over-cap gate row never moves.
 
 ## Storage and contracts
 
@@ -297,7 +298,7 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 - Actions are in [actions](actions.md). Relationships and weekly briefs are planned; see [roadmap](../roadmap.md).
 - Planned: structured statement extraction, temporal identity resolution, candidate matching, reviewed relationships, and timelines.
 - Each quotation stays addressable for later matching with actions.
-- Gate runs from before `statement-gate-v2` have no `namesBillOrVote` answer. `StatementGateCarryOver` reads them with a null answer. A live answer without the field is rejected.
+- Gate runs from before `statement-gate-v2` have no `namesBillOrVote` answer. `StatementGateCarryOver` reads them with a null answer.
 - Rolling back the `GateBillOrVoteReasons` migration fails while any gate run holds a `passed-bill-or-vote` or `passed-bill-number` reason. Remove or change those rows first.
 - The bill or vote answer of the model is unmeasured. The `passed-bill-or-vote` and `passed-bill-number` counts show how often each path fires. The bill number rule finds only the forms that `BillNumberFinder` accepts.
 - Measured on 2026-10-16 with 30 House press feeds: the gate dropped 25 of 48 candidates. Most were grants and events. It also dropped a release about a farm bill vote, two bill introductions, and a Senate inquiry.

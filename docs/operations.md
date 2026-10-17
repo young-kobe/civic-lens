@@ -532,7 +532,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- st
 CIVIC_LENS_ISSUES_CONFIG=/abs/config/issues.json dotnet run --no-build --configuration Release --project src/CivicLens.Host -- statements regate --since 2026-01-01
 ```
 
-`status` prints the daily limit, any pause, the tokens charged today, and the count of candidates in each outcome. `list` takes `passed`, `skipped`, `failed-open`, `over-cap`, `pending`, or `failed`, and a limit up to 500 (default 100). `run` prints one run with its output, rubric revision, reason, and verified quote spans. `requeue` moves Failed gate rows back to Pending. `regate` moves skipped candidates back to Pending when their latest run used an older issue revision or an older gate prompt version. To apply a rubric change, edit the issue file, run `regate`, and let the worker run.
+`status` prints the daily limit, any pause, the tokens charged today, and the count of candidates in each outcome. `list` takes `passed`, `skipped`, `failed-open`, `over-cap`, `pending`, or `failed`, and a limit up to 500 (default 100). `run` prints one run with its output, rubric revision, reason, and verified quote spans. `requeue` moves Failed gate rows back to Pending. `regate` moves skipped candidates back to Pending when their latest run used another issue revision or another gate prompt version. To apply a rubric change, edit the issue file, run `regate`, and let the worker run.
 
 The [live test](#verification) for the gate sends two paid requests. It fails unless the second request reads the prompt cache.
 
