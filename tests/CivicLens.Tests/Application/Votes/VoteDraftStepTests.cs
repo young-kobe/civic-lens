@@ -61,6 +61,57 @@ public sealed class VoteDraftStepTests
     }
 
     [Fact]
+    public async Task TheRevisionStoresTheVoteDayAndCitesTheStartLineBecausePublishedDatesMustQuoteTheirSource()
+    {
+        var world = Create();
+
+        var (store, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Drafted));
+
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal(new DateOnly(2025, 4, 10), revision.VotedOn);
+        Assert.Equal("Started: 2025-04-10T11:08:00-04:00", world.Quote(revision.VotedOnCitation));
+    }
+
+    [Fact]
+    public async Task AMemberCastIsStoredAsItsRenderedLineShowsItSoThePublishedCastAlwaysEndsItsCitedLine()
+    {
+        var world = Create(members: [new(Aderholt, "Robert", "Aderholt", "  Yea ")]);
+
+        var (store, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Drafted));
+
+        var member = Assert.Single(Assert.Single(store.Revisions).Members);
+        Assert.Equal("Yea", member.Cast);
+        Assert.EndsWith(", Yea", world.Quote(member.Citation), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AChangedStartTextCallsTheModelBecauseTheStartLineIsAFactEvenWhenTheInstantIsTheSame()
+    {
+        var current = await FirstRevisionAsync(Create());
+        var utcStart = current.Facts[0] with { Text = "Started: 2025-04-10T15:08:00Z" };
+        current = current with { Facts = current.Facts.SetItem(0, utcStart) };
+        var model = new FakeHeadlineSummaryModel().Draft(Drafted);
+
+        var (store, _) = await RunAsync(Create(), model, current);
+
+        Assert.Single(model.Requests);
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal((2, "Started: 2025-04-10T11:08:00-04:00"), (revision.RevisionNumber, revision.Facts[0].Text));
+    }
+
+    [Fact]
+    public async Task AVoteWithoutAStartLineBlocksBecauseItsDayHasNoCitationToPublish()
+    {
+        var model = new FakeHeadlineSummaryModel();
+
+        var (store, _) = await RunAsync(Create(withStartDate: false), model);
+
+        Assert.Equal((State.Blocked, "evidenceUnavailable"), (store.Entries[0].Status, store.Entries[0].ErrorCode));
+        Assert.Empty(model.Requests);
+        Assert.Empty(store.Revisions);
+    }
+
+    [Fact]
     public async Task AChangedKindAloneCopiesTheTextWithoutAModelCallBecauseTheKindComesFromCodeAndNotFromTheText()
     {
         var current = (await FirstRevisionAsync(Create())) with { Kind = VoteKind.Rule };
@@ -107,7 +158,7 @@ public sealed class VoteDraftStepTests
 
         var revision = Assert.Single(store.Revisions);
         Assert.Equal([
-            "Started: 2025-04-10T15:08:00Z",
+            "Started: 2025-04-10T11:08:00-04:00",
             "Question: On Motion to Concur in the Senate Amendment",
             "Result: Passed",
             "Legislation: HCONRES 14",

@@ -60,7 +60,7 @@ internal sealed class VoteWorld
 
     public static VoteWorld Create(MemberSpec[]? members = null, string result = "Passed", string? question = null,
         string legislation = HouseVoteFixtures.Legislation, DateOnly? backfillFrom = null, string? totals = null,
-        string billTitle = BillTitle, string? policyArea = BillGateFixtures.TrackedPolicyArea)
+        string billTitle = BillTitle, string? policyArea = BillGateFixtures.TrackedPolicyArea, bool withStartDate = true)
     {
         var configuration = Configuration();
         if (backfillFrom is { } from)
@@ -71,6 +71,7 @@ internal sealed class VoteWorld
             detail = Regex.Replace(detail, @"""votePartyTotal"":\[.*?\}\],", $"\"votePartyTotal\":{totals},", RegexOptions.Singleline);
         if (question is not null)
             detail = detail.Replace("On Motion to Concur in the Senate Amendment", question, StringComparison.Ordinal);
+        if (!withStartDate) detail = Regex.Replace(detail, @"""startDate"":""[^""]*"",", "");
         var roll = HouseVoteFixtures.Roll100;
         world.Add("detail", ApiResource.HouseVoteDetail, HouseVoteRollUrl.Detail(HouseVoteFixtures.SourceUrl, roll), detail,
             HouseVoteRenderer.RenderDetail(HouseVoteParser.Parse(Encoding.UTF8.GetBytes(detail), roll)));

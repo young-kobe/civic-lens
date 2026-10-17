@@ -37,15 +37,7 @@ internal sealed class PublishedActionBuilder(PublishedRecordRules rules)
                 WithdrawnOn = sponsorship.WithdrawnOn,
                 Citations = [.. sponsorship.Citations.Select(Cite)]
             })],
-            Sources = [.. revision.Citations.Select(span => span.ExtractionId).Distinct(StringComparer.Ordinal)
-                .Select(id => extractions[id])
-                .Select(extraction => new PublishedDocumentVersion
-                {
-                    ExtractionId = extraction.ExtractionId,
-                    Url = extraction.SourceAttempt.FinalUrl,
-                    ObservedAtUtc = extraction.SourceAttempt.ObservedAt,
-                    Text = extraction.Text
-                })],
+            Sources = PublishedRecordRules.Sources(revision.Citations, extractions),
             ApprovedAtUtc = PublishedRecordRules.GetApprovalTime(revision.RevisionNumber, review.Decisions),
             FirstPublishedAtUtc = previous?.FirstPublishedAtUtc ?? now
         };

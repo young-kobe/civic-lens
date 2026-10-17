@@ -10,7 +10,7 @@ Claude drafts document-change accounts and statement records inside daily token 
 
 The worker drafts one action record for each tracked Congress.gov bill. Each record lists every tracked official's sponsorship and cosponsorship. A person reviews, approves, and publishes each action record. Bulk approval covers revisions that change only sponsorships.
 
-The worker collects House roll-call votes and drafts one vote record for each roll call. Each record lists the vote of every tracked member. A person reviews and approves each vote record on the vote pages. Publication of vote records is pending.
+The worker collects House roll-call votes and drafts one vote record for each roll call. Each record lists the vote of every tracked member. A person reviews and approves each vote record on the vote pages. An approved vote record publishes in a static release.
 
 The worker drafts one weekly brief for each closed week. It uses the records that releases published in that week. A person reviews and approves each brief. The owner publishes it with its cited records.
 

@@ -111,7 +111,7 @@ public sealed class ReleaseRendererTests
         Assert.Equal(PublicationProtocol.ManifestPath, form.GetAttribute("data-release-search"));
         Assert.Equal(PublicationProtocol.RecordPagePath("{id}"), form.GetAttribute("data-record-page"));
         Assert.True(form.Closest("section")!.HasAttribute("hidden"));
-        Assert.Equal(["", "documentChange", "statement", "action", "brief"],
+        Assert.Equal(["", "documentChange", "statement", "action", "brief", "vote"],
             document.QuerySelectorAll("#search-kind option").Select(option => option.GetAttribute("value")));
         Assert.Equal(["text", "kind", "official", "issue", "policyArea", "from", "to"],
             form.QuerySelectorAll("input, select").Select(control => control.GetAttribute("name")));
@@ -244,6 +244,75 @@ public sealed class ReleaseRendererTests
         var action = Action() with { SummaryCitation = Action().SummaryCitation! with { ExtractionId = new string('9', 64) } };
 
         await Assert.ThrowsAsync<InvalidDataException>(() => new ReleaseRenderer().RenderActionAsync(action, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task VotePageShowsTheDayTheKindTheResultFactsTheCastOfEachTrackedMemberAndTheSources()
+    {
+        var html = await new ReleaseRenderer().RenderVoteAsync(Vote(), null, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
+            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
+        Assert.Equal("2025-04-10", facts["Voted on"]);
+        Assert.Equal("Passage", facts["Kind"]);
+        Assert.Equal("100, Congress 119, session 1", facts["Roll call"]);
+        Assert.Equal("housing", facts["Tracked issues"]);
+        var result = document.QuerySelector("[aria-labelledby='result-title']")!;
+        Assert.Equal(["Started: 2025-04-10T11:08:00-04:00", "Question: On Passage", "Result: Passed <b>"],
+            result.QuerySelectorAll("blockquote").Select(quote => quote.TextContent));
+        var rows = document.QuerySelectorAll("[aria-labelledby='members-title'] tbody tr")
+            .Select(row => string.Join("|", row.QuerySelectorAll("td").Select(cell => cell.QuerySelector("blockquote")?.TextContent ?? cell.TextContent.Trim())));
+        Assert.Equal(["Jane <Doe>|Yea|Member: A000055, Jane Doe, R, AL, Yea"], rows);
+        var sources = document.QuerySelector("[aria-labelledby='sources-title']")!;
+        Assert.Equal(["Source text 1 of 2", "Source text 2 of 2"], sources.QuerySelectorAll("[aria-label]").Select(item => item.GetAttribute("aria-label")));
+        Assert.Contains("only the officials that Civic Lens tracks", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<b>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task EveryVoteQuoteLinksToTheMarkOfTheSameTextInTheSource()
+    {
+        var html = await new ReleaseRenderer().RenderVoteAsync(Vote(), null, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var links = document.QuerySelectorAll("a[href^='#cite-']").ToArray();
+        Assert.Equal(4, links.Length);
+        foreach (var link in links)
+        {
+            var quote = link.Closest("td, .choice")!.QuerySelector("blockquote")!.TextContent;
+            Assert.Equal(quote, document.QuerySelector(link.GetAttribute("href")!)!.TextContent);
+        }
+    }
+
+    [Fact]
+    public async Task TheVotePageLinksToTheBillActionOnlyWhenTheReleaseHoldsThatAction()
+    {
+        var actionId = new string('c', 64);
+
+        var linked = new HtmlParser().ParseDocument(await new ReleaseRenderer().RenderVoteAsync(Vote(), actionId, CancellationToken.None));
+        var plain = new HtmlParser().ParseDocument(await new ReleaseRenderer().RenderVoteAsync(Vote(), null, CancellationToken.None));
+
+        var link = Assert.Single(linked.QuerySelectorAll("[aria-labelledby='bill-title'] a"));
+        Assert.Equal(($"../records/{actionId}.html", "HR 7, Congress 119"), (link.GetAttribute("href"), link.TextContent));
+        Assert.Empty(plain.QuerySelectorAll("[aria-labelledby='bill-title'] a"));
+        Assert.Contains("HR 7, Congress 119", plain.QuerySelector("[aria-labelledby='bill-title']")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AVoteWithoutABillShowsNoBillPanel()
+    {
+        var html = await new ReleaseRenderer().RenderVoteAsync(Vote() with { BillType = null, BillNumber = null }, null, CancellationToken.None);
+
+        Assert.Empty(new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='bill-title']"));
+    }
+
+    [Fact]
+    public async Task VotePageRejectsACitationThatNamesNoEmbeddedSource()
+    {
+        var vote = Vote() with { VotedOnCitation = Vote().VotedOnCitation with { ExtractionId = new string('9', 64) } };
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => new ReleaseRenderer().RenderVoteAsync(vote, null, CancellationToken.None));
     }
 
     [Fact]
@@ -428,6 +497,57 @@ public sealed class ReleaseRendererTests
             [
                 Source(detailId, "https://api.congress.gov/v3/bill/119/hr/7", detail),
                 Source(cosponsorsId, "https://api.congress.gov/v3/bill/119/hr/7/cosponsors", cosponsors)
+            ],
+            ApprovedAtUtc = new DateTimeOffset(2026, 1, 22, 12, 0, 0, TimeSpan.Zero),
+            FirstPublishedAtUtc = new DateTimeOffset(2026, 1, 23, 8, 0, 0, TimeSpan.Zero)
+        };
+    }
+
+    private static PublishedVote Vote()
+    {
+        const string detail = "Started: 2025-04-10T11:08:00-04:00\nQuestion: On Passage\nResult: Passed <b>\n";
+        const string members = "Member: A000055, Jane Doe, R, AL, Yea\n";
+        var detailId = new string('1', 64);
+        var membersId = new string('2', 64);
+        PublishedCitation Cite(string id, string text, string quote) =>
+            new() { ExtractionId = id, Start = text.IndexOf(quote, StringComparison.Ordinal), Length = quote.Length, Quote = quote };
+        PublishedDocumentVersion Source(string id, string url, string text) =>
+            new() { ExtractionId = id, Url = url, ObservedAtUtc = new DateTimeOffset(2026, 1, 21, 9, 0, 0, TimeSpan.Zero), Text = text };
+        return new PublishedVote
+        {
+            RecordId = new string('f', 64),
+            RevisionNumber = 1,
+            Headline = "House passes a housing bill",
+            Summary = "The House voted.",
+            Congress = 119,
+            Session = 1,
+            RollCallNumber = 100,
+            Kind = PublishedVoteKind.Passage,
+            KindCitation = Cite(detailId, detail, "Question: On Passage"),
+            VotedOn = new DateOnly(2025, 4, 10),
+            VotedOnCitation = Cite(detailId, detail, "Started: 2025-04-10T11:08:00-04:00"),
+            Facts =
+            [
+                new PublishedVoteFact { Text = "Started: 2025-04-10T11:08:00-04:00", Citation = Cite(detailId, detail, "Started: 2025-04-10T11:08:00-04:00") },
+                new PublishedVoteFact { Text = "Question: On Passage", Citation = Cite(detailId, detail, "Question: On Passage") },
+                new PublishedVoteFact { Text = "Result: Passed <b>", Citation = Cite(detailId, detail, "Result: Passed <b>") }
+            ],
+            Members =
+            [
+                new PublishedMemberVote
+                {
+                    Official = new PublishedOfficial { Id = "o1", Name = "Jane <Doe>" },
+                    Cast = "Yea",
+                    Citation = Cite(membersId, members, "Member: A000055, Jane Doe, R, AL, Yea")
+                }
+            ],
+            BillType = "hr",
+            BillNumber = 7,
+            TrackedIssueIds = ["housing"],
+            Sources =
+            [
+                Source(detailId, "https://api.congress.gov/v3/house-vote/119/1/100", detail),
+                Source(membersId, "https://api.congress.gov/v3/house-vote/119/1/100/members", members)
             ],
             ApprovedAtUtc = new DateTimeOffset(2026, 1, 22, 12, 0, 0, TimeSpan.Zero),
             FirstPublishedAtUtc = new DateTimeOffset(2026, 1, 23, 8, 0, 0, TimeSpan.Zero)

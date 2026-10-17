@@ -22,15 +22,14 @@ Exit criteria:
 
 Each item gives its outcome, what it depends on, and where the design lives. Present the design choices before building R-22 only.
 
-The path to the first deploy is R-15, R-16, R-19 and R-20, R-36, R-23 and R-18, then R-24. Decide D-07 and D-08 before R-24.
+The path to the first deploy is R-16, R-19 and R-20, R-36, R-23 and R-18, then R-24. Decide D-07 and D-08 before R-24.
 
 ### Now
 
-- R-15: House roll-call votes as actions. Collection, vote candidates, drafting, and review are done. Publication remains. Depends on: none stated. It does not need R-14. [Votes](architecture/votes.md#limits-and-planned-work)
+- R-16: Reviewed relationships between statements and actions, and timelines. Depends on: none stated. [Statements](architecture/statements.md#limits-and-planned-work)
 
 ### Next
 
-- R-16: Reviewed relationships between statements and actions, and timelines. Depends on: R-15. [Statements](architecture/statements.md#limits-and-planned-work)
 - R-17: Congressional Record articles as a statement connector. Depends on: R-16. [Actions](architecture/actions.md#limits-and-planned-work)
 - R-18: Engine policies for broad coverage: spending ceilings, backlog limits, source fairness, live reload, a health view, and collection concurrency for backfills. One job at a time limits a Congress.gov backfill to about 1,400 requests an hour. The precedent is CIVIC_LENS_EVIDENCE_CONCURRENCY. Depends on: none stated. It must come before R-24. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-19: Review volume tools beyond the sponsorship-only bulk approval of actions, and a clearer source-to-review path. One reviewer cannot approve every draft, so a priority rule orders the queue. It uses tracked issues, recency, and links between statements and votes. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)

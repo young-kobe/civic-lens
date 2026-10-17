@@ -10,6 +10,7 @@ public static class PublishedRecordLabels
         PublishedRecordKind.Statement => "Statement",
         PublishedRecordKind.Action => "Action",
         PublishedRecordKind.Brief => "Weekly brief",
+        PublishedRecordKind.Vote => "Vote",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no label.")
     };
 
@@ -21,5 +22,19 @@ public static class PublishedRecordLabels
         PublishedSponsorshipRole.Sponsor => "Sponsor",
         PublishedSponsorshipRole.Cosponsor => "Cosponsor",
         _ => throw new ArgumentOutOfRangeException(nameof(role), role, "Sponsorship role has no label.")
+    };
+
+    public static string VoteKind(PublishedVoteKind kind) => kind switch
+    {
+        PublishedVoteKind.Rule => "Rule",
+        PublishedVoteKind.PreviousQuestion => "Previous question",
+        PublishedVoteKind.MotionToRecommit => "Motion to recommit",
+        PublishedVoteKind.Amendment => "Amendment",
+        PublishedVoteKind.Suspension => "Suspension of the rules",
+        PublishedVoteKind.Passage => "Passage",
+        PublishedVoteKind.ConferenceReport => "Conference report",
+        PublishedVoteKind.VetoOverride => "Veto override",
+        PublishedVoteKind.Other => "Other",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Vote kind has no label.")
     };
 }

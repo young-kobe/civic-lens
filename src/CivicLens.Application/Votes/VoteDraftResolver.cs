@@ -45,7 +45,7 @@ public static class VoteDraftResolver
         var candidate = evidence.Candidate;
         var revision = new VoteDraftRevision(candidate.RecordId, (current?.RevisionNumber ?? 0) + 1, ReviewAuthor.AnalysisSubject, createdAtUtc,
             text.Headline, text.Summary, text.Origin, text.Suggestion, candidate.SourceId, candidate.Congress, candidate.SessionNumber, candidate.RollCallNumber, candidate.BillType,
-            candidate.BillNumber, candidate.CandidateId, candidate.UpdateDate, snapshot.Facts, snapshot.Kind, snapshot.KindCitation, snapshot.Members, trackedIssueIds, issueRevisionId);
+            candidate.BillNumber, candidate.CandidateId, candidate.UpdateDate, snapshot.Facts, snapshot.Day, snapshot.VotedOnCitation, snapshot.Kind, snapshot.KindCitation, snapshot.Members, trackedIssueIds, issueRevisionId);
         revision.ValidateAsAnalysisRevision(current);
         return revision;
     }

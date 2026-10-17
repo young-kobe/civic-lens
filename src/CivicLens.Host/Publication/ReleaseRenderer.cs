@@ -43,6 +43,17 @@ public sealed class ReleaseRenderer : IReleaseRenderer
         });
     }
 
+    public Task<string> RenderVoteAsync(PublishedVote record, string? billActionRecordId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        record.Validate();
+        return RenderAsync<PublishedVotePage>(new Dictionary<string, object?>
+        {
+            [nameof(PublishedVotePage.Record)] = record,
+            [nameof(PublishedVotePage.BillActionRecordId)] = billActionRecordId
+        });
+    }
+
     public Task<string> RenderBriefAsync(PublishedBrief record, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(record);

@@ -32,13 +32,11 @@ public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader respo
             bill = await LoadBillAsync(billPage, cancellationToken);
             if (TextError(billPage, CongressBillRenderer.RenderDetail(bill)) is { } billTextError) return new(null, billTextError);
         }
-        var day = VoteDayOf(detail, candidate.UpdateDate);
+        if (detail.StartDate is not { } start) return new(null, VoteDraftErrorCodes.EvidenceUnavailable);
+        var day = DateOnly.FromDateTime(start.DateTime);
         var tracked = configuration.CoveredBioguidePeopleOf(source, day);
         return new(Assemble(evidence, members, tracked, configuration.People, bill?.PolicyArea, day), null);
     }
-
-    private static DateOnly VoteDayOf(HouseVoteDetail detail, DateTimeOffset updateDate) =>
-        detail.StartDate is { } start ? DateOnly.FromDateTime(start.DateTime) : DateOnly.FromDateTime(updateDate.UtcDateTime);
 
     private static VoteSnapshot Assemble(VoteDraftEvidence evidence, HouseVoteMemberVotes members, PersonConfiguration[] tracked,
         PersonConfiguration[] configuredPeople, string? policyArea, DateOnly day)
@@ -48,7 +46,8 @@ public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader respo
         var memberVotes = MemberVotesOf(evidence.Members, members, tracked);
         var involved = memberVotes.Select(item => item.PersonId).ToHashSet(StringComparer.Ordinal);
         var (kind, kindCitation) = VoteKindTable.Classify(facts);
-        return new(facts, kind, kindCitation, memberVotes, VoteFingerprint.Compute(facts, memberVotes),
+        var votedOnCitation = VoteFacts.Find(facts, VoteFactPrefixes.Started)!.Citation;
+        return new(facts, votedOnCitation, kind, kindCitation, memberVotes, VoteFingerprint.Compute(facts, memberVotes),
             policyArea, day,
             configuredPeople.Where(person => involved.Contains(person.Id)).ToImmutableDictionary(person => person.Id, person => person.Name),
             [.. configuredPeople.Select(person => person.Name)]);
@@ -69,7 +68,7 @@ public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader respo
     {
         var citations = LineCitations.ExactLines(page.ExtractionId, page.Text);
         return [.. members.Members.Join(tracked, member => member.BioguideId, person => person.BioguideId,
-                (member, person) => new MemberVote(person.Id, member.BioguideId, member.VoteCast, citations[HouseVoteRenderer.MemberLine(member)]))
+                (member, person) => new MemberVote(person.Id, member.BioguideId, RenderedText.SingleLine(member.VoteCast), citations[HouseVoteRenderer.MemberLine(member)]))
             .DistinctBy(vote => vote.BioguideId).OrderBy(vote => vote.BioguideId, StringComparer.Ordinal)];
     }
 

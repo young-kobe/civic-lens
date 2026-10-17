@@ -21,7 +21,7 @@
             {
                 <li id="@PublishedBriefView.CitationAnchor(citation.Id)">
                     <span class="choice-label">@citation.Id</span>
-                    <a href="@PublishedBriefView.RecordLink(citation)">@citation.Headline</a>
+                    <a href="@PublishedRecordView.RecordLink(citation.RecordId)">@citation.Headline</a>
                     <span class="muted small">@PublishedRecordLabels.Kind(citation.Kind), revision @citation.RevisionNumber</span>
                 </li>
             }

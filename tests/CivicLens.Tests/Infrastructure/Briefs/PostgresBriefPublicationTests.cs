@@ -15,6 +15,7 @@ using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Application.Actions;
 using CivicLens.Tests.Application.Publication;
 using CivicLens.Tests.Application.Statements;
+using CivicLens.Tests.Application.Votes;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
@@ -274,7 +275,7 @@ public sealed class PostgresBriefPublicationTests(PostgresCollection postgres) :
             File.WriteAllBytes(Path.Combine(folder, PublicationProtocol.RecordPagePath(entry.RecordId)), []);
         }
         return new PublishRelease(publications, new FileReleaseDirectory(releaseRoot), new ReleaseRenderer(),
-            new PublishedRecordLoaders(new FakeReviewStore(), new FakeStatementReviewStore(), new FakeActionReviewStore(), reviews),
+            new PublishedRecordLoaders(new FakeReviewStore(), new FakeStatementReviewStore(), new FakeActionReviewStore(), new FakeVoteReviewStore(), reviews),
             new PublicationCatalog(new Dictionary<string, string>()), new FakeClock(InWeek.AddDays(10)));
     }
 }

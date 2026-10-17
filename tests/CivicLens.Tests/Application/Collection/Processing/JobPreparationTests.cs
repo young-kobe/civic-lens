@@ -301,7 +301,7 @@ public sealed class JobPreparationTests
         _ = await Prepare(ApiResource.HouseVoteDetail, VoteDetailUrl, HouseVoteFixtures.Detail(), null);
 
         var saved = Assert.Single(extractions.Saved);
-        Assert.Equal((HouseVoteParser.Version, HouseVoteRenderer.NormalizationVersion, "attempt"),
+        Assert.Equal((HouseVoteParser.Version, "house-vote-render-v2", "attempt"),
             (saved.ParserVersion, saved.NormalizationVersion, saved.SourceAttempt.AttemptId));
         Assert.StartsWith("House vote: 119 1 100\nUpdated: 2025-06-24T12:34:41Z\n", saved.Text, StringComparison.Ordinal);
         Assert.Equal(saved.ExtractionId, Assert.Single(votes.ExtractionIds));
@@ -313,7 +313,7 @@ public sealed class JobPreparationTests
         _ = await Prepare(ApiResource.HouseVoteMembers, VoteMembersUrl, HouseVoteFixtures.Members(), null);
 
         var saved = Assert.Single(extractions.Saved);
-        Assert.Equal((HouseVoteMembersParser.Version, HouseVoteRenderer.NormalizationVersion, "attempt"),
+        Assert.Equal((HouseVoteMembersParser.Version, "house-vote-render-v2", "attempt"),
             (saved.ParserVersion, saved.NormalizationVersion, saved.SourceAttempt.AttemptId));
         Assert.Contains("\nMember: A000148, Jake Auchincloss, D, MA, Nay\n", saved.Text, StringComparison.Ordinal);
         Assert.Equal(saved.ExtractionId, Assert.Single(votes.ExtractionIds));

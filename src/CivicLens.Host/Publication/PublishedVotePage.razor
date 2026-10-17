@@ -1,0 +1,74 @@
+@using CivicLens.Host.Components.Evidence
+@using CivicLens.Publication.Contracts
+
+<PublishedRecordFrame Headline="@Record.Headline" Summary="@Record.Summary" Facts="PublishedVoteView.Facts(Record)"
+                      Caveat="This record lists only the officials that Civic Lens tracks. Each cast is the wording of the House Clerk roll call at the observation time of its source.">
+    @if (PublishedVoteView.Bill(Record) is { } bill)
+    {
+        <Panel Title="Bill" Id="bill-title" Padded="true">
+            @if (BillActionRecordId is not null)
+            {
+                <a href="@PublishedRecordView.RecordLink(BillActionRecordId)">@bill</a>
+            }
+            else
+            {
+                <span>@bill</span>
+            }
+        </Panel>
+    }
+
+    <Panel Title="Result" Id="result-title" Padded="true">
+        <p class="muted small">Each quote is exact text from the saved Congress.gov API page as Civic Lens renders it. Each source panel marks the quotes in the full saved text.</p>
+        <ul class="choices">
+            <li>
+                <CitationQuote Label="Date" Quote="@Record.VotedOnCitation.Quote">
+                    <a href="@("#" + PublishedVoteView.Anchor(Record, Record.VotedOnCitation))">Show in the full source text</a>
+                </CitationQuote>
+            </li>
+            @if (Record.KindCitation is { } kind)
+            {
+                <li>
+                    <CitationQuote Label="Kind" Quote="@kind.Quote">
+                        <a href="@("#" + PublishedVoteView.Anchor(Record, kind))">Show in the full source text</a>
+                    </CitationQuote>
+                </li>
+            }
+            @foreach (var fact in PublishedVoteView.ResultFacts(Record))
+            {
+                <li>
+                    <CitationQuote Label="@PublishedVoteView.FactLabel(fact)" Quote="@fact.Text">
+                        <a href="@("#" + PublishedVoteView.Anchor(Record, fact.Citation))">Show in the full source text</a>
+                    </CitationQuote>
+                </li>
+            }
+        </ul>
+    </Panel>
+
+    <Panel Title="Tracked members" Id="members-title" Padded="true">
+        <DataTable Items="Record.Members" Caption="Votes of tracked members">
+            <Head><th>Official</th><th>Cast</th><th>Evidence</th></Head>
+            <Row Context="member">
+                <td>@member.Official.Name</td>
+                <td>@member.Cast</td>
+                <td>
+                    <blockquote class="quote">@EncodedEvidence.Markup(member.Citation.Quote)</blockquote>
+                    <a class="small" href="@("#" + PublishedVoteView.Anchor(Record, member.Citation))">Show in the full source text</a>
+                </td>
+            </Row>
+        </DataTable>
+    </Panel>
+
+    <Panel Title="Sources" Id="sources-title" Padded="true">
+        @for (var index = 0; index < Record.Sources.Length; index++)
+        {
+            var source = Record.Sources[index];
+            <VersionSource Version="source" Linked="false" />
+            <DocumentText Label="@($"Source text {index + 1} of {Record.Sources.Length}")" Runs="CitedText.Split(source.Text, PublishedVoteView.RangesIn(Record, source))" />
+        }
+    </Panel>
+</PublishedRecordFrame>
+
+@code {
+    [Parameter, EditorRequired] public PublishedVote Record { get; set; } = default!;
+    [Parameter] public string? BillActionRecordId { get; set; }
+}

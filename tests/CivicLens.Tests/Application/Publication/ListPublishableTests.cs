@@ -201,7 +201,7 @@ public sealed class ListPublishableTests
 
         var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
 
-        Assert.Equal([16, 16, 16, 16], KindCounts(list));
+        Assert.Equal([16, 16, 16, 16, 0], KindCounts(list));
         Assert.True(list.HasMore);
         Assert.Equal(PublishRelease.MaximumRecords + 1, scenario.Actions.UnpublishedLimit);
         Assert.Equal(PublishRelease.MaximumRecords + 1, scenario.Briefs.UnpublishedLimit);
@@ -222,8 +222,22 @@ public sealed class ListPublishableTests
 
         var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
 
-        Assert.Equal([29, 5, 30, 0], KindCounts(list));
+        Assert.Equal([29, 5, 30, 0, 0], KindCounts(list));
         Assert.True(list.HasMore);
+    }
+
+    [Fact]
+    public async Task ApprovedVoteIsListedWithItsKindAndAVoteWithAConcernIsNot()
+    {
+        var scenario = new PublicationScenario();
+        var approved = scenario.Votes.Publishable[scenario.AddVote('d')].Review;
+        var concern = scenario.Votes.Publishable[scenario.AddVote('e', decisions: [PublicationScenario.Decision(new string('e', 64), 1, ReviewDecisionKind.RequestChanges)])].Review;
+        scenario.Votes.Unpublished.AddRange([new(approved, null), new(concern, null)]);
+
+        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+
+        var item = Assert.Single(list.Items);
+        Assert.Equal((PublishedRecordKind.Vote, approved.RecordId), (item.Kind, item.RecordId));
     }
 
     [Fact]

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The votes feature collects House roll-call votes from the Congress.gov `house-vote` API. It fetches the detail and the member votes of each roll call as durable jobs. Each roll call version with both pages captured becomes a vote candidate. The `worker` drafts one vote record for each source and roll call from these candidates. A person reviews and approves each vote record on the vote review pages. Publication of vote records is planned.
+The votes feature collects House roll-call votes from the Congress.gov `house-vote` API. It fetches the detail and the member votes of each roll call as durable jobs. Each roll call version with both pages captured becomes a vote candidate. The `worker` drafts one vote record for each source and roll call from these candidates. A person reviews and approves each vote record on the vote review pages. An approved vote record publishes as the vote kind of a release; see [publication](publication.md#vote-record).
 
 ## Decisions
 
@@ -36,13 +36,14 @@ The votes feature collects House roll-call votes from the Congress.gov `house-vo
 - When only the votes of tracked members change, drafting makes no model call. It copies the text of the current revision, as action drafting does for sponsorships.
 - A person edits only the headline and the summary of a vote record. The revision holds a `TextOrigin` and a suggestion, with the same append rules as an [action](actions.md#revision-and-append). Text that a person wrote survives later model runs. The model text then becomes a suggestion.
 - Votes get review as actions do: a review store, a list page, an editor page, a decide handler, review counts, and review history. Votes have no bulk approval, because a vote record has no change that is safe to approve without a read.
-- Review writes take the `civic-lens-vote-review` lock, the key that the drafting append already takes. Vote publication is planned and will add this key to the publication lock order.
+- Review writes take the `civic-lens-vote-review` lock, the key that the drafting append already takes. Publication also takes this key, after the action key and before the brief key.
 - The owner command `votes draft` has `status`, `list`, and `requeue`. It copies the `actions draft` command and its shared queue commands. `status` also shows the number of waiting votes.
 - A Blocked vote entry can return to Pending. The lifecycle allows the move, as the [action](actions.md#decisions) lifecycle does. A Succeeded entry never returns to Pending. The owner command moves only Blocked entries with an exact code.
 - The vote kind (D-10, accepted on 2026-10-17) comes from a code table, not from the model. `VoteKindTable` maps the `Question` line to a kind. The kinds are rule, previous question, motion to recommit, amendment, suspension, passage, conference report, veto override, and other. An unknown question gives other.
 - A motion to commit and a motion to commit with instructions are a motion to recommit. A motion to concur in a Senate amendment is passage. A consideration of a resolution stays other.
 - A resolution agreed to by the question `On Agreeing to the Resolution` is a rule when its legislation is a House resolution (`HRES`). Its bill title must also hold `consideration of`, in any case and at any position. Any other resolution so agreed is passage, because agreeing to it is its final vote. This choice is deliberate: the kind list has no resolution kind.
 - Code stores the kind in the revision at draft time, with the cited `Question` line, as `PolicyAreaId` is stored for actions. Publication never derives it again.
+- Code also stores the vote day, `VotedOn`, with the cited `Started` line, as it stores the kind. The day is the date of the start time in the offset that the API gives. A vote without a start time blocks with `evidenceUnavailable`, because its day would have no citation. The vote recovers when the API sends a later roll call version, which is a new candidate. The task version is `vote-draft-v3`. Code reads no older revision shape, so the dev rows are reset.
 - The citation covers the `Question` line only. The rule test also reads the `Legislation` and `Title` facts. The same revision cites them.
 
 ## Invariants
@@ -78,7 +79,8 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - The tracked issues come from the policy area on the vote day, and the revision names the issue revision. Enforced by `VoteDraftStep` and `BillGate.TrackedIssueIdsFor`. Tests: `VoteDraftStepTests.TheTrackedIssuesComeFromThePolicyAreaOfTheBillAndTheRevisionNamesTheIssueRevision` and `VoteDraftStepTests.TheTrackedIssuesAreCheckedOnTheVoteDaySoAnIssueThatEndedBeforeTheVoteIsNotTracked`.
 - A change of the title, the tracked issues, or the issue revision calls the model. Enforced by `VoteDraftContext.ChangeSinceCurrent`. Tests: `VoteDraftStepTests.AChangedBillTitleCallsTheModelBecauseTheTitleIsAFact` and `VoteDraftStepTests.AnotherIssueRevisionCallsTheModelEvenWhenEveryFactIsTheSameBecauseTheTrackedIssuesCameFromOtherRules`.
 - Only tracked members enter the record. Enforced by `VoteReader`. Test: `VoteDraftStepTests.MembersWhomNobodyTracksNeverEnterTheRecordBecauseOnlyTrackedVotesAreCited`.
-- A member is tracked when the source covers the member on the vote day. Enforced by `VoteReader`, which uses the start time of the vote and the update time only when the start time is missing. Test: `VoteDraftStepTests.CoverageIsCheckedOnTheVoteDayBecauseALaterCorrectionMustNotChangeWhoWasTrackedForTheVote`.
+- A member is tracked when the source covers the member on the vote day. Enforced by `VoteReader`, which uses the start time of the vote. Test: `VoteDraftStepTests.CoverageIsCheckedOnTheVoteDayBecauseALaterCorrectionMustNotChangeWhoWasTrackedForTheVote`.
+- A revision stores the vote day with a bounded citation of the `Started` line, and a vote without a start time blocks. Enforced by `VoteReader` and `VoteDraftRevision.ValidateShape`. Tests: `VoteDraftStepTests.TheRevisionStoresTheVoteDayAndCitesTheStartLineBecausePublishedDatesMustQuoteTheirSource`, `VoteDraftStepTests.AVoteWithoutAStartLineBlocksBecauseItsDayHasNoCitationToPublish`, and `VoteDraftRevisionTests.TheVoteDayMustCiteItsStartLineSoThePublishedDateIsNeverAnUnbackedClaim`.
 - The prompt holds only the agreed fact lines. Enforced by `VoteDraftPrompt`. Test: `VoteDraftStepTests.ThePromptHoldsOnlyTheAgreedFactLinesAndNoMemberBecauseCodeOwnsTheMembersAndTheirVotes`.
 - The text names no configured person. Enforced by `VoteDraftResolver`. Test: `VoteDraftStepTests.TextThatNamesAnyConfiguredPersonIsRejectedSoNoCopiedTextCanStateAStaleVote`.
 - A change of member votes alone makes no model call and keeps the text. Enforced by `VoteDraftContext.ChangeSinceCurrent` and `VoteDraftStep`. Test: `VoteDraftStepTests.ACorrectedMemberVoteAppendsAtOnceWithoutAModelCallAndKeepsTheTextBecauseCodeOwnsTheVotes`.
@@ -94,7 +96,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - The saved extraction text must equal the new render of its capture. Enforced by `VoteReader`. Test: `VoteDraftStepTests.ARenderedTextThatDiffersFromTheSavedExtractionBlocksBeforeAnyCall`.
 - A saved extraction of an older parser blocks before any capture is parsed. Enforced by `VoteReader`. Test: `VoteDraftStepTests.AChangedParserVersionBlocksBeforeAnyCaptureIsParsedSoAnUpgradeIsNeverReportedAsBrokenData`.
 - A candidate with a newer candidate of the same roll call never becomes a revision. Enforced by `VoteDraftStep` and `VoteDraftRows.AppendAnalysisRevisionAsync`. Tests: `VoteDraftStepTests.ACandidateWithANewerCandidateOfTheSameRollCallIsSupersededWithoutACall` and `PostgresHouseVoteTests.ANewerCandidateThatArrivesAfterTheClaimSupersedesTheAppendSoTheOlderDraftNeverBecomesARevision`.
-- A person edits only the headline and the summary. Enforced by `VoteDraftRevision.ValidatePersonEditOf`, checked again under the vote review lock. Test: `VoteDraftRevisionTests.AVoteReviewerEditsOnlyTheHeadlineAndTheSummaryBecauseCodeOwnsTheKindTheFactsAndTheMemberVotes`.
+- A person edits only the headline and the summary. Enforced by `VoteDraftRevision.ValidatePersonEditOf`, checked again under the vote review lock. Test: `VoteDraftRevisionTests.AVoteReviewerEditsOnlyTheHeadlineAndTheSummaryBecauseCodeOwnsTheDayTheKindTheFactsAndTheMemberVotes`.
 - A person may keep or clear the suggestion, but never change it. Enforced by `ReviewTextRules.RequireSuggestionKeptOrCleared`, checked again under the lock. Tests: `VoteDraftRevisionTests.APersonMayKeepOrClearTheSuggestionButNeverChangeItBecauseOnlyTheModelWritesSuggestions` and `PostgresHouseVoteTests.APersonSaveMayKeepOrClearTheSuggestionButTheStoreRefusesAChangedOne`.
 - A later model run keeps the text of a person and offers its own text as a suggestion. Enforced by `ReviewText.AfterModelDraft` and `ReviewTextRules.RequireAnalysisText`. Tests: `VoteDraftStepTests.APersonsTextIsKeptAndTheModelsNewTextBecomesASuggestionBecauseAModelPredictionIsNeverAHumanEdit`, `VoteDraftStepTests.ACorrectedMemberVoteKeepsAPersonsTextAndTheSuggestionWithoutAModelCall`, and `VoteDraftRevisionTests.ARevisionAfterAPersonsTextMustKeepThatTextAndOfferTheModelsAsASuggestion`.
 - An approval binds to the exact revision that the page showed. Enforced by `ReviewWriteRules` under the lock. Tests: `PostgresHouseVoteTests.ApprovalBindsToTheExactRevisionSoAWorkerRevisionAfterThePageLoadedTurnsItIntoAConflict` and `PostgresHouseVoteTests.ADecisionWithAStaleReviewStateVersionIsAConflictSoTwoReviewersCannotOverwriteEachOther`.
@@ -154,7 +156,7 @@ Each succeeded job goes through [preparation](collection.md#preparation). The pa
 | `HouseVoteParser` | `congress-house-vote-v1` | One detail |
 | `HouseVoteMembersParser` | `congress-house-vote-members-v1` | One members response, with at least one member |
 
-`HouseVoteRenderer` renders the parsed detail and members. Its normalization version is `house-vote-render-v1`.
+`HouseVoteRenderer` renders the parsed detail and members. Its normalization version is `house-vote-render-v2`. The `Started` line keeps the offset of the API, for example `2025-07-02T21:15:00-04:00`, so the cited day is the House day. Version 1 wrote UTC. Code reads no extraction of version 1, so the dev rows are reset.
 
 A list item needs `congress`, `sessionNumber`, `rollCallNumber`, and `updateDate`. Its session must be the session of the page. A detail and a members response need the same roll call as the job URL and an `updateDate`.
 
@@ -171,7 +173,7 @@ Detail, with party totals in party order and candidate totals in candidate order
 ```
 House vote: 119 1 100
 Updated: 2025-06-24T12:34:41Z
-Started: 2025-04-10T15:08:00Z
+Started: 2025-04-10T11:08:00-04:00
 Question: On Motion to Concur in the Senate Amendment
 Vote type: Yea-and-Nay
 Result: Passed
@@ -226,7 +228,7 @@ The update date is the exact UTC time as `yyyy-MM-ddTHH:mm:ssZ`. `BillStreamJobK
 2. `VoteReader` checks that both pages were saved by the current parser and normalization. It parses both captures again and renders them. A render that differs from the saved text blocks with `renderedTextMismatch`.
 3. `VoteReader` takes the facts. A fact is a line of the detail text that starts with `Started: `, `Question: `, `Result: `, `Legislation: `, `Party total `, or `Candidate total `. The Speaker election therefore cites its candidate totals. Each fact keeps its text and a span of its line. The vote type, the update time, and the source data line are not facts.
 4. `PostgresVoteDraftStore.ReadEvidenceAsync` also returns the newest saved bill detail of a voted bill. The newest is the one with the latest update time, and the job ID breaks a tie. `VoteReader` checks that its parser and normalization versions are current. It parses the bill capture again with `CongressBillDetailJob`, the code that [action drafting](actions.md#step) also uses. It renders the bill and compares the text with the saved extraction. A voted bill with no saved detail blocks with `evidenceUnavailable`. A bad version blocks with `extractionVersionChanged`. A text that differs blocks with `renderedTextMismatch`. The reader adds the `Title: ` line and the `Policy area: ` line as facts, after the vote facts. The policy area line is omitted when the bill has none. The tracked issues use the policy area of the parsed bill.
-5. `VoteReader` takes the member votes. The tracked people are those of `CollectionConfiguration.CoveredBioguidePeopleOf` on the vote day. That is the date of the start time in the offset that the API gives. A vote without a start time uses the UTC date of its update time. Each tracked member in the members response gives the person, the bioguide ID, the cast, and a span of the member line. The order is the bioguide ID order.
+5. `VoteReader` takes the member votes. The tracked people are those of `CollectionConfiguration.CoveredBioguidePeopleOf` on the vote day. That is the date of the start time in the offset that the API gives. A vote without a start time blocks before this step. Each tracked member in the members response gives the person, the bioguide ID, the cast, and a span of the member line. The order is the bioguide ID order.
 6. The fingerprint is the SHA-256 of the fact lines, with the title and policy area, and the member votes (`VoteFingerprint`, version `vote-fingerprint-v1`). It is the input hash of a run that makes no call.
 7. No tracked member settles `Succeeded` with `noTrackedMember`, a bypassed run, and no revision. More than 600 members block with `tooManyMembers`. More than 64 facts, or a fact over 2,000 characters, block with `factTooLong`.
 8. `VoteKindTable.Classify` reads the vote kind from the facts, after the bill facts are added. It returns the kind and the citation of the `Question` line. A roll call with no `Question` line gets the kind other and no citation. The snapshot holds both.
@@ -266,7 +268,7 @@ Vote review uses the shared decision rules and review cycles in [review](review.
 
 **Ownership.** Core/Votes holds `VoteReview`, the aggregate of one record, and the review rules on `VoteDraftRevision`. Application/Votes holds `SaveVoteDraft`, `DecideVoteReview`, `GetVoteReview`, `ListVoteReviews`, `GetVoteReviewCounts`, and the store boundary `IVoteReviewStore`. Infrastructure/Votes holds `PostgresVoteReviewStore` on the shared `ReviewRecords` core. The core and the draft rows share one instance, `VoteDraftRows.Records`. A person cannot create a vote draft, so the store has no create. The shared text rules of actions and votes are in `ReviewText`, `ReviewTextRules`, and `ReviewTextSuggestion` (Core/Review).
 
-**Save and decide.** `SaveVoteDraft` and `DecideVoteReview` work as the action handlers do. A decision touches no brief, because briefs cite no vote record yet.
+**Save and decide.** `SaveVoteDraft` and `DecideVoteReview` work as the action handlers do. A decision requeues no brief until briefs can cite votes. It still calls `BriefStaleness.AfterDecision`, which takes the brief locks in the action order.
 
 **Reads.** `GetVoteReview` returns the review cycle, the extractions that the loaded revisions cite, and the configured names of the people. The names come from the configuration revisions of the candidates. `ListVoteReviews` takes the filter `All`, `NeedsAction`, or `Approved`. Needs action orders by `last_revised_at_utc_ticks`, then record ID. The other filters order by creation time, then record ID. `GetVoteReviewCounts` counts with the same status filter.
 
@@ -335,8 +337,9 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 | Evidence reader, snapshot, fingerprint | `src/CivicLens.Application/Votes/VoteReader.cs`, `src/CivicLens.Application/Votes/VoteSnapshot.cs`, `src/CivicLens.Application/Votes/VoteFingerprint.cs`, `src/CivicLens.Application/Documents/LineCitations.cs` |
 | Prompt, task identity, settings, codes | `src/CivicLens.Application/Votes/VoteDraftPrompt.cs`, `src/CivicLens.Application/Votes/VoteDraftTask.cs`, `src/CivicLens.Application/Votes/VoteDraftSettings.cs`, `src/CivicLens.Application/Votes/VoteDraftErrorCodes.cs` |
 | Queue lifecycle and store boundary | `src/CivicLens.Application/Votes/VoteDraftLifecycle.cs`, `src/CivicLens.Application/Votes/IVoteDraftStore.cs`, `src/CivicLens.Application/Votes/IVoteDraftModel.cs` |
-| Vote kind | `src/CivicLens.Core/Votes/VoteKind.cs`, `src/CivicLens.Application/Votes/VoteKindTable.cs`, `src/CivicLens.Application/Votes/VoteFactPrefixes.cs` |
+| Vote kind | `src/CivicLens.Core/Votes/VoteKind.cs`, `src/CivicLens.Application/Votes/VoteKindTable.cs`, `src/CivicLens.Application/Votes/VoteFactPrefixes.cs`, `src/CivicLens.Application/Votes/VoteFacts.cs` |
 | Owner command | `src/CivicLens.Host/Votes/VoteCommand.cs`, `src/CivicLens.Application/Votes/GetVoteDraftStatus.cs`, `src/CivicLens.Application/Votes/RequeueBlockedVoteDrafts.cs`, `src/CivicLens.Application/Votes/VoteDraftView.cs`, `src/CivicLens.Application/Votes/VoteDraftListItem.cs` |
+| Publication reads | `src/CivicLens.Application/Votes/UnpublishedApprovedVote.cs`, `src/CivicLens.Application/Votes/PublishableVote.cs`, `src/CivicLens.Infrastructure/Votes/VoteReviewQueries.cs`, `src/CivicLens.Application/Publication/VoteRecordLoader.cs` |
 | Vote revision | `src/CivicLens.Core/Votes/VoteDraftRevision.cs`, `src/CivicLens.Core/Review/ReviewText.cs`, `src/CivicLens.Core/Review/ReviewTextRules.cs`, `src/CivicLens.Core/Review/ReviewTextSuggestion.cs`, `src/CivicLens.Core/Review/IHeadlineSummaryRevision.cs` |
 | Review aggregate | `src/CivicLens.Core/Votes/VoteReview.cs` |
 | Review commands and reads | `src/CivicLens.Application/Votes/SaveVoteDraft.cs`, `src/CivicLens.Application/Votes/DecideVoteReview.cs`, `src/CivicLens.Application/Votes/GetVoteReview.cs`, `src/CivicLens.Application/Votes/ListVoteReviews.cs`, `src/CivicLens.Application/Votes/GetVoteReviewCounts.cs`, `src/CivicLens.Application/Votes/IVoteReviewStore.cs` |
@@ -348,11 +351,7 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 
 ## Limits and planned work
 
-- Planned ([R-15](../roadmap.md#now)): publication of vote records. It reuses the shared publication machinery.
 - The lists of vote records read `vote_drafts` without the partial status indexes of `action_drafts`. The table held 676 roll calls on 2026-10-17 and grows by about 700 a year. `brief_drafts` also has no such indexes. Add the indexes when the table passes about 10,000 rows.
-- Planned: the publication lock rule must add `civic-lens-vote-review` to the review keys.
-- Planned: PR 3c replaces the no-op after-decision hook of `PostgresVoteReviewStore` with `BriefStaleness.AfterDecision(briefQueue, PublishedRecordKind.Vote)`. A withdrawn vote approval then requeues a brief that cites the vote.
-- Planned: a vote record keeps the bill identity, so it can link to the action record of that bill. The link is not built yet.
 - A later bill detail does not redraft a vote that was already drafted. The next change of the vote itself drafts again.
 - A voted bill from a congress before `minimumCongress` of the bill source would wait forever. No such vote exists today, because the vote sweep starts in 2025.
 - Measured on 2026-10-16 with 147 drafts: no headline contradicts the result in 74 checked drafts. But 23 of the 74 summaries say the facts do not describe the measure. 28 explain House procedure from model knowledge.

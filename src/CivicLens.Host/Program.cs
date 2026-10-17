@@ -308,6 +308,7 @@ try
                 PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
                 PostgresStatementReviewStore.FromConnectionString(connectionString),
                 PostgresActionReviewStore.FromConnectionString(connectionString),
+                PostgresVoteReviewStore.FromConnectionString(connectionString),
                 new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString))),
             new PublicationCatalog(officialNames), TimeProvider.System);
         executing = true;

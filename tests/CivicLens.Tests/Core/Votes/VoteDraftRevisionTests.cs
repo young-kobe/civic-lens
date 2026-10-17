@@ -48,6 +48,22 @@ public sealed class VoteDraftRevisionTests
     }
 
     [Fact]
+    public void TheVoteDayMustCiteItsStartLineSoThePublishedDateIsNeverAnUnbackedClaim()
+    {
+        Assert.Throws<ArgumentException>(() => (Revision() with { VotedOn = default }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (Revision() with { VotedOnCitation = new SourceSpan(ExtractionId, 0, 0) }).ValidateShape());
+    }
+
+    [Fact]
+    public void TheCitationsHoldTheVoteDayTheFactsTheKindAndTheMembersInThatOrderSoTheSourceOrderOfAPublishedRecordNeverChanges()
+    {
+        var revision = Revision();
+
+        Assert.Equal([revision.VotedOnCitation, revision.Facts[0].Citation, revision.KindCitation!, revision.Members[0].Citation], revision.Citations);
+        Assert.Equal(3, (Revision() with { KindCitation = null, Kind = VoteKind.Other }).Citations.Count());
+    }
+
+    [Fact]
     public void TheIssueRevisionIsAHashAndTheTrackedIssuesAreBoundedSoTheRecordNamesTheRulesThatChoseThem()
     {
         Assert.Throws<ArgumentException>(() => (Revision() with { IssueRevisionId = "short" }).ValidateShape());
@@ -94,7 +110,7 @@ public sealed class VoteDraftRevisionTests
     }
 
     [Fact]
-    public void AVoteReviewerEditsOnlyTheHeadlineAndTheSummaryBecauseCodeOwnsTheKindTheFactsAndTheMemberVotes()
+    public void AVoteReviewerEditsOnlyTheHeadlineAndTheSummaryBecauseCodeOwnsTheDayTheKindTheFactsAndTheMemberVotes()
     {
         var previous = Revision();
         var edit = PersonEditOf(previous, "A better headline", "A better summary.");
@@ -114,6 +130,8 @@ public sealed class VoteDraftRevisionTests
         Assert.Throws<ArgumentException>(() => (edit with { SessionNumber = 2 }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (edit with { RollCallNumber = 101 }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (edit with { CandidateUpdateDate = previous.CandidateUpdateDate.AddDays(1) }).ValidatePersonEditOf(previous));
+        Assert.Throws<ArgumentException>(() => (edit with { VotedOn = previous.VotedOn.AddDays(1) }).ValidatePersonEditOf(previous));
+        Assert.Throws<ArgumentException>(() => (edit with { VotedOnCitation = new SourceSpan(ExtractionId, 1, 10) }).ValidatePersonEditOf(previous));
     }
 
     [Fact]
@@ -137,16 +155,6 @@ public sealed class VoteDraftRevisionTests
 
         Assert.Throws<ArgumentException>(() => (edit with { Suggestion = Suggestion() with { Headline = "Other" } }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (PersonEditOf(Revision(), "h", "s") with { Suggestion = Suggestion() }).ValidatePersonEditOf(Revision()));
-    }
-
-    [Fact]
-    public void TheCitationsOfARevisionHoldTheFactsTheKindAndTheMemberVotesSoApprovalChecksEachLineItShows()
-    {
-        var revision = Revision();
-
-        Assert.Equal([revision.Facts[0].Citation, revision.KindCitation!, revision.Members[0].Citation], revision.Citations);
-        Assert.Equal(revision.Facts.Select(fact => fact.Citation).Concat(revision.Members.Select(member => member.Citation)),
-            (revision with { KindCitation = null, Kind = VoteKind.Other }).Citations);
     }
 
     [Theory]
@@ -174,5 +182,6 @@ public sealed class VoteDraftRevisionTests
     private static VoteDraftRevision Revision(int number = 1, string author = "civic-lens:analysis") => new(
         VoteWorld.RecordId, number, author, VoteWorld.UpdatedAt.AddMinutes(number), "The House voted", "The House decided a question.", ReviewTextOrigin.Model, null,
         "congress-house-votes", 119, 1, 100, "hconres", 14, VoteWorld.CandidateId, VoteWorld.UpdatedAt,
-        [new("Result: Passed", new SourceSpan(ExtractionId, 0, 14))], VoteKind.Passage, new SourceSpan(ExtractionId, 15, 20), [Member()], ["rent"], new string('e', 64));
+        [new("Result: Passed", new SourceSpan(ExtractionId, 0, 14))], new DateOnly(2025, 4, 10), new SourceSpan(ExtractionId, 30, 28),
+        VoteKind.Passage, new SourceSpan(ExtractionId, 15, 20), [Member()], ["rent"], new string('e', 64));
 }

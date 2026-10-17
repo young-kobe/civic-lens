@@ -19,7 +19,7 @@ internal static class PublishedActionView
     ];
 
     public static IReadOnlyList<CitedRange> RangesIn(PublishedAction action, PublishedDocumentVersion source) =>
-    [.. CitationsOf(action).Select((citation, index) => (citation, anchor: PublishedRecordView.CitationAnchor(index)))
+    [.. action.Citations().Select((citation, index) => (citation, anchor: PublishedRecordView.CitationAnchor(index)))
         .Where(item => item.citation.ExtractionId == source.ExtractionId)
         .Select(item => new CitedRange(item.anchor, item.citation.Start, item.citation.Length))];
 
@@ -33,8 +33,4 @@ internal static class PublishedActionView
         PublishedRecordView.CitationAnchor(SponsorshipCitationCount(action) + (action.PolicyAreaCitation is null ? 0 : 1));
 
     private static int SponsorshipCitationCount(PublishedAction action) => action.Sponsorships.Sum(item => item.Citations.Length);
-
-    private static IEnumerable<PublishedCitation> CitationsOf(PublishedAction action) =>
-        action.Sponsorships.SelectMany(sponsorship => sponsorship.Citations)
-            .Concat(action.PolicyAreaCitation is { } area ? [area] : []).Concat(action.SummaryCitation is { } summary ? [summary] : []);
 }

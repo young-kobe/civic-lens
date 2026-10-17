@@ -23,7 +23,7 @@ public static class VoteKindTable
 
     public static (VoteKind Kind, SourceSpan? Citation) Classify(ImmutableArray<VoteFact> facts)
     {
-        var question = FactOf(facts, VoteFactPrefixes.Question);
+        var question = VoteFacts.Find(facts, VoteFactPrefixes.Question);
         if (question is null) return (VoteKind.Other, null);
         return (KindOf(question.Text[VoteFactPrefixes.Question.Length..], facts), question.Citation);
     }
@@ -39,12 +39,9 @@ public static class VoteKindTable
 
     private static bool ProvidesForConsideration(ImmutableArray<VoteFact> facts)
     {
-        var isHouseResolution = FactOf(facts, VoteFactPrefixes.Legislation)?.Text[VoteFactPrefixes.Legislation.Length..]
+        var isHouseResolution = VoteFacts.Find(facts, VoteFactPrefixes.Legislation)?.Text[VoteFactPrefixes.Legislation.Length..]
             .StartsWith("HRES ", StringComparison.OrdinalIgnoreCase) == true;
-        var title = FactOf(facts, VoteFactPrefixes.Title)?.Text[VoteFactPrefixes.Title.Length..];
+        var title = VoteFacts.Find(facts, VoteFactPrefixes.Title)?.Text[VoteFactPrefixes.Title.Length..];
         return isHouseResolution && title?.Contains("consideration of", StringComparison.OrdinalIgnoreCase) == true;
     }
-
-    private static VoteFact? FactOf(ImmutableArray<VoteFact> facts, string prefix) =>
-        facts.FirstOrDefault(fact => fact.Text.StartsWith(prefix, StringComparison.Ordinal));
 }

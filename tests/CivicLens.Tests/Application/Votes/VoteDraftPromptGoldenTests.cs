@@ -21,7 +21,7 @@ public sealed class VoteDraftPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(VoteDraftTask.PromptVersion)} ({VoteDraftTask.PromptVersion}) or " +
             $"{nameof(VoteDraftTask.SchemaVersion)} ({VoteDraftTask.SchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("vote-draft", "vote-draft-v2", "vote-draft-prompt-v2", "vote-draft-schema-v1", "claude-haiku-5-5"),
+        Assert.Equal(("vote-draft", "vote-draft-v3", "vote-draft-prompt-v2", "vote-draft-schema-v1", "claude-haiku-5-5"),
             (VoteDraftTask.Task, VoteDraftTask.TaskVersion, VoteDraftTask.PromptVersion, VoteDraftTask.SchemaVersion, VoteDraftTask.Model));
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
         Assert.True(Sha256(request.SchemaJson) == SchemaSha256, $"{bump} Schema: {Sha256(request.SchemaJson)}");

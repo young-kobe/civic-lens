@@ -23,6 +23,4 @@ internal static class PublishedBriefView
         $"new records that Civic Lens considered for the week. It reflects releases up to release {brief.CutoffReleaseNumber}.";
 
     public static string CitationAnchor(string citationId) => "citation-" + citationId;
-
-    public static string RecordLink(PublishedBriefCitation citation) => "../" + PublicationProtocol.RecordPagePath(citation.RecordId);
 }
