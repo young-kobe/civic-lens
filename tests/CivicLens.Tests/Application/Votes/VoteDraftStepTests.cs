@@ -469,10 +469,10 @@ public sealed class VoteDraftStepTests
     }
 
     [Fact]
-    public async Task ABillDetailWithoutATitleLineBlocksBecauseTheRendererAlwaysWritesOne()
+    public async Task ASavedBillDetailThatDiffersFromTheRenderOfItsCaptureBlocksSoTheCitedLinesAreNeverTrustedBlindly()
     {
         var world = Create();
-        world.TamperWithSavedText("bill", "Bill: 119 hconres 14");
+        world.TamperWithSavedText("bill", "Bill: 119 hconres 14\nTitle: Changed after capture");
 
         var (store, model) = await RunAsync(world, new FakeHeadlineSummaryModel());
 

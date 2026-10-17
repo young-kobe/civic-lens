@@ -35,6 +35,7 @@ internal sealed class HouseVoteCandidateRowConfiguration : IEntityTypeConfigurat
         builder.HasKey(row => row.CandidateId);
         builder.HasIndex(row => new { row.SourceId, row.Congress, row.SessionNumber, row.RollCallNumber, row.UpdateDateUtcTicks })
             .HasDatabaseName("ix_house_vote_candidates_roll");
+        builder.HasIndex(row => new { row.Congress, row.BillType, row.BillNumber }).HasDatabaseName("ix_house_vote_candidates_bill");
         builder.HasIndex(row => row.DetailJobId).IsUnique().HasDatabaseName("ux_house_vote_candidates_detail_job");
         builder.HasOne<HouseVoteRow>().WithMany().HasForeignKey(row => row.DetailJobId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<JobRow>().WithMany().HasForeignKey(row => row.MembersJobId).OnDelete(DeleteBehavior.Restrict);

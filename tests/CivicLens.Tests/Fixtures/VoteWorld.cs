@@ -24,6 +24,9 @@ internal sealed class VoteWorld
     public const string Amodei = "A000369";
     public const string SourceId = HouseVoteFixtures.SourceId;
     public const string BillTitle = "A concurrent resolution on rent";
+    public static readonly DateTimeOffset BillUpdatedAt = new(2025, 3, 3, 12, 0, 0, TimeSpan.Zero);
+    private static readonly CollectionConfigurationRevision BillRevision =
+        CollectionConfigurationRevision.Create(ActionBillWorld.Configuration());
     public static readonly string RecordId = new('a', 64);
     public static readonly string CandidateId = new('b', 64);
     public static readonly DateTimeOffset UpdatedAt = HouseVoteFixtures.Updated;
@@ -74,7 +77,12 @@ internal sealed class VoteWorld
         var membersBody = MembersBody(members ?? DefaultMembers);
         world.Add("members", ApiResource.HouseVoteMembers, HouseVoteRollUrl.Members(HouseVoteFixtures.SourceUrl, roll), membersBody,
             HouseVoteRenderer.RenderMembers(HouseVoteMembersParser.Parse(Encoding.UTF8.GetBytes(membersBody), roll)));
-        world.texts["bill"] = BillDetailText(billTitle, policyArea);
+        var bill = new CongressBill(119, "hconres", 14, billTitle, ActionBillWorld.Backfill, BillUpdatedAt, policyArea, [], 0, 1, 0);
+        var billBody = ActionBillWorld.DetailBody(bill);
+        var billUrl = $"{ActionBillWorld.SourceUrl}/119/hconres/14?format=json";
+        world.Add("bill", ApiResource.Bill, billUrl, billBody,
+            CongressBillRenderer.RenderDetail(CongressBillParser.Parse(Encoding.UTF8.GetBytes(billBody), CongressBillListItem.TryReadDetailUrl(ActionBillWorld.SourceUrl, billUrl)!)),
+            BillRevision, ActionBillWorld.SourceId, ActionBillWorld.Backfill);
         world.Stores = new ActionBillWorld.FixtureStores(world.jobs, world.bodies);
         return world;
     }
@@ -104,10 +112,6 @@ internal sealed class VoteWorld
     private VoteDraftPage BillPage() =>
         new("bill", ExtractionIdOf("bill"), versionOverrides.GetValueOrDefault("bill") ?? CongressBillParser.Version,
             CongressBillRenderer.NormalizationVersion, texts["bill"]);
-
-    private static string BillDetailText(string title, string? policyArea) => string.Join('\n',
-        new[] { "Bill: 119 hconres 14", $"Title: {title}", "Introduced: 2025-01-03", "Updated: 2025-06-01T00:00:00Z", policyArea is null ? null : $"Policy area: {policyArea}" }
-            .OfType<string>());
 
     private VoteDraftPage Page(string jobId, string parserVersion) =>
         new(jobId, ExtractionIdOf(jobId), versionOverrides.GetValueOrDefault(jobId) ?? parserVersion,
@@ -140,7 +144,13 @@ internal sealed class VoteWorld
     private void Add(string jobId, ApiResource resource, string url, string body, string renderedText)
     {
         var coveredFrom = Revision.Configuration.Sources.Single().BackfillFrom!.Value;
-        var configured = new ConfiguredCollectionSource(Revision, SourceId, coveredFrom);
+        Add(jobId, resource, url, body, renderedText, Revision, SourceId, coveredFrom);
+    }
+
+    private void Add(string jobId, ApiResource resource, string url, string body, string renderedText,
+        CollectionConfigurationRevision revision, string sourceId, DateOnly coveredFrom)
+    {
+        var configured = new ConfiguredCollectionSource(revision, sourceId, coveredFrom);
         var definition = configured.CreateApiJobDefinition(resource, url, coveredFrom);
         var attempt = new CollectionJobAttempt("attempt-" + jobId, definition.CreateRequest(jobId, Path.GetFullPath("captures")),
             new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);

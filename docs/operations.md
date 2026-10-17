@@ -167,7 +167,7 @@ The source `congress-house-votes` in `config/federal-coverage.json` and `config/
 2. Set `CIVIC_LENS_CONGRESS_API_KEY` in the protected environment of the worker. Do not put the key in configuration.
 3. Set `enabled` to `true` for `congress-house-votes` and restart the worker. A restart reads the configuration again.
 
-The source needs no issue file. Each day it reads the whole vote list of every session from `backfillFrom` on, about 4 list pages a day today. The first day admits one detail job and one members job for every roll call. [Votes](architecture/votes.md) holds the sweep and candidate rules.
+The source needs no issue file. Votes on a bill draft only when the `congress-bills` source is enabled and has saved the detail of that bill. Each day it reads the whole vote list of every session from `backfillFrom` on, about 4 list pages a day today. The first day admits one detail job and one members job for every roll call. [Votes](architecture/votes.md) holds the sweep and candidate rules.
 
 Configuration loading rejects a vote source whose `admissionPolicy` cannot hold the [251-job rule](architecture/votes.md#admission). Set `maxJobs` and the request, byte, and time totals to fit it.
 
@@ -603,11 +603,12 @@ The [live test](#verification) for action drafting sends one paid request.
 
 ## Vote drafting
 
-The `worker` command drafts one vote record for each House roll call that has a candidate. [Votes](architecture/votes.md#drafting) holds the rules. Vote drafting runs when both required variables below are set in the worker's protected environment. A limit without `ANTHROPIC_API_KEY` stops the worker with exit code 2. The tracked members come from the configuration revision of the candidate.
+The `worker` command drafts one vote record for each House roll call that has a candidate. [Votes](architecture/votes.md#drafting) holds the rules. Vote drafting runs when all three required variables below are set in the worker's protected environment. A limit without `ANTHROPIC_API_KEY` or without `CIVIC_LENS_ISSUES_CONFIG` stops the worker with exit code 2. The tracked members come from the configuration revision of the candidate. The issue file gives the tracked issues of the voted bill. Votes on a bill draft only when the `congress-bills` source is enabled and has saved the detail of that bill.
 
 | Variable | Meaning |
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude API key, shared with the other stages |
+| `CIVIC_LENS_ISSUES_CONFIG` | Absolute path of the issue configuration, shared with the Congress.gov bill stream |
 | `CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS` | Daily token limit for vote drafting calls, per UTC day. It is separate from the other limits. Start low. |
 | `CIVIC_LENS_VOTE_DRAFTING_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the prompt byte cap. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |

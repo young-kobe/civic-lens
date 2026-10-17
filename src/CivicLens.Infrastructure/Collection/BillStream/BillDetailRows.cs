@@ -8,5 +8,5 @@ internal static class BillDetailRows
         db.Set<BillGateRow>().Where(gate => gate.Congress == congress && gate.BillType == billType && gate.BillNumber == billNumber)
             .Join(db.Set<BillPageRow>().Where(page => page.Role == BillPageRole.Detail), gate => gate.DetailJobId, page => page.JobId,
                 (gate, page) => new { gate.UpdateDateUtcTicks, Page = page })
-            .OrderByDescending(detail => detail.UpdateDateUtcTicks).Select(detail => detail.Page);
+            .OrderByDescending(detail => detail.UpdateDateUtcTicks).ThenByDescending(detail => detail.Page.JobId).Select(detail => detail.Page);
 }

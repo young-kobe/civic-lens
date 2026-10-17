@@ -51,6 +51,26 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
+    public async Task TwoVersionsOfOneVoteBothWaitingForTheBillAreQueuedTogetherAndTheOlderSeesTheNewerCandidateSoTheStepSettlesItAsSuperseded()
+    {
+        var older = HouseVoteFixtures.Vote(100, Updated);
+        var newer = HouseVoteFixtures.Vote(100, Updated.AddDays(1));
+        foreach (var vote in new[] { older, newer })
+        {
+            var (_, members) = await DetailWithMembersJobAsync(vote);
+            await AdmitMembersAsync(members, vote);
+        }
+        Assert.Empty(await QueueAsync());
+
+        await AdmitBillDetailAsync();
+
+        var queued = await QueueAsync();
+        Assert.Equal(2, queued.Count);
+        var olderId = (string)(await ScalarAsync($"SELECT candidate_id FROM house_vote_candidates WHERE update_date_utc_ticks = {older.UpdateDate.UtcTicks}"))!;
+        Assert.True((await VoteStore().ReadEvidenceAsync(olderId, default))!.HasNewerCandidate);
+    }
+
+    [Fact]
     public async Task AVoteWhoseBillDetailWasSavedBeforeTheVoteIsQueuedAtOnce()
     {
         await AdmitBillDetailAsync();
