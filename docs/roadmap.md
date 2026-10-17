@@ -22,7 +22,7 @@ Exit criteria:
 
 Each item gives its outcome, what it depends on, and where the design lives. Present the design choices before building R-22 only.
 
-The path to the first deploy is R-15, R-16, R-19 and R-20, R-36, R-23 and R-18, then R-24. Decide D-06, D-07, and D-08 before R-24.
+The path to the first deploy is R-15, R-16, R-19 and R-20, R-36, R-23 and R-18, then R-24. Decide D-07 and D-08 before R-24.
 
 ### Now
 
@@ -61,7 +61,6 @@ The path to the first deploy is R-15, R-16, R-19 and R-20, R-36, R-23 and R-18, 
 - D-03: Global search and expanded reviewer source visibility. [Review](architecture/review.md#limits-and-planned-work)
 - D-04: Bounded storage: store each distinct extraction text once, keyed by its hash. Keep raw capture bytes forever only when a gated change, draft, or release uses them or they are the latest version. Delete other bytes after a set period and keep the observation record. [Collection](architecture/collection.md#limits-and-planned-work)
 - D-05: Classification ladder, only if the R-13 measurement shows that a model tier is needed: the uncertainty signal for each tier, where the escalation policy and thresholds live, and the stronger model for the reasoning tier. [Analysis](architecture/analysis.md#limits-and-planned-work)
-- D-06: The Hetzner backup destination, chosen by cost and recovery needs. [Host](architecture/host.md#limits-and-planned-work)
 - D-07: How the static file server runs locally and in production, and the release retention policy. It depends on D-14. [Publication](architecture/publication.md#limits-and-planned-work)
 - D-11: Drafting the past votes of a member who is added to tracking later. [Votes](architecture/votes.md#limits-and-planned-work)
 - D-12: Content profiles for the 282 of 1,392 page, HTML, and feed sources that have none. [Documents](architecture/documents.md#limits-and-planned-work)

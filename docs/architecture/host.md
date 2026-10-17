@@ -17,7 +17,10 @@ The Host is the composition root, the CLI, and the authenticated web workspace. 
 - Production starts on the existing Hetzner CPX21 with containers, Terraform, and CI deployment. Production must run without the developer workstation.
 - Auth0 is the identity provider.
 - AI uses hosted inference first. Evaluation can change the model for each task.
-- The off-server backup destination will be a Hetzner service. S3 is not planned.
+- Off-server backups go to Cloudflare R2 through restic. R2 costs nothing under 10 GB and charges no download fee for restores. Backblaze B2 is the fallback if storage grows large.
+- Restic encrypts each backup on our server before upload. The vendor stores only data that it cannot read. The key stays with the owner and never goes to a vendor.
+- A pg_dump runs every 6 hours, so a failure loses at most 6 hours of database writes. Each run backs up the dump and the capture files together.
+- Restic keeps 7 daily, 4 weekly, and 12 monthly snapshots. A restore test runs each month.
 - The first deployment accepts single-host downtime during maintenance or failure.
 - Build and validate MVP features and the UI on the dev box first. The dev box is for development only. Live infrastructure is not a prerequisite for feature work.
 
@@ -113,7 +116,6 @@ Production hosting is agreed but not implemented. The [roadmap](../roadmap.md) h
 - Terraform rebuilds infrastructure. Restoring persisted data needs backups.
 - Application boundaries isolate storage, execution, and model adapters from domain rules.
 - No production availability or recovery guarantee has been demonstrated yet.
-- Select the Hetzner backup destination by cost and recovery needs.
 - For the MVP, a dynamic SVG view shows collection and AI processing from the retained process state. It shows waiting, failure, recovery, and budget-limit states, and supports reduced motion. AI stages stay marked unavailable until they exist.
 
 Before the shared workspace opens, verify:
@@ -121,5 +123,5 @@ Before the shared workspace opens, verify:
 - [ ] access controls and live Auth0 login
 - [x] controlled migrations
 - [ ] worker restart and recovery
-- [ ] Hetzner off-server backups and a restoration
+- [ ] off-server backups to R2 and a restoration
 - [ ] operation with the developer workstation off
