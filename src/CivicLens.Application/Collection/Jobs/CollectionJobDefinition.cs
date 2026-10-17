@@ -37,6 +37,19 @@ public sealed record CollectionJobDefinition
         ApiResource is Collection.ApiResource.BillList or Collection.ApiResource.HouseVoteList ||
         ConfigurationRevision?.Configuration.Sources.FirstOrDefault(source => source.Id == SourceId)?.Url == Url;
 
+    public bool IsListingPage()
+    {
+        var path = ComparablePath(Url);
+        var configuredUrl = ConfigurationRevision?.Configuration.Sources.FirstOrDefault(source => source.Id == SourceId)?.Url;
+        return path == ComparablePath(AllowedPathPrefix) || configuredUrl is not null && path == ComparablePath(configuredUrl);
+    }
+
+    private static string ComparablePath(string urlOrPath)
+    {
+        var path = Uri.TryCreate(urlOrPath, UriKind.Absolute, out var url) ? url.AbsolutePath : urlOrPath;
+        return Uri.UnescapeDataString(path).TrimEnd('/');
+    }
+
     public static CollectionJobDefinition FromConfiguration(CollectionConfiguration configuration, string sourceId,
         DateOnly? asOf = null)
     {

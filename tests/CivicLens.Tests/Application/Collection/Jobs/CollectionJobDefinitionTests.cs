@@ -86,6 +86,35 @@ public sealed class CollectionJobDefinitionTests
         Assert.False((definition with { ConfigurationRevision = null, CoverageAsOf = null }).IsRoot());
     }
 
+    [Theory]
+    [InlineData("https://example.test/news", true)]
+    [InlineData("https://example.test/news/", true)]
+    [InlineData("https://example.test/news?page=2", true)]
+    [InlineData("https://example.test/news/documentquery.aspx?DocumentTypeID=1951", true)]
+    [InlineData("https://example.test/news/documentquery.aspx/", true)]
+    [InlineData("https://example.test/news/press-releases/some-slug", false)]
+    [InlineData("https://example.test/news/documentsingle.aspx?DocumentID=1", false)]
+    [InlineData("https://example.test/news/DocumentQuery.aspx", false)]
+    public void AnIndexPageOfTheSourceIsNotAStatementEvenWhenItsQueryOrSlashDiffers(string url, bool expected)
+    {
+        var config = new CollectionConfiguration
+        {
+            People = [new PersonConfiguration { Id = "person", Name = "Person" }],
+            Sources =
+            [
+                new WatchedSourceConfiguration
+                {
+                    Id = "first", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }],
+                    Url = "https://example.test/news/documentquery.aspx?DocumentTypeID=27",
+                    AllowedOrigin = "https://example.test", AllowedPathPrefix = "/news"
+                }
+            ]
+        };
+        var definition = CollectionJobDefinition.FromConfiguration(config, "first", new DateOnly(2026, 7, 1));
+
+        Assert.Equal(expected, (definition with { Url = url }).IsListingPage());
+    }
+
     [Fact]
     public void LegacyReplayMatchesExecutionSettingsWithoutInventingProvenance()
     {
