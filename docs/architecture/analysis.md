@@ -230,6 +230,7 @@ The [roadmap](../roadmap.md) holds the delivery order. These design rules apply 
 - The planned ladder is deterministic rules, then a cheap probability tier, then a stronger model, then a person. The model tiers depend on the R-13 measurement. A bake-off selects the models and thresholds for each tier.
 - Deterministic rules include learned churn regions. A two-state Markov chain (stable or churning) over check history models each page region. Recurring churn, such as timestamps or rotating widgets, then needs no hand-written profile for each source.
 - When the engine is unsure, the change goes to review. The engine never drops a change silently.
+- A version bump has no selective rerun yet (R-39). `analyses requeue` moves Failed entries only, and `statements regate` covers the gate only.
 - The rubric asks narrow typed questions. Examples: navigation or boilerplate, date or timestamp only, a changed number, obligation, named person, or policy claim. Others: removed content and touched configured issues.
 - A label binds to the exact comparison, the rubric version, and the labeler. Model output, also agreement between models, is a prediction, never a label.
 - Labels from the review queue are biased by the gate. False-negative estimates therefore use the random sample of skipped changes, weighted by its selection rate.
