@@ -54,12 +54,13 @@ public sealed class PostgresGateLabelStore(IDbContextFactory<CollectionAttemptDb
         var candidate = await db.Set<StatementCandidateRow>().AsNoTracking()
             .SingleOrDefaultAsync(row => row.CandidateId == candidateId, cancellationToken);
         if (candidate is null) return null;
-        var article = await StatementAnalysisListing.ReadArticleAsync(db, candidateId, cancellationToken)
+        var extraction = await PostgresDocumentExtractionStore.ReadAsync(db, candidate.ExtractionId, cancellationToken)
             ?? throw new InvalidOperationException("The extraction of a statement candidate is missing.");
+        var heldOut = GateLabelSplit.IsHeldOut(candidateId);
         var labels = await db.Set<StatementGateLabelRow>().AsNoTracking().Where(row => row.CandidateId == candidateId)
             .OrderByDescending(row => row.CreatedAtUtcTicks).ThenByDescending(row => row.LabelId).ToArrayAsync(cancellationToken);
-        return new(candidateId, candidate.ExtractionId, candidate.Url, article.Extraction.Text,
-            GateLabelSplit.IsHeldOut(candidateId), NewestOf(labels, ReviewAuthorKind.Person), NewestOf(labels, ReviewAuthorKind.Analysis));
+        return new(candidateId, candidate.ExtractionId, candidate.Url, extraction.Text, heldOut,
+            NewestOf(labels, ReviewAuthorKind.Person), heldOut ? null : NewestOf(labels, ReviewAuthorKind.Analysis));
     }
 
     public async Task<IReadOnlyList<GateLabelExportRow>> ListLabelsOfRecordAsync(CancellationToken cancellationToken)

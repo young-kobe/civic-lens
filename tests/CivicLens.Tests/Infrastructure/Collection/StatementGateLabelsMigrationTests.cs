@@ -31,6 +31,22 @@ public sealed class StatementGateLabelsMigrationTests(PostgresCollection postgre
     }
 
     [Fact]
+    public async Task TheRunIdHasAForeignKeyToTheAnalysisRunsAndAUniqueIndexSoOneRunLabelsOneRelease()
+    {
+        await using var db = CreateContext();
+        await db.Database.MigrateAsync();
+
+        Assert.Equal(1L, await CountAsync("""
+            SELECT count(*) FROM pg_constraint
+            WHERE conname = 'FK_statement_gate_labels_statement_analysis_runs_run_id' AND confrelid = 'statement_analysis_runs'::regclass
+            """));
+        Assert.Equal(1L, await CountAsync("""
+            SELECT count(*) FROM pg_indexes
+            WHERE indexname = 'IX_statement_gate_labels_run_id' AND indexdef LIKE 'CREATE UNIQUE INDEX%'
+            """));
+    }
+
+    [Fact]
     public async Task TheMigrationCanBeRolledBackSoADeploymentCanReturnToThePreviousSchema()
     {
         await using var db = CreateContext();

@@ -6,6 +6,7 @@ using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Statements;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
+using Npgsql;
 using static CivicLens.Tests.Host.ReviewWorkspaceHost;
 
 namespace CivicLens.Tests.Host;
@@ -88,10 +89,36 @@ public sealed class GateLabelPageTests(PostgresCollection postgres) : IAsyncLife
     }
 
     [Fact]
+    public async Task AModelRowOnAHeldOutReleaseNeverPrefillsTheFormSoTheTestSetStaysBlind()
+    {
+        var candidate = await SeedAsync(heldOut: true);
+        var extraction = (await labels.GetAsync(candidate, default))!.ExtractionId;
+        var run = new string('c', 32);
+        await GateLabelRuns.InsertAsync(host.ConnectionString, candidate, run);
+        var json = $$"""{"issueIds":["{{RentIssue}}"],"namesBillOrVote":true}""";
+        await using (var connection = new NpgsqlConnection(host.ConnectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = new NpgsqlCommand($"""
+                INSERT INTO statement_gate_labels (label_id, candidate_id, extraction_id, author_subject, author_kind, run_id, label_json, created_at_utc_ticks)
+                VALUES ('{new string('d', 32)}', '{candidate}', '{extraction}', 'civic-lens:analysis', 'Analysis', '{run}', '{json}', 0)
+                """, connection);
+            await command.ExecuteNonQueryAsync();
+        }
+        SignIn(Owner);
+
+        var page = await host.GetDocumentAsync($"/Review/GateLabels/{candidate}");
+
+        Assert.Empty(page.QuerySelectorAll("#label-form input[checked]"));
+        Assert.DoesNotContain("A model suggested", page.Body!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AReleaseWithAModelLabelPrefillsItAndSavingItAddsAHumanLabelOfRecord()
     {
         var candidate = await SeedAsync(heldOut: false);
         var extraction = (await labels.GetAsync(candidate, default))!.ExtractionId;
+        await GateLabelRuns.InsertAsync(host.ConnectionString, candidate, new string('c', 32));
         await labels.AddAsync(new(candidate, extraction, ReviewAuthor.AnalysisSubject, ReviewAuthorKind.Analysis, new string('c', 32),
             new GateLabel([RentIssue], true), DateTimeOffset.UtcNow), default);
         SignIn(Owner);

@@ -3009,6 +3009,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("CandidateId", "CreatedAtUtcTicks");
 
+                    b.HasIndex("RunId")
+                        .IsUnique();
+
                     b.ToTable("statement_gate_labels", null, t =>
                         {
                             t.HasCheckConstraint("ck_statement_gate_labels_author_kind", "author_kind IN ('Person','Analysis')");
@@ -3981,6 +3984,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasForeignKey("CandidateId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementAnalysisRunRow", null)
+                        .WithMany()
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementReviewDecisionRow", b =>

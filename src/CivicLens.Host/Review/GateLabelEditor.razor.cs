@@ -39,7 +39,8 @@ public sealed partial class GateLabelEditor
 
     private CancellationToken RequestAborted => HttpContext.RequestAborted;
 
-    private string? StatusMessage => Status == "saved" ? "The label is saved. This is the next release." : null;
+    private string? StatusMessage => Status == "saved" && !HttpMethods.IsPost(HttpContext.Request.Method)
+        ? "The label is saved. This is the next release." : null;
 
     private IReadOnlyList<Crumb> Crumbs => [new("Review", "/Review"), new("Gate labels", GateLabelRoutes.List), new(task is null ? "Release" : "Label")];
 
@@ -116,8 +117,13 @@ public sealed partial class GateLabelEditor
 
     private async Task<string> NextTargetAsync()
     {
-        var next = (await ListQueue.ExecuteAsync(actor!, 1, RequestAborted)).Items.FirstOrDefault();
-        return next is null ? GateLabelRoutes.List + "?status=done" : GateLabelRoutes.Editor(next.CandidateId, "saved");
+        try
+        {
+            var next = (await ListQueue.ExecuteAsync(actor!, 1, RequestAborted)).Items.FirstOrDefault();
+            return next is null ? GateLabelRoutes.List + "?status=done" : GateLabelRoutes.Editor(next.CandidateId, "saved");
+        }
+        catch (OperationCanceledException) when (RequestAborted.IsCancellationRequested) { throw; }
+        catch (Exception) { return GateLabelRoutes.List; }
     }
 
     public sealed class LabelInput

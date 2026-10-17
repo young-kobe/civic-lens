@@ -19,7 +19,7 @@ public sealed class GateLabelExportTests : IDisposable
         var path = Path.Combine(Runtime, "labels", "gate.jsonl");
         var row = new GateLabelExportRow("c1", "e1", true, ["rent"], false, "Release text.");
 
-        await GateLabelExport.WriteAsync([row, row with { CandidateId = "c2" }], path, Runtime, default);
+        await GateLabelExport.WriteAsync([row, row with { CandidateId = "c2" }], GateLabelExport.ResolveTarget(path, Runtime), default);
 
         var lines = await File.ReadAllLinesAsync(path);
         Assert.Equal(2, lines.Length);
@@ -30,19 +30,14 @@ public sealed class GateLabelExportTests : IDisposable
     [Theory]
     [InlineData("../outside.jsonl")]
     [InlineData("../.runtime-evil/labels.jsonl")]
-    public async Task APathOutsideTheRuntimeDirectoryIsRefusedAndNothingIsWritten(string path)
+    public void APathOutsideTheRuntimeDirectoryIsRefused(string path)
     {
-        var target = Path.GetFullPath(path, Runtime);
-        var row = new GateLabelExportRow("c1", "e1", false, [], false, "Text.");
-
-        await Assert.ThrowsAsync<ArgumentException>(() => GateLabelExport.WriteAsync([row], Path.Combine(Runtime, path), Runtime, default));
-
-        Assert.False(File.Exists(target));
+        Assert.Throws<ArgumentException>(() => GateLabelExport.ResolveTarget(Path.Combine(Runtime, path), Runtime));
     }
 
     [Fact]
-    public async Task TheRuntimeDirectoryItselfIsNotAFilePathSoItIsRefused()
+    public void TheRuntimeDirectoryItselfIsNotAFilePathSoItIsRefused()
     {
-        await Assert.ThrowsAsync<ArgumentException>(() => GateLabelExport.WriteAsync([], Runtime, Runtime, default));
+        Assert.Throws<ArgumentException>(() => GateLabelExport.ResolveTarget(Runtime, Runtime));
     }
 }

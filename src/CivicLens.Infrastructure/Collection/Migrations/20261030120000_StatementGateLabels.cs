@@ -37,12 +37,24 @@ public partial class StatementGateLabels : Migration
                     principalTable: "statement_candidates",
                     principalColumn: "candidate_id",
                     onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_statement_gate_labels_statement_analysis_runs_run_id",
+                    column: x => x.run_id,
+                    principalTable: "statement_analysis_runs",
+                    principalColumn: "run_id",
+                    onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateIndex(
             name: "IX_statement_gate_labels_candidate_id_created_at_utc_ticks",
             table: "statement_gate_labels",
             columns: new[] { "candidate_id", "created_at_utc_ticks" });
+
+        migrationBuilder.CreateIndex(
+            name: "IX_statement_gate_labels_run_id",
+            table: "statement_gate_labels",
+            column: "run_id",
+            unique: true);
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)

@@ -9,12 +9,15 @@ public static class GateLabelExport
 
     public static string DefaultRuntimeDirectory() => Path.GetFullPath(".runtime");
 
-    public static async Task WriteAsync(IEnumerable<GateLabelExportRow> rows, string path, string runtimeDirectory,
-        CancellationToken cancellationToken)
+    public static string ResolveTarget(string path, string runtimeDirectory)
     {
         var target = Path.GetFullPath(path);
-        if (!target.StartsWith(runtimeDirectory + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-            throw new ArgumentException("The export path must be inside the .runtime directory.");
+        return target.StartsWith(runtimeDirectory + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+            ? target : throw new ArgumentException("The export path must be inside the .runtime directory.");
+    }
+
+    public static async Task WriteAsync(IEnumerable<GateLabelExportRow> rows, string target, CancellationToken cancellationToken)
+    {
         Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         await File.WriteAllLinesAsync(target, rows.Select(row => JsonSerializer.Serialize(row, Json)), cancellationToken);
     }

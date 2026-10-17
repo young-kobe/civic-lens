@@ -22,7 +22,7 @@ The statements feature finds articles that may hold an official's statement and 
 - A gate label holds the tracked issue IDs and the `namesBillOrVote` answer of one release. It holds no quote, policy area, or pass verdict. The gate rule derives a pass from a label, so the rule keeps one owner.
 - Labels are append-only rows, like revisions. The newest human row of a candidate is the label of record. A model row never replaces it.
 - Code assigns about 30 percent of releases to a held-out set by a hash of the candidate ID. The set is the test set of the gate benchmark ([D-13](../roadmap.md#pending-decisions)). A held-out release never gets a model label.
-- Only the owner labels releases and exports labels.
+- Only the owner labels releases and exports labels. `GateLabelEditor` does not extend `ReviewRecordPage`, because that base class serves revisions and decisions and a label has neither.
 - Vendor rule: only public press release text and gate labels may go to Cloudflare. Never send review notes, reviewer identity, or credentials.
 - Drafting does not cache the prompt. The article text is most of each request, and the schema changes with the covered officials of each source.
 
@@ -46,11 +46,13 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - The newest human label is the label of record, and a model label never replaces it. Enforced by `PostgresGateLabelStore`. Test: `PostgresGateLabelStoreTests.AModelLabelNeverReplacesTheHumanLabelOfRecord`.
 - A model label has a run ID and a human label has none. Enforced by `ck_statement_gate_labels_run`. Test: `StatementGateLabelsMigrationTests.TheDatabaseRefusesAModelLabelWithoutARunAndAHumanLabelWithOne`.
 - A held-out release takes no model label. Enforced by `PostgresGateLabelStore` with `GateLabelSplit`. Test: `PostgresGateLabelStoreTests.AHeldOutReleaseRefusesAModelLabelAndStoresNothingSoTheTestSetStaysBlindToModels`.
+- The read of a held-out release never returns a model label, even if a row exists. Enforced by `PostgresGateLabelStore.GetAsync`. Tests: `PostgresGateLabelStoreTests.AModelRowThatReachesAHeldOutCandidateByRawSqlIsStillNeverReturnedSoTheReadKeepsTheTestSetBlind` and `GateLabelPageTests.AModelRowOnAHeldOutReleaseNeverPrefillsTheFormSoTheTestSetStaysBlind`.
+- A model label cites a real run, and one run labels one release. Enforced by the foreign key and the unique index on `run_id`. Tests: `PostgresGateLabelStoreTests.AModelLabelNeedsARealRunAndEachRunLabelsOnlyOneRelease` and `StatementGateLabelsMigrationTests.TheRunIdHasAForeignKeyToTheAnalysisRunsAndAUniqueIndexSoOneRunLabelsOneRelease`.
 - A candidate ID always has the same held-out answer. Enforced by `GateLabelSplit`. Test: `GateLabelSplitTests.TheSameCandidateAlwaysLandsOnTheSameSideSoALaterRunCannotLeakATestReleaseIntoTraining`.
 - A label cites the extraction of its candidate. Enforced by `PostgresGateLabelStore`. Test: `PostgresGateLabelStoreTests.ALabelThatCitesAnotherExtractionOrAnUnknownCandidateIsRefused`.
 - A label holds only tracked issue IDs of the issue file. Enforced by `SaveGateLabel`. Test: `SaveGateLabelTests.AnIssueThatTheIssueFileDoesNotTrackIsRefusedSoLabelsStayInTheGateVocabulary`.
 - Only the owner labels, reads the label queue, or exports labels. Enforced by `ReviewAuthorization.RequireOwner` in each use case, and by a redirect on the pages. Tests: `SaveGateLabelTests.AReviewerCannotLabelBecauseLabelsFeedTheOwnersBenchmark` and `GateLabelPageTests.ReviewersAreSentToAccessDeniedSoOnlyTheOwnerFeedsTheBenchmark`.
-- An export line never holds an author subject, a review note, or a credential, and the file stays inside `.runtime`. Enforced by `GateLabelExportRow`, which has no such field, and by `GateLabelExport`. Tests: `GateLabelExportTests.EachLineHoldsOnlyTheFieldsTheBenchmarkNeedsSoNoSubjectNoteOrCredentialCanLeave` and `GateLabelExportTests.APathOutsideTheRuntimeDirectoryIsRefusedAndNothingIsWritten`.
+- An export line never holds an author subject, a review note, or a credential, and the file stays inside `.runtime`. Enforced by `GateLabelExportRow`, which has no such field, and by `GateLabelExport`. Tests: `GateLabelExportTests.EachLineHoldsOnlyTheFieldsTheBenchmarkNeedsSoNoSubjectNoteOrCredentialCanLeave` and `GateLabelExportTests.APathOutsideTheRuntimeDirectoryIsRefused`.
 - Each task charges its own budget. Enforced by the primary key of `statement_analysis_budget`. Test: `PostgresStatementGateStoreTests.TheGateChargesItsOwnDailyBudgetAndNotTheDocumentChangeBudget`.
 
 ## Behavior
@@ -303,7 +305,7 @@ With `--since`, `regate` moves only candidates first captured on or after that U
 - A draft with no revision has the status `NotDrafted`. A migration set old rows with revision 0 to `NotDrafted` and every other row to `AwaitingReview`.
 - `statement_review_decisions` holds the immutable decision JSON.
 - The commands reuse the replay receipt table with the operations `statement-create`, `statement-save`, and `statement-decide`.
-- `statement_gate_labels` holds the gate labels. Its key is a 32-character label ID. A row names the candidate and the extraction. It also holds the author subject, the author kind (`Person` or `Analysis`), the run ID, the label JSON, and the creation time. `ck_statement_gate_labels_run` ties the run ID to the `Analysis` kind. The run ID has no foreign key, because the benchmark runs are not gate runs.
+- `statement_gate_labels` holds the gate labels. Its key is a 32-character label ID. A row names the candidate and the extraction. It also holds the author subject, the author kind (`Person` or `Analysis`), the run ID, the label JSON, and the creation time. `ck_statement_gate_labels_run` ties the run ID to the `Analysis` kind. The run ID has a foreign key to `statement_analysis_runs` and a unique index, so one run labels one release.
 - Version constants are listed in [Behavior versions](../architecture.md#behavior-versions).
 
 ## Code map
@@ -336,8 +338,10 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 - Gate runs from before `statement-gate-v2` have no `namesBillOrVote` answer. `StatementGateCarryOver` reads them with a null answer.
 - Rolling back the `GateBillOrVoteReasons` migration fails while any gate run holds a `passed-bill-or-vote` or `passed-bill-number` reason. Remove or change those rows first.
 - The bill or vote answer of the model is unmeasured. The `passed-bill-or-vote` and `passed-bill-number` counts show how often each path fires. The bill number rule finds only the forms that `BillNumberFinder` accepts.
-- The gate labels are the first part of D-13. The model pre-label, the model comparison, and the fine-tuning are planned. A model label needs `GateLabelEntry` with the `Analysis` kind and a run ID.
+- The gate labels are the first part of D-13. The model pre-label, the model comparison, and the fine-tuning are planned. A model label needs `GateLabelEntry` with the `Analysis` kind and the ID of a run in `statement_analysis_runs`.
 - The label page offers every tracked issue of the issue file. It does not hide an issue that was inactive on the capture date.
+- The label queue reads every unlabeled candidate (ID, source, and URL) on each list load and each save, because code computes the split. Revisit this if labeling moves to a large set.
+- Two labels with equal timestamps fall back to label ID order. This is acceptable for a single owner.
 - A label save has no idempotency key. A double submit adds two equal rows, and the newest is the label of record.
 - The export path check compares full paths. It does not resolve symbolic links.
 - The split is a hash, so the held-out share is near 30 percent but not exact.

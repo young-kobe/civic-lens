@@ -83,8 +83,9 @@ internal sealed class StatementCommand(AnalysisQueueCommands<StatementGateRun, S
 
     private async Task<int> ExportLabelsAsync(string path, CancellationToken cancellationToken)
     {
+        var target = GateLabelExport.ResolveTarget(path, runtimeDirectory);
         var rows = await exportLabels.ExecuteAsync(owner, cancellationToken);
-        await GateLabelExport.WriteAsync(rows, path, runtimeDirectory, cancellationToken);
+        await GateLabelExport.WriteAsync(rows, target, cancellationToken);
         CommandOutput.Write(new { exported = rows.Count });
         return 0;
     }

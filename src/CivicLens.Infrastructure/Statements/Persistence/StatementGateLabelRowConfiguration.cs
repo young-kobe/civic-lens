@@ -23,6 +23,8 @@ internal sealed class StatementGateLabelRowConfiguration : IEntityTypeConfigurat
         builder.Property(row => row.LabelJson).HasColumnName("label_json").IsRequired();
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
         builder.HasIndex(row => new { row.CandidateId, row.CreatedAtUtcTicks });
+        builder.HasIndex(row => row.RunId).IsUnique();
         builder.HasOne<StatementCandidateRow>().WithMany().HasForeignKey(row => row.CandidateId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<StatementAnalysisRunRow>().WithMany().HasForeignKey(row => row.RunId).OnDelete(DeleteBehavior.Restrict);
     }
 }

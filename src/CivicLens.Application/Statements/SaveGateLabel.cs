@@ -16,7 +16,7 @@ public sealed class SaveGateLabel(IGateLabelStore store, IssueConfiguration issu
         ArgumentNullException.ThrowIfNull(request);
         var label = new GateLabel(ReviewValidation.ValidateSelections(request.IssueIds, trackedIssueIds, "issueIds"), request.NamesBillOrVote);
         return store.AddAsync(new GateLabelEntry(ReviewValidation.ValidateCandidateId(request.CandidateId),
-            ReviewValidation.ValidateHash(request.ExtractionId, nameof(request)), actor.Subject, ReviewAuthorKind.Person, null, label,
+            ReviewValidation.ValidateHash(request.ExtractionId, "extractionId"), actor.Subject, ReviewAuthorKind.Person, null, label,
             DateTimeOffset.UtcNow), cancellationToken);
     }
 }

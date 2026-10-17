@@ -1,4 +1,11 @@
+using CivicLens.Core.Review;
+using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Documents;
+using CivicLens.Infrastructure.Statements;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace CivicLens.Tests.Host;
 
@@ -158,6 +165,37 @@ public sealed class StatementCommandTests(PostgresCollection postgres) : IAsyncL
         Assert.Equal(2, result.ExitCode);
         Assert.Contains(".runtime", result.Error, StringComparison.Ordinal);
         Assert.False(File.Exists(outside));
+    }
+
+    [Fact]
+    public async Task ALabelExportInsideTheRuntimeDirectoryWritesTheLabelOfRecordWithoutTheAuthorSubject()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "civic-label-cli-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var relative = Path.Combine(".runtime", "label-cli-" + Guid.NewGuid().ToString("N") + ".jsonl");
+        try
+        {
+            var factory = new PooledDbContextFactory<CollectionAttemptDbContext>(
+                new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
+            var seeder = new StatementCandidateSeeder(new PostgresCollectionAttemptStore(factory), new PostgresDocumentExtractionStore(factory),
+                connectionString, root);
+            var candidate = await seeder.SeedAsync("The office announced a rent cap.", "https://example.test/pages/1");
+            var store = new PostgresGateLabelStore(factory);
+            var extraction = (await store.GetAsync(candidate, default))!.ExtractionId;
+            await store.AddAsync(new(candidate, extraction, "auth0|owner", ReviewAuthorKind.Person, null, new([], true), DateTimeOffset.UtcNow), default);
+
+            var result = await RunAsync("auth0|owner", "statements", "labels", "export", relative);
+
+            Assert.Equal((0, """{"exported":1}"""), (result.ExitCode, result.Output.Trim()));
+            var text = await File.ReadAllTextAsync(Path.GetFullPath(relative));
+            Assert.Contains(candidate, text, StringComparison.Ordinal);
+            Assert.DoesNotContain("auth0|owner", text, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(Path.GetFullPath(relative));
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]

@@ -60,6 +60,7 @@ public sealed class PostgresGateLabelStoreTests(PostgresCollection postgres) : I
     {
         var candidate = await SeedAsync(heldOut: false);
         await store.AddAsync(await EntryAsync(candidate, ReviewAuthorKind.Person, ["rent"], false, 0), default);
+        await GateLabelRuns.InsertAsync(connectionString, candidate, RunId);
         await store.AddAsync(await EntryAsync(candidate, ReviewAuthorKind.Analysis, ["health"], true, 1, RunId), default);
 
         var task = (await store.GetAsync(candidate, default))!;
@@ -87,10 +88,42 @@ public sealed class PostgresGateLabelStoreTests(PostgresCollection postgres) : I
     {
         var candidate = await SeedAsync(heldOut: false);
 
+        await GateLabelRuns.InsertAsync(connectionString, candidate, RunId);
         await store.AddAsync(await EntryAsync(candidate, ReviewAuthorKind.Analysis, ["rent"], true, 0, RunId), default);
 
         var task = (await store.GetAsync(candidate, default))!;
         Assert.Equal((false, "rent:True", null), (task.HeldOut, Shape(task.ModelLabel), Shape(task.HumanLabel)));
+    }
+
+    [Fact]
+    public async Task AModelRowThatReachesAHeldOutCandidateByRawSqlIsStillNeverReturnedSoTheReadKeepsTheTestSetBlind()
+    {
+        var candidate = await SeedAsync(heldOut: true);
+        var extraction = (await store.GetAsync(candidate, default))!.ExtractionId;
+        await GateLabelRuns.InsertAsync(connectionString, candidate, RunId);
+        var json = """{"issueIds":["rent"],"namesBillOrVote":true}""";
+        await ExecuteAsync($"""
+            INSERT INTO statement_gate_labels (label_id, candidate_id, extraction_id, author_subject, author_kind, run_id, label_json, created_at_utc_ticks)
+            VALUES ('{new string('d', 32)}', '{candidate}', '{extraction}', 'civic-lens:analysis', 'Analysis', '{RunId}', '{json}', 0)
+            """);
+
+        var task = (await store.GetAsync(candidate, default))!;
+
+        Assert.Null(task.ModelLabel);
+    }
+
+    [Fact]
+    public async Task AModelLabelNeedsARealRunAndEachRunLabelsOnlyOneRelease()
+    {
+        var first = await SeedAsync(heldOut: false);
+        var second = await SeedAsync(heldOut: false);
+        await Assert.ThrowsAsync<DbUpdateException>(async () =>
+            await store.AddAsync(await EntryAsync(first, ReviewAuthorKind.Analysis, [], false, 0, new string('e', 32)), default));
+        await GateLabelRuns.InsertAsync(connectionString, first, RunId);
+        await store.AddAsync(await EntryAsync(first, ReviewAuthorKind.Analysis, [], false, 0, RunId), default);
+
+        await Assert.ThrowsAsync<DbUpdateException>(async () =>
+            await store.AddAsync(await EntryAsync(second, ReviewAuthorKind.Analysis, [], false, 0, RunId), default));
     }
 
     [Fact]
@@ -113,6 +146,7 @@ public sealed class PostgresGateLabelStoreTests(PostgresCollection postgres) : I
         var labeled = await SeedAsync(heldOut: false);
         var modelOnly = await SeedAsync(heldOut: false);
         await store.AddAsync(await EntryAsync(labeled, ReviewAuthorKind.Person, [], false, 0), default);
+        await GateLabelRuns.InsertAsync(connectionString, modelOnly, RunId);
         await store.AddAsync(await EntryAsync(modelOnly, ReviewAuthorKind.Analysis, [], false, 0, RunId), default);
 
         var queue = await store.ListUnlabeledAsync(100, default);
@@ -157,6 +191,14 @@ public sealed class PostgresGateLabelStoreTests(PostgresCollection postgres) : I
         int minutes, string? runId = null) =>
         new(candidate, (await store.GetAsync(candidate, default))!.ExtractionId, kind == ReviewAuthorKind.Person ? Owner : ReviewAuthor.AnalysisSubject,
             kind, runId, new GateLabel([.. issues], namesBillOrVote), Start.AddMinutes(minutes));
+
+    private async Task ExecuteAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
+    }
 
     private async Task<long> CountAsync(string sql, string? candidate)
     {
