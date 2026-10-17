@@ -38,7 +38,7 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
     public string ReleaseDirectory => Path.Combine(KeyDirectory, "releases");
     private Process? process;
     private Task<string>? output;
-    private Task<string>? error;
+    private readonly StringBuilder errors = new();
     public string ConnectionString { get; private set; } = null!;
     public PostgresCollectionAttemptStore Attempts { get; private set; } = null!;
     public PostgresDocumentExtractionStore Extractions { get; private set; } = null!;
@@ -100,13 +100,17 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
         }
         process = Process.Start(start)!;
         output = process.StandardOutput.ReadToEndAsync();
-        error = process.StandardError.ReadToEndAsync();
+        process.ErrorDataReceived += (_, line) =>
+        {
+            lock (errors) errors.AppendLine(line.Data);
+        };
+        process.BeginErrorReadLine();
         Client.BaseAddress = new Uri($"http://127.0.0.1:{port}");
         Client.DefaultRequestHeaders.Host = "review.example.test";
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(25));
         while (true)
         {
-            if (process.HasExited) throw new InvalidOperationException($"Review workspace exited: {await output} {await error}");
+            if (process.HasExited) throw new InvalidOperationException($"Review workspace exited: {await output} {HostErrors}");
             try
             {
                 using var response = await Client.GetAsync("/access-denied", deadline.Token);
@@ -125,17 +129,24 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
             if (!process.HasExited) process.Kill(entireProcessTree: true);
             await process.WaitForExitAsync();
             if (output is not null) await output;
-            if (error is not null) await error;
             process.Dispose();
         }
         if (Directory.Exists(KeyDirectory)) Directory.Delete(KeyDirectory, recursive: true);
         await postgres.DropDatabaseAsync(ConnectionString);
     }
 
+    public string HostErrors
+    {
+        get
+        {
+            lock (errors) return errors.ToString();
+        }
+    }
+
     public async Task<IDocument> GetDocumentAsync(string url)
     {
-        using var response = await Client.GetAsync(url);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var response = await GetWithHostErrorsAsync(url);
+        Assert.True(response.StatusCode == HttpStatusCode.OK, $"GET {url} returned {(int)response.StatusCode}. Host stderr: {HostErrors}");
         if (response.Headers.TryGetValues("Set-Cookie", out var cookies))
         {
             var retained = Client.DefaultRequestHeaders.GetValues("Cookie").Single().Split("; ").ToList();
@@ -150,6 +161,18 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
             Client.DefaultRequestHeaders.Add("Cookie", string.Join("; ", retained));
         }
         return await new HtmlParser().ParseDocumentAsync(await response.Content.ReadAsStringAsync());
+    }
+
+    private async Task<HttpResponseMessage> GetWithHostErrorsAsync(string url)
+    {
+        try
+        {
+            return await Client.GetAsync(url);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            throw new InvalidOperationException($"GET {url} failed. Host stderr: {HostErrors}", exception);
+        }
     }
 
     public static FormUrlEncodedContent Form(IElement form) => new(Fields(form));

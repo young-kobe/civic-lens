@@ -22,29 +22,17 @@ public static class ActionDraftResolver
         CheckNames(output.Headline.Text, "headline", snapshot, errors);
         CheckNames(output.Summary.Text, "summary", snapshot, errors);
         if (errors.Count > 0) return AnalysisResolution<ActionDraftRevision>.Reject(Bound(errors), false);
-        return AnalysisResolution<ActionDraftRevision>.Accept(Assemble(output, context, runId, createdAtUtc));
+        return AnalysisResolution<ActionDraftRevision>.Accept(Assemble(context, createdAtUtc, ReviewText.AfterModelDraft(context.Evidence.Current,
+            output.Headline.Text, output.Summary.Text, runId, snapshot.Fingerprint)));
     }
 
     public static ActionDraftRevision CopyText(ActionDraftContext context, DateTimeOffset createdAtUtc)
     {
         var current = context.Evidence.Current ?? throw new ArgumentException("Copied text needs a current revision.", nameof(context));
-        return Assemble(context, createdAtUtc,
-            (current.Headline, current.Summary, current.TextOrigin, current.Suggestion));
+        return Assemble(context, createdAtUtc, ReviewText.CopyOf(current));
     }
 
-    private static ActionDraftRevision Assemble(HeadlineSummaryOutput output, ActionDraftContext context, string runId,
-        DateTimeOffset createdAtUtc)
-    {
-        var current = context.Evidence.Current;
-        var text = current?.TextOrigin == ReviewTextOrigin.Person
-            ? (current.Headline, current.Summary, ReviewTextOrigin.Person,
-                new ActionTextSuggestion(output.Headline.Text, output.Summary.Text, runId, context.Snapshot.Fingerprint))
-            : (output.Headline.Text, output.Summary.Text, ReviewTextOrigin.Model, (ActionTextSuggestion?)null);
-        return Assemble(context, createdAtUtc, text);
-    }
-
-    private static ActionDraftRevision Assemble(ActionDraftContext context, DateTimeOffset createdAtUtc,
-        (string Headline, string Summary, ReviewTextOrigin Origin, ActionTextSuggestion? Suggestion) text)
+    private static ActionDraftRevision Assemble(ActionDraftContext context, DateTimeOffset createdAtUtc, ReviewText text)
     {
         var (evidence, snapshot, trackedIssueIds, policyAreaId, issueRevisionId) = context;
         var current = evidence.Current;

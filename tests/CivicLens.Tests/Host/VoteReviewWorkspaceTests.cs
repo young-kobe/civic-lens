@@ -1,0 +1,100 @@
+using System.Net;
+using System.Text.Json;
+using CivicLens.Application.Collection;
+using CivicLens.Core.Documents;
+using CivicLens.Core.Review;
+using CivicLens.Core.Votes;
+using CivicLens.Tests.Fixtures;
+using CivicLens.Tests.Infrastructure.Collection;
+using Npgsql;
+using static CivicLens.Tests.Host.ReviewWorkspaceHost;
+
+namespace CivicLens.Tests.Host;
+
+[Collection(PostgresCollection.Name)]
+[Trait("Category", "Postgres")]
+public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLifetime
+{
+    private readonly ReviewWorkspaceHost host = new(postgres) { Issues = StatementGateFixtures.Configuration() };
+
+    public Task InitializeAsync() => host.StartAsync();
+
+    public Task DisposeAsync() => host.StopAsync();
+
+    [Fact]
+    public async Task TheRailLinksTheVoteListWhichCountsEachFilter()
+    {
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+
+        var page = await host.GetDocumentAsync("/Review/Votes");
+
+        Assert.Equal("page", page.QuerySelector(".nav a[href='/Review/Votes']")!.GetAttribute("aria-current"));
+        Assert.Null(page.QuerySelector(".nav a[href='/Review']")!.GetAttribute("aria-current"));
+        Assert.Equal(["0", "0", "0"], page.QuerySelectorAll("[aria-labelledby='drafts'] .segmented-count").Select(count => count.TextContent));
+        Assert.Equal(["/Review/Votes#drafts", "/Review/Votes?drafts=needs-action#drafts", "/Review/Votes?drafts=approved#drafts"],
+            page.QuerySelectorAll("[aria-labelledby='drafts'] a.segmented-item").Select(tab => tab.GetAttribute("href")));
+        Assert.Equal("No vote records yet", page.QuerySelector("[aria-labelledby='drafts'] .empty h3")!.TextContent);
+    }
+
+    [Fact]
+    public async Task AnUnknownOrMalformedVoteRecordIsNotFound()
+    {
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|owner"));
+
+        foreach (var id in new[] { new string('a', 64), "not-a-record" })
+        {
+            using var missing = await host.Client.GetAsync($"/Review/Votes/{id}");
+            Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task TheVotePageShowsTheTrackedMembersCastAndTheKindWithTheirCitedLines()
+    {
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+        var recordId = await SeedVoteDraftAsync();
+
+        var page = await host.GetDocumentAsync($"/Review/Votes/{recordId}");
+
+        var members = page.QuerySelector("[aria-labelledby='members']")!.TextContent;
+        Assert.Contains("A: Yea", members, StringComparison.Ordinal);
+        Assert.Contains("Member: A000001, A, R, AL, Yea", members, StringComparison.Ordinal);
+        var evidence = page.QuerySelector("[aria-labelledby='evidence']")!.TextContent;
+        Assert.Contains("Vote kind: Passage", evidence, StringComparison.Ordinal);
+        Assert.Contains("Question: On Passage", evidence, StringComparison.Ordinal);
+    }
+
+    private async Task<string> SeedVoteDraftAsync()
+    {
+        const string question = "Question: On Passage";
+        const string member = "Member: A000001, A, R, AL, Yea";
+        var extraction = await host.SaveExtractionAsync($"{question}\n{member}\n");
+        var configuration = CollectionConfigurationRevision.Create(HouseVoteFixtures.Configuration());
+        var recordId = new string('a', 64);
+        var candidateId = new string('b', 64);
+        var revision = new VoteDraftRevision(recordId, 1, "auth0|editor", DateTimeOffset.UtcNow, "The House passed a measure",
+            "The House voted on passage.", ReviewTextOrigin.Person, null, HouseVoteFixtures.SourceId, 119, 1, 100, null, null, candidateId,
+            HouseVoteFixtures.Updated, [new(question, new SourceSpan(extraction.ExtractionId, 0, question.Length))], VoteKind.Passage,
+            new SourceSpan(extraction.ExtractionId, 0, question.Length),
+            [new("with-id-a", "A000001", "Yea", new SourceSpan(extraction.ExtractionId, question.Length + 1, member.Length))], [], new string('e', 64));
+        await using var connection = new NpgsqlConnection(host.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand($"""
+            SET session_replication_role = replica;
+            INSERT INTO collection_configuration_revisions (revision_id, json, created_at) VALUES ('{configuration.Id}', @configuration, 1);
+            INSERT INTO house_vote_candidates (candidate_id, source_id, congress, session_number, roll_call_number, update_date_utc_ticks,
+                detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
+            VALUES ('{candidateId}', '{HouseVoteFixtures.SourceId}', 119, 1, 100, 1, 'detail', 'members', '{extraction.ExtractionId}',
+                '{extraction.ExtractionId}', '{configuration.Id}', 1);
+            INSERT INTO vote_drafts (record_id, source_id, congress, session_number, roll_call_number, current_revision_number,
+                review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
+            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', 119, 1, 100, 1, 0, 'AwaitingReview', 1, 1);
+            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
+            VALUES ('{recordId}', 1, 'auth0|editor', 'Person', NULL, @revision, 1);
+            """, connection);
+        command.Parameters.AddWithValue("configuration", configuration.Json);
+        command.Parameters.AddWithValue("revision", JsonSerializer.Serialize(revision, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        await command.ExecuteNonQueryAsync();
+        return recordId;
+    }
+}

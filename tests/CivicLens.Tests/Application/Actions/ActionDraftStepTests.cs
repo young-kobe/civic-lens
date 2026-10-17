@@ -183,7 +183,7 @@ public sealed class ActionDraftStepTests
     public async Task ASponsorshipChangeKeepsAPersonsTextAndTheSuggestionUnchangedWithItsRunId()
     {
         var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
-        var suggestion = new ActionTextSuggestion("Model headline", "Model summary.", Assert.Single(first.Runs).Run.RunId,
+        var suggestion = new ReviewTextSuggestion("Model headline", "Model summary.", Assert.Single(first.Runs).Run.RunId,
             Assert.Single(first.Revisions).Fingerprint);
         var edited = ActionRevisionFixtures.PersonEditOf(Assert.Single(first.Revisions), "Edited headline", "Edited summary.") with
         {

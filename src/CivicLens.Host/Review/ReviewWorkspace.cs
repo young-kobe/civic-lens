@@ -9,6 +9,7 @@ using CivicLens.Application.Publication;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
+using CivicLens.Application.Votes;
 using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Briefs;
@@ -18,6 +19,7 @@ using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Statements;
+using CivicLens.Infrastructure.Votes;
 using CivicLens.Host.Publication;
 using CivicLens.Host.Components;
 using Microsoft.AspNetCore.Antiforgery;
@@ -223,6 +225,7 @@ internal static class ReviewWorkspace
         var contexts = AnalysisDbContextFactory.Create(connectionString);
         ConfigureStatementReview(services, contexts);
         ConfigureActionReview(services, contexts);
+        ConfigureVoteReview(services, contexts);
         ConfigureBriefReview(services, contexts);
         var collection = ReviewCollectionSettings.FromEnvironment();
         if (collection is null)
@@ -270,6 +273,16 @@ internal static class ReviewWorkspace
         services.AddScoped<GetActionReview>();
         services.AddScoped<ListActionReviews>();
         services.AddScoped<GetActionReviewCounts>();
+    }
+
+    private static void ConfigureVoteReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)
+    {
+        services.AddSingleton<IVoteReviewStore>(new PostgresVoteReviewStore(contexts));
+        services.AddScoped<SaveVoteDraft>();
+        services.AddScoped<DecideVoteReview>();
+        services.AddScoped<GetVoteReview>();
+        services.AddScoped<ListVoteReviews>();
+        services.AddScoped<GetVoteReviewCounts>();
     }
 
     private static void ConfigureBriefReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)

@@ -157,13 +157,10 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
     private static async Task<ImmutableDictionary<string, string>> ReadOfficialNamesAsync(CollectionAttemptDbContext db,
         IEnumerable<ActionDraftRevision> revisions, CancellationToken cancellationToken)
     {
-        var candidateIds = revisions.Select(revision => revision.CandidateId).ToArray();
+        var candidateIds = revisions.Select(revision => revision.CandidateId).Distinct(StringComparer.Ordinal).ToArray();
         var revisionIds = await db.Set<ActionCandidateRow>().AsNoTracking().Where(row => candidateIds.Contains(row.CandidateId))
             .ToDictionaryAsync(row => row.CandidateId, row => row.ConfigurationRevisionId, StringComparer.Ordinal, cancellationToken);
-        var configurations = await StoredJobDefinition.LoadRevisionsAsync(db, revisionIds.Values, cancellationToken);
-        return candidateIds.SelectMany(id => StoredJobDefinition.Find(configurations, revisionIds[id]).Configuration.People)
-            .DistinctBy(person => person.Id, StringComparer.Ordinal)
-            .ToImmutableDictionary(person => person.Id, person => person.Name, StringComparer.Ordinal);
+        return await ConfiguredPersonNames.ReadAsync(db, candidateIds, revisionIds, cancellationToken);
     }
 
     private static ActionReviewDecisionRow NewDecisionRow(ReviewDecision decision) => new()

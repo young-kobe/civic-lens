@@ -4,6 +4,7 @@ using CivicLens.Application.Analysis;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Documents;
+using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Votes;
@@ -301,11 +302,13 @@ public sealed partial class PostgresHouseVoteTests
 
     private async Task<VoteDraftRevision> RevisionAsync(string candidate, int number)
     {
-        var evidence = (await VoteStore().ReadEvidenceAsync(candidate, default))!.Candidate;
-        var span = new SourceSpan(new string('c', 64), 0, 5);
-        return new(evidence.RecordId, number, "civic-lens:analysis", Updated.AddMinutes(number), "Headline", "Summary.", evidence.SourceId,
-            evidence.Congress, evidence.SessionNumber, evidence.RollCallNumber, evidence.BillType, evidence.BillNumber, candidate,
-            evidence.UpdateDate, [new("Result: Passed", span)], VoteKind.Other, null, [new("aderholt", "A000055", "Yea", span)], [], new string('e', 64));
+        var evidence = (await VoteStore().ReadEvidenceAsync(candidate, default))!;
+        var fact = new SourceSpan(evidence.Detail.ExtractionId, 0, 5);
+        var member = new SourceSpan(evidence.Members.ExtractionId, 0, 5);
+        var identity = evidence.Candidate;
+        return new(identity.RecordId, number, "civic-lens:analysis", Updated.AddMinutes(number), "Headline", "Summary.", ReviewTextOrigin.Model, null,
+            identity.SourceId, identity.Congress, identity.SessionNumber, identity.RollCallNumber, identity.BillType, identity.BillNumber, candidate,
+            identity.UpdateDate, [new("Result: Passed", fact)], VoteKind.Other, null, [new("with-id-a", "A000001", "Yea", member)], [], new string('e', 64));
     }
 
     private async Task<IReadOnlyList<(string CandidateId, string Task, string Status, string? ErrorCode)>> QueueAsync()

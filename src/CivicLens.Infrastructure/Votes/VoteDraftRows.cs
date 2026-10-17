@@ -57,7 +57,7 @@ internal static class VoteDraftRows
         CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
     };
 
-    private static VoteRevisionRow NewRevision(VoteDraftRevision revision, string runId) => new()
+    public static VoteRevisionRow NewRevision(VoteDraftRevision revision, string? runId) => new()
     {
         RecordId = revision.RecordId,
         RevisionNumber = revision.RevisionNumber,
