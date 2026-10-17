@@ -88,6 +88,24 @@ public sealed class StatementGateResolverTests
     }
 
     [Fact]
+    public void TheModelsYesWinsOverABillNumberSoTheOrderOfTheThreePathsHolds()
+    {
+        var result = StatementGateResolver.Resolve(OutputNamingBillOrVote(), Evidence(Article + " See S. 99."), Rubric());
+
+        Assert.Equal(StatementGateReasons.PassedBillOrVote, result.Reason);
+    }
+
+    [Fact]
+    public void ALiveAnswerWithoutTheBillOrVoteFieldIsRejectedSoOnlyStoredRunsMayLackIt()
+    {
+        var answer = """{"trackedIssues":[],"policyAreas":[],"confidence":0.8}""";
+
+        var result = StatementGateResolver.Resolve(answer, Evidence(Article + " See S. 99."), Rubric());
+
+        Assert.False(result.IsValid);
+    }
+
+    [Fact]
     public void ABillNumberInTheTextPassesWithoutTheModelAnswerSoTheFloorHoldsWhenTheModelMissesIt()
     {
         var result = StatementGateResolver.Resolve(Output(), Evidence(Article + " She introduced H.R. 1234."), Rubric());

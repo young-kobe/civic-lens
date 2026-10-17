@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 namespace CivicLens.Application.Statements;
 
 public static class StatementGateReasons
@@ -11,9 +13,9 @@ public static class StatementGateReasons
 
     public static bool IsKnown(string? reason) => IsPass(reason) || reason is NoTrackedIssue or OverByteCap or FailedOpen;
 
-    public static bool IsPass(string? reason) => reason is Passed or PassedBillOrVote or PassedBillNumber;
+    public static readonly ImmutableArray<string> PassReasons = [Passed, PassedBillOrVote, PassedBillNumber];
 
-    public static string[] PassReasons() => [Passed, PassedBillOrVote, PassedBillNumber];
+    public static bool IsPass(string? reason) => reason is not null && PassReasons.Contains(reason);
 
     public static bool QueuesDraft(string? reason) => IsPass(reason) || reason is OverByteCap or FailedOpen;
 }

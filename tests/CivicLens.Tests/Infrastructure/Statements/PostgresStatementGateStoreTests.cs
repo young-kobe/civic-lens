@@ -131,6 +131,18 @@ public sealed class PostgresStatementGateStoreTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task RegateRequeuesASkipMadeUnderAnOlderGatePromptEvenWhenTheIssueRevisionIsCurrent()
+    {
+        var candidate = await seeder.SeedAsync(Article, "https://example.test/pages/a");
+        await Worker(new FakeStatementGateModel().Classify(Output([])), Revision()).ExecuteAsync(once: true);
+        Assert.Equal(0, await new RegateStatementCandidates(store).ExecuteAsync(Owner, Revision().Id, null));
+        await ExecuteAsync(connectionString, "UPDATE statement_analysis_runs SET prompt_version = 'statement-gate-prompt-v1' WHERE task = 'gate'");
+
+        Assert.Equal(1, await new RegateStatementCandidates(store).ExecuteAsync(Owner, Revision().Id, null));
+        Assert.Equal([("gate", "Pending", null)], await RowsAsync(candidate));
+    }
+
+    [Fact]
     public async Task RegateWithASinceDateSkipsCandidatesCapturedBeforeIt()
     {
         _ = await seeder.SeedAsync(Article, "https://example.test/pages/a");
@@ -186,6 +198,7 @@ public sealed class PostgresStatementGateStoreTests(PostgresCollection postgres)
         Assert.Equal([("gate", "Succeeded", StatementGateReasons.PassedBillOrVote), (StatementDraftTask.Task, "Pending", null)], await RowsAsync(candidate));
         Assert.Equal(StatementGateReasons.PassedBillOrVote, (await store.GetRunAsync(await RunIdAsync(candidate), default))!.Reason);
         Assert.Equal(1, (await store.CountAsync(default))[StatementGateView.Passed]);
+        Assert.Equal(candidate, Assert.Single(await store.ListAsync(StatementGateView.Passed, 10, default)).CandidateId);
     }
 
     private AnalysisWorker<StatementGateRun> Worker(FakeStatementGateModel model, CivicLens.Application.Issues.IssueConfigurationRevision revision,

@@ -239,25 +239,25 @@ Before the first production deploy ([R-23](roadmap.md#later)), reset the develop
 | Normalization | `body-text-v1` | same file | Extraction IDs, text, and citations | Whitespace or block-separator rules change |
 | Comparison algorithm | `line-lcs-context-v1` | `src/CivicLens.Core/Documents/DocumentComparison.cs` | Stored comparison IDs and hunks | Hunk or word-edit output changes |
 | Comparison settings | `bounded-lines-2000-...-v1` | same file | Limits recorded with each comparison | Any limit constant changes |
-| Draft task | `document-change-draft-v1` | `src/CivicLens.Application/Analysis/DocumentChangeDraftTask.cs` | Analysis runs and queue entries | Task flow or output handling changes |
+| Draft task | `document-change-draft-v1` | `src/CivicLens.Application/Analysis/DocumentChangeDraftTask.cs` | Analysis runs | Task flow or output handling changes |
 | Draft prompt | `document-change-draft-prompt-v2` | same file | Analysis runs and review metrics | Prompt text or input framing changes |
 | Draft schema | `document-change-draft-schema-v2` | same file | Analysis runs | The model output schema changes |
-| Statement draft task | `statement-draft-v1` | `src/CivicLens.Application/Statements/StatementDraftTask.cs` | Statement analysis runs and queue entries | Task flow or output handling changes |
+| Statement draft task | `statement-draft-v1` | `src/CivicLens.Application/Statements/StatementDraftTask.cs` | Statement analysis runs | Task flow or output handling changes |
 | Statement draft prompt | `statement-draft-prompt-v1` | same file | Statement analysis runs | Prompt text or input framing changes, for either speaker shape |
 | Statement draft schema | `statement-draft-schema-v1` | same file | Statement analysis runs | The model output schema changes, for either speaker shape |
-| Action draft task | `action-draft-v2` | `src/CivicLens.Application/Actions/ActionDraftTask.cs` | Action analysis runs and queue entries | Task flow or output handling changes |
+| Action draft task | `action-draft-v2` | `src/CivicLens.Application/Actions/ActionDraftTask.cs` | Action analysis runs | Task flow or output handling changes |
 | Action draft prompt | `action-draft-prompt-v2` | same file | Action analysis runs | Prompt text or input framing changes |
 | Action draft schema | `action-draft-schema-v1` | same file | Action analysis runs | The model output schema changes |
-| Vote draft task | `vote-draft-v1` | `src/CivicLens.Application/Votes/VoteDraftTask.cs` | Vote analysis runs and queue entries | Task flow or output handling changes |
+| Vote draft task | `vote-draft-v1` | `src/CivicLens.Application/Votes/VoteDraftTask.cs` | Vote analysis runs | Task flow or output handling changes |
 | Vote draft prompt | `vote-draft-prompt-v1` | same file | Vote analysis runs | Prompt text or input framing changes |
 | Vote draft schema | `vote-draft-schema-v1` | same file | Vote analysis runs | The model output schema changes |
 | Vote fingerprint | `vote-fingerprint-v1` | `src/CivicLens.Application/Votes/VoteFingerprint.cs` | The run input hash of a draft that makes no call | The canonical text of the fingerprint changes |
 | Sponsorship fingerprint | `action-fingerprint-v1` | `src/CivicLens.Application/Collection/Bills/ActionFingerprint.cs` | The fingerprint in each action revision | The canonical text of an entry changes |
-| Brief draft task | `brief-draft-v1` | `src/CivicLens.Application/Briefs/BriefDraftTask.cs` | Brief analysis runs and queue entries | Task flow or output handling changes |
+| Brief draft task | `brief-draft-v1` | `src/CivicLens.Application/Briefs/BriefDraftTask.cs` | Brief analysis runs | Task flow or output handling changes |
 | Brief draft prompt | `brief-draft-prompt-v1` | same file | Brief analysis runs | Prompt text or input framing changes |
 | Brief draft schema | `brief-draft-schema-v1` | same file | Brief analysis runs | The model output schema changes |
 | Brief fingerprint | `brief-fingerprint-v1` | `src/CivicLens.Application/Briefs/BriefFingerprint.cs` | The fingerprint in each brief revision | The canonical text of the fingerprint changes |
-| Gate task | `statement-gate-v1` | `src/CivicLens.Application/Statements/StatementGateTask.cs` | Statement analysis runs and queue entries | Task flow or output handling changes |
+| Gate task | `statement-gate-v2` | `src/CivicLens.Application/Statements/StatementGateTask.cs` | Statement analysis runs | Task flow or output handling changes |
 | Gate prompt | `statement-gate-prompt-v2` | same file | Statement analysis runs | Prompt text or input framing changes |
 | Gate schema | `statement-gate-schema-v2` | same file | Statement analysis runs | The model output schema changes |
 
