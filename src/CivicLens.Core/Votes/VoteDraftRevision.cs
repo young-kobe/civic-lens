@@ -8,7 +8,7 @@ namespace CivicLens.Core.Votes;
 public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, string AuthorSubject, DateTimeOffset CreatedAtUtc,
     string Headline, string Summary, ReviewTextOrigin TextOrigin, ReviewTextSuggestion? Suggestion,
     string SourceId, int Congress, int SessionNumber, int RollCallNumber, string? BillType, int? BillNumber,
-    string CandidateId, DateTimeOffset CandidateUpdateDate, ImmutableArray<VoteFact> Facts, VoteKind Kind, SourceSpan? KindCitation, ImmutableArray<MemberVote> Members,
+    string CandidateId, DateTimeOffset CandidateUpdateDate, ImmutableArray<VoteFact> Facts, DateOnly VotedOn, SourceSpan VotedOnCitation, VoteKind Kind, SourceSpan? KindCitation, ImmutableArray<MemberVote> Members,
     ImmutableArray<string> TrackedIssueIds, string IssueRevisionId)
     : IHeadlineSummaryRevision
 {
@@ -20,7 +20,7 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
 
     public ReviewAuthorKind AuthorKind => ReviewAuthor.KindOf(AuthorSubject);
 
-    public IEnumerable<SourceSpan> Citations => Facts.Select(fact => fact.Citation)
+    public IEnumerable<SourceSpan> Citations => new[] { VotedOnCitation }.Concat(Facts.Select(fact => fact.Citation))
         .Concat(KindCitation is { } kind ? [kind] : []).Concat(Members.Select(member => member.Citation));
 
     public void ValidateShape()
@@ -37,6 +37,8 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
         if (Facts.IsDefault || Facts.Length > MaximumFacts || Facts.Any(fact => !IsBounded(fact.Citation)))
             throw new ArgumentException($"A vote revision needs at most {MaximumFacts} facts with bounded citations.");
         foreach (var fact in Facts) ReviewTextRules.ValidateText(fact.Text, MaximumFactLength, nameof(Facts));
+        if (VotedOn == default || !IsBounded(VotedOnCitation))
+            throw new ArgumentException("A vote revision needs the vote day with a bounded citation of its start line.");
         if (!Enum.IsDefined(Kind) || KindCitation is { } kindCitation && !IsBounded(kindCitation) || Kind != VoteKind.Other && KindCitation is null)
             throw new ArgumentException("A vote kind other than Other needs a bounded citation of its question.");
         if (Members.IsDefaultOrEmpty || Members.Length > MaximumMembers)
@@ -77,7 +79,8 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
     private bool HasSameStructuredPartAs(VoteDraftRevision other) =>
         RecordId == other.RecordId && SourceId == other.SourceId && Congress == other.Congress && SessionNumber == other.SessionNumber &&
         RollCallNumber == other.RollCallNumber && BillType == other.BillType && BillNumber == other.BillNumber &&
-        CandidateId == other.CandidateId && CandidateUpdateDate == other.CandidateUpdateDate && Facts.SequenceEqual(other.Facts) &&
+        CandidateId == other.CandidateId && CandidateUpdateDate == other.CandidateUpdateDate && VotedOn == other.VotedOn &&
+        VotedOnCitation == other.VotedOnCitation && Facts.SequenceEqual(other.Facts) &&
         Kind == other.Kind && KindCitation == other.KindCitation && Members.SequenceEqual(other.Members) &&
         TrackedIssueIds.SequenceEqual(other.TrackedIssueIds) && IssueRevisionId == other.IssueRevisionId;
 

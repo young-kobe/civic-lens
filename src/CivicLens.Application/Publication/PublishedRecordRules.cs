@@ -21,6 +21,17 @@ internal sealed class PublishedRecordRules(PublicationCatalog catalog)
         return new() { ExtractionId = span.ExtractionId, Start = span.Start, Length = span.Length, Quote = span.Quote };
     }
 
+    public static PublishedDocumentVersion[] Sources(IEnumerable<SourceSpan> citations, IReadOnlyDictionary<string, DocumentExtraction> extractions) =>
+        [.. citations.Select(span => span.ExtractionId).Distinct(StringComparer.Ordinal)
+            .Select(id => extractions[id])
+            .Select(extraction => new PublishedDocumentVersion
+            {
+                ExtractionId = extraction.ExtractionId,
+                Url = extraction.SourceAttempt.FinalUrl,
+                ObservedAtUtc = extraction.SourceAttempt.ObservedAt,
+                Text = extraction.Text
+            })];
+
     public PublishedOfficial MapOfficial(string recordId, string officialId) => new()
     {
         Id = officialId,

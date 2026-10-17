@@ -183,7 +183,7 @@ The analysis queues share the `civic_lens_analysis` channel. The notify trigger 
 The keys, in their declared order:
 
 - `civic-lens-collection-jobs`: `PostgresCollectionJobStore` takes it at the start of each admission, claim, and settlement transaction. Discovery admission needs no other key, because this key already serializes every admission.
-- Review keys: `civic-lens-document-change-review`, `civic-lens-statement-review`, `civic-lens-action-review`, `civic-lens-vote-review`, and `civic-lens-brief-review`. Publication takes the document change, statement, action, and brief keys in the order of `PostgresAdvisoryLock.ReviewKeysInOrder`. The vote key is declared before the brief key. Vote drafting and vote review take it today. Vote publication will add it to that order.
+- Review keys: `civic-lens-document-change-review`, `civic-lens-statement-review`, `civic-lens-action-review`, `civic-lens-vote-review`, and `civic-lens-brief-review`. Publication takes all five keys in the order of `PostgresAdvisoryLock.ReviewKeysInOrder`. The vote key comes after the action key and before the brief key. Vote drafting, vote review, and vote publication take it.
 - `civic-lens-collection-import`: the import store takes it for each write. No transaction holds it with another key.
 
 A transaction that takes a brief queue row lock takes it before `civic-lens-brief-review`. The worker settlement locks its row and then takes the brief key. A publication commit, a release activation, and a review decision that must requeue a brief therefore lock every brief queue row in key order first. They use `BriefStaleness.TakeLocksAsync` and then take the brief key. The commit and the activation take the earlier review keys (`PostgresAdvisoryLock.ReviewKeysBeforeBriefs`), then the brief rows, then the brief key.
@@ -249,10 +249,11 @@ Before the first production deploy ([R-23](roadmap.md#later)), reset the develop
 | Action draft task | `action-draft-v2` | `src/CivicLens.Application/Actions/ActionDraftTask.cs` | Action analysis runs | Task flow or output handling changes |
 | Action draft prompt | `action-draft-prompt-v2` | same file | Action analysis runs | Prompt text or input framing changes |
 | Action draft schema | `action-draft-schema-v1` | same file | Action analysis runs | The model output schema changes |
-| Vote draft task | `vote-draft-v2` | `src/CivicLens.Application/Votes/VoteDraftTask.cs` | Vote analysis runs | Task flow or output handling changes |
+| Vote draft task | `vote-draft-v3` | `src/CivicLens.Application/Votes/VoteDraftTask.cs` | Vote analysis runs | Task flow or output handling changes |
 | Vote draft prompt | `vote-draft-prompt-v2` | same file | Vote analysis runs | Prompt text or input framing changes |
 | Vote draft schema | `vote-draft-schema-v1` | same file | Vote analysis runs | The model output schema changes |
 | Vote fingerprint | `vote-fingerprint-v1` | `src/CivicLens.Application/Votes/VoteFingerprint.cs` | The run input hash of a draft that makes no call | The canonical text of the fingerprint changes |
+| House vote render | `house-vote-render-v2` | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteRenderer.cs` | Vote extraction text and citations | The rendered text of a vote changes |
 | Sponsorship fingerprint | `action-fingerprint-v1` | `src/CivicLens.Application/Collection/Bills/ActionFingerprint.cs` | The fingerprint in each action revision | The canonical text of an entry changes |
 | Brief draft task | `brief-draft-v1` | `src/CivicLens.Application/Briefs/BriefDraftTask.cs` | Brief analysis runs | Task flow or output handling changes |
 | Brief draft prompt | `brief-draft-prompt-v1` | same file | Brief analysis runs | Prompt text or input framing changes |
@@ -365,6 +366,7 @@ This is the only navigation index.
 | Review lists, paging, overview counts | [Review](architecture/review.md#lists-and-paging) | `src/CivicLens.Application/Review/ListDocumentChangeReviews.cs` |
 | Releases, activation, rollback | [Publication](architecture/publication.md#publish) | `src/CivicLens.Application/Publication/PublishRelease.cs` |
 | Release record content and schema | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Publication.Contracts/PublicationRelease.cs` |
+| Published vote record, builder, and page | [Publication](architecture/publication.md#vote-record) | `src/CivicLens.Publication.Contracts/PublishedVote.cs` |
 | Backups, retention, monitoring | [Publication](architecture/publication.md#limits-and-planned-work) | none |
 | Web host, security headers, components | [Host](architecture/host.md#behavior) | `src/CivicLens.Host/Program.cs` |
 | Production hosting plan | [Host](architecture/host.md#limits-and-planned-work) | none |

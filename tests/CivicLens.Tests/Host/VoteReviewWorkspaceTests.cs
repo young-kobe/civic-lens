@@ -74,7 +74,8 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
         var candidateId = new string('b', 64);
         var revision = new VoteDraftRevision(recordId, 1, "auth0|editor", DateTimeOffset.UtcNow, "The House passed a measure",
             "The House voted on passage.", ReviewTextOrigin.Person, null, HouseVoteFixtures.SourceId, 119, 1, 100, null, null, candidateId,
-            HouseVoteFixtures.Updated, [new(question, new SourceSpan(extraction.ExtractionId, 0, question.Length))], VoteKind.Passage,
+            HouseVoteFixtures.Updated, [new(question, new SourceSpan(extraction.ExtractionId, 0, question.Length))],
+            new DateOnly(2025, 4, 10), new SourceSpan(extraction.ExtractionId, 0, question.Length), VoteKind.Passage,
             new SourceSpan(extraction.ExtractionId, 0, question.Length),
             [new("with-id-a", "A000001", "Yea", new SourceSpan(extraction.ExtractionId, question.Length + 1, member.Length))], [], new string('e', 64));
         await using var connection = new NpgsqlConnection(host.ConnectionString);

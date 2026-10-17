@@ -13,6 +13,7 @@ using CivicLens.Infrastructure.Publication.Persistence;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Review.Persistence;
 using CivicLens.Infrastructure.Statements.Persistence;
+using CivicLens.Infrastructure.Votes.Persistence;
 using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -202,6 +203,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         await AddDocumentChangeStatesAsync(db, IdsOf(expectations, PublishedRecordKind.DocumentChange), current, cancellationToken);
         await AddStatementStatesAsync(db, IdsOf(expectations, PublishedRecordKind.Statement), current, cancellationToken);
         await AddActionStatesAsync(db, IdsOf(expectations, PublishedRecordKind.Action), current, cancellationToken);
+        await AddVoteStatesAsync(db, IdsOf(expectations, PublishedRecordKind.Vote), current, cancellationToken);
         await AddBriefStatesAsync(db, IdsOf(expectations, PublishedRecordKind.Brief), current, cancellationToken);
         return current;
     }
@@ -234,6 +236,16 @@ public sealed class PostgresPublicationStore : IPublicationStore
             .Where(row => recordIds.Contains(row.RecordId)).ToArrayAsync(cancellationToken);
         foreach (var row in actions)
             current[(PublishedRecordKind.Action, row.RecordId)] = (row.CurrentRevisionNumber, row.ReviewStateVersion);
+    }
+
+    private static async Task AddVoteStatesAsync(CollectionAttemptDbContext db, string[] recordIds,
+        Dictionary<(PublishedRecordKind, string), (int, int)> current, CancellationToken cancellationToken)
+    {
+        if (recordIds.Length == 0) return;
+        var votes = await db.Set<VoteDraftRow>().AsNoTracking()
+            .Where(row => recordIds.Contains(row.RecordId)).ToArrayAsync(cancellationToken);
+        foreach (var row in votes)
+            current[(PublishedRecordKind.Vote, row.RecordId)] = (row.CurrentRevisionNumber, row.ReviewStateVersion);
     }
 
     private static async Task AddBriefStatesAsync(CollectionAttemptDbContext db, string[] recordIds,

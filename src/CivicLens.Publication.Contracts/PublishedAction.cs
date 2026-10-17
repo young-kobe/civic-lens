@@ -45,7 +45,7 @@ public sealed record PublishedAction
             throw new InvalidDataException("Published record identity or wording is invalid.");
         if (Congress < 1 || BillNumber < 1 || string.IsNullOrWhiteSpace(BillType) || string.IsNullOrWhiteSpace(BillTitle))
             throw new InvalidDataException("Published action requires a bill identity and title.");
-        ValidateSources();
+        PublishedEvidenceRules.RequireSources(Sources, MaximumSources, "action");
         if (Sponsorships is null || Sponsorships.Length is 0 or > MaximumSponsorships)
             throw new InvalidDataException($"Published action requires 1 to {MaximumSponsorships} sponsorships.");
         foreach (var sponsorship in Sponsorships) ValidateSponsorship(sponsorship);
@@ -57,21 +57,11 @@ public sealed record PublishedAction
         if (SummaryCitation is not null) ValidateCitation(SummaryCitation);
         if (TrackedIssueIds is null || !PublishedEvidenceRules.AreDistinctAndNotBlank(TrackedIssueIds))
             throw new InvalidDataException("Published action tracked issue ids must be distinct and not blank.");
-        if (Sources.Any(source => !Citations.Any(citation => citation.ExtractionId == source.ExtractionId)))
-            throw new InvalidDataException("Each published action source must be cited.");
+        PublishedEvidenceRules.RequireEverySourceCited(Sources, Citations(), "action");
     }
 
-    private IEnumerable<PublishedCitation> Citations => Sponsorships.SelectMany(item => item.Citations)
+    public IEnumerable<PublishedCitation> Citations() => Sponsorships.SelectMany(item => item.Citations)
         .Concat(PolicyAreaCitation is { } area ? [area] : []).Concat(SummaryCitation is { } summary ? [summary] : []);
-
-    private void ValidateSources()
-    {
-        if (Sources is null || Sources.Length is 0 or > MaximumSources)
-            throw new InvalidDataException($"Published action requires 1 to {MaximumSources} sources.");
-        foreach (var source in Sources) PublishedEvidenceRules.RequireVersion(source);
-        if (Sources.DistinctBy(source => source.ExtractionId).Count() != Sources.Length)
-            throw new InvalidDataException("Published action sources must be distinct.");
-    }
 
     private void ValidateSponsorship(PublishedSponsorship? sponsorship)
     {
@@ -85,11 +75,5 @@ public sealed record PublishedAction
         foreach (var citation in sponsorship.Citations) ValidateCitation(citation);
     }
 
-    private void ValidateCitation(PublishedCitation? citation)
-    {
-        if (citation is null) throw new InvalidDataException("Published citation is missing.");
-        var source = Sources.FirstOrDefault(item => item.ExtractionId == citation.ExtractionId)
-            ?? throw new InvalidDataException("Published citation must cite one of the action's sources.");
-        PublishedEvidenceRules.RequireQuote(source.Text, citation.Start, citation.Length, citation.Quote);
-    }
+    private void ValidateCitation(PublishedCitation? citation) => PublishedEvidenceRules.RequireCitation(Sources, citation, "action");
 }

@@ -1,16 +1,19 @@
+using System.Globalization;
 using static CivicLens.Application.Collection.RenderedText;
 
 namespace CivicLens.Application.Collection.HouseVotes;
 
 public static class HouseVoteRenderer
 {
-    public const string NormalizationVersion = "house-vote-render-v1";
+    private const string StartedFormat = "yyyy-MM-dd'T'HH:mm:sszzz";
+
+    public const string NormalizationVersion = "house-vote-render-v2";
 
     public static string RenderDetail(HouseVoteDetail detail)
     {
         ArgumentNullException.ThrowIfNull(detail);
         var lines = new List<string> { IdentityLine("House vote", detail.Vote), UpdatedLine(detail.Vote) };
-        AddLine(lines, "Started", detail.StartDate is { } start ? ApiJobKeys.ExactTime(start) : null);
+        AddLine(lines, "Started", detail.StartDate is { } start ? start.ToString(StartedFormat, CultureInfo.InvariantCulture) : null);
         AddLine(lines, "Question", detail.Question);
         AddLine(lines, "Vote type", detail.VoteType);
         AddLine(lines, "Result", detail.Result);

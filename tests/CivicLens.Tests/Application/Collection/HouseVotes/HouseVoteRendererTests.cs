@@ -14,7 +14,7 @@ public sealed class HouseVoteRendererTests
         Assert.Equal("""
             House vote: 119 1 100
             Updated: 2025-06-24T12:34:41Z
-            Started: 2025-04-10T15:08:00Z
+            Started: 2025-04-10T11:08:00-04:00
             Question: On Motion to Concur in the Senate Amendment
             Vote type: Yea-and-Nay
             Result: Passed
@@ -33,6 +33,14 @@ public sealed class HouseVoteRendererTests
         var reversed = detail with { PartyTotals = [.. detail.PartyTotals.Reverse()] };
 
         Assert.Equal(HouseVoteRenderer.RenderDetail(detail), HouseVoteRenderer.RenderDetail(reversed));
+    }
+
+    [Fact]
+    public void TheStartLineKeepsTheOffsetOfTheApiSoAnEveningVoteKeepsItsHouseDay()
+    {
+        var evening = Detail() with { StartDate = new DateTimeOffset(2025, 7, 2, 21, 15, 0, TimeSpan.FromHours(-4)) };
+
+        Assert.Contains("\nStarted: 2025-07-02T21:15:00-04:00\n", HouseVoteRenderer.RenderDetail(evening), StringComparison.Ordinal);
     }
 
     [Fact]

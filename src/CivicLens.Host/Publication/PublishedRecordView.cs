@@ -11,6 +11,8 @@ internal static class PublishedRecordView
 
     public static string CitationAnchor(int index) => $"cite-{index + 1}";
 
+    public static string RecordLink(string recordId) => "../" + PublicationProtocol.RecordPagePath(recordId);
+
     public static ImmutableArray<DocumentComparisonHunk> Hunks(PublishedDocumentChange record) =>
         [.. record.Changes.Select(change => new DocumentComparisonHunk(
             change.BeforeStart, change.BeforeLength, change.AfterStart, change.AfterLength,

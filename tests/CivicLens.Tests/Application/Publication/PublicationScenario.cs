@@ -14,7 +14,9 @@ using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Tests.Application.Actions;
+using CivicLens.Core.Votes;
 using CivicLens.Tests.Application.Statements;
+using CivicLens.Tests.Application.Votes;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 
@@ -32,10 +34,11 @@ internal sealed class PublicationScenario
     public FakeReviewStore Reviews { get; } = new();
     public FakeStatementReviewStore Statements { get; } = new();
     public FakeActionReviewStore Actions { get; } = new();
+    public FakeVoteReviewStore Votes { get; } = new();
     public FakeBriefReviewStore Briefs { get; } = new();
     public Dictionary<string, string> OfficialNames { get; } = new() { ["mayor"] = "Mayor Example", ["chair"] = "Council Chair Example" };
 
-    public PublishedRecordLoaders Loaders() => new(Reviews, Statements, Actions, Briefs);
+    public PublishedRecordLoaders Loaders() => new(Reviews, Statements, Actions, Votes, Briefs);
 
     public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer(), Loaders(),
         new PublicationCatalog(OfficialNames), Clock);
@@ -196,6 +199,34 @@ internal sealed class PublicationScenario
         return recordId;
     }
 
+    public const string VoteDetail = "Started: 2025-04-10T11:08:00-04:00\nQuestion: On Passage\nResult: Passed\nLegislation: HR 7\n";
+    public const string VoteMembers = "Member: M000001, Mayor Example, D, MA, Yea\n";
+
+    public string AddVote(char id, ImmutableArray<ReviewDecision>? decisions = null, ReviewTextOrigin origin = ReviewTextOrigin.Model,
+        string? billType = "hr", ImmutableArray<string>? billActionRecordIds = null)
+    {
+        var recordId = new string(id, 64);
+        var detail = Extraction(VoteDetail, $"vote-detail-{id}", "https://api.congress.gov/v3/house-vote/119/1/100");
+        var members = Extraction(VoteMembers, $"vote-members-{id}", "https://api.congress.gov/v3/house-vote/119/1/100/members");
+        SourceSpan Line(DocumentExtraction extraction, string text, string line) =>
+            new(extraction.ExtractionId, text.IndexOf(line, StringComparison.Ordinal), line.Length);
+        VoteFact Fact(string line) => new(line, Line(detail, VoteDetail, line));
+        var revision = new VoteDraftRevision(recordId, 1, origin == ReviewTextOrigin.Model ? "civic-lens:analysis" : "auth0|editor", ApprovedAt,
+            $"Vote {id}", "The House voted on passage.", origin, null, "congress-house-votes", 119, 1, 100, billType, billType is null ? null : 7,
+            new string('b', 64), ApprovedAt,
+            [Fact("Started: 2025-04-10T11:08:00-04:00"), Fact("Question: On Passage"), Fact("Result: Passed"), Fact("Legislation: HR 7")],
+            new DateOnly(2025, 4, 10), Line(detail, VoteDetail, "Started: 2025-04-10T11:08:00-04:00"), VoteKind.Passage,
+            Line(detail, VoteDetail, "Question: On Passage"),
+            [new("mayor", "M000001", "Yea", Line(members, VoteMembers, "Member: M000001, Mayor Example, D, MA, Yea"))], ["housing"], new string('e', 64));
+        var all = decisions ?? [Decision(recordId, 1, ReviewDecisionKind.Approve)];
+        var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
+        var review = new VoteReview(recordId, revision, null, [revision], all.Length, ReviewPolicy.GetCurrentStatus(1, all, concerns), all, concerns);
+        Votes.Publishable[recordId] = new(review, ImmutableDictionary.CreateRange(StringComparer.Ordinal,
+            [KeyValuePair.Create(detail.ExtractionId, detail), KeyValuePair.Create(members.ExtractionId, members)]),
+            billActionRecordIds ?? []);
+        return recordId;
+    }
+
     public string AddBrief(DateOnly week, PublishedRevisionBinding[] cited, ReviewDecisionKind decision = ReviewDecisionKind.Approve)
     {
         var recordId = BriefWeek.RecordIdOf(week);
@@ -232,6 +263,8 @@ internal sealed class FakeRenderer : IReleaseRenderer
         Task.FromResult($"<html>statement {record.RecordId}</html>");
     public Task<string> RenderActionAsync(PublishedAction record, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>action {record.RecordId}</html>");
+    public Task<string> RenderVoteAsync(PublishedVote record, string? billActionRecordId, CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>vote {record.RecordId} bill {billActionRecordId}</html>");
     public Task<string> RenderBriefAsync(PublishedBrief record, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>brief {record.RecordId}</html>");
     public Task<string> RenderIndexAsync(PublicationRelease release, int page, CancellationToken cancellationToken) =>

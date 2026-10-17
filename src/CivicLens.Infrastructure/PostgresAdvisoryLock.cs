@@ -19,7 +19,7 @@ internal static class PostgresAdvisoryLock
 
     private const string AcquireSql = "SELECT pg_advisory_xact_lock(hashtextextended(@key, 0))";
 
-    internal static readonly IReadOnlyList<string> ReviewKeysBeforeBriefs = [DocumentChangeReview, StatementReview, ActionReview];
+    internal static readonly IReadOnlyList<string> ReviewKeysBeforeBriefs = [DocumentChangeReview, StatementReview, ActionReview, VoteReview];
 
     internal static readonly IReadOnlyList<string> ReviewKeysInOrder = [.. ReviewKeysBeforeBriefs, BriefReview];
 
