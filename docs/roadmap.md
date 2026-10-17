@@ -26,7 +26,7 @@ The path to the first deploy is R-15, R-16, R-19 and R-20, R-36, R-23 and R-18, 
 
 ### Now
 
-- R-15: House roll-call votes as actions. Collection, vote candidates, and drafting are done. Review and publication remain. Depends on: none stated. It does not need R-14. [Votes](architecture/votes.md#limits-and-planned-work)
+- R-15: House roll-call votes as actions. Collection, vote candidates, drafting, and review are done. Publication remains. Depends on: none stated. It does not need R-14. [Votes](architecture/votes.md#limits-and-planned-work)
 
 ### Next
 

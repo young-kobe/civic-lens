@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The review feature is the private editorial workspace. People draft, revise, and decide on proposed public records beside their evidence. Every decision binds to an exact immutable revision. This page covers document changes and the decision rules that statements and actions share. Statement-specific review is in [statements](statements.md#statement-review). Action-specific review is in [actions](actions.md#action-review). Brief-specific review is in [briefs](briefs.md#brief-review).
+The review feature is the private editorial workspace. People draft, revise, and decide on proposed public records beside their evidence. Every decision binds to an exact immutable revision. This page covers document changes and the decision rules that statements, actions, and votes share. Statement-specific review is in [statements](statements.md#statement-review). Action-specific review is in [actions](actions.md#action-review). Vote-specific review is in [votes](votes.md#vote-review). Brief-specific review is in [briefs](briefs.md#brief-review).
 
 ## Decisions
 
@@ -18,7 +18,7 @@ The review feature is the private editorial workspace. People draft, revise, and
 - Decisions are immutable. They cannot be edited or deleted.
 - A saved revision never resolves a concern by itself. Only an explicit approval with a resolution note does.
 - Shared Application handlers own these rules for the UI, the CLI, and future MCP callers.
-- Document changes, statements, actions, and briefs share one decision policy, `ReviewPolicy`. Briefs reach it through `ReviewRecords`.
+- Document changes, statements, actions, votes, and briefs share one decision policy, `ReviewPolicy`. Briefs reach it through `ReviewRecords`.
 - A review cycle starts at the latest approval. Reads load the current revision, the last approved revision, and the decisions since that approval. A cycle has no revision cap. The open-concern cap bounds its decisions.
 - One step appends a revision and computes `review_status` again. Person saves and analysis appends both use it.
 - `review_status` and `has_changes` are stored columns that C# computes. SQL filters read them, so SQL keeps no copy of the policy.
@@ -139,7 +139,7 @@ A new change is a complete comparison with at least one text hunk and no draft. 
 
 The Review home page lists new changes, drafts, source health, and recent activity. The owner also sees the latest root job of each configured source; see [collection](collection.md#sources-page). The recent activity feed reads the newest events of each kind from the review tables. For the owner only, it also reads the job and processing tables. Application merges the events by time.
 
-`RecordRoutes.Editor` maps a record kind and a record ID to its review page. It calls `DocumentRoutes`, `StatementRoutes`, `ActionRoutes`, or `BriefRoutes`.
+`RecordRoutes.Editor` maps a record kind and a record ID to its review page. It calls `DocumentRoutes`, `StatementRoutes`, `ActionRoutes`, or `BriefRoutes`. Votes have `VoteRoutes`, but no record kind in `RecordRoutes` until vote publication exists.
 
 ### Workspace forms
 
@@ -163,8 +163,8 @@ The Host uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.12 for th
 - Core/Review owns decision semantics. Application/Review owns authenticated commands and configured selection validation. Infrastructure/Review implements the store boundary with Postgres.
 - `ReviewPolicy` holds the status rule, the open-concern rule, and the decision checks. It works on a record ID, the current revision number, the review state version, and the decisions. It knows no record type.
 - Review writes take the review keys from `PostgresAdvisoryLock`. The keys and their order are in [advisory locks](../architecture.md#advisory-locks).
-- `ReviewRecords` is the shared store core for each record type. Each store holds one instance over its draft, revision, and decision rows, its lock key, and its record ID property. It owns the create, save, and decide flow, the append step, the status filters, the draft page, and the unpublished approved list. Its bounded batch reads parse and validate one review cycle for each record into a `ReviewHistory`. Its batched revision 1 read parses and validates the shape of each revision 1. A store gives only its feature rules as delegates. They are the create body, the save preparation, the revision row builder, the decision checks, and the decision row builder. Actions and briefs also give a delegate that records the revision time on the draft row. Each store can give a callback for a withdrawn approval, which requeues the briefs that cite the record; see [briefs](briefs.md#staleness). The rows implement `IReviewDraftRow`, `IReviewRevisionRow`, and `IReviewDecisionRow`, and the revisions implement `IReviewRevision`. `IReviewRevision` is a deliberate departure from the concrete-types rule and the first interface in Core. Core cannot see Infrastructure, and the shared core needs it as its generic constraint.
-- `ReviewRecords.AppendRevision` is the one step that appends a revision and computes `review_status` again. The person save and the action and brief analysis appends call it. Document-change and statement analysis drafts only create revision 1, so they use `ReviewPolicy.GetInitialStatus`.
+- `ReviewRecords` is the shared store core for each record type. Each store holds one instance over its draft, revision, and decision rows, its lock key, and its record ID property. It owns the create, save, and decide flow, the append step, the status filters, the draft page, and the unpublished approved list. Its bounded batch reads parse and validate one review cycle for each record into a `ReviewHistory`. Its batched revision 1 read parses and validates the shape of each revision 1. A store gives only its feature rules as delegates. They are the create body, the save preparation, the revision row builder, the decision checks, and the decision row builder. Actions, votes, and briefs also give a delegate that records the revision time on the draft row. Actions and votes share the headline and summary text rules in `ReviewText` and `ReviewTextRules`. Each store can give a callback for a withdrawn approval, which requeues the briefs that cite the record; see [briefs](briefs.md#staleness). The rows implement `IReviewDraftRow`, `IReviewRevisionRow`, and `IReviewDecisionRow`, and the revisions implement `IReviewRevision`. `IReviewRevision` is a deliberate departure from the concrete-types rule and the first interface in Core. Core cannot see Infrastructure, and the shared core needs it as its generic constraint.
+- `ReviewRecords.AppendRevision` is the one step that appends a revision and computes `review_status` again. The person save and the action, vote, and brief analysis appends call it. Document-change and statement analysis drafts only create revision 1, so they use `ReviewPolicy.GetInitialStatus`.
 - `ReviewIdempotency` reads and writes replay receipts and checks the actor, key, and payload hash. `ReviewDecisionHistory` parses and replays the stored decisions of one review cycle. `IReviewDecisionRow` exposes the decision kind, so the cycle read finds the latest approval in SQL. `ReviewKeyset` builds the keyset page filter. `ReviewJson` holds the stored JSON options.
 - Four tables hold record pointers, immutable revision JSON, immutable decision JSON, and actor, operation, and request-key replay receipts.
 - Draft and decision expected versions are checked inside the locked transaction.

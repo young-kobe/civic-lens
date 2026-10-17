@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The votes feature collects House roll-call votes from the Congress.gov `house-vote` API. It fetches the detail and the member votes of each roll call as durable jobs. Each roll call version with both pages captured becomes a vote candidate. The `worker` drafts one vote record for each source and roll call from these candidates. Review and publication of vote records are planned.
+The votes feature collects House roll-call votes from the Congress.gov `house-vote` API. It fetches the detail and the member votes of each roll call as durable jobs. Each roll call version with both pages captured becomes a vote candidate. The `worker` drafts one vote record for each source and roll call from these candidates. A person reviews and approves each vote record on the vote review pages. Publication of vote records is planned.
 
 ## Decisions
 
@@ -34,7 +34,9 @@ The votes feature collects House roll-call votes from the Congress.gov `house-vo
 - Code produces every fact with its citation. The model writes only the headline and a plain summary of the question.
 - The model sees only the fact lines. It sees no member and no vote, and its text may name no configured person. Code lists the tracked members and their votes beside the text. So copied text can never state a vote that a later correction changed.
 - When only the votes of tracked members change, drafting makes no model call. It copies the text of the current revision, as action drafting does for sponsorships.
-- The vote record has no text origin, no suggestion, and no person edit rule yet. The review change adds them with the review pages.
+- A person edits only the headline and the summary of a vote record. The revision holds a `TextOrigin` and a suggestion, with the same append rules as an [action](actions.md#revision-and-append). Text that a person wrote survives later model runs. The model text then becomes a suggestion.
+- Votes get review as actions do: a review store, a list page, an editor page, a decide handler, review counts, and review history. Votes have no bulk approval, because a vote record has no change that is safe to approve without a read.
+- Review writes take the `civic-lens-vote-review` lock, the key that the drafting append already takes. Vote publication is planned and will add this key to the publication lock order.
 - The owner command `votes draft` has `status`, `list`, and `requeue`. It copies the `actions draft` command and its shared queue commands. `status` also shows the number of waiting votes.
 - A Blocked vote entry can return to Pending. The lifecycle allows the move, as the [action](actions.md#decisions) lifecycle does. A Succeeded entry never returns to Pending. The owner command moves only Blocked entries with an exact code.
 - The vote kind (D-10, accepted on 2026-10-17) comes from a code table, not from the model. `VoteKindTable` maps the `Question` line to a kind. The kinds are rule, previous question, motion to recommit, amendment, suspension, passage, conference report, veto override, and other. An unknown question gives other.
@@ -92,6 +94,12 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - The saved extraction text must equal the new render of its capture. Enforced by `VoteReader`. Test: `VoteDraftStepTests.ARenderedTextThatDiffersFromTheSavedExtractionBlocksBeforeAnyCall`.
 - A saved extraction of an older parser blocks before any capture is parsed. Enforced by `VoteReader`. Test: `VoteDraftStepTests.AChangedParserVersionBlocksBeforeAnyCaptureIsParsedSoAnUpgradeIsNeverReportedAsBrokenData`.
 - A candidate with a newer candidate of the same roll call never becomes a revision. Enforced by `VoteDraftStep` and `VoteDraftRows.AppendAnalysisRevisionAsync`. Tests: `VoteDraftStepTests.ACandidateWithANewerCandidateOfTheSameRollCallIsSupersededWithoutACall` and `PostgresHouseVoteTests.ANewerCandidateThatArrivesAfterTheClaimSupersedesTheAppendSoTheOlderDraftNeverBecomesARevision`.
+- A person edits only the headline and the summary. Enforced by `VoteDraftRevision.ValidatePersonEditOf`, checked again under the vote review lock. Test: `VoteDraftRevisionTests.AVoteReviewerEditsOnlyTheHeadlineAndTheSummaryBecauseCodeOwnsTheKindTheFactsAndTheMemberVotes`.
+- A person may keep or clear the suggestion, but never change it. Enforced by `ReviewTextRules.RequireSuggestionKeptOrCleared`, checked again under the lock. Tests: `VoteDraftRevisionTests.APersonMayKeepOrClearTheSuggestionButNeverChangeItBecauseOnlyTheModelWritesSuggestions` and `PostgresHouseVoteTests.APersonSaveMayKeepOrClearTheSuggestionButTheStoreRefusesAChangedOne`.
+- A later model run keeps the text of a person and offers its own text as a suggestion. Enforced by `ReviewText.AfterModelDraft` and `ReviewTextRules.RequireAnalysisText`. Tests: `VoteDraftStepTests.APersonsTextIsKeptAndTheModelsNewTextBecomesASuggestionBecauseAModelPredictionIsNeverAHumanEdit`, `VoteDraftStepTests.ACorrectedMemberVoteKeepsAPersonsTextAndTheSuggestionWithoutAModelCall`, and `VoteDraftRevisionTests.ARevisionAfterAPersonsTextMustKeepThatTextAndOfferTheModelsAsASuggestion`.
+- An approval binds to the exact revision that the page showed. Enforced by `ReviewWriteRules` under the lock. Tests: `PostgresHouseVoteTests.ApprovalBindsToTheExactRevisionSoAWorkerRevisionAfterThePageLoadedTurnsItIntoAConflict` and `PostgresHouseVoteTests.ADecisionWithAStaleReviewStateVersionIsAConflictSoTwoReviewersCannotOverwriteEachOther`.
+- A model revision never counts as approval. A new analysis revision recomputes the stored status, so an approved record needs review again. Enforced by `ReviewRecords.AppendRevision`. Test: `PostgresHouseVoteTests.AWorkerRevisionAfterAnApprovalNeedsReviewAgainBecauseAModelRevisionNeverCountsAsApproval`.
+- An approval checks every citation of the revision against its saved extraction. Enforced by `PostgresVoteReviewStore` and `VoteDraftRevision.ValidateAgainst`. Test: `PostgresHouseVoteTests.ApprovalChecksEveryCitationAgainstItsSavedExtractionSoNoApprovalRestsOnAMissingLine`.
 - An append needs the expected revision number and the vote review lock. Enforced by `VoteDraftRows.AppendAnalysisRevisionAsync`. Tests: `PostgresHouseVoteTests.APersonsConcurrentRevisionFailsTheExpectedVersionCheckSoTheRunRetriesWithBackoffAndAppendsNothing` and `PostgresHouseVoteTests.AnAppendWaitsForTheVoteReviewLockSoAHumanSaveAndTheWorkerNeverInterleave`.
 - An unchanged or no-member settlement carries its bypassed run. Enforced by `VoteDraftQueueMapping.PrepareSettlementAsync`. Test: `PostgresHouseVoteTests.AnUnchangedOrNoMemberSettlementWithoutItsRunIsRefused`.
 - An analysis revision has a run, and a revision follows the current number. Enforced by `ck_vote_revisions_run` and `VoteDraftRevision.ValidateAsAnalysisRevision`. Tests: `PostgresHouseVoteTests.TheDatabaseRefusesAnAnalysisRevisionWithoutARunAndAPersonRevisionWithOne` and `VoteDraftRevisionTests.AnAnalysisRevisionFollowsTheCurrentOneAndAFirstRevisionIsNumberOne`.
@@ -250,7 +258,30 @@ A run that makes no call has the reason `unchanged`, `noTrackedMember`, `memberV
 
 The record ID is the SHA-256 of the source, the congress, the session, and the roll call (`PostgresCollectionJobStore.HashHouseVoteRecord`). It frames the text with the prefix `house-vote-record:`. The update time is not part of it.
 
-`VoteDraftRevision` (Core/Votes) holds the headline, the summary, the candidate identity, and the bill identity. It also holds the facts and the vote kind with the citation of its question. Last come the member votes, the tracked issue IDs, and the issue revision ID. `VoteDraftRows.AppendAnalysisRevisionAsync` appends it in the settlement transaction of the queue row. It takes the `civic-lens-vote-review` lock and refuses a candidate with a newer one. It checks the expected revision number and calls `ReviewRecords.AppendRevision`. A refused append discards the run and keeps the entry for a retry.
+`VoteDraftRevision` (Core/Votes) holds the headline, the summary, the text origin, the suggestion, the candidate identity, and the bill identity. It also holds the facts and the vote kind with the citation of its question. Last come the member votes, the tracked issue IDs, and the issue revision ID. `VoteDraftRows.AppendAnalysisRevisionAsync` appends it in the settlement transaction of the queue row. It takes the `civic-lens-vote-review` lock and refuses a candidate with a newer one. It checks the expected revision number and calls `ReviewRecords.AppendRevision`. A refused append discards the run and keeps the entry for a retry.
+
+### Vote review
+
+Vote review uses the shared decision rules and review cycles in [review](review.md#review-cycles). It copies the shape of [action review](actions.md#action-review). The Host has vote pages on top of the shared handlers.
+
+**Ownership.** Core/Votes holds `VoteReview`, the aggregate of one record, and the review rules on `VoteDraftRevision`. Application/Votes holds `SaveVoteDraft`, `DecideVoteReview`, `GetVoteReview`, `ListVoteReviews`, `GetVoteReviewCounts`, and the store boundary `IVoteReviewStore`. Infrastructure/Votes holds `PostgresVoteReviewStore` on the shared `ReviewRecords` core. The core and the draft rows share one instance, `VoteDraftRows.Records`. A person cannot create a vote draft, so the store has no create. The shared text rules of actions and votes are in `ReviewText`, `ReviewTextRules`, and `ReviewTextSuggestion` (Core/Review).
+
+**Save and decide.** `SaveVoteDraft` and `DecideVoteReview` work as the action handlers do. A decision touches no brief, because briefs cite no vote record yet.
+
+**Reads.** `GetVoteReview` returns the review cycle, the extractions that the loaded revisions cite, and the configured names of the people. The names come from the configuration revisions of the candidates. `ListVoteReviews` takes the filter `All`, `NeedsAction`, or `Approved`. Needs action orders by `last_revised_at_utc_ticks`, then record ID. The other filters order by creation time, then record ID. `GetVoteReviewCounts` counts with the same status filter.
+
+**Pages.** `/Review/Votes` lists the records with the filter tabs and their counts. Each row shows the headline, the roll call, the vote kind, the status, and the open concerns.
+
+`/Review/Votes/{record-id}` has these parts:
+
+- the change since the last approved revision: the old and the new text side by side, with the facts of each revision beside it
+- those facts are the roll call, the kind, the bill, the tracked issues, and the member votes
+- the saved revision and the "Edit wording" form, with the suggestion and its "Use suggestion" and "Dismiss" buttons
+- the evidence: the vote kind with its cited `Question` line, and each fact with its cited line
+- the tracked members: the name and the cast of each member, with the cited member line
+- the shared `ReviewDecisionPanel` and `ReviewHistoryPanel`
+
+A person cannot edit the member votes. The rail has a Votes link.
 
 ### Owner commands
 
@@ -281,7 +312,7 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 - `ix_house_vote_candidates_roll` serves the newer-candidate check of a roll call.
 - `ix_house_vote_candidates_bill` on congress, bill type, and bill number serves the waiting-candidate query of the bill detail admission.
 - `vote_analysis`, `vote_analysis_runs`, and `vote_analysis_budget` hold the queue, the runs, and the daily charge of the task `vote-draft`. They have the shape of the [action tables](actions.md#storage-and-contracts). A run has the reason column for a bypassed run.
-- `vote_drafts` holds one record for each source and roll call. `vote_revisions` holds its revisions as JSON, each with the run of its analysis author. `vote_review_decisions` is empty until review exists. It completes the shape that `ReviewRecords` needs.
+- `vote_drafts` holds one record for each source and roll call. `vote_revisions` holds its revisions as JSON, each with the run of its analysis author. `vote_review_decisions` holds the review decisions of vote records. It mirrors the action decision table.
 - A bill detail is found through `bill_gates` and `bill_pages`, which the bill stream owns. `BillDetailRows` owns this lookup for both the queue rule and the evidence read. Vote drafting adds no table and no column.
 - The migration queues every vote candidate that existed when it ran. The first run can spend up to the daily limit on them.
 
@@ -306,15 +337,21 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 | Queue lifecycle and store boundary | `src/CivicLens.Application/Votes/VoteDraftLifecycle.cs`, `src/CivicLens.Application/Votes/IVoteDraftStore.cs`, `src/CivicLens.Application/Votes/IVoteDraftModel.cs` |
 | Vote kind | `src/CivicLens.Core/Votes/VoteKind.cs`, `src/CivicLens.Application/Votes/VoteKindTable.cs`, `src/CivicLens.Application/Votes/VoteFactPrefixes.cs` |
 | Owner command | `src/CivicLens.Host/Votes/VoteCommand.cs`, `src/CivicLens.Application/Votes/GetVoteDraftStatus.cs`, `src/CivicLens.Application/Votes/RequeueBlockedVoteDrafts.cs`, `src/CivicLens.Application/Votes/VoteDraftView.cs`, `src/CivicLens.Application/Votes/VoteDraftListItem.cs` |
-| Vote revision | `src/CivicLens.Core/Votes/VoteDraftRevision.cs` |
+| Vote revision | `src/CivicLens.Core/Votes/VoteDraftRevision.cs`, `src/CivicLens.Core/Review/ReviewText.cs`, `src/CivicLens.Core/Review/ReviewTextRules.cs`, `src/CivicLens.Core/Review/ReviewTextSuggestion.cs`, `src/CivicLens.Core/Review/IHeadlineSummaryRevision.cs` |
+| Review aggregate | `src/CivicLens.Core/Votes/VoteReview.cs` |
+| Review commands and reads | `src/CivicLens.Application/Votes/SaveVoteDraft.cs`, `src/CivicLens.Application/Votes/DecideVoteReview.cs`, `src/CivicLens.Application/Votes/GetVoteReview.cs`, `src/CivicLens.Application/Votes/ListVoteReviews.cs`, `src/CivicLens.Application/Votes/GetVoteReviewCounts.cs`, `src/CivicLens.Application/Votes/IVoteReviewStore.cs` |
+| Review store | `src/CivicLens.Infrastructure/Votes/PostgresVoteReviewStore.cs`, `src/CivicLens.Infrastructure/Review/ConfiguredPersonNames.cs` |
+| Review pages | `src/CivicLens.Host/Review/VoteList.razor`, `src/CivicLens.Host/Review/VoteEditor.razor`, `src/CivicLens.Host/Review/VoteLabels.cs`, `src/CivicLens.Host/Review/VoteRoutes.cs` |
 | Postgres drafting store and append | `src/CivicLens.Infrastructure/Votes/PostgresVoteDraftStore.cs`, `src/CivicLens.Infrastructure/Votes/VoteDraftRows.cs`, `src/CivicLens.Infrastructure/Votes/VoteDraftQueueMapping.cs`, `src/CivicLens.Infrastructure/Votes/VoteDraftQueueRows.cs` |
 | Drafting tables and model adapter | `src/CivicLens.Infrastructure/Votes/Persistence/`, `src/CivicLens.Infrastructure/Votes/AnthropicVoteDraftModel.cs` |
 | Worker composition | `src/CivicLens.Host/Votes/VoteDraftComposition.cs`, `src/CivicLens.Host/Votes/VoteDraftConfiguration.cs` |
 
 ## Limits and planned work
 
-- Planned ([R-15](../roadmap.md#now)): review pages and publication of vote records. They reuse the shared review and publication machinery. The revision then gets a text origin, a suggestion, and the person edit rule, as for [actions](actions.md#revision-and-append).
+- Planned ([R-15](../roadmap.md#now)): publication of vote records. It reuses the shared publication machinery.
+- The lists of vote records read `vote_drafts` without the partial status indexes of `action_drafts`. The table held 676 roll calls on 2026-10-17 and grows by about 700 a year. `brief_drafts` also has no such indexes. Add the indexes when the table passes about 10,000 rows.
 - Planned: the publication lock rule must add `civic-lens-vote-review` to the review keys.
+- Planned: PR 3c replaces the no-op after-decision hook of `PostgresVoteReviewStore` with `BriefStaleness.AfterDecision(briefQueue, PublishedRecordKind.Vote)`. A withdrawn vote approval then requeues a brief that cites the vote.
 - Planned: a vote record keeps the bill identity, so it can link to the action record of that bill. The link is not built yet.
 - A later bill detail does not redraft a vote that was already drafted. The next change of the vote itself drafts again.
 - A voted bill from a congress before `minimumCongress` of the bill source would wait forever. No such vote exists today, because the vote sweep starts in 2025.

@@ -22,13 +22,14 @@ public static class VoteDraftResolver
         CheckNoNames(output.Headline.Text, "headline", snapshot, errors);
         CheckNoNames(output.Summary.Text, "summary", snapshot, errors);
         if (errors.Count > 0) return AnalysisResolution<VoteDraftRevision>.Reject(Bound(errors), false);
-        return AnalysisResolution<VoteDraftRevision>.Accept(Assemble(context, createdAtUtc, output.Headline.Text, output.Summary.Text));
+        return AnalysisResolution<VoteDraftRevision>.Accept(Assemble(context, createdAtUtc, ReviewText.AfterModelDraft(context.Evidence.Current, output.Headline.Text,
+            output.Summary.Text, runId, snapshot.Fingerprint)));
     }
 
     public static VoteDraftRevision CopyText(VoteDraftContext context, DateTimeOffset createdAtUtc)
     {
         var current = context.Evidence.Current ?? throw new ArgumentException("Copied text needs a current revision.", nameof(context));
-        return Assemble(context, createdAtUtc, current.Headline, current.Summary);
+        return Assemble(context, createdAtUtc, ReviewText.CopyOf(current));
     }
 
     private static void CheckNoNames(string text, string field, VoteSnapshot snapshot, List<string> errors)
@@ -37,13 +38,13 @@ public static class VoteDraftResolver
             errors.Add($"The {field} names \"{Shorten(name)}\". Code lists the tracked members and their votes, so name no person.");
     }
 
-    private static VoteDraftRevision Assemble(VoteDraftContext context, DateTimeOffset createdAtUtc, string headline, string summary)
+    private static VoteDraftRevision Assemble(VoteDraftContext context, DateTimeOffset createdAtUtc, ReviewText text)
     {
         var (evidence, snapshot, trackedIssueIds, issueRevisionId) = context;
         var current = evidence.Current;
         var candidate = evidence.Candidate;
         var revision = new VoteDraftRevision(candidate.RecordId, (current?.RevisionNumber ?? 0) + 1, ReviewAuthor.AnalysisSubject, createdAtUtc,
-            headline, summary, candidate.SourceId, candidate.Congress, candidate.SessionNumber, candidate.RollCallNumber, candidate.BillType,
+            text.Headline, text.Summary, text.Origin, text.Suggestion, candidate.SourceId, candidate.Congress, candidate.SessionNumber, candidate.RollCallNumber, candidate.BillType,
             candidate.BillNumber, candidate.CandidateId, candidate.UpdateDate, snapshot.Facts, snapshot.Kind, snapshot.KindCitation, snapshot.Members, trackedIssueIds, issueRevisionId);
         revision.ValidateAsAnalysisRevision(current);
         return revision;

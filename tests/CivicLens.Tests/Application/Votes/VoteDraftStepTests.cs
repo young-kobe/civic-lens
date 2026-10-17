@@ -3,6 +3,7 @@ using CivicLens.Application.Analysis;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Analysis;
+using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
 using CivicLens.Tests.Application.Actions;
 using CivicLens.Tests.Application.Analysis;
@@ -201,6 +202,39 @@ public sealed class VoteDraftStepTests
         Assert.Equal((State.Succeeded, null), (store.Entries[0].Status, store.Entries[0].ErrorCode));
         var run = Assert.Single(store.Runs);
         Assert.Equal((AnalysisRunOutcome.Bypassed, "memberVotesChanged", 0L), (run.Run.Outcome, run.Reason, run.Run.ChargedTokens));
+    }
+
+    [Fact]
+    public async Task APersonsTextIsKeptAndTheModelsNewTextBecomesASuggestionBecauseAModelPredictionIsNeverAHumanEdit()
+    {
+        var edited = PersonEditOf(await FirstRevisionAsync(Create()), "Edited headline", "Edited summary.");
+        var changed = Create(result: "Failed");
+
+        var (store, _) = await RunAsync(changed, new FakeHeadlineSummaryModel().Draft(Output(headline: "Model headline", summary: "Model summary.")),
+            edited, updatedAt: UpdatedAt.AddDays(1));
+
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal(("Edited headline", "Edited summary.", ReviewTextOrigin.Person), (revision.Headline, revision.Summary, revision.TextOrigin));
+        Assert.Equal(("Model headline", "Model summary."), (revision.Suggestion!.Headline, revision.Suggestion.Summary));
+        Assert.Equal(Assert.Single(store.Runs).Run.RunId, revision.Suggestion.RunId);
+        Assert.Equal("civic-lens:analysis", revision.AuthorSubject);
+    }
+
+    [Fact]
+    public async Task ACorrectedMemberVoteKeepsAPersonsTextAndTheSuggestionWithoutAModelCall()
+    {
+        var suggestion = new ReviewTextSuggestion("Model headline", "Model summary.", new string('1', 32), new string('d', 64));
+        var edited = PersonEditOf(await FirstRevisionAsync(Create()), "Edited headline", "Edited summary.") with { Suggestion = suggestion };
+        var model = new FakeHeadlineSummaryModel();
+        var corrected = Create(members: [new(Aderholt, "Robert", "Aderholt", "Nay"), new(Auchincloss, "Jake", "Auchincloss", "Nay")]);
+
+        var (store, _) = await RunAsync(corrected, model, edited, updatedAt: UpdatedAt.AddDays(1));
+
+        Assert.Empty(model.Requests);
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal(("Edited headline", "Edited summary.", ReviewTextOrigin.Person, suggestion),
+            (revision.Headline, revision.Summary, revision.TextOrigin, revision.Suggestion));
+        Assert.Equal(["Nay", "Nay"], revision.Members.Select(member => member.Cast));
     }
 
     [Fact]
@@ -519,6 +553,15 @@ public sealed class VoteDraftStepTests
         Assert.Equal((State.Blocked, "renderedTextMismatch"), (store.Entries[0].Status, store.Entries[0].ErrorCode));
         Assert.Empty(model.Requests);
     }
+
+    private static VoteDraftRevision PersonEditOf(VoteDraftRevision previous, string headline, string summary) => previous with
+    {
+        RevisionNumber = previous.RevisionNumber + 1,
+        AuthorSubject = "auth0|editor",
+        Headline = headline,
+        Summary = summary,
+        TextOrigin = ReviewTextOrigin.Person
+    };
 
     private static async Task<VoteDraftRevision> FirstRevisionAsync(VoteWorld world)
     {

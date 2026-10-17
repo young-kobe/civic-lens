@@ -23,9 +23,9 @@ public sealed class ActionDraftRevisionTests
     [Fact]
     public void ARevisionAfterAPersonsTextMustKeepThatTextAndOfferTheModelsAsASuggestion()
     {
-        var earlier = new ActionTextSuggestion("Old", "Old summary.", new string('2', 32), Fingerprint);
+        var earlier = new ReviewTextSuggestion("Old", "Old summary.", new string('2', 32), Fingerprint);
         var person = PersonEditOf(Model(), "Edited headline", "Edited summary.") with { Suggestion = earlier };
-        var suggestion = new ActionTextSuggestion("New", "New summary.", new string('1', 32), Fingerprint);
+        var suggestion = new ReviewTextSuggestion("New", "New summary.", new string('1', 32), Fingerprint);
         var kept = Model(3) with { Headline = person.Headline, Summary = person.Summary, TextOrigin = ReviewTextOrigin.Person, Suggestion = suggestion };
 
         kept.ValidateAsAnalysisRevision(person);
@@ -38,7 +38,7 @@ public sealed class ActionDraftRevisionTests
     [Fact]
     public void ARevisionThatCopiesTheTextOriginAndSuggestionIsValidBecauseASponsorshipChangeNeedsNoNewText()
     {
-        var suggestion = new ActionTextSuggestion("New", "New summary.", new string('1', 32), Fingerprint);
+        var suggestion = new ReviewTextSuggestion("New", "New summary.", new string('1', 32), Fingerprint);
         var person = PersonEditOf(Model(), "Edited headline", "Edited summary.");
         var withSuggestion = person with { Suggestion = suggestion };
 
@@ -51,7 +51,7 @@ public sealed class ActionDraftRevisionTests
     [Fact]
     public void ModelTextAfterModelTextCarriesNoSuggestion()
     {
-        var suggestion = new ActionTextSuggestion("New", "New summary.", new string('1', 32), Fingerprint);
+        var suggestion = new ReviewTextSuggestion("New", "New summary.", new string('1', 32), Fingerprint);
 
         Assert.Throws<ArgumentException>(() => (Model(2) with { Suggestion = suggestion }).ValidateAsAnalysisRevision(Model()));
     }
@@ -84,7 +84,7 @@ public sealed class ActionDraftRevisionTests
     [Fact]
     public void APersonMayKeepOrClearTheSuggestionButNeverChangeItBecauseOnlyTheModelWritesSuggestions()
     {
-        var suggestion = new ActionTextSuggestion("New", "New summary.", new string('1', 32), Fingerprint);
+        var suggestion = new ReviewTextSuggestion("New", "New summary.", new string('1', 32), Fingerprint);
         var previous = Model(2) with { TextOrigin = ReviewTextOrigin.Person, Suggestion = suggestion };
         var edit = PersonEditOf(previous, "Mine", "My summary.");
 
