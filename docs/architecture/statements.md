@@ -362,7 +362,10 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 R-16 decisions, accepted on 2026-10-16. The build starts after vote review, so that vote links are in the first release.
 
 - A relationship has a named type and no verdict. The types are "describes own bill", "states position on", "claims credit for", and "statement about a vote". A stance such as consistent or inconsistent needs a method note first.
-- Code finds the pairs: the same official and a shared bill number. A bill number without a Congress takes the Congress from the statement date. Pairs that share only a tracked issue wait for a measurement. Matching by bill title is pending as [D-09](../roadmap.md#pending-decisions).
+- Code finds the pairs: the same official and a shared bill number. A bill number without a Congress takes the Congress from the statement date. Pairs that share only a tracked issue wait for a measurement.
+- Code also finds a pair by bill title, accepted on 2026-10-17. It looks for the saved title of each bill that the official sponsored or voted on. The match ignores case, a leading "the", and a trailing year such as "of 2025". The matched words are the cited span. The titles come from the bill details that [R-33](../roadmap.md#now) saves.
+- Measured on 2026-10-17 over 263 gated releases: 38 hold a bill number and 127 name something that ends in "Act". Some of those are listing pages or older laws. No release writes a number without periods, such as `HR 1234`.
+- Planned after a measurement of the releases that title matching leaves unmatched: code lists the bills and votes of the official in a date window. The model picks one or none. Code checks the quoted span, and a person approves the pair.
 - The model proposes the type and one cited sentence of reason. A person approves or rejects the relationship.
 - A relationship cites the exact revision of each side, as a brief does. A changed flag is derived at each read. An approved relationship stays approved until a person withdraws it.
 - Relationships are their own record kind, with tables, revisions, review pages, a review lock, and publication.

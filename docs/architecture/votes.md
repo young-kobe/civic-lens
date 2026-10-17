@@ -267,8 +267,9 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 - Planned: a vote record keeps the bill identity, so it can link to the action record of that bill. The link is not built yet.
 - Planned ([R-33](../roadmap.md#now)): the title and policy area of the voted bill as cited facts. The bill stream collects only bills with a tracked sponsor, so most voted bills have no title today.
 - Measured on 2026-10-16 with 147 drafts: no headline contradicts the result in 74 checked drafts. But 23 of the 74 summaries say the facts do not describe the measure. 28 explain House procedure from model knowledge.
-- Measured on 2026-10-16 over 676 roll calls: 145 are procedural, 96 are amendments, and 324 pass a bill. A vote kind from code is pending as [D-10](../roadmap.md#pending-decisions).
-- The members response spells casts as Yea and Nay or as Aye and No. One spelling for display and links is pending as D-10.
+- Measured on 2026-10-16 over 676 roll calls: 145 are procedural, 96 are amendments, and 324 pass a bill.
+- Planned, accepted on 2026-10-17: a code table maps the `Question` line to a vote kind, and the kind cites that line. The kinds are rule, previous question, motion to recommit, amendment, suspension, passage, conference report, veto override, and other. An unknown question gives other. A resolution that provides for the consideration of a bill is a rule, and its R-33 title shows this. The talk and action profile groups the kinds.
+- Planned, accepted on 2026-10-17: the evidence keeps the cast spelling of the members response, Yea and Nay or Aye and No. Code derives one display value at each read: Yes, No, Present, or Not voting. A cast in the Speaker election is a candidate name and stays a name.
 - The tracked members of a candidate come from its configuration revision. A member added to tracking later gets no past votes. This is pending as [D-11](../roadmap.md#pending-decisions).
 - Planned: measure the noise of drafting every roll call before adding a gate. The 119th Congress had 362 roll calls in session 1 and 314 so far in session 2 on 2026-10-16.
 - A roll call with no tracked member has no record. The record needs at least one member vote.
