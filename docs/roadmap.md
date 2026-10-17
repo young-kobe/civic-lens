@@ -24,8 +24,7 @@ Each item gives its outcome, what it depends on, and where the design lives. Pre
 
 ### Now
 
-- R-33: Bill titles on vote records. Fetch the Congress.gov bill detail of every voted bill, also when no tracked member sponsors it. Code gives the vote record its title and policy area as cited facts. Depends on: none stated. It comes before R-15 review. [Votes](architecture/votes.md#limits-and-planned-work)
-- R-15: House roll-call votes as actions. Collection, vote candidates, and drafting are done. Review and publication remain, after R-33. Depends on: R-33. It does not need R-14. [Votes](architecture/votes.md#limits-and-planned-work)
+- R-15: House roll-call votes as actions. Collection, vote candidates, and drafting are done. Review and publication remain. Depends on: none stated. It does not need R-14. [Votes](architecture/votes.md#limits-and-planned-work)
 
 ### Next
 

@@ -29,8 +29,8 @@ internal static class AnalysisWorkers
         new(new ActionDraftStep(store, reader, model, settings, issues), status, clock);
 
     public static AnalysisWorker<VoteDraftRun> VoteDrafting(IVoteDraftStore store, IAnalysisStatusStore status, VoteReader reader,
-        IVoteDraftModel model, VoteDraftSettings settings, TimeProvider clock) =>
-        new(new VoteDraftStep(store, reader, model, settings), status, clock);
+        IVoteDraftModel model, VoteDraftSettings settings, IssueConfigurationRevision issues, TimeProvider clock) =>
+        new(new VoteDraftStep(store, reader, model, settings, issues), status, clock);
 
     public static AnalysisWorker<BriefDraftRun> BriefDrafting(IBriefDraftStore store, IAnalysisStatusStore status, IBriefDraftModel model,
         BriefDraftSettings settings, IReadOnlyDictionary<string, string> officialNames, TimeProvider clock) =>

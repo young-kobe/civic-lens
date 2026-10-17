@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CivicLens.Application.Analysis;
+using CivicLens.Application.Issues;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Votes;
@@ -70,7 +71,9 @@ public sealed class VoteDraftStepTests
             "Result: Passed",
             "Legislation: HCONRES 14",
             "Party total D: Yea 1, Nay 212, Present 0, Not voting 2",
-            "Party total R: Yea 216, Nay 2, Present 0, Not voting 3"], revision.Facts.Select(fact => fact.Text));
+            "Party total R: Yea 216, Nay 2, Present 0, Not voting 3",
+            $"Title: {BillTitle}",
+            "Policy area: Housing and Community Development"], revision.Facts.Select(fact => fact.Text));
         Assert.Equal(revision.Facts.Select(fact => fact.Text), revision.Facts.Select(fact => world.Quote(fact.Citation)));
         Assert.Equal([(Aderholt, "Yea", "Member: A000055, Robert Aderholt, R, AL, Yea"),
             (Auchincloss, "Nay", "Member: A000148, Jake Auchincloss, R, AL, Nay")],
@@ -327,7 +330,7 @@ public sealed class VoteDraftStepTests
         var model = new FakeHeadlineSummaryModel();
 
         await AnalysisWorkers.VoteDrafting(store, new FakeAnalysisStatusStore(), world.Reader(), model,
-            new VoteDraftSettings(10_000_000, concurrency: 1), TimeProvider.System).ExecuteAsync(once: true);
+            new VoteDraftSettings(10_000_000, concurrency: 1), BillGateFixtures.Revision(), TimeProvider.System).ExecuteAsync(once: true);
 
         Assert.Equal((State.WaitingForBudget, "dailyTokenLimit"), (store.Entries[0].Status, store.Entries[0].ErrorCode));
         Assert.Empty(model.Requests);
@@ -343,6 +346,140 @@ public sealed class VoteDraftStepTests
         Assert.Equal(2, Assert.Single(store.Revisions).RevisionNumber);
     }
 
+    [Fact]
+    public async Task TheBillTitleAndPolicyAreaAreCitedFromTheSavedBillDetailSoTheModelKnowsWhatTheMeasureIs()
+    {
+        var world = Create();
+
+        var (store, model) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Drafted));
+
+        var facts = Assert.Single(store.Revisions).Facts.TakeLast(2).ToArray();
+        Assert.Equal([$"Title: {BillTitle}", "Policy area: Housing and Community Development"], facts.Select(fact => world.Quote(fact.Citation)));
+        Assert.Equal(ExtractionIdOf("bill"), facts[0].Citation.ExtractionId);
+        var prompt = Assert.Single(model.Requests).UserPrompt;
+        Assert.Contains($"Title: {BillTitle}", prompt, StringComparison.Ordinal);
+        Assert.Contains("title of the measure", Assert.Single(model.Requests).SystemPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ABillDetailWithoutAPolicyAreaCitesTheTitleOnlyAndTracksNoIssue()
+    {
+        var (store, _) = await RunAsync(Create(policyArea: null), new FakeHeadlineSummaryModel().Draft(Drafted));
+
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal($"Title: {BillTitle}", revision.Facts[^1].Text);
+        Assert.DoesNotContain(revision.Facts, fact => fact.Text.StartsWith("Policy area: ", StringComparison.Ordinal));
+        Assert.Empty(revision.TrackedIssueIds);
+    }
+
+    [Theory]
+    [InlineData(BillGateFixtures.TrackedPolicyArea, new[] { "rent" })]
+    [InlineData(BillGateFixtures.UntrackedPolicyArea, new string[0])]
+    public async Task TheTrackedIssuesComeFromThePolicyAreaOfTheBillAndTheRevisionNamesTheIssueRevision(string policyArea, string[] expected)
+    {
+        var (store, _) = await RunAsync(Create(policyArea: policyArea), new FakeHeadlineSummaryModel().Draft(Drafted));
+
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal(expected, revision.TrackedIssueIds);
+        Assert.Equal(BillGateFixtures.Revision().Id, revision.IssueRevisionId);
+    }
+
+    [Fact]
+    public async Task TheTrackedIssuesAreCheckedOnTheVoteDaySoAnIssueThatEndedBeforeTheVoteIsNotTracked()
+    {
+        var ended = IssueConfigurationRevision.Create(BillGateFixtures.Issues(endsBefore: new DateOnly(2025, 4, 1)));
+
+        var (store, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Drafted), issues: ended);
+
+        Assert.Empty(Assert.Single(store.Revisions).TrackedIssueIds);
+    }
+
+    [Fact]
+    public async Task AChangedBillTitleCallsTheModelBecauseTheTitleIsAFact()
+    {
+        var current = await FirstRevisionAsync(Create());
+        var model = new FakeHeadlineSummaryModel().Draft(Drafted);
+
+        var (store, _) = await RunAsync(Create(billTitle: "A renamed measure"), model, current);
+
+        Assert.Single(model.Requests);
+        Assert.Equal(2, Assert.Single(store.Revisions).RevisionNumber);
+    }
+
+    [Fact]
+    public async Task AnotherIssueRevisionCallsTheModelEvenWhenEveryFactIsTheSameBecauseTheTrackedIssuesCameFromOtherRules()
+    {
+        var current = await FirstRevisionAsync(Create());
+        var model = new FakeHeadlineSummaryModel().Draft(Drafted);
+        var other = IssueConfigurationRevision.Create(BillGateFixtures.Issues(startsOn: new DateOnly(2000, 1, 1)));
+
+        var (store, _) = await RunAsync(Create(), model, current, issues: other);
+
+        Assert.Single(model.Requests);
+        Assert.Equal(other.Id, Assert.Single(store.Revisions).IssueRevisionId);
+    }
+
+    [Fact]
+    public async Task ARecollectedVoteWithTheSameBillAndTheSameIssueRevisionStillSettlesUnchanged()
+    {
+        var current = await FirstRevisionAsync(Create());
+        var model = new FakeHeadlineSummaryModel();
+
+        var (store, _) = await RunAsync(Create(), model, current, updatedAt: UpdatedAt.AddDays(1));
+
+        Assert.Empty(model.Requests);
+        Assert.Equal("unchanged", store.Entries[0].ErrorCode);
+    }
+
+    [Fact]
+    public async Task AVoteOnABillWithoutASavedBillDetailBlocksBecauseTheDraftNeedsTheTitle()
+    {
+        var world = Create();
+
+        var (store, model) = await RunAsync(world, new FakeHeadlineSummaryModel(), evidence: world.Evidence() with { BillDetail = null });
+
+        Assert.Equal((State.Blocked, "evidenceUnavailable"), (store.Entries[0].Status, store.Entries[0].ErrorCode));
+        Assert.Empty(model.Requests);
+    }
+
+    [Fact]
+    public async Task AVoteWithoutABillIdentityNeedsNoBillDetailAndCitesNoTitle()
+    {
+        var world = Create();
+        var evidence = world.Evidence();
+        evidence = evidence with { Candidate = evidence.Candidate with { BillType = null, BillNumber = null }, BillDetail = null };
+
+        var (store, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Drafted), evidence: evidence);
+
+        var revision = Assert.Single(store.Revisions);
+        Assert.DoesNotContain(revision.Facts, fact => fact.Text.StartsWith("Title: ", StringComparison.Ordinal));
+        Assert.Empty(revision.TrackedIssueIds);
+    }
+
+    [Fact]
+    public async Task ABillDetailOfAnOlderParserBlocksBeforeAnyCallBecauseItsLinesMayHaveAnotherMeaning()
+    {
+        var world = Create();
+        world.SetVersion("bill", "congress-bill-v0");
+
+        var (store, model) = await RunAsync(world, new FakeHeadlineSummaryModel());
+
+        Assert.Equal((State.Blocked, "extractionVersionChanged"), (store.Entries[0].Status, store.Entries[0].ErrorCode));
+        Assert.Empty(model.Requests);
+    }
+
+    [Fact]
+    public async Task ABillDetailWithoutATitleLineBlocksBecauseTheRendererAlwaysWritesOne()
+    {
+        var world = Create();
+        world.TamperWithSavedText("bill", "Bill: 119 hconres 14");
+
+        var (store, model) = await RunAsync(world, new FakeHeadlineSummaryModel());
+
+        Assert.Equal((State.Blocked, "renderedTextMismatch"), (store.Entries[0].Status, store.Entries[0].ErrorCode));
+        Assert.Empty(model.Requests);
+    }
+
     private static async Task<VoteDraftRevision> FirstRevisionAsync(VoteWorld world)
     {
         var (store, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Drafted));
@@ -350,11 +487,13 @@ public sealed class VoteDraftStepTests
     }
 
     private static async Task<(FakeVoteDraftStore Store, FakeHeadlineSummaryModel Model)> RunAsync(VoteWorld world, FakeHeadlineSummaryModel model,
-        VoteDraftRevision? current = null, DateTimeOffset? updatedAt = null, VoteDraftSettings? settings = null, bool hasNewerCandidate = false)
+        VoteDraftRevision? current = null, DateTimeOffset? updatedAt = null, VoteDraftSettings? settings = null, bool hasNewerCandidate = false,
+        IssueConfigurationRevision? issues = null, VoteDraftEvidence? evidence = null)
     {
-        var store = new FakeVoteDraftStore(world.Evidence(current, updatedAt, hasNewerCandidate));
+        var store = new FakeVoteDraftStore(evidence ?? world.Evidence(current, updatedAt, hasNewerCandidate));
         await AnalysisWorkers.VoteDrafting(store, new FakeAnalysisStatusStore(), world.Reader(), model,
-            settings ?? new VoteDraftSettings(10_000_000, concurrency: 1), TimeProvider.System).ExecuteAsync(once: true);
+            settings ?? new VoteDraftSettings(10_000_000, concurrency: 1), issues ?? BillGateFixtures.Revision(), TimeProvider.System)
+            .ExecuteAsync(once: true);
         return (store, model);
     }
 }

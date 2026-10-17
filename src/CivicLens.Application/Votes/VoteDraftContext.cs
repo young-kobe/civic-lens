@@ -1,13 +1,16 @@
+using System.Collections.Immutable;
 using CivicLens.Core.Votes;
 
 namespace CivicLens.Application.Votes;
 
-public sealed record VoteDraftContext(VoteDraftEvidence Evidence, VoteSnapshot Snapshot)
+public sealed record VoteDraftContext(VoteDraftEvidence Evidence, VoteSnapshot Snapshot, ImmutableArray<string> TrackedIssueIds,
+    string IssueRevisionId)
 {
     public VoteChange ChangeSinceCurrent()
     {
         var previous = Evidence.Current;
-        if (previous is null || !previous.Facts.Select(fact => fact.Text).SequenceEqual(Snapshot.Facts.Select(fact => fact.Text)))
+        if (previous is null || !previous.Facts.Select(fact => fact.Text).SequenceEqual(Snapshot.Facts.Select(fact => fact.Text)) ||
+            !previous.TrackedIssueIds.SequenceEqual(TrackedIssueIds) || previous.IssueRevisionId != IssueRevisionId)
             return VoteChange.Other;
         return previous.Members.Select(VoteOf).SequenceEqual(Snapshot.Members.Select(VoteOf)) ? VoteChange.None : VoteChange.MemberVotesOnly;
     }

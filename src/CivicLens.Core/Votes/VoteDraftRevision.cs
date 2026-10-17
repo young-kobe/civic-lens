@@ -1,12 +1,14 @@
 using System.Collections.Immutable;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
+using CivicLens.Core.Statements;
 
 namespace CivicLens.Core.Votes;
 
 public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, string AuthorSubject, DateTimeOffset CreatedAtUtc,
     string Headline, string Summary, string SourceId, int Congress, int SessionNumber, int RollCallNumber, string? BillType, int? BillNumber,
-    string CandidateId, DateTimeOffset CandidateUpdateDate, ImmutableArray<VoteFact> Facts, ImmutableArray<MemberVote> Members)
+    string CandidateId, DateTimeOffset CandidateUpdateDate, ImmutableArray<VoteFact> Facts, ImmutableArray<MemberVote> Members,
+    ImmutableArray<string> TrackedIssueIds, string IssueRevisionId)
     : IReviewRevision
 {
     public const int MaximumHeadlineLength = 256;
@@ -17,12 +19,14 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
 
     public void ValidateShape()
     {
-        if (!LowercaseHex.Is(RecordId, 64) || !LowercaseHex.Is(CandidateId, 64))
-            throw new ArgumentException("A vote revision needs valid record and candidate IDs.");
+        if (!LowercaseHex.Is(RecordId, 64) || !LowercaseHex.Is(CandidateId, 64) || !LowercaseHex.Is(IssueRevisionId, 64))
+            throw new ArgumentException("A vote revision needs valid record, candidate, and issue revision IDs.");
         if (RevisionNumber < 1 || string.IsNullOrWhiteSpace(SourceId) || Congress < 1 || SessionNumber is not (1 or 2) || RollCallNumber < 1)
             throw new ArgumentException("A vote revision needs a source and a roll call identity.");
         if ((BillType is null) != (BillNumber is null) || BillType is not null && (string.IsNullOrWhiteSpace(BillType) || BillNumber < 1))
             throw new ArgumentException("A bill type has a number, and a number has a type.");
+        if (TrackedIssueIds.IsDefault || TrackedIssueIds.Length > StatementDraftRevision.MaximumSelections)
+            throw new ArgumentException($"A vote revision needs at most {StatementDraftRevision.MaximumSelections} tracked issues.");
         ValidateText(Headline, MaximumHeadlineLength, nameof(Headline));
         ValidateText(Summary, MaximumSummaryLength, nameof(Summary));
         if (Facts.IsDefault || Facts.Length > MaximumFacts || Facts.Any(fact => !IsBounded(fact.Citation)))

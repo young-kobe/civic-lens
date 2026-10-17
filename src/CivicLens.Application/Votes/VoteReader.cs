@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
@@ -11,11 +12,15 @@ namespace CivicLens.Application.Votes;
 
 public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader responses, string artifactRoot)
 {
+    private const string BillTitlePrefix = "Title: ";
+    private const string PolicyAreaPrefix = "Policy area: ";
+
     private static readonly string[] FactPrefixes = ["Started: ", "Question: ", "Result: ", "Legislation: ", "Party total ", "Candidate total "];
 
     public async Task<VoteRead> ReadAsync(VoteDraftEvidence evidence, CancellationToken cancellationToken)
     {
         var candidate = evidence.Candidate;
+        if (BillError(evidence) is { } billError) return new(null, billError);
         if (!HasCurrentVersions(evidence.Detail, HouseVoteParser.Version) || !HasCurrentVersions(evidence.Members, HouseVoteMembersParser.Version))
             return new(null, VoteDraftErrorCodes.ExtractionVersionChanged);
         var roll = new HouseVoteRoll(new HouseVoteSession(candidate.Congress, candidate.SessionNumber), candidate.RollCallNumber);
@@ -26,23 +31,44 @@ public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader respo
 
         var configuration = evidence.ConfigurationRevision.Configuration;
         var source = configuration.Sources.Single(item => item.Id == candidate.SourceId);
-        var tracked = configuration.CoveredBioguidePeopleOf(source, VoteDayOf(detail, candidate.UpdateDate));
-        return new(Assemble(evidence, members, tracked, configuration.People), null);
+        var day = VoteDayOf(detail, candidate.UpdateDate);
+        var tracked = configuration.CoveredBioguidePeopleOf(source, day);
+        return new(Assemble(evidence, members, tracked, configuration.People, day), null);
     }
 
     private static DateOnly VoteDayOf(HouseVoteDetail detail, DateTimeOffset updateDate) =>
         detail.StartDate is { } start ? DateOnly.FromDateTime(start.DateTime) : DateOnly.FromDateTime(updateDate.UtcDateTime);
 
     private static VoteSnapshot Assemble(VoteDraftEvidence evidence, HouseVoteMemberVotes members, PersonConfiguration[] tracked,
-        PersonConfiguration[] configuredPeople)
+        PersonConfiguration[] configuredPeople, DateOnly day)
     {
-        var facts = FactsOf(evidence.Detail);
+        var billFacts = BillFactsOf(evidence.BillDetail);
+        var facts = FactsOf(evidence.Detail).AddRange(billFacts);
         var memberVotes = MemberVotesOf(evidence.Members, members, tracked);
         var involved = memberVotes.Select(item => item.PersonId).ToHashSet(StringComparer.Ordinal);
         return new(facts, memberVotes, VoteFingerprint.Compute(facts, memberVotes),
+            billFacts.FirstOrDefault(fact => fact.Text.StartsWith(PolicyAreaPrefix, StringComparison.Ordinal))?.Text[PolicyAreaPrefix.Length..], day,
             configuredPeople.Where(person => involved.Contains(person.Id)).ToImmutableDictionary(person => person.Id, person => person.Name),
             [.. configuredPeople.Select(person => person.Name)]);
     }
+
+    private static string? BillError(VoteDraftEvidence evidence)
+    {
+        if (evidence.BillDetail is not { } page) return evidence.Candidate.BillType is null ? null : VoteDraftErrorCodes.EvidenceUnavailable;
+        if (page.ParserVersion != CongressBillParser.Version || page.NormalizationVersion != CongressBillRenderer.NormalizationVersion)
+            return VoteDraftErrorCodes.ExtractionVersionChanged;
+        return BillFactOf(page, DocumentLines.Split(page.Text), BillTitlePrefix) is null ? VoteDraftErrorCodes.RenderedTextMismatch : null;
+    }
+
+    private static ImmutableArray<VoteFact> BillFactsOf(VoteDraftPage? page)
+    {
+        if (page is null) return [];
+        var lines = DocumentLines.Split(page.Text);
+        return [.. new[] { BillTitlePrefix, PolicyAreaPrefix }.Select(prefix => BillFactOf(page, lines, prefix)).OfType<VoteFact>()];
+    }
+
+    private static VoteFact? BillFactOf(VoteDraftPage page, ImmutableArray<DocumentLine> lines, string prefix) =>
+        LineCitations.Line(page.ExtractionId, lines, prefix) is { } span ? new VoteFact(page.Text.Substring(span.Start, span.Length), span) : null;
 
     private static ImmutableArray<VoteFact> FactsOf(VoteDraftPage page) =>
         [.. DocumentLines.Split(page.Text).Where(line => FactPrefixes.Any(prefix => line.Text.StartsWith(prefix, StringComparison.Ordinal)))

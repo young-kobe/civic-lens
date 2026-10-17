@@ -1,14 +1,18 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Analysis;
+using CivicLens.Application.Collection.Bills;
+using CivicLens.Application.Issues;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Votes;
 using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Application.Votes;
 
-public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVoteDraftModel model, VoteDraftSettings settings)
-    : IAnalysisTaskStep<VoteDraftRun>
+public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVoteDraftModel model, VoteDraftSettings settings,
+    IssueConfigurationRevision issues) : IAnalysisTaskStep<VoteDraftRun>
 {
+    private readonly IssueConfiguration issueConfiguration = issues.ReadConfiguration();
+
     public IAnalysisQueue<VoteDraftRun> Queue => store;
 
     public AnalysisSettings Settings => settings;
@@ -34,7 +38,8 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
             return await attempt.CompleteAsync(State.Blocked, VoteDraftErrorCodes.TooManyMembers, cancellationToken);
         if (snapshot.Facts.Length > VoteDraftRevision.MaximumFacts || snapshot.Facts.Any(fact => fact.Text.Length > VoteDraftRevision.MaximumFactLength))
             return await attempt.CompleteAsync(State.Blocked, VoteDraftErrorCodes.FactTooLong, cancellationToken);
-        var context = new VoteDraftContext(evidence, snapshot);
+        var trackedIssueIds = BillGate.TrackedIssueIdsFor(snapshot.PolicyArea, snapshot.Day, issueConfiguration);
+        var context = new VoteDraftContext(evidence, snapshot, [.. trackedIssueIds], issues.Id);
         return context.ChangeSinceCurrent() switch
         {
             VoteChange.None => await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, VoteDraftErrorCodes.Unchanged, cancellationToken),

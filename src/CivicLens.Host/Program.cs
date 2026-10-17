@@ -187,7 +187,7 @@ try
         var actionDrafting = ActionDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, textExtractor, issues,
             artifactRoot);
         await using var actionDraftingWakeup = actionDrafting.Wakeup;
-        var voteDrafting = VoteDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, artifactRoot);
+        var voteDrafting = VoteDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, issues, artifactRoot);
         await using var voteDraftingWakeup = voteDrafting.Wakeup;
         var briefDrafting = BriefDraftComposition.Create(analysisContexts, connectionString, workerConfiguration);
         await using var briefDraftingWakeup = briefDrafting.Wakeup;
