@@ -1,6 +1,7 @@
 using CivicLens.Application.Votes;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Collection.BillStream;
 using CivicLens.Infrastructure.Collection.HouseVotes;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Documents.Persistence;
@@ -44,9 +45,19 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
         return new(candidate, StoredJobDefinition.Find(revisions, row.ConfigurationRevisionId),
             await ReadPageAsync(db, row.DetailJobId, row.DetailExtractionId, cancellationToken),
             await ReadPageAsync(db, row.MembersJobId, row.MembersExtractionId, cancellationToken),
+            await ReadBillDetailAsync(db, row, cancellationToken),
             await VoteDraftRows.ReadCurrentAsync(db, recordId, cancellationToken),
             await VoteDraftRows.HasNewerCandidateAsync(db, row.SourceId, row.Congress, row.SessionNumber, row.RollCallNumber,
                 row.UpdateDateUtcTicks, cancellationToken));
+    }
+
+    private static async Task<VoteDraftPage?> ReadBillDetailAsync(CollectionAttemptDbContext db, HouseVoteCandidateRow candidate,
+        CancellationToken cancellationToken)
+    {
+        if (candidate.BillType is null) return null;
+        var page = await BillDetailRows.PagesNewestFirst(db, candidate.Congress, candidate.BillType, candidate.BillNumber!.Value)
+            .FirstOrDefaultAsync(cancellationToken);
+        return page is null ? null : await ReadPageAsync(db, page.JobId, page.ExtractionId, cancellationToken);
     }
 
     private static async Task<VoteDraftPage> ReadPageAsync(CollectionAttemptDbContext db, string jobId, string extractionId,

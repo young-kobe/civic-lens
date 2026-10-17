@@ -24,6 +24,7 @@ public sealed partial class PostgresCollectionJobStore
             var row = NewGateRow(source.SourceId, detailJobId, bill, gate, issueRevisionId, now);
             db.Add(row);
             await RecordPageAsync(db, detailJobId, detailJobId, BillPageRole.Detail, extractionId, closesChain: true, cancellationToken);
+            await QueueVotesWaitingForBillAsync(db, bill, now, cancellationToken);
             return await AdmitFollowOnsAsync(db, source, detailJobId, DetailFollowOns(source, bill, gate, row, now), now,
                 cancellationToken);
         }, cancellationToken);

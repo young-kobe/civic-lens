@@ -95,7 +95,7 @@ if (args is [] or ["--help"] or ["help"])
         worker requires CIVIC_LENS_ISSUES_CONFIG when a Congress.gov bill list source is enabled.
         worker also drafts statements when CIVIC_LENS_STATEMENT_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         worker also drafts bill actions when CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
-        worker also drafts House votes when CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
+        worker also drafts House votes when CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
         worker also drafts weekly briefs when CIVIC_LENS_BRIEF_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         documents commands require the database. Citations use UTF-16 offsets into immutable extracted text.
         Exit codes: 0 success, 1 failed/deferred collection or operational failure, 2 invalid input/configuration.
@@ -187,7 +187,7 @@ try
         var actionDrafting = ActionDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, textExtractor, issues,
             artifactRoot);
         await using var actionDraftingWakeup = actionDrafting.Wakeup;
-        var voteDrafting = VoteDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, artifactRoot);
+        var voteDrafting = VoteDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, issues, artifactRoot);
         await using var voteDraftingWakeup = voteDrafting.Wakeup;
         var briefDrafting = BriefDraftComposition.Create(analysisContexts, connectionString, workerConfiguration);
         await using var briefDraftingWakeup = briefDrafting.Wakeup;

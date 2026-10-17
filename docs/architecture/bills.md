@@ -118,6 +118,8 @@ The configured source sets `maxJobs` 251, and request, byte, and time totals for
 
 These jobs never register statement candidates, because only the key prefix `discovery-admission/` does that.
 
+The detail admission also queues the [vote](votes.md#admission) candidates that wait for the bill, in the same transaction.
+
 ### Job keys
 
 `BillStreamJobKeys` owns the keys. A replayed preparation finds the known keys and creates no job.

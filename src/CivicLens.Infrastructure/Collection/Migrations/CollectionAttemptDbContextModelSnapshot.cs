@@ -1661,6 +1661,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .IsUnique()
                         .HasDatabaseName("ux_house_vote_candidates_detail_job");
 
+                    b.HasIndex("Congress", "BillType", "BillNumber")
+                        .HasDatabaseName("ix_house_vote_candidates_bill");
+
                     b.HasIndex("MembersExtractionId");
 
                     b.HasIndex("MembersJobId");

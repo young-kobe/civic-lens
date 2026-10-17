@@ -20,9 +20,7 @@ public sealed class ActionBillReader(ICollectionJobStore jobs, ApiResponseReader
         var detailPage = evidence.Pages.Single(page => page.Resource == ApiResource.Bill);
         if (!evidence.Pages.All(HasCurrentVersions)) return new(null, ActionDraftErrorCodes.ExtractionVersionChanged);
         var (detailJob, detailResponse) = await LoadAsync(detailPage, cancellationToken);
-        var expected = CongressBillListItem.TryReadDetailUrl(SourceOf(detailJob, candidate).SourceUrl, detailJob.Definition.Url)
-            ?? throw new InvalidDataException("Bill detail job URL is not a bill detail URL.");
-        var bill = CongressBillParser.Parse(detailResponse.Body, expected);
+        var bill = CongressBillDetailJob.Parse(detailJob, detailResponse);
         if (TextError(detailPage, CongressBillRenderer.RenderDetail(bill)) is { } detailError) return new(null, detailError);
 
         var source = configuration.Sources.Single(item => item.Id == candidate.SourceId);

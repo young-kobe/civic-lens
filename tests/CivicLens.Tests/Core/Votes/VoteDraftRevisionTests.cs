@@ -36,6 +36,15 @@ public sealed class VoteDraftRevisionTests
     }
 
     [Fact]
+    public void TheIssueRevisionIsAHashAndTheTrackedIssuesAreBoundedSoTheRecordNamesTheRulesThatChoseThem()
+    {
+        Assert.Throws<ArgumentException>(() => (Revision() with { IssueRevisionId = "short" }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (Revision() with { TrackedIssueIds = default }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (Revision() with { TrackedIssueIds = [.. Enumerable.Repeat("rent", 65)] }).ValidateShape());
+        (Revision() with { TrackedIssueIds = [] }).ValidateShape();
+    }
+
+    [Fact]
     public void ABillTypeNeedsANumberAndANumberNeedsAType()
     {
         (Revision() with { BillType = null, BillNumber = null }).ValidateShape();
@@ -58,5 +67,5 @@ public sealed class VoteDraftRevisionTests
     private static VoteDraftRevision Revision(int number = 1, string author = "civic-lens:analysis") => new(
         VoteWorld.RecordId, number, author, VoteWorld.UpdatedAt.AddMinutes(number), "The House voted", "The House decided a question.",
         "congress-house-votes", 119, 1, 100, "hconres", 14, VoteWorld.CandidateId, VoteWorld.UpdatedAt,
-        [new("Result: Passed", new SourceSpan(ExtractionId, 0, 14))], [Member()]);
+        [new("Result: Passed", new SourceSpan(ExtractionId, 0, 14))], [Member()], ["rent"], new string('e', 64));
 }

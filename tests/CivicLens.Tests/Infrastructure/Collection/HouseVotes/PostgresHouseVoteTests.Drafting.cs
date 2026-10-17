@@ -23,6 +23,7 @@ public sealed partial class PostgresHouseVoteTests
     {
         var vote = HouseVoteFixtures.Vote(100, Updated);
         var (_, members) = await DetailWithMembersJobAsync(vote);
+        await AdmitBillDetailAsync();
         Assert.Empty(await QueueAsync());
 
         await AdmitMembersAsync(members, vote);
@@ -203,6 +204,7 @@ public sealed partial class PostgresHouseVoteTests
         var vote = HouseVoteFixtures.Vote(100, updated ?? Updated);
         var (_, members) = await DetailWithMembersJobAsync(vote);
         await AdmitMembersAsync(members, vote);
+        await AdmitBillDetailAsync();
         return (string)(await ScalarAsync($"SELECT candidate_id FROM house_vote_candidates WHERE update_date_utc_ticks = {vote.UpdateDate.UtcTicks}"))!;
     }
 
@@ -237,7 +239,7 @@ public sealed partial class PostgresHouseVoteTests
         var span = new SourceSpan(new string('c', 64), 0, 5);
         return new(evidence.RecordId, number, "civic-lens:analysis", Updated.AddMinutes(number), "Headline", "Summary.", evidence.SourceId,
             evidence.Congress, evidence.SessionNumber, evidence.RollCallNumber, evidence.BillType, evidence.BillNumber, candidate,
-            evidence.UpdateDate, [new("Result: Passed", span)], [new("aderholt", "A000055", "Yea", span)]);
+            evidence.UpdateDate, [new("Result: Passed", span)], [new("aderholt", "A000055", "Yea", span)], [], new string('e', 64));
     }
 
     private async Task<IReadOnlyList<(string CandidateId, string Task, string Status, string? ErrorCode)>> QueueAsync()

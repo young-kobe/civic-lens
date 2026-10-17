@@ -7,9 +7,9 @@ namespace CivicLens.Tests.Application.Votes;
 
 public sealed class VoteDraftPromptGoldenTests
 {
-    private const string SystemSha256 = "630aad49ca48697e490331feb4ba3a72dbea577dc970d60cb3e6ccf951cac88f";
+    private const string SystemSha256 = "ffc613b8ae00aa36ac1aa7e5269e73b7ba77d02174de5e2b9a5cebd0eaa408d3";
     private const string SchemaSha256 = "7e063b55e0c1bfc654088f5e9372850813294a033939acc1826b01b822aa7016";
-    private const string InputHash = "5f8c46c809e870ef101a2250b58fa66be570f3fae08f05add9c71012bc5e68d3";
+    private const string InputHash = "7acc2dc24fcb5b3b0ff39e97078b9237422657a3145bb750dbff318a2ac2e807";
 
     [Fact]
     public async Task ThePromptAndSchemaMatchTheirPinnedVersions()
@@ -21,7 +21,7 @@ public sealed class VoteDraftPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(VoteDraftTask.PromptVersion)} ({VoteDraftTask.PromptVersion}) or " +
             $"{nameof(VoteDraftTask.SchemaVersion)} ({VoteDraftTask.SchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("vote-draft", "vote-draft-v1", "vote-draft-prompt-v1", "vote-draft-schema-v1", "claude-haiku-5-5"),
+        Assert.Equal(("vote-draft", "vote-draft-v1", "vote-draft-prompt-v2", "vote-draft-schema-v1", "claude-haiku-5-5"),
             (VoteDraftTask.Task, VoteDraftTask.TaskVersion, VoteDraftTask.PromptVersion, VoteDraftTask.SchemaVersion, VoteDraftTask.Model));
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
         Assert.True(Sha256(request.SchemaJson) == SchemaSha256, $"{bump} Schema: {Sha256(request.SchemaJson)}");

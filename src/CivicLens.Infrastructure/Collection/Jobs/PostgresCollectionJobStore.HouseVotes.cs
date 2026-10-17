@@ -1,8 +1,11 @@
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
+using CivicLens.Application.Collection.Bills;
+using CivicLens.Infrastructure.Collection.BillStream;
 using CivicLens.Infrastructure.Collection.HouseVotes;
 using CivicLens.Infrastructure.Votes;
+using CivicLens.Infrastructure.Votes.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Collection.Jobs;
@@ -61,9 +64,25 @@ public sealed partial class PostgresCollectionJobStore : IHouseVoteAdmissionStor
             await EnsureExtractionIsOfJobAsync(db, membersJobId, extractionId, cancellationToken);
             var candidate = NewHouseVoteCandidate(source, row, membersJobId, extractionId, now);
             db.Add(candidate);
+            if (await IsWaitingForBillDetailAsync(db, candidate, cancellationToken)) return NoAdmission;
             VoteDraftQueueRows.Add(db, candidate.CandidateId, Ticks(now));
             return NoAdmission;
         }, cancellationToken);
+    }
+
+    private static async Task<bool> IsWaitingForBillDetailAsync(CollectionAttemptDbContext db, HouseVoteCandidateRow candidate,
+        CancellationToken cancellationToken) =>
+        candidate.BillType is not null && !await BillDetailRows
+            .PagesNewestFirst(db, candidate.Congress, candidate.BillType, candidate.BillNumber!.Value).AnyAsync(cancellationToken);
+
+    private static async Task QueueVotesWaitingForBillAsync(CollectionAttemptDbContext db, CongressBill bill, DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var waiting = await db.Set<HouseVoteCandidateRow>().Where(candidate => candidate.Congress == bill.Congress &&
+            candidate.BillType == bill.Type && candidate.BillNumber == bill.Number &&
+            !db.Set<VoteAnalysisRow>().Any(entry => entry.CandidateId == candidate.CandidateId))
+            .Select(candidate => candidate.CandidateId).ToListAsync(cancellationToken);
+        foreach (var candidateId in waiting) VoteDraftQueueRows.Add(db, candidateId, Ticks(now));
     }
 
     private static string HashHouseVoteCandidate(string sourceId, int congress, int sessionNumber, int rollCallNumber,

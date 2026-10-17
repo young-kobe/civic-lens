@@ -39,12 +39,12 @@ public static class VoteDraftResolver
 
     private static VoteDraftRevision Assemble(VoteDraftContext context, DateTimeOffset createdAtUtc, string headline, string summary)
     {
-        var (evidence, snapshot) = context;
+        var (evidence, snapshot, trackedIssueIds, issueRevisionId) = context;
         var current = evidence.Current;
         var candidate = evidence.Candidate;
         var revision = new VoteDraftRevision(candidate.RecordId, (current?.RevisionNumber ?? 0) + 1, ReviewAuthor.AnalysisSubject, createdAtUtc,
             headline, summary, candidate.SourceId, candidate.Congress, candidate.SessionNumber, candidate.RollCallNumber, candidate.BillType,
-            candidate.BillNumber, candidate.CandidateId, candidate.UpdateDate, snapshot.Facts, snapshot.Members);
+            candidate.BillNumber, candidate.CandidateId, candidate.UpdateDate, snapshot.Facts, snapshot.Members, trackedIssueIds, issueRevisionId);
         revision.ValidateAsAnalysisRevision(current);
         return revision;
     }
