@@ -35,7 +35,13 @@ The votes feature collects House roll-call votes from the Congress.gov `house-vo
 - The model sees only the fact lines. It sees no member and no vote, and its text may name no configured person. Code lists the tracked members and their votes beside the text. So copied text can never state a vote that a later correction changed.
 - When only the votes of tracked members change, drafting makes no model call. It copies the text of the current revision, as action drafting does for sponsorships.
 - The vote record has no text origin, no suggestion, and no person edit rule yet. The review change adds them with the review pages.
-- The vote record has no owner command yet. A Blocked entry stays Blocked until a later change adds `votes draft requeue`.
+- The owner command `votes draft` has `status`, `list`, and `requeue`. It copies the `actions draft` command and its shared queue commands. `status` also shows the number of waiting votes.
+- A Blocked vote entry can return to Pending. The lifecycle allows the move, as the [action](actions.md#decisions) lifecycle does. A Succeeded entry never returns to Pending. The owner command moves only Blocked entries with an exact code.
+- The vote kind (D-10, accepted on 2026-10-17) comes from a code table, not from the model. `VoteKindTable` maps the `Question` line to a kind. The kinds are rule, previous question, motion to recommit, amendment, suspension, passage, conference report, veto override, and other. An unknown question gives other.
+- A motion to commit and a motion to commit with instructions are a motion to recommit. A motion to concur in a Senate amendment is passage. A consideration of a resolution stays other.
+- A resolution agreed to by the question `On Agreeing to the Resolution` is a rule when its legislation is a House resolution (`HRES`). Its bill title must also hold `consideration of`, in any case and at any position. Any other resolution so agreed is passage, because agreeing to it is its final vote. This choice is deliberate: the kind list has no resolution kind.
+- Code stores the kind in the revision at draft time, with the cited `Question` line, as `PolicyAreaId` is stored for actions. Publication never derives it again.
+- The citation covers the `Question` line only. The rule test also reads the `Legislation` and `Title` facts. The same revision cites them.
 
 ## Invariants
 
@@ -75,6 +81,12 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - The text names no configured person. Enforced by `VoteDraftResolver`. Test: `VoteDraftStepTests.TextThatNamesAnyConfiguredPersonIsRejectedSoNoCopiedTextCanStateAStaleVote`.
 - A change of member votes alone makes no model call and keeps the text. Enforced by `VoteDraftContext.ChangeSinceCurrent` and `VoteDraftStep`. Test: `VoteDraftStepTests.ACorrectedMemberVoteAppendsAtOnceWithoutAModelCallAndKeepsTheTextBecauseCodeOwnsTheVotes`.
 - A change of any fact calls the model. A change of the tracked member set alone copies the text, because the text names no member. Enforced by `VoteDraftContext.ChangeSinceCurrent`. Tests: `VoteDraftStepTests.AMemberVoteChangeTogetherWithAChangedResultStillCallsTheModel` and `VoteDraftStepTests.AChangedTrackedMemberSetCopiesTheTextWithoutACallBecauseTheTextNamesNoMember`.
+- A vote kind is stored in the revision with a bounded citation of the `Question` line. Only the kind other may have no citation. Enforced by `VoteKindTable` and `VoteDraftRevision.ValidateShape`. Tests: `VoteKindTableTests.EachQuestionLineMapsToTheKindThatNamesItsStageSoTheReviewerCanGroupVotesByWhatTheyDecided`, `VoteDraftStepTests.TheRevisionStoresTheKindOfTheQuestionAndCitesTheQuestionLineSoPublishNeverDerivesItAgain`, and `VoteDraftRevisionTests.AKindOtherThanOtherMustCiteItsQuestionSoTheReviewerCanCheckTheKindAgainstTheSavedLine`.
+- A resolution is a rule only when it is a House resolution with a bill title that holds `consideration of`. Enforced by `VoteKindTable`. Tests: `VoteKindTableTests.AHouseResolutionThatProvidesForConsiderationIsARuleBecauseItOnlySetsTheTermsOfDebate` and `VoteKindTableTests.AResolutionThatIsNotARuleIsPassageBecauseAgreeingToItIsItsFinalVote`.
+- A change of the kind alone copies the text and makes no model call. A change of a fact still redrafts. The stored kind updates at the next draft of that roll call. Nothing requeues stored votes after a table change. Enforced by `VoteDraftContext.ChangeSinceCurrent` and `VoteDraftStep`. Test: `VoteDraftStepTests.AChangedKindAloneCopiesTheTextWithoutAModelCallBecauseTheKindComesFromCodeAndNotFromTheText`.
+- The waiting count and the queue rule share one definition of a waiting vote. A vote without a bill identity never waits. Enforced by `VoteDraftQueueRows.WaitingForBill`. Test: `PostgresHouseVoteTests.TheWaitingCountHoldsOnlyVotesOnABillWithNoQueueRowAndDropsWhenTheBillDetailQueuesThem`.
+- An owner requeue of Blocked votes moves only Blocked entries with exactly the given code. Enforced by `PostgresAnalysisQueue.RequeueAsync` and `VoteDraftLifecycle`. Tests: `PostgresHouseVoteTests.RequeueBlockedMovesOnlyBlockedVotesWithTheGivenCodeAndResetsTheirAttempts` and `VoteDraftLifecycleTests.ABlockedVoteDraftMovesBackToPendingBecauseTheOwnerCommandRequeuesItAfterFixingTheCause`.
+- Only the owner runs `votes draft` commands. Enforced by `ReviewAuthorization.RequireOwner` in each use case. Test: `VoteCommandTests.TheAiDrafterCannotActAsTheOwner`.
 - A re-collected vote with the same facts and votes writes nothing. Enforced by `VoteDraftContext.ChangeSinceCurrent`. Test: `VoteDraftStepTests.ARecollectedVoteWithTheSameFactsAndVotesSettlesWithoutACallEvenWhenItsUpdateDateMoved`.
 - A roll call with no tracked member writes no revision and makes no call. Enforced by `VoteDraftStep`. Test: `VoteDraftStepTests.ARollCallWithNoTrackedMemberSettlesSucceededWithoutACallOrARevision`.
 - The saved extraction text must equal the new render of its capture. Enforced by `VoteReader`. Test: `VoteDraftStepTests.ARenderedTextThatDiffersFromTheSavedExtractionBlocksBeforeAnyCall`.
@@ -209,9 +221,10 @@ The update date is the exact UTC time as `yyyy-MM-ddTHH:mm:ssZ`. `BillStreamJobK
 5. `VoteReader` takes the member votes. The tracked people are those of `CollectionConfiguration.CoveredBioguidePeopleOf` on the vote day. That is the date of the start time in the offset that the API gives. A vote without a start time uses the UTC date of its update time. Each tracked member in the members response gives the person, the bioguide ID, the cast, and a span of the member line. The order is the bioguide ID order.
 6. The fingerprint is the SHA-256 of the fact lines, with the title and policy area, and the member votes (`VoteFingerprint`, version `vote-fingerprint-v1`). It is the input hash of a run that makes no call.
 7. No tracked member settles `Succeeded` with `noTrackedMember`, a bypassed run, and no revision. More than 600 members block with `tooManyMembers`. More than 64 facts, or a fact over 2,000 characters, block with `factTooLong`.
-8. `VoteDraftContext.ChangeSinceCurrent` compares the snapshot with the current revision. Equal fact texts, equal tracked issues, an equal issue revision, equal members, and equal casts give `unchanged`. Equal facts, issues, and issue revision with other members or casts give `memberVotesChanged`. Anything else, or no current revision, drafts with the model.
+8. `VoteKindTable.Classify` reads the vote kind from the facts, after the bill facts are added. It returns the kind and the citation of the `Question` line. A roll call with no `Question` line gets the kind other and no citation. The snapshot holds both.
+9. `VoteDraftContext.ChangeSinceCurrent` compares the snapshot with the current revision. Equal fact texts, an equal kind, equal tracked issues, an equal issue revision, equal members, and equal casts give `unchanged`. Equal facts, issues, and issue revision with other members or casts give `memberVotesChanged`. Equal facts, issues, issue revision, members, and casts with another kind give `kindChanged`. Anything else, or no current revision, drafts with the model.
 
-`memberVotesChanged` appends a revision at once. `VoteDraftResolver.CopyText` keeps the headline and the summary. The run is bypassed with zero charged tokens. A change of the tracked set is also a member change, because the text names no member.
+`memberVotesChanged` and `kindChanged` append a revision at once. `VoteDraftResolver.CopyText` keeps the headline and the summary. The run is bypassed with zero charged tokens. A change of the tracked set is also a member change, because the text names no member.
 
 `VoteDraftStep` takes the tracked issue IDs from `BillGate.TrackedIssueIdsFor`. It uses the policy area, the vote day, and the issue configuration revision of the worker. The revision stores the IDs and the issue revision ID. The IDs are not in the prompt.
 
@@ -229,15 +242,28 @@ The prompt holds the fact lines only. It tells the model that the `Title` line i
 | Succeeded | `supersededByNewerCandidate` | The roll call has a candidate with a later update time |
 | RetryWaiting | `revisionConflict` | Another writer appended first |
 | Blocked | `evidenceUnavailable`, `tooManyMembers`, `factTooLong`, `extractionVersionChanged`, `renderedTextMismatch`, `overByteCap` | The input cannot be drafted |
-| Failed | `outputRejected`, a stop code, or `attemptsExhausted` | The entry stays Failed. No command can requeue it yet; the vote review PR adds one |
+| Failed | `outputRejected`, a stop code, or `attemptsExhausted` | Owner requeue needed |
 
-A run that makes no call has the reason `unchanged`, `noTrackedMember`, or `memberVotesChanged`.
+A run that makes no call has the reason `unchanged`, `noTrackedMember`, `memberVotesChanged`, or `kindChanged`.
 
 ### Record and append
 
 The record ID is the SHA-256 of the source, the congress, the session, and the roll call (`PostgresCollectionJobStore.HashHouseVoteRecord`). It frames the text with the prefix `house-vote-record:`. The update time is not part of it.
 
-`VoteDraftRevision` (Core/Votes) holds the headline, the summary, the candidate identity, and the bill identity. It also holds the facts, the member votes, the tracked issue IDs, and the issue revision ID. `VoteDraftRows.AppendAnalysisRevisionAsync` appends it in the settlement transaction of the queue row. It takes the `civic-lens-vote-review` lock and refuses a candidate with a newer one. It checks the expected revision number and calls `ReviewRecords.AppendRevision`. A refused append discards the run and keeps the entry for a retry.
+`VoteDraftRevision` (Core/Votes) holds the headline, the summary, the candidate identity, and the bill identity. It also holds the facts and the vote kind with the citation of its question. Last come the member votes, the tracked issue IDs, and the issue revision ID. `VoteDraftRows.AppendAnalysisRevisionAsync` appends it in the settlement transaction of the queue row. It takes the `civic-lens-vote-review` lock and refuses a candidate with a newer one. It checks the expected revision number and calls `ReviewRecords.AppendRevision`. A refused append discards the run and keeps the entry for a retry.
+
+### Owner commands
+
+`votes draft` needs `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`. `VoteCommand` runs on the shared `AnalysisQueueCommands`, as `ActionCommand` does. The [operations](../operations.md#vote-drafting) guide shows each command.
+
+| Command | Effect |
+|---|---|
+| `votes draft status` | JSON with `queue` (the status, `chargedToday`, and `counts` for each view) and `waitingForBill` |
+| `votes draft list [view] [limit]` | Entries in a view: `drafted`, `unchanged`, `superseded`, `no-member`, `pending`, or `failed` |
+| `votes draft requeue <candidate-id\|--all>` | Failed rows, and no others, back to Pending |
+| `votes draft requeue --blocked --code <block-code>` | Blocked rows with exactly that code, and no others, back to Pending. The code is required and must not be empty |
+
+`waitingForBill` counts the vote candidates that name a bill and have no queue row. They wait for the bill detail. `VoteDraftQueueRows.WaitingForBill` owns this rule. The bill detail admission uses the same query to queue them.
 
 ### Executor
 
@@ -278,6 +304,8 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 | Evidence reader, snapshot, fingerprint | `src/CivicLens.Application/Votes/VoteReader.cs`, `src/CivicLens.Application/Votes/VoteSnapshot.cs`, `src/CivicLens.Application/Votes/VoteFingerprint.cs`, `src/CivicLens.Application/Documents/LineCitations.cs` |
 | Prompt, task identity, settings, codes | `src/CivicLens.Application/Votes/VoteDraftPrompt.cs`, `src/CivicLens.Application/Votes/VoteDraftTask.cs`, `src/CivicLens.Application/Votes/VoteDraftSettings.cs`, `src/CivicLens.Application/Votes/VoteDraftErrorCodes.cs` |
 | Queue lifecycle and store boundary | `src/CivicLens.Application/Votes/VoteDraftLifecycle.cs`, `src/CivicLens.Application/Votes/IVoteDraftStore.cs`, `src/CivicLens.Application/Votes/IVoteDraftModel.cs` |
+| Vote kind | `src/CivicLens.Core/Votes/VoteKind.cs`, `src/CivicLens.Application/Votes/VoteKindTable.cs`, `src/CivicLens.Application/Votes/VoteFactPrefixes.cs` |
+| Owner command | `src/CivicLens.Host/Votes/VoteCommand.cs`, `src/CivicLens.Application/Votes/GetVoteDraftStatus.cs`, `src/CivicLens.Application/Votes/RequeueBlockedVoteDrafts.cs`, `src/CivicLens.Application/Votes/VoteDraftView.cs`, `src/CivicLens.Application/Votes/VoteDraftListItem.cs` |
 | Vote revision | `src/CivicLens.Core/Votes/VoteDraftRevision.cs` |
 | Postgres drafting store and append | `src/CivicLens.Infrastructure/Votes/PostgresVoteDraftStore.cs`, `src/CivicLens.Infrastructure/Votes/VoteDraftRows.cs`, `src/CivicLens.Infrastructure/Votes/VoteDraftQueueMapping.cs`, `src/CivicLens.Infrastructure/Votes/VoteDraftQueueRows.cs` |
 | Drafting tables and model adapter | `src/CivicLens.Infrastructure/Votes/Persistence/`, `src/CivicLens.Infrastructure/Votes/AnthropicVoteDraftModel.cs` |
@@ -286,15 +314,16 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 ## Limits and planned work
 
 - Planned ([R-15](../roadmap.md#now)): review pages and publication of vote records. They reuse the shared review and publication machinery. The revision then gets a text origin, a suggestion, and the person edit rule, as for [actions](actions.md#revision-and-append).
-- Planned: an owner command `votes draft` with `status`, `list`, and `requeue`. Until then a Blocked or Failed entry stays as it is. The vote lifecycle allows no requeue of a Blocked or Succeeded entry. The publication lock rule must add `civic-lens-vote-review` to the review keys.
+- Planned: the publication lock rule must add `civic-lens-vote-review` to the review keys.
 - Planned: a vote record keeps the bill identity, so it can link to the action record of that bill. The link is not built yet.
 - A later bill detail does not redraft a vote that was already drafted. The next change of the vote itself drafts again.
 - A voted bill from a congress before `minimumCongress` of the bill source would wait forever. No such vote exists today, because the vote sweep starts in 2025.
-- The number of waiting votes shows with the `votes draft status` command, planned in [R-15](../roadmap.md#now) PR 3.
 - Measured on 2026-10-16 with 147 drafts: no headline contradicts the result in 74 checked drafts. But 23 of the 74 summaries say the facts do not describe the measure. 28 explain House procedure from model knowledge.
 - Measured on 2026-10-16 over 676 roll calls: 145 are procedural, 96 are amendments, and 324 pass a bill.
-- Planned, accepted on 2026-10-17: a code table maps the `Question` line to a vote kind, and the kind cites that line. The kinds are rule, previous question, motion to recommit, amendment, suspension, passage, conference report, veto override, and other. An unknown question gives other. A resolution that provides for the consideration of a bill is a rule, and its bill title shows this. The talk and action profile groups the kinds.
-- Planned, accepted on 2026-10-17: the evidence keeps the cast spelling of the members response, Yea and Nay or Aye and No. Code derives one display value at each read: Yes, No, Present, or Not voting. A cast in the Speaker election is a candidate name and stays a name.
+- Planned: the talk and action profile groups the vote kinds.
+- Measured on 2026-10-17 over 676 roll calls in the development data: 266 passage, 157 suspension, 90 amendment, 70 motion to recommit, and 61 previous question. Also 2 veto override and 30 other.
+- No rule and no conference report occur in that data yet. The 79 roll calls on a House resolution still wait for their bill title, so they count as passage until the title arrives.
+- The other kind holds motions to table, discharge, adjourn, refer, instruct, and reconsider. It also holds the consideration of a resolution and the division votes. It also holds the Speaker election and the quorum calls.
 - The tracked members of a candidate come from its configuration revision. A member added to tracking later gets no past votes. This is pending as [D-11](../roadmap.md#pending-decisions).
 - Planned: measure the noise of drafting every roll call before adding a gate. The 119th Congress had 362 roll calls in session 1 and 314 so far in session 2 on 2026-10-16.
 - A roll call with no tracked member has no record. The record needs at least one member vote.
@@ -302,5 +331,6 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 - The `house-vote` API is a beta. Its shape can change. A changed shape makes a parser raise invalid data, which blocks the job.
 - A roll call with an unknown legislation type has no bill link, so it does not link to an action record.
 - A members response that is newer than the recorded detail blocks its job until the next sweep admits the newer detail.
+- Rolling back the `VoteKindChangedReason` migration fails while any vote run has the `kindChanged` reason.
 - The session of today uses the UTC date. The new session therefore starts a few hours early on 1 January in US time zones. Its list is empty then.
 - Senate votes need senate.gov data and a `lis_member_id` crosswalk. See [actions](actions.md#limits-and-planned-work).

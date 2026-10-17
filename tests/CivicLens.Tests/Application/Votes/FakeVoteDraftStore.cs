@@ -20,6 +20,16 @@ internal sealed class FakeVoteDraftStore : FakeAnalysisQueue<VoteDraftRun>, IVot
     public Task<VoteDraftEvidence?> ReadEvidenceAsync(string candidateId, CancellationToken cancellationToken) =>
         Task.FromResult<VoteDraftEvidence?>(Evidence);
 
+    public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+    public Task<int> CountWaitingForBillAsync(CancellationToken cancellationToken) => Task.FromResult(0);
+
+    public Task<IReadOnlyList<VoteDraftListItem>> ListAsync(VoteDraftView? view, int limit, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<VoteDraftListItem>>([]);
+
+    public Task<IReadOnlyDictionary<VoteDraftView, int>> CountAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<VoteDraftView, int>>(new Dictionary<VoteDraftView, int>());
+
     protected override bool CanTransition(AnalysisRecord record, AnalysisCheckpoint checkpoint) =>
         VoteDraftLifecycle.CanTransition(record, checkpoint);
 

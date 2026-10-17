@@ -7,7 +7,7 @@ namespace CivicLens.Core.Votes;
 
 public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, string AuthorSubject, DateTimeOffset CreatedAtUtc,
     string Headline, string Summary, string SourceId, int Congress, int SessionNumber, int RollCallNumber, string? BillType, int? BillNumber,
-    string CandidateId, DateTimeOffset CandidateUpdateDate, ImmutableArray<VoteFact> Facts, ImmutableArray<MemberVote> Members,
+    string CandidateId, DateTimeOffset CandidateUpdateDate, ImmutableArray<VoteFact> Facts, VoteKind Kind, SourceSpan? KindCitation, ImmutableArray<MemberVote> Members,
     ImmutableArray<string> TrackedIssueIds, string IssueRevisionId)
     : IReviewRevision
 {
@@ -32,6 +32,8 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
         if (Facts.IsDefault || Facts.Length > MaximumFacts || Facts.Any(fact => !IsBounded(fact.Citation)))
             throw new ArgumentException($"A vote revision needs at most {MaximumFacts} facts with bounded citations.");
         foreach (var fact in Facts) ValidateText(fact.Text, MaximumFactLength, nameof(Facts));
+        if (!Enum.IsDefined(Kind) || KindCitation is { } kindCitation && !IsBounded(kindCitation) || Kind != VoteKind.Other && KindCitation is null)
+            throw new ArgumentException("A vote kind other than Other needs a bounded citation of its question.");
         if (Members.IsDefaultOrEmpty || Members.Length > MaximumMembers)
             throw new ArgumentException($"A vote revision needs 1 to {MaximumMembers} member votes.");
         if (Members.Any(member => string.IsNullOrWhiteSpace(member.PersonId) || string.IsNullOrWhiteSpace(member.BioguideId) ||

@@ -1,3 +1,4 @@
+using CivicLens.Application.Votes;
 using CivicLens.Infrastructure.Analysis.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -14,7 +15,7 @@ internal sealed class VoteAnalysisRunRowConfiguration : IEntityTypeConfiguration
                 table.HasCheckConstraint("ck_vote_analysis_runs_ids",
                     "run_id ~ '^[0-9a-f]{32}$' AND input_hash ~ '^[0-9a-f]{64}$' AND (previous_run_id IS NULL OR previous_run_id ~ '^[0-9a-f]{32}$')");
                 table.HasCheckConstraint("ck_vote_analysis_runs_reason",
-                    "reason IS NULL OR reason IN ('unchanged','noTrackedMember','memberVotesChanged')");
+                    $"reason IS NULL OR reason IN ('{VoteDraftErrorCodes.Unchanged}','{VoteDraftErrorCodes.NoTrackedMember}','{VoteDraftErrorCodes.MemberVotesChanged}','{VoteDraftErrorCodes.KindChanged}')");
                 table.HasCheckConstraint("ck_vote_analysis_runs_outcome",
                     "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted','Bypassed')");
             });

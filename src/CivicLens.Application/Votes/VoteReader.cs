@@ -12,9 +12,6 @@ namespace CivicLens.Application.Votes;
 
 public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader responses, string artifactRoot)
 {
-    private static readonly string[] FactPrefixes = ["Started: ", "Question: ", "Result: ", "Legislation: ", "Party total ", "Candidate total "];
-    private static readonly string[] BillFactPrefixes = ["Title: ", "Policy area: "];
-
     public async Task<VoteRead> ReadAsync(VoteDraftEvidence evidence, CancellationToken cancellationToken)
     {
         var candidate = evidence.Candidate;
@@ -46,11 +43,12 @@ public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader respo
     private static VoteSnapshot Assemble(VoteDraftEvidence evidence, HouseVoteMemberVotes members, PersonConfiguration[] tracked,
         PersonConfiguration[] configuredPeople, string? policyArea, DateOnly day)
     {
-        var facts = FactsOf(evidence.Detail, FactPrefixes);
-        if (evidence.BillDetail is { } billPage) facts = facts.AddRange(FactsOf(billPage, BillFactPrefixes));
+        var facts = FactsOf(evidence.Detail, VoteFactPrefixes.Detail);
+        if (evidence.BillDetail is { } billPage) facts = facts.AddRange(FactsOf(billPage, VoteFactPrefixes.Bill));
         var memberVotes = MemberVotesOf(evidence.Members, members, tracked);
         var involved = memberVotes.Select(item => item.PersonId).ToHashSet(StringComparer.Ordinal);
-        return new(facts, memberVotes, VoteFingerprint.Compute(facts, memberVotes),
+        var (kind, kindCitation) = VoteKindTable.Classify(facts);
+        return new(facts, kind, kindCitation, memberVotes, VoteFingerprint.Compute(facts, memberVotes),
             policyArea, day,
             configuredPeople.Where(person => involved.Contains(person.Id)).ToImmutableDictionary(person => person.Id, person => person.Name),
             [.. configuredPeople.Select(person => person.Name)]);

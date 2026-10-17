@@ -17,6 +17,8 @@ using CivicLens.Infrastructure.Collection.Processing;
 using CivicLens.Application.Documents;
 using CivicLens.Host.Analysis;
 using CivicLens.Application.Actions;
+using CivicLens.Application.Votes;
+using CivicLens.Infrastructure.Votes;
 using CivicLens.Host;
 using CivicLens.Host.Actions;
 using CivicLens.Host.Briefs;
@@ -77,6 +79,10 @@ if (args is [] or ["--help"] or ["help"])
           actions draft status
           actions draft list [drafted|unchanged|superseded|no-official|pending|failed] [limit]
           actions draft requeue <candidate-id|--all>
+          votes draft status
+          votes draft list [drafted|unchanged|superseded|no-member|pending|failed] [limit]
+          votes draft requeue <candidate-id|--all>
+          votes draft requeue --blocked --code <block-code>
           brief redraft --week <yyyy-MM-dd>
           releases publish <idempotency-key> <draft-id>...
           releases list [limit]
@@ -144,7 +150,7 @@ if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _]
     or ["feeds" or "discovery", "get", _] or ["feeds" or "discovery", "admit", _, _, _, _]
     or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args) &&
     !CollectionWorkerCommand.Matches(args) && !DocumentCommand.Matches(args) && !ReleaseCommand.Matches(args) &&
-    !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args) && !ActionCommand.Matches(args) && !BriefCommand.Matches(args))
+    !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args) && !ActionCommand.Matches(args) && !VoteCommand.Matches(args) && !BriefCommand.Matches(args))
 {
     Console.Error.WriteLine("Unknown command. Use --help.");
     return 2;
@@ -258,6 +264,19 @@ try
         var actions = new ActionCommand(draftCommands, new RequeueBlockedActionDrafts(draftStore), owner);
         executing = true;
         return await actions.ExecuteAsync(args, cancellation.Token);
+    }
+
+    if (VoteCommand.Matches(args))
+    {
+        var (connectionString, owner) = OwnerCommand.ReadEnvironment();
+        var contexts = AnalysisDbContextFactory.Create(connectionString);
+        var draftStore = new PostgresVoteDraftStore(contexts);
+        var draftCommands = new AnalysisQueueCommands<VoteDraftRun, VoteDraftView, VoteDraftListItem>(
+            draftStore, new PostgresAnalysisStatusStore(contexts, VoteDraftTask.Task));
+        var votes = new VoteCommand(draftCommands, new GetVoteDraftStatus(draftCommands.Status, draftStore),
+            new RequeueBlockedVoteDrafts(draftStore), owner);
+        executing = true;
+        return await votes.ExecuteAsync(args, cancellation.Token);
     }
 
     if (BriefCommand.Matches(args))

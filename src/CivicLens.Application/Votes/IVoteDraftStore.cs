@@ -2,9 +2,11 @@ using CivicLens.Application.Analysis;
 
 namespace CivicLens.Application.Votes;
 
-public interface IVoteDraftStore : IAnalysisQueue<VoteDraftRun>
+public interface IVoteDraftStore : IAnalysisQueueStore<VoteDraftRun, VoteDraftView, VoteDraftListItem>
 {
-    Task<VoteDraftRun?> GetRunAsync(string runId, CancellationToken cancellationToken);
-
     Task<VoteDraftEvidence?> ReadEvidenceAsync(string candidateId, CancellationToken cancellationToken);
+
+    Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken);
+
+    Task<int> CountWaitingForBillAsync(CancellationToken cancellationToken);
 }

@@ -31,7 +31,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A reservation is set or cleared as a whole. Enforced by `ck_<table>_reservation` on every queue table. No test.
 - A run charges at least the tokens it used. Enforced by `ck_document_change_analysis_runs_tokens` and `AnalysisRun`. Test: `AnalysisRunTests.ARunCannotChargeLessThanTheTokensItUsed`.
 - At most one run exists for each draft revision. Enforced by the unique index `IX_document_change_analysis_runs_draft_id_revision_number` on `(draft_id, revision_number)`. A run without a draft has a null `draft_id`. No test.
-- Only a human owner requeues. Enforced by `RequeueAnalyses`, `RequeueBlockedActionDrafts`, and `RedraftBrief`. Tests: `RequeueAnalysesTests.OnlyAHumanOwnerRequeues`, `ActionCommandTests.TheAiDrafterCannotActAsTheOwner`, and `RedraftBriefTests.OnlyTheOwnerMayRedraftAWeek`.
+- Only a human owner requeues. Enforced by `RequeueAnalyses`, `RequeueBlockedActionDrafts`, `RequeueBlockedVoteDrafts`, and `RedraftBrief`. Tests: `RequeueAnalysesTests.OnlyAHumanOwnerRequeues`, `ActionCommandTests.TheAiDrafterCannotActAsTheOwner`, `VoteCommandTests.TheAiDrafterCannotActAsTheOwner`, and `RedraftBriefTests.OnlyTheOwnerMayRedraftAWeek`.
 
 ## Behavior
 
@@ -55,12 +55,12 @@ The states are the values of `ck_<table>_status`, the same for every queue table
 | Running | Succeeded, Blocked, Failed | Settlement |
 | WaitingForBudget | Pending | Budget wait release at worker startup |
 | Failed | Pending | Owner requeue (`analyses requeue`) |
-| Succeeded | Pending | Only where the feature lifecycle allows it: a skipped statement gate (`statements regate`), any action draft, and any brief draft |
-| Blocked | Pending | Only where the feature lifecycle allows it: an action draft (`actions draft requeue --blocked`) and a brief draft (`brief redraft`) |
+| Succeeded | Pending | Only where the feature lifecycle allows it: a skipped statement gate (`statements regate`) and any brief draft |
+| Blocked | Pending | Only where the feature lifecycle allows it: an action draft (`actions draft requeue --blocked`), a vote draft (`votes draft requeue --blocked`), and a brief draft (`brief redraft`) |
 
 These events count as attempts: a durable retry, a reclaim of an expired lease, a release with tokens reserved, and a rejected draft. The claim owns the limit. A claim of an entry with eight attempts fails it as `attemptsExhausted` with no call.
 
-`IAnalysisQueueStore<TRun, TView, TItem>` adds a run read, a list for each view, and the counts to `IAnalysisQueue<TRun>`. The owner handlers `GetAnalysisStatus`, `ListAnalyses`, and `GetAnalysisRun` work on any such store. The statement gate, statement drafting, and action drafting use them. The Host puts them with `RequeueAnalyses` in one `AnalysisQueueCommands` for each queue. Document-change drafting keeps its own read handlers. They serve the review UI, need the reviewer role, and find entries by comparison or draft ID.
+`IAnalysisQueueStore<TRun, TView, TItem>` adds a run read, a list for each view, and the counts to `IAnalysisQueue<TRun>`. The owner handlers `GetAnalysisStatus`, `ListAnalyses`, and `GetAnalysisRun` work on any such store. The statement gate, statement drafting, action drafting, and vote drafting use them. The Host puts them with `RequeueAnalyses` in one `AnalysisQueueCommands` for each queue. Document-change drafting keeps its own read handlers. They serve the review UI, need the reviewer role, and find entries by comparison or draft ID.
 
 ### Executor
 

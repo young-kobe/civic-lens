@@ -12,11 +12,12 @@ public sealed record VoteDraftContext(VoteDraftEvidence Evidence, VoteSnapshot S
         if (previous is null || !previous.Facts.Select(fact => fact.Text).SequenceEqual(Snapshot.Facts.Select(fact => fact.Text)) ||
             !previous.TrackedIssueIds.SequenceEqual(TrackedIssueIds) || previous.IssueRevisionId != IssueRevisionId)
             return VoteChange.Other;
-        return previous.Members.Select(VoteOf).SequenceEqual(Snapshot.Members.Select(VoteOf)) ? VoteChange.None : VoteChange.MemberVotesOnly;
+        if (!previous.Members.Select(VoteOf).SequenceEqual(Snapshot.Members.Select(VoteOf))) return VoteChange.MemberVotesOnly;
+        return previous.Kind == Snapshot.Kind ? VoteChange.None : VoteChange.KindOnly;
     }
 
     private static (string PersonId, string BioguideId, string Cast) VoteOf(MemberVote member) =>
         (member.PersonId, member.BioguideId, member.Cast);
 }
 
-public enum VoteChange { None, MemberVotesOnly, Other }
+public enum VoteChange { None, MemberVotesOnly, KindOnly, Other }

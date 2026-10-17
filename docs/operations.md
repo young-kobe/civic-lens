@@ -615,7 +615,16 @@ The `worker` command drafts one vote record for each House roll call that has a 
 
 Drafting uses Claude Haiku 5.5. The migration queued every vote candidate that existed when it ran, and the first run can spend up to the daily limit on them. The stage runs after action drafting and before brief drafting. A roll call with no tracked member, and a re-collected vote with the same facts, settle without a call. The [outcomes](architecture/votes.md#outcomes) table lists every code.
 
-No owner command exists for vote drafting yet. The status row of the task `vote-draft` shows the daily limit and any pause. A paused or waiting stage follows the same table as document-change drafting: fix the key or the credit and restart the worker, or wait for the next UTC day.
+The commands below need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- votes draft status
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- votes draft list unchanged 50
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- votes draft requeue <candidate-id|--all>
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- votes draft requeue --blocked --code factTooLong
+```
+
+`status` prints one JSON object. Its `queue` field holds the daily limit, any pause, `chargedToday`, and `counts` for each outcome. Its `waitingForBill` field is the number of votes on a bill that wait for the bill detail and have no queue row yet. `list` takes `drafted`, `unchanged`, `superseded`, `no-member`, `pending`, or `failed`, and a limit up to 500 (default 100). `requeue` moves Failed and no other rows back to Pending. `requeue --blocked --code <block-code>` moves Blocked rows with that code back to Pending. Fix the cause first, or the entry blocks again. The code is required. Use a code from the [outcomes](architecture/votes.md#outcomes) table. A mistyped code requeues nothing and prints `{"requeued":0}`. A paused or waiting stage follows the same table as document-change drafting: fix the key or the credit and restart the worker, or wait for the next UTC day.
 
 ## Brief drafting
 

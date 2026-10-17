@@ -5,7 +5,6 @@ using CivicLens.Application.Collection.Bills;
 using CivicLens.Infrastructure.Collection.BillStream;
 using CivicLens.Infrastructure.Collection.HouseVotes;
 using CivicLens.Infrastructure.Votes;
-using CivicLens.Infrastructure.Votes.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Collection.Jobs;
@@ -78,9 +77,8 @@ public sealed partial class PostgresCollectionJobStore : IHouseVoteAdmissionStor
     private static async Task QueueVotesWaitingForBillAsync(CollectionAttemptDbContext db, CongressBill bill, DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var waiting = await db.Set<HouseVoteCandidateRow>().Where(candidate => candidate.Congress == bill.Congress &&
-            candidate.BillType == bill.Type && candidate.BillNumber == bill.Number &&
-            !db.Set<VoteAnalysisRow>().Any(entry => entry.CandidateId == candidate.CandidateId))
+        var waiting = await VoteDraftQueueRows.WaitingForBill(db).Where(candidate => candidate.Congress == bill.Congress &&
+            candidate.BillType == bill.Type && candidate.BillNumber == bill.Number)
             .Select(candidate => candidate.CandidateId).ToListAsync(cancellationToken);
         foreach (var candidateId in waiting) VoteDraftQueueRows.Add(db, candidateId, Ticks(now));
     }
