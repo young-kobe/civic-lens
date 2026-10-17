@@ -9,7 +9,7 @@ public sealed class VoteDraftPromptGoldenTests
 {
     private const string SystemSha256 = "ffc613b8ae00aa36ac1aa7e5269e73b7ba77d02174de5e2b9a5cebd0eaa408d3";
     private const string SchemaSha256 = "7e063b55e0c1bfc654088f5e9372850813294a033939acc1826b01b822aa7016";
-    private const string InputHash = "7acc2dc24fcb5b3b0ff39e97078b9237422657a3145bb750dbff318a2ac2e807";
+    private const string InputHash = "0bf5374daf51b7c4ddbb32dbc1fc866d6085281c49c59207733a6eb82e6b6c6f";
 
     [Fact]
     public async Task ThePromptAndSchemaMatchTheirPinnedVersions()
