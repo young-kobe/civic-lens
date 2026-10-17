@@ -19,6 +19,11 @@ The statements feature finds articles that may hold an official's statement and 
 - The speakers come from the configuration revision that admitted the article, not the current file. A later configuration change cannot change the speakers of an admitted article.
 - Code sets the quotation kind and the bill numbers. The model and the reviewer never set them.
 - Code never guesses a statement date. When the article states no date, the draft date is null, and the reviewer sets it.
+- A gate label holds the tracked issue IDs and the `namesBillOrVote` answer of one release. It holds no quote, policy area, or pass verdict. The gate rule derives a pass from a label, so the rule keeps one owner.
+- Labels are append-only rows, like revisions. The newest human row of a candidate is the label of record. A model row never replaces it.
+- Code assigns about 30 percent of releases to a held-out set by a hash of the candidate ID. The set is the test set of the gate benchmark ([D-13](../roadmap.md#pending-decisions)). A held-out release never gets a model label.
+- Only the owner labels releases and exports labels.
+- Vendor rule: only public press release text and gate labels may go to Cloudflare. Never send review notes, reviewer identity, or credentials.
 - Drafting does not cache the prompt. The article text is most of each request, and the schema changes with the covered officials of each source.
 
 ## Invariants
@@ -37,6 +42,15 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - Only an analysis revision has a run ID, and one revision exists for each run. Enforced by `ck_statement_revisions_run` and `IX_statement_revisions_run_id`. Test: `PostgresStatementDraftStoreTests.TheDatabaseRefusesAnAiRevisionThatHasNoRun`.
 - NotDrafted holds exactly when the revision number is 0. Enforced by `ck_statement_drafts_not_drafted`. Test: `StatementReviewMigrationTests.TheDatabaseRefusesANotDraftedStatusOnADraftThatHasARevision`.
 - A candidate gets one draft and one first revision. Enforced by `StatementDraftRows` under the `PostgresAdvisoryLock.StatementReview` key. Test: `PostgresStatementReviewStoreTests.AHumanCreateAndAnAiSettlementRacingForTheSameCandidateLeaveExactlyOneFirstRevision`.
+- A label row is only added. It is never changed or deleted. Enforced by `PostgresGateLabelStore`, which has no update or delete method. Test: `PostgresGateLabelStoreTests.LabelsAreAppendedAndTheNewestHumanRowIsTheLabelOfRecordSoACorrectionNeverEditsHistory`.
+- The newest human label is the label of record, and a model label never replaces it. Enforced by `PostgresGateLabelStore`. Test: `PostgresGateLabelStoreTests.AModelLabelNeverReplacesTheHumanLabelOfRecord`.
+- A model label has a run ID and a human label has none. Enforced by `ck_statement_gate_labels_run`. Test: `StatementGateLabelsMigrationTests.TheDatabaseRefusesAModelLabelWithoutARunAndAHumanLabelWithOne`.
+- A held-out release takes no model label. Enforced by `PostgresGateLabelStore` with `GateLabelSplit`. Test: `PostgresGateLabelStoreTests.AHeldOutReleaseRefusesAModelLabelAndStoresNothingSoTheTestSetStaysBlindToModels`.
+- A candidate ID always has the same held-out answer. Enforced by `GateLabelSplit`. Test: `GateLabelSplitTests.TheSameCandidateAlwaysLandsOnTheSameSideSoALaterRunCannotLeakATestReleaseIntoTraining`.
+- A label cites the extraction of its candidate. Enforced by `PostgresGateLabelStore`. Test: `PostgresGateLabelStoreTests.ALabelThatCitesAnotherExtractionOrAnUnknownCandidateIsRefused`.
+- A label holds only tracked issue IDs of the issue file. Enforced by `SaveGateLabel`. Test: `SaveGateLabelTests.AnIssueThatTheIssueFileDoesNotTrackIsRefusedSoLabelsStayInTheGateVocabulary`.
+- Only the owner labels, reads the label queue, or exports labels. Enforced by `ReviewAuthorization.RequireOwner` in each use case, and by a redirect on the pages. Tests: `SaveGateLabelTests.AReviewerCannotLabelBecauseLabelsFeedTheOwnersBenchmark` and `GateLabelPageTests.ReviewersAreSentToAccessDeniedSoOnlyTheOwnerFeedsTheBenchmark`.
+- An export line never holds an author subject, a review note, or a credential, and the file stays inside `.runtime`. Enforced by `GateLabelExportRow`, which has no such field, and by `GateLabelExport`. Tests: `GateLabelExportTests.EachLineHoldsOnlyTheFieldsTheBenchmarkNeedsSoNoSubjectNoteOrCredentialCanLeave` and `GateLabelExportTests.APathOutsideTheRuntimeDirectoryIsRefusedAndNothingIsWritten`.
 - Each task charges its own budget. Enforced by the primary key of `statement_analysis_budget`. Test: `PostgresStatementGateStoreTests.TheGateChargesItsOwnDailyBudgetAndNotTheDocumentChangeBudget`.
 
 ## Behavior
@@ -229,6 +243,22 @@ Issues and policy areas are choices from the allowed sets. The quotations are ch
 
 The list drops a repeated (start, length) pair and a span longer than `MaximumQuotationLength`. It stops at 200 spans. The page accepts only a posted key that the list offers.
 
+### Gate labels
+
+A gate label is the answer a person gives for one release. It lists the tracked issues that the release speaks to. It also says whether the release names a bill or a recorded vote. The labels measure the gate and the models that may replace it ([D-13](../roadmap.md#pending-decisions)).
+
+**Store.** `PostgresGateLabelStore` adds one row for each save. A row holds the candidate ID, the extraction ID of the saved text, the author, the optional run ID, and the label JSON. The extraction ID must be the extraction of the candidate. `GetAsync` returns the saved text, the newest human label, and the newest model label.
+
+**Split.** `GateLabelSplit.IsHeldOut` hashes the candidate ID with SHA-256. It holds the release out when the first four bytes, as a number, give a remainder under 30 when divided by 100. The result never changes for an ID. About 30 percent of releases are held out.
+
+The store refuses a model label for a held-out release. A person still labels a held-out release, but never sees a model label for it.
+
+**Page.** `/Review/GateLabels` is for the owner only. A reviewer goes to the access-denied page. It lists unlabeled releases, with held-out releases first. They are the test set, so a person label is the only label they can have. A release with only a model label is still unlabeled. The list shows 25 releases and the total.
+
+`/Review/GateLabels/{CandidateId}` shows the saved text, a checkbox for each tracked issue of the issue file, and a yes or no choice for `namesBillOrVote`. The yes or no choice has no default. The form is prefilled with the human label, or else with the model label when the release is not held out. A save always adds a human row. It confirms or corrects the prefill. After a save, the page opens the next unlabeled release.
+
+**Export.** `statements labels export <path>` writes one JSON line for each release that has a human label. A line holds `candidateId`, `extractionId`, `heldOut`, `issueIds`, `namesBillOrVote`, and `text`. The text is the public release text. The command refuses a path that is not inside the `.runtime` directory under the current directory. Run it from the repository root.
+
 ### Commands
 
 All statement commands are owner commands.
@@ -244,6 +274,7 @@ All statement commands are owner commands.
 | `statements draft list [view] [limit]` | Draft rows. Views: `drafted`, `over-cap`, `existing`, `pending`, `failed` |
 | `statements draft run <run-id>` | One draft run |
 | `statements draft requeue <candidate-id\|--all>` | Failed draft rows back to Pending. It never moves a gate row. |
+| `statements labels export <path>` | Labels of record as JSON lines, inside `.runtime` only |
 
 With `--since`, `regate` moves only candidates first captured on or after that UTC date. A skip made under another gate prompt version moves too, because the new prompt may find a bill or a vote. `regate` never runs by itself, and it needs `CIVIC_LENS_ISSUES_CONFIG`. A passed, failed-open, or over-cap gate row never moves.
 
@@ -272,6 +303,7 @@ With `--since`, `regate` moves only candidates first captured on or after that U
 - A draft with no revision has the status `NotDrafted`. A migration set old rows with revision 0 to `NotDrafted` and every other row to `AwaitingReview`.
 - `statement_review_decisions` holds the immutable decision JSON.
 - The commands reuse the replay receipt table with the operations `statement-create`, `statement-save`, and `statement-decide`.
+- `statement_gate_labels` holds the gate labels. Its key is a 32-character label ID. A row names the candidate and the extraction. It also holds the author subject, the author kind (`Person` or `Analysis`), the run ID, the label JSON, and the creation time. `ck_statement_gate_labels_run` ties the run ID to the `Analysis` kind. The run ID has no foreign key, because the benchmark runs are not gate runs.
 - Version constants are listed in [Behavior versions](../architecture.md#behavior-versions).
 
 ## Code map
@@ -289,6 +321,9 @@ With `--since`, `regate` moves only candidates first captured on or after that U
 | Review commands and reads | `src/CivicLens.Application/Statements/CreateStatementDraft.cs`, `src/CivicLens.Application/Statements/SaveStatementDraft.cs`, `src/CivicLens.Application/Statements/DecideStatementReview.cs`, `src/CivicLens.Application/Statements/GetStatementReview.cs`, `src/CivicLens.Application/Statements/ListStatementReviews.cs`, `src/CivicLens.Application/Statements/ListStatementsNotInReview.cs`, `src/CivicLens.Application/Statements/StatementSelectionResolver.cs`, `src/CivicLens.Application/Statements/StatementSelectableSpans.cs` |
 | Review store | `src/CivicLens.Infrastructure/Statements/PostgresStatementReviewStore.cs`, `src/CivicLens.Infrastructure/Statements/StatementReviewQueries.cs` |
 | Review pages | `src/CivicLens.Host/Review/StatementList.razor`, `src/CivicLens.Host/Review/StatementEditor.razor`, `src/CivicLens.Host/Review/ReviewRecordPage.cs` |
+| Gate labels: label, split, store | `src/CivicLens.Core/Statements/GateLabel.cs`, `src/CivicLens.Core/Statements/GateLabelEntry.cs`, `src/CivicLens.Core/Statements/GateLabelSplit.cs`, `src/CivicLens.Application/Statements/IGateLabelStore.cs`, `src/CivicLens.Infrastructure/Statements/PostgresGateLabelStore.cs` |
+| Gate label use cases | `src/CivicLens.Application/Statements/SaveGateLabel.cs`, `src/CivicLens.Application/Statements/ListGateLabelQueue.cs`, `src/CivicLens.Application/Statements/GetGateLabelTask.cs`, `src/CivicLens.Application/Statements/ExportGateLabels.cs` |
+| Gate label pages and export | `src/CivicLens.Host/Review/GateLabelList.razor`, `src/CivicLens.Host/Review/GateLabelEditor.razor`, `src/CivicLens.Host/Statements/GateLabelExport.cs` |
 | Reserved author kind | `src/CivicLens.Core/Review/ReviewAuthor.cs` |
 
 The gate and drafting run on the shared owners in [analysis](analysis.md#code-map).
@@ -301,6 +336,11 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 - Gate runs from before `statement-gate-v2` have no `namesBillOrVote` answer. `StatementGateCarryOver` reads them with a null answer.
 - Rolling back the `GateBillOrVoteReasons` migration fails while any gate run holds a `passed-bill-or-vote` or `passed-bill-number` reason. Remove or change those rows first.
 - The bill or vote answer of the model is unmeasured. The `passed-bill-or-vote` and `passed-bill-number` counts show how often each path fires. The bill number rule finds only the forms that `BillNumberFinder` accepts.
+- The gate labels are the first part of D-13. The model pre-label, the model comparison, and the fine-tuning are planned. A model label needs `GateLabelEntry` with the `Analysis` kind and a run ID.
+- The label page offers every tracked issue of the issue file. It does not hide an issue that was inactive on the capture date.
+- A label save has no idempotency key. A double submit adds two equal rows, and the newest is the label of record.
+- The export path check compares full paths. It does not resolve symbolic links.
+- The split is a hash, so the held-out share is near 30 percent but not exact.
 - Measured on 2026-10-16 with 30 House press feeds: the gate dropped 25 of 48 candidates. Most were grants and events. It also dropped a release about a farm bill vote, two bill introductions, and a Senate inquiry.
 - Measured on 2026-10-16: 4 of 21 drafts carry a bill number. 2 of them name a bill with a collected House vote, and both members voted on it.
 - Measured on 2026-10-16: some issue tags are doubtful. For example, a post office closure was tagged `elections-and-voting`.

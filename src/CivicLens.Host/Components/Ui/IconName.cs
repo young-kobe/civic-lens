@@ -7,6 +7,7 @@ public enum IconName
     Statements,
     Actions,
     Briefs,
+    Labels,
     Light,
     Dark,
     System,

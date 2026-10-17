@@ -15,6 +15,7 @@
             @if (role == ReviewRole.Owner)
             {
                 <RailLink Href="/Review/Sources" Text="Sources" Icon="IconName.Sources" />
+                <RailLink Href="/Review/GateLabels" Text="Gate labels" Icon="IconName.Labels" />
             }
         </nav>
         <div class="rail-foot">
@@ -41,7 +42,7 @@
     public const string CrumbsSection = "topbar-crumbs";
 
     private static readonly IReadOnlyList<string> ReviewSections = ["/Documents"];
-    private static readonly IReadOnlyList<string> ReviewExclusions = ["/Review/Sources", "/Review/Statements", "/Review/Actions", "/Review/Briefs"];
+    private static readonly IReadOnlyList<string> ReviewExclusions = ["/Review/Sources", "/Review/Statements", "/Review/Actions", "/Review/Briefs", "/Review/GateLabels"];
     private ReviewRole role;
 
     [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }

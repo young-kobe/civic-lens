@@ -148,6 +148,27 @@ public sealed class StatementCommandTests(PostgresCollection postgres) : IAsyncL
         Assert.Equal(2, result.ExitCode);
     }
 
+    [Fact]
+    public async Task ALabelExportOutsideTheRuntimeDirectoryIsRefusedAndWritesNoFile()
+    {
+        var outside = Path.Combine(Path.GetTempPath(), "civic-label-export-" + Guid.NewGuid().ToString("N") + ".jsonl");
+
+        var result = await RunAsync("auth0|owner", "statements", "labels", "export", outside);
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains(".runtime", result.Error, StringComparison.Ordinal);
+        Assert.False(File.Exists(outside));
+    }
+
+    [Fact]
+    public async Task ALabelExportWithoutAPathShowsTheUsage()
+    {
+        var result = await RunAsync("auth0|owner", "statements", "labels", "export");
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("statements labels export <path>", result.Error, StringComparison.Ordinal);
+    }
+
     private Task<(int ExitCode, string Output, string Error)> RunAsync(string owner, params string[] arguments) =>
         HostProcess.RunWithEnvironmentAsync(connectionString, null,
             new Dictionary<string, string> { ["CIVIC_LENS_REVIEW_OWNER"] = owner }, arguments);

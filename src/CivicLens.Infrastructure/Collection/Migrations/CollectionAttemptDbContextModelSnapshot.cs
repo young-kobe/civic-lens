@@ -2960,6 +2960,65 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementGateLabelRow", b =>
+                {
+                    b.Property<string>("LabelId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("label_id");
+
+                    b.Property<string>("AuthorKind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("author_kind");
+
+                    b.Property<string>("AuthorSubject")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("author_subject");
+
+                    b.Property<string>("CandidateId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("candidate_id");
+
+                    b.Property<long>("CreatedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_at_utc_ticks");
+
+                    b.Property<string>("ExtractionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("extraction_id");
+
+                    b.Property<string>("LabelJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("label_json");
+
+                    b.Property<string>("RunId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("run_id");
+
+                    b.HasKey("LabelId");
+
+                    b.HasIndex("CandidateId", "CreatedAtUtcTicks");
+
+                    b.ToTable("statement_gate_labels", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_statement_gate_labels_author_kind", "author_kind IN ('Person','Analysis')");
+
+                            t.HasCheckConstraint("ck_statement_gate_labels_id", "label_id ~ '^[0-9a-f]{32}$'");
+
+                            t.HasCheckConstraint("ck_statement_gate_labels_run", "(author_kind = 'Analysis') = (run_id IS NOT NULL)");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementReviewDecisionRow", b =>
                 {
                     b.Property<string>("DecisionId")
@@ -3907,6 +3966,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementDraftRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementCandidateRow", null)
+                        .WithMany()
+                        .HasForeignKey("CandidateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementGateLabelRow", b =>
                 {
                     b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementCandidateRow", null)
                         .WithMany()

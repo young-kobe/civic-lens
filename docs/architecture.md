@@ -354,6 +354,7 @@ This is the only navigation index.
 | Planned classification and datasets | [Analysis](architecture/analysis.md#limits-and-planned-work) | none |
 | Statement candidates and the issue gate | [Statements](architecture/statements.md#issue-gate) | `src/CivicLens.Application/Statements/StatementGateStep.cs` |
 | Statement drafting | [Statements](architecture/statements.md#statement-drafting) | `src/CivicLens.Application/Statements/StatementDraftStep.cs` |
+| Gate labels, held-out split, label export | [Statements](architecture/statements.md#gate-labels) | `src/CivicLens.Core/Statements/GateLabelSplit.cs` |
 | Statement review pages and commands | [Statements](architecture/statements.md#statement-review) | `src/CivicLens.Host/Review/StatementEditor.razor` |
 | Review decisions, roles, concurrency | [Review](architecture/review.md#review-decisions) | `src/CivicLens.Core/Review/ReviewPolicy.cs` |
 | Review cycles, history caps, the shared append step | [Review](architecture/review.md#review-cycles) | `src/CivicLens.Infrastructure/Review/ReviewRecords.cs` |
