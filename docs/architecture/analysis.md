@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The analysis feature runs model tasks over retained evidence through durable, budgeted queues. Today the worker drafts an account of each complete document change. Statement, action, vote, and brief tasks use the same machinery; see [statements](statements.md), [actions](actions.md), [votes](votes.md#drafting), and [briefs](briefs.md). A model prediction is never a human decision.
+The analysis feature runs model tasks over retained evidence through durable, budgeted queues. Today the worker drafts an account of each complete document change. Statement, action, vote, relationship, and brief tasks use the same machinery; see [statements](statements.md), [actions](actions.md), [votes](votes.md#drafting), [relationships](statements.md#relationship-drafting), and [briefs](briefs.md). A model prediction is never a human decision.
 
 ## Decisions
 
@@ -31,7 +31,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A reservation is set or cleared as a whole. Enforced by `ck_<table>_reservation` on every queue table. No test.
 - A run charges at least the tokens it used. Enforced by `ck_document_change_analysis_runs_tokens` and `AnalysisRun`. Test: `AnalysisRunTests.ARunCannotChargeLessThanTheTokensItUsed`.
 - At most one run exists for each draft revision. Enforced by the unique index `IX_document_change_analysis_runs_draft_id_revision_number` on `(draft_id, revision_number)`. A run without a draft has a null `draft_id`. No test.
-- Only a human owner requeues. Enforced by `RequeueAnalyses`, `RequeueBlockedActionDrafts`, `RequeueBlockedVoteDrafts`, and `RedraftBrief`. Tests: `RequeueAnalysesTests.OnlyAHumanOwnerRequeues`, `ActionCommandTests.TheAiDrafterCannotActAsTheOwner`, `VoteCommandTests.TheAiDrafterCannotActAsTheOwner`, and `RedraftBriefTests.OnlyTheOwnerMayRedraftAWeek`.
+- Only a human owner requeues. Enforced by `RequeueAnalyses`, `RequeueBlockedActionDrafts`, `RequeueBlockedVoteDrafts`, and `RedraftBrief`. Tests: `RequeueAnalysesTests.OnlyAHumanOwnerRequeues`, `ActionCommandTests.TheAiDrafterCannotActAsTheOwner`, `VoteCommandTests.TheAiDrafterCannotActAsTheOwner`, `RelationshipCommandTests.TheAiDrafterCannotActAsTheOwner`, and `RedraftBriefTests.OnlyTheOwnerMayRedraftAWeek`.
 
 ## Behavior
 
@@ -55,12 +55,12 @@ The states are the values of `ck_<table>_status`, the same for every queue table
 | Running | Succeeded, Blocked, Failed | Settlement |
 | WaitingForBudget | Pending | Budget wait release at worker startup |
 | Failed | Pending | Owner requeue (`analyses requeue`) |
-| Succeeded | Pending | Only where the feature lifecycle allows it: a skipped statement gate (`statements regate`) and any brief draft |
-| Blocked | Pending | Only where the feature lifecycle allows it: an action draft (`actions draft requeue --blocked`), a vote draft (`votes draft requeue --blocked`), and a brief draft (`brief redraft`) |
+| Succeeded | Pending | Only where the feature lifecycle allows it: a skipped statement gate (`statements regate`), any brief draft, and a relationship draft whose pair has a new input |
+| Blocked | Pending | Only where the feature lifecycle allows it: an action draft (`actions draft requeue --blocked`), a vote draft (`votes draft requeue --blocked`), a brief draft (`brief redraft`), and a relationship draft that was blocked by an unapproved side |
 
 These events count as attempts: a durable retry, a reclaim of an expired lease, a release with tokens reserved, and a rejected draft. The claim owns the limit. A claim of an entry with eight attempts fails it as `attemptsExhausted` with no call.
 
-`IAnalysisQueueStore<TRun, TView, TItem>` adds a run read, a list for each view, and the counts to `IAnalysisQueue<TRun>`. The owner handlers `GetAnalysisStatus`, `ListAnalyses`, and `GetAnalysisRun` work on any such store. The statement gate, statement drafting, action drafting, and vote drafting use them. The Host puts them with `RequeueAnalyses` in one `AnalysisQueueCommands` for each queue. Document-change drafting keeps its own read handlers. They serve the review UI, need the reviewer role, and find entries by comparison or draft ID.
+`IAnalysisQueueStore<TRun, TView, TItem>` adds a run read, a list for each view, and the counts to `IAnalysisQueue<TRun>`. The owner handlers `GetAnalysisStatus`, `ListAnalyses`, and `GetAnalysisRun` work on any such store. The statement gate, statement drafting, action drafting, vote drafting, and relationship drafting use them. The Host puts them with `RequeueAnalyses` in one `AnalysisQueueCommands` for each queue. Document-change drafting keeps its own read handlers. They serve the review UI, need the reviewer role, and find entries by comparison or draft ID.
 
 ### Executor
 
@@ -68,7 +68,7 @@ The drafting executor is `AnalysisWorker<AnalysisRun>` with `DocumentChangeDraft
 
 The executor runs beside the collection loop in the `worker` process. Its wakeup uses the `civic_lens_analysis` channel with the payload `document_change_analysis:draft`. Collection therefore never waits for a model call. With `--once`, collection drains first and drafting drains next. If one loop fails, both stop.
 
-`AnalysisWorker` takes an optional hook that runs before each drain pass, inside the same error handling as the eligible read. The brief executor uses it to queue the closed weeks. No other executor sets it.
+`AnalysisWorker` takes an optional hook that runs before each drain pass, inside the same error handling as the eligible read. The brief executor uses it to queue the closed weeks. The relationship executor uses it to find the pairs and to requeue the stale ones. No other executor sets it.
 
 At most `CIVIC_LENS_ANALYSIS_CONCURRENCY` calls run at a time. The default is 2 and the maximum is 4. On shutdown the executor releases claimed entries.
 
@@ -85,7 +85,7 @@ The loop returns one of four ends:
 - Exhausted: a second rejection, or a retry prompt over the cap.
 - Not sent: the first prompt is over the cap, or the resumed retry prompt is.
 
-The step decides what each end means. The drafting steps for document changes, statements, actions, votes, and briefs call `AnalysisValidationLoop.FailAsync`, which fails the entry with the rejection code. The statement gate fails open.
+The step decides what each end means. The drafting steps for document changes, statements, actions, votes, relationships, and briefs call `AnalysisValidationLoop.FailAsync`, which fails the entry with the rejection code. The statement gate fails open.
 
 ### Prompt and output
 

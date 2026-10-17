@@ -34,4 +34,15 @@ public sealed class BillNumberFinderTests
     public void RepeatedNumbersAppearOnceInOrderOfFirstUse() =>
         Assert.Equal(["H.R. 56", "S. 1234", "S.J.Res. 2"],
             BillNumberFinder.Find("H.R. 56 and S. 1234, then H.R.56 and S.J.Res. 2 and S. 1234 again.").ToArray());
+
+    [Fact]
+    public void EachMatchGivesTheSpanOfTheWholeCitationSoACallerCanQuoteTheExactWords()
+    {
+        const string text = "See H. R. 56 and S.J.Res. 2, then H.R.56 again.";
+
+        var matches = BillNumberFinder.FindWithSpans(text);
+
+        Assert.Equal(["H. R. 56", "S.J.Res. 2", "H.R.56"], matches.Select(match => text.Substring(match.Start, match.Length)));
+        Assert.Equal([("H.R.", 56), ("S.J.Res.", 2), ("H.R.", 56)], matches.Select(match => (match.Type, match.Number)));
+    }
 }

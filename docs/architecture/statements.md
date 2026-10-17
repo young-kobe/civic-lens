@@ -25,6 +25,18 @@ The statements feature finds articles that may hold an official's statement and 
 - Only the owner labels releases and exports labels. `GateLabelEditor` does not extend `ReviewRecordPage`, because that base class serves revisions and decisions and a label has neither.
 - Vendor rule: only public press release text and gate labels may go to Cloudflare. Never send review notes, reviewer identity, or credentials. Encrypted backups are the one exception, as [host](host.md#decisions) states.
 - Drafting does not cache the prompt. The article text is most of each request, and the schema changes with the covered officials of each source.
+- A relationship links one approved statement revision to one approved action or vote revision. It has a named type and no verdict. A stance such as consistent or inconsistent needs a method note first.
+- The types for an action are "describes own bill", "states position on", and "claims credit for". The only type for a vote is "statement about a vote". The model may also answer none. Then the queue row settles and no relationship record exists.
+- Relationships are their own record kind, with a queue, a budget, drafts, revisions, review decisions, and a review lock. Review pages and publication are planned; see [limits](#limits-and-planned-work).
+- Code finds the pairs, not the model. A pair is the same official plus a shared bill. For an action, the official needs a sponsorship of the bill in any role. A cosponsor who withdrew still counts. For a vote, the official needs to have cast it.
+- Code finds the shared bill by number first and then by title. A title is the saved title of the action revision. The match ignores case, a leading "the", and a trailing year such as "of 2025". A title of fewer than three words never matches ([D-09](../roadmap.md#pending-decisions)).
+- A vote has no saved title, so a vote pairs by bill number only.
+- A bill number comes from `BillNumberFinder` in the quoted passages of the statement. The number has no Congress, so it takes the Congress of the statement date. A Congress starts on 3 January of an odd year, and 1 and 2 January belong to the Congress before it. A statement with no date cannot place a number. Code skips the number and counts the statement.
+- Pairs that share only a tracked issue wait for a measurement.
+- A relationship cites the revision number of each side, as a brief cites its records.
+- The queue key of a pair is the lowercase SHA-256 hash of `relationship-v1|statementCandidateId|targetKind|targetRecordId`. The match basis and the matched span are in the revision, not in the key.
+- The model proposes the type and one sentence of reason. It also quotes the statement and names one fact of the record. Code finds the quote and requires it to cover the matched words. A person approves or rejects the relationship.
+- Relationship drafting uses Haiku with its own queue, budget table, and variable. No gate runs before it.
 
 ## Invariants
 
@@ -53,6 +65,19 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A label holds only tracked issue IDs of the issue file. Enforced by `SaveGateLabel`. Test: `SaveGateLabelTests.AnIssueThatTheIssueFileDoesNotTrackIsRefusedSoLabelsStayInTheGateVocabulary`.
 - Only the owner labels, reads the label queue, or exports labels. Enforced by `ReviewAuthorization.RequireOwner` in each use case, and by a redirect on the pages. Tests: `SaveGateLabelTests.AReviewerCannotLabelBecauseLabelsFeedTheOwnersBenchmark`, `GateLabelOwnerOnlyTests.AReviewerCannotReadTheLabelQueueATaskOrTheExportBecauseOnlyTheOwnerRunsTheBenchmark` and `GateLabelPageTests.ReviewersAreSentToAccessDeniedSoOnlyTheOwnerFeedsTheBenchmark`.
 - An export line never holds an author subject, a review note, or a credential, and the file stays inside `.runtime`. Enforced by `GateLabelExportRow`, which has no such field, and by `GateLabelExport`. Tests: `GateLabelExportTests.EachLineHoldsOnlyTheFieldsTheBenchmarkNeedsSoNoSubjectNoteOrCredentialCanLeave` and `GateLabelExportTests.APathOutsideTheRuntimeDirectoryIsRefused`.
+- A pair key is the hash of the statement, the target kind, and the target record. It does not change with a revision or a match basis. Enforced by `RelationshipPair.IdOf`. Tests: `RelationshipPairFinderTests.ThePairIdIsPinnedSoAStoredQueueKeyNeverChangesWithoutAVersionBump` and `RelationshipPairFinderTests.ThePairIdIsTheHashOfTheStatementTheKindAndTheTargetAndIgnoresTheMatchBasisAndTheRevisions`.
+- Only approved revisions make pairs. Enforced by `RelationshipEvidenceReader`. Test: `PostgresRelationshipDraftStoreTests.ASideThatIsNotApprovedMakesNoPairBecauseOnlyApprovedRevisionsMayBeCited`.
+- A pair needs the same official: a sponsorship for an action and a cast vote for a vote. Enforced by `RelationshipPairFinder`. Tests: `RelationshipPairFinderTests.AnActionThatTheSpeakerDidNotSponsorMakesNoPairBecauseThePairNeedsTheSameOfficial` and `RelationshipPairFinderTests.AVoteOnAMentionedBillMakesAPairForTheOfficialWhoCastIt`.
+- A bare bill number takes the Congress of the statement date. A statement with no date skips the number and is counted. Enforced by `StatementBillMentions` and `CongressCalendar`. Tests: `RelationshipPairFinderTests.AStatementWithoutADateCannotPlaceABareNumberSoItIsSkippedAndCounted` and `CongressCalendarTests.ACongressStartsOnThirdJanuaryOfAnOddYearAndTheFirstTwoDaysBelongToTheCongressBefore`.
+- A title of fewer than three words never matches. Enforced by `BillTitleMatcher`. Test: `BillTitleMatcherTests.ATitleOfFewerThanThreeWordsIsTooShortToMatchBecauseItWouldMatchEverySentenceThatUsesThoseWords`.
+- A relationship type fits the kind of its target. Enforced by `RelationshipTypes`, the output schema, and `RelationshipRevision`. Tests: `RelationshipRevisionTests.ATypeThatDoesNotFitTheKindOfTheTargetIsRefused` and `RelationshipDraftPromptGoldenTests.TheSchemaOffersOnlyTheTypesOfTheTargetKindAndNoneSoTheModelCannotPickAWrongSide`.
+- The quote of a relationship lies inside one passage of the statement and covers the words that code matched. Enforced by `RelationshipDraftResolver` and `RelationshipRevision`. Tests: `RelationshipDraftResolverTests.AQuoteThatLeavesOutTheMatchedWordsIsRejectedAsACitationError` and `RelationshipDraftResolverTests.AQuoteFromTheArticleOutsideEveryPassageOfTheStatementIsRejected`.
+- A relationship cites the exact revision of both sides. Enforced by `RelationshipDraftResolver`. Test: `RelationshipDraftStepTests.TheFirstDraftCallsTheModelOnceAndWritesRevisionOneThatCitesBothApprovedRevisions`.
+- A none answer settles the queue row and saves no relationship. Enforced by `RelationshipDraftStep`. Test: `PostgresRelationshipDraftStoreTests.ANoneAnswerSavesNoRelationshipAndTheNextPassDoesNotAskAgain`.
+- An unchanged fingerprint makes no model call. Enforced by `RelationshipDraftStep`. Test: `RelationshipDraftStepTests.AnUnchangedFingerprintSettlesWithABypassedRunAndNoModelCall`.
+- A new approved revision of a side moves an unapproved pair back to Pending, and an approved relationship never moves. Enforced by `PostgresRelationshipDraftStore.RefreshPairsAsync`. Tests: `PostgresRelationshipDraftStoreTests.ANewApprovedRevisionOfASideMovesAnUnapprovedPairBackToPendingThroughTheQueueOwner` and `PostgresRelationshipDraftStoreTests.AnApprovedRelationshipIsNeverRequeuedEvenWhenACitedRevisionChanged`.
+- A pair that is no longer found is flagged and never deleted. Enforced by `PostgresRelationshipDraftStore.RefreshPairsAsync`. Test: `PostgresRelationshipDraftStoreTests.APairThatIsNotFoundAnymoreIsFlaggedAndNotDeletedAndTheFlagClearsWhenItIsFoundAgain`.
+- A relationship revision is appended under the relationship review lock and follows the current revision. Enforced by `RelationshipDraftRows`. Test: `PostgresRelationshipDraftStoreTests.OneWorkerPassDraftsTheApprovedPairSavesRevisionOneUnderTheReviewLockAndLeavesTheDraftAwaitingReview`.
 - Each task charges its own budget. Enforced by the primary key of `statement_analysis_budget`. Test: `PostgresStatementGateStoreTests.TheGateChargesItsOwnDailyBudgetAndNotTheDocumentChangeBudget`.
 
 ## Behavior
@@ -269,6 +294,69 @@ The store refuses a model label for a held-out release. A person still labels a 
 
 **Export.** `statements labels export <path>` writes one JSON line for each release that has a human label. A line holds `candidateId`, `extractionId`, `heldOut`, `issueIds`, `namesBillOrVote`, and `text`. The text is the public release text. The command refuses a path that is not inside the `.runtime` directory under the current directory. Run it from the repository root.
 
+### Relationship drafting
+
+The executor is `AnalysisWorker<RelationshipDraftRun>` with `RelationshipDraftStep`. It runs after vote drafting and before brief drafting in the `worker` process. It has its own wakeup, status row, daily limit, and run limit, and it uses `CIVIC_LENS_ANALYSIS_CONCURRENCY`. Its required variables are in [operations](../operations.md#relationship-drafting). The status row is in `document_change_analysis_status` under the task `relationship-draft`.
+
+**Pair finding.** Before each pass, the worker calls `RefreshPairsAsync`, as the brief executor does for closed weeks. The call works in this order:
+
+1. It reads the current revision of every approved statement, with the article text.
+2. It reads the approved actions that a speaker of those statements sponsors, in any role.
+3. It reads the approved votes on the bills that the statements mention by number.
+4. `RelationshipPairFinder` makes one pair for each statement and each action or vote that it matches. It takes the bill number first and the bill title second.
+5. In one transaction, it inserts a Pending queue row for each new pair, with `ON CONFLICT DO NOTHING`. It also moves the stale pairs back to Pending and sets the match flags.
+
+The transaction locks the queue rows and then takes the relationship review lock. The queue owner `PostgresAnalysisQueue` does the requeue, so the lifecycle rules still apply.
+
+**Staleness.** A fingerprint is a hash of the pair key, both cited revision numbers, and the match basis and span. It also covers the task version and the prompt version. The `context_json` of the latest `Drafted` or `Bypassed` run holds the fingerprint of the last settled input. A Succeeded pair returns to Pending when its fingerprint differs and its relationship is not approved. A Blocked pair with the code `sideNotApproved` returns when both sides are approved again. An approved relationship never returns. A running pair settles first and then returns by the same rule.
+
+A pair that the pass does not find has `no_longer_matches` set on its draft. Code never deletes the draft. The flag clears when the pair is found again.
+
+**Step.** The step reads the queue row and the current approved revision of each side. Then it follows this order:
+
+1. A side that is not approved blocks the entry with `sideNotApproved`. The entry waits for the next refresh.
+2. The step finds the pair again with `RelationshipPairFinder`. When no pair remains, the entry settles as `noLongerMatches` with no call.
+3. When the fingerprint equals the last settled fingerprint, the entry settles as `unchanged` with no call.
+4. Otherwise, the step runs the validation loop with at most two passes, like the other drafting steps.
+
+An accepted answer appends revision 1 or the next revision in the settlement transaction, under the relationship review lock. A none answer keeps its `Drafted` run with the reason `noRelationship` and appends nothing.
+
+**Prompt and output.** The prompt holds the date and the officials of the statement, its quoted passages, and the words that code matched. It also holds the role of the official and the facts of the record. An action has these facts: the bill identity, the saved title, and the headline and summary of the approved revision. A vote has the lines of its record. The role is the sponsorship (`sponsor`, `cosponsor`, `original cosponsor`, and a withdrawn date) or the cast of the vote.
+
+The model answers four fields: `type`, `reason`, `statementQuote`, and `targetFactId`. The schema limits `type` to the types of the target kind and `none`. It limits `targetFactId` to the listed fact IDs. No confidence field exists.
+
+**Checks.** `RelationshipDraftResolver` rejects an answer when:
+
+- the reason is empty, has more than one line, is over 400 characters, or names a configured official that the record does not list
+- the fact ID is not listed
+- the quote is not unique in the article, is not inside one quoted passage of the statement, or leaves out the matched words
+
+A rejection gets one more call with the reasons added. A second rejection fails the entry. Code sets the matched span, so the model cannot move it.
+
+**Revision.** `RelationshipRevision` holds the record ID (the pair key), the number, the author, and the time. It cites both revisions by kind, record ID, and revision number. It also holds the match basis with its span, the type, the reason, the quote span, and the fact ID. A person edit is planned.
+
+**Outcomes.**
+
+| State | Code | Meaning |
+|---|---|---|
+| Succeeded | none | A revision was appended |
+| Succeeded | `noRelationship` | The model answered none |
+| Succeeded | `unchanged` | The fingerprint matches the last settled input |
+| Succeeded | `noLongerMatches` | Both sides are approved, but the pair no longer matches |
+| RetryWaiting | `revisionConflict` | Another writer appended first |
+| Blocked | `evidenceUnavailable`, `sideNotApproved`, `overByteCap` | The input cannot be drafted now |
+| Failed | `outputRejected`, `citationRejected`, a stop code, or `attemptsExhausted` | Owner requeue needed |
+
+**Commands.** These are owner commands.
+
+| Command | Effect |
+|---|---|
+| `relationships draft status` | Queue status, limit, pause reason, and the count of statements skipped for a missing date |
+| `relationships draft list [view] [limit]` | Queue rows. Views: `drafted`, `unchanged`, `none`, `unmatched`, `pending`, `failed` |
+| `relationships draft requeue <pair-id\|--all>` | Failed rows back to Pending |
+
+The skipped count runs the pair finding on demand. It counts statements with a bill number and no usable date.
+
 ### Commands
 
 All statement commands are owner commands.
@@ -314,6 +402,12 @@ With `--since`, `regate` moves only candidates first captured on or after that U
 - `statement_review_decisions` holds the immutable decision JSON.
 - The commands reuse the replay receipt table with the operations `statement-create`, `statement-save`, and `statement-decide`.
 - `statement_gate_labels` holds the gate labels. Its key is a 32-character label ID. A row names the candidate and the extraction. It also holds the author subject, the author kind (`Person` or `Analysis`), the run ID, the label JSON, and the creation time. `ck_statement_gate_labels_run` ties the run ID to the `Analysis` kind. The run ID has a foreign key to `statement_analysis_runs` and a unique index, so one run labels one release.
+- The migration `RelationshipDrafting` adds six tables: `relationship_analysis`, `relationship_analysis_runs`, `relationship_analysis_budget`, `relationship_drafts`, `relationship_revisions`, and `relationship_review_decisions`. The decision table has no writer until relationship review exists.
+- `relationship_analysis` is keyed by `(pair_id, task)`. A row also holds the statement candidate ID, the target kind (`Action` or `Vote`), and the target record ID. The candidate ID has a foreign key to `statement_candidates`. The trigger `trg_relationship_analysis_notify` calls `civic_lens_notify_analysis_change`.
+- `relationship_analysis_runs` adds the reason `unchanged`, `noRelationship`, or `noLongerMatches`. Every run keeps `context_json`. A matched run holds the pair key, the fingerprint, and both cited revisions.
+- `relationship_drafts` has one row for each pair that has a revision. It has the review columns of the other draft tables and the flag `no_longer_matches`.
+- The relationship review lock is `civic-lens-relationship-review`. It is declared between the vote key and the brief key. Revision appends take it. The publication lists of locks do not hold it until relationship publication exists.
+- Relationship drafting has its own budget table, separate from the other budgets.
 - Version constants are listed in [Behavior versions](../architecture.md#behavior-versions).
 
 ## Code map
@@ -334,14 +428,19 @@ With `--since`, `regate` moves only candidates first captured on or after that U
 | Gate labels: label, split, store | `src/CivicLens.Core/Statements/GateLabel.cs`, `src/CivicLens.Core/Statements/GateLabelEntry.cs`, `src/CivicLens.Core/Statements/GateLabelSplit.cs`, `src/CivicLens.Application/Statements/IGateLabelStore.cs`, `src/CivicLens.Infrastructure/Statements/PostgresGateLabelStore.cs` |
 | Gate label use cases | `src/CivicLens.Application/Statements/SaveGateLabel.cs`, `src/CivicLens.Application/Statements/ListGateLabelQueue.cs`, `src/CivicLens.Application/Statements/GetGateLabelTask.cs`, `src/CivicLens.Application/Statements/ExportGateLabels.cs` |
 | Gate label pages and export | `src/CivicLens.Host/Review/GateLabelList.razor`, `src/CivicLens.Host/Review/GateLabelEditor.razor`, `src/CivicLens.Host/Statements/GateLabelExport.cs` |
+| Relationship pairs | `src/CivicLens.Application/Relationships/RelationshipPairFinder.cs`, `src/CivicLens.Application/Relationships/RelationshipPair.cs`, `src/CivicLens.Application/Relationships/RelationshipPairs.cs`, `src/CivicLens.Application/Relationships/RelationshipTarget.cs`, `src/CivicLens.Application/Relationships/ApprovedStatement.cs`, `src/CivicLens.Application/Relationships/StatementPassage.cs`, `src/CivicLens.Application/Relationships/StatementBillMentions.cs`, `src/CivicLens.Application/Relationships/BillMention.cs`, `src/CivicLens.Application/Relationships/RelationshipFingerprint.cs` |
+| Relationship rules | `src/CivicLens.Core/Relationships/CongressCalendar.cs`, `src/CivicLens.Core/Relationships/BillTitleMatcher.cs`, `src/CivicLens.Core/Relationships/RelationshipTypes.cs`, `src/CivicLens.Core/Relationships/RelationshipRevision.cs`, `src/CivicLens.Core/Statements/BillNumberMatch.cs` |
+| Relationship drafting | `src/CivicLens.Application/Relationships/RelationshipDraftStep.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftPrompt.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftResolver.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftLifecycle.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftTask.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftErrorCodes.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftEvidence.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftContext.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftSettings.cs`, `src/CivicLens.Application/Relationships/IRelationshipDraftStore.cs`, `src/CivicLens.Application/Relationships/GetRelationshipDraftStatus.cs` |
+| Relationship stores | `src/CivicLens.Infrastructure/Relationships/PostgresRelationshipDraftStore.cs`, `src/CivicLens.Infrastructure/Relationships/RelationshipEvidenceReader.cs`, `src/CivicLens.Infrastructure/Relationships/RelationshipDraftQueueMapping.cs`, `src/CivicLens.Infrastructure/Relationships/RelationshipDraftRows.cs`, `src/CivicLens.Infrastructure/Relationships/AnthropicRelationshipDraftModel.cs`, `src/CivicLens.Infrastructure/Relationships/Persistence/`, `src/CivicLens.Infrastructure/Collection/Migrations/20261102120000_RelationshipDrafting.cs` |
+| Relationship CLI and composition | `src/CivicLens.Host/Relationships/RelationshipCommand.cs`, `src/CivicLens.Host/Relationships/RelationshipDraftComposition.cs`, `src/CivicLens.Host/Relationships/RelationshipDraftConfiguration.cs` |
 | Reserved author kind | `src/CivicLens.Core/Review/ReviewAuthor.cs` |
 
 The gate and drafting run on the shared owners in [analysis](analysis.md#code-map).
 
 ## Limits and planned work
 
-- Actions are in [actions](actions.md). Relationships and weekly briefs are planned; see [roadmap](../roadmap.md).
-- Planned: structured statement extraction, temporal identity resolution, candidate matching, reviewed relationships, and timelines.
+- Actions are in [actions](actions.md). Weekly briefs are in [briefs](briefs.md).
+- Planned: structured statement extraction and temporal identity resolution.
 - Each quotation stays addressable for later matching with actions.
 - Planned after the first deploy ([R-38](../roadmap.md#later)): find the same or nearly the same sentences in releases from different offices. It shows coordinated messaging and who used the words first.
 - Gate runs from before `statement-gate-v2` have no `namesBillOrVote` answer. `StatementGateCarryOver` reads them with a null answer.
@@ -359,20 +458,17 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 - Measured on 2026-10-16 with 30 House press feeds: the gate dropped 25 of 48 candidates. Most were grants and events. It also dropped a release about a farm bill vote, two bill introductions, and a Senate inquiry.
 - Measured on 2026-10-16: 4 of 21 drafts carry a bill number. 2 of them name a bill with a collected House vote, and both members voted on it.
 - Measured on 2026-10-16: some issue tags are doubtful. For example, a post office closure was tagged `elections-and-voting`.
-
-R-16 decisions, accepted on 2026-10-16. The build starts after vote review, so that vote links are in the first release.
-
-- A relationship has a named type and no verdict. The types are "describes own bill", "states position on", "claims credit for", and "statement about a vote". A stance such as consistent or inconsistent needs a method note first.
-- Code finds the pairs: the same official and a shared bill number. A bill number without a Congress takes the Congress from the statement date. Pairs that share only a tracked issue wait for a measurement.
-- Code also finds a pair by bill title, accepted on 2026-10-17. It looks for the saved title of each bill that the official sponsored or voted on. The match ignores case, a leading "the", and a trailing year such as "of 2025". The matched words are the cited span. The titles come from the saved bill details of the [bill stream](bills.md#admission).
-- Measured on 2026-10-17 over 263 gated releases: 38 hold a bill number and 127 name something that ends in "Act". Some of those are listing pages or older laws. No release writes a number without periods, such as `HR 1234`.
+- Relationship review pages, review decisions, and publication are planned. A changed flag will be derived at each read. Publication will refuse a relationship when the release lacks either cited revision or when its changed flag is set.
+- A person cannot edit a relationship yet. Until that exists, every relationship revision has the analysis author.
+- Timelines are planned. They will be built from published records by official, issue, and date when a page renders. They need no review, because they only order records.
 - Planned after a measurement of the releases that title matching leaves unmatched: code lists the bills and votes of the official in a date window. The model picks one or none. Code checks the quoted span, and a person approves the pair.
-- The model proposes the type and one cited sentence of reason. A person approves or rejects the relationship.
-- A relationship cites the exact revision of each side, as a brief does. A changed flag is derived at each read. An approved relationship stays approved until a person withdraws it.
-- Relationships are their own record kind, with tables, revisions, review pages, a review lock, and publication.
-- Publication refuses a relationship when the release lacks either cited revision, or when its changed flag is set.
-- Timelines are built from published records by official, issue, and date when a page renders. They need no review, because they only order records.
-- Drafting uses Haiku with its own queue, budget table, and variable. No gate runs before it.
+- Measured on 2026-10-17 over 263 gated releases: 38 hold a bill number and 127 name something that ends in "Act". Some of those are listing pages or older laws. No release writes a number without periods, such as `HR 1234`.
+- `BillNumberFinder` finds a bare number only. A number that names its Congress, such as "H.R. 1234 of the 118th Congress", takes the Congress of the statement date.
+- A pair for an action needs a sponsorship by a speaker. A statement about a bill that the speaker did not sponsor pairs only with a vote that the speaker cast.
+- A vote pairs by bill number only. A title match never reaches a vote, because a vote has no saved title.
+- `RefreshPairsAsync` reads every approved statement and its article text on each pass. Revisit this if the approved set grows large.
+- The `context_json` of a run is the only record of the last settled fingerprint. A run row that someone deletes makes the pair draft again.
+- The model answer is unmeasured. The `relationships draft list` views count how often it answers none.
 
 Statements and actions acceptance:
 
