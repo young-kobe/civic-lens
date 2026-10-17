@@ -18,7 +18,16 @@ public sealed class ActionDraftLifecycleTests
     }
 
     [Fact]
-    public void OtherTasksKeepBlockedFinalBecauseOnlyActionsTurnTheOptionOn()
+    public void ASucceededActionDraftStaysFinalBecauseNoCodeRequeuesIt()
+    {
+        var record = new AnalysisRecord(CandidateId, ActionDraftTask.Task, State.Succeeded, null, 1, 1, null, null);
+        var requeue = new AnalysisCheckpoint(CandidateId, ActionDraftTask.Task, State.Succeeded, null, 1, State.Pending);
+
+        Assert.False(ActionDraftLifecycle.CanTransition(record, requeue));
+    }
+
+    [Fact]
+    public void GateStatementAndDocumentChangeTasksKeepBlockedFinalBecauseTheirLifecyclesDoNotOptIn()
     {
         var gate = BlockedRequeue(StatementGateTask.Task);
         var statementDraft = BlockedRequeue(StatementDraftTask.Task);

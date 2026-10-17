@@ -11,6 +11,7 @@ public static class VoteDraftErrorCodes
     public const string NoTrackedMember = "noTrackedMember";
     public const string Unchanged = "unchanged";
     public const string MemberVotesChanged = "memberVotesChanged";
+    public const string KindChanged = "kindChanged";
     public const string SupersededByNewerCandidate = "supersededByNewerCandidate";
     public const string RevisionConflict = "revisionConflict";
 }

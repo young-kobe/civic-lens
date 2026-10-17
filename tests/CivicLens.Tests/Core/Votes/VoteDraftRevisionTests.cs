@@ -36,6 +36,17 @@ public sealed class VoteDraftRevisionTests
     }
 
     [Fact]
+    public void AKindOtherThanOtherMustCiteItsQuestionSoTheReviewerCanCheckTheKindAgainstTheSavedLine()
+    {
+        (Revision() with { Kind = VoteKind.Other, KindCitation = null }).ValidateShape();
+        (Revision() with { Kind = VoteKind.Other }).ValidateShape();
+
+        Assert.Throws<ArgumentException>(() => (Revision() with { KindCitation = null }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (Revision() with { KindCitation = new SourceSpan(ExtractionId, 0, 0) }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (Revision() with { Kind = (VoteKind)99 }).ValidateShape());
+    }
+
+    [Fact]
     public void TheIssueRevisionIsAHashAndTheTrackedIssuesAreBoundedSoTheRecordNamesTheRulesThatChoseThem()
     {
         Assert.Throws<ArgumentException>(() => (Revision() with { IssueRevisionId = "short" }).ValidateShape());
@@ -67,5 +78,5 @@ public sealed class VoteDraftRevisionTests
     private static VoteDraftRevision Revision(int number = 1, string author = "civic-lens:analysis") => new(
         VoteWorld.RecordId, number, author, VoteWorld.UpdatedAt.AddMinutes(number), "The House voted", "The House decided a question.",
         "congress-house-votes", 119, 1, 100, "hconres", 14, VoteWorld.CandidateId, VoteWorld.UpdatedAt,
-        [new("Result: Passed", new SourceSpan(ExtractionId, 0, 14))], [Member()], ["rent"], new string('e', 64));
+        [new("Result: Passed", new SourceSpan(ExtractionId, 0, 14))], VoteKind.Passage, new SourceSpan(ExtractionId, 15, 20), [Member()], ["rent"], new string('e', 64));
 }

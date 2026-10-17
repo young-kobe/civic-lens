@@ -9,10 +9,19 @@ public sealed class VoteDraftLifecycleTests
     private const string CandidateId = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 
     [Fact]
-    public void ABlockedVoteDraftStaysFinalBecauseNoOwnerCommandRequeuesItYet()
+    public void ABlockedVoteDraftMovesBackToPendingBecauseTheOwnerCommandRequeuesItAfterFixingTheCause()
     {
         var record = new AnalysisRecord(CandidateId, VoteDraftTask.Task, State.Blocked, null, 1, 1, null, VoteDraftErrorCodes.FactTooLong);
         var requeue = new AnalysisCheckpoint(CandidateId, VoteDraftTask.Task, State.Blocked, null, 1, State.Pending);
+
+        Assert.True(VoteDraftLifecycle.CanTransition(record, requeue));
+    }
+
+    [Fact]
+    public void ASucceededVoteDraftStaysFinalBecauseNoCodeRequeuesItAndANewVersionHasItsOwnCandidate()
+    {
+        var record = new AnalysisRecord(CandidateId, VoteDraftTask.Task, State.Succeeded, null, 1, 1, null, null);
+        var requeue = new AnalysisCheckpoint(CandidateId, VoteDraftTask.Task, State.Succeeded, null, 1, State.Pending);
 
         Assert.False(VoteDraftLifecycle.CanTransition(record, requeue));
     }

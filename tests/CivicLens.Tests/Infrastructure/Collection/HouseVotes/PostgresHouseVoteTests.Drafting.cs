@@ -86,6 +86,26 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
+    public async Task AKindOnlyChangeSettlesItsCopyRunAndAppendsRevisionTwoBecauseTheDatabaseKnowsTheKindChangedReason()
+    {
+        var older = await PendingCandidateAsync();
+        var first = await RevisionAsync(older, 1);
+        await SettleAsync(older, first);
+        var newer = await PendingCandidateAsync(Updated.AddDays(1));
+        var store = VoteStore();
+        var claim = (await store.TryClaimAsync(newer, Lease, default))!;
+        var copy = await RevisionAsync(newer, 2) with { Kind = VoteKind.Passage, KindCitation = first.Facts[0].Citation };
+        var run = BypassedRun(Guid.NewGuid().ToString("N"), newer);
+
+        var settled = await store.CheckpointAsync(VoteDraftCheckpoint.From(claim, copy), new VoteDraftRun(run, VoteDraftErrorCodes.KindChanged), default);
+
+        Assert.True(settled);
+        Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM vote_analysis_runs WHERE run_id = '{run.RunId}' AND reason = 'kindChanged'"));
+        Assert.Equal(2, await ScalarAsync("SELECT current_revision_number FROM vote_drafts"));
+        Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM vote_revisions WHERE revision_number = 2 AND run_id = '{run.RunId}'"));
+    }
+
+    [Fact]
     public async Task ANewerCandidateThatArrivesAfterTheClaimSupersedesTheAppendSoTheOlderDraftNeverBecomesARevision()
     {
         var older = await PendingCandidateAsync();
@@ -199,6 +219,48 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal([PostgresErrorCodes.UniqueViolation, PostgresErrorCodes.CheckViolation], [duplicate.SqlState, badId.SqlState]);
     }
 
+    [Fact]
+    public async Task RequeueBlockedMovesOnlyBlockedVotesWithTheGivenCodeAndResetsTheirAttempts()
+    {
+        var requeued = await PendingCandidateAsync();
+        var otherCode = await PendingCandidateAsync(Updated.AddDays(1));
+        var failed = await PendingCandidateAsync(Updated.AddDays(2));
+        await ExecuteAsync($"""
+            UPDATE vote_analysis SET attempts = 2, status = CASE candidate_id WHEN '{failed}' THEN 'Failed' ELSE 'Blocked' END,
+                error_code = CASE candidate_id WHEN '{otherCode}' THEN '{VoteDraftErrorCodes.OverByteCap}' ELSE '{VoteDraftErrorCodes.FactTooLong}' END
+            """);
+
+        Assert.Equal(1, await VoteStore().RequeueBlockedAsync(VoteDraftErrorCodes.FactTooLong, default));
+
+        var queue = (await QueueAsync()).ToDictionary(row => row.CandidateId, row => (row.Status, row.ErrorCode));
+        Assert.Equal(("Pending", (string?)null), queue[requeued]);
+        Assert.Equal(0, await ScalarAsync($"SELECT attempts FROM vote_analysis WHERE candidate_id = '{requeued}'"));
+        Assert.Equal(("Blocked", VoteDraftErrorCodes.OverByteCap), queue[otherCode]);
+        Assert.Equal(("Failed", VoteDraftErrorCodes.FactTooLong), queue[failed]);
+    }
+
+    [Fact]
+    public async Task ListAndCountSplitTheQueueIntoTheSameViewsSoTheOwnerSeesWhereEveryVoteStands()
+    {
+        var pending = await PendingCandidateAsync();
+        var unchanged = await PendingCandidateAsync(Updated.AddDays(1));
+        var failed = await PendingCandidateAsync(Updated.AddDays(2));
+        await ExecuteAsync($"""
+            UPDATE vote_analysis SET status = CASE candidate_id WHEN '{failed}' THEN 'Failed' WHEN '{unchanged}' THEN 'Succeeded' ELSE status END,
+                error_code = CASE candidate_id WHEN '{failed}' THEN 'outputRejected' WHEN '{unchanged}' THEN '{VoteDraftErrorCodes.Unchanged}' END
+            """);
+
+        var counts = await VoteStore().CountAsync(default);
+        var unchangedItems = await VoteStore().ListAsync(VoteDraftView.Unchanged, 10, default);
+
+        Assert.Equal([1, 1, 1, 0, 0, 0], new[] { VoteDraftView.Pending, VoteDraftView.Unchanged, VoteDraftView.Failed, VoteDraftView.Drafted,
+            VoteDraftView.Superseded, VoteDraftView.NoTrackedMember }.Select(view => counts[view]));
+        var item = Assert.Single(unchangedItems);
+        Assert.Equal((unchanged, "119 1 100", "119 hconres 14", VoteDraftView.Unchanged), (item.CandidateId, item.RollCall, item.Bill, item.View));
+        Assert.Equal(3, (await VoteStore().ListAsync(null, 10, default)).Count);
+        Assert.Contains(pending, (await VoteStore().ListAsync(VoteDraftView.Pending, 10, default)).Select(entry => entry.CandidateId));
+    }
+
     private async Task<string> PendingCandidateAsync(DateTimeOffset? updated = null)
     {
         var vote = HouseVoteFixtures.Vote(100, updated ?? Updated);
@@ -233,13 +295,17 @@ public sealed partial class PostgresHouseVoteTests
         AnalysisRunOutcome.Drafted, new(900, 100, 0, 0), 1_000, "end_turn", "req", "{}", [], "{}", DateTimeOffset.UnixEpoch,
         DateTimeOffset.UnixEpoch), null);
 
+    private static AnalysisRun BypassedRun(string runId, string candidate) => new(runId, candidate, VoteDraftTask.Task,
+        VoteDraftTask.TaskVersion, VoteDraftTask.Model, VoteDraftTask.PromptVersion, VoteDraftTask.SchemaVersion, new string('1', 64), null,
+        AnalysisRunOutcome.Bypassed, AnalysisTokenUsage.None, 0, null, null, null, [], "{}", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
+
     private async Task<VoteDraftRevision> RevisionAsync(string candidate, int number)
     {
         var evidence = (await VoteStore().ReadEvidenceAsync(candidate, default))!.Candidate;
         var span = new SourceSpan(new string('c', 64), 0, 5);
         return new(evidence.RecordId, number, "civic-lens:analysis", Updated.AddMinutes(number), "Headline", "Summary.", evidence.SourceId,
             evidence.Congress, evidence.SessionNumber, evidence.RollCallNumber, evidence.BillType, evidence.BillNumber, candidate,
-            evidence.UpdateDate, [new("Result: Passed", span)], [new("aderholt", "A000055", "Yea", span)], [], new string('e', 64));
+            evidence.UpdateDate, [new("Result: Passed", span)], VoteKind.Other, null, [new("aderholt", "A000055", "Yea", span)], [], new string('e', 64));
     }
 
     private async Task<IReadOnlyList<(string CandidateId, string Task, string Status, string? ErrorCode)>> QueueAsync()

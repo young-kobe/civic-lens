@@ -43,16 +43,18 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
         return context.ChangeSinceCurrent() switch
         {
             VoteChange.None => await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, VoteDraftErrorCodes.Unchanged, cancellationToken),
-            VoteChange.MemberVotesOnly => await CopyTextAsync(attempt, context, cancellationToken),
+            VoteChange.MemberVotesOnly => await CopyTextAsync(attempt, context, VoteDraftErrorCodes.MemberVotesChanged, cancellationToken),
+            VoteChange.KindOnly => await CopyTextAsync(attempt, context, VoteDraftErrorCodes.KindChanged, cancellationToken),
             _ => await DraftAsync(attempt, context, cancellationToken)
         };
     }
 
-    private Task<bool> CopyTextAsync(IAnalysisAttempt<VoteDraftRun> attempt, VoteDraftContext context, CancellationToken cancellationToken)
+    private Task<bool> CopyTextAsync(IAnalysisAttempt<VoteDraftRun> attempt, VoteDraftContext context, string reason,
+        CancellationToken cancellationToken)
     {
         var run = attempt.BypassRun(VoteDraftTask.Model, context.Snapshot.Fingerprint, null);
         var revision = VoteDraftResolver.CopyText(context, run.FinishedAtUtc);
-        return attempt.SettleAsync(new VoteDraftRun(run, VoteDraftErrorCodes.MemberVotesChanged),
+        return attempt.SettleAsync(new VoteDraftRun(run, reason),
             VoteDraftCheckpoint.From(attempt.Claim, revision), cancellationToken);
     }
 

@@ -34,6 +34,46 @@ public sealed class VoteDraftStepTests
         Assert.Equal((State.Succeeded, null), (entry.Status, entry.ErrorCode));
     }
 
+    [Theory]
+    [InlineData("On Passage", VoteKind.Passage)]
+    [InlineData("On Motion to Recommit", VoteKind.MotionToRecommit)]
+    [InlineData("On Motion to Table", VoteKind.Other)]
+    [InlineData("On Motion to Concur in the Senate Amendment", VoteKind.Passage)]
+    public async Task TheRevisionStoresTheKindOfTheQuestionAndCitesTheQuestionLineSoPublishNeverDerivesItAgain(string question, VoteKind kind)
+    {
+        var world = Create(question: question);
+
+        var (store, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Drafted));
+
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal(kind, revision.Kind);
+        Assert.Equal($"Question: {question}", world.Quote(revision.KindCitation!));
+    }
+
+    [Fact]
+    public async Task ARollCallWithoutAQuestionLineGetsKindOtherAndNoCitationBecauseNothingBacksAKind()
+    {
+        var (store, _) = await RunAsync(Create(question: ""), new FakeHeadlineSummaryModel().Draft(Drafted));
+
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal((VoteKind.Other, null), (revision.Kind, revision.KindCitation));
+    }
+
+    [Fact]
+    public async Task AChangedKindAloneCopiesTheTextWithoutAModelCallBecauseTheKindComesFromCodeAndNotFromTheText()
+    {
+        var current = (await FirstRevisionAsync(Create())) with { Kind = VoteKind.Rule };
+        var model = new FakeHeadlineSummaryModel();
+
+        var (store, _) = await RunAsync(Create(), model, current, updatedAt: UpdatedAt.AddDays(1));
+
+        Assert.Empty(model.Requests);
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal((2, VoteKind.Passage, current.Headline, current.Summary), (revision.RevisionNumber, revision.Kind, revision.Headline, revision.Summary));
+        var run = Assert.Single(store.Runs);
+        Assert.Equal((AnalysisRunOutcome.Bypassed, "kindChanged", 0L), (run.Run.Outcome, run.Reason, run.Run.ChargedTokens));
+    }
+
     [Fact]
     public async Task ConfidenceStaysInTheRunOutputAndNeverReachesTheRevision()
     {

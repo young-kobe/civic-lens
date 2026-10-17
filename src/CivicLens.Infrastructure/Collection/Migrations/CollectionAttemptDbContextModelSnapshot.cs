@@ -3375,7 +3375,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_vote_analysis_runs_outcome", "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted','Bypassed')");
 
-                            t.HasCheckConstraint("ck_vote_analysis_runs_reason", "reason IS NULL OR reason IN ('unchanged','noTrackedMember','memberVotesChanged')");
+                            t.HasCheckConstraint("ck_vote_analysis_runs_reason", "reason IS NULL OR reason IN ('unchanged','noTrackedMember','memberVotesChanged','kindChanged')");
 
                             t.HasCheckConstraint("ck_vote_analysis_runs_times", "finished_at_utc_ticks >= started_at_utc_ticks");
 

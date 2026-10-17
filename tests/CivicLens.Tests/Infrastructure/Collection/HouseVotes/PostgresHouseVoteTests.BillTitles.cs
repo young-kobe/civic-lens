@@ -152,6 +152,26 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal("Pending", Assert.Single(await QueueAsync()).Status);
     }
 
+    [Fact]
+    public async Task TheWaitingCountHoldsOnlyVotesOnABillWithNoQueueRowAndDropsWhenTheBillDetailQueuesThem()
+    {
+        var waiting = HouseVoteFixtures.Vote(100, Updated);
+        var withoutBill = HouseVoteFixtures.Vote(101, Updated, billType: null, billNumber: null);
+        foreach (var vote in new[] { waiting, withoutBill })
+        {
+            var (_, members) = await DetailWithMembersJobAsync(vote);
+            await AdmitMembersAsync(members, vote);
+        }
+
+        await ExecuteAsync("DELETE FROM vote_analysis WHERE candidate_id IN (SELECT candidate_id FROM house_vote_candidates WHERE bill_type IS NULL)");
+
+        var before = await VoteStore().CountWaitingForBillAsync(default);
+        await AdmitBillDetailAsync();
+        var after = await VoteStore().CountWaitingForBillAsync(default);
+
+        Assert.Equal((1, 0), (before, after));
+    }
+
     private async Task<PreparedBillDetail> AdmitBillDetailAsync(DateTimeOffset? updatedAt = null, int congress = 119, int number = 14)
     {
         var bill = await PrepareBillDetailAsync(updatedAt, congress, number);
