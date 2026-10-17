@@ -7,9 +7,9 @@ namespace CivicLens.Tests.Application.Statements;
 
 public sealed class StatementGatePromptGoldenTests
 {
-    private const string SystemSha256 = "607dbb805c0c22499ca15754836747d6c22d633fbaed427fbed1b03e860eb857";
-    private const string SchemaSha256 = "58d2bca2b13f65f6153a0e55014818cb39235eb784cef2b3b585ca18624acea9";
-    private const string InputHash = "5845448690b9dfa6ce4735f36bc2f85f47c7e6870187d960ed286a4bc3e4fa1f";
+    private const string SystemSha256 = "a95470b798416f4e860a604ca585a80cc77e1db7a78efb70e4d32ebb2cdc8ced";
+    private const string SchemaSha256 = "70a578bf6bd993fd98f7a8de61e8daf123ddfdc900839526b92c2ab6af044661";
+    private const string InputHash = "bf48c997830015be070d0e25330df9af271f5d42711aabb42a5cd1ec0b9be7a1";
 
     [Fact]
     public void ThePromptAndSchemaMatchTheirPinnedVersions()
@@ -20,8 +20,8 @@ public sealed class StatementGatePromptGoldenTests
             $"({StatementGateTask.PromptVersion}) or {nameof(StatementGateTask.SchemaVersion)} " +
             $"({StatementGateTask.SchemaVersion}), and then update the pinned hashes in this test.";
 
-        Assert.Equal("statement-gate-prompt-v1", StatementGateTask.PromptVersion);
-        Assert.Equal("statement-gate-schema-v1", StatementGateTask.SchemaVersion);
+        Assert.Equal("statement-gate-prompt-v2", StatementGateTask.PromptVersion);
+        Assert.Equal("statement-gate-schema-v2", StatementGateTask.SchemaVersion);
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
         Assert.True(Sha256(request.SchemaJson) == SchemaSha256, $"{bump} Schema: {Sha256(request.SchemaJson)}");
         Assert.True(request.InputHash == InputHash, $"{bump} Input hash: {request.InputHash}");

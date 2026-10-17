@@ -11,6 +11,8 @@ public sealed class StatementGateLifecycleTests
     [Theory]
     [InlineData(StatementGateReasons.NoTrackedIssue, true)]
     [InlineData(StatementGateReasons.Passed, false)]
+    [InlineData(StatementGateReasons.PassedBillOrVote, false)]
+    [InlineData(StatementGateReasons.PassedBillNumber, false)]
     [InlineData(StatementGateReasons.OverByteCap, false)]
     [InlineData(StatementGateReasons.FailedOpen, false)]
     public void OnlyASkippedGateMayReturnToPendingForRegate(string reason, bool allowed)
@@ -23,6 +25,8 @@ public sealed class StatementGateLifecycleTests
 
     [Theory]
     [InlineData(StatementGateReasons.Passed, true)]
+    [InlineData(StatementGateReasons.PassedBillOrVote, true)]
+    [InlineData(StatementGateReasons.PassedBillNumber, true)]
     [InlineData(StatementGateReasons.NoTrackedIssue, true)]
     [InlineData("draftDiscarded", false)]
     [InlineData(null, false)]

@@ -19,7 +19,8 @@ public static class StatementGatePrompt
         Fields:
         - trackedIssues: the matching tracked issues. Each match gives an id, a quote, and a confidence. The id is a listed tracked issue ID. The quote is one passage from the article text that shows the match. Copy it exactly, character for character, from the article text. Do not add, remove, or normalize characters. Choose a passage of at most {StatementGateTask.MaximumQuoteLength} characters that occurs only once in the article. Give each tracked issue at most once. Give an empty list when no tracked issue matches.
         - policyAreas: the policy areas that the article concerns, whether or not a tracked issue matches. Each gives an id from the listed policy areas and a confidence. Give an empty list when none apply.
-        - confidence: your probability that trackedIssues is complete and correct.
+        - namesBillOrVote: true when the article reports that the speaker introduces, cosponsors, votes on, or states a position on a specific bill, resolution, or recorded vote. Give false otherwise. Answer this whether or not a tracked issue matches.
+        - confidence: your probability that your whole answer is complete and correct.
 
         Every confidence is a number from 0 to 1. Civic Lens records the values to calibrate them against human review. No rule acts on them. Use the full range honestly. Do not round toward 1.
         """;
@@ -65,7 +66,7 @@ public static class StatementGatePrompt
         {
             ["type"] = "object",
             ["additionalProperties"] = false,
-            ["required"] = new JsonArray("trackedIssues", "policyAreas", "confidence"),
+            ["required"] = new JsonArray("trackedIssues", "policyAreas", "namesBillOrVote", "confidence"),
             ["properties"] = new JsonObject
             {
                 ["trackedIssues"] = new JsonObject
@@ -99,6 +100,7 @@ public static class StatementGatePrompt
                         }
                     }
                 },
+                ["namesBillOrVote"] = new JsonObject { ["type"] = "boolean" },
                 ["confidence"] = AnalysisSchema.Number()
             }
         };

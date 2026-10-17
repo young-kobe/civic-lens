@@ -43,9 +43,9 @@ public sealed class PostgresStatementGateStore : PostgresAnalysisStore<Statement
         queue.RequeueAsync(State.Succeeded, StatementGateReasons.NoTrackedIssue, null, async (db, skipped, token) =>
         {
             var ids = skipped.Select(row => row.CandidateId).ToArray();
-            var boundToOlder = await CandidatesBoundToOlderRevisionAsync(db, ids, issueRevisionId, token);
+            var boundToOlderRun = await CandidatesBoundToOlderRunAsync(db, ids, issueRevisionId, token);
             var capturedSince = since is null ? null : await CandidatesCapturedSinceAsync(db, ids, since.Value, token);
-            return skipped.Where(row => boundToOlder.Contains(row.CandidateId) &&
+            return skipped.Where(row => boundToOlderRun.Contains(row.CandidateId) &&
                 (capturedSince is null || capturedSince.Contains(row.CandidateId)));
         }, cancellationToken);
 
@@ -64,15 +64,16 @@ public sealed class PostgresStatementGateStore : PostgresAnalysisStore<Statement
         return await AnalysisQueueCounts.CountAsync<StatementAnalysisRow, StatementGateView>(db, StatementGateTask.Task, ViewOf, cancellationToken);
     }
 
-    private static async Task<HashSet<string>> CandidatesBoundToOlderRevisionAsync(CollectionAttemptDbContext db, string[] candidateIds,
+    private static async Task<HashSet<string>> CandidatesBoundToOlderRunAsync(CollectionAttemptDbContext db, string[] candidateIds,
         string issueRevisionId, CancellationToken cancellationToken)
     {
         var runs = await db.Set<StatementAnalysisRunRow>().AsNoTracking()
             .Where(run => run.Task == StatementGateTask.Task && candidateIds.Contains(run.CandidateId))
-            .Select(run => new { run.CandidateId, run.IssueRevisionId, run.StartedAtUtcTicks }).ToArrayAsync(cancellationToken);
+            .Select(run => new { run.CandidateId, run.IssueRevisionId, run.PromptVersion, run.StartedAtUtcTicks }).ToArrayAsync(cancellationToken);
         return runs.GroupBy(run => run.CandidateId)
-            .Where(group => group.OrderByDescending(run => run.StartedAtUtcTicks).First().IssueRevisionId != issueRevisionId)
-            .Select(group => group.Key).ToHashSet(StringComparer.Ordinal);
+            .Select(group => (group.Key, Latest: group.MaxBy(run => run.StartedAtUtcTicks)!))
+            .Where(latest => latest.Latest.IssueRevisionId != issueRevisionId || latest.Latest.PromptVersion != StatementGateTask.PromptVersion)
+            .Select(latest => latest.Key).ToHashSet(StringComparer.Ordinal);
     }
 
     private static async Task<HashSet<string>> CandidatesCapturedSinceAsync(CollectionAttemptDbContext db, string[] candidateIds,
@@ -89,7 +90,7 @@ public sealed class PostgresStatementGateStore : PostgresAnalysisStore<Statement
     private static Expression<Func<StatementAnalysisRow, bool>> InView(StatementGateView view) => view switch
     {
         StatementGateView.Pending => AnalysisQueueStates.IsPending<StatementAnalysisRow>(),
-        StatementGateView.Passed => row => row.Status == State.Succeeded && row.ErrorCode == StatementGateReasons.Passed,
+        StatementGateView.Passed => row => row.Status == State.Succeeded && StatementGateReasons.PassReasons.Contains(row.ErrorCode!),
         StatementGateView.Skipped => row => row.Status == State.Succeeded && row.ErrorCode == StatementGateReasons.NoTrackedIssue,
         StatementGateView.FailedOpen => row => row.Status == State.Succeeded && row.ErrorCode == StatementGateReasons.FailedOpen,
         StatementGateView.OverCap => row => row.Status == State.Succeeded && row.ErrorCode == StatementGateReasons.OverByteCap,
@@ -100,7 +101,7 @@ public sealed class PostgresStatementGateStore : PostgresAnalysisStore<Statement
     {
         State.Succeeded => errorCode switch
         {
-            StatementGateReasons.Passed => StatementGateView.Passed,
+            var pass when StatementGateReasons.IsPass(pass) => StatementGateView.Passed,
             StatementGateReasons.NoTrackedIssue => StatementGateView.Skipped,
             StatementGateReasons.FailedOpen => StatementGateView.FailedOpen,
             _ => StatementGateView.OverCap

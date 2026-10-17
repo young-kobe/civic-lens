@@ -45,10 +45,17 @@ internal static class StatementGateFixtures
         StatementGateRubric.Create(Revision().Id, Configuration(), DateOnly.FromDateTime((observed ?? Observed).UtcDateTime));
 
     public static string Output(string[]? areas = null, double confidence = 0.8, params (string Id, string Quote)[] issues) =>
+        Answer(areas, confidence, false, issues);
+
+    public static string OutputNamingBillOrVote(string[]? areas = null, params (string Id, string Quote)[] issues) =>
+        Answer(areas, 0.8, true, issues);
+
+    private static string Answer(string[]? areas, double confidence, bool namesBillOrVote, (string Id, string Quote)[] issues) =>
         JsonSerializer.Serialize(new
         {
             trackedIssues = issues.Select(issue => new { id = issue.Id, quote = issue.Quote, confidence = 0.9 }),
             policyAreas = (areas ?? []).Select(id => new { id, confidence = 0.7 }),
+            namesBillOrVote,
             confidence
         });
 }
