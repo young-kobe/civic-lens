@@ -89,15 +89,24 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     }
 
     [Fact]
-    public async Task ASavedStatementDraftRaisesTheVoteRowOfABillThatItsSpeakerVotedOn()
+    public async Task ASavedStatementDraftRaisesTheVoteRowOfABillThatItsSpeakerVotedOnAndNotAVoteOfSomeoneElse()
     {
         var candidate = await PassedCandidateAsync(Article + "\nShe backs H.R. 77 to cap rent.");
         var world = new RelationshipWorldSeeder(connectionString);
-        await world.VoteAsync(RelationshipFixtures.Vote(billNumber: 77, person: Warren), "AwaitingReview");
+        var castByTheSpeaker = RelationshipFixtures.Vote(billNumber: 77, person: Warren);
+        var castByAnother = RelationshipFixtures.Vote(billNumber: 77, person: Markey) with
+        {
+            RecordId = new string('7', 64),
+            CandidateId = new string('8', 64),
+            RollCallNumber = 101
+        };
+        await world.VoteAsync(castByTheSpeaker, "AwaitingReview");
+        await world.VoteAsync(castByAnother, "AwaitingReview");
         await ExecuteAsync(connectionString, $"""
             SET session_replication_role = replica;
             INSERT INTO vote_analysis (candidate_id, task, status, fence, attempts, reserved_tokens, created_at_utc_ticks)
-            VALUES ('{RelationshipFixtures.Vote().CandidateId}', 'vote-draft', 'Pending', 0, 0, 0, 1)
+            VALUES ('{castByTheSpeaker.CandidateId}', 'vote-draft', 'Pending', 0, 0, 0, 1),
+                   ('{castByAnother.CandidateId}', 'vote-draft', 'Pending', 0, 0, 0, 1)
             """);
         var model = new FakeStatementDraftModel().Draft(Output(date: ("2026-10-03", "October 3, 2026"),
             quotes: ["a rent cap for tenants", "backs H.R. 77 to cap rent"]));
@@ -105,7 +114,8 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         await DraftingWorker(model).ExecuteAsync(once: true);
 
         Assert.Equal(1L, await ScalarAsync($"SELECT current_revision_number FROM statement_drafts WHERE candidate_id = '{candidate}'"));
-        Assert.Equal(1L, await ScalarAsync("SELECT priority::bigint FROM vote_analysis"));
+        Assert.Equal(1L, await ScalarAsync($"SELECT priority::bigint FROM vote_analysis WHERE candidate_id = '{castByTheSpeaker.CandidateId}'"));
+        Assert.Equal(3L, await ScalarAsync($"SELECT priority::bigint FROM vote_analysis WHERE candidate_id = '{castByAnother.CandidateId}'"));
     }
 
     private Task SeedActionRowAsync(string candidateId, int billNumber) => ExecuteAsync(connectionString, $"""

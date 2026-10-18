@@ -14,6 +14,7 @@ namespace CivicLens.Tests.Infrastructure.Statements;
 public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private const string ArticleUrl = "https://example.test/pages/article";
+    private static readonly DateTimeOffset In119th = new(2026, 3, 1, 0, 0, 0, TimeSpan.Zero);
     private readonly string root = Path.Combine(Path.GetTempPath(), "civic-statements-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
     private PostgresCollectionAttemptStore attempts = null!;
@@ -168,7 +169,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
         await SeedVoteRowAsync(new string('1', 64), roll: 1, congress: 119, billNumber: 14);
         await SeedVoteRowAsync(new string('2', 64), roll: 2, congress: 119, billNumber: 15);
         var text = "Said: I back H.Con.Res. 14 today.";
-        var attempt = await seeder.ImportAsync(text, ArticleUrl, CandidateJobKind.DiscoveryAdmitted);
+        var attempt = await seeder.ImportAsync(text, ArticleUrl, CandidateJobKind.DiscoveryAdmitted, observedAt: In119th);
 
         await extractions.SaveAsync(new DocumentExtraction(attempt, "parser-v1", "normalization-v1", text), CancellationToken.None);
 
@@ -182,7 +183,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
         await SeedVoteRowAsync(new string('1', 64), roll: 1, congress: 118, billNumber: 14);
         await SeedVoteRowAsync(new string('2', 64), roll: 2, congress: 119, billNumber: 14);
         var text = "Said: I back H.Con.Res. 14 today.";
-        var attempt = await seeder.ImportAsync(text, ArticleUrl, CandidateJobKind.DiscoveryAdmitted);
+        var attempt = await seeder.ImportAsync(text, ArticleUrl, CandidateJobKind.DiscoveryAdmitted, observedAt: In119th);
 
         await extractions.SaveAsync(new DocumentExtraction(attempt, "parser-v1", "normalization-v1", text), CancellationToken.None);
 

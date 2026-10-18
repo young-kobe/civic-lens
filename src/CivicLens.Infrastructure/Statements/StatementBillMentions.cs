@@ -37,19 +37,19 @@ internal static class StatementBillMentions
         var cited = RelationshipPairRule.CitedBills(articleText);
         if (cited.IsEmpty) return;
         var numbers = cited.Select(bill => bill.Number).Distinct().ToArray();
-        bool Names(int billCongress, string? billType, int? number) => cited.Any(bill =>
-            RelationshipPairRule.IsSameBill(congress, bill.BillType, bill.Number, billCongress, billType, number));
+        bool Names(string? billType, int? number) => cited.Any(bill =>
+            RelationshipPairRule.IsSameBill(congress, bill.BillType, bill.Number, congress, billType, number));
         var actions = await db.Set<ActionCandidateRow>().AsNoTracking()
             .Where(candidate => candidate.Congress == congress && numbers.Contains(candidate.BillNumber))
-            .Select(candidate => new { candidate.CandidateId, candidate.Congress, candidate.BillType, candidate.BillNumber }).ToArrayAsync(cancellationToken);
+            .Select(candidate => new { candidate.CandidateId, candidate.BillType, candidate.BillNumber }).ToArrayAsync(cancellationToken);
         var votes = await db.Set<HouseVoteCandidateRow>().AsNoTracking()
             .Where(candidate => candidate.Congress == congress && candidate.BillNumber != null && numbers.Contains(candidate.BillNumber.Value))
-            .Select(candidate => new { candidate.CandidateId, candidate.Congress, candidate.BillType, candidate.BillNumber }).ToArrayAsync(cancellationToken);
+            .Select(candidate => new { candidate.CandidateId, candidate.BillType, candidate.BillNumber }).ToArrayAsync(cancellationToken);
         await AnalysisPriority.RaiseAsync(db, PostgresActionDraftStore.Table, "candidate_id", ActionDraftTask.Task,
-            [.. actions.Where(candidate => Names(candidate.Congress, candidate.BillType, candidate.BillNumber)).Select(candidate => candidate.CandidateId)],
+            [.. actions.Where(candidate => Names(candidate.BillType, candidate.BillNumber)).Select(candidate => candidate.CandidateId)],
             ReviewPriority.Highest, cancellationToken);
         await AnalysisPriority.RaiseAsync(db, PostgresVoteDraftStore.Table, "candidate_id", VoteDraftTask.Task,
-            [.. votes.Where(candidate => Names(candidate.Congress, candidate.BillType, candidate.BillNumber)).Select(candidate => candidate.CandidateId)],
+            [.. votes.Where(candidate => Names(candidate.BillType, candidate.BillNumber)).Select(candidate => candidate.CandidateId)],
             ReviewPriority.Highest, cancellationToken);
     }
 
