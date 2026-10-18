@@ -6,6 +6,7 @@ using CivicLens.Application.Relationships;
 using CivicLens.Application.Review;
 using CivicLens.Core.Relationships;
 using CivicLens.Core.Review;
+using CivicLens.Publication.Contracts;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Relationships.Persistence;
 using CivicLens.Infrastructure.Review;
@@ -17,6 +18,14 @@ public sealed class PostgresRelationshipReviewStore(IDbContextFactory<Collection
 {
     private static readonly ReviewRecords<RelationshipDraftRow, RelationshipRevisionRow, RelationshipReviewDecisionRow, RelationshipRevision> Records =
         RelationshipDraftRows.Records;
+
+    private const string FindCitingSql = """
+        SELECT a.pair_id AS "Value" FROM relationship_analysis a
+        WHERE a.task = {0} AND a.pair_id = ANY({1})
+          AND (a.statement_candidate_id = ANY({2})
+            OR a.target_kind = 'Action' AND a.target_record_id = ANY({3})
+            OR a.target_kind = 'Vote' AND a.target_record_id = ANY({4}))
+        """;
 
     private const string SaveOperation = "relationship-save";
     private const string DecideOperation = "relationship-decide";
@@ -112,6 +121,18 @@ public sealed class PostgresRelationshipReviewStore(IDbContextFactory<Collection
         })];
     }
 
+    // One ANY batch read, as RelationshipCitedReader.FindChangedAsync does. The pair row holds the cited statement and target of its relationship.
+    public async Task<IReadOnlySet<string>> FindCitingAsync(ImmutableArray<string> relationshipIds, ImmutableArray<PublishedRecordReference> cited,
+        CancellationToken cancellationToken)
+    {
+        if (relationshipIds.IsEmpty || cited.IsEmpty) return new HashSet<string>();
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var found = await db.Database.SqlQueryRaw<string>(FindCitingSql, RelationshipDraftTask.Task, (object)relationshipIds.ToArray(),
+            (object)IdsOf(cited, PublishedRecordKind.Statement), (object)IdsOf(cited, PublishedRecordKind.Action),
+            (object)IdsOf(cited, PublishedRecordKind.Vote)).ToArrayAsync(cancellationToken);
+        return found.ToHashSet(StringComparer.Ordinal);
+    }
+
     public async Task<IReadOnlyDictionary<string, PublishableRelationship>> GetForPublicationAsync(ImmutableArray<string> recordIds,
         ImmutableArray<PublishedRevisionBinding> releaseRecords, CancellationToken cancellationToken)
     {
@@ -133,6 +154,9 @@ public sealed class PostgresRelationshipReviewStore(IDbContextFactory<Collection
                 cited[draft.RecordId].Target, CitesNotCurrent(current, notCurrent));
         }, StringComparer.Ordinal);
     }
+
+    private static string[] IdsOf(ImmutableArray<PublishedRecordReference> cited, PublishedRecordKind kind) =>
+        [.. cited.Where(reference => reference.Kind == kind).Select(reference => reference.RecordId)];
 
     private static RelationshipCitation[] CitationsOf(RelationshipRevision revision) => [revision.Statement, revision.Target];
 

@@ -173,6 +173,19 @@ public sealed class PostgresRelationshipPublicationTests(PostgresCollection post
         await Assert.ThrowsAsync<PublicationConflictException>(() => CommitAsync(StatementBinding, ActionBinding, RelationshipBinding()));
     }
 
+    [Fact]
+    public async Task FindCitingNamesOnlyTheGivenRelationshipsThatCiteAGivenRecordOfTheRightKind()
+    {
+        var statement = new PublishedRecordReference(PublishedRecordKind.Statement, StatementId);
+        var action = new PublishedRecordReference(PublishedRecordKind.Action, ActionId);
+
+        Assert.Equal([recordId], await reviews.FindCitingAsync([recordId], [statement], default));
+        Assert.Equal([recordId], await reviews.FindCitingAsync([recordId], [action], default));
+        Assert.Empty(await reviews.FindCitingAsync([recordId], [new(PublishedRecordKind.Vote, ActionId), new(PublishedRecordKind.Statement, ActionId)], default));
+        Assert.Empty(await reviews.FindCitingAsync([new string('f', 64)], [statement, action], default));
+        Assert.Empty(await reviews.FindCitingAsync([], [statement], default));
+    }
+
     private PublishedRevisionBinding RelationshipBinding() => BriefWorldSeeder.Binding(PublishedRecordKind.Relationship, recordId, 1);
 
     private async Task ApproveAsync() => _ = await new DecideRelationshipReview(reviews).ExecuteAsync(Reviewer,

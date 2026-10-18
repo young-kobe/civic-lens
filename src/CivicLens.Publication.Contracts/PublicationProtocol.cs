@@ -14,7 +14,6 @@ public static class PublicationProtocol
     public const int MaximumRecordsPerRelease = 20000;
     public const int IndexPageSize = 50;
     public const int MaximumManifestBytes = 32 * 1024 * 1024;
-    public const int MaximumRecordBytes = 16 * 1024 * 1024;
 
     public static string IndexPagePath(int page) => page == 1 ? "index.html" : $"page-{page}.html";
     public static int IndexPageCount(int recordCount) => Math.Max(1, (recordCount + IndexPageSize - 1) / IndexPageSize);

@@ -16,6 +16,11 @@ public sealed class PublishedRecordLoaders(IDocumentChangeReviewStore documentCh
         [new DocumentChangeRecordLoader(documentChanges), new StatementRecordLoader(statements), new ActionRecordLoader(actions),
          new VoteRecordLoader(votes), new RelationshipRecordLoader(relationships), new BriefRecordLoader(briefs)];
 
+    internal RelationshipRecordLoader Relationships => All.OfType<RelationshipRecordLoader>().Single();
+
+    internal ICarriedPageLoader Carried(PublishedRecordKind kind) =>
+        For(kind) as ICarriedPageLoader ?? throw new ArgumentException($"A {kind} page does not list related records.", nameof(kind));
+
     internal PublishedRecordLoader For(PublishedRecordKind kind) =>
         All.FirstOrDefault(loader => loader.Kind == kind) ?? throw new ArgumentException("Record kind is unknown.", nameof(kind));
 }

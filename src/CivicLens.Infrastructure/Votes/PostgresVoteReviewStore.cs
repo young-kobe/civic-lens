@@ -141,8 +141,7 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
         var histories = await Records.ReadHistoriesAsync(db, drafts, cancellationToken);
         var currents = histories.Values.Select(history => history.CurrentRevision!).ToArray();
         var extractions = (await ReadExtractionsAsync(db, currents, cancellationToken)).ToImmutableDictionary(StringComparer.Ordinal);
-        var billActions = await ReadBillActionRecordIdsAsync(db, [.. currents.Where(revision => revision.BillType is not null)
-            .Select(revision => new VoteBill(revision.RecordId, revision.Congress, revision.BillType!, revision.BillNumber!.Value))], cancellationToken);
+        var billActions = await ReadBillActionRecordIdsAsync(db, [.. currents.Select(VoteBill.Of).OfType<VoteBill>()], cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         foreach (var current in currents) current.ValidateAgainst(extractions);
         return drafts.ToDictionary(draft => draft.RecordId, draft =>

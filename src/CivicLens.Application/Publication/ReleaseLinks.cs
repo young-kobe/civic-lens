@@ -19,17 +19,21 @@ internal sealed class ReleaseLinks
 
     public ImmutableArray<PublishedRelationship> Added { get; }
 
-    public static async Task<ReleaseLinks> LoadAsync(IReleaseDirectory releases, PreviousRelease previous,
+    // The database names the carried relationships that cite a record this publish renders. The files stay the source of the text.
+    public static async Task<ReleaseLinks> LoadAsync(IReleaseDirectory releases, PublicationBuild build, RelationshipRecordLoader relationships,
         IReadOnlyList<PendingRecord> additions, CancellationToken cancellationToken)
     {
         if (!additions.Any(addition => ListsRelated(addition.Entry.Kind))) return None;
         ImmutableArray<PublishedRelationship> added = [.. additions.Where(addition => addition.Entry.Kind == PublishedRecordKind.Relationship)
             .Select(addition => Parse(addition.Json))];
         var replaced = added.Select(link => link.RecordId).ToHashSet(StringComparer.Ordinal);
+        var carriedIds = build.ReleaseRecords.Where(record => record.Kind == PublishedRecordKind.Relationship && !replaced.Contains(record.RecordId))
+            .Select(record => record.RecordId).ToImmutableArray();
+        var citing = await relationships.FindCitingAsync(carriedIds, RenderedRecords(additions, added), cancellationToken);
         var carried = new List<PublishedRelationship>();
-        foreach (var entry in previous.Entries.Where(entry => entry.Kind == PublishedRecordKind.Relationship && !replaced.Contains(entry.RecordId)))
-            carried.Add(Parse(await releases.ReadFileAsync(previous.DirectoryName!, PublicationProtocol.RecordDataPath(entry.RecordId),
-                PublicationProtocol.MaximumRecordBytes, cancellationToken)));
+        foreach (var recordId in citing.Order(StringComparer.Ordinal))
+            carried.Add(Parse(await releases.ReadFileAsync(build.Previous.DirectoryName!, PublicationProtocol.RecordDataPath(recordId),
+                PublishedRelationship.MaximumFileBytes, cancellationToken)));
         return new([.. carried, .. added], added);
     }
 
@@ -38,7 +42,13 @@ internal sealed class ReleaseLinks
             .OrderBy(link => link.StatementDate is null).ThenBy(link => link.StatementDate).ThenBy(link => link.RecordId, StringComparer.Ordinal)];
 
     private static bool ListsRelated(PublishedRecordKind kind) =>
-        kind is PublishedRecordKind.Statement or PublishedRecordKind.Action or PublishedRecordKind.Vote or PublishedRecordKind.Relationship;
+        PublishedRelationship.IsCitedKind(kind) || kind == PublishedRecordKind.Relationship;
+
+    private static List<PublishedRecordReference> RenderedRecords(IReadOnlyList<PendingRecord> additions, ImmutableArray<PublishedRelationship> added) =>
+        [.. additions.Where(addition => PublishedRelationship.IsCitedKind(addition.Entry.Kind))
+            .Select(addition => new PublishedRecordReference(addition.Entry.Kind, addition.RecordId))
+            .Concat(added.SelectMany(link => new[] { link.Statement, link.Target }).Select(cited => new PublishedRecordReference(cited.Kind, cited.RecordId)))
+            .Distinct()];
 
     private static bool Cites(PublishedRelationshipCitation citation, PublishedRecordKind kind, string recordId) =>
         citation.Kind == kind && citation.RecordId == recordId;

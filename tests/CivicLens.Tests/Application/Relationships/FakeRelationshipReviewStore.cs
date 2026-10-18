@@ -17,6 +17,15 @@ internal sealed class FakeRelationshipReviewStore : IRelationshipReviewStore
     public Task<IReadOnlyList<UnpublishedApprovedRelationship>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<UnpublishedApprovedRelationship>>([.. Unpublished.Take(limit)]);
 
+    public Task<IReadOnlySet<string>> FindCitingAsync(ImmutableArray<string> relationshipIds, ImmutableArray<PublishedRecordReference> cited,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlySet<string> found = relationshipIds.Where(Publishable.ContainsKey).Where(id =>
+            new[] { Publishable[id].Review.CurrentRevision.Statement, Publishable[id].Review.CurrentRevision.Target }
+                .Any(citation => cited.Contains(new(RelationshipRecordKinds.PublishedKindOf(citation.Kind), citation.RecordId)))).ToHashSet();
+        return Task.FromResult(found);
+    }
+
     public Task<IReadOnlyDictionary<string, PublishableRelationship>> GetForPublicationAsync(ImmutableArray<string> recordIds,
         ImmutableArray<PublishedRevisionBinding> releaseRecords, CancellationToken cancellationToken)
     {

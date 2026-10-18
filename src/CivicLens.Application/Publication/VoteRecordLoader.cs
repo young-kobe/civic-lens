@@ -6,7 +6,8 @@ using CivicLens.Publication.Contracts;
 namespace CivicLens.Application.Publication;
 
 internal sealed class VoteRecordLoader(IVoteReviewStore votes)
-    : PublishedRecordLoader<UnpublishedApprovedVote, PublishableVote>(PublishedRecordKind.Vote, "Vote")
+    : PublishedRecordLoader<UnpublishedApprovedVote, PublishableVote>(PublishedRecordKind.Vote, "Vote"),
+      ICarriedPageLoader
 {
     public override void ValidateId(string recordId) => ReviewValidation.ValidateHash(recordId, nameof(recordId));
 
@@ -32,13 +33,12 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
             (related, cancellationToken) => build.Renderer.RenderVoteAsync(record, billActionRecordId, related, cancellationToken));
     }
 
-    public override async Task<IReadOnlyDictionary<string, string>> RenderCarriedAsync(IReadOnlyDictionary<string, byte[]> records,
+    public async Task<IReadOnlyDictionary<string, string>> RenderCarriedAsync(IReadOnlyDictionary<string, byte[]> records,
         ReleaseLinks links, PublicationBuild build, CancellationToken cancellationToken)
     {
         var parsed = ParseAll<PublishedVote>(records);
         var billActionRecordIds = await votes.FindBillActionRecordIdsAsync(
-            [.. parsed.Values.Where(vote => vote.BillType is not null)
-                .Select(vote => new VoteBill(vote.RecordId, vote.Congress, vote.BillType!, vote.BillNumber!.Value))],
+            [.. parsed.Values.Select(VoteBill.Of).OfType<VoteBill>()],
             cancellationToken);
         return await RenderEachAsync(parsed, (vote, recordId) => build.Renderer.RenderVoteAsync(vote,
             BillActionRecordIn(billActionRecordIds.GetValueOrDefault(recordId, []), build), links.Citing(Kind, recordId), cancellationToken));

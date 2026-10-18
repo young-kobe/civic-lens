@@ -8,12 +8,12 @@ internal sealed class ReleasePages(IReleaseDirectory releases, PublishedRecordLo
     public async Task<IReadOnlyDictionary<string, string>> RenderAsync(PublicationBuild build, IReadOnlyList<PendingRecord> additions,
         CancellationToken cancellationToken)
     {
-        var links = await ReleaseLinks.LoadAsync(releases, build.Previous, additions, cancellationToken);
+        var links = await ReleaseLinks.LoadAsync(releases, build, loaders.Relationships, additions, cancellationToken);
         var pages = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var addition in additions)
             pages[addition.RecordId] = await addition.RenderPage(links.Citing(addition.Entry.Kind, addition.RecordId), cancellationToken);
         foreach (var kind in CarriedCitedBy(links, additions).GroupBy(cited => cited.Kind))
-            foreach (var (recordId, page) in await loaders.For(kind.Key).RenderCarriedAsync(
+            foreach (var (recordId, page) in await loaders.Carried(kind.Key).RenderCarriedAsync(
                 await ReadAsync(build.Previous, kind, cancellationToken), links, build, cancellationToken))
                 pages[recordId] = page;
         return pages;
@@ -32,7 +32,7 @@ internal sealed class ReleasePages(IReleaseDirectory releases, PublishedRecordLo
         var json = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         foreach (var citation in cited)
             json[citation.RecordId] = await releases.ReadFileAsync(previous.DirectoryName!, PublicationProtocol.RecordDataPath(citation.RecordId),
-                PublicationProtocol.MaximumRecordBytes, cancellationToken);
+                PublishedRecordFiles.MaximumCitedRecordBytes, cancellationToken);
         return json;
     }
 }

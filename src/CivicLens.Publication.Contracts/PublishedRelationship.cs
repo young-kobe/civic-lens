@@ -7,6 +7,7 @@ public sealed record PublishedRelationship
     public const int MaximumReasonLength = 400;
     public const int MaximumQuoteLength = 4_096;
     public const int MaximumFactLength = 8_192;
+    public const int MaximumFileBytes = 1024 * 1024;
 
     public required string RecordId { get; init; }
     public required int RevisionNumber { get; init; }
@@ -37,6 +38,9 @@ public sealed record PublishedRelationship
         EventDate = StatementDate
     };
 
+    public static bool IsCitedKind(PublishedRecordKind kind) =>
+        kind is PublishedRecordKind.Statement or PublishedRecordKind.Action or PublishedRecordKind.Vote;
+
     public PublishedRelationshipCitation Other(PublishedRecordKind kind, string recordId) =>
         Statement.Kind == kind && Statement.RecordId == recordId ? Target : Statement;
 
@@ -61,7 +65,7 @@ public sealed record PublishedRelationship
     private void ValidateCitations()
     {
         if (Statement is not { Kind: PublishedRecordKind.Statement } ||
-            Target is not { Kind: PublishedRecordKind.Action or PublishedRecordKind.Vote })
+            Target is not { Kind: var targetKind } || targetKind == PublishedRecordKind.Statement || !IsCitedKind(targetKind))
             throw new InvalidDataException("A published relationship cites one statement and one action or vote.");
         foreach (var citation in new[] { Statement, Target })
         {

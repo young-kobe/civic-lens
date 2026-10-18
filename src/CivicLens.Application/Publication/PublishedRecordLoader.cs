@@ -18,11 +18,6 @@ internal abstract class PublishedRecordLoader(PublishedRecordKind kind)
     public abstract Task<List<PendingRecord>> LoadAsync(ImmutableArray<string> recordIds, PublicationBuild build,
         CancellationToken cancellationToken);
 
-    /// <summary>Renders again the pages of records that the release carries, so each page lists its related records. Only the kinds that a relationship cites do this.</summary>
-    public virtual Task<IReadOnlyDictionary<string, string>> RenderCarriedAsync(IReadOnlyDictionary<string, byte[]> records,
-        ReleaseLinks links, PublicationBuild build, CancellationToken cancellationToken) =>
-        throw new InvalidOperationException($"A {Kind} page does not list related records.");
-
     protected static Dictionary<string, TRecord> ParseAll<TRecord>(IReadOnlyDictionary<string, byte[]> records) =>
         records.ToDictionary(record => record.Key, record => JsonSerializer.Deserialize<TRecord>(record.Value, PublicationProtocol.JsonOptions)
             ?? throw new InvalidDataException("A carried record file is empty."), StringComparer.Ordinal);

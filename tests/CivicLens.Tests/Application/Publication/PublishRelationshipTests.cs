@@ -231,6 +231,41 @@ public sealed class PublishRelationshipTests
         Assert.Equal([PublicationProtocol.ManifestPath], scenario.Releases.ReadPaths);
     }
 
+    [Fact]
+    public async Task OnlyTheCarriedLinksThatCiteAnAddedRecordAreReadFromDiskSoThePublishCostFollowsTheLinksOfThatRecord()
+    {
+        var scenario = new PublicationScenario();
+        var (statement, action, _) = await PublishRecordsAsync(scenario);
+        var otherStatement = scenario.AddStatement('a');
+        var otherAction = scenario.AddAction('f');
+        var citing = scenario.AddRelationship('e', statement, action);
+        var unrelated = scenario.AddRelationship('1', otherStatement, otherAction);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
+            Reference(PublishedRecordKind.Statement, otherStatement), Reference(PublishedRecordKind.Action, otherAction),
+            Reference(PublishedRecordKind.Relationship, citing), Reference(PublishedRecordKind.Relationship, unrelated)));
+        scenario.AddStatement('c', revisionNumber: 2, statementDate: StatementDate);
+        scenario.Releases.ReadPaths.Clear();
+
+        var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k3", Reference(PublishedRecordKind.Statement, statement)));
+
+        Assert.Equal([PublicationProtocol.ManifestPath, PublicationProtocol.RecordDataPath(citing)], scenario.Releases.ReadPaths);
+        Assert.Equal($"<html>statement {statement} related e</html>", PageOf(scenario, third.DirectoryName, statement));
+    }
+
+    [Fact]
+    public async Task ARelationshipWhoseQuoteLiesOutsideEveryPassageOfItsStatementIsRefusedBecauseThePageWouldQuoteTextThatNoOneApproved()
+    {
+        var scenario = new PublicationScenario();
+        var (statement, action, _) = await PublishRecordsAsync(scenario);
+        var extractionId = scenario.Statements.Publishable[statement].Extraction.ExtractionId;
+        var outside = scenario.AddRelationship('e', statement, action, quoteSpan: new(extractionId, 0, 5));
+        var otherExtraction = scenario.AddRelationship('f', statement, action, quoteSpan: new(new string('9', 64), 12, 15));
+
+        foreach (var relationship in new[] { outside, otherExtraction })
+            await Assert.ThrowsAsync<InvalidDataException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k" + relationship[0], relationship)));
+    }
+
     private static async Task<(string Statement, string Action, string Other)> PublishRecordsAsync(PublicationScenario scenario)
     {
         var statement = scenario.AddStatement('c', statementDate: StatementDate);

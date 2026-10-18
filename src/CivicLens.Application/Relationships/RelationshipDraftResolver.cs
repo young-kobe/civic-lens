@@ -54,7 +54,7 @@ public static class RelationshipDraftResolver
             errors, citationErrors);
         if (start is not { } found) return null;
         var span = new SourceSpan(pair.Match.Span.ExtractionId, found, quote!.Length);
-        if (!pair.Statement.Passages().Any(passage => passage.Span.Covers(span)))
+        if (!pair.Statement.HasPassageCovering(span))
             AddCitationError("The statementQuote must lie inside one passage of the statement.", errors, citationErrors);
         else if (!span.Covers(pair.Match.Span))
             AddCitationError("The statementQuote must include the matched words.", errors, citationErrors);

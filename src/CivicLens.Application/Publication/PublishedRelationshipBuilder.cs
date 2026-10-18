@@ -48,8 +48,8 @@ internal sealed class PublishedRelationshipBuilder(PublishedRecordRules rules)
     private static string QuoteOf(ApprovedStatement statement, RelationshipRevision revision)
     {
         var span = revision.StatementQuote;
-        if (span.Start + span.Length > statement.ArticleText.Length)
-            throw new InvalidDataException($"Relationship {revision.RecordId} quotes text that its statement does not hold.");
+        if (!statement.HasPassageCovering(span))
+            throw new InvalidDataException($"Relationship {revision.RecordId} quotes text outside every passage of its statement.");
         return statement.ArticleText.Substring(span.Start, span.Length);
     }
 

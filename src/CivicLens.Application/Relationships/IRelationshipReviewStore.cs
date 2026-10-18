@@ -25,6 +25,9 @@ public interface IRelationshipReviewStore
 
     Task<IReadOnlyList<UnpublishedApprovedRelationship>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken);
 
+    Task<IReadOnlySet<string>> FindCitingAsync(ImmutableArray<string> relationshipIds, ImmutableArray<PublishedRecordReference> cited,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyDictionary<string, PublishableRelationship>> GetForPublicationAsync(ImmutableArray<string> recordIds,
         ImmutableArray<PublishedRevisionBinding> releaseRecords, CancellationToken cancellationToken);
 }

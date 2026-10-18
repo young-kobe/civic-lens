@@ -226,6 +226,7 @@ internal sealed class PublicationScenario
         var all = decisions ?? [Decision(recordId, 1, ReviewDecisionKind.Approve)];
         var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
         var review = new VoteReview(recordId, revision, null, [revision], all.Length, ReviewPolicy.GetCurrentStatus(1, all, concerns), all, concerns);
+        if (billType is not null) Votes.BillActions[(119, billType, 7)] = billActionRecordIds ?? [];
         Votes.Publishable[recordId] = new(review, ImmutableDictionary.CreateRange(StringComparer.Ordinal,
             [KeyValuePair.Create(detail.ExtractionId, detail), KeyValuePair.Create(members.ExtractionId, members)]),
             billActionRecordIds ?? []);
@@ -233,12 +234,12 @@ internal sealed class PublicationScenario
     }
 
     public string AddRelationship(char id, string statementId, string targetId, PublishedRecordKind targetKind = PublishedRecordKind.Action,
-        ReviewDecisionKind decision = ReviewDecisionKind.Approve, int statementRevision = 1, int targetRevision = 1, int revisionNumber = 1)
+        ReviewDecisionKind decision = ReviewDecisionKind.Approve, int statementRevision = 1, int targetRevision = 1, int revisionNumber = 1, SourceSpan? quoteSpan = null)
     {
         var recordId = new string(id, 64);
         var statement = Statements.Publishable[statementId];
         var statementRevisionRecord = statement.Review.CurrentRevision!;
-        var quote = new SourceSpan(statement.Extraction.ExtractionId, 12, 15);
+        var quote = quoteSpan ?? new SourceSpan(statement.Extraction.ExtractionId, 12, 15);
         var target = targetKind == PublishedRecordKind.Action
             ? RelationshipTarget.Of(Actions.Publishable[targetId].Review.CurrentRevision)
             : RelationshipTarget.Of(Votes.Publishable[targetId].Review.CurrentRevision);

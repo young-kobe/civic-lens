@@ -107,6 +107,35 @@ public sealed class PublishedRelationshipTests
         Assert.True("Title: ".Length + ActionDraftRevision.MaximumTitleLength <= PublishedRelationship.MaximumFactLength);
     }
 
+    [Fact]
+    public void AFileWithEveryFieldAtItsLimitAndEscapedStaysUnderTheFileCapSoTheReadCapNeverRefusesAPublishedLink()
+    {
+        var escaped = (int length) => new string('\u0001', length);
+        var citation = (PublishedRecordKind kind, string id) => new PublishedRelationshipCitation
+        {
+            Kind = kind,
+            RecordId = id,
+            RevisionNumber = 1,
+            Headline = escaped(PublishedRelationship.MaximumCitedHeadlineLength)
+        };
+        var names = Enumerable.Range(0, PublishedRecordEntry.MaximumFilterValues).Select(index => $"{index:x2}".PadRight(PublishedRecordEntry.MaximumFilterValueLength, '\u0001')).ToArray();
+        var link = Link() with
+        {
+            Headline = escaped(PublishedRelationship.MaximumHeadlineLength),
+            Statement = citation(PublishedRecordKind.Statement, StatementId),
+            Target = citation(PublishedRecordKind.Action, ActionId),
+            Reason = escaped(PublishedRelationship.MaximumReasonLength),
+            Quote = escaped(PublishedRelationship.MaximumQuoteLength),
+            TargetFact = escaped(PublishedRelationship.MaximumFactLength),
+            Officials = [.. names.Select(name => new PublishedOfficial { Id = name, Name = name })],
+            IssueIds = names,
+            PolicyAreaIds = names
+        };
+
+        link.Validate();
+        Assert.True(JsonSerializer.SerializeToUtf8Bytes(link, PublicationProtocol.JsonOptions).Length < PublishedRelationship.MaximumFileBytes);
+    }
+
     private static PublishedRelationship Link() => new()
     {
         RecordId = LinkId,

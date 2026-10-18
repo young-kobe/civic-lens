@@ -290,6 +290,19 @@ public sealed class ListPublishableTests
     }
 
     [Fact]
+    public async Task ARelationshipThatNoLongerMatchesIsListedWithTheFlagSoTheOwnerSeesItBeforePublishingButIsNotBlocked()
+    {
+        var scenario = new PublicationScenario();
+        var relationship = scenario.Relationships.Publishable[scenario.AddRelationship('e', scenario.AddStatement('c'), scenario.AddAction('d'))].Review;
+        scenario.Relationships.Unpublished.Add(new(relationship with { NoLongerMatches = true }, "Statement c", "Action d", null, false));
+        scenario.Relationships.Unpublished.Add(new(relationship with { RecordId = new string('f', 64) }, "Statement c", "Action d", null, false));
+
+        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+
+        Assert.Equal([(relationship.RecordId, true), (new string('f', 64), false)], list.Items.Select(item => (item.RecordId, item.NoLongerMatches)));
+    }
+
+    [Fact]
     public async Task ABriefWithAnUnresolvedConcernIsNotReady()
     {
         var scenario = new PublicationScenario();
