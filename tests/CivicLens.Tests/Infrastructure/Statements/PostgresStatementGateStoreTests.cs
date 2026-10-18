@@ -169,6 +169,30 @@ public sealed class PostgresStatementGateStoreTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task GateClaimsPreferAHigherPriorityOverAnOlderLowerPriorityRowSoTheReviewerSeesTheMostUsefulDraftsFirst()
+    {
+        var one = await seeder.SeedAsync(Article + " one", "https://example.test/pages/one");
+        var two = await seeder.SeedAsync(Article + " two", "https://example.test/pages/two");
+        var (older, newer) = string.CompareOrdinal(one, two) > 0 ? (one, two) : (two, one);
+        await ExecuteAsync(connectionString, $"""
+            UPDATE statement_analysis SET created_at_utc_ticks = CASE candidate_id WHEN '{older}' THEN 1 ELSE 2 END,
+                                          priority = CASE candidate_id WHEN '{older}' THEN 3 ELSE 1 END
+            """);
+
+        Assert.Equal([newer, older], (await store.GetEligibleAsync(10, default)).Select(row => row.SubjectId));
+    }
+
+    [Fact]
+    public async Task TheClaimIndexOrdersByPriorityBeforeCreationTime()
+    {
+        var definition = await ScalarTextAsync("""
+            SELECT indexdef FROM pg_indexes WHERE schemaname = current_schema() AND indexname = 'ix_statement_analysis_active_claim'
+            """);
+
+        Assert.Contains("(task, priority, created_at_utc_ticks, candidate_id)", definition, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ListAndCountSeparateEachGateOutcome()
     {
         _ = await seeder.SeedAsync(Article + " one", "https://example.test/pages/one");

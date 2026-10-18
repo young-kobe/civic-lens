@@ -21,6 +21,7 @@ internal sealed class DocumentChangeAnalysisRow : IAnalysisRow
     public string? DraftId { get; set; }
     public string? ErrorCode { get; set; }
     public long CreatedAtUtcTicks { get; set; }
+    public int Priority { get; set; }
 
     string IAnalysisRow.SubjectId => ComparisonId;
 }

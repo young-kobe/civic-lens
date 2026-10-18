@@ -20,4 +20,5 @@ internal interface IAnalysisRow
     string? RetryOfRunId { get; set; }
     string? ErrorCode { get; set; }
     long CreatedAtUtcTicks { get; }
+    int Priority { get; set; }
 }

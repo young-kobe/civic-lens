@@ -1,5 +1,6 @@
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Analysis;
+using CivicLens.Core.Review;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -17,6 +18,8 @@ internal static class AnalysisTableConfiguration
             constraints.HasCheckConstraint($"ck_{table}_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
             constraints.HasCheckConstraint($"ck_{table}_running", "(status = 'Running') = (lease_token IS NOT NULL)");
             constraints.HasCheckConstraint($"ck_{table}_retry_of", "retry_of_run_id IS NULL OR retry_of_run_id ~ '^[0-9a-f]{32}$'");
+            constraints.HasCheckConstraint($"ck_{table}_priority",
+                $"priority BETWEEN {ReviewPriority.Highest} AND {ReviewPriority.Lowest}");
             constraints.HasCheckConstraint($"ck_{table}_counts", "fence >= 0 AND attempts >= 0 AND reserved_tokens >= 0");
             constraints.HasCheckConstraint($"ck_{table}_reservation",
                 "(reserved_tokens = 0) = (budget_day IS NULL AND reserved_at_utc_ticks IS NULL AND pending_run_id IS NULL AND pending_input_hash IS NULL)");
@@ -39,8 +42,10 @@ internal static class AnalysisTableConfiguration
         builder.Property<string>(nameof(IAnalysisRow.RetryOfRunId)).HasColumnName("retry_of_run_id").HasMaxLength(32);
         builder.Property<string>(nameof(IAnalysisRow.ErrorCode)).HasColumnName("error_code").HasMaxLength(128);
         builder.Property<long>(nameof(IAnalysisRow.CreatedAtUtcTicks)).HasColumnName("created_at_utc_ticks");
+        builder.Property<int>(nameof(IAnalysisRow.Priority)).HasColumnName("priority").HasColumnType("smallint")
+            .HasDefaultValue(ReviewPriority.Lowest);
         builder.HasIndex(nameof(IAnalysisRow.Status), nameof(IAnalysisRow.CreatedAtUtcTicks), keyProperty);
-        builder.HasIndex([nameof(IAnalysisRow.Task), nameof(IAnalysisRow.CreatedAtUtcTicks), keyProperty], $"ix_{table}_active_claim")
+        builder.HasIndex([nameof(IAnalysisRow.Task), nameof(IAnalysisRow.Priority), nameof(IAnalysisRow.CreatedAtUtcTicks), keyProperty], $"ix_{table}_active_claim")
             .HasFilter("status IN ('Pending','RetryWaiting','WaitingForBudget','Running')");
     }
 
