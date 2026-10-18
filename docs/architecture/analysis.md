@@ -233,6 +233,7 @@ The [roadmap](../roadmap.md) holds the delivery order. These design rules apply 
 
 - A concurrent statement registration and action enqueue can miss a raise. The row then waits until a statement draft saves.
 - The exact tier of a saved draft changes the claim order only after a requeue. The review lists use it in the next change.
+- Entries and gate rows written before the priority migration keep tier 3 and `has_tracked_issue` false. A change to the tracked issues does not refresh `has_tracked_issue` or the waiting tiers. No command recomputes them yet.
 - The early mention check scans the current statement revisions on each enqueue. On the dev database it took about 5 ms with about 244 statement drafts. A mention table is the planned fix if statement volume grows.
 - Rules from measured change history gate document changes. A model tier follows only if the R-13 measurement shows a need (D-05). A change classified as nonsubstantive skips review. Routing supports process, defer, and skip-expensive-analysis, with reasons and retained input references.
 - Skipped changes stay visible and inspectable, and a reviewer can return one to review. Audit a sample of skipped records.
