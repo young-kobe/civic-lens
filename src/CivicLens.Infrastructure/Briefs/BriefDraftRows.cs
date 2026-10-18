@@ -17,6 +17,7 @@ internal static class BriefDraftRows
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.BriefReview, cancellationToken);
         var draft = await db.Set<BriefDraftRow>().SingleOrDefaultAsync(row => row.RecordId == revision.RecordId, cancellationToken);
         if ((draft?.CurrentRevisionNumber ?? 0) != revision.RevisionNumber - 1) return BriefDraftErrorCodes.RevisionConflict;
+        if (draft?.ReviewStatus == ReviewStatus.Approved) return BriefDraftErrorCodes.AlreadyApproved;
         if (draft is null) db.Add(draft = NewDraft(revision));
         var records = PostgresBriefReviewStore.Records;
         records.AppendRevision(db, draft, revision, NewRevision(revision, runId), await records.ReadCycleAsync(db, draft, cancellationToken));

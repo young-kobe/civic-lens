@@ -47,6 +47,9 @@ internal sealed class RelationshipDraftQueueMapping : IAnalysisQueueMapping<Rela
             throw new ArgumentException("A revision needs its drafted run.", nameof(settlement));
         var refusal = await RelationshipDraftRows.AppendAnalysisRevisionAsync(db, revision, run.Run.RunId, cancellationToken);
         if (refusal is null) return settlement;
+        var discarded = run with { Run = run.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded } };
+        if (refusal == RelationshipDraftErrorCodes.AlreadyApproved)
+            return new(checkpoint with { ErrorCode = RelationshipDraftErrorCodes.Unchanged, Revision = null }, discarded);
         row.RetryOfRunId = null;
         return new(checkpoint with
         {
@@ -54,6 +57,6 @@ internal sealed class RelationshipDraftQueueMapping : IAnalysisQueueMapping<Rela
             ErrorCode = refusal,
             RetryDelay = AnalysisPolicy.RetryDelay(row.Attempts),
             Revision = null
-        }, run with { Run = run.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded } });
+        }, discarded);
     }
 }

@@ -21,6 +21,7 @@ internal static class RelationshipDraftRows
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.RelationshipReview, cancellationToken);
         var draft = await db.Set<RelationshipDraftRow>().SingleOrDefaultAsync(row => row.RecordId == revision.RecordId, cancellationToken);
         if ((draft?.CurrentRevisionNumber ?? 0) != revision.RevisionNumber - 1) return RelationshipDraftErrorCodes.RevisionConflict;
+        if (draft?.ReviewStatus == ReviewStatus.Approved) return RelationshipDraftErrorCodes.AlreadyApproved;
         if (draft is null) db.Add(draft = NewDraft(revision));
         Records.AppendRevision(db, draft, revision, NewRevision(revision, runId), await Records.ReadCycleAsync(db, draft, cancellationToken));
         return null;

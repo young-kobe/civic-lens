@@ -225,6 +225,21 @@ public sealed class PostgresRelationshipDraftStoreTests(PostgresCollection postg
     }
 
     [Fact]
+    public async Task AnApprovalThatLandsWhileTheModelRunsLeavesTheApprovedRevisionAndSettlesTheRunAsUnchanged()
+    {
+        var pair = await SeedApprovedPairAsync();
+        await RunWorkerAsync(new FakeRelationshipDraftModel().Draft(Output()));
+        await seeder.StatementAsync(Statement(revision: 2));
+
+        await RunWorkerAsync(new ApprovingModel(seeder, pair.PairId, Output()));
+
+        Assert.Equal([["1"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions"));
+        Assert.Equal([["Approved"]], await seeder.ReadAsync("SELECT review_status FROM relationship_drafts"));
+        Assert.Equal([["Succeeded", "unchanged"]], await seeder.ReadAsync("SELECT status, error_code FROM relationship_analysis"));
+        Assert.Equal([["1"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_analysis_runs WHERE outcome = 'DraftDiscarded'"));
+    }
+
+    [Fact]
     public async Task ANoneAnswerSavesNoRelationshipAndTheNextPassDoesNotAskAgain()
     {
         await SeedApprovedPairAsync();
@@ -267,10 +282,20 @@ public sealed class PostgresRelationshipDraftStoreTests(PostgresCollection postg
         return ActionPair();
     }
 
-    private async Task RunWorkerAsync(FakeRelationshipDraftModel model)
+    private async Task RunWorkerAsync(IRelationshipDraftModel model)
     {
         _ = await store.RefreshPairsAsync(default);
         await AnalysisWorkers.RelationshipDrafting(store, new PostgresAnalysisStatusStore(factory, RelationshipDraftTask.Task), model,
             new RelationshipDraftSettings(10_000_000, concurrency: 1), Officials, TimeProvider.System).ExecuteAsync(once: true);
+    }
+
+    private sealed class ApprovingModel(RelationshipWorldSeeder seeder, string recordId, string reply) : IRelationshipDraftModel
+    {
+        public async Task<CivicLens.Application.Analysis.AnalysisModelResponse> DraftAsync(CivicLens.Application.Analysis.AnalysisModelRequest request,
+            CancellationToken cancellationToken)
+        {
+            await seeder.ExecuteAsync("UPDATE relationship_drafts SET review_status = 'Approved' WHERE record_id = @id", ("id", recordId));
+            return new("end_turn", reply, new(900, 100, 0, 0), "req_fixture");
+        }
     }
 }
