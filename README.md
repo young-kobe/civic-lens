@@ -12,6 +12,8 @@ The worker drafts one action record for each tracked Congress.gov bill. Each rec
 
 The worker collects House roll-call votes and drafts one vote record for each roll call. Each record lists the vote of every tracked member. A person reviews and approves each vote record on the vote pages. An approved vote record publishes in a static release.
 
+The worker drafts a relationship for each pair of an approved statement and an approved action or vote that share an official and a bill. A person reviews each relationship. An approved relationship publishes in a static release, and the statement, action, and vote pages list it.
+
 The worker drafts one weekly brief for each closed week. It uses the records that releases published in that week. A person reviews and approves each brief. The owner publishes it with its cited records.
 
 Live Auth0 verification, production deployment, and MCP are pending. See [status](docs/architecture.md#status) for the full list. The prior implementation is preserved in [civic-lens-legacy](https://github.com/young-kobe/civic-lens-legacy).

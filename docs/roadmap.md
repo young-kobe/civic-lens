@@ -22,18 +22,17 @@ Exit criteria:
 
 Each item gives its outcome, what it depends on, and where the design lives. Present the design choices before building R-22 only.
 
-The path to the first deploy is R-16, R-19, R-36, R-23 and R-18, then R-24. Decide D-14 next, because R-36, D-07, and D-08 depend on it. Decide D-07 and D-08 before R-24.
+The path to the first deploy is R-19, R-36, R-23 and R-18, then R-24. Decide D-14 next, because R-36, D-07, and D-08 depend on it. Decide D-07 and D-08 before R-24.
 
 ### Now
 
-- R-16: Reviewed relationships between statements and actions, and timelines. Depends on: none stated. [Statements](architecture/statements.md#limits-and-planned-work)
+- R-19: Review volume tools beyond the sponsorship-only bulk approval of actions, and a clearer source-to-review path. One reviewer cannot approve every draft, so a priority rule orders the queue. It uses tracked issues, recency, and links between statements and votes. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
 
 ### Next
 
-- R-17: Congressional Record articles as a statement connector. Depends on: R-16. [Actions](architecture/actions.md#limits-and-planned-work)
+- R-17: Congressional Record articles as a statement connector. Depends on: none stated. [Actions](architecture/actions.md#limits-and-planned-work)
 - R-18: Engine policies for broad coverage. One shared configuration loader with a higher size limit, because the coverage file is 771 KB of the 1 MB limit. A health view and a worker heartbeat, built with R-21. The spending total documented in operations. Source fairness is an open choice: a job class column, or a production backfill before press sources start. Depends on: none stated. It must come before R-24. [Collection](architecture/collection.md#limits-and-planned-work)
-- R-19: Review volume tools beyond the sponsorship-only bulk approval of actions, and a clearer source-to-review path. One reviewer cannot approve every draft, so a priority rule orders the queue. It uses tracked issues, recency, and links between statements and votes. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
-- R-36: Public briefing, official, issue, and record pages for citizens. Readers start with a weekly briefing and recent reviewed developments, and each record shows its evidence and timeline. The official, issue, and policy area pages are also the public filter pages. The search panel gets a source filter and names for issues and policy areas. Decide at the start whether official pages wait for R-14. Depends on: R-16 and D-14. [Publication](architecture/publication.md#limits-and-planned-work)
+- R-36: Public briefing, official, issue, and record pages for citizens. Readers start with a weekly briefing and recent reviewed developments, and each record shows its evidence and timeline. The official, issue, and policy area pages are also the public filter pages. The search panel gets a source filter and names for issues and policy areas. Decide at the start whether official pages wait for R-14. Depends on: D-14. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-39: An `analyses redraft --stale` owner command requeues finished drafts whose last run used an older task, prompt, or schema version. It covers document changes, statements, actions, votes, and briefs. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-21: Process view of collection and AI stages from retained state. Depends on: none stated. [Host](architecture/host.md#limits-and-planned-work)
 - R-29: Check each policy area name against the Congress.gov API. Depends on: none stated. [Configuration](architecture/configuration.md#limits-and-planned-work)

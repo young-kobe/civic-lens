@@ -27,10 +27,11 @@ The statements feature finds articles that may hold an official's statement and 
 - Drafting does not cache the prompt. The article text is most of each request, and the schema changes with the covered officials of each source.
 - A relationship links one approved statement revision to one approved action or vote revision. It has a named type and no verdict. A stance such as consistent or inconsistent needs a method note first.
 - The types for an action are "describes own bill", "states position on", and "claims credit for". The only type for a vote is "statement about a vote". The model may also answer none. Then the queue row settles and no relationship record exists.
-- Relationships are their own record kind, with a queue, a budget, drafts, revisions, review decisions, and a review lock. Reviewers use their own pages; see [Relationship review](#relationship-review). Publication is planned; see [limits](#limits-and-planned-work).
+- Relationships are their own record kind, with a queue, a budget, drafts, revisions, review decisions, and a review lock. Reviewers use their own pages; see [Relationship review](#relationship-review). An approved relationship publishes as its own record kind; see [publication](publication.md#relationship-record).
 - A person edits only the type, the reason, the quote, and the fact of a relationship. The reviewer picks the quote from the passages of the statement and the fact from the facts of the target. Code builds the span.
 - A reviewer rejects a false pair with Request changes and a note. No dismiss tool exists.
 - Approval needs both cited revisions to be the approved revision of their records. The flag is derived at read time, as for briefs. An approved relationship stays approved until a person withdraws it.
+- Publication uses a stricter rule than the review flag. It refuses a relationship when the new release lacks either cited revision, or when the latest decision on either is not an approval. A published relationship stays in later releases. The statement, action, and vote pages list the relationships that cite them; see [related records](publication.md#related-records).
 - Code finds the pairs, not the model. A pair is the same official plus a shared bill. For an action, the official needs a sponsorship of the bill in any role. A cosponsor who withdrew still counts. For a vote, the official needs to have cast it.
 - Code finds the shared bill by number first and then by title. A title is the saved title of the action revision. The match ignores case, a leading "the", and a trailing year such as "of 2025". A title of fewer than three words never matches ([D-09](../roadmap.md#pending-decisions)). When the statement date is known, a title matches only an action of the Congress of that date.
 - A vote has no saved title, so a vote pairs by bill number only.
@@ -495,7 +496,6 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 ## Limits and planned work
 
 - Actions are in [actions](actions.md). Weekly briefs are in [briefs](briefs.md).
-- Planned: relationship publication ([R-16](../roadmap.md#now)). That change decides whether publication refuses or flags an approved link whose cited record was withdrawn or revised.
 - Planned: structured statement extraction and temporal identity resolution.
 - Each quotation stays addressable for later matching with actions.
 - Planned after the first deploy ([R-38](../roadmap.md#later)): find the same or nearly the same sentences in releases from different offices. It shows coordinated messaging and who used the words first.
@@ -514,9 +514,8 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 - Measured on 2026-10-16 with 30 House press feeds: the gate dropped 25 of 48 candidates. Most were grants and events. It also dropped a release about a farm bill vote, two bill introductions, and a Senate inquiry.
 - Measured on 2026-10-16: 4 of 21 drafts carry a bill number. 2 of them name a bill with a collected House vote, and both members voted on it.
 - Measured on 2026-10-16: some issue tags are doubtful. For example, a post office closure was tagged `elections-and-voting`.
-- Relationship review pages, review decisions, and publication are planned. A changed flag will be derived at each read. Publication will refuse a relationship when the release lacks either cited revision or when its changed flag is set.
-- A person cannot edit a relationship yet. Until that exists, every relationship revision has the analysis author.
-- Timelines are planned. They will be built from published records by official, issue, and date when a page renders. They need no review, because they only order records.
+- Timelines are planned in [R-36](../roadmap.md#next). They will be built from published records by official, issue, and date when a page renders. They need no review, because they only order records. The published relationships give the links.
+- A relationship that is flagged "no longer matches" can still publish. The flag shows in review only.
 - Planned after a measurement of the releases that title matching leaves unmatched: code lists the bills and votes of the official in a date window. The model picks one or none. Code checks the quoted span, and a person approves the pair.
 - Measured on 2026-10-17 over 263 gated releases: 38 hold a bill number and 127 name something that ends in "Act". Some of those are listing pages or older laws. No release writes a number without periods, such as `HR 1234`.
 - `BillNumberFinder` finds a bare number only. A number that names its Congress, such as "H.R. 1234 of the 118th Congress", takes the Congress of the statement date.
