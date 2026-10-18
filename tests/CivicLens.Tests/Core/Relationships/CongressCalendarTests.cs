@@ -19,4 +19,15 @@ public sealed class CongressCalendarTests
     [Fact]
     public void ADateBeforeThe20thAmendmentTermStartHasNoCongressBecauseTheOldTermStartedInMarch() =>
         Assert.Null(CongressCalendar.CongressOn(new DateOnly(1935, 1, 2)));
+
+    [Theory]
+    [InlineData(119, 2025)]
+    [InlineData(120, 2027)]
+    public void ACongressStartsOnThirdJanuaryAndTheDayBeforeBelongsToThePreviousCongress(int congress, int year)
+    {
+        var start = CongressCalendar.StartOf(congress);
+
+        Assert.Equal(new DateOnly(year, 1, 3), start);
+        Assert.Equal((congress, congress - 1), (CongressCalendar.CongressOn(start), CongressCalendar.CongressOn(start.AddDays(-1))));
+    }
 }

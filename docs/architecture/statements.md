@@ -79,7 +79,8 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A pair that is no longer found is flagged and never deleted, but only while both sides are approved. Enforced by `RelationshipStaleness`. Tests: `PostgresRelationshipDraftStoreTests.APairThatIsNotFoundAnymoreIsFlaggedAndNotDeletedAndTheFlagClearsWhenItIsFoundAgain` and `PostgresStatementReviewStoreTests.ReApprovingAStatementRequeuesAPairThatBlockedWhileItWasNotApprovedAndAChangeRequestNeverFlagsIt`.
 - A review decision queues the pairs of its record in the same transaction, so an idle worker wakes. Enforced by `RelationshipStaleness.AfterDecision` in the three review stores. Tests: `PostgresStatementReviewStoreTests.ApprovingAStatementQueuesItsRelationshipPairsInTheSameTransactionSoTheRelationshipWorkerWakes` and `PostgresStatementReviewStoreTests.ADecisionWakesAnIdleRelationshipWorkerSoANewApprovalIsDraftedWithoutAnyOtherEvent`.
 - A title match respects the Congress of the statement date. Enforced by `RelationshipPairFinder`. Test: `RelationshipPairFinderTests.ATitleMatchesOnlyAnActionOfTheCongressOfTheStatementDateSoAnOlderBillWithTheSameNameIsNotPaired`.
-- The relationship hook takes the queue rows, then the relationship key, then the brief rows and key. Enforced by `AfterDecisionHooks.InOrder` in the review stores. Test: `PostgresStatementReviewStoreTests.ADecisionOnAnActiveRevisionTakesTheBriefLockBeforeItWritesSoABriefApprovalNeverInterleavesWithIt`.
+- The relationship hook takes the pair rows of its record, then the relationship key, and only then the brief rows and key. Enforced by `AfterDecisionHooks.InOrder` in the review stores. Tests: `PostgresStatementReviewStoreTests.ADecisionThatWaitsForTheRelationshipKeyHasNotReachedTheBriefKeyYetSoTheBriefHookStaysLast` and `PostgresStatementReviewStoreTests.ADecisionOnAnActiveRevisionTakesTheBriefLockBeforeItWritesSoABriefApprovalNeverInterleavesWithIt`.
+- A decision locks only the pair rows of its own record, and a decision that leaves the record not approved takes no relationship lock. Enforced by `RelationshipStaleness`. Tests: `PostgresStatementReviewStoreTests.ADecisionLocksOnlyTheRelationshipRowsOfItsOwnRecordSoAnUnrelatedPairRowDoesNotBlockIt` and `PostgresStatementReviewStoreTests.ADecisionThatLeavesTheRecordNotApprovedTakesNoRelationshipLock`.
 - A relationship revision is appended under the relationship review lock and follows the current revision. Enforced by `RelationshipDraftRows`. Test: `PostgresRelationshipDraftStoreTests.OneWorkerPassDraftsTheApprovedPairSavesRevisionOneUnderTheReviewLockAndLeavesTheDraftAwaitingReview`.
 - Each task charges its own budget. Enforced by the primary key of `statement_analysis_budget`. Test: `PostgresStatementGateStoreTests.TheGateChargesItsOwnDailyBudgetAndNotTheDocumentChangeBudget`.
 
@@ -303,8 +304,8 @@ The executor is `AnalysisWorker<RelationshipDraftRun>` with `RelationshipDraftSt
 
 **Pair finding.** A review decision on a statement, an action, or a vote finds the pairs of that record. `RelationshipStaleness.AfterDecision` does this inside the decision transaction, as `BriefStaleness.AfterDecision` does for briefs. The review stores of the three record kinds run it before the brief hook. It works in this order:
 
-1. It saves the decision and takes the queue row locks and then the relationship review lock.
-2. For a statement, it reads the approved statement. It also reads the approved actions that a speaker sponsors and the approved votes on the bills that the statement mentions. For an action or a vote, it reads the approved record and the approved statements of its sponsors or members.
+1. It saves the decision row and the draft status first, because the read needs the new state. A record that is not approved ends the hook here. Otherwise it locks the pair rows of the record in pair key order and then takes the relationship review lock.
+2. For a statement, it reads the approved statement. It also reads the approved actions that a speaker sponsors and the approved votes on the bills that the statement mentions. For an action, it reads the approved action and the approved statements of its sponsors. For a vote, it reads the approved vote and the approved statements of its members that carry a date in the Congress of the vote.
 3. `RelationshipPairFinder` makes one pair for each statement and each action or vote that it matches. It takes the bill number first and the bill title second.
 4. It inserts a Pending queue row for each new pair, with `ON CONFLICT DO NOTHING`. It moves the stale pairs of the record back to Pending. It sets the match flags of the pairs of the record.
 
@@ -313,6 +314,8 @@ The insert and the requeue fire the queue trigger, so an idle relationship worke
 Records that were approved before the migration have no pairs. The owner runs `relationships draft refresh` once. It runs the same finder and the same writes over every approved statement.
 
 **Staleness.** A fingerprint is a hash of the pair key, both cited revision numbers, and the match basis and span. It also covers the task version and the prompt version. The `context_json` of the latest `Drafted` or `Bypassed` run holds the fingerprint of the last settled input. A Succeeded pair returns to Pending when its fingerprint differs and its relationship is not approved. A Blocked pair with the code `sideNotApproved` returns when both sides are approved again. An approved relationship never returns. A running pair settles first and then returns by the same rule.
+
+A vote pairs by bill number, and a number needs the statement date. An undated statement can never pair with a vote, so the vote read leaves it out. An action read keeps undated statements, because a title can pair them.
 
 The finder may miss a pair of the decided record. Then its draft gets `no_longer_matches`, but only while both sides are approved. A statement that is back in review flags nothing. Code never deletes the draft. The flag clears when the pair is found again.
 
@@ -473,7 +476,7 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 - `BillNumberFinder` finds a bare number only. A number that names its Congress, such as "H.R. 1234 of the 118th Congress", takes the Congress of the statement date.
 - A pair for an action needs a sponsorship by a speaker. A statement about a bill that the speaker did not sponsor pairs only with a vote that the speaker cast.
 - A vote pairs by bill number only. A title match never reaches a vote, because a vote has no saved title.
-- A vote decision reads every approved statement of its members, with the article text. Revisit this if the approved set grows large.
+- A vote decision reads the approved dated statements of its members in the Congress of the vote, with the article text. Revisit this if that set grows large.
 - The `context_json` of a run is the only record of the last settled fingerprint. A run row that someone deletes makes the pair draft again.
 - The model answer is unmeasured. The `relationships draft list` views count how often it answers none.
 

@@ -57,9 +57,9 @@ public sealed class PostgresRelationshipDraftStore : PostgresAnalysisStore<Relat
     public async Task<int> RefreshPairsAsync(CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var found = await RelationshipPairSource.FindAllAsync(db, cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
-        await RelationshipStaleness.TakeLocksAsync(queue, db, cancellationToken);
+        await RelationshipStaleness.TakeLocksAsync(db, RelationshipPairScope.All, cancellationToken);
+        var found = await RelationshipPairSource.FindAllAsync(db, cancellationToken);
         await RelationshipStaleness.ApplyAsync(queue, db, found, RelationshipPairScope.All, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return found.Length;

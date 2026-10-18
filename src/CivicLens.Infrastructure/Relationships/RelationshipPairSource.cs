@@ -43,7 +43,7 @@ internal static class RelationshipPairSource
     {
         if (await RelationshipEvidenceReader.ReadVoteAsync(db, recordId, cancellationToken) is not { } vote) return [];
         var officialIds = vote.Members.Select(item => item.PersonId).Distinct(StringComparer.Ordinal).ToArray();
-        return RelationshipPairFinder.Find(await RelationshipEvidenceReader.ReadStatementsOfOfficialsAsync(db, officialIds, cancellationToken),
-            [], [vote]);
+        return RelationshipPairFinder.Find(
+            await RelationshipEvidenceReader.ReadDatedStatementsOfOfficialsAsync(db, officialIds, vote.Congress, cancellationToken), [], [vote]);
     }
 }

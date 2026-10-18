@@ -61,10 +61,12 @@ internal static class RelationshipFixtures
             new DateOnly(2025, 4, 10), Line(0), VoteKind.Passage, Line(10), [new(person, "W000817", cast, Line(30))], ["housing"], new string('e', 64));
     }
 
-    public static ApprovedStatement StatementAboutBill(string official, int congress, int billNumber, string citationType = "H.R.")
+    public static ApprovedStatement StatementAboutBill(string official, int congress, int billNumber, string citationType = "H.R.",
+        string? id = null, bool dated = true)
     {
         var sentence = $"I back {citationType} {billNumber} today.";
-        return Statement(new DateOnly(1789 + 2 * (congress - 1), 3, 1), officials: [official], article: "Said: " + sentence, passages: [sentence]);
+        var statement = Statement(CongressCalendar.StartOf(congress).AddDays(57), dated, [official], [sentence], article: "Said: " + sentence);
+        return id is null ? statement : statement with { Revision = statement.Revision with { CandidateId = id } };
     }
 
     public static RelationshipPair ActionPair(ApprovedStatement? statement = null, ActionDraftRevision? action = null) =>

@@ -6,6 +6,8 @@ public static class CongressCalendar
     private const int FirstDayOfJanuaryTerm = 3;
     private static readonly DateOnly FirstJanuaryTermStart = new(1935, 1, FirstDayOfJanuaryTerm);
 
+    public static DateOnly StartOf(int congress) => new(FirstCongressYear + 2 * (congress - 1), 1, FirstDayOfJanuaryTerm);
+
     public static int? CongressOn(DateOnly date)
     {
         if (date < FirstJanuaryTermStart) return null;

@@ -36,6 +36,27 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
+    public async Task ApprovingAVotePairsOnlyDatedStatementsOfItsCongressBecauseAVotePairsByNumberAndANumberNeedsTheDate()
+    {
+        var candidate = await PendingCandidateAsync();
+        await SettleAsync(candidate, await RevisionAsync(candidate, 1));
+        var recordId = await RecordIdAsync(candidate);
+        using var revision = System.Text.Json.JsonDocument.Parse((string)(await ScalarAsync(
+            $"SELECT revision_json FROM vote_revisions WHERE record_id = '{recordId}' AND revision_number = 1"))!);
+        var vote = revision.RootElement;
+        var (member, congress, number) = (vote.GetProperty("members")[0].GetProperty("personId").GetString()!,
+            vote.GetProperty("congress").GetInt32(), vote.GetProperty("billNumber").GetInt32());
+        var seeder = new RelationshipWorldSeeder(connectionString);
+        await seeder.StatementAsync(RelationshipFixtures.StatementAboutBill(member, congress, number, "H.Con.Res.", new string('1', 64)));
+        await seeder.StatementAsync(RelationshipFixtures.StatementAboutBill(member, congress - 1, number, "H.Con.Res.", new string('2', 64)));
+        await seeder.StatementAsync(RelationshipFixtures.StatementAboutBill(member, congress, number, "H.Con.Res.", new string('3', 64), dated: false));
+
+        await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Approve);
+
+        Assert.Equal([[new string('1', 64)]], await seeder.ReadAsync("SELECT statement_candidate_id FROM relationship_analysis"));
+    }
+
+    [Fact]
     public async Task AWorkerRevisionAfterAnApprovalNeedsReviewAgainBecauseAModelRevisionNeverCountsAsApproval()
     {
         var first = await PendingCandidateAsync();

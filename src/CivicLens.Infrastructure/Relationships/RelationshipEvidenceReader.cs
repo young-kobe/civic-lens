@@ -1,6 +1,9 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Relationships;
 using CivicLens.Core.Actions;
+using CivicLens.Core.Relationships;
+using CivicLens.Infrastructure.Actions.Persistence;
+using CivicLens.Infrastructure.Votes.Persistence;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Core.Votes;
@@ -25,6 +28,14 @@ internal static class RelationshipEvidenceReader
         SELECT d.candidate_id AS "Value" FROM statement_drafts d
         JOIN statement_revisions r ON r.candidate_id = d.candidate_id AND r.revision_number = d.current_revision_number
         WHERE d.review_status = 'Approved'
+          AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(r.revision_json::jsonb -> 'speakerOfficialIds') o WHERE o = ANY({0}))
+        """;
+
+    private const string ApprovedStatementsOfOfficialsInCongress = """
+        SELECT d.candidate_id AS "Value" FROM statement_drafts d
+        JOIN statement_revisions r ON r.candidate_id = d.candidate_id AND r.revision_number = d.current_revision_number
+        WHERE d.review_status = 'Approved'
+          AND r.revision_json::jsonb ->> 'statementDate' >= {1} AND r.revision_json::jsonb ->> 'statementDate' < {2}
           AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(r.revision_json::jsonb -> 'speakerOfficialIds') o WHERE o = ANY({0}))
         """;
 
@@ -69,6 +80,26 @@ internal static class RelationshipEvidenceReader
         string[] officialIds, CancellationToken cancellationToken) =>
         await ReadStatementsAsync(db, await db.Database.SqlQueryRaw<string>(ApprovedStatementsOfOfficials, (object)officialIds)
             .ToArrayAsync(cancellationToken), cancellationToken);
+
+    public static async Task<ImmutableArray<ApprovedStatement>> ReadDatedStatementsOfOfficialsAsync(CollectionAttemptDbContext db,
+        string[] officialIds, int congress, CancellationToken cancellationToken)
+    {
+        var from = CongressCalendar.StartOf(congress).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        var until = CongressCalendar.StartOf(congress + 1).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        return await ReadStatementsAsync(db, await db.Database.SqlQueryRaw<string>(ApprovedStatementsOfOfficialsInCongress, officialIds, from, until)
+            .ToArrayAsync(cancellationToken), cancellationToken);
+    }
+
+    public static Task<bool> IsApprovedAsync(CollectionAttemptDbContext db, RelationshipRecordKind kind, string recordId,
+        CancellationToken cancellationToken) => kind switch
+        {
+            RelationshipRecordKind.Statement => db.Set<StatementDraftRow>().AsNoTracking()
+                .AnyAsync(draft => draft.CandidateId == recordId && draft.ReviewStatus == ReviewStatus.Approved, cancellationToken),
+            RelationshipRecordKind.Action => db.Set<ActionDraftRow>().AsNoTracking()
+                .AnyAsync(draft => draft.RecordId == recordId && draft.ReviewStatus == ReviewStatus.Approved, cancellationToken),
+            _ => db.Set<VoteDraftRow>().AsNoTracking()
+                .AnyAsync(draft => draft.RecordId == recordId && draft.ReviewStatus == ReviewStatus.Approved, cancellationToken)
+        };
 
     public static async Task<ImmutableArray<ActionDraftRevision>> ReadActionsSponsoredByAsync(CollectionAttemptDbContext db,
         string[] officialIds, CancellationToken cancellationToken) =>

@@ -188,7 +188,7 @@ The keys, in their declared order:
 - The relationship key comes after the vote key and before the brief key. Relationship drafting takes it. Publication does not take it until relationship publication exists, and then it joins the list in this order.
 - `civic-lens-collection-import`: the import store takes it for each write. No transaction holds it with another key.
 
-A transaction that takes a brief queue row lock takes it before `civic-lens-brief-review`. The worker settlement locks its row and then takes the brief key. A publication commit, a release activation, and a review decision that must requeue a brief therefore lock every brief queue row in key order first. They use `BriefStaleness.TakeLocksAsync` and then take the brief key. The commit and the activation take the earlier review keys (`PostgresAdvisoryLock.ReviewKeysBeforeBriefs`), then the brief rows, then the brief key.
+A transaction that takes a brief queue row lock takes it before `civic-lens-brief-review`. The worker settlement locks its row and then takes the brief key. A publication commit, a release activation, and a review decision that must requeue a brief therefore lock every brief queue row in key order first. They use `BriefStaleness.TakeLocksAsync` and then take the brief key. A decision on a statement, an action, or a vote has saved its decision row and draft status by then. The relationship hook runs first and needs the new state. The commit and the activation take the earlier review keys (`PostgresAdvisoryLock.ReviewKeysBeforeBriefs`), then the brief rows, then the brief key.
 
 Extraction and comparison saves take no advisory lock. Each uses `INSERT ... ON CONFLICT DO NOTHING` in one ReadCommitted transaction. See [documents](architecture/documents.md#invariants).
 
@@ -196,7 +196,7 @@ No transaction holds a review key with a collection key.
 
 An analysis settlement can add a draft row or append a revision. It then takes its queue row lock (`FOR UPDATE` in `PostgresAnalysisQueue`) before the review key of its record kind. Review and publication writes take review keys only and never lock queue rows, so no lock cycle exists.
 
-A review decision on a statement, an action, or a vote finds the relationship pairs of its record. It holds the key of its own record kind, and then it locks every relationship queue row in key order. Then it takes the relationship key. The brief hook comes last, with the brief rows and the brief key. `AfterDecisionHooks.InOrder` keeps this order. A settlement that appends a relationship revision locks its own row and then takes the relationship key.
+A review decision on a statement, an action, or a vote finds the relationship pairs of its record. It saves the decision first. It holds the key of its own record kind, and a record that is not approved ends the hook. Otherwise it locks only the relationship queue rows of its record in pair key order. Then it takes the relationship key. The brief hook comes last, with the brief rows and the brief key. For these three stores, the decision and draft writes happen before the brief locks. `AfterDecisionHooks.InOrder` keeps this order. A settlement that appends a relationship revision locks its own row and then takes the relationship key.
 
 The requeue of stale briefs takes the brief key last. A review decision takes the key of its own record kind first. The requeue changes only the queue rows of finished weeks, which no worker holds.
 

@@ -32,6 +32,14 @@ internal static class RelationshipStaleness
           AND f.fingerprint IS DISTINCT FROM {{SettledFingerprint("a.pair_id")}}
         """;
 
+    // The shape of PostgresAnalysisQueue.lockSubjectsSql (task filter, key order, FOR UPDATE), narrowed to the pairs of one record.
+    private const string LockRowsSql = $$"""
+        SELECT 1 FROM {{PostgresRelationshipDraftStore.Table}} WHERE task = {0}
+          AND (CAST({1} AS text) IS NULL OR statement_candidate_id = {1})
+          AND (CAST({2} AS text) IS NULL OR target_kind = {2} AND target_record_id = {3})
+        ORDER BY pair_id FOR UPDATE
+        """;
+
     private const string FlagPairsSql = """
         UPDATE relationship_drafts d SET no_longer_matches = NOT (d.record_id = ANY({3}))
         FROM relationship_analysis a
@@ -56,16 +64,18 @@ internal static class RelationshipStaleness
         async (db, recordId, _, cancellationToken) =>
         {
             await db.SaveChangesAsync(cancellationToken);
-            await TakeLocksAsync(queue, db, cancellationToken);
-            var found = await RelationshipPairSource.FindAsync(db, kind, recordId, cancellationToken);
+            if (!await RelationshipEvidenceReader.IsApprovedAsync(db, kind, recordId, cancellationToken)) return;
             var scope = kind == RelationshipRecordKind.Statement ? RelationshipPairScope.OfStatement(recordId)
                 : RelationshipPairScope.OfTarget(kind, recordId);
+            await TakeLocksAsync(db, scope, cancellationToken);
+            var found = await RelationshipPairSource.FindAsync(db, kind, recordId, cancellationToken);
             await ApplyAsync(queue, db, found, scope, cancellationToken);
         };
 
-    public static async Task TakeLocksAsync(RelationshipQueue queue, CollectionAttemptDbContext db, CancellationToken cancellationToken)
+    public static async Task TakeLocksAsync(CollectionAttemptDbContext db, RelationshipPairScope scope, CancellationToken cancellationToken)
     {
-        await queue.LockRowsAsync(db, cancellationToken);
+        _ = await db.Database.ExecuteSqlRawAsync(LockRowsSql, [RelationshipDraftTask.Task, scope.StatementId!, scope.TargetKind?.ToString()!,
+            scope.TargetId!], cancellationToken);
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.RelationshipReview, cancellationToken);
     }
 

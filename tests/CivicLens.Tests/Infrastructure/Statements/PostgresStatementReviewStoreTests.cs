@@ -261,6 +261,72 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     }
 
     [Fact]
+    public async Task ADecisionLocksOnlyTheRelationshipRowsOfItsOwnRecordSoAnUnrelatedPairRowDoesNotBlockIt()
+    {
+        var candidate = await ApprovableAsync();
+        await Relationships.ActionAsync(RelationshipFixtures.Action(title: Quote));
+        await Relationships.ExecuteAsync("""
+            SET session_replication_role = replica;
+            INSERT INTO relationship_analysis (pair_id, task, statement_candidate_id, target_kind, target_record_id, status, fence, attempts,
+                reserved_tokens, created_at_utc_ticks)
+            VALUES (repeat('e', 64), 'relationship-draft', repeat('f', 64), 'Action', repeat('9', 64), 'Pending', 0, 0, 0, 1)
+            """);
+        await using var holder = new Npgsql.NpgsqlConnection(connectionString);
+        await holder.OpenAsync();
+        await using var transaction = await holder.BeginTransactionAsync();
+        await new Npgsql.NpgsqlCommand("SELECT 1 FROM relationship_analysis WHERE pair_id = repeat('e', 64) FOR UPDATE", holder, transaction)
+            .ExecuteNonQueryAsync();
+
+        var decision = Decide.ExecuteAsync(Owner, new(candidate, 2, 0, ReviewDecisionKind.Approve, null, [], "approve"));
+
+        Assert.Same(decision, await Task.WhenAny(decision, Task.Delay(TimeSpan.FromSeconds(20))));
+        await decision;
+        Assert.Equal(2L, await CountRowsAsync("relationship_analysis"));
+    }
+
+    [Fact]
+    public async Task ADecisionThatWaitsForTheRelationshipKeyHasNotReachedTheBriefKeyYetSoTheBriefHookStaysLast()
+    {
+        var candidate = await ApprovableAsync();
+        await Relationships.ActionAsync(RelationshipFixtures.Action(title: Quote));
+        await using var holder = new Npgsql.NpgsqlConnection(connectionString);
+        await holder.OpenAsync();
+        await using var transaction = await holder.BeginTransactionAsync();
+        await AdvisoryAsync(holder, transaction, "civic-lens-relationship-review");
+
+        var decision = Decide.ExecuteAsync(Owner, new(candidate, 2, 0, ReviewDecisionKind.Approve, null, [], "approve"));
+        await Task.Delay(1500);
+
+        Assert.False(decision.IsCompleted);
+        await using var probe = new Npgsql.NpgsqlConnection(connectionString);
+        await probe.OpenAsync();
+        await using var probeTransaction = await probe.BeginTransactionAsync();
+        Assert.True((bool)(await new Npgsql.NpgsqlCommand("SELECT pg_try_advisory_xact_lock(hashtextextended('civic-lens-brief-review', 0))", probe,
+            probeTransaction).ExecuteScalarAsync())!);
+        await probeTransaction.RollbackAsync();
+        await transaction.CommitAsync();
+        await decision;
+    }
+
+    [Fact]
+    public async Task ADecisionThatLeavesTheRecordNotApprovedTakesNoRelationshipLock()
+    {
+        var candidate = await ApprovableAsync();
+        await using var holder = new Npgsql.NpgsqlConnection(connectionString);
+        await holder.OpenAsync();
+        await using var transaction = await holder.BeginTransactionAsync();
+        await AdvisoryAsync(holder, transaction, "civic-lens-relationship-review");
+
+        var decision = Decide.ExecuteAsync(Owner, new(candidate, 2, 0, ReviewDecisionKind.RequestChanges, "Name the bill.", [], "changes"));
+
+        Assert.Same(decision, await Task.WhenAny(decision, Task.Delay(TimeSpan.FromSeconds(20))));
+        await decision;
+    }
+
+    private static Task AdvisoryAsync(Npgsql.NpgsqlConnection connection, Npgsql.NpgsqlTransaction transaction, string key) =>
+        new Npgsql.NpgsqlCommand($"SELECT pg_advisory_xact_lock(hashtextextended('{key}', 0))", connection, transaction).ExecuteNonQueryAsync();
+
+    [Fact]
     public async Task WithdrawingAnApprovalRequeuesTheBriefOfTheWeekAndTheRedraftLeavesTheRecordOut()
     {
         var (candidate, briefs) = await PublishedApprovedAsync();
