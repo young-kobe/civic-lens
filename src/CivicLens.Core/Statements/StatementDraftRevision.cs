@@ -24,6 +24,8 @@ public sealed record StatementDraftRevision(string CandidateId, int RevisionNumb
 
     string IReviewRevision.RecordId => CandidateId;
 
+    public DateOnly EventOn(DateOnly capturedOn) => StatementDate ?? capturedOn;
+
     public void ValidateAsFirstAnalysisRevision()
     {
         if (RevisionNumber != 1 || AuthorKind != ReviewAuthorKind.Analysis)

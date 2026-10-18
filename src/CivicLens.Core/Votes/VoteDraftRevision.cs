@@ -23,6 +23,8 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
     public IEnumerable<SourceSpan> Citations => new[] { VotedOnCitation }.Concat(Facts.Select(fact => fact.Citation))
         .Concat(KindCitation is { } kind ? [kind] : []).Concat(Members.Select(member => member.Citation));
 
+    public ImmutableArray<string> OfficialIds() => [.. Members.Select(member => member.PersonId).Distinct(StringComparer.Ordinal)];
+
     public void ValidateShape()
     {
         if (!LowercaseHex.Is(RecordId, 64) || !LowercaseHex.Is(CandidateId, 64) || !LowercaseHex.Is(IssueRevisionId, 64))
