@@ -1,6 +1,6 @@
 namespace CivicLens.Application.Collection.Bills;
 
-public readonly record struct BillGateOutcome(BillGateDecision Decision, BillGateReason? Reason)
+public readonly record struct BillGateOutcome(BillGateDecision Decision, BillGateReason? Reason, bool HasTrackedIssue = false)
 {
     public static BillGateOutcome Pending { get; } = new(BillGateDecision.Pending, null);
 

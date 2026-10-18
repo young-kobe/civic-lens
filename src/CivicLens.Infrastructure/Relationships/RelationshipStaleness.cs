@@ -68,7 +68,7 @@ internal static class RelationshipStaleness
             var scope = kind == RelationshipRecordKind.Statement ? RelationshipPairScope.OfStatement(recordId)
                 : RelationshipPairScope.OfTarget(kind, recordId);
             await TakeLocksAsync(db, scope, cancellationToken);
-            var found = await RelationshipPairSource.FindAsync(db, kind, recordId, cancellationToken);
+            var found = await RelationshipPairSource.FindAsync(db, kind, recordId, RelationshipRevisionScope.Approved, cancellationToken);
             await ApplyAsync(queue, db, found, scope, cancellationToken);
         };
 

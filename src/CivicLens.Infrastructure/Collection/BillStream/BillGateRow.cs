@@ -14,6 +14,7 @@ internal sealed class BillGateRow
     public int CosponsorCount { get; set; }
     public int SummaryCount { get; set; }
     public string IssueRevisionId { get; set; } = "";
+    public bool HasTrackedIssue { get; set; }
     public BillGateDecision Decision { get; set; }
     public BillGateReason? Reason { get; set; }
     public long CreatedAtUtcTicks { get; set; }

@@ -38,8 +38,7 @@ public static class RelationshipPairFinder
     private static RelationshipPair? MatchAction(StatementReading reading, ActionDraftRevision action, string? titleKey)
     {
         var statement = reading.Statement;
-        var sponsorship = action.Sponsorships.Where(item => statement.Revision.SpeakerOfficialIds.Contains(item.PersonId))
-            .OrderBy(item => item.Role).FirstOrDefault();
+        var sponsorship = RelationshipPairRule.SponsorOf(statement.Revision.SpeakerOfficialIds, action);
         if (sponsorship is null) return null;
         var sameCongress = reading.Congress is null || reading.Congress == action.Congress;
         var match = MatchByNumber(reading.Mentions, action.Congress, action.BillType, action.BillNumber) ??
@@ -51,7 +50,7 @@ public static class RelationshipPairFinder
     private static RelationshipPair? MatchVote(StatementReading reading, VoteDraftRevision vote)
     {
         var statement = reading.Statement;
-        var member = vote.Members.FirstOrDefault(item => statement.Revision.SpeakerOfficialIds.Contains(item.PersonId));
+        var member = RelationshipPairRule.MemberOf(statement.Revision.SpeakerOfficialIds, vote);
         if (member is null) return null;
         var match = MatchByNumber(reading.Mentions, vote.Congress, vote.BillType, vote.BillNumber);
         return match is null ? null : new(statement, RelationshipTarget.Of(vote), match, member.PersonId, $"voted {member.Cast}");

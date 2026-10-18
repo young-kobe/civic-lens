@@ -22,6 +22,7 @@ internal sealed class BriefAnalysisRow : IAnalysisRow
     public string? RetryOfRunId { get; set; }
     public string? ErrorCode { get; set; }
     public long CreatedAtUtcTicks { get; set; }
+    public int Priority { get; set; }
 
     string IAnalysisRow.SubjectId => RecordId;
 }

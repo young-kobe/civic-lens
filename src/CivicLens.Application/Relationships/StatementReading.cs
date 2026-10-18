@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using CivicLens.Application.Collection.Bills;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Relationships;
 using CivicLens.Core.Statements;
@@ -18,7 +17,7 @@ internal sealed record StatementReading(ApprovedStatement Statement, int? Congre
         ImmutableArray<BillMention> mentions =
             [.. from passage in passages
                 from match in BillNumberFinder.FindWithSpans(passage.Text)
-                select new BillMention(congress, CongressBillListItem.NormalizeCitationType(match.Type)!, match.Number,
+                select new BillMention(congress, RelationshipPairRule.BillTypeOf(match), match.Number,
                     new SourceSpan(passage.Span.ExtractionId, passage.Span.Start + match.Start, match.Length))];
         return new(statement, congress, passages, mentions);
     }

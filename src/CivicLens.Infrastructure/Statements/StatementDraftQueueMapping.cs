@@ -1,6 +1,7 @@
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Statements;
 using CivicLens.Core.Analysis;
+using CivicLens.Infrastructure.Relationships;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Statements.Persistence;
@@ -50,5 +51,7 @@ internal sealed class StatementDraftQueueMapping : IAnalysisQueueMapping<Stateme
     {
         if (checkpoint.Status == AnalysisState.Succeeded && checkpoint.ErrorCode == StatementDraftErrorCodes.OverByteCap)
             await StatementDraftRows.AddDraftWithoutRevisionAsync(db, row.CandidateId, now, cancellationToken);
+        if (checkpoint is StatementDraftCheckpoint { Revision: { } revision })
+            await PairPriority.RaiseTargetsOfStatementAsync(db, revision.CandidateId, cancellationToken);
     }
 }

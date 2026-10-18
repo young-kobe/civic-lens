@@ -26,7 +26,7 @@ The path to the first deploy is R-19, R-36, R-23 and R-18, then R-24. Decide D-1
 
 ### Now
 
-- R-19: Review volume tools beyond the sponsorship-only bulk approval of actions, and a clearer source-to-review path. One reviewer cannot approve every draft, so a priority rule orders the queue. It uses tracked issues, recency, and links between statements and votes. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
+- R-19: Review volume tools beyond the sponsorship-only bulk approval of actions, and a clearer source-to-review path. The analysis queues already claim by priority. Still planned: review lists that page by the priority column, and the review tools above. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
 
 ### Next
 

@@ -14,6 +14,7 @@ namespace CivicLens.Tests.Infrastructure.Statements;
 public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private const string ArticleUrl = "https://example.test/pages/article";
+    private static readonly DateTimeOffset In119th = new(2026, 3, 1, 0, 0, 0, TimeSpan.Zero);
     private readonly string root = Path.Combine(Path.GetTempPath(), "civic-statements-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
     private PostgresCollectionAttemptStore attempts = null!;
@@ -47,6 +48,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
 
         Assert.Equal([(attempt.SourceId, ArticleUrl, extraction.ExtractionId, attempt.AttemptId)], await CandidatesAsync());
         Assert.Equal([("gate", "Pending", 0L, 0, 0L)], await AnalysisRowsAsync());
+        Assert.Equal(1L, await ScalarAsync("SELECT priority::bigint FROM statement_analysis"));
     }
 
     [Fact]
@@ -160,6 +162,44 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
         await Task.WhenAny(notified.Task, waiting);
         Assert.True(notified.Task.IsCompleted, "Queueing a gate row must send the analysis wakeup.");
     }
+
+    [Fact]
+    public async Task ANewStatementCandidateRaisesAMatchingVoteRowAndLeavesTheVoteOnAnotherBillAlone()
+    {
+        await SeedVoteRowAsync(new string('1', 64), roll: 1, congress: 119, billNumber: 14);
+        await SeedVoteRowAsync(new string('2', 64), roll: 2, congress: 119, billNumber: 15);
+        var text = "Said: I back H.Con.Res. 14 today.";
+        var attempt = await seeder.ImportAsync(text, ArticleUrl, CandidateJobKind.DiscoveryAdmitted, observedAt: In119th);
+
+        await extractions.SaveAsync(new DocumentExtraction(attempt, "parser-v1", "normalization-v1", text), CancellationToken.None);
+
+        Assert.Equal(1L, await ScalarAsync($"SELECT priority::bigint FROM vote_analysis WHERE candidate_id = '{new string('1', 64)}'"));
+        Assert.Equal(3L, await ScalarAsync($"SELECT priority::bigint FROM vote_analysis WHERE candidate_id = '{new string('2', 64)}'"));
+    }
+
+    [Fact]
+    public async Task ACaptureInAnotherCongressRaisesNoRowThatHasTheSameBillNumber()
+    {
+        await SeedVoteRowAsync(new string('1', 64), roll: 1, congress: 118, billNumber: 14);
+        await SeedVoteRowAsync(new string('2', 64), roll: 2, congress: 119, billNumber: 14);
+        var text = "Said: I back H.Con.Res. 14 today.";
+        var attempt = await seeder.ImportAsync(text, ArticleUrl, CandidateJobKind.DiscoveryAdmitted, observedAt: In119th);
+
+        await extractions.SaveAsync(new DocumentExtraction(attempt, "parser-v1", "normalization-v1", text), CancellationToken.None);
+
+        Assert.Equal(3L, await ScalarAsync($"SELECT priority::bigint FROM vote_analysis WHERE candidate_id = '{new string('1', 64)}'"));
+        Assert.Equal(1L, await ScalarAsync($"SELECT priority::bigint FROM vote_analysis WHERE candidate_id = '{new string('2', 64)}'"));
+    }
+
+    private Task SeedVoteRowAsync(string candidateId, int roll, int congress, int billNumber) => ExecuteAsync(connectionString, $"""
+        SET session_replication_role = replica;
+        INSERT INTO house_vote_candidates (candidate_id, source_id, congress, session_number, roll_call_number, update_date_utc_ticks, bill_type,
+            bill_number, detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
+        VALUES ('{candidateId}', 'house', {congress}, 1, {roll}, 1, 'hconres', {billNumber}, 'detail-{roll}', 'members-{roll}',
+                '{new string('c', 64)}', '{new string('c', 64)}', '{new string('c', 64)}', 1);
+        INSERT INTO vote_analysis (candidate_id, task, status, fence, attempts, reserved_tokens, created_at_utc_ticks)
+        VALUES ('{candidateId}', 'vote-draft', 'Pending', 0, 0, 0, 1)
+        """);
 
     private async Task<List<(string Source, string Url, string Extraction, string Attempt)>> CandidatesAsync()
     {

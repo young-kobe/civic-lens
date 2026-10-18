@@ -51,6 +51,7 @@ public sealed class PostgresStatementGateStoreTests(PostgresCollection postgres)
         await Worker(model, Revision()).ExecuteAsync(once: true);
 
         Assert.Equal([("gate", "Succeeded", "passed"), (StatementDraftTask.Task, "Pending", null)], await RowsAsync(candidate));
+        Assert.Equal(1L, await ScalarAsync($"SELECT priority::bigint FROM statement_analysis WHERE candidate_id = '{candidate}' AND task = '{StatementDraftTask.Task}'"));
         var run = (await store.GetRunAsync(await RunIdAsync(candidate), default))!;
         Assert.Equal((Revision().Id, StatementGateReasons.Passed), (run.IssueRevisionId, run.Reason));
         Assert.Equal(Article.IndexOf("a rent cap", StringComparison.Ordinal), Assert.Single(run.Quotes).Start);
@@ -166,6 +167,30 @@ public sealed class PostgresStatementGateStoreTests(PostgresCollection postgres)
             $"UPDATE statement_analysis SET created_at_utc_ticks = CASE candidate_id WHEN '{older}' THEN 1 ELSE 2 END");
 
         Assert.Equal([older, newer], (await store.GetEligibleAsync(10, default)).Select(row => row.SubjectId));
+    }
+
+    [Fact]
+    public async Task GateClaimsPreferAHigherPriorityOverAnOlderLowerPriorityRowSoTheReviewerSeesTheMostUsefulDraftsFirst()
+    {
+        var one = await seeder.SeedAsync(Article + " one", "https://example.test/pages/one");
+        var two = await seeder.SeedAsync(Article + " two", "https://example.test/pages/two");
+        var (older, newer) = string.CompareOrdinal(one, two) > 0 ? (one, two) : (two, one);
+        await ExecuteAsync(connectionString, $"""
+            UPDATE statement_analysis SET created_at_utc_ticks = CASE candidate_id WHEN '{older}' THEN 1 ELSE 2 END,
+                                          priority = CASE candidate_id WHEN '{older}' THEN 3 ELSE 1 END
+            """);
+
+        Assert.Equal([newer, older], (await store.GetEligibleAsync(10, default)).Select(row => row.SubjectId));
+    }
+
+    [Fact]
+    public async Task TheClaimIndexOrdersByPriorityBeforeCreationTime()
+    {
+        var definition = await ScalarTextAsync("""
+            SELECT indexdef FROM pg_indexes WHERE schemaname = current_schema() AND indexname = 'ix_statement_analysis_active_claim'
+            """);
+
+        Assert.Contains("(task, priority, created_at_utc_ticks, candidate_id)", definition, StringComparison.Ordinal);
     }
 
     [Fact]

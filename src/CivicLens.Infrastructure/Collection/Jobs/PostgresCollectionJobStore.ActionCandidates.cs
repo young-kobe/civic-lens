@@ -4,6 +4,7 @@ using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Collection.BillStream;
 using CivicLens.Infrastructure.Collection.Jobs.Persistence;
 using CivicLens.Infrastructure.Documents.Persistence;
+using CivicLens.Infrastructure.Statements;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Collection.Jobs;
@@ -62,7 +63,9 @@ public sealed partial class PostgresCollectionJobStore
         if (await HasCandidateWithAtLeastTheseInputsAsync(db, gate.DetailJobId, includesSummaries, cancellationToken)) return;
         var candidate = NewActionCandidate(source, gate, includesSummaries, now);
         db.Add(candidate);
-        ActionDraftQueueRows.Add(db, candidate.CandidateId, Ticks(now));
+        var priority = await StatementBillMentions.PriorityOfBillAsync(db, gate.Congress, gate.BillType, gate.BillNumber, gate.HasTrackedIssue,
+            cancellationToken);
+        ActionDraftQueueRows.Add(db, candidate.CandidateId, Ticks(now), priority);
     }
 
     private static Task<bool> HasCandidateWithAtLeastTheseInputsAsync(CollectionAttemptDbContext db, string detailJobId,

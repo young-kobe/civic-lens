@@ -97,6 +97,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("pending_run_id");
 
+                    b.Property<int>("Priority")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue(3)
+                        .HasColumnName("priority");
+
                     b.Property<long?>("ReservedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("reserved_at_utc_ticks");
@@ -124,7 +130,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("Status", "CreatedAtUtcTicks", "CandidateId");
 
-                    b.HasIndex(new[] { "Task", "CreatedAtUtcTicks", "CandidateId" }, "ix_action_analysis_active_claim")
+                    b.HasIndex(new[] { "Task", "Priority", "CreatedAtUtcTicks", "CandidateId" }, "ix_action_analysis_active_claim")
                         .HasFilter("status IN ('Pending','RetryWaiting','WaitingForBudget','Running')");
 
                     b.ToTable("action_analysis", null, t =>
@@ -132,6 +138,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_action_analysis_counts", "fence >= 0 AND attempts >= 0 AND reserved_tokens >= 0");
 
                             t.HasCheckConstraint("ck_action_analysis_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
+
+                            t.HasCheckConstraint("ck_action_analysis_priority", "priority BETWEEN 1 AND 3");
 
                             t.HasCheckConstraint("ck_action_analysis_reservation", "(reserved_tokens = 0) = (budget_day IS NULL AND reserved_at_utc_ticks IS NULL AND pending_run_id IS NULL AND pending_input_hash IS NULL)");
 
@@ -524,6 +532,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("pending_run_id");
 
+                    b.Property<int>("Priority")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue(3)
+                        .HasColumnName("priority");
+
                     b.Property<long?>("ReservedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("reserved_at_utc_ticks");
@@ -553,7 +567,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("Status", "CreatedAtUtcTicks", "ComparisonId");
 
-                    b.HasIndex(new[] { "Task", "CreatedAtUtcTicks", "ComparisonId" }, "ix_document_change_analysis_active_claim")
+                    b.HasIndex(new[] { "Task", "Priority", "CreatedAtUtcTicks", "ComparisonId" }, "ix_document_change_analysis_active_claim")
                         .HasFilter("status IN ('Pending','RetryWaiting','WaitingForBudget','Running')");
 
                     b.ToTable("document_change_analysis", null, t =>
@@ -561,6 +575,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_document_change_analysis_counts", "fence >= 0 AND attempts >= 0 AND reserved_tokens >= 0");
 
                             t.HasCheckConstraint("ck_document_change_analysis_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
+
+                            t.HasCheckConstraint("ck_document_change_analysis_priority", "priority BETWEEN 1 AND 3");
 
                             t.HasCheckConstraint("ck_document_change_analysis_reservation", "(reserved_tokens = 0) = (budget_day IS NULL AND reserved_at_utc_ticks IS NULL AND pending_run_id IS NULL AND pending_input_hash IS NULL)");
 
@@ -823,6 +839,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("pending_run_id");
 
+                    b.Property<int>("Priority")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue(3)
+                        .HasColumnName("priority");
+
                     b.Property<long?>("ReservedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("reserved_at_utc_ticks");
@@ -858,7 +880,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("Status", "CreatedAtUtcTicks", "RecordId");
 
-                    b.HasIndex(new[] { "Task", "CreatedAtUtcTicks", "RecordId" }, "ix_brief_analysis_active_claim")
+                    b.HasIndex(new[] { "Task", "Priority", "CreatedAtUtcTicks", "RecordId" }, "ix_brief_analysis_active_claim")
                         .HasFilter("status IN ('Pending','RetryWaiting','WaitingForBudget','Running')");
 
                     b.ToTable("brief_analysis", null, t =>
@@ -866,6 +888,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_brief_analysis_counts", "fence >= 0 AND attempts >= 0 AND reserved_tokens >= 0");
 
                             t.HasCheckConstraint("ck_brief_analysis_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
+
+                            t.HasCheckConstraint("ck_brief_analysis_priority", "priority BETWEEN 1 AND 3");
 
                             t.HasCheckConstraint("ck_brief_analysis_reservation", "(reserved_tokens = 0) = (budget_day IS NULL AND reserved_at_utc_ticks IS NULL AND pending_run_id IS NULL AND pending_input_hash IS NULL)");
 
@@ -1320,6 +1344,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("decision");
+
+                    b.Property<bool>("HasTrackedIssue")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_tracked_issue");
 
                     b.Property<string>("IssueRevisionId")
                         .IsRequired()
@@ -2528,6 +2556,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("pending_run_id");
 
+                    b.Property<int>("Priority")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue(3)
+                        .HasColumnName("priority");
+
                     b.Property<long?>("ReservedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("reserved_at_utc_ticks");
@@ -2575,7 +2609,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("Status", "CreatedAtUtcTicks", "PairId");
 
-                    b.HasIndex(new[] { "Task", "CreatedAtUtcTicks", "PairId" }, "ix_relationship_analysis_active_claim")
+                    b.HasIndex(new[] { "Task", "Priority", "CreatedAtUtcTicks", "PairId" }, "ix_relationship_analysis_active_claim")
                         .HasFilter("status IN ('Pending','RetryWaiting','WaitingForBudget','Running')");
 
                     b.ToTable("relationship_analysis", null, t =>
@@ -2585,6 +2619,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_relationship_analysis_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
 
                             t.HasCheckConstraint("ck_relationship_analysis_pair", "pair_id ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_relationship_analysis_priority", "priority BETWEEN 1 AND 3");
 
                             t.HasCheckConstraint("ck_relationship_analysis_reservation", "(reserved_tokens = 0) = (budget_day IS NULL AND reserved_at_utc_ticks IS NULL AND pending_run_id IS NULL AND pending_input_hash IS NULL)");
 
@@ -3116,6 +3152,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("pending_run_id");
 
+                    b.Property<int>("Priority")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue(3)
+                        .HasColumnName("priority");
+
                     b.Property<long?>("ReservedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("reserved_at_utc_ticks");
@@ -3143,7 +3185,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("Status", "CreatedAtUtcTicks", "CandidateId");
 
-                    b.HasIndex(new[] { "Task", "CreatedAtUtcTicks", "CandidateId" }, "ix_statement_analysis_active_claim")
+                    b.HasIndex(new[] { "Task", "Priority", "CreatedAtUtcTicks", "CandidateId" }, "ix_statement_analysis_active_claim")
                         .HasFilter("status IN ('Pending','RetryWaiting','WaitingForBudget','Running')");
 
                     b.ToTable("statement_analysis", null, t =>
@@ -3151,6 +3193,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_statement_analysis_counts", "fence >= 0 AND attempts >= 0 AND reserved_tokens >= 0");
 
                             t.HasCheckConstraint("ck_statement_analysis_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
+
+                            t.HasCheckConstraint("ck_statement_analysis_priority", "priority BETWEEN 1 AND 3");
 
                             t.HasCheckConstraint("ck_statement_analysis_reservation", "(reserved_tokens = 0) = (budget_day IS NULL AND reserved_at_utc_ticks IS NULL AND pending_run_id IS NULL AND pending_input_hash IS NULL)");
 
@@ -3631,6 +3675,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("pending_run_id");
 
+                    b.Property<int>("Priority")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue(3)
+                        .HasColumnName("priority");
+
                     b.Property<long?>("ReservedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("reserved_at_utc_ticks");
@@ -3658,7 +3708,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("Status", "CreatedAtUtcTicks", "CandidateId");
 
-                    b.HasIndex(new[] { "Task", "CreatedAtUtcTicks", "CandidateId" }, "ix_vote_analysis_active_claim")
+                    b.HasIndex(new[] { "Task", "Priority", "CreatedAtUtcTicks", "CandidateId" }, "ix_vote_analysis_active_claim")
                         .HasFilter("status IN ('Pending','RetryWaiting','WaitingForBudget','Running')");
 
                     b.ToTable("vote_analysis", null, t =>
@@ -3666,6 +3716,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_vote_analysis_counts", "fence >= 0 AND attempts >= 0 AND reserved_tokens >= 0");
 
                             t.HasCheckConstraint("ck_vote_analysis_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
+
+                            t.HasCheckConstraint("ck_vote_analysis_priority", "priority BETWEEN 1 AND 3");
 
                             t.HasCheckConstraint("ck_vote_analysis_reservation", "(reserved_tokens = 0) = (budget_day IS NULL AND reserved_at_utc_ticks IS NULL AND pending_run_id IS NULL AND pending_input_hash IS NULL)");
 

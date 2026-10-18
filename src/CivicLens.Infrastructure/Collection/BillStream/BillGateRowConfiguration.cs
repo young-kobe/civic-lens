@@ -33,6 +33,7 @@ internal sealed class BillGateRowConfiguration : IEntityTypeConfiguration<BillGa
         builder.Property(row => row.CosponsorCount).HasColumnName("cosponsor_count");
         builder.Property(row => row.SummaryCount).HasColumnName("summary_count");
         builder.Property(row => row.IssueRevisionId).HasColumnName("issue_revision_id").HasMaxLength(64);
+        builder.Property(row => row.HasTrackedIssue).HasColumnName("has_tracked_issue");
         builder.Property(row => row.Decision).HasColumnName("decision").HasMaxLength(32)
             .HasConversion<string>();
         builder.Property(row => row.Reason).HasColumnName("reason").HasMaxLength(32)

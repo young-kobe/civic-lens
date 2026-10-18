@@ -58,7 +58,7 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
                 throw new InvalidOperationException("An extraction identity was reused with different evidence or text.");
             return winner;
         }
-        await PostgresStatementCandidateRegistration.RegisterAsync(db, captured, extraction.ExtractionId, cancellationToken);
+        await PostgresStatementCandidateRegistration.RegisterAsync(db, captured, extraction.ExtractionId, extraction.Text, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return extraction;
     }

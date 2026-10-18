@@ -76,7 +76,7 @@ The record ID is the SHA-256 of the source and the bill (congress, type, number)
 
 `action_analysis` has one entry for each candidate, with the task `action-draft`. The entry is added in the transaction that writes the candidate. Late summaries make a new candidate, so no entry is ever reopened. The evidence of a candidate without summaries never includes summaries pages, even after they arrive.
 
-The worker claims due entries oldest first, like the other analysis tasks. `ActionDraftRows.HasNewerCandidateAsync` owns the newest-wins rule, and the index `ix_action_candidates_bill` serves it. A candidate with summaries is newer than one without them on the same update date. The budget is `action_analysis_budget`. The notify trigger on the queue table only wakes the worker.
+The worker claims due entries by priority, then oldest first, like the other analysis tasks. `ActionDraftRows.HasNewerCandidateAsync` owns the newest-wins rule, and the index `ix_action_candidates_bill` serves it. A candidate with summaries is newer than one without them on the same update date. The budget is `action_analysis_budget`. The notify trigger on the queue table only wakes the worker.
 
 When summaries arrive after the older candidate drafted, the bill version gets a second candidate and a second call.
 

@@ -1,6 +1,8 @@
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Analysis;
+using CivicLens.Core.Relationships;
+using CivicLens.Infrastructure.Relationships;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Votes.Persistence;
@@ -32,6 +34,14 @@ internal sealed class VoteDraftQueueMapping : IAnalysisQueueMapping<VoteAnalysis
         var runRow = AnalysisRunRows.Create<VoteAnalysisRunRow>(run.Run);
         runRow.Reason = run.Reason;
         db.Add(runRow);
+    }
+
+    public async Task AfterTransitionAsync(CollectionAttemptDbContext db, VoteAnalysisRow row, AnalysisCheckpoint checkpoint, long now,
+        CancellationToken cancellationToken)
+    {
+        if (checkpoint is VoteDraftCheckpoint { Revision: { } revision })
+            row.Priority = await PairPriority.OfTargetAsync(db, RelationshipRecordKind.Vote, revision.RecordId, !revision.TrackedIssueIds.IsEmpty,
+                cancellationToken);
     }
 
     public async Task<AnalysisSettlement<VoteDraftRun>> PrepareSettlementAsync(CollectionAttemptDbContext db, VoteAnalysisRow row,

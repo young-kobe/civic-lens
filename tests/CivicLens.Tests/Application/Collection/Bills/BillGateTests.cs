@@ -10,11 +10,21 @@ public sealed class BillGateTests
     private static readonly DateTimeOffset UpdatedAt = new(2025, 3, 3, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void ACoveredSponsorPassesBeforeThePolicyAreaIsRead()
+    public void ACoveredSponsorPassesBeforeThePolicyAreaIsReadAndKeepsTheTrackedIssueFact()
     {
         var bill = Bill(sponsors: ["Z000009", "A000001"], policyArea: BillGateFixtures.TrackedPolicyArea, cosponsors: 0);
 
-        Assert.Equal(BillGateOutcome.Passed(BillGateReason.CoveredSponsor), BillGate.AtDetail(bill, Covered, Issues()));
+        Assert.Equal(BillGateOutcome.Passed(BillGateReason.CoveredSponsor) with { HasTrackedIssue = true }, BillGate.AtDetail(bill, Covered, Issues()));
+    }
+
+    [Fact]
+    public void TheGateKeepsWhetherABillHasATrackedIssueEvenWhenACoveredSponsorPassedItOrNobodyDid()
+    {
+        var sponsored = Bill(sponsors: ["A000001"], policyArea: BillGateFixtures.UntrackedPolicyArea, cosponsors: 0);
+        var waiting = Bill(policyArea: BillGateFixtures.UntrackedPolicyArea, cosponsors: 2);
+
+        Assert.False(BillGate.AtDetail(sponsored, Covered, Issues()).HasTrackedIssue);
+        Assert.False(BillGate.AtDetail(waiting, Covered, Issues()).HasTrackedIssue);
     }
 
     [Fact]
@@ -22,7 +32,7 @@ public sealed class BillGateTests
     {
         var bill = Bill(policyArea: BillGateFixtures.TrackedPolicyArea, cosponsors: 0);
 
-        Assert.Equal(BillGateOutcome.Passed(BillGateReason.TrackedPolicyArea), BillGate.AtDetail(bill, Covered, Issues()));
+        Assert.Equal(BillGateOutcome.Passed(BillGateReason.TrackedPolicyArea) with { HasTrackedIssue = true }, BillGate.AtDetail(bill, Covered, Issues()));
     }
 
     [Fact]

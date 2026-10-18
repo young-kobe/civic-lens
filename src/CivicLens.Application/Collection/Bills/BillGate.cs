@@ -13,9 +13,15 @@ public static class BillGate
         ArgumentNullException.ThrowIfNull(bill);
         ArgumentNullException.ThrowIfNull(coveredBioguideIds);
         ArgumentNullException.ThrowIfNull(issues);
+        var tracked = IsTracked(bill.PolicyArea, DayOf(bill.UpdateDate), issues);
+        return DecideAtDetail(bill, coveredBioguideIds, tracked) with { HasTrackedIssue = tracked };
+    }
+
+    private static BillGateOutcome DecideAtDetail(CongressBill bill, IReadOnlySet<string> coveredBioguideIds, bool tracked)
+    {
         if (bill.SponsorBioguideIds.Any(coveredBioguideIds.Contains))
             return BillGateOutcome.Passed(BillGateReason.CoveredSponsor);
-        if (IsTracked(bill.PolicyArea, DayOf(bill.UpdateDate), issues))
+        if (tracked)
             return BillGateOutcome.Passed(BillGateReason.TrackedPolicyArea);
         return bill.CosponsorCount == 0
             ? BillGateOutcome.NotRelevant(UntrackedReason(bill.PolicyArea))

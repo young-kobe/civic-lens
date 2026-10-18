@@ -50,7 +50,7 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
             .Where(row => row.Task == task && (row.Status == State.Pending ||
                 (row.Status == State.RetryWaiting || row.Status == State.WaitingForBudget) && row.RetryAt <= now ||
                 row.Status == State.Running && row.LeaseExpiresAt <= now))
-            .OrderBy(row => row.CreatedAtUtcTicks).ThenBy(row => EF.Property<string>(row, key)).Take(limit)
+            .OrderBy(row => row.Priority).ThenBy(row => row.CreatedAtUtcTicks).ThenBy(row => EF.Property<string>(row, key)).Take(limit)
             .ToArrayAsync(cancellationToken);
         return [.. rows.Select(ToRecord)];
     }

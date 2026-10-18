@@ -49,7 +49,7 @@ internal sealed class StatementCandidateSeeder(PostgresCollectionAttemptStore at
     }
 
     public async Task<CapturedAttemptResult> ImportAsync(string text, string url, CandidateJobKind kind, string sourceId = "source",
-        string definitionJson = "{}", string? revisionId = null)
+        string definitionJson = "{}", string? revisionId = null, DateTimeOffset? observedAt = null)
     {
         var bytes = Encoding.UTF8.GetBytes(text);
         var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
@@ -60,6 +60,7 @@ internal sealed class StatementCandidateSeeder(PostgresCollectionAttemptStore at
         var request = Request() with { JobId = attemptId, SourceId = sourceId, Url = url, ArtifactDirectory = captureRoot };
         var receipt = Receipt(request) with
         {
+            ObservedAt = observedAt ?? DateTimeOffset.UtcNow,
             BytesReceived = bytes.Length,
             Capture = new CaptureArtifact { Sha256 = hash, RelativePath = hash + ".gz", ByteLength = bytes.Length },
             Response = new HttpResponseMetadata { StatusCode = 200, ContentType = "text/plain; charset=utf-8", ContentEncodings = [] }

@@ -4,6 +4,7 @@ using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Infrastructure.Collection.BillStream;
 using CivicLens.Infrastructure.Collection.HouseVotes;
+using CivicLens.Infrastructure.Statements;
 using CivicLens.Infrastructure.Votes;
 using Microsoft.EntityFrameworkCore;
 
@@ -64,7 +65,7 @@ public sealed partial class PostgresCollectionJobStore : IHouseVoteAdmissionStor
             var candidate = NewHouseVoteCandidate(source, row, membersJobId, extractionId, now);
             db.Add(candidate);
             if (await IsWaitingForBillDetailAsync(db, candidate, cancellationToken)) return NoAdmission;
-            VoteDraftQueueRows.Add(db, candidate.CandidateId, Ticks(now));
+            VoteDraftQueueRows.Add(db, candidate.CandidateId, Ticks(now), await PriorityOfVoteAsync(db, candidate, cancellationToken));
             return NoAdmission;
         }, cancellationToken);
     }
@@ -74,13 +75,25 @@ public sealed partial class PostgresCollectionJobStore : IHouseVoteAdmissionStor
         candidate.BillType is not null && !await BillDetailRows
             .PagesNewestFirst(db, candidate.Congress, candidate.BillType, candidate.BillNumber!.Value).AnyAsync(cancellationToken);
 
-    private static async Task QueueVotesWaitingForBillAsync(CollectionAttemptDbContext db, CongressBill bill, DateTimeOffset now,
+    private static async Task<int> PriorityOfVoteAsync(CollectionAttemptDbContext db, HouseVoteCandidateRow candidate,
         CancellationToken cancellationToken)
+    {
+        var hasTrackedIssue = candidate.BillType is not null && await db.Set<BillGateRow>().AsNoTracking()
+            .Where(gate => gate.Congress == candidate.Congress && gate.BillType == candidate.BillType && gate.BillNumber == candidate.BillNumber)
+            .OrderByDescending(gate => gate.UpdateDateUtcTicks).Select(gate => gate.HasTrackedIssue).FirstOrDefaultAsync(cancellationToken);
+        return await StatementBillMentions.PriorityOfBillAsync(db, candidate.Congress, candidate.BillType, candidate.BillNumber, hasTrackedIssue,
+            cancellationToken);
+    }
+
+    private static async Task QueueVotesWaitingForBillAsync(CollectionAttemptDbContext db, CongressBill bill, bool hasTrackedIssue,
+        DateTimeOffset now, CancellationToken cancellationToken)
     {
         var waiting = await VoteDraftQueueRows.WaitingForBill(db).Where(candidate => candidate.Congress == bill.Congress &&
             candidate.BillType == bill.Type && candidate.BillNumber == bill.Number)
             .Select(candidate => candidate.CandidateId).ToListAsync(cancellationToken);
-        foreach (var candidateId in waiting) VoteDraftQueueRows.Add(db, candidateId, Ticks(now));
+        if (waiting.Count == 0) return;
+        var priority = await StatementBillMentions.PriorityOfBillAsync(db, bill.Congress, bill.Type, bill.Number, hasTrackedIssue, cancellationToken);
+        foreach (var candidateId in waiting) VoteDraftQueueRows.Add(db, candidateId, Ticks(now), priority);
     }
 
     private static string HashHouseVoteCandidate(string sourceId, int congress, int sessionNumber, int rollCallNumber,
