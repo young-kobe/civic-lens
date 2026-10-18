@@ -66,7 +66,7 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
         VALUES (@id, @number, 0, 'AwaitingReview', false, 1, 1)
         ON CONFLICT (record_id) DO UPDATE SET current_revision_number = @number;
         INSERT INTO relationship_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-        VALUES (@id, @number, @author, @kind, substr(md5(@id || @number::text), 1, 32), @json, 1)
+        VALUES (@id, @number, @author, @kind, CASE WHEN @kind = 'Analysis' THEN substr(md5(@id || @number::text), 1, 32) END, @json, 1)
         """, ("id", revision.RecordId), ("number", revision.RevisionNumber), ("author", revision.AuthorSubject),
         ("kind", ReviewAuthor.KindOf(revision.AuthorSubject).ToString()), ("json", JsonSerializer.Serialize(revision, Web)));
 

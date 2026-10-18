@@ -318,12 +318,30 @@ public sealed class PostgresBriefDraftStoreTests(PostgresCollection postgres) : 
             $$"""[{"kind":"statement","recordId":"{{S2}}","revisionNumber":1},{"kind":"statement","recordId":"{{S3}}","revisionNumber":1}]""", 2);
         _ = await store.RedraftAsync(Week, default);
 
+        var fingerprint = (await store.ReadEvidenceAsync(BriefWeek.RecordIdOf(Week), default))!.Current!.Fingerprint;
+
         await DraftAsync(new ApprovingModel(seeder, BriefFixtures.Output(paragraphs: [("Newer text.", ["R1"])])));
 
         Assert.Equal(("Succeeded", BriefDraftErrorCodes.Unchanged), await StatusAsync(Week));
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM brief_revisions"));
         Assert.Equal("Approved", await ScalarAsync("SELECT review_status FROM brief_drafts"));
-        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM brief_analysis_runs WHERE outcome = 'DraftDiscarded'"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM brief_analysis_runs WHERE outcome = 'DraftDiscarded' AND reason IS NULL"));
+        Assert.Equal(fingerprint, (await store.ReadEvidenceAsync(BriefWeek.RecordIdOf(Week), default))!.Current!.Fingerprint);
+    }
+
+    [Fact]
+    public async Task ARedraftOfAWeekWithAnApprovedBriefIsRefusedWithoutAModelCallUntilTheApprovalIsWithdrawn()
+    {
+        await SeedWeekAsync();
+        await DraftAsync(new FakeBriefDraftModel().Draft(BriefFixtures.Output(paragraphs: [("Text.", ["R1"])])));
+        await seeder.ExecuteAsync("UPDATE brief_drafts SET review_status = 'Approved'");
+
+        var refused = await Assert.ThrowsAsync<ArgumentException>(() => store.RedraftAsync(Week, default));
+
+        Assert.Contains("Withdraw the approval", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(("Succeeded", null), await StatusAsync(Week));
+        await seeder.ExecuteAsync("UPDATE brief_drafts SET review_status = 'ApprovalWithdrawn'");
+        Assert.Equal(1, await store.RedraftAsync(Week, default));
     }
 
     [Fact]

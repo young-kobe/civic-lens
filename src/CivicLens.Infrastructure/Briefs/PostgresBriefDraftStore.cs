@@ -3,6 +3,7 @@ using CivicLens.Application;
 using CivicLens.Application.Briefs;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Briefs;
+using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Briefs.Persistence;
 using CivicLens.Infrastructure.Collection;
@@ -108,8 +109,11 @@ public sealed class PostgresBriefDraftStore : PostgresAnalysisStore<BriefDraftRu
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var currentWeekStart = await db.Database.SqlQueryRaw<DateOnly>(ReadCurrentWeekSql).SingleAsync(cancellationToken);
         if (weekStart >= currentWeekStart) throw new ArgumentException("Only a week that has ended can be redrafted.", nameof(weekStart));
-        var requeued = await InsertWeeksAsync(db, [weekStart], cancellationToken);
         var recordId = BriefWeek.RecordIdOf(weekStart);
+        if (await db.Set<BriefDraftRow>().AsNoTracking().AnyAsync(row => row.RecordId == recordId && row.ReviewStatus == ReviewStatus.Approved,
+                cancellationToken))
+            throw new ArgumentException("The brief of this week is approved. Withdraw the approval first.", nameof(weekStart));
+        var requeued = await InsertWeeksAsync(db, [weekStart], cancellationToken);
         foreach (var state in RedraftableStates)
             requeued += await queue.RequeueAsync(state, null, recordId, null, cancellationToken);
         return requeued;

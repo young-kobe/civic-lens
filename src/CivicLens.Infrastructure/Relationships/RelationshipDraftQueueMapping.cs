@@ -48,7 +48,7 @@ internal sealed class RelationshipDraftQueueMapping : IAnalysisQueueMapping<Rela
         var refusal = await RelationshipDraftRows.AppendAnalysisRevisionAsync(db, revision, run.Run.RunId, cancellationToken);
         if (refusal is null) return settlement;
         var discarded = run with { Run = run.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded } };
-        if (refusal == RelationshipDraftErrorCodes.AlreadyApproved)
+        if (refusal is RelationshipDraftErrorCodes.AlreadyApproved or RelationshipDraftErrorCodes.PersonEditKept)
             return new(checkpoint with { ErrorCode = RelationshipDraftErrorCodes.Unchanged, Revision = null }, discarded);
         row.RetryOfRunId = null;
         return new(checkpoint with
