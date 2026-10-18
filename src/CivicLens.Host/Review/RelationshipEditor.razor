@@ -51,6 +51,10 @@ else
         {
             <Notice Tone="Tone.Warn" id="cited-changed">The statement or the @RelationshipLabels.TargetName(revision.Target.Kind).ToLowerInvariant() is no longer at the revision that this link cites. Approval is blocked.@(review.CurrentStatus == ReviewStatus.Approved ? " The link stays approved until you withdraw the approval." : "")</Notice>
         }
+        @if (review.NoLongerMatches)
+        {
+            <Notice Tone="Tone.Warn" id="no-longer-matches">The pair finder no longer finds this pair. The statement or the record changed so that they do not share the bill. Check the link before you approve it.</Notice>
+        }
         @if (concerns.Length > 0)
         {
             <Notice Tone="Tone.Warn">Approval is blocked. @(concerns.Length == 1 ? "Resolve the open concern below first." : $"Resolve the {concerns.Length} open concerns below first.")</Notice>

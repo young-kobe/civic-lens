@@ -167,6 +167,34 @@ public sealed class RelationshipReviewWorkspaceTests(PostgresCollection postgres
         Assert.True(conflict.QuerySelector("#decision-controls")!.HasAttribute("disabled"));
     }
 
+    [Fact]
+    public async Task TheReviewHomeCountsTheBriefsAndTheRelationshipsThatNeedActionAndLinksEachList()
+    {
+        await SeedAsync();
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+
+        var home = await host.GetDocumentAsync("/Review");
+
+        var relationships = home.QuerySelector("a.stat[href='/Review/Relationships?drafts=needs-action']")!;
+        Assert.Equal(["1", "Relationships need action"], relationships.Children.Select(child => child.TextContent));
+        var briefs = home.QuerySelector("a.stat[href='/Review/Briefs?drafts=needs-action']")!;
+        Assert.Equal(["0", "Briefs need action"], briefs.Children.Select(child => child.TextContent));
+    }
+
+    [Fact]
+    public async Task ANoLongerMatchingPairShowsABadgeOnTheListAndANoticeInTheEditor()
+    {
+        await SeedAsync();
+        await seeder.ExecuteAsync("UPDATE relationship_drafts SET no_longer_matches = true");
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+
+        var list = await host.GetDocumentAsync("/Review/Relationships");
+        var page = await host.GetDocumentAsync(url);
+
+        Assert.Contains("No longer matches", list.QuerySelector("[aria-labelledby='drafts'] tbody")!.TextContent, StringComparison.Ordinal);
+        Assert.NotNull(page.QuerySelector("#no-longer-matches"));
+    }
+
     private static string CitedRevision(AngleSharp.Dom.IDocument page, string panel) => page.QuerySelectorAll($"[aria-labelledby='{panel}'] dt")
         .Single(label => label.TextContent == "Cited revision").NextElementSibling!.TextContent;
 

@@ -134,7 +134,7 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
     }
 
     private static BriefReview ToReview(BriefDraftRow draft, ReviewHistory<BriefRevision> history) =>
-        new(draft.RecordId, history.CurrentRevision!, history.LastApprovedRevision, history.LoadedRevisions, draft.ReviewStateVersion,
+        new(draft.RecordId, history.CurrentRevision!, history.LoadedRevisions, draft.ReviewStateVersion,
             history.CurrentStatus, history.Decisions, history.UnresolvedConcerns);
 
     private static BriefReviewDecisionRow NewDecisionRow(ReviewDecision decision) => new()

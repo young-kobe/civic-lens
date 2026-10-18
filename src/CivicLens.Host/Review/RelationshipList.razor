@@ -29,6 +29,10 @@
                             {
                                 <StatusBadge Tone="Tone.Warn" Text="Cited records changed" />
                             }
+                            @if (item.Review.NoLongerMatches)
+                            {
+                                <StatusBadge Tone="Tone.Warn" Text="No longer matches" />
+                            }
                             <span class="cell-sub">@item.StatementHeadline, then @item.TargetHeadline</span>
                         </td>
                         <td><StatusBadge Tone="DraftStatusDisplay.Tone(item.Review.CurrentStatus)" Text="@DraftStatusDisplay.Label(item.Review.CurrentStatus, item.Review.UnresolvedConcerns.Length)" /></td>

@@ -64,10 +64,12 @@ public sealed class PostgresRelationshipReviewStoreTests(PostgresCollection post
     {
         var start = Article.IndexOf("said: ", StringComparison.Ordinal);
         var crossesThePassageStart = new SourceSpan(ExtractionId, start, Article.IndexOf(BillWords, StringComparison.Ordinal) + BillWords.Length - start);
+        var insideOnePassageButNotOffered = Span(BillSentence) with { Start = Span(BillSentence).Start + 1, Length = Span(BillSentence).Length - 1 };
         var tooShortForTheMatch = Span(BillWords) with { Length = 3 };
 
         await Assert.ThrowsAsync<ArgumentException>(() => SaveAsync(1, RelationshipType.StatesPositionOn, "Reason.", crossesThePassageStart, "F1"));
         await Assert.ThrowsAsync<ArgumentException>(() => SaveAsync(1, RelationshipType.StatesPositionOn, "Reason.", tooShortForTheMatch, "F1"));
+        await Assert.ThrowsAsync<ArgumentException>(() => SaveAsync(1, RelationshipType.StatesPositionOn, "Reason.", insideOnePassageButNotOffered, "F1"));
         await Assert.ThrowsAsync<ArgumentException>(() => SaveAsync(1, RelationshipType.StatesPositionOn, "Reason.", Span(BillSentence), "F9"));
 
         Assert.Equal("1", await ReadAsync($"SELECT current_revision_number FROM relationship_drafts WHERE record_id = '{recordId}'"));
@@ -119,6 +121,30 @@ public sealed class PostgresRelationshipReviewStoreTests(PostgresCollection post
         Assert.Equal(change.StartsWith("statement", StringComparison.Ordinal), read.StatementChanged);
         Assert.Equal(change.StartsWith("target", StringComparison.Ordinal), read.TargetChanged);
         Assert.True(Assert.Single((await reviews.ListAsync(null, 10, DraftStatusFilter.All, default)).Items).CitedRecordsChanged);
+    }
+
+    [Fact]
+    public async Task TheApprovalGateReadsTheCitedRecordsAfterItTakesTheRelationshipLockSoAStatementApprovalThatCommitsFirstBlocksIt()
+    {
+        await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-relationship-review");
+
+        var approving = DecideAsync(1, 0, ReviewDecisionKind.Approve);
+        await HeldAdvisoryLock.WaitForWaiterAsync(connectionString, "civic-lens-relationship-review");
+        await seeder.StatementAsync(Statement(revision: 2));
+
+        Assert.False(approving.IsCompleted);
+        await holder.DisposeAsync();
+        await Assert.ThrowsAsync<ArgumentException>(() => approving);
+        Assert.Equal("0", await ReadAsync("SELECT count(*) FROM relationship_review_decisions"));
+    }
+
+    [Fact]
+    public async Task ANoLongerMatchingPairShowsTheFlagInTheReadAndTheList()
+    {
+        await seeder.ExecuteAsync("UPDATE relationship_drafts SET no_longer_matches = true");
+
+        Assert.True((await reviews.GetAsync(recordId, default))!.Review.NoLongerMatches);
+        Assert.True(Assert.Single((await reviews.ListAsync(null, 10, DraftStatusFilter.All, default)).Items).Review.NoLongerMatches);
     }
 
     [Fact]

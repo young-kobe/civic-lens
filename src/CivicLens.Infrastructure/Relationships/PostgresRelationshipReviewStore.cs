@@ -59,7 +59,8 @@ public sealed class PostgresRelationshipReviewStore(IDbContextFactory<Collection
         var (statement, target) = await RelationshipCitedReader.ReadCitedAsync(db, current, cancellationToken);
         var changed = await RelationshipCitedReader.FindChangedAsync(db, [current.Statement, current.Target], cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new(ToReview(draft, history), statement, target, changed.Contains(current.Statement), changed.Contains(current.Target));
+        return new(ToReview(draft, history), statement, target, changed.Contains(current.Statement), changed.Contains(current.Target),
+            RelationshipEditOptions.For(current, statement, target));
     }
 
     public async Task<RelationshipReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter, CancellationToken cancellationToken)
@@ -92,8 +93,8 @@ public sealed class PostgresRelationshipReviewStore(IDbContextFactory<Collection
     }
 
     private static RelationshipReview ToReview(RelationshipDraftRow draft, ReviewHistory<RelationshipRevision> history) =>
-        new(draft.RecordId, history.CurrentRevision!, history.LastApprovedRevision, history.LoadedRevisions, draft.ReviewStateVersion,
-            history.CurrentStatus, history.Decisions, history.UnresolvedConcerns);
+        new(draft.RecordId, history.CurrentRevision!, history.LoadedRevisions, draft.ReviewStateVersion,
+            history.CurrentStatus, history.Decisions, history.UnresolvedConcerns, draft.NoLongerMatches);
 
     private static RelationshipReviewDecisionRow NewDecisionRow(ReviewDecision decision) => new()
     {

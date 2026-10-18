@@ -238,7 +238,7 @@ internal sealed class PublicationScenario
             new(citations.Length + 2, citations.Length + 1, citations.Length));
         var all = ImmutableArray.Create(Decision(recordId, 1, decision));
         var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
-        var review = new BriefReview(recordId, revision, null, [revision], 1, ReviewPolicy.GetCurrentStatus(1, all, concerns), all, concerns);
+        var review = new BriefReview(recordId, revision, [revision], 1, ReviewPolicy.GetCurrentStatus(1, all, concerns), all, concerns);
         Briefs.Publishable[recordId] = new(review, citations.ToImmutableDictionary(citation => citation.Id,
             citation => new BriefCitedRecord($"Cited {citation.Id}", "Summary", false), StringComparer.Ordinal));
         return recordId;

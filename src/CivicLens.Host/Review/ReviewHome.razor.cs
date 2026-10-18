@@ -1,8 +1,10 @@
 using CivicLens.Application.Activity;
 using CivicLens.Application.Analysis;
+using CivicLens.Application.Briefs;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Health;
 using CivicLens.Application.Publication;
+using CivicLens.Application.Relationships;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using CivicLens.Host.Collection;
@@ -28,6 +30,8 @@ public sealed partial class ReviewHome
     private AnalysisStatus? analysisStatus;
     private DocumentChangeReviewPage? drafts;
     private SourceHealthReport? health;
+    private BriefReviewCounts? briefCounts;
+    private RelationshipReviewCounts? relationshipCounts;
     private IReadOnlyList<FeedItem> activity = [];
     private string? error;
 
@@ -38,6 +42,8 @@ public sealed partial class ReviewHome
     [Inject] private ListDocumentChangeAnalyses ListAnalyses { get; set; } = default!;
     [Inject] private GetDocumentChangeAnalysisStatus GetAnalysisStatus { get; set; } = default!;
     [Inject] private ListDocumentChangeReviews ListDrafts { get; set; } = default!;
+    [Inject] private GetBriefReviewCounts GetBriefCounts { get; set; } = default!;
+    [Inject] private GetRelationshipReviewCounts GetRelationshipCounts { get; set; } = default!;
     [Inject] private GetRecentActivity GetActivity { get; set; } = default!;
     [Inject] private CreateDocumentChangeDraft CreateDraft { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
@@ -85,6 +91,8 @@ public sealed partial class ReviewHome
                 [.. changes.Items.Select(item => item.ComparisonId)], cancellationToken);
             analysisStatus = await GetAnalysisStatus.ExecuteAsync(actor, cancellationToken);
             drafts = await ListDrafts.ExecuteAsync(actor, DraftsCursor, PageSize, Filter, cancellationToken);
+            briefCounts = await GetBriefCounts.ExecuteAsync(actor, cancellationToken);
+            relationshipCounts = await GetRelationshipCounts.ExecuteAsync(actor, cancellationToken);
             if (collection is not null)
             {
                 configuration = collection.GetConfiguration(actor);
