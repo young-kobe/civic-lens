@@ -215,7 +215,7 @@ Brief review uses the shared decision rules and review cycles in [review](review
 - the cited records, each with its ID, headline, summary, kind, and revision, a "Changed" badge, and a link to its review page
 - the coverage line, the shared `ReviewDecisionPanel`, and the shared `ReviewHistoryPanel`
 
-The page differs from the action page in two ways. It has no "Change since the last approval" panel. It has no bulk approval. The rail has a Briefs link.
+The page differs from the action page in two ways. It has no "Change since the last approval" panel. It has no bulk approval. The rail has a Briefs link. The review home has a stat card with the count of briefs that need action, and it links to the list.
 
 **Withdraw and redraft.** A flagged approved brief stays approved until a person withdraws it. No event requeues it after the withdrawal. A later publication, activation, or decision that touches a record of the week requeues it, because it is no longer approved. After a withdrawal, the owner can run `brief redraft --week`. The command refuses a week whose brief is approved, with a message to withdraw the approval first, and it makes no model call. The redraft appends a revision with the new fingerprint. If the current text is model text, the revision replaces it and cites the revisions that the active release holds. If the current text is person text, the revision keeps the old citations and stores the new text as a suggestion. In that case the flag stays until one of three things happens. The person adopts the suggestion. The person drops the changed citation. The cited record is approved again.
 
