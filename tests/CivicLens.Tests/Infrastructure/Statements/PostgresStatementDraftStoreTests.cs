@@ -88,6 +88,26 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         Assert.Equal(3L, await ScalarAsync($"SELECT priority::bigint FROM action_analysis WHERE candidate_id = '{new string('8', 64)}'"));
     }
 
+    [Fact]
+    public async Task ASavedStatementDraftRaisesTheVoteRowOfABillThatItsSpeakerVotedOn()
+    {
+        var candidate = await PassedCandidateAsync(Article + "\nShe backs H.R. 77 to cap rent.");
+        var world = new RelationshipWorldSeeder(connectionString);
+        await world.VoteAsync(RelationshipFixtures.Vote(billNumber: 77, person: Warren), "AwaitingReview");
+        await ExecuteAsync(connectionString, $"""
+            SET session_replication_role = replica;
+            INSERT INTO vote_analysis (candidate_id, task, status, fence, attempts, reserved_tokens, created_at_utc_ticks)
+            VALUES ('{RelationshipFixtures.Vote().CandidateId}', 'vote-draft', 'Pending', 0, 0, 0, 1)
+            """);
+        var model = new FakeStatementDraftModel().Draft(Output(date: ("2026-10-03", "October 3, 2026"),
+            quotes: ["a rent cap for tenants", "backs H.R. 77 to cap rent"]));
+
+        await DraftingWorker(model).ExecuteAsync(once: true);
+
+        Assert.Equal(1L, await ScalarAsync($"SELECT current_revision_number FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+        Assert.Equal(1L, await ScalarAsync("SELECT priority::bigint FROM vote_analysis"));
+    }
+
     private Task SeedActionRowAsync(string candidateId, int billNumber) => ExecuteAsync(connectionString, $"""
         SET session_replication_role = replica;
         INSERT INTO action_candidates (candidate_id, source_id, congress, bill_type, bill_number, update_date_utc_ticks, detail_job_id,

@@ -10,7 +10,7 @@ public sealed class BillGateTests
     private static readonly DateTimeOffset UpdatedAt = new(2025, 3, 3, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void ACoveredSponsorPassesBeforeThePolicyAreaIsRead()
+    public void ACoveredSponsorPassesBeforeThePolicyAreaIsReadAndKeepsTheTrackedIssueFact()
     {
         var bill = Bill(sponsors: ["Z000009", "A000001"], policyArea: BillGateFixtures.TrackedPolicyArea, cosponsors: 0);
 

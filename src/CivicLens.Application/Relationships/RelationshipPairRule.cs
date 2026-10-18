@@ -13,7 +13,9 @@ public static class RelationshipPairRule
         mentionedCongress == congress && string.Equals(mentionedType, billType, StringComparison.Ordinal) && mentionedNumber == billNumber;
 
     public static ImmutableArray<(string BillType, int Number)> CitedBills(string text) =>
-        [.. BillNumberFinder.FindWithSpans(text).Select(match => (CongressBillListItem.NormalizeCitationType(match.Type)!, match.Number)).Distinct()];
+        [.. BillNumberFinder.FindWithSpans(text).Select(match => (BillTypeOf(match), match.Number)).Distinct()];
+
+    internal static string BillTypeOf(BillNumberMatch match) => CongressBillListItem.NormalizeCitationType(match.Type)!;
 
     internal static ActionSponsorship? SponsorOf(ImmutableArray<string> speakerOfficialIds, ActionDraftRevision action) =>
         action.Sponsorships.Where(item => speakerOfficialIds.Contains(item.PersonId)).OrderBy(item => item.Role).FirstOrDefault();
