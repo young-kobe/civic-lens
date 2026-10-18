@@ -508,7 +508,8 @@ The shared wakeup and lease mechanics are in [Shared worker mechanics](../archit
 - Future wire changes need an explicit compatibility decision.
 - Browser rendering and OCR are deferred until a selected source needs them.
 - An article whose path equals the configured page path or the prefix, and which only its query names, is also skipped. An example is `/?p=123`. No admitted URL in the dev data has this form.
-- Planned engine policies: engine-wide spending ceilings, global backlog limits, weighted source fairness, live configuration reload, an engine-health view, and collection concurrency for backfills. The scheduler does not guarantee them. Broad coverage makes them MVP requirements.
+- Planned engine policies in R-18: one shared configuration loader with a higher size limit, an engine-health view, and a documented spending total. Source fairness is an open choice.
+- Later, in R-41: collection concurrency for backfills, when a measured backlog is more than one worker can clear. Backlog limits and live configuration reload are not planned.
 - Agreed upgrade ([R-22](../roadmap.md#later)): ordered row locks in place of the single global lock of the job store. Measure lock waits on a bills-only collection run before the design.
 - Fix the remaining format and parser limits that the federal coverage found ([R-30](../roadmap.md#next)).
 - Planned: automatic discovery of official sources for a configured official, so that a new official needs no source entered by hand. Use the `fromDateTime` change check of the Congress.gov member list for it.
