@@ -33,15 +33,15 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
             (related, cancellationToken) => build.Renderer.RenderVoteAsync(record, billActionRecordId, related, cancellationToken));
     }
 
-    public async Task<IReadOnlyDictionary<string, string>> RenderCarriedAsync(IReadOnlyDictionary<string, byte[]> records,
-        ReleaseLinks links, PublicationBuild build, CancellationToken cancellationToken)
+    public async Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
+        CancellationToken cancellationToken)
     {
-        var parsed = ParseAll<PublishedVote>(records);
-        var billActionRecordIds = await votes.FindBillActionRecordIdsAsync(
-            [.. parsed.Values.Select(VoteBill.Of).OfType<VoteBill>()],
+        var vote = Parse<PublishedVote>(json);
+        var billActionRecordIds = VoteBill.Of(vote) is { } bill
+            ? (await votes.FindBillActionRecordIdsAsync([bill], cancellationToken)).GetValueOrDefault(recordId, [])
+            : [];
+        return await build.Renderer.RenderVoteAsync(vote, BillActionRecordIn(billActionRecordIds, build), links.Citing(Kind, recordId),
             cancellationToken);
-        return await RenderEachAsync(parsed, (vote, recordId) => build.Renderer.RenderVoteAsync(vote,
-            BillActionRecordIn(billActionRecordIds.GetValueOrDefault(recordId, []), build), links.Citing(Kind, recordId), cancellationToken));
     }
 
     private static string? BillActionRecordIn(ImmutableArray<string> billActionRecordIds, PublicationBuild build) =>

@@ -35,8 +35,7 @@ internal sealed class StatementRecordLoader(IStatementReviewStore statements)
             (related, cancellationToken) => build.Renderer.RenderStatementAsync(record, related, cancellationToken));
     }
 
-    public Task<IReadOnlyDictionary<string, string>> RenderCarriedAsync(IReadOnlyDictionary<string, byte[]> records,
-        ReleaseLinks links, PublicationBuild build, CancellationToken cancellationToken) =>
-        RenderEachAsync(ParseAll<PublishedStatement>(records), (record, recordId) =>
-            build.Renderer.RenderStatementAsync(record, links.Citing(Kind, recordId), cancellationToken));
+    public Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
+        CancellationToken cancellationToken) =>
+        build.Renderer.RenderStatementAsync(Parse<PublishedStatement>(json), links.Citing(Kind, recordId), cancellationToken);
 }

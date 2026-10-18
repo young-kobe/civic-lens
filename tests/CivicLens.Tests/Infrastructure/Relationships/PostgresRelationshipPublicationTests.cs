@@ -182,7 +182,8 @@ public sealed class PostgresRelationshipPublicationTests(PostgresCollection post
         Assert.Equal([recordId], await reviews.FindCitingAsync([recordId], [statement], default));
         Assert.Equal([recordId], await reviews.FindCitingAsync([recordId], [action], default));
         Assert.Empty(await reviews.FindCitingAsync([recordId], [new(PublishedRecordKind.Vote, ActionId), new(PublishedRecordKind.Statement, ActionId)], default));
-        Assert.Empty(await reviews.FindCitingAsync([new string('f', 64)], [statement, action], default));
+        Assert.Empty(await reviews.FindCitingAsync([recordId], [new(PublishedRecordKind.Statement, new string('f', 64))], default));
+        await Assert.ThrowsAsync<InvalidDataException>(() => reviews.FindCitingAsync([recordId, new string('f', 64)], [statement, action], default));
         Assert.Empty(await reviews.FindCitingAsync([], [statement], default));
     }
 

@@ -31,8 +31,7 @@ internal sealed class ActionRecordLoader(IActionReviewStore actions)
             (related, cancellationToken) => build.Renderer.RenderActionAsync(record, related, cancellationToken));
     }
 
-    public Task<IReadOnlyDictionary<string, string>> RenderCarriedAsync(IReadOnlyDictionary<string, byte[]> records,
-        ReleaseLinks links, PublicationBuild build, CancellationToken cancellationToken) =>
-        RenderEachAsync(ParseAll<PublishedAction>(records), (record, recordId) =>
-            build.Renderer.RenderActionAsync(record, links.Citing(Kind, recordId), cancellationToken));
+    public Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
+        CancellationToken cancellationToken) =>
+        build.Renderer.RenderActionAsync(Parse<PublishedAction>(json), links.Citing(Kind, recordId), cancellationToken);
 }

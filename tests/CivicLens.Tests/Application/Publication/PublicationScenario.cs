@@ -31,9 +31,10 @@ internal sealed class PublicationScenario
     public static readonly ReviewActor Reviewer = new("reviewer", ReviewRole.Reviewer);
     public static readonly DateTimeOffset ApprovedAt = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
+    public List<string> Events { get; } = [];
     public FakeClock Clock { get; } = new(new(2026, 2, 1, 0, 0, 0, TimeSpan.Zero));
     public FakePublicationStore Publications { get; } = new();
-    public FakeReleaseDirectory Releases { get; } = new();
+    public FakeReleaseDirectory Releases { get; }
     public FakeReviewStore Reviews { get; } = new();
     public FakeStatementReviewStore Statements { get; } = new();
     public FakeActionReviewStore Actions { get; } = new();
@@ -42,9 +43,11 @@ internal sealed class PublicationScenario
     public FakeBriefReviewStore Briefs { get; } = new();
     public Dictionary<string, string> OfficialNames { get; } = new() { ["mayor"] = "Mayor Example", ["chair"] = "Council Chair Example" };
 
+    public PublicationScenario() => Releases = new() { Events = Events };
+
     public PublishedRecordLoaders Loaders() => new(Reviews, Statements, Actions, Votes, Relationships, Briefs);
 
-    public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer(), Loaders(),
+    public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events }, Loaders(),
         new PublicationCatalog(OfficialNames), Clock);
 
     private const string PunctuatedHeadline = "Mayor\u2019s \u201Chousing\u201D plan: caf\u00E9 owners, r\u00E9sum\u00E9 rules; it\u2019s 100% ready? ";
@@ -285,15 +288,16 @@ internal sealed class PublicationScenario
 
 internal sealed class FakeRenderer : IReleaseRenderer
 {
+    public List<string>? Events { get; init; }
     public IReadOnlyList<ReleaseAsset> Assets { get; } = [new("assets/site.css", [1, 2, 3])];
     public Task<string> RenderRecordAsync(PublishedDocumentChange record, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>{record.RecordId}</html>");
     public Task<string> RenderStatementAsync(PublishedStatement record, ImmutableArray<PublishedRelationship> related,
         CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>statement {record.RecordId}{Related(related)}</html>");
+        Logged($"render {record.RecordId[..1]}", $"<html>statement {record.RecordId}{Related(related)}</html>");
     public Task<string> RenderActionAsync(PublishedAction record, ImmutableArray<PublishedRelationship> related,
         CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>action {record.RecordId}{Related(related)}</html>");
+        Logged($"render {record.RecordId[..1]}", $"<html>action {record.RecordId}{Related(related)}</html>");
     public Task<string> RenderVoteAsync(PublishedVote record, string? billActionRecordId, ImmutableArray<PublishedRelationship> related,
         CancellationToken cancellationToken) =>
         Task.FromResult($"<html>vote {record.RecordId} bill {billActionRecordId}{Related(related)}</html>");
@@ -303,6 +307,12 @@ internal sealed class FakeRenderer : IReleaseRenderer
         Task.FromResult($"<html>brief {record.RecordId}</html>");
     public Task<string> RenderIndexAsync(PublicationRelease release, int page, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>index {page} {release.Records.Length}</html>");
+
+    private Task<string> Logged(string entry, string page)
+    {
+        Events?.Add(entry);
+        return Task.FromResult(page);
+    }
 
     private static string Related(ImmutableArray<PublishedRelationship> related) =>
         related.IsEmpty ? "" : " related " + string.Join(' ', related.Select(link => link.RecordId[..1]));
@@ -377,6 +387,7 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
     public List<string> WriteOrder { get; } = [];
     public List<(string SourceDirectory, string RelativePath)> Links { get; } = [];
     public List<string> ReadPaths { get; } = [];
+    public List<string>? Events { get; init; }
     public List<string> Deleted { get; } = [];
     public List<string> Activated { get; } = [];
     public int BeginCount { get; private set; }
@@ -395,6 +406,7 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
         CancellationToken cancellationToken)
     {
         ReadPaths.Add(relativePath);
+        Events?.Add($"read {relativePath.Split('/', '.')[^2][..1]}");
         return Task.FromResult(Directories[directoryName][relativePath]);
     }
 

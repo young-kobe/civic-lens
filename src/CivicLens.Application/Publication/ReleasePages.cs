@@ -12,10 +12,12 @@ internal sealed class ReleasePages(IReleaseDirectory releases, PublishedRecordLo
         var pages = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var addition in additions)
             pages[addition.RecordId] = await addition.RenderPage(links.Citing(addition.Entry.Kind, addition.RecordId), cancellationToken);
-        foreach (var kind in CarriedCitedBy(links, additions).GroupBy(cited => cited.Kind))
-            foreach (var (recordId, page) in await loaders.Carried(kind.Key).RenderCarriedAsync(
-                await ReadAsync(build.Previous, kind, cancellationToken), links, build, cancellationToken))
-                pages[recordId] = page;
+        foreach (var cited in CarriedCitedBy(links, additions))
+        {
+            var json = await releases.ReadFileAsync(build.Previous.DirectoryName!, PublicationProtocol.RecordDataPath(cited.RecordId),
+                PublishedRecordFiles.MaximumCitedRecordBytes, cancellationToken);
+            pages[cited.RecordId] = await loaders.Carried(cited.Kind).RenderCarriedAsync(cited.RecordId, json, links, build, cancellationToken);
+        }
         return pages;
     }
 
@@ -24,15 +26,5 @@ internal sealed class ReleasePages(IReleaseDirectory releases, PublishedRecordLo
         var added = additions.Select(addition => (addition.Entry.Kind, addition.RecordId)).ToHashSet();
         return links.Added.SelectMany(link => new[] { link.Statement, link.Target })
             .Where(cited => !added.Contains((cited.Kind, cited.RecordId))).DistinctBy(cited => (cited.Kind, cited.RecordId));
-    }
-
-    private async Task<IReadOnlyDictionary<string, byte[]>> ReadAsync(PreviousRelease previous, IEnumerable<PublishedRelationshipCitation> cited,
-        CancellationToken cancellationToken)
-    {
-        var json = new Dictionary<string, byte[]>(StringComparer.Ordinal);
-        foreach (var citation in cited)
-            json[citation.RecordId] = await releases.ReadFileAsync(previous.DirectoryName!, PublicationProtocol.RecordDataPath(citation.RecordId),
-                PublishedRecordFiles.MaximumCitedRecordBytes, cancellationToken);
-        return json;
     }
 }

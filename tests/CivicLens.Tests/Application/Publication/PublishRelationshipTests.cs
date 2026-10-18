@@ -254,6 +254,20 @@ public sealed class PublishRelationshipTests
     }
 
     [Fact]
+    public async Task EachCarriedRecordIsReadAndRenderedBeforeTheNextIsReadSoPeakMemoryStaysAtAboutOneRecord()
+    {
+        var scenario = new PublicationScenario();
+        var (statement, action, _) = await PublishRecordsAsync(scenario);
+        var relationship = scenario.AddRelationship('e', statement, action);
+        scenario.Events.Clear();
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", relationship));
+
+        var carried = scenario.Events.Where(entry => entry is "read c" or "read d" or "render c" or "render d").ToArray();
+        Assert.Equal(["read c", "render c", "read d", "render d"], carried);
+    }
+
+    [Fact]
     public async Task ARelationshipWhoseQuoteLiesOutsideEveryPassageOfItsStatementIsRefusedBecauseThePageWouldQuoteTextThatNoOneApproved()
     {
         var scenario = new PublicationScenario();

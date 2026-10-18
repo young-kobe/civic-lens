@@ -18,17 +18,9 @@ internal abstract class PublishedRecordLoader(PublishedRecordKind kind)
     public abstract Task<List<PendingRecord>> LoadAsync(ImmutableArray<string> recordIds, PublicationBuild build,
         CancellationToken cancellationToken);
 
-    protected static Dictionary<string, TRecord> ParseAll<TRecord>(IReadOnlyDictionary<string, byte[]> records) =>
-        records.ToDictionary(record => record.Key, record => JsonSerializer.Deserialize<TRecord>(record.Value, PublicationProtocol.JsonOptions)
-            ?? throw new InvalidDataException("A carried record file is empty."), StringComparer.Ordinal);
-
-    protected static async Task<IReadOnlyDictionary<string, string>> RenderEachAsync<TRecord>(Dictionary<string, TRecord> records,
-        Func<TRecord, string, Task<string>> render)
-    {
-        var pages = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (recordId, record) in records) pages[recordId] = await render(record, recordId);
-        return pages;
-    }
+    protected static TRecord Parse<TRecord>(byte[] json) =>
+        JsonSerializer.Deserialize<TRecord>(json, PublicationProtocol.JsonOptions)
+        ?? throw new InvalidDataException("A carried record file is empty.");
 }
 
 internal abstract class PublishedRecordLoader<TCandidate, TAddition>(PublishedRecordKind kind, string noun)

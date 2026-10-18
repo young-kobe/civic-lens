@@ -38,8 +38,7 @@ public sealed record PublishedRelationship
         EventDate = StatementDate
     };
 
-    public static bool IsCitedKind(PublishedRecordKind kind) =>
-        kind is PublishedRecordKind.Statement or PublishedRecordKind.Action or PublishedRecordKind.Vote;
+    public static bool IsCitedKind(PublishedRecordKind kind) => kind == PublishedRecordKind.Statement || IsTargetKind(kind);
 
     public PublishedRelationshipCitation Other(PublishedRecordKind kind, string recordId) =>
         Statement.Kind == kind && Statement.RecordId == recordId ? Target : Statement;
@@ -62,10 +61,12 @@ public sealed record PublishedRelationship
             throw new InvalidDataException("Published relationship officials, issues, and policy areas must be distinct and not blank.");
     }
 
+    private static bool IsTargetKind(PublishedRecordKind kind) => kind is PublishedRecordKind.Action or PublishedRecordKind.Vote;
+
     private void ValidateCitations()
     {
         if (Statement is not { Kind: PublishedRecordKind.Statement } ||
-            Target is not { Kind: var targetKind } || targetKind == PublishedRecordKind.Statement || !IsCitedKind(targetKind))
+            Target is not { Kind: var targetKind } || !IsTargetKind(targetKind))
             throw new InvalidDataException("A published relationship cites one statement and one action or vote.");
         foreach (var citation in new[] { Statement, Target })
         {

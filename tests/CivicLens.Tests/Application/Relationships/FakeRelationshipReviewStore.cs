@@ -20,7 +20,9 @@ internal sealed class FakeRelationshipReviewStore : IRelationshipReviewStore
     public Task<IReadOnlySet<string>> FindCitingAsync(ImmutableArray<string> relationshipIds, ImmutableArray<PublishedRecordReference> cited,
         CancellationToken cancellationToken)
     {
-        IReadOnlySet<string> found = relationshipIds.Where(Publishable.ContainsKey).Where(id =>
+        if (relationshipIds.Any(id => !Publishable.ContainsKey(id)))
+            throw new InvalidDataException("A relationship in the release has no pair row, so its cited records are unknown.");
+        IReadOnlySet<string> found = relationshipIds.Where(id =>
             new[] { Publishable[id].Review.CurrentRevision.Statement, Publishable[id].Review.CurrentRevision.Target }
                 .Any(citation => cited.Contains(new(RelationshipRecordKinds.PublishedKindOf(citation.Kind), citation.RecordId)))).ToHashSet();
         return Task.FromResult(found);

@@ -20,11 +20,12 @@ public sealed class PostgresRelationshipReviewStore(IDbContextFactory<Collection
         RelationshipDraftRows.Records;
 
     private const string FindCitingSql = """
-        SELECT a.pair_id AS "Value" FROM relationship_analysis a
+        SELECT a.pair_id AS "RecordId",
+               (a.statement_candidate_id = ANY({2})
+                OR a.target_kind = 'Action' AND a.target_record_id = ANY({3})
+                OR a.target_kind = 'Vote' AND a.target_record_id = ANY({4})) AS "Cites"
+        FROM relationship_analysis a
         WHERE a.task = {0} AND a.pair_id = ANY({1})
-          AND (a.statement_candidate_id = ANY({2})
-            OR a.target_kind = 'Action' AND a.target_record_id = ANY({3})
-            OR a.target_kind = 'Vote' AND a.target_record_id = ANY({4}))
         """;
 
     private const string SaveOperation = "relationship-save";
@@ -122,15 +123,18 @@ public sealed class PostgresRelationshipReviewStore(IDbContextFactory<Collection
     }
 
     // One ANY batch read, as RelationshipCitedReader.FindChangedAsync does. The pair row holds the cited statement and target of its relationship.
+    // A relationship without a pair row cannot say what it cites, so the read fails instead of leaving the relationship out.
     public async Task<IReadOnlySet<string>> FindCitingAsync(ImmutableArray<string> relationshipIds, ImmutableArray<PublishedRecordReference> cited,
         CancellationToken cancellationToken)
     {
-        if (relationshipIds.IsEmpty || cited.IsEmpty) return new HashSet<string>();
+        if (relationshipIds.IsEmpty) return new HashSet<string>();
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var found = await db.Database.SqlQueryRaw<string>(FindCitingSql, RelationshipDraftTask.Task, (object)relationshipIds.ToArray(),
+        var rows = await db.Database.SqlQueryRaw<CitingRow>(FindCitingSql, RelationshipDraftTask.Task, (object)relationshipIds.ToArray(),
             (object)IdsOf(cited, PublishedRecordKind.Statement), (object)IdsOf(cited, PublishedRecordKind.Action),
             (object)IdsOf(cited, PublishedRecordKind.Vote)).ToArrayAsync(cancellationToken);
-        return found.ToHashSet(StringComparer.Ordinal);
+        if (rows.Length != relationshipIds.Distinct().Count())
+            throw new InvalidDataException("A relationship in the release has no pair row, so its cited records are unknown.");
+        return rows.Where(row => row.Cites).Select(row => row.RecordId).ToHashSet(StringComparer.Ordinal);
     }
 
     public async Task<IReadOnlyDictionary<string, PublishableRelationship>> GetForPublicationAsync(ImmutableArray<string> recordIds,
@@ -177,4 +181,10 @@ public sealed class PostgresRelationshipReviewStore(IDbContextFactory<Collection
         Kind = decision.Kind,
         CreatedAtUtcTicks = decision.CreatedAtUtc.UtcTicks
     };
+
+    private sealed class CitingRow
+    {
+        public string RecordId { get; set; } = "";
+        public bool Cites { get; set; }
+    }
 }

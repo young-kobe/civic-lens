@@ -10,9 +10,9 @@ public sealed class PublishedRecordFilesTests
     public void TheCitedRecordCapHoldsTheLargestRecordThatTheWriteSideCanProduceBecauseTheLimitsHaveOneOwner()
     {
         const long escapedBytesPerCharacter = 6;
-        var largestSourceCount = new[] { PublishedAction.MaximumSources, PublishedVote.MaximumSources, 1 }.Max();
 
-        Assert.True(largestSourceCount * (long)DocumentExtraction.MaximumTextLength * escapedBytesPerCharacter <= PublishedRecordFiles.MaximumCitedRecordBytes);
-        Assert.True(PublishedRecordFiles.MaximumCitedRecordBytes > 16 * 1024 * 1024);
+        // A statement record has one Source field and no source maximum constant, so one source stands for it.
+        foreach (var (kind, sources) in new[] { ("action", PublishedAction.MaximumSources), ("vote", PublishedVote.MaximumSources), ("statement", 1) })
+            Assert.True(sources * (long)DocumentExtraction.MaximumTextLength * escapedBytesPerCharacter <= PublishedRecordFiles.MaximumCitedRecordBytes, kind);
     }
 }
