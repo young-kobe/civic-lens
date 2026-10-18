@@ -158,7 +158,7 @@ Withdrawing approval does not change published artifacts. The UI flags affected 
 
 ### Vote record
 
-`PublishedVote` is the contract of a vote record. `PublishedVoteBuilder` builds it from an approved `VoteDraftRevision`, the review decisions, and the cited extractions. It maps each member official through `PublishedRecordRules.MapOfficial` and copies each citation through `PublishedRecordRules.Cite`. The vote kind enum mirrors the Core `VoteKind`. `PublishVoteTests` tests the builder through `PublishRelease`, as for the other kinds. The official filter does not find votes until the official pages (R-36) or the search service (R-20) index them. `VoteRecordLoader` owns the vote kind for publish and the ready list. `PostgresVoteReviewStore.GetForPublicationAsync` reads the selected drafts, their review cycles, and the cited extractions. It also reads the IDs of the action records with the same congress, bill type, and bill number. Several bill sources can draft one bill, so there can be more than one ID. The loader passes the first ID whose action record is in the release to `RenderVoteAsync`. The release holds an action record when the base release has it or the same publish adds it. Loaders run in list order and action comes before vote, so a same-release action counts. The page links to it. Otherwise the page shows the bill as text.
+`PublishedVote` is the contract of a vote record. `PublishedVoteBuilder` builds it from an approved `VoteDraftRevision`, the review decisions, and the cited extractions. It maps each member official through `PublishedRecordRules.MapOfficial` and copies each citation through `PublishedRecordRules.Cite`. The vote kind enum mirrors the Core `VoteKind`. `PublishVoteTests` tests the builder through `PublishRelease`, as for the other kinds. The official filter does not find votes until the official pages (R-36) or the search service (R-40) index them. `VoteRecordLoader` owns the vote kind for publish and the ready list. `PostgresVoteReviewStore.GetForPublicationAsync` reads the selected drafts, their review cycles, and the cited extractions. It also reads the IDs of the action records with the same congress, bill type, and bill number. Several bill sources can draft one bill, so there can be more than one ID. The loader passes the first ID whose action record is in the release to `RenderVoteAsync`. The release holds an action record when the base release has it or the same publish adds it. Loaders run in list order and action comes before vote, so a same-release action counts. The page links to it. Otherwise the page shows the bill as text.
 
 ### Rendering
 
@@ -218,13 +218,13 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - How the static file server runs locally is not decided. It must send the precompressed manifest, for example Caddy `file_server { precompressed br gzip }` or nginx `gzip_static on`. Compression by the server is the fallback.
 - Issue, official, and briefing pages are planned in [R-36](../roadmap.md#next). Readers will start with a weekly briefing and recent reviewed developments. Issue pages will connect related records across officials and institutions. Official pages will show dated statements, actions, and reviewed relationships.
 - Search filter pages, timelines, expandable evidence, and shareable records are planned against published releases.
-- Public filter pages are an MVP requirement; see R-20.
-- Planned, not built: a source filter and filters that are easy to clear, on the R-20 filter pages.
-- The R-20 pages will work at phone width. Each result will show the kind, headline, officials, issues, and dates of its record.
-- Later, in [R-20](../roadmap.md#next) after the first cloud deployment: a public search service with its own Postgres database, fed from releases. It gives full-text search over the whole processed corpus.
+- Public filter pages are an MVP requirement. The R-36 official, issue, and policy area pages serve as these pages.
+- Planned, not built: a source filter and filters that are easy to clear, in R-36. The manifest already holds `sourceHost` for the source filter.
+- The R-36 pages will work at phone width. Each result will show the kind, headline, officials, issues, and dates of its record.
+- Later, in [R-40](../roadmap.md#later) after the first cloud deployment: a public search service with its own Postgres database, fed from releases. It gives full-text search over the whole processed corpus.
 - Split the manifest by kind when it grows over 4 MB.
 - At 20,000 entries the worst realistic manifest is about 14.6 MB, under three quarters of the 32 MB cap. `PublishRelease` refuses a manifest over the cap.
-- Issue and policy area filters show raw IDs, because the manifest has no names for them. R-20 owns the fix.
+- Issue and policy area filters show raw IDs, because the manifest has no names for them. R-36 owns the fix. The names come from `config/issues.json` through `PublicationCatalog`, as official names do.
 - After the first deploy, the public search service replaces the client search and the schema 3 filter fields. Delete them then.
 - Each release row stores `records_json`, about 2 MB at 20,000 records. Review queries expand the active one.
 - Rolling back the `DropReleaseCountCheck` migration fails while any release holds more than 2000 records.
