@@ -14,7 +14,7 @@ The system has one repository and three runtime parts. A C# application runs col
 
 - A **statement** is a public communication by an official in their own words. It comes from the official, their office, or the official record of their remarks. It states a position, makes a claim, or claims credit. One statement covers one source document, such as a press release or a floor speech. It holds the speaker, the date, a short account, and exact cited quotations.
 - An **action** is an act that an official performs in their official capacity. The institution where it happened records it. Examples are sponsoring or cosponsoring a bill, withdrawing a cosponsorship, and casting a roll-call vote. Each action states whether it is a proposal, a procedural act, or a decision. What happens to a bill later is context, because it is an act of Congress, not of the official.
-- A **relationship** is a reviewed link of a named type between a statement and an action. Examples are "describes own bill", "states position on", and "claims credit for". Chronology alone never creates one. Relationships are planned.
+- A **relationship** is a reviewed link of a named type between a statement and an action or a vote. Examples are "describes own bill", "states position on", and "claims credit for". Chronology alone never creates one. The worker drafts relationships. Review and publication are planned.
 
 ### Editorial rules
 
@@ -42,6 +42,7 @@ Implemented:
 - action review, with bulk approval of sponsorship-only revisions
 - vote review: person edits, version-bound decisions, and the tracked member votes beside their citations
 - brief review: person edits, version-bound decisions, and a derived flag for changed cited records
+- AI drafting of relationships between approved statements and approved actions or votes
 - AI drafting of weekly briefs from the records published in a closed week
 - the authenticated review workspace
 - static release publication of document changes, statements, actions, and weekly briefs
@@ -183,16 +184,19 @@ The analysis queues share the `civic_lens_analysis` channel. The notify trigger 
 The keys, in their declared order:
 
 - `civic-lens-collection-jobs`: `PostgresCollectionJobStore` takes it at the start of each admission, claim, and settlement transaction. Discovery admission needs no other key, because this key already serializes every admission.
-- Review keys: `civic-lens-document-change-review`, `civic-lens-statement-review`, `civic-lens-action-review`, `civic-lens-vote-review`, and `civic-lens-brief-review`. Publication takes all five keys in the order of `PostgresAdvisoryLock.ReviewKeysInOrder`. The vote key comes after the action key and before the brief key. Vote drafting, vote review, and vote publication take it.
+- Review keys: `civic-lens-document-change-review`, `civic-lens-statement-review`, `civic-lens-action-review`, `civic-lens-vote-review`, `civic-lens-relationship-review`, and `civic-lens-brief-review`. Publication takes five of them in the order of `PostgresAdvisoryLock.ReviewKeysInOrder`. The vote key comes after the action key and before the brief key. Vote drafting, vote review, and vote publication take it.
+- The relationship key comes after the vote key and before the brief key. Relationship drafting takes it. Publication does not take it until relationship publication exists, and then it joins the list in this order.
 - `civic-lens-collection-import`: the import store takes it for each write. No transaction holds it with another key.
 
-A transaction that takes a brief queue row lock takes it before `civic-lens-brief-review`. The worker settlement locks its row and then takes the brief key. A publication commit, a release activation, and a review decision that must requeue a brief therefore lock every brief queue row in key order first. They use `BriefStaleness.TakeLocksAsync` and then take the brief key. The commit and the activation take the earlier review keys (`PostgresAdvisoryLock.ReviewKeysBeforeBriefs`), then the brief rows, then the brief key.
+A transaction that takes a brief queue row lock takes it before `civic-lens-brief-review`. The worker settlement locks its row and then takes the brief key. A publication commit, a release activation, and a review decision that must requeue a brief therefore lock every brief queue row in key order first. They use `BriefStaleness.TakeLocksAsync` and then take the brief key. A decision on a statement, an action, or a vote has saved its decision row and draft status by then. The relationship hook runs first and needs the new state. The commit and the activation take the earlier review keys (`PostgresAdvisoryLock.ReviewKeysBeforeBriefs`), then the brief rows, then the brief key.
 
 Extraction and comparison saves take no advisory lock. Each uses `INSERT ... ON CONFLICT DO NOTHING` in one ReadCommitted transaction. See [documents](architecture/documents.md#invariants).
 
 No transaction holds a review key with a collection key.
 
 An analysis settlement can add a draft row or append a revision. It then takes its queue row lock (`FOR UPDATE` in `PostgresAnalysisQueue`) before the review key of its record kind. Review and publication writes take review keys only and never lock queue rows, so no lock cycle exists.
+
+A review decision on a statement, an action, or a vote finds the relationship pairs of its record. It saves the decision first. It holds the key of its own record kind, and a record that is not approved ends the hook. Otherwise it locks only the relationship queue rows of its record in pair key order. Then it takes the relationship key. The brief hook comes last, with the brief rows and the brief key. For these three stores, the decision and draft writes happen before the brief locks. `AfterDecisionHooks.InOrder` keeps this order. A settlement that appends a relationship revision locks its own row and then takes the relationship key.
 
 The requeue of stale briefs takes the brief key last. A review decision takes the key of its own record kind first. The requeue changes only the queue rows of finished weeks, which no worker holds.
 
@@ -255,6 +259,11 @@ Before the first production deploy ([R-23](roadmap.md#later)), reset the develop
 | Vote fingerprint | `vote-fingerprint-v1` | `src/CivicLens.Application/Votes/VoteFingerprint.cs` | The run input hash of a draft that makes no call | The canonical text of the fingerprint changes |
 | House vote render | `house-vote-render-v2` | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteRenderer.cs` | Vote extraction text and citations | The rendered text of a vote changes |
 | Sponsorship fingerprint | `action-fingerprint-v1` | `src/CivicLens.Application/Collection/Bills/ActionFingerprint.cs` | The fingerprint in each action revision | The canonical text of an entry changes |
+| Relationship draft task | `relationship-draft-v1` | `src/CivicLens.Application/Relationships/RelationshipDraftTask.cs` | Relationship analysis runs | Task flow or output handling changes |
+| Relationship draft prompt | `relationship-draft-prompt-v1` | same file | Relationship analysis runs | Prompt text or input framing changes |
+| Relationship draft schema | `relationship-draft-schema-v1` | same file | Relationship analysis runs | The model output schema changes |
+| Relationship fingerprint | `relationship-fingerprint-v1` | `src/CivicLens.Application/Relationships/RelationshipFingerprint.cs` | The last settled input of a pair | The canonical text of the fingerprint changes |
+| Relationship pair key | `relationship-v1` | `src/CivicLens.Application/Relationships/RelationshipPair.cs` | The queue key and record ID of a relationship | The canonical text of the key changes |
 | Brief draft task | `brief-draft-v1` | `src/CivicLens.Application/Briefs/BriefDraftTask.cs` | Brief analysis runs | Task flow or output handling changes |
 | Brief draft prompt | `brief-draft-prompt-v1` | same file | Brief analysis runs | Prompt text or input framing changes |
 | Brief draft schema | `brief-draft-schema-v1` | same file | Brief analysis runs | The model output schema changes |
@@ -317,7 +326,7 @@ This is the only navigation index.
 | Preparation, extraction and comparison stages | [Collection](architecture/collection.md#preparation) | `src/CivicLens.Application/Collection/Processing/JobPreparation.cs` |
 | Sources page | [Collection](architecture/collection.md#sources-page) | `src/CivicLens.Host/Collection/SourcesPage.razor` |
 | CLI collect and import commands | [Collection](architecture/collection.md#cli-composition) | `src/CivicLens.Host/Program.cs` |
-| Generated schema: tables, keys, checks, indexes, triggers | [collection](architecture/schema/collection.md), [bills](architecture/schema/bills.md), [votes](architecture/schema/votes.md), [documents](architecture/schema/documents.md), [analysis](architecture/schema/analysis.md), [statements](architecture/schema/statements.md), [actions](architecture/schema/actions.md), [briefs](architecture/schema/briefs.md), [review](architecture/schema/review.md), [publication](architecture/schema/publication.md) | `tests/CivicLens.Tests/Infrastructure/SchemaReferenceTests.cs` |
+| Generated schema: tables, keys, checks, indexes, triggers | [collection](architecture/schema/collection.md), [bills](architecture/schema/bills.md), [votes](architecture/schema/votes.md), [documents](architecture/schema/documents.md), [analysis](architecture/schema/analysis.md), [statements](architecture/schema/statements.md), [actions](architecture/schema/actions.md), [briefs](architecture/schema/briefs.md), [relationships](architecture/schema/relationships.md), [review](architecture/schema/review.md), [publication](architecture/schema/publication.md) | `tests/CivicLens.Tests/Infrastructure/SchemaReferenceTests.cs` |
 | Collection tables and the import lock | [Collection](architecture/collection.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Collection/PostgresCollectionAttemptStore.cs` |
 | Congress.gov bill list, window, cursor | [Bills](architecture/bills.md#daily-window) | `src/CivicLens.Application/Collection/Bills/BillStreamWindow.cs` |
 | Bill gate and follow-on pages | [Bills](architecture/bills.md#bill-gate) | `src/CivicLens.Application/Collection/Bills/BillGate.cs` |
@@ -341,6 +350,11 @@ This is the only navigation index.
 | Action queue outcomes and codes | [Actions](architecture/actions.md#outcomes) | `src/CivicLens.Application/Actions/ActionDraftErrorCodes.cs` |
 | Bill stream tables: cursors, gates, pages, candidates | [Bills](architecture/bills.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Collection/BillStream/` |
 | Action tables: queue, runs, budget, drafts, revisions, decisions | [Actions](architecture/actions.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Actions/` |
+| Relationship pairs, bill number and title matching, the pair key | [Statements](architecture/statements.md#relationship-drafting) | `src/CivicLens.Application/Relationships/RelationshipPairFinder.cs` |
+| Relationship drafting, fingerprint, staleness, and outcomes | [Statements](architecture/statements.md#relationship-drafting) | `src/CivicLens.Application/Relationships/RelationshipDraftStep.cs` |
+| Relationship revisions and the Congress rule | [Statements](architecture/statements.md#relationship-drafting) | `src/CivicLens.Core/Relationships/RelationshipRevision.cs` |
+| Relationship commands | [Statements](architecture/statements.md#relationship-drafting) | `src/CivicLens.Host/Relationships/RelationshipCommand.cs` |
+| Relationship tables: queue, runs, budget, drafts, revisions, decisions | [Statements](architecture/statements.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Relationships/` |
 | Weekly brief drafting and the week rule | [Briefs](architecture/briefs.md#step) | `src/CivicLens.Application/Briefs/BriefDraftStep.cs` |
 | Brief selection, grouping, and fingerprint | [Briefs](architecture/briefs.md#selection) | `src/CivicLens.Application/Briefs/BriefSelection.cs` |
 | Brief revisions and citations | [Briefs](architecture/briefs.md#revision-and-append) | `src/CivicLens.Core/Briefs/BriefRevision.cs` |

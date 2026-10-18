@@ -22,8 +22,11 @@ using CivicLens.Infrastructure.Votes;
 using CivicLens.Host;
 using CivicLens.Host.Actions;
 using CivicLens.Host.Briefs;
+using CivicLens.Host.Relationships;
 using CivicLens.Host.Votes;
 using CivicLens.Application.Briefs;
+using CivicLens.Application.Relationships;
+using CivicLens.Infrastructure.Relationships;
 using CivicLens.Infrastructure.Briefs;
 using CivicLens.Infrastructure.Actions;
 using CivicLens.Host.Collection;
@@ -83,6 +86,10 @@ if (args is [] or ["--help"] or ["help"])
           votes draft list [drafted|unchanged|superseded|no-member|pending|failed] [limit]
           votes draft requeue <candidate-id|--all>
           votes draft requeue --blocked --code <block-code>
+          relationships draft status
+          relationships draft list [drafted|unchanged|none|unmatched|pending|failed] [limit]
+          relationships draft requeue <pair-id|--all>
+          relationships draft refresh
           brief redraft --week <yyyy-MM-dd>
           releases publish <idempotency-key> <draft-id>...
           releases list [limit]
@@ -102,6 +109,7 @@ if (args is [] or ["--help"] or ["help"])
         worker also drafts statements when CIVIC_LENS_STATEMENT_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         worker also drafts bill actions when CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
         worker also drafts House votes when CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
+        worker also drafts relationships when CIVIC_LENS_RELATIONSHIP_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         worker also drafts weekly briefs when CIVIC_LENS_BRIEF_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         documents commands require the database. Citations use UTF-16 offsets into immutable extracted text.
         Exit codes: 0 success, 1 failed/deferred collection or operational failure, 2 invalid input/configuration.
@@ -150,7 +158,7 @@ if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _]
     or ["feeds" or "discovery", "get", _] or ["feeds" or "discovery", "admit", _, _, _, _]
     or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args) &&
     !CollectionWorkerCommand.Matches(args) && !DocumentCommand.Matches(args) && !ReleaseCommand.Matches(args) &&
-    !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args) && !ActionCommand.Matches(args) && !VoteCommand.Matches(args) && !BriefCommand.Matches(args))
+    !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args) && !ActionCommand.Matches(args) && !VoteCommand.Matches(args) && !RelationshipCommand.Matches(args) && !BriefCommand.Matches(args))
 {
     Console.Error.WriteLine("Unknown command. Use --help.");
     return 2;
@@ -195,6 +203,8 @@ try
         await using var actionDraftingWakeup = actionDrafting.Wakeup;
         var voteDrafting = VoteDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, issues, artifactRoot);
         await using var voteDraftingWakeup = voteDrafting.Wakeup;
+        var relationshipDrafting = RelationshipDraftComposition.Create(analysisContexts, connectionString, workerConfiguration);
+        await using var relationshipDraftingWakeup = relationshipDrafting.Wakeup;
         var briefDrafting = BriefDraftComposition.Create(analysisContexts, connectionString, workerConfiguration);
         await using var briefDraftingWakeup = briefDrafting.Wakeup;
         executing = true;
@@ -204,6 +214,7 @@ try
         await statementDrafting.RecordStartAsync(cancellation.Token);
         await actionDrafting.RecordStartAsync(cancellation.Token);
         await voteDrafting.RecordStartAsync(cancellation.Token);
+        await relationshipDrafting.RecordStartAsync(cancellation.Token);
         await briefDrafting.RecordStartAsync(cancellation.Token);
         var extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
         var comparisons = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
@@ -224,6 +235,7 @@ try
                 AnalysisStage.For("statementDrafting", statementDrafting.Worker),
                 AnalysisStage.For("actionDrafting", actionDrafting.Worker),
                 AnalysisStage.For("voteDrafting", voteDrafting.Worker),
+                AnalysisStage.For("relationshipDrafting", relationshipDrafting.Worker),
                 AnalysisStage.For("briefDrafting", briefDrafting.Worker)
             }.OfType<AnalysisStage>()]);
     }
@@ -277,6 +289,18 @@ try
             new RequeueBlockedVoteDrafts(draftStore), owner);
         executing = true;
         return await votes.ExecuteAsync(args, cancellation.Token);
+    }
+
+    if (RelationshipCommand.Matches(args))
+    {
+        var (connectionString, owner) = OwnerCommand.ReadEnvironment();
+        var contexts = AnalysisDbContextFactory.Create(connectionString);
+        var draftStore = new PostgresRelationshipDraftStore(contexts);
+        var draftCommands = new AnalysisQueueCommands<RelationshipDraftRun, RelationshipDraftView, RelationshipDraftListItem>(
+            draftStore, new PostgresAnalysisStatusStore(contexts, RelationshipDraftTask.Task));
+        var relationships = new RelationshipCommand(draftCommands, new GetRelationshipDraftStatus(draftCommands.Status, draftStore), new RefreshRelationshipPairs(draftStore), owner);
+        executing = true;
+        return await relationships.ExecuteAsync(args, cancellation.Token);
     }
 
     if (BriefCommand.Matches(args))

@@ -14,6 +14,8 @@ public sealed record CongressBillListItem(int Congress, string Type, int Number,
         return IsKnownType(lowered) ? lowered : null;
     }
 
+    public static string? NormalizeCitationType(string citationType) => NormalizeType(citationType.Replace(".", ""));
+
     public static bool IsDetailUrl(string sourceUrl, string url) => TryReadDetailUrl(sourceUrl, url) is not null;
 
     public static CongressBillListItem? TryReadDetailUrl(string sourceUrl, string url)

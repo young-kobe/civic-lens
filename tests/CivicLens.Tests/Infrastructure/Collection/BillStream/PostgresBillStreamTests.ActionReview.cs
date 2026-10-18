@@ -18,6 +18,26 @@ public sealed partial class PostgresBillStreamTests
     private static readonly ReviewActor Reviewer = new("auth0|reviewer", ReviewRole.Reviewer);
 
     [Fact]
+    public async Task ApprovingAnActionQueuesTheRelationshipPairWithAnApprovedStatementOfItsSponsor()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+        using var revision = System.Text.Json.JsonDocument.Parse((string)(await ScalarAsync(
+            $"SELECT revision_json FROM action_revisions WHERE record_id = '{RecordId}' AND revision_number = 1"))!);
+        var bill = revision.RootElement;
+        var sponsor = bill.GetProperty("sponsorships")[0].GetProperty("personId").GetString()!;
+        var seeder = new RelationshipWorldSeeder(connectionString);
+        await seeder.StatementAsync(RelationshipFixtures.StatementAboutBill(sponsor, bill.GetProperty("congress").GetInt32(),
+            bill.GetProperty("billNumber").GetInt32()));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM relationship_analysis"));
+
+        await DecideAsync(1, 0, ReviewDecisionKind.Approve);
+
+        Assert.Equal(("Pending", "Action", RecordId), ((string)(await ScalarAsync("SELECT status FROM relationship_analysis"))!,
+            (string)(await ScalarAsync("SELECT target_kind FROM relationship_analysis"))!,
+            (string)(await ScalarAsync("SELECT target_record_id FROM relationship_analysis"))!));
+    }
+
+    [Fact]
     public async Task AWorkerRevisionAfterAnApprovalRecomputesTheStoredStatusSoTheRecordNeedsReviewAgain()
     {
         await DraftAsync(UpdatedAt, DraftableOutput);

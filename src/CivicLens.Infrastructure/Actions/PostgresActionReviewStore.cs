@@ -12,6 +12,10 @@ using CivicLens.Infrastructure.Actions.Persistence;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Briefs;
 using CivicLens.Infrastructure.Briefs.Persistence;
+using CivicLens.Infrastructure.Relationships;
+using CivicLens.Infrastructure.Relationships.Persistence;
+using CivicLens.Core.Relationships;
+using CivicLens.Application.Relationships;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.BillStream;
 using CivicLens.Infrastructure.Collection.Jobs;
@@ -34,15 +38,18 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
 
     private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
     private readonly PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue;
+    private readonly PostgresAnalysisQueue<RelationshipAnalysisRow, RelationshipAnalysisBudgetRow, RelationshipDraftRun> relationshipQueue;
 
     public PostgresActionReviewStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
-        : this(contextFactory, new(contextFactory, new BriefDraftQueueMapping())) { }
+        : this(contextFactory, new(contextFactory, new BriefDraftQueueMapping()), new(contextFactory, new RelationshipDraftQueueMapping())) { }
 
     private PostgresActionReviewStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
-        PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue)
+        PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue,
+        PostgresAnalysisQueue<RelationshipAnalysisRow, RelationshipAnalysisBudgetRow, RelationshipDraftRun> relationshipQueue)
     {
         this.contextFactory = contextFactory;
         this.briefQueue = briefQueue;
+        this.relationshipQueue = relationshipQueue;
     }
 
     public static PostgresActionReviewStore FromConnectionString(string connectionString)
@@ -79,7 +86,9 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
                 var current = history.CurrentRevision!;
                 current.ValidateForApproval();
                 current.ValidateAgainst(await ReadExtractionsAsync(db, [current], cancellationToken));
-            }, NewDecisionRow, BriefStaleness.AfterDecision(briefQueue, PublishedRecordKind.Action), cancellationToken);
+            }, NewDecisionRow, AfterDecisionHooks.InOrder(
+                RelationshipStaleness.AfterDecision(relationshipQueue, RelationshipRecordKind.Action),
+                BriefStaleness.AfterDecision(briefQueue, PublishedRecordKind.Action)), cancellationToken);
 
     public async Task<ActionReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken)
     {

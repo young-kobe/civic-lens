@@ -3,6 +3,7 @@ using CivicLens.Application.Actions;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Briefs;
 using CivicLens.Application.Issues;
+using CivicLens.Application.Relationships;
 using CivicLens.Application.Statements;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Analysis;
@@ -35,4 +36,8 @@ internal static class AnalysisWorkers
     public static AnalysisWorker<BriefDraftRun> BriefDrafting(IBriefDraftStore store, IAnalysisStatusStore status, IBriefDraftModel model,
         BriefDraftSettings settings, IReadOnlyDictionary<string, string> officialNames, TimeProvider clock) =>
         new(new BriefDraftStep(store, model, settings, officialNames), status, clock, null, store.EnqueueClosedWeeksAsync);
+
+    public static AnalysisWorker<RelationshipDraftRun> RelationshipDrafting(IRelationshipDraftStore store, IAnalysisStatusStore status,
+        IRelationshipDraftModel model, RelationshipDraftSettings settings, IReadOnlyDictionary<string, string> officialNames, TimeProvider clock) =>
+        new(new RelationshipDraftStep(store, model, settings, officialNames), status, clock);
 }
