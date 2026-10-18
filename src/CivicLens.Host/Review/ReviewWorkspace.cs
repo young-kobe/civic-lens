@@ -260,6 +260,7 @@ internal static class ReviewWorkspace
         services.AddScoped<DecideStatementReview>();
         services.AddScoped<GetStatementReview>();
         services.AddScoped<ListStatementReviews>();
+        services.AddScoped<GetStatementReviewCounts>();
         services.AddScoped<ListStatementsNotInReview>();
         services.AddSingleton<IGateLabelStore>(new PostgresGateLabelStore(contexts));
         services.AddScoped<SaveGateLabel>();

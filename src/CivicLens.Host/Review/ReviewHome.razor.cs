@@ -1,3 +1,4 @@
+using CivicLens.Application.Actions;
 using CivicLens.Application.Activity;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Briefs;
@@ -6,6 +7,8 @@ using CivicLens.Application.Collection.Health;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Relationships;
 using CivicLens.Application.Review;
+using CivicLens.Application.Statements;
+using CivicLens.Application.Votes;
 using CivicLens.Core.Review;
 using CivicLens.Host.Collection;
 using CivicLens.Host.Components.Layout;
@@ -30,6 +33,9 @@ public sealed partial class ReviewHome
     private AnalysisStatus? analysisStatus;
     private DocumentChangeReviewPage? drafts;
     private SourceHealthReport? health;
+    private StatementReviewCounts? statementCounts;
+    private ActionReviewCounts? actionCounts;
+    private VoteReviewCounts? voteCounts;
     private BriefReviewCounts? briefCounts;
     private RelationshipReviewCounts? relationshipCounts;
     private IReadOnlyList<FeedItem> activity = [];
@@ -42,6 +48,9 @@ public sealed partial class ReviewHome
     [Inject] private ListDocumentChangeAnalyses ListAnalyses { get; set; } = default!;
     [Inject] private GetDocumentChangeAnalysisStatus GetAnalysisStatus { get; set; } = default!;
     [Inject] private ListDocumentChangeReviews ListDrafts { get; set; } = default!;
+    [Inject] private GetStatementReviewCounts GetStatementCounts { get; set; } = default!;
+    [Inject] private GetActionReviewCounts GetActionCounts { get; set; } = default!;
+    [Inject] private GetVoteReviewCounts GetVoteCounts { get; set; } = default!;
     [Inject] private GetBriefReviewCounts GetBriefCounts { get; set; } = default!;
     [Inject] private GetRelationshipReviewCounts GetRelationshipCounts { get; set; } = default!;
     [Inject] private GetRecentActivity GetActivity { get; set; } = default!;
@@ -91,6 +100,9 @@ public sealed partial class ReviewHome
                 [.. changes.Items.Select(item => item.ComparisonId)], cancellationToken);
             analysisStatus = await GetAnalysisStatus.ExecuteAsync(actor, cancellationToken);
             drafts = await ListDrafts.ExecuteAsync(actor, DraftsCursor, PageSize, Filter, cancellationToken);
+            statementCounts = await GetStatementCounts.ExecuteAsync(actor, cancellationToken);
+            actionCounts = await GetActionCounts.ExecuteAsync(actor, cancellationToken);
+            voteCounts = await GetVoteCounts.ExecuteAsync(actor, cancellationToken);
             briefCounts = await GetBriefCounts.ExecuteAsync(actor, cancellationToken);
             relationshipCounts = await GetRelationshipCounts.ExecuteAsync(actor, cancellationToken);
             if (collection is not null)

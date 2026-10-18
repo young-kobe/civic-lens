@@ -64,7 +64,7 @@ internal static class StatementBillMentions
 
     private static int? CongressOf(MentionRow mention) => CongressCalendar.CongressOn(mention.StatementDate is { } date
         ? DateOnly.ParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture)
-        : DateOnly.FromDateTime(new DateTime(mention.CapturedAtUtcTicks, DateTimeKind.Utc)));
+        : StatementDraftRows.CapturedOn(mention.CapturedAtUtcTicks));
 
     private sealed class MentionRow
     {

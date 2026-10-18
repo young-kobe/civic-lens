@@ -157,8 +157,19 @@ public sealed class StatementReviewHandlerTests
     {
         var list = new ListStatementReviews(null!);
 
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => list.ExecuteAsync(Reviewer, null, 10, (DraftStatusFilter)99));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => list.ExecuteAsync(Reviewer, null, 10, new DraftListFilter((DraftStatusFilter)99)));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => list.ExecuteAsync(Reviewer, null, 0));
+    }
+
+    [Fact]
+    public async Task ListRejectsAReversedDateRangeAndABlankOrOverlongFilterId()
+    {
+        var list = new ListStatementReviews(null!);
+        var all = DraftStatusFilter.All;
+
+        await Assert.ThrowsAsync<ArgumentException>(() => list.ExecuteAsync(Reviewer, null, 10, new(all, From: new DateOnly(2026, 5, 2), To: new DateOnly(2026, 5, 1))));
+        await Assert.ThrowsAsync<ArgumentException>(() => list.ExecuteAsync(Reviewer, null, 10, new(all, IssueId: " ")));
+        await Assert.ThrowsAsync<ArgumentException>(() => list.ExecuteAsync(Reviewer, null, 10, new(all, OfficialId: new string('a', 129))));
     }
 
     [Theory]

@@ -1,3 +1,4 @@
+using CivicLens.Infrastructure.Review.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -22,11 +23,13 @@ internal sealed class ActionDraftRowConfiguration : IEntityTypeConfiguration<Act
         builder.Property(row => row.Congress).HasColumnName("congress");
         builder.Property(row => row.BillType).HasColumnName("bill_type").HasMaxLength(16).IsRequired();
         builder.Property(row => row.BillNumber).HasColumnName("bill_number");
+        builder.Property(row => row.CandidateId).HasColumnName("candidate_id").HasMaxLength(64).IsRequired().HasDefaultValue("");
         builder.Property(row => row.CurrentRevisionNumber).HasColumnName("current_revision_number");
         builder.Property(row => row.ReviewStateVersion).HasColumnName("review_state_version");
         builder.Property(row => row.ReviewStatus).HasColumnName("review_status").HasConversion<string>().HasMaxLength(32).IsRequired();
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
         builder.Property(row => row.LastRevisedAtUtcTicks).HasColumnName("last_revised_at_utc_ticks");
+        ListedDraftTableConfiguration.ConfigureListing(builder, "action_drafts", nameof(ActionDraftRow.RecordId));
         builder.HasIndex(row => new { row.SourceId, row.Congress, row.BillType, row.BillNumber }).IsUnique()
             .HasDatabaseName("ux_action_drafts_bill");
     }

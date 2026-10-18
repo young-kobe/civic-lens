@@ -1,4 +1,5 @@
 @page "/Review/Votes"
+@inherits DraftListPage
 
 <TopBarTitle Crumbs="Crumbs" />
 
@@ -14,6 +15,10 @@
         <Panel Title="Records" Id="drafts">
             <Aside><FilterTabs Label="Filter vote records" Tabs="DraftTabs" /></Aside>
             <ChildContent>
+                <DraftFilterForm Label="Filter vote records by issue, official, and date" Action="@($"{VoteRoutes.List}#drafts")"
+                                 ClearHref="@ClearHref(VoteRoutes.List)" Status="@DraftFilterNames.NameOf(Filter)"
+                                 Issues="Issues.Issues" OfficialIds="[.. Catalog.OfficialIds.Order(StringComparer.Ordinal)]"
+                                 IssueId="@IssueId" OfficialId="@OfficialId" From="@From" To="@To" />
                 <DataTable Items="drafts.Items" Caption="Vote records">
                     <Head>
                         <th>Vote</th>
@@ -24,7 +29,13 @@
                         <th class="act"><span class="visually-hidden">Open</span></th>
                     </Head>
                     <Row Context="item">
-                        <td><a class="cell-title" href="@VoteRoutes.Editor(item.RecordId)">@item.CurrentRevision.Headline</a></td>
+                        <td>
+                            <a class="cell-title" href="@VoteRoutes.Editor(item.RecordId)">@item.CurrentRevision.Headline</a>
+                            @if (PriorityLabels.Of(drafts.Priorities[item.RecordId]) is { } tier)
+                            {
+                                <StatusBadge Text="@tier" />
+                            }
+                        </td>
                         <td class="fit hide-narrow">@VoteLabels.RollCall(item.CurrentRevision)</td>
                         <td class="fit hide-narrow">@VoteLabels.Kind(item.CurrentRevision.Kind)</td>
                         <td><StatusBadge Tone="DraftStatusDisplay.Tone(item.CurrentStatus)" Text="@DraftStatusDisplay.Label(item.CurrentStatus, item.UnresolvedConcerns.Length)" /></td>

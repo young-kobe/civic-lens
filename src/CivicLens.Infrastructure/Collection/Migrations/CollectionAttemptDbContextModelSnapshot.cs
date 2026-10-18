@@ -303,6 +303,14 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("bill_type");
 
+                    b.Property<string>("CandidateId")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("")
+                        .HasColumnName("candidate_id");
+
                     b.Property<int>("Congress")
                         .HasColumnType("integer")
                         .HasColumnName("congress");
@@ -315,9 +323,29 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("current_revision_number");
 
+                    b.Property<DateOnly>("EventOn")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("date")
+                        .HasDefaultValue(new DateOnly(1, 1, 1))
+                        .HasColumnName("event_on");
+
+                    b.PrimitiveCollection<string[]>("IssueIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'")
+                        .HasColumnName("issue_ids");
+
                     b.Property<long>("LastRevisedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("last_revised_at_utc_ticks");
+
+                    b.PrimitiveCollection<string[]>("OfficialIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'")
+                        .HasColumnName("official_ids");
 
                     b.Property<int>("ReviewStateVersion")
                         .HasColumnType("integer")
@@ -336,6 +364,18 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnName("source_id");
 
                     b.HasKey("RecordId");
+
+                    b.HasIndex("EventOn", "RecordId")
+                        .IsDescending(true, true)
+                        .HasDatabaseName("ix_action_drafts_listing");
+
+                    b.HasIndex("IssueIds")
+                        .HasMethod("gin")
+                        .HasDatabaseName("ix_action_drafts_issue_ids");
+
+                    b.HasIndex("OfficialIds")
+                        .HasMethod("gin")
+                        .HasDatabaseName("ix_action_drafts_official_ids");
 
                     b.HasIndex("SourceId", "Congress", "BillType", "BillNumber")
                         .IsUnique()
@@ -3412,6 +3452,26 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("current_revision_number");
 
+                    b.Property<DateOnly>("EventOn")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("date")
+                        .HasDefaultValue(new DateOnly(1, 1, 1))
+                        .HasColumnName("event_on");
+
+                    b.PrimitiveCollection<string[]>("IssueIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'")
+                        .HasColumnName("issue_ids");
+
+                    b.PrimitiveCollection<string[]>("OfficialIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'")
+                        .HasColumnName("official_ids");
+
                     b.Property<int>("ReviewStateVersion")
                         .HasColumnType("integer")
                         .HasColumnName("review_state_version");
@@ -3423,6 +3483,18 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnName("review_status");
 
                     b.HasKey("CandidateId");
+
+                    b.HasIndex("EventOn", "CandidateId")
+                        .IsDescending(true, true)
+                        .HasDatabaseName("ix_statement_drafts_listing");
+
+                    b.HasIndex("IssueIds")
+                        .HasMethod("gin")
+                        .HasDatabaseName("ix_statement_drafts_issue_ids");
+
+                    b.HasIndex("OfficialIds")
+                        .HasMethod("gin")
+                        .HasDatabaseName("ix_statement_drafts_official_ids");
 
                     b.ToTable("statement_drafts", null, t =>
                         {
@@ -3871,6 +3943,14 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("record_id");
 
+                    b.Property<string>("CandidateId")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("")
+                        .HasColumnName("candidate_id");
+
                     b.Property<int>("Congress")
                         .HasColumnType("integer")
                         .HasColumnName("congress");
@@ -3883,9 +3963,29 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("current_revision_number");
 
+                    b.Property<DateOnly>("EventOn")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("date")
+                        .HasDefaultValue(new DateOnly(1, 1, 1))
+                        .HasColumnName("event_on");
+
+                    b.PrimitiveCollection<string[]>("IssueIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'")
+                        .HasColumnName("issue_ids");
+
                     b.Property<long>("LastRevisedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("last_revised_at_utc_ticks");
+
+                    b.PrimitiveCollection<string[]>("OfficialIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'")
+                        .HasColumnName("official_ids");
 
                     b.Property<int>("ReviewStateVersion")
                         .HasColumnType("integer")
@@ -3912,6 +4012,18 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnName("source_id");
 
                     b.HasKey("RecordId");
+
+                    b.HasIndex("EventOn", "RecordId")
+                        .IsDescending(true, true)
+                        .HasDatabaseName("ix_vote_drafts_listing");
+
+                    b.HasIndex("IssueIds")
+                        .HasMethod("gin")
+                        .HasDatabaseName("ix_vote_drafts_issue_ids");
+
+                    b.HasIndex("OfficialIds")
+                        .HasMethod("gin")
+                        .HasDatabaseName("ix_vote_drafts_official_ids");
 
                     b.HasIndex("SourceId", "Congress", "SessionNumber", "RollCallNumber")
                         .IsUnique()

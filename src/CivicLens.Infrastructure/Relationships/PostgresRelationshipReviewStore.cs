@@ -40,7 +40,7 @@ public sealed class PostgresRelationshipReviewStore(IDbContextFactory<Collection
     public Task<RelationshipRevision> SaveRevisionAsync(string actorSubject, RelationshipRevision revision, int expectedRevisionNumber,
         string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
         Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
-            payloadHash, async (db, current) =>
+            payloadHash, async (db, _, current) =>
             {
                 revision.ValidatePersonEditOf(current);
                 var (statement, target) = await RelationshipCitedReader.ReadCitedAsync(db, current, cancellationToken);

@@ -46,7 +46,7 @@ internal sealed class FakeVoteReviewStore : IVoteReviewStore
 
     public Task<VoteReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-    public Task<VoteReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter, CancellationToken cancellationToken) =>
+    public Task<VoteReviewPage> ListAsync(PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
     public Task<VoteReviewCounts> CountAsync(CancellationToken cancellationToken) => throw new NotSupportedException();

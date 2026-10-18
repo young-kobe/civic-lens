@@ -47,10 +47,12 @@ internal sealed class FakeStatementReviewStore : IStatementReviewStore
     public Task<StatementReviewRead?> GetAsync(string candidateId, CancellationToken cancellationToken) =>
         Task.FromResult(Read);
 
-    public Task<StatementReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter, CancellationToken cancellationToken)
+    public Task<StatementReviewCounts> CountAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+
+    public Task<StatementReviewPage> ListAsync(PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken)
     {
         ListedCursor = cursor?.Encode();
-        return Task.FromResult(new StatementReviewPage([], null, null));
+        return Task.FromResult(new StatementReviewPage([], ImmutableDictionary<string, int>.Empty, null, null));
     }
 
     public Task<StatementNotInReviewPage> ListNotInReviewAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken)

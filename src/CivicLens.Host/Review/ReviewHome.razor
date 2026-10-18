@@ -44,6 +44,9 @@
             <Stat Value="overview.NewChanges" Label="New changes" Href="#new-changes" />
             <Stat Value="overview.DraftsNeedingAction" Label="Drafts need action" Tone="Tone.Warn" Href="/Review?drafts=needs-action#drafts" />
             <Stat Value="overview.ApprovedDrafts" Label="Approved, private" Tone="Tone.Ok" Href="/Review?drafts=approved#drafts" />
+            <Stat Value="statementCounts!.NeedsAction" Label="Statements need action" Tone="Tone.Warn" Href="@($"{StatementRoutes.List}?drafts={DraftFilterNames.NeedsAction}")" />
+            <Stat Value="actionCounts!.NeedsAction" Label="Actions need action" Tone="Tone.Warn" Href="@($"{ActionRoutes.List}?drafts={DraftFilterNames.NeedsAction}")" />
+            <Stat Value="voteCounts!.NeedsAction" Label="Votes need action" Tone="Tone.Warn" Href="@($"{VoteRoutes.List}?drafts={DraftFilterNames.NeedsAction}")" />
             <Stat Value="briefCounts!.NeedsAction" Label="Briefs need action" Tone="Tone.Warn" Href="@($"{BriefRoutes.List}?drafts={DraftFilterNames.NeedsAction}")" />
             <Stat Value="relationshipCounts!.NeedsAction" Label="Relationships need action" Tone="Tone.Warn" Href="@($"{RelationshipRoutes.List}?drafts={DraftFilterNames.NeedsAction}")" />
             @if (ready is not null)

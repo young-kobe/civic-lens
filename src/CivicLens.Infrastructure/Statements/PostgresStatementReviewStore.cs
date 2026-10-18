@@ -64,11 +64,12 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
         Records.CreateAsync(contextFactory, actorSubject, revision, CreateOperation, idempotencyKey, payloadHash, async db =>
         {
             revision.ValidateShape();
-            await StatementDraftRows.RequireCandidateExtractionAsync(db, revision, cancellationToken);
+            var capturedOn = await StatementDraftRows.RequireCandidateExtractionAsync(db, revision, cancellationToken);
             var draft = await db.Set<StatementDraftRow>()
                 .SingleOrDefaultAsync(row => row.CandidateId == revision.CandidateId, cancellationToken);
-            if (draft is null) db.Add(StatementDraftRows.NewDraft(revision.CandidateId, 1, revision.CreatedAtUtc.UtcTicks));
+            if (draft is null) db.Add(draft = StatementDraftRows.NewDraft(revision.CandidateId, 1, revision.CreatedAtUtc.UtcTicks));
             else StartRevisionLessDraft(draft);
+            StatementDraftRows.SetListing(draft, revision, capturedOn);
             db.Add(StatementDraftRows.NewRevision(revision, null));
             return revision;
         }, cancellationToken);
@@ -77,11 +78,11 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
         int expectedRevisionNumber, bool statementDateChecked, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken) =>
         Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
-            payloadHash, async (db, current) =>
+            payloadHash, async (db, draft, current) =>
             {
                 var saved = revision.KeepingAiStatementDateOnlyIfChecked(current, statementDateChecked);
                 saved.ValidateShape();
-                await StatementDraftRows.RequireCandidateExtractionAsync(db, saved, cancellationToken);
+                StatementDraftRows.SetListing(draft, saved, await StatementDraftRows.RequireCandidateExtractionAsync(db, saved, cancellationToken));
                 return saved;
             }, saved => StatementDraftRows.NewRevision(saved, null), cancellationToken);
 
@@ -116,18 +117,28 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
         return new(ToReview(draft, history), candidate.SourceId, candidate.Url, article.Extraction, analysisRunId, configurationRevision);
     }
 
-    public async Task<StatementReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter,
+    public async Task<StatementReviewPage> ListAsync(PageCursor? cursor, int limit, DraftListFilter filter,
         CancellationToken cancellationToken)
     {
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var slice = await Records.PageAsync(db, cursor, limit, filter, cancellationToken);
-        var candidates = await ReadCandidatesAsync(db, [.. slice.Items.Select(row => row.CandidateId)], cancellationToken);
-        var histories = await Records.ReadHistoriesAsync(db, slice.Items, cancellationToken);
+        var slice = await ListedDrafts.PageAsync<StatementDraftRow, StatementAnalysisRow>(db, Records.Drafts(db, filter.Status),
+            StatementDraftTask.Task, nameof(StatementDraftRow.CandidateId), cursor, limit, filter, cancellationToken);
+        var drafts = slice.Items.Select(item => item.Draft).ToArray();
+        var candidates = await ReadCandidatesAsync(db, [.. drafts.Select(row => row.CandidateId)], cancellationToken);
+        var histories = await Records.ReadHistoriesAsync(db, drafts, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        var items = slice.Items.Select(row => ToListItem(row, candidates[row.CandidateId], histories[row.CandidateId]));
-        return new([.. items], slice.NewerCursor, slice.OlderCursor);
+        var items = drafts.Select(row => ToListItem(row, candidates[row.CandidateId], histories[row.CandidateId]));
+        return new([.. items], ListedDrafts.PrioritiesOf(slice.Items), slice.NewerCursor, slice.OlderCursor);
+    }
+
+    public async Task<StatementReviewCounts> CountAsync(CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var needsAction = await Records.Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken);
+        var approved = await Records.Drafts(db, DraftStatusFilter.Approved).CountAsync(cancellationToken);
+        return new(needsAction, approved);
     }
 
     public async Task<StatementNotInReviewPage> ListNotInReviewAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken)

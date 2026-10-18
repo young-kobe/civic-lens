@@ -3,11 +3,9 @@ using System.Globalization;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Review;
 using CivicLens.Core.Actions;
-using CivicLens.Core.Review;
 using CivicLens.Host.Components.Layout;
 using CivicLens.Host.Components.Ui;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Authorization;
 
 namespace CivicLens.Host.Review;
 
@@ -19,62 +17,37 @@ public sealed partial class ActionList
     private static readonly IReadOnlyList<Crumb> Crumbs = [new("Review", "/Review"), new("Actions")];
 
     private readonly string renderKey = Guid.NewGuid().ToString("N");
-    private ReviewActor? actor;
     private ActionReviewPage? drafts;
     private ActionReviewCounts? counts;
     private IReadOnlyList<ActionApprovalResult>? approvals;
-    private string? error;
 
-    [Inject] private ReviewActorAccessor Actors { get; set; } = default!;
     [Inject] private ListActionReviews ListDrafts { get; set; } = default!;
     [Inject] private GetActionReviewCounts GetCounts { get; set; } = default!;
     [Inject] private ApproveSponsorshipChanges Approve { get; set; } = default!;
 
-    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
-    [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = default!;
-
-    [SupplyParameterFromQuery(Name = "drafts")] private string? DraftsFilterName { get; set; }
-    [SupplyParameterFromQuery(Name = "draftsCursor")] private string? DraftsCursor { get; set; }
-
     [SupplyParameterFromForm(FormName = ApproveForm, Name = "targets")] private string[]? Targets { get; set; }
     [SupplyParameterFromForm(FormName = ApproveForm, Name = "idempotencyKey")] private string? ApproveKey { get; set; }
 
-    private DraftStatusFilter Filter => DraftFilterNames.Parse(DraftsFilterName);
-
     protected override async Task OnInitializedAsync()
     {
-        actor = Actors.GetActor((await AuthenticationState).User);
+        await ReadActorAsync();
         if (!HttpMethods.IsPost(HttpContext.Request.Method)) await LoadAsync();
     }
 
-    private async Task LoadAsync()
+    private Task LoadAsync() => LoadGuardedAsync(async () =>
     {
-        var cancellationToken = HttpContext.RequestAborted;
-        try
-        {
-            drafts = await ListDrafts.ExecuteAsync(actor!, DraftsCursor, PageSize, Filter, cancellationToken);
-            counts = await GetCounts.ExecuteAsync(actor!, cancellationToken);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (ArgumentException)
-        {
-            error = "This page link is no longer valid. Go back to the first page of the list.";
-        }
-        catch (Exception)
-        {
-            error = "The action list could not load. Refresh the page to try again.";
-        }
-    }
+        drafts = await ListDrafts.ExecuteAsync(actor, DraftsCursor, PageSize, ReadListFilter(), RequestAborted);
+        counts = await GetCounts.ExecuteAsync(actor, RequestAborted);
+    }, "The action list could not load. Refresh the page to try again.");
 
     private async Task ApproveAsync()
     {
-        var cancellationToken = HttpContext.RequestAborted;
         try
         {
-            approvals = await Approve.ExecuteAsync(actor!, new ApproveSponsorshipChangesRequest(ParseTargets(), ApproveKey ?? ""),
-                cancellationToken);
+            approvals = await Approve.ExecuteAsync(actor, new ApproveSponsorshipChangesRequest(ParseTargets(), ApproveKey ?? ""),
+                RequestAborted);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (OperationCanceledException) when (RequestAborted.IsCancellationRequested) { throw; }
         catch (ArgumentException)
         {
             HttpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
@@ -106,17 +79,10 @@ public sealed partial class ActionList
     };
 
     private IReadOnlyList<FilterTab> DraftTabs =>
-        DraftFilterTabs.For(Filter, name => Href(name, null), counts!.NeedsAction, counts.Approved);
+        DraftFilterTabs.For(Filter, name => Href(ActionRoutes.List, name, null, "drafts"), counts!.NeedsAction, counts.Approved);
 
-    private string? DraftsHref(string? cursor) => cursor is null ? null : Href(DraftFilterNames.NameOf(Filter), cursor);
-
-    private static string Href(string? filter, string? cursor)
-    {
-        var query = new List<string>();
-        if (filter is not null) query.Add("drafts=" + filter);
-        if (cursor is not null) query.Add("draftsCursor=" + Uri.EscapeDataString(cursor));
-        return ActionRoutes.List + (query.Count == 0 ? "" : "?" + string.Join('&', query)) + "#drafts";
-    }
+    private string? DraftsHref(string? cursor) =>
+        cursor is null ? null : Href(ActionRoutes.List, DraftFilterNames.NameOf(Filter), cursor, "drafts");
 
     private (string Title, string Text) DraftsEmpty => Filter switch
     {

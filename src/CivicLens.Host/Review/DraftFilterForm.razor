@@ -1,0 +1,46 @@
+@using CivicLens.Application.Issues
+<form class="list-filter" method="get" action="@Action" aria-label="@Label">
+    @if (Status is not null)
+    {
+        <input type="hidden" name="drafts" value="@Status" />
+    }
+    <Field Label="Issue" For="filter-issue" Optional="true">
+        <select id="filter-issue" name="issue">
+            <option value="" selected="@string.IsNullOrEmpty(IssueId)">Any issue</option>
+            @foreach (var issue in Issues)
+            {
+                <option value="@issue.Id" selected="@(issue.Id == IssueId)">@issue.Name</option>
+            }
+        </select>
+    </Field>
+    <Field Label="Official" For="filter-official" Optional="true">
+        <select id="filter-official" name="official">
+            <option value="" selected="@string.IsNullOrEmpty(OfficialId)">Any official</option>
+            @foreach (var id in OfficialIds)
+            {
+                <option value="@id" selected="@(id == OfficialId)">@id</option>
+            }
+        </select>
+    </Field>
+    <Field Label="From" For="filter-from" Optional="true">
+        <input id="filter-from" type="date" name="from" value="@From" />
+    </Field>
+    <Field Label="To" For="filter-to" Optional="true">
+        <input id="filter-to" type="date" name="to" value="@To" />
+    </Field>
+    <Button Variant="ButtonVariant.Primary" Small="true" Type="submit">Filter</Button>
+    <Button Small="true" Href="@ClearHref">Clear</Button>
+</form>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Action { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string ClearHref { get; set; } = string.Empty;
+    [Parameter] public string? Status { get; set; }
+    [Parameter, EditorRequired] public IReadOnlyList<TrackedIssueConfiguration> Issues { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<string> OfficialIds { get; set; } = [];
+    [Parameter] public string? IssueId { get; set; }
+    [Parameter] public string? OfficialId { get; set; }
+    [Parameter] public string? From { get; set; }
+    [Parameter] public string? To { get; set; }
+}

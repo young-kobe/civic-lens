@@ -31,6 +31,7 @@ internal static class ReviewAuthorization
 internal static class ReviewValidation
 {
     public const int MaximumIdempotencyKeyLength = 256;
+    private const int MaximumFilterIdLength = 128;
 
     public static void ValidateIdempotencyKey(string value, int maximumLength = MaximumIdempotencyKeyLength)
     {
@@ -143,5 +144,16 @@ internal static class ReviewValidation
     {
         PageLimit.Validate(limit);
         return PageCursor.Parse(cursor);
+    }
+
+    public static void ValidateListFilter(DraftListFilter filter)
+    {
+        if (!Enum.IsDefined(filter.Status)) throw new ArgumentOutOfRangeException(nameof(filter));
+        if (filter.From > filter.To) throw new ArgumentException("The date range ends before it starts.", nameof(filter));
+        foreach (var id in new[] { filter.IssueId, filter.OfficialId })
+        {
+            if (id is not null && (string.IsNullOrWhiteSpace(id) || id.Length > MaximumFilterIdLength))
+                throw new ArgumentException("A filter ID must contain 1 to 128 characters.", nameof(filter));
+        }
     }
 }

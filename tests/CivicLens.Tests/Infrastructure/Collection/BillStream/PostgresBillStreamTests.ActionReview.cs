@@ -49,9 +49,25 @@ public sealed partial class PostgresBillStreamTests
 
         Assert.Equal("AwaitingReview", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
         Assert.True((long)(await ScalarAsync($"SELECT last_revised_at_utc_ticks FROM action_drafts WHERE record_id = '{RecordId}'"))! > approvedAt);
-        var needsAction = await new ListActionReviews(ActionReviews()).ExecuteAsync(Reviewer, null, filter: DraftStatusFilter.NeedsAction);
+        var needsAction = await new ListActionReviews(ActionReviews()).ExecuteAsync(Reviewer, null, filter: new DraftListFilter(DraftStatusFilter.NeedsAction));
         var item = Assert.Single(needsAction.Items);
         Assert.Equal((2, 1), (item.CurrentRevision.RevisionNumber, item.LastApprovedRevision!.RevisionNumber));
+    }
+
+    // The lists filter and sort on these columns, so each new revision must replace them or the lists would show stale sponsors.
+    [Fact]
+    public async Task EachWorkerRevisionReplacesTheListedColumnsWithThoseOfTheCurrentRevision()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+        var first = await ListedColumnsAsync();
+        Assert.Single(first.Officials);
+
+        await AddSponsorAsync(UpdatedAt.AddDays(1));
+
+        var second = await ListedColumnsAsync();
+        Assert.Equal(2, second.Officials.Length);
+        Assert.NotEqual(first.CandidateId, second.CandidateId);
+        Assert.Equal(second.FromRevision, second.FromColumns);
     }
 
     [Fact]
@@ -233,6 +249,28 @@ public sealed partial class PostgresBillStreamTests
 
         await Assert.ThrowsAsync<PostgresException>(() =>
             ExecuteAsync(connectionString, $"UPDATE action_drafts SET review_status = 'NotDrafted' WHERE record_id = '{RecordId}'"));
+    }
+
+    private async Task<(string CandidateId, string[] Officials, (string, string, string, string) FromRevision, (string, string, string, string) FromColumns)>
+        ListedColumnsAsync()
+    {
+        using var revision = System.Text.Json.JsonDocument.Parse((string)(await ScalarAsync($"""
+            SELECT r.revision_json FROM action_revisions r JOIN action_drafts d ON d.record_id = r.record_id AND d.current_revision_number = r.revision_number
+            WHERE d.record_id = '{RecordId}'
+            """))!);
+        var root = revision.RootElement;
+        var officials = root.GetProperty("sponsorships").EnumerateArray().Select(item => item.GetProperty("personId").GetString()!).Distinct().ToArray();
+        var newest = root.GetProperty("sponsorships").EnumerateArray()
+            .Select(item => (item.TryGetProperty("withdrawnOn", out var withdrawn) && withdrawn.ValueKind == System.Text.Json.JsonValueKind.String
+                ? withdrawn : item.GetProperty("sponsoredOn")).GetString()!).Max()!;
+        var candidate = root.GetProperty("candidateId").GetString()!;
+        var issues = string.Join(',', root.GetProperty("trackedIssueIds").EnumerateArray().Select(item => item.GetString()));
+        var stored = (string)(await ScalarAsync($"""
+            SELECT concat_ws('|', candidate_id, event_on::text, array_to_string(issue_ids, ','), array_to_string(official_ids, ','))
+            FROM action_drafts WHERE record_id = '{RecordId}'
+            """))!;
+        var parts = stored.Split('|');
+        return (candidate, officials, (candidate, newest, issues, string.Join(',', officials)), (parts[0], parts[1], parts[2], parts[3]));
     }
 
     private PostgresActionReviewStore ActionReviews() => new(new PooledDbContextFactory<CollectionAttemptDbContext>(

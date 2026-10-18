@@ -66,7 +66,7 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
     public Task<VoteDraftRevision> SaveRevisionAsync(string actorSubject, VoteDraftRevision revision, int expectedRevisionNumber,
         string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
         Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
-            payloadHash, (_, current) =>
+            payloadHash, (_, _, current) =>
             {
                 revision.ValidatePersonEditOf(current);
                 return Task.FromResult(revision);
@@ -99,17 +99,18 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
         return new(ToReview(draft, history), extractions.ToImmutableDictionary(StringComparer.Ordinal), names);
     }
 
-    public async Task<VoteReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter, CancellationToken cancellationToken)
+    public async Task<VoteReviewPage> ListAsync(PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken)
     {
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var slice = filter == DraftStatusFilter.NeedsAction
-            ? await Records.PageAsync(db, cursor, limit, filter, row => row.LastRevisedAtUtcTicks, cancellationToken)
-            : await Records.PageAsync(db, cursor, limit, filter, cancellationToken);
-        var histories = await Records.ReadHistoriesAsync(db, slice.Items, cancellationToken);
+        var slice = await ListedDrafts.PageAsync<VoteDraftRow, VoteAnalysisRow>(db, Records.Drafts(db, filter.Status),
+            VoteDraftTask.Task, nameof(VoteDraftRow.RecordId), cursor, limit, filter, cancellationToken);
+        var drafts = slice.Items.Select(item => item.Draft).ToArray();
+        var histories = await Records.ReadHistoriesAsync(db, drafts, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new([.. slice.Items.Select(row => ToReview(row, histories[row.RecordId]))], slice.NewerCursor, slice.OlderCursor);
+        return new([.. drafts.Select(row => ToReview(row, histories[row.RecordId]))], ListedDrafts.PrioritiesOf(slice.Items),
+            slice.NewerCursor, slice.OlderCursor);
     }
 
     public async Task<VoteReviewCounts> CountAsync(CancellationToken cancellationToken)
