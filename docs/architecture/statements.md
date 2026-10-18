@@ -46,6 +46,8 @@ The statements feature finds articles that may hold an official's statement and 
 
 Each line gives the rule, what enforces it, and the test that protects it. Cross-feature invariants are in [architecture](../architecture.md#invariants).
 
+- The event date of a statement is its statement date, or else the capture date of its candidate (`statement_candidates.created_at_utc_ticks`, as a UTC date). Enforced by `StatementDraftRevision.EventOn`. Test: `StatementDraftRevisionTests.TheEventDateIsTheStatementDateElseTheCaptureDate`.
+- A count equals the total of its list filter, so a draft with no revision needs action. Enforced by `PostgresStatementReviewStore.CountAsync` and `ReviewRecords.Drafts`. Test: `PostgresStatementReviewStoreTests.CountsUseTheSameStatusRuleAsTheListFiltersSoADraftWithoutARevisionNeedsAction`.
 - A statement candidate is the source plus the URL, and it never repeats. Enforced by the primary key of `statement_candidates`. Test: `PostgresStatementCandidateRegistrationTests.ConcurrentSavesForTheSameSourceAndUrlLeaveOneCandidate`.
 - Only discovery-admitted jobs become candidates. Enforced by `PostgresStatementCandidateRegistration`. Test: `PostgresStatementCandidateRegistrationTests.ExtractionFromAWatchedPageJobRegistersNoCandidate`.
 - A Succeeded gate has a known reason. Enforced by `StatementGateLifecycle`. Test: `StatementGateLifecycleTests.ASucceededGateNeedsAKnownReason`.
@@ -248,14 +250,14 @@ Infrastructure/Statements holds `PostgresStatementReviewStore` and `StatementRev
 
 **Reads.** `GetStatementReview` returns the aggregate, the status, the source ID, the URL, and the extraction for quote display. It also returns the run ID when revision 1 is an AI draft. A candidate with no draft row reads as `NotDrafted`.
 
-`ListStatementReviews` takes the filter `All`, `NeedsAction`, or `Approved`. It orders by creation time and then candidate ID. `NotDrafted` counts as needs action.
+`ListStatementReviews` takes the filter `All`, `NeedsAction`, or `Approved`. Every filter orders by tier, then newest event date, then candidate ID; see [review](review.md#lists-and-paging). The list also takes an issue, an official, and an event date range. The page holds the tier of each row. `NotDrafted` counts as needs action. `GetStatementReviewCounts` counts each filter with the same status rule, and the Review home page shows the needs action count.
 
 `ListStatementsNotInReview` lists candidates that have no draft revision, each with its stage and reason code. These are over-cap draft rows. They are also candidates with no draft row whose gate or draft entry is skipped, failed, or blocked. `StatementReviewQueries` holds the unpublished approved and not-in-review SQL.
 
 **Pages.** `/Review/Statements` lists the drafts and the statements that are not in review.
 
-- The drafts table has the filter tabs All, Needs action, and Approved, and a pager on `ListStatementReviews`. It shows the headline (or "Not drafted"), the source, the status, and the open concern count.
-- The query values are `drafts` (filter), `draftsCursor`, `notInReview` (cursor), and `status`, as on the Review home page.
+- The drafts table has the filter tabs All, Needs action, and Approved, a filter form for issue, official, and dates, and a pager on `ListStatementReviews`. It shows the headline (or "Not drafted"), a tier badge for tier 1 and tier 2, the source, the status, and the open concern count.
+- The query values are `drafts` (filter), `draftsCursor`, `issue`, `official`, `from`, `to`, `notInReview` (cursor), and `status`, as on the Review home page.
 - The "Not in review" table has a pager on `ListStatementsNotInReview`. It shows the source, the URL, and the reason code. Each row has a Start draft post form.
 
 `/Review/Statements/{CandidateId}` mirrors the document-change editor. It shows the AI authorship notice with the analysis run, the open-concern notice, and the compare panel after a stale save.
@@ -449,6 +451,7 @@ With `--since`, `regate` moves only candidates first captured on or after that U
 - Each `statement_revisions` row has the author kind (`ReviewAuthorKind`: `Person` or `Analysis`). Revision 1 by the analysis author is the AI revision. Code only inserts revision rows.
 - `StatementDraftRevision` holds the headline, the summary, and the statement date with its evidence span. It also holds `speakerOfficialIds`, `otherSpeakers`, `issueIds`, `policyAreaIds`, the quotations (an extraction span and a kind), and `billNumbers`. Confidence is never in the revision; it stays in the run output.
 - The review record ID is the 64-character candidate ID. `ReviewValidation.ValidateCandidateId` accepts a lowercase SHA-256 value only.
+- `statement_drafts` also has `event_on`, `issue_ids`, and `official_ids`, with GIN indexes on the two arrays and the index `ix_statement_drafts_listing`. The migration `ReviewListColumns` adds them with no backfill. Create, save, and the AI draft write them from the revision through `StatementDraftRows.SetListing`. The over-cap draft row gets the capture date.
 - `statement_drafts` also has `review_state_version` and `review_status`. The store computes both with `ReviewPolicy` under the lock.
 - A draft with no revision has the status `NotDrafted`. A migration set old rows with revision 0 to `NotDrafted` and every other row to `AwaitingReview`.
 - `statement_review_decisions` holds the immutable decision JSON.
@@ -474,9 +477,9 @@ With `--since`, `regate` moves only candidates first captured on or after that U
 | Stores and models | `src/CivicLens.Infrastructure/Statements/PostgresStatementGateStore.cs`, `src/CivicLens.Infrastructure/Statements/StatementAnalysisListing.cs` (queue table name, shared list and article read), `src/CivicLens.Application/Statements/StatementArticle.cs` (article record), `src/CivicLens.Infrastructure/Statements/PostgresStatementDraftStore.cs`, `src/CivicLens.Infrastructure/Statements/StatementGateQueueMapping.cs`, `src/CivicLens.Infrastructure/Statements/StatementDraftQueueMapping.cs`, `src/CivicLens.Infrastructure/Statements/AnthropicStatementGateModel.cs`, `src/CivicLens.Infrastructure/Statements/AnthropicStatementDraftModel.cs` |
 | CLI and composition | `src/CivicLens.Host/Statements/StatementCommand.cs`, `src/CivicLens.Host/Statements/StatementGateComposition.cs`, `src/CivicLens.Host/Statements/StatementDraftComposition.cs` |
 | Review aggregate | `src/CivicLens.Core/Statements/StatementReview.cs`, `src/CivicLens.Core/Review/AiProposedDate.cs` |
-| Review commands and reads | `src/CivicLens.Application/Statements/CreateStatementDraft.cs`, `src/CivicLens.Application/Statements/SaveStatementDraft.cs`, `src/CivicLens.Application/Statements/DecideStatementReview.cs`, `src/CivicLens.Application/Statements/GetStatementReview.cs`, `src/CivicLens.Application/Statements/ListStatementReviews.cs`, `src/CivicLens.Application/Statements/ListStatementsNotInReview.cs`, `src/CivicLens.Application/Statements/StatementSelectionResolver.cs`, `src/CivicLens.Application/Statements/StatementSelectableSpans.cs` |
+| Review commands and reads | `src/CivicLens.Application/Statements/CreateStatementDraft.cs`, `src/CivicLens.Application/Statements/SaveStatementDraft.cs`, `src/CivicLens.Application/Statements/DecideStatementReview.cs`, `src/CivicLens.Application/Statements/GetStatementReview.cs`, `src/CivicLens.Application/Statements/ListStatementReviews.cs`, `src/CivicLens.Application/Statements/GetStatementReviewCounts.cs`, `src/CivicLens.Application/Statements/ListStatementsNotInReview.cs`, `src/CivicLens.Application/Statements/StatementSelectionResolver.cs`, `src/CivicLens.Application/Statements/StatementSelectableSpans.cs` |
 | Review store | `src/CivicLens.Infrastructure/Statements/PostgresStatementReviewStore.cs`, `src/CivicLens.Infrastructure/Statements/StatementReviewQueries.cs` |
-| Review pages | `src/CivicLens.Host/Review/StatementList.razor`, `src/CivicLens.Host/Review/StatementEditor.razor`, `src/CivicLens.Host/Review/ReviewRecordPage.cs` |
+| Review pages | `src/CivicLens.Host/Review/StatementList.razor`, `src/CivicLens.Host/Review/DraftListPage.cs`, `src/CivicLens.Host/Review/StatementEditor.razor`, `src/CivicLens.Host/Review/ReviewRecordPage.cs` |
 | Gate labels: label, split, store | `src/CivicLens.Core/Statements/GateLabel.cs`, `src/CivicLens.Core/Statements/GateLabelEntry.cs`, `src/CivicLens.Core/Statements/GateLabelSplit.cs`, `src/CivicLens.Application/Statements/IGateLabelStore.cs`, `src/CivicLens.Infrastructure/Statements/PostgresGateLabelStore.cs` |
 | Gate label use cases | `src/CivicLens.Application/Statements/SaveGateLabel.cs`, `src/CivicLens.Application/Statements/ListGateLabelQueue.cs`, `src/CivicLens.Application/Statements/GetGateLabelTask.cs`, `src/CivicLens.Application/Statements/ExportGateLabels.cs` |
 | Gate label pages and export | `src/CivicLens.Host/Review/GateLabelList.razor`, `src/CivicLens.Host/Review/GateLabelEditor.razor`, `src/CivicLens.Host/Statements/GateLabelExport.cs` |
