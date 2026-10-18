@@ -11,6 +11,7 @@ internal static class RecordRoutes
         PublishedRecordKind.Action => ActionRoutes.Editor(recordId),
         PublishedRecordKind.Vote => VoteRoutes.Editor(recordId),
         PublishedRecordKind.Brief => BriefRoutes.Editor(recordId),
+        PublishedRecordKind.Relationship => RelationshipRoutes.Editor(recordId),
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no review page.")
     };
 }

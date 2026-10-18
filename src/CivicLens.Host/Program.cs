@@ -333,6 +333,7 @@ try
                 PostgresStatementReviewStore.FromConnectionString(connectionString),
                 PostgresActionReviewStore.FromConnectionString(connectionString),
                 PostgresVoteReviewStore.FromConnectionString(connectionString),
+                new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)),
                 new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString))),
             new PublicationCatalog(officialNames), TimeProvider.System);
         executing = true;

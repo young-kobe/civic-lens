@@ -16,6 +16,7 @@ public sealed class PublishRelease
     private readonly IReleaseDirectory releases;
     private readonly IReleaseRenderer renderer;
     private readonly PublishedRecordLoaders loaders;
+    private readonly ReleasePages releasePages;
     private readonly PublishedRecordRules rules;
     private readonly TimeProvider clock;
 
@@ -26,6 +27,7 @@ public sealed class PublishRelease
         this.releases = releases;
         this.renderer = renderer;
         this.loaders = loaders;
+        releasePages = new ReleasePages(releases, loaders);
         this.clock = clock;
         rules = new PublishedRecordRules(catalog);
     }
@@ -46,14 +48,16 @@ public sealed class PublishRelease
         var now = clock.GetUtcNow();
         var state = await publications.GetStateAsync(cancellationToken);
         var previous = await PreviousRelease.LoadAsync(releases, state.Active, cancellationToken);
-        var additions = await LoadAdditionsAsync(references, new(previous, now, rules, renderer), cancellationToken);
+        var build = new PublicationBuild(previous, now, rules, renderer);
+        var additions = await LoadAdditionsAsync(references, build, cancellationToken);
+        var pages = await releasePages.RenderAsync(build.WithAdded(additions), additions, cancellationToken);
         var requested = references.ToHashSet();
         var carried = previous.Entries.Where(entry => !requested.Contains(new(entry.Kind, entry.RecordId))).ToList();
         if (carried.Count + additions.Count > PublicationProtocol.MaximumRecordsPerRelease)
             throw new ArgumentException("The release would exceed the maximum record count.", nameof(request));
 
         var number = state.LatestReleaseNumber + 1;
-        var (directory, entries) = await StageAsync(number, now, previous, carried, additions, cancellationToken);
+        var (directory, entries) = await StageAsync(number, now, previous, carried, additions, pages, cancellationToken);
         var commit = new PublicationCommit(number, state.Active?.ReleaseNumber, directory,
             [.. entries.Select(PublishedRevisionBinding.Of)],
             [.. additions.Select(addition => addition.Expectation)]);
@@ -96,7 +100,7 @@ public sealed class PublishRelease
 
     private async Task<(string Directory, List<PublishedRecordEntry> Entries)> StageAsync(int number, DateTimeOffset now,
         PreviousRelease previous, List<PublishedRecordEntry> carried, List<PendingRecord> additions,
-        CancellationToken cancellationToken)
+        IReadOnlyDictionary<string, string> pages, CancellationToken cancellationToken)
     {
         List<PublishedRecordEntry> entries = [.. carried, .. additions.Select(addition => addition.Entry)];
         var manifest = new PublicationRelease
@@ -116,13 +120,16 @@ public sealed class PublishRelease
         foreach (var entry in carried)
         {
             await staging.LinkFileAsync(previous.DirectoryName!, PublicationProtocol.RecordDataPath(entry.RecordId), cancellationToken);
-            await staging.LinkFileAsync(previous.DirectoryName!, PublicationProtocol.RecordPagePath(entry.RecordId), cancellationToken);
+            if (pages.TryGetValue(entry.RecordId, out var page))
+                await staging.WriteFileAsync(PublicationProtocol.RecordPagePath(entry.RecordId), Encoding.UTF8.GetBytes(page), cancellationToken);
+            else
+                await staging.LinkFileAsync(previous.DirectoryName!, PublicationProtocol.RecordPagePath(entry.RecordId), cancellationToken);
         }
         foreach (var addition in additions)
         {
             await staging.WriteFileAsync(PublicationProtocol.RecordDataPath(addition.RecordId), addition.Json, cancellationToken);
             await staging.WriteFileAsync(PublicationProtocol.RecordPagePath(addition.RecordId),
-                Encoding.UTF8.GetBytes(addition.Page), cancellationToken);
+                Encoding.UTF8.GetBytes(pages[addition.RecordId]), cancellationToken);
         }
 
         foreach (var asset in renderer.Assets)

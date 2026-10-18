@@ -14,7 +14,7 @@ The system has one repository and three runtime parts. A C# application runs col
 
 - A **statement** is a public communication by an official in their own words. It comes from the official, their office, or the official record of their remarks. It states a position, makes a claim, or claims credit. One statement covers one source document, such as a press release or a floor speech. It holds the speaker, the date, a short account, and exact cited quotations.
 - An **action** is an act that an official performs in their official capacity. The institution where it happened records it. Examples are sponsoring or cosponsoring a bill, withdrawing a cosponsorship, and casting a roll-call vote. Each action states whether it is a proposal, a procedural act, or a decision. What happens to a bill later is context, because it is an act of Congress, not of the official.
-- A **relationship** is a reviewed link of a named type between a statement and an action or a vote. Examples are "describes own bill", "states position on", and "claims credit for". Chronology alone never creates one. The worker drafts relationships. Review and publication are planned.
+- A **relationship** is a reviewed link of a named type between a statement and an action or a vote. Examples are "describes own bill", "states position on", and "claims credit for". Chronology alone never creates one. The worker drafts relationships. A person reviews them. An approved relationship publishes in a static release.
 
 ### Editorial rules
 
@@ -46,7 +46,8 @@ Implemented:
 - relationship review: person edits, version-bound decisions, and a derived flag for changed cited records
 - AI drafting of weekly briefs from the records published in a closed week
 - the authenticated review workspace
-- static release publication of document changes, statements, actions, and weekly briefs
+- static release publication of document changes, statements, actions, votes, weekly briefs, and relationships
+- related records on the statement, action, and vote pages
 
 Pending: live Auth0 tenant verification, production deployment, AI classification, correction and withdrawal releases, and MCP. The [roadmap](roadmap.md) holds the order.
 
@@ -68,7 +69,7 @@ Core holds domain invariants. Application holds use cases and the interfaces of 
 <!-- diagrams:start -->
 ### Collection to publication (target)
 
-Target workflow. Implemented: configured collection with durable jobs, discovery, and admission; the Congress.gov bill stream with its gate and action candidates; text extraction, history, and comparison; AI drafting of document-change accounts; the statement gate and statement drafting; AI drafting of bill action records; AI drafting of weekly briefs; version-bound review of all four record kinds, including weekly briefs; and static release publication of all four record kinds. Planned: classification and private and public MCP.
+Target workflow. Implemented: configured collection with durable jobs, discovery, and admission; the Congress.gov bill stream with its gate and action candidates; text extraction, history, and comparison; AI drafting of document-change accounts; the statement gate and statement drafting; AI drafting of bill action records; AI drafting of weekly briefs; version-bound review of all record kinds, including weekly briefs and relationships; and static release publication of all record kinds. Planned: classification and private and public MCP.
 
 ```mermaid
 flowchart LR
@@ -185,11 +186,11 @@ The analysis queues share the `civic_lens_analysis` channel. The notify trigger 
 The keys, in their declared order:
 
 - `civic-lens-collection-jobs`: `PostgresCollectionJobStore` takes it at the start of each admission, claim, and settlement transaction. Discovery admission needs no other key, because this key already serializes every admission.
-- Review keys: `civic-lens-document-change-review`, `civic-lens-statement-review`, `civic-lens-action-review`, `civic-lens-vote-review`, `civic-lens-relationship-review`, and `civic-lens-brief-review`. Publication takes five of them in the order of `PostgresAdvisoryLock.ReviewKeysInOrder`. The vote key comes after the action key and before the brief key. Vote drafting, vote review, and vote publication take it.
-- The relationship key comes after the vote key and before the brief key. Relationship drafting takes it. Publication does not take it until relationship publication exists, and then it joins the list in this order.
+- Review keys: `civic-lens-document-change-review`, `civic-lens-statement-review`, `civic-lens-action-review`, `civic-lens-vote-review`, `civic-lens-relationship-review`, and `civic-lens-brief-review`. Publication takes all six of them in the order of `PostgresAdvisoryLock.ReviewKeysInOrder`. The vote key comes after the action key and before the relationship key. Vote drafting, vote review, and vote publication take it.
+- The relationship key comes after the vote key and before the brief key. Relationship drafting, relationship review, and publication take it. Publication takes it with the record keys, so the record keys come first, then the relationship key, then the brief key.
 - `civic-lens-collection-import`: the import store takes it for each write. No transaction holds it with another key.
 
-A transaction that takes a brief queue row lock takes it before `civic-lens-brief-review`. The worker settlement locks its row and then takes the brief key. A publication commit, a release activation, and a review decision that must requeue a brief therefore lock every brief queue row in key order first. They use `BriefStaleness.TakeLocksAsync` and then take the brief key. A decision on a statement, an action, or a vote has saved its decision row and draft status by then. The relationship hook runs first and needs the new state. The commit and the activation take the earlier review keys (`PostgresAdvisoryLock.ReviewKeysBeforeBriefs`), then the brief rows, then the brief key.
+A transaction that takes a brief queue row lock takes it before `civic-lens-brief-review`. The worker settlement locks its row and then takes the brief key. A publication commit, a release activation, and a review decision that must requeue a brief therefore lock every brief queue row in key order first. They use `BriefStaleness.TakeLocksAsync` and then take the brief key. A decision on a statement, an action, or a vote has saved its decision row and draft status by then. The relationship hook runs first and needs the new state. The commit and the activation take the earlier review keys, which include the relationship key (`PostgresAdvisoryLock.ReviewKeysBeforeBriefs`), then the brief rows, then the brief key.
 
 Extraction and comparison saves take no advisory lock. Each uses `INSERT ... ON CONFLICT DO NOTHING` in one ReadCommitted transaction. See [documents](architecture/documents.md#invariants).
 
@@ -383,6 +384,8 @@ This is the only navigation index.
 | Releases, activation, rollback | [Publication](architecture/publication.md#publish) | `src/CivicLens.Application/Publication/PublishRelease.cs` |
 | Release record content and schema | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Publication.Contracts/PublicationRelease.cs` |
 | Published vote record, builder, and page | [Publication](architecture/publication.md#vote-record) | `src/CivicLens.Publication.Contracts/PublishedVote.cs` |
+| Published relationship record, builder, and page | [Publication](architecture/publication.md#relationship-record) | `src/CivicLens.Publication.Contracts/PublishedRelationship.cs` |
+| Related records on record pages | [Publication](architecture/publication.md#related-records) | `src/CivicLens.Application/Publication/ReleasePages.cs` |
 | Backups, retention, monitoring | [Publication](architecture/publication.md#limits-and-planned-work) | none |
 | Web host, security headers, components | [Host](architecture/host.md#behavior) | `src/CivicLens.Host/Program.cs` |
 | Production hosting plan | [Host](architecture/host.md#limits-and-planned-work) | none |

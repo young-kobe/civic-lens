@@ -241,6 +241,21 @@ public sealed class BriefStalenessTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
+    public async Task ThePublishDoesNotHoldTheBriefLockWhileItWaitsForTheRelationshipLockSoTheRelationshipLockComesBeforeIt()
+    {
+        await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-relationship-review");
+        var committing = CommitAsync(Binding(PublishedRecordKind.Statement, P1, 1));
+        await HeldAdvisoryLock.WaitForWaiterAsync(connectionString, "civic-lens-relationship-review");
+
+        var acquiring = HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-brief-review");
+        Assert.Same(acquiring, await Task.WhenAny(acquiring, Task.Delay(TimeSpan.FromSeconds(10))));
+        await (await acquiring).DisposeAsync();
+        await holder.DisposeAsync();
+
+        await committing;
+    }
+
+    [Fact]
     public async Task TheReleaseTimeIsStampedAfterTheBriefLockSoABriefReadThatWaitedForTheCommitFindsTheRelease()
     {
         await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-brief-review");

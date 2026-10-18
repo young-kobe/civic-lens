@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text.Json;
 using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
 
@@ -16,6 +17,10 @@ internal abstract class PublishedRecordLoader(PublishedRecordKind kind)
 
     public abstract Task<List<PendingRecord>> LoadAsync(ImmutableArray<string> recordIds, PublicationBuild build,
         CancellationToken cancellationToken);
+
+    protected static TRecord Parse<TRecord>(byte[] json) =>
+        JsonSerializer.Deserialize<TRecord>(json, PublicationProtocol.JsonOptions)
+        ?? throw new InvalidDataException("A carried record file is empty.");
 }
 
 internal abstract class PublishedRecordLoader<TCandidate, TAddition>(PublishedRecordKind kind, string noun)
@@ -39,7 +44,7 @@ internal abstract class PublishedRecordLoader<TCandidate, TAddition>(PublishedRe
         {
             var addition = found.GetValueOrDefault(recordId)
                 ?? throw new ArgumentException($"{noun} {recordId} does not exist.", nameof(recordIds));
-            pending.Add(await BuildAsync(recordId, addition, build, cancellationToken));
+            pending.Add(Build(recordId, addition, build));
         }
         return pending;
     }
@@ -51,8 +56,7 @@ internal abstract class PublishedRecordLoader<TCandidate, TAddition>(PublishedRe
     protected abstract Task<IReadOnlyDictionary<string, TAddition>> GetForPublicationAsync(ImmutableArray<string> recordIds,
         PublicationBuild build, CancellationToken cancellationToken);
 
-    protected abstract Task<PendingRecord> BuildAsync(string recordId, TAddition addition, PublicationBuild build,
-        CancellationToken cancellationToken);
+    protected abstract PendingRecord Build(string recordId, TAddition addition, PublicationBuild build);
 
     protected ReadyToPublishRecord? Ready(ReviewStatus status, int unresolvedConcernCount, string recordId, string headline,
         int revisionNumber, int? publishedRevisionNumber) =>

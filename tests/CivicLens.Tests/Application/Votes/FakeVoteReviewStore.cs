@@ -11,6 +11,8 @@ internal sealed class FakeVoteReviewStore : IVoteReviewStore
 {
     public Dictionary<string, PublishableVote> Publishable { get; } = [];
     public List<UnpublishedApprovedVote> Unpublished { get; } = [];
+    public Dictionary<(int Congress, string BillType, int BillNumber), ImmutableArray<string>> BillActions { get; } = [];
+    public int BillLookups { get; private set; }
 
     public Task<IReadOnlyList<UnpublishedApprovedVote>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<UnpublishedApprovedVote>>([.. Unpublished.Take(limit)]);
@@ -20,6 +22,15 @@ internal sealed class FakeVoteReviewStore : IVoteReviewStore
     {
         IReadOnlyDictionary<string, PublishableVote> found = recordIds.Where(Publishable.ContainsKey)
             .ToDictionary(id => id, id => Publishable[id]);
+        return Task.FromResult(found);
+    }
+
+    public Task<IReadOnlyDictionary<string, ImmutableArray<string>>> FindBillActionRecordIdsAsync(ImmutableArray<VoteBill> bills,
+        CancellationToken cancellationToken)
+    {
+        BillLookups++;
+        IReadOnlyDictionary<string, ImmutableArray<string>> found = bills.ToDictionary(bill => bill.VoteRecordId,
+            bill => BillActions.GetValueOrDefault((bill.Congress, bill.BillType, bill.BillNumber), []));
         return Task.FromResult(found);
     }
 

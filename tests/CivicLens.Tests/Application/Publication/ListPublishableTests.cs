@@ -201,7 +201,7 @@ public sealed class ListPublishableTests
 
         var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
 
-        Assert.Equal([16, 16, 16, 16, 0], KindCounts(list));
+        Assert.Equal([16, 16, 16, 16, 0, 0], KindCounts(list));
         Assert.True(list.HasMore);
         Assert.Equal(PublishRelease.MaximumRecords + 1, scenario.Actions.UnpublishedLimit);
         Assert.Equal(PublishRelease.MaximumRecords + 1, scenario.Briefs.UnpublishedLimit);
@@ -222,7 +222,7 @@ public sealed class ListPublishableTests
 
         var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
 
-        Assert.Equal([29, 5, 30, 0, 0], KindCounts(list));
+        Assert.Equal([29, 5, 30, 0, 0, 0], KindCounts(list));
         Assert.True(list.HasMore);
     }
 
@@ -270,6 +270,36 @@ public sealed class ListPublishableTests
 
         var item = Assert.Single(list.Items);
         Assert.Equal((PublishedRecordKind.Brief, brief.RecordId, true), (item.Kind, item.RecordId, item.IsReplacement));
+    }
+
+    [Fact]
+    public async Task AnApprovedRelationshipIsListedWithBothHeadlinesAndOneWhoseCitedRecordsChangedIsNotBecausePublishWouldRefuseIt()
+    {
+        var scenario = new PublicationScenario();
+        var statement = scenario.AddStatement('c');
+        var action = scenario.AddAction('d');
+        var relationship = scenario.Relationships.Publishable[scenario.AddRelationship('e', statement, action)].Review;
+        scenario.Relationships.Unpublished.Add(new(relationship, "Statement c", "Action d", 1, false));
+        scenario.Relationships.Unpublished.Add(new(relationship with { RecordId = new string('f', 64) }, "Statement c", "Action d", null, true));
+
+        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+
+        var item = Assert.Single(list.Items);
+        Assert.Equal((PublishedRecordKind.Relationship, relationship.RecordId, "Statement c and Action d", true),
+            (item.Kind, item.RecordId, item.Headline, item.IsReplacement));
+    }
+
+    [Fact]
+    public async Task ARelationshipThatNoLongerMatchesIsListedWithTheFlagSoTheOwnerSeesItBeforePublishingButIsNotBlocked()
+    {
+        var scenario = new PublicationScenario();
+        var relationship = scenario.Relationships.Publishable[scenario.AddRelationship('e', scenario.AddStatement('c'), scenario.AddAction('d'))].Review;
+        scenario.Relationships.Unpublished.Add(new(relationship with { NoLongerMatches = true }, "Statement c", "Action d", null, false));
+        scenario.Relationships.Unpublished.Add(new(relationship with { RecordId = new string('f', 64) }, "Statement c", "Action d", null, false));
+
+        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+
+        Assert.Equal([(relationship.RecordId, true), (new string('f', 64), false)], list.Items.Select(item => (item.RecordId, item.NoLongerMatches)));
     }
 
     [Fact]

@@ -157,7 +157,13 @@
                                     <Row Context="item">
                                         <td><a class="cell-title" href="@RecordRoutes.Editor(item.Kind, item.RecordId)">@DraftStatusDisplay.DraftName(item.Headline)</a></td>
                                         <td>@PublishedRecordLabels.Kind(item.Kind)</td>
-                                        <td><StatusBadge Tone="@(item.IsReplacement ? Tone.Warn : Tone.Ok)" Text="@(item.IsReplacement ? "Replacement" : "New")" /></td>
+                                        <td>
+                                            <StatusBadge Tone="@(item.IsReplacement ? Tone.Warn : Tone.Ok)" Text="@(item.IsReplacement ? "Replacement" : "New")" />
+                                            @if (item.NoLongerMatches)
+                                            {
+                                                <StatusBadge Tone="Tone.Warn" Text="No longer matches" />
+                                            }
+                                        </td>
                                         <td class="num hide-narrow">@item.RevisionNumber</td>
                                     </Row>
                                 </DataTable>
@@ -181,7 +187,13 @@
                                         <td class="fit"><input type="checkbox" form="publish-select" name="publish" value="@item.Reference" aria-label="@($"Select {DraftStatusDisplay.DraftName(item.Headline)}")" /></td>
                                         <td><a class="cell-title" href="@RecordRoutes.Editor(item.Kind, item.RecordId)">@DraftStatusDisplay.DraftName(item.Headline)</a></td>
                                         <td>@PublishedRecordLabels.Kind(item.Kind)</td>
-                                        <td><StatusBadge Tone="@(item.IsReplacement ? Tone.Warn : Tone.Ok)" Text="@(item.IsReplacement ? "Replacement" : "New")" /></td>
+                                        <td>
+                                            <StatusBadge Tone="@(item.IsReplacement ? Tone.Warn : Tone.Ok)" Text="@(item.IsReplacement ? "Replacement" : "New")" />
+                                            @if (item.NoLongerMatches)
+                                            {
+                                                <StatusBadge Tone="Tone.Warn" Text="No longer matches" />
+                                            }
+                                        </td>
                                         <td class="num hide-narrow">@item.RevisionNumber</td>
                                     </Row>
                                     <Empty>

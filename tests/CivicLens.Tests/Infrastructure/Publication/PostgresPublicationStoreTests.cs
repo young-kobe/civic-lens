@@ -316,6 +316,50 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task CommitWaitsForTheRelationshipLockBecauseARelationshipDecisionMustNotSlipInDuringThePublish()
+    {
+        await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-relationship-review");
+
+        var committing = publications.CommitAsync(Owner.Subject,
+            new(1, null, $"000001-{Guid.NewGuid():N}", [], []), "key", Hash(1), default);
+        await HeldAdvisoryLock.WaitForWaiterAsync(connectionString, "civic-lens-relationship-review");
+        Assert.False(committing.IsCompleted);
+        await holder.DisposeAsync();
+
+        Assert.Equal(1, (await committing).ReleaseNumber);
+    }
+
+    [Fact]
+    public async Task TheCommitHoldsTheVoteLockWhileItWaitsForTheRelationshipLockSoTheRelationshipLockComesAfterTheRecordLocks()
+    {
+        await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-relationship-review");
+        var committing = publications.CommitAsync(Owner.Subject,
+            new(1, null, $"000001-{Guid.NewGuid():N}", [], []), "key", Hash(1), default);
+        await HeldAdvisoryLock.WaitForWaiterAsync(connectionString, "civic-lens-relationship-review");
+
+        var acquiring = HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-vote-review");
+        await Task.Delay(400);
+        Assert.False(acquiring.IsCompleted);
+        await holder.DisposeAsync();
+
+        Assert.Equal(1, (await committing).ReleaseNumber);
+        await (await acquiring).DisposeAsync();
+    }
+
+    [Fact]
+    public async Task ServingWaitsForTheRelationshipLockToo()
+    {
+        await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-relationship-review");
+
+        var serving = publications.ServeActiveAsync((_, _) => Task.CompletedTask, default);
+        await HeldAdvisoryLock.WaitForWaiterAsync(connectionString, "civic-lens-relationship-review");
+        Assert.False(serving.IsCompleted);
+        await holder.DisposeAsync();
+
+        Assert.Null(await serving);
+    }
+
+    [Fact]
     public async Task ServingWaitsForTheDocumentChangeLockToo()
     {
         await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-document-change-review");

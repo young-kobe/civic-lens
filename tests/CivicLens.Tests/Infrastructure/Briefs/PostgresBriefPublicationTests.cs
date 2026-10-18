@@ -1,3 +1,4 @@
+using CivicLens.Tests.Application.Relationships;
 using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text;
@@ -275,7 +276,8 @@ public sealed class PostgresBriefPublicationTests(PostgresCollection postgres) :
             File.WriteAllBytes(Path.Combine(folder, PublicationProtocol.RecordPagePath(entry.RecordId)), []);
         }
         return new PublishRelease(publications, new FileReleaseDirectory(releaseRoot), new ReleaseRenderer(),
-            new PublishedRecordLoaders(new FakeReviewStore(), new FakeStatementReviewStore(), new FakeActionReviewStore(), new FakeVoteReviewStore(), reviews),
+            new PublishedRecordLoaders(new FakeReviewStore(), new FakeStatementReviewStore(), new FakeActionReviewStore(), new FakeVoteReviewStore(),
+                new FakeRelationshipReviewStore(), reviews),
             new PublicationCatalog(new Dictionary<string, string>()), new FakeClock(InWeek.AddDays(10)));
     }
 }

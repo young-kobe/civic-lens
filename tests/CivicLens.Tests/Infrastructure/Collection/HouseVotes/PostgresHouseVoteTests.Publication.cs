@@ -69,6 +69,22 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
+    public async Task FindBillActionRecordIdsReturnsTheActionRecordsOfEachNamedBillWithoutReadingTheVoteRows()
+    {
+        var match = new string('7', 64);
+        await InsertActionDraftAsync(match, "hconres", 14);
+        await InsertActionDraftAsync(new string('9', 64), "hr", 14);
+
+        var found = await VoteReviews().FindBillActionRecordIdsAsync(
+            [new("first", 119, "hconres", 14), new("second", 119, "hr", 14), new("third", 119, "hr", 99)], default);
+
+        Assert.Equal([match], [.. found["first"]]);
+        Assert.Equal([new string('9', 64)], [.. found["second"]]);
+        Assert.Empty(found["third"]);
+        Assert.Empty(await VoteReviews().FindBillActionRecordIdsAsync([], default));
+    }
+
+    [Fact]
     public async Task AVoteWithoutAnActionDraftOfItsBillGetsNoActionRecordId()
     {
         var recordId = await ApprovedVoteAsync();

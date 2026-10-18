@@ -1,8 +1,11 @@
 @using CivicLens.Host.Components.Evidence
+@using System.Collections.Immutable
 @using CivicLens.Publication.Contracts
 
 <PublishedRecordFrame Headline="@Record.Headline" Summary="@Record.Summary" Facts="PublishedVoteView.Facts(Record)"
                       Caveat="This record lists only the officials that Civic Lens tracks. Each cast is the wording of the House Clerk roll call at the observation time of its source.">
+    <PublishedRelatedPanel Related="Related" Kind="PublishedRecordKind.Vote" RecordId="@Record.RecordId" />
+
     @if (PublishedVoteView.Bill(Record) is { } bill)
     {
         <Panel Title="Bill" Id="bill-title" Padded="true">
@@ -70,5 +73,6 @@
 
 @code {
     [Parameter, EditorRequired] public PublishedVote Record { get; set; } = default!;
+    [Parameter] public ImmutableArray<PublishedRelationship> Related { get; set; }
     [Parameter] public string? BillActionRecordId { get; set; }
 }

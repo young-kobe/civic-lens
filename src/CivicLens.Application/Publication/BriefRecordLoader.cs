@@ -23,8 +23,7 @@ internal sealed class BriefRecordLoader(IBriefReviewStore briefs)
         ImmutableArray<string> recordIds, PublicationBuild build, CancellationToken cancellationToken) =>
         briefs.GetForPublicationAsync(recordIds, build.ReleaseRecords, cancellationToken);
 
-    protected override async Task<PendingRecord> BuildAsync(string recordId, PublishableBrief addition, PublicationBuild build,
-        CancellationToken cancellationToken)
+    protected override PendingRecord Build(string recordId, PublishableBrief addition, PublicationBuild build)
     {
         var review = addition.Review;
         RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
@@ -33,6 +32,6 @@ internal sealed class BriefRecordLoader(IBriefReviewStore briefs)
                 $"Brief {recordId} cites a record that the new release does not hold at the cited revision, or that is not approved.");
         var record = PublishedBriefBuilder.Build(addition, build.Previous.Find(Kind, recordId), build.Now);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
-            await build.Renderer.RenderBriefAsync(record, cancellationToken));
+            (_, cancellationToken) => build.Renderer.RenderBriefAsync(record, cancellationToken));
     }
 }

@@ -26,4 +26,7 @@ public interface IVoteReviewStore
 
     Task<IReadOnlyDictionary<string, PublishableVote>> GetForPublicationAsync(ImmutableArray<string> recordIds,
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyDictionary<string, ImmutableArray<string>>> FindBillActionRecordIdsAsync(ImmutableArray<VoteBill> bills,
+        CancellationToken cancellationToken);
 }

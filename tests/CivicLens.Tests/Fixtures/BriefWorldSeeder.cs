@@ -35,6 +35,7 @@ internal sealed class BriefWorldSeeder(string connectionString)
             PublishedRecordKind.Statement => ("statement_review_decisions", "candidate_id"),
             PublishedRecordKind.DocumentChange => ("document_change_review_decisions", "draft_id"),
             PublishedRecordKind.Brief => ("brief_review_decisions", "record_id"),
+            PublishedRecordKind.Vote => ("vote_review_decisions", "record_id"),
             _ => ("action_review_decisions", "record_id")
         };
         return ExecuteAsync($"""

@@ -2,13 +2,16 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using CivicLens.Application.Briefs;
 using CivicLens.Application.Publication;
+using CivicLens.Application.Relationships;
 using CivicLens.Core.Briefs;
+using CivicLens.Core.Relationships;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Actions.Persistence;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Briefs;
 using CivicLens.Infrastructure.Briefs.Persistence;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Relationships.Persistence;
 using CivicLens.Infrastructure.Publication.Persistence;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Review.Persistence;
@@ -182,17 +185,37 @@ public sealed class PostgresPublicationStore : IPublicationStore
     private static async Task RequireCurrentCitationsAsync(CollectionAttemptDbContext db, PublicationCommit commit,
         CancellationToken cancellationToken)
     {
-        var briefs = commit.AddedRecords.Where(expectation => expectation.Kind == PublishedRecordKind.Brief).ToArray();
-        if (briefs.Length == 0) return;
+        var cited = (await ReadAddedBriefCitationsAsync(db, commit.AddedRecords, cancellationToken))
+            .Concat(await ReadAddedRelationshipCitationsAsync(db, commit.AddedRecords, cancellationToken)).ToArray();
+        if ((await CitedRevisions.FindNotCurrentAsync(db, cited, commit.Records, cancellationToken)).Count > 0)
+            throw new PublicationConflictException("A cited record changed after the release was built. Rebuild it.");
+    }
+
+    private static async Task<IEnumerable<PublishedRevisionBinding>> ReadAddedBriefCitationsAsync(CollectionAttemptDbContext db,
+        ImmutableArray<ReviewStateExpectation> expectations, CancellationToken cancellationToken)
+    {
+        var briefs = expectations.Where(expectation => expectation.Kind == PublishedRecordKind.Brief).ToArray();
+        if (briefs.Length == 0) return [];
         var rows = await db.Set<BriefRevisionRow>().FromSqlRaw(
                 "SELECT r.* FROM brief_revisions r JOIN unnest({0}, {1}) AS k(id, number) ON r.record_id = k.id AND r.revision_number = k.number",
                 briefs.Select(brief => brief.RecordId).ToArray(), briefs.Select(brief => brief.RevisionNumber).ToArray())
             .AsNoTracking().ToArrayAsync(cancellationToken);
-        var revisions = rows.Select(row => ReviewJson.Deserialize<BriefRevision>(row.RevisionJson, "revision"));
-        var changed = await BriefRecordReader.FindChangedAsync(db, revisions.SelectMany(revision => revision.Citations),
-            commit.Records, cancellationToken);
-        if (changed.Count > 0)
-            throw new PublicationConflictException("A cited record changed after the release was built. Rebuild it.");
+        return rows.Select(row => ReviewJson.Deserialize<BriefRevision>(row.RevisionJson, "revision"))
+            .SelectMany(revision => revision.Citations).Select(BriefRecordReader.BindingOf);
+    }
+
+    private static async Task<IEnumerable<PublishedRevisionBinding>> ReadAddedRelationshipCitationsAsync(CollectionAttemptDbContext db,
+        ImmutableArray<ReviewStateExpectation> expectations, CancellationToken cancellationToken)
+    {
+        var relationships = expectations.Where(expectation => expectation.Kind == PublishedRecordKind.Relationship).ToArray();
+        if (relationships.Length == 0) return [];
+        var rows = await db.Set<RelationshipRevisionRow>().FromSqlRaw(
+                "SELECT r.* FROM relationship_revisions r JOIN unnest({0}, {1}) AS k(id, number) ON r.record_id = k.id AND r.revision_number = k.number",
+                relationships.Select(relationship => relationship.RecordId).ToArray(),
+                relationships.Select(relationship => relationship.RevisionNumber).ToArray())
+            .AsNoTracking().ToArrayAsync(cancellationToken);
+        return rows.Select(row => ReviewJson.Deserialize<RelationshipRevision>(row.RevisionJson, "revision"))
+            .SelectMany(revision => new[] { revision.Statement, revision.Target }).Select(RelationshipRecordKinds.BindingOf);
     }
 
     private static async Task<Dictionary<(PublishedRecordKind Kind, string RecordId), (int RevisionNumber, int ReviewStateVersion)>>
@@ -204,6 +227,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         await AddStatementStatesAsync(db, IdsOf(expectations, PublishedRecordKind.Statement), current, cancellationToken);
         await AddActionStatesAsync(db, IdsOf(expectations, PublishedRecordKind.Action), current, cancellationToken);
         await AddVoteStatesAsync(db, IdsOf(expectations, PublishedRecordKind.Vote), current, cancellationToken);
+        await AddRelationshipStatesAsync(db, IdsOf(expectations, PublishedRecordKind.Relationship), current, cancellationToken);
         await AddBriefStatesAsync(db, IdsOf(expectations, PublishedRecordKind.Brief), current, cancellationToken);
         return current;
     }
@@ -246,6 +270,16 @@ public sealed class PostgresPublicationStore : IPublicationStore
             .Where(row => recordIds.Contains(row.RecordId)).ToArrayAsync(cancellationToken);
         foreach (var row in votes)
             current[(PublishedRecordKind.Vote, row.RecordId)] = (row.CurrentRevisionNumber, row.ReviewStateVersion);
+    }
+
+    private static async Task AddRelationshipStatesAsync(CollectionAttemptDbContext db, string[] recordIds,
+        Dictionary<(PublishedRecordKind, string), (int, int)> current, CancellationToken cancellationToken)
+    {
+        if (recordIds.Length == 0) return;
+        var relationships = await db.Set<RelationshipDraftRow>().AsNoTracking()
+            .Where(row => recordIds.Contains(row.RecordId)).ToArrayAsync(cancellationToken);
+        foreach (var row in relationships)
+            current[(PublishedRecordKind.Relationship, row.RecordId)] = (row.CurrentRevisionNumber, row.ReviewStateVersion);
     }
 
     private static async Task AddBriefStatesAsync(CollectionAttemptDbContext db, string[] recordIds,

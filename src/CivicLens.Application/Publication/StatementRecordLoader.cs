@@ -6,7 +6,8 @@ using CivicLens.Publication.Contracts;
 namespace CivicLens.Application.Publication;
 
 internal sealed class StatementRecordLoader(IStatementReviewStore statements)
-    : PublishedRecordLoader<UnpublishedApprovedStatement, PublishableStatement>(PublishedRecordKind.Statement, "Statement")
+    : PublishedRecordLoader<UnpublishedApprovedStatement, PublishableStatement>(PublishedRecordKind.Statement, "Statement"),
+      ICarriedPageLoader
 {
     public override void ValidateId(string recordId) => ReviewValidation.ValidateCandidateId(recordId);
 
@@ -23,8 +24,7 @@ internal sealed class StatementRecordLoader(IStatementReviewStore statements)
         ImmutableArray<string> recordIds, PublicationBuild build, CancellationToken cancellationToken) =>
         statements.GetForPublicationAsync(recordIds, cancellationToken);
 
-    protected override async Task<PendingRecord> BuildAsync(string recordId, PublishableStatement addition,
-        PublicationBuild build, CancellationToken cancellationToken)
+    protected override PendingRecord Build(string recordId, PublishableStatement addition, PublicationBuild build)
     {
         var review = addition.Review;
         var revision = review.CurrentRevision
@@ -32,6 +32,10 @@ internal sealed class StatementRecordLoader(IStatementReviewStore statements)
         RequirePublishable(recordId, revision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
         var record = new PublishedStatementBuilder(build.Rules).Build(addition, build.Previous.Find(Kind, recordId), build.Now);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
-            await build.Renderer.RenderStatementAsync(record, cancellationToken));
+            (related, cancellationToken) => build.Renderer.RenderStatementAsync(record, related, cancellationToken));
     }
+
+    public Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
+        CancellationToken cancellationToken) =>
+        build.Renderer.RenderStatementAsync(Parse<PublishedStatement>(json), links.Citing(Kind, recordId), cancellationToken);
 }

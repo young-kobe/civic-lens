@@ -45,17 +45,28 @@ internal static class RelationshipCitedReader
     }
 
     public static async Task<(ApprovedStatement Statement, RelationshipTarget Target)> ReadCitedAsync(CollectionAttemptDbContext db,
-        RelationshipRevision revision, CancellationToken cancellationToken)
+        RelationshipRevision revision, CancellationToken cancellationToken) =>
+        (await ReadCitedAsync(db, [revision], cancellationToken))[revision.RecordId];
+
+    public static async Task<Dictionary<string, (ApprovedStatement Statement, RelationshipTarget Target)>> ReadCitedAsync(
+        CollectionAttemptDbContext db, IReadOnlyCollection<RelationshipRevision> revisions, CancellationToken cancellationToken)
     {
-        var statement = (await ReadAsync<StatementDraftRevision>(db, RelationshipRecordKind.Statement, [revision.Statement], cancellationToken)).Single();
-        var articleText = await (from candidate in db.Set<StatementCandidateRow>().AsNoTracking()
-                                 where candidate.CandidateId == statement.CandidateId
-                                 join extraction in db.Set<DocumentExtractionRow>().AsNoTracking() on candidate.ExtractionId equals extraction.ExtractionId
-                                 select extraction.Text).SingleAsync(cancellationToken);
-        var target = revision.Target.Kind == RelationshipRecordKind.Action
-            ? RelationshipTarget.Of((await ReadAsync<ActionDraftRevision>(db, RelationshipRecordKind.Action, [revision.Target], cancellationToken)).Single())
-            : RelationshipTarget.Of((await ReadAsync<VoteDraftRevision>(db, RelationshipRecordKind.Vote, [revision.Target], cancellationToken)).Single());
-        return (new ApprovedStatement(statement, articleText), target);
+        var citations = revisions.SelectMany(revision => new[] { revision.Statement, revision.Target }).ToArray();
+        var statements = (await ReadAsync<StatementDraftRevision>(db, RelationshipRecordKind.Statement, citations, cancellationToken))
+            .ToDictionary(item => (item.CandidateId, item.RevisionNumber));
+        var targets = (await ReadAsync<ActionDraftRevision>(db, RelationshipRecordKind.Action, citations, cancellationToken))
+            .Select(RelationshipTarget.Of).Concat((await ReadAsync<VoteDraftRevision>(db, RelationshipRecordKind.Vote, citations, cancellationToken))
+                .Select(RelationshipTarget.Of)).ToDictionary(item => item.Citation);
+        var candidateIds = statements.Keys.Select(key => key.CandidateId).Distinct().ToArray();
+        var articleTexts = await (from candidate in db.Set<StatementCandidateRow>().AsNoTracking()
+                                  where candidateIds.Contains(candidate.CandidateId)
+                                  join extraction in db.Set<DocumentExtractionRow>().AsNoTracking() on candidate.ExtractionId equals extraction.ExtractionId
+                                  select new { candidate.CandidateId, extraction.Text }).ToDictionaryAsync(item => item.CandidateId, item => item.Text, cancellationToken);
+        return revisions.ToDictionary(revision => revision.RecordId, revision =>
+        {
+            var statement = statements[(revision.Statement.RecordId, revision.Statement.RevisionNumber)];
+            return (new ApprovedStatement(statement, articleTexts[statement.CandidateId]), targets[revision.Target]);
+        });
     }
 
     private static async Task<ImmutableArray<T>> ReadAsync<T>(CollectionAttemptDbContext db, RelationshipRecordKind kind,
@@ -63,7 +74,7 @@ internal static class RelationshipCitedReader
     {
         var wanted = citations.Where(citation => citation.Kind == kind).Distinct().ToArray();
         if (wanted.Length == 0) return [];
-        var (table, idColumn) = RevisionsOf(kind);
+        var (table, _, idColumn) = ReviewTables.For(RelationshipRecordKinds.PublishedKindOf(kind));
         var sql = $"SELECT r.revision_json AS \"Value\" FROM {table} r JOIN unnest({{0}}, {{1}}) AS k(id, number) ON r.{idColumn} = k.id AND r.revision_number = k.number";
         var json = await db.Database.SqlQueryRaw<string>(sql, wanted.Select(citation => citation.RecordId).ToArray(),
             wanted.Select(citation => citation.RevisionNumber).ToArray()).ToArrayAsync(cancellationToken);
@@ -76,13 +87,6 @@ internal static class RelationshipCitedReader
         RelationshipRecordKind.Statement => ("statement_drafts", "candidate_id"),
         RelationshipRecordKind.Action => ("action_drafts", "record_id"),
         _ => ("vote_drafts", "record_id")
-    };
-
-    private static (string Table, string IdColumn) RevisionsOf(RelationshipRecordKind kind) => kind switch
-    {
-        RelationshipRecordKind.Statement => ("statement_revisions", "candidate_id"),
-        RelationshipRecordKind.Action => ("action_revisions", "record_id"),
-        _ => ("vote_revisions", "record_id")
     };
 
     private sealed class ApprovedRevisionRow

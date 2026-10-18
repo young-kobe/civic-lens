@@ -1,4 +1,6 @@
+using System.Collections.Immutable;
 using CivicLens.Application.Paging;
+using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Core.Relationships;
 using CivicLens.Core.Review;
@@ -20,4 +22,12 @@ public interface IRelationshipReviewStore
     Task<RelationshipReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter, CancellationToken cancellationToken);
 
     Task<RelationshipReviewCounts> CountAsync(CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<UnpublishedApprovedRelationship>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken);
+
+    Task<IReadOnlySet<string>> FindCitingAsync(ImmutableArray<string> relationshipIds, ImmutableArray<PublishedRecordReference> cited,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyDictionary<string, PublishableRelationship>> GetForPublicationAsync(ImmutableArray<string> recordIds,
+        ImmutableArray<PublishedRevisionBinding> releaseRecords, CancellationToken cancellationToken);
 }

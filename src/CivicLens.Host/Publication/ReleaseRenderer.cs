@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CivicLens.Application.Publication;
 using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
@@ -23,34 +24,50 @@ public sealed class ReleaseRenderer : IReleaseRenderer
         });
     }
 
-    public Task<string> RenderStatementAsync(PublishedStatement record, CancellationToken cancellationToken)
+    public Task<string> RenderStatementAsync(PublishedStatement record, ImmutableArray<PublishedRelationship> related,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(record);
         record.Validate();
         return RenderAsync<PublishedStatementPage>(new Dictionary<string, object?>
         {
-            [nameof(PublishedStatementPage.Record)] = record
+            [nameof(PublishedStatementPage.Record)] = record,
+            [nameof(PublishedStatementPage.Related)] = related
         });
     }
 
-    public Task<string> RenderActionAsync(PublishedAction record, CancellationToken cancellationToken)
+    public Task<string> RenderActionAsync(PublishedAction record, ImmutableArray<PublishedRelationship> related,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(record);
         record.Validate();
         return RenderAsync<PublishedActionPage>(new Dictionary<string, object?>
         {
-            [nameof(PublishedActionPage.Record)] = record
+            [nameof(PublishedActionPage.Record)] = record,
+            [nameof(PublishedActionPage.Related)] = related
         });
     }
 
-    public Task<string> RenderVoteAsync(PublishedVote record, string? billActionRecordId, CancellationToken cancellationToken)
+    public Task<string> RenderVoteAsync(PublishedVote record, string? billActionRecordId, ImmutableArray<PublishedRelationship> related,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(record);
         record.Validate();
         return RenderAsync<PublishedVotePage>(new Dictionary<string, object?>
         {
             [nameof(PublishedVotePage.Record)] = record,
-            [nameof(PublishedVotePage.BillActionRecordId)] = billActionRecordId
+            [nameof(PublishedVotePage.BillActionRecordId)] = billActionRecordId,
+            [nameof(PublishedVotePage.Related)] = related
+        });
+    }
+
+    public Task<string> RenderRelationshipAsync(PublishedRelationship record, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        record.Validate();
+        return RenderAsync<PublishedRelationshipPage>(new Dictionary<string, object?>
+        {
+            [nameof(PublishedRelationshipPage.Record)] = record
         });
     }
 
