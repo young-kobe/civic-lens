@@ -44,7 +44,7 @@ internal static class RelationshipDraftRows
         CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
     };
 
-    private static RelationshipRevisionRow NewRevision(RelationshipRevision revision, string runId) => new()
+    public static RelationshipRevisionRow NewRevision(RelationshipRevision revision, string? runId) => new()
     {
         RecordId = revision.RecordId,
         RevisionNumber = revision.RevisionNumber,

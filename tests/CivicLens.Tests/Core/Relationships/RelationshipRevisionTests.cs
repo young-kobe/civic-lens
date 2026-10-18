@@ -71,4 +71,43 @@ public sealed class RelationshipRevisionTests
         Assert.Throws<ArgumentException>(() => (first with { RevisionNumber = 2, RecordId = new string('e', 64) }).ValidateAsAnalysisRevision(first));
         Assert.Throws<ArgumentException>(() => (first with { AuthorSubject = "auth0|editor" }).ValidateAsAnalysisRevision(null));
     }
+
+    [Fact]
+    public void APersonEditChangesOnlyTheTypeTheReasonTheQuoteAndTheFact()
+    {
+        var first = Revision();
+        var edit = first with
+        {
+            RevisionNumber = 2,
+            AuthorSubject = "auth0|reviewer",
+            Type = RelationshipType.ClaimsCreditFor,
+            Reason = "Credit.",
+            StatementQuote = RelationshipFixtures.Span(RelationshipFixtures.BillWords),
+            TargetFactId = "F1"
+        };
+
+        edit.ValidatePersonEditOf(first);
+
+        foreach (var forged in new[]
+        {
+            edit with { Statement = first.Statement with { RevisionNumber = 9 } },
+            edit with { Target = first.Target with { RecordId = new string('9', 64) } },
+            edit with { Match = first.Match with { Basis = RelationshipMatchBasis.BillTitle } },
+            edit with { RecordId = new string('e', 64) },
+            edit with { AuthorSubject = ReviewAuthor.AnalysisSubject },
+            edit with { RevisionNumber = 3 }
+        })
+            Assert.Throws<ArgumentException>(() => forged.ValidatePersonEditOf(first));
+    }
+
+    [Fact]
+    public void ASpanCoversAnotherSpanOnlyInTheSameExtractionAndInsideItsOwnRange()
+    {
+        var outer = new SourceSpan(RelationshipFixtures.ExtractionId, 10, 20);
+
+        Assert.True(outer.Covers(outer with { Start = 15, Length = 5 }));
+        Assert.False(outer.Covers(outer with { Start = 5, Length = 10 }));
+        Assert.False(outer.Covers(outer with { Start = 25, Length = 10 }));
+        Assert.False(outer.Covers(outer with { ExtractionId = new string('9', 64), Start = 15, Length = 5 }));
+    }
 }

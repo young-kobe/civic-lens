@@ -54,16 +54,13 @@ public static class RelationshipDraftResolver
             errors, citationErrors);
         if (start is not { } found) return null;
         var span = new SourceSpan(pair.Match.Span.ExtractionId, found, quote!.Length);
-        if (!pair.Statement.Passages().Any(passage => Covers(passage.Span, span)))
+        if (!pair.Statement.Passages().Any(passage => passage.Span.Covers(span)))
             AddCitationError("The statementQuote must lie inside one passage of the statement.", errors, citationErrors);
-        else if (!Covers(span, pair.Match.Span))
+        else if (!span.Covers(pair.Match.Span))
             AddCitationError("The statementQuote must include the matched words.", errors, citationErrors);
         else return span;
         return null;
     }
-
-    private static bool Covers(SourceSpan outer, SourceSpan inner) =>
-        outer.Start <= inner.Start && inner.Start + inner.Length <= outer.Start + outer.Length;
 
     private static RelationshipDraftOutput? Parse(string outputJson)
     {

@@ -75,6 +75,14 @@ internal static class RelationshipFixtures
     public static RelationshipPair VotePair(ApprovedStatement? statement = null, VoteDraftRevision? vote = null) =>
         RelationshipPairFinder.Match(statement ?? Statement(), vote ?? Vote())!;
 
+    public static RelationshipRevision Revision(RelationshipPair? pair = null)
+    {
+        var chosen = pair ?? ActionPair();
+        return new(chosen.PairId, 1, CivicLens.Core.Review.ReviewAuthor.AnalysisSubject, Created,
+            new(RelationshipRecordKind.Statement, chosen.Statement.RecordId, chosen.Statement.Revision.RevisionNumber), chosen.Target.Citation,
+            chosen.Match, RelationshipType.DescribesOwnBill, "Warren says she introduced the bill.", Span(BillWords), "F2");
+    }
+
     public static RelationshipDraftContext Context(RelationshipPair pair, RelationshipRevision? current = null, string? settledFingerprint = null) =>
         RelationshipDraftContext.Create(Evidence(pair, current, settledFingerprint), pair, Officials);
 
