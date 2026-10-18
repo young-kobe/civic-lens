@@ -22,13 +22,13 @@ Exit criteria:
 
 Each item gives its outcome, what it depends on, and where the design lives. Present the design choices before building R-22 only.
 
-The path to the first deploy is R-36, R-23 and R-18, then R-24. Decide D-14 next, because R-36, D-07, and D-08 depend on it. Decide D-07 and D-08 before R-24.
+The path to the first deploy is R-36, R-23 and R-18, then R-24. Decide D-07 and D-08 before R-24.
 
 ### Next
 
 - R-17: Congressional Record articles as a statement connector. Depends on: none stated. [Actions](architecture/actions.md#limits-and-planned-work)
 - R-18: Engine policies for broad coverage. One shared configuration loader with a higher size limit, because the coverage file is 771 KB of the 1 MB limit. A health view and a worker heartbeat, built with R-21. The spending total documented in operations. Source fairness is an open choice: a job class column, or a production backfill before press sources start. Depends on: none stated. It must come before R-24. [Collection](architecture/collection.md#limits-and-planned-work)
-- R-36: Public briefing, official, issue, and record pages for citizens. Readers start with a weekly briefing and recent reviewed developments, and each record shows its evidence and timeline. The official, issue, and policy area pages are also the public filter pages. The search panel gets a source filter and names for issues and policy areas. Decide at the start whether official pages wait for R-14. Depends on: D-14. [Publication](architecture/publication.md#limits-and-planned-work)
+- R-36: Public briefing, official, issue, and record pages for citizens. Readers start with a weekly briefing and recent reviewed developments, and each record shows its evidence and timeline. The official, issue, and policy area pages are also the public filter pages. The search panel gets a source filter and names for issues and policy areas. Decide at the start whether official pages wait for R-14. Depends on: none stated. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-39: An `analyses redraft --stale` owner command requeues finished drafts whose last run used an older task, prompt, or schema version. It covers document changes, statements, actions, votes, and briefs. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-21: Process view of collection and AI stages from retained state. Depends on: none stated. [Host](architecture/host.md#limits-and-planned-work)
 - R-29: Check each policy area name against the Congress.gov API. Depends on: none stated. [Configuration](architecture/configuration.md#limits-and-planned-work)
@@ -43,7 +43,7 @@ The path to the first deploy is R-36, R-23 and R-18, then R-24. Decide D-14 next
 - R-24: Production on the Hetzner CPX21 with containers, Terraform, CI, off-server backups, and live Auth0 verification. The open host checklist items are its exit checks. Also stop the worker during a job and show that the deployed container recovers it. Depends on: the MVP exit criteria other than the document-change criterion, R-18, and R-23. [Host](architecture/host.md#limits-and-planned-work)
 - R-25: Public MCP over published releases, with source health, backup and restore, and worker service management. Depends on: the MVP exit criteria other than the document-change criterion. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-26: Read-only local MCP inspection. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
-- R-40: A public search service with its own Postgres database, fed from releases, replaces the client search. Depends on: R-24 and D-14. [Publication](architecture/publication.md#limits-and-planned-work)
+- R-40: A public search service with its own Postgres database, fed from releases, replaces the client search. Depends on: R-24. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-41: Collection concurrency for backfills, when a measured backlog is more than one worker can clear. The precedent is CIVIC_LENS_EVIDENCE_CONCURRENCY. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-27: Automatic discovery of official sources, and check cadence from measured change rates. It needs runtime writes, so people, sources, and coverage then move to tables. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-28: Datasets and fine-tuning from labels and review history. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
@@ -56,13 +56,12 @@ The path to the first deploy is R-36, R-23 and R-18, then R-24. Decide D-14 next
 - D-03: Global search and expanded reviewer source visibility. [Review](architecture/review.md#limits-and-planned-work)
 - D-04: Bounded storage: store each distinct extraction text once, keyed by its hash. Keep raw capture bytes forever only when a gated change, draft, or release uses them or they are the latest version. Delete other bytes after a set period and keep the observation record. [Collection](architecture/collection.md#limits-and-planned-work)
 - D-05: Classification ladder, only if the R-13 measurement shows that a model tier is needed: the uncertainty signal for each tier, where the escalation policy and thresholds live, and the stronger model for the reasoning tier. [Analysis](architecture/analysis.md#limits-and-planned-work)
-- D-07: How the static file server runs locally and in production, and the release retention policy. It depends on D-14. [Publication](architecture/publication.md#limits-and-planned-work)
+- D-07: How the static file server runs locally and in production, and the release retention policy. D-14 chose static pages on a CDN. [Publication](architecture/publication.md#limits-and-planned-work)
 - D-11: Drafting the past votes of a member who is added to tracking later. [Votes](architecture/votes.md#limits-and-planned-work)
 - D-12: Content profiles for the 282 of 1,392 page, HTML, and feed sources that have none. [Documents](architecture/documents.md#limits-and-planned-work)
 - D-13: A classifier benchmark for the statement issue gate, to run as soon as possible. The gate label store, the held-out split, the owner labeling page, and the label export are built ([Statements](architecture/statements.md#gate-labels)). Still to build: a Sonnet pre-label for releases outside the held-out set, and about 100 labels by hand, starting from the 48 measured ones. Then compare Haiku 5.5, Clef-flash, Clef-omni, Clef, a fine-tuned Clef, Strands Decider 2B, a fine-tuned ModernBERT, and a feature baseline. The issue list is configuration. A decision model takes the options in each request, so it needs no retraining when the list changes. A model that runs inside the worker (ONNX Runtime) needs a reviewed boundary change first. The fine-tuning needs the dataset rules of [R-28](#later) agreed first.
-- D-08: Deployment topology: one cloud deployment, separate services, or services split across cloud providers, chosen by cost and operational needs. It depends on D-14. [Host](architecture/host.md#limits-and-planned-work)
+- D-08: Deployment topology: one cloud deployment, separate services, or services split across cloud providers, chosen by cost and operational needs. D-14 chose static pages on a CDN. [Host](architecture/host.md#limits-and-planned-work)
 
-- D-14: The shape of the public UI, to decide next. R-36, D-07, and D-08 depend on it. One option is static pages on a CDN with a public read API for search and filters. The other renders pages on a public server from a database fed by releases. Search engines must find each public page at a stable URL. A public API and public MCP will serve other clients. Reader accounts are not part of the MVP. [Publication](architecture/publication.md#limits-and-planned-work)
 
 ## Product direction
 
