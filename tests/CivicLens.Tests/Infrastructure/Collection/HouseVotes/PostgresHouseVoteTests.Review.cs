@@ -4,6 +4,7 @@ using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Votes;
+using CivicLens.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
@@ -12,6 +13,27 @@ namespace CivicLens.Tests.Infrastructure.Collection.HouseVotes;
 public sealed partial class PostgresHouseVoteTests
 {
     private static readonly ReviewActor Reviewer = new("auth0|reviewer", ReviewRole.Reviewer);
+
+    [Fact]
+    public async Task ApprovingAVoteQueuesTheRelationshipPairWithAnApprovedStatementOfAMember()
+    {
+        var candidate = await PendingCandidateAsync();
+        await SettleAsync(candidate, await RevisionAsync(candidate, 1));
+        var recordId = await RecordIdAsync(candidate);
+        using var revision = System.Text.Json.JsonDocument.Parse((string)(await ScalarAsync(
+            $"SELECT revision_json FROM vote_revisions WHERE record_id = '{recordId}' AND revision_number = 1"))!);
+        var vote = revision.RootElement;
+        var member = vote.GetProperty("members")[0].GetProperty("personId").GetString()!;
+        await new RelationshipWorldSeeder(connectionString).StatementAsync(RelationshipFixtures.StatementAboutBill(member,
+            vote.GetProperty("congress").GetInt32(), vote.GetProperty("billNumber").GetInt32(), "H.Con.Res."));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM relationship_analysis"));
+
+        await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Approve);
+
+        Assert.Equal(("Pending", "Vote", recordId), ((string)(await ScalarAsync("SELECT status FROM relationship_analysis"))!,
+            (string)(await ScalarAsync("SELECT target_kind FROM relationship_analysis"))!,
+            (string)(await ScalarAsync("SELECT target_record_id FROM relationship_analysis"))!));
+    }
 
     [Fact]
     public async Task AWorkerRevisionAfterAnApprovalNeedsReviewAgainBecauseAModelRevisionNeverCountsAsApproval()
