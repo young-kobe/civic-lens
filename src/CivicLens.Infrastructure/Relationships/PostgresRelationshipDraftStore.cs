@@ -48,9 +48,9 @@ public sealed class PostgresRelationshipDraftStore : PostgresAnalysisStore<Relat
         var isAction = row.TargetKind == RelationshipRecordKind.Action;
         var settled = await db.Database.SqlQueryRaw<string>(ReadSettledFingerprintSql, pairId).SingleOrDefaultAsync(cancellationToken);
         return new(pairId, row.TargetKind,
-            (await RelationshipEvidenceReader.ReadStatementsAsync(db, [row.StatementCandidateId], cancellationToken)).SingleOrDefault(),
-            isAction ? await RelationshipEvidenceReader.ReadActionAsync(db, row.TargetRecordId, cancellationToken) : null,
-            isAction ? null : await RelationshipEvidenceReader.ReadVoteAsync(db, row.TargetRecordId, cancellationToken),
+            (await RelationshipEvidenceReader.ReadStatementsAsync(db, [row.StatementCandidateId], RelationshipRevisionScope.Approved, cancellationToken)).SingleOrDefault(),
+            isAction ? await RelationshipEvidenceReader.ReadActionAsync(db, row.TargetRecordId, RelationshipRevisionScope.Approved, cancellationToken) : null,
+            isAction ? null : await RelationshipEvidenceReader.ReadVoteAsync(db, row.TargetRecordId, RelationshipRevisionScope.Approved, cancellationToken),
             settled, await RelationshipDraftRows.ReadCurrentAsync(db, pairId, cancellationToken));
     }
 
@@ -69,7 +69,7 @@ public sealed class PostgresRelationshipDraftStore : PostgresAnalysisStore<Relat
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         return RelationshipPairFinder.CountStatementsWithoutCongress(
-            await RelationshipEvidenceReader.ReadStatementsAsync(db, null, cancellationToken));
+            await RelationshipEvidenceReader.ReadStatementsAsync(db, null, RelationshipRevisionScope.Approved, cancellationToken));
     }
 
     public async Task<IReadOnlyList<RelationshipDraftListItem>> ListAsync(RelationshipDraftView? view, int limit,

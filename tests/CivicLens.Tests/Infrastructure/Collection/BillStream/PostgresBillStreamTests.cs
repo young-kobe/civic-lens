@@ -1060,11 +1060,11 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
 
     private sealed record StartedBill(string Detail, string? Cosponsors, string Actions, string? Summaries);
 
-    private async Task<StartedBill> StartPassedBillAsync(int cosponsors, int summaries)
+    private async Task<StartedBill> StartPassedBillAsync(int cosponsors, int summaries, bool hasTrackedIssue = false)
     {
         var detail = await EnqueueDetailAsync("detail");
         var result = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors, summaries: summaries),
-            BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+            BillGateOutcome.Passed(BillGateReason.CoveredSponsor) with { HasTrackedIssue = hasTrackedIssue });
         string? JobOf(string resource) => result.Jobs.SingleOrDefault(job => job.Url.Contains($"/{resource}?"))?.JobId;
         return new StartedBill(detail, JobOf("cosponsors"), JobOf("actions")!, JobOf("summaries"));
     }

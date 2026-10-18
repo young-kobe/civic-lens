@@ -69,6 +69,36 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     }
 
     [Fact]
+    public async Task ASavedStatementDraftRaisesTheActionRowOfABillThatItsSpeakerSponsorsAndLeavesOtherRowsAlone()
+    {
+        var article = Article + "\nShe backs H.R. 77 to cap rent.";
+        var candidate = await PassedCandidateAsync(article);
+        var world = new RelationshipWorldSeeder(connectionString);
+        await world.ActionAsync(RelationshipFixtures.Action(billNumber: 77, sponsor: Warren), "AwaitingReview");
+        await world.ActionAsync(RelationshipFixtures.Action(billNumber: 78, sponsor: Markey) with { RecordId = new string('7', 64) }, "AwaitingReview");
+        await SeedActionRowAsync(new string('9', 64), 77);
+        await SeedActionRowAsync(new string('8', 64), 78);
+        var model = new FakeStatementDraftModel().Draft(Output(date: ("2026-10-03", "October 3, 2026"),
+            quotes: ["a rent cap for tenants", "backs H.R. 77 to cap rent"]));
+
+        await DraftingWorker(model).ExecuteAsync(once: true);
+
+        Assert.Equal(1L, await ScalarAsync($"SELECT current_revision_number FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+        Assert.Equal(1L, await ScalarAsync($"SELECT priority::bigint FROM action_analysis WHERE candidate_id = '{new string('9', 64)}'"));
+        Assert.Equal(3L, await ScalarAsync($"SELECT priority::bigint FROM action_analysis WHERE candidate_id = '{new string('8', 64)}'"));
+    }
+
+    private Task SeedActionRowAsync(string candidateId, int billNumber) => ExecuteAsync(connectionString, $"""
+        SET session_replication_role = replica;
+        INSERT INTO action_candidates (candidate_id, source_id, congress, bill_type, bill_number, update_date_utc_ticks, detail_job_id,
+                                       configuration_revision_id, created_at_utc_ticks, includes_summaries)
+        VALUES ('{candidateId}', '{RelationshipFixtures.Action().SourceId}', 119, '{RelationshipFixtures.Action().BillType}', {billNumber}, 1,
+                'detail-{billNumber}', '{new string('1', 64)}', 1, false);
+        INSERT INTO action_analysis (candidate_id, task, status, fence, attempts, reserved_tokens, created_at_utc_ticks)
+        VALUES ('{candidateId}', 'action-draft', 'Pending', 0, 0, 0, 1)
+        """);
+
+    [Fact]
     public async Task AnArticleOverTheByteCapGetsADraftWithoutARevisionAndABypassedRun()
     {
         var candidate = await PassedCandidateAsync(new string('x', 6_000), "https://example.test/pages/big", gateSettings: BigGate);

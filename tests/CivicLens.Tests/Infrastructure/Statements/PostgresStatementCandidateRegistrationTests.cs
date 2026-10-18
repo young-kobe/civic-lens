@@ -47,6 +47,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
 
         Assert.Equal([(attempt.SourceId, ArticleUrl, extraction.ExtractionId, attempt.AttemptId)], await CandidatesAsync());
         Assert.Equal([("gate", "Pending", 0L, 0, 0L)], await AnalysisRowsAsync());
+        Assert.Equal(1L, await ScalarAsync("SELECT priority::bigint FROM statement_analysis"));
     }
 
     [Fact]

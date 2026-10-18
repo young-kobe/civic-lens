@@ -51,6 +51,7 @@ public sealed class PostgresStatementGateStoreTests(PostgresCollection postgres)
         await Worker(model, Revision()).ExecuteAsync(once: true);
 
         Assert.Equal([("gate", "Succeeded", "passed"), (StatementDraftTask.Task, "Pending", null)], await RowsAsync(candidate));
+        Assert.Equal(1L, await ScalarAsync($"SELECT priority::bigint FROM statement_analysis WHERE candidate_id = '{candidate}' AND task = '{StatementDraftTask.Task}'"));
         var run = (await store.GetRunAsync(await RunIdAsync(candidate), default))!;
         Assert.Equal((Revision().Id, StatementGateReasons.Passed), (run.IssueRevisionId, run.Reason));
         Assert.Equal(Article.IndexOf("a rent cap", StringComparison.Ordinal), Assert.Single(run.Quotes).Start);

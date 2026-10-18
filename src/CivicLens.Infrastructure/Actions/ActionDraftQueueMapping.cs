@@ -1,6 +1,8 @@
 using CivicLens.Application.Actions;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Analysis;
+using CivicLens.Core.Relationships;
+using CivicLens.Infrastructure.Relationships;
 using CivicLens.Infrastructure.Actions.Persistence;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
@@ -32,6 +34,14 @@ internal sealed class ActionDraftQueueMapping : IAnalysisQueueMapping<ActionAnal
         var runRow = AnalysisRunRows.Create<ActionAnalysisRunRow>(run.Run);
         runRow.Reason = run.Reason;
         db.Add(runRow);
+    }
+
+    public async Task AfterTransitionAsync(CollectionAttemptDbContext db, ActionAnalysisRow row, AnalysisCheckpoint checkpoint, long now,
+        CancellationToken cancellationToken)
+    {
+        if (checkpoint is ActionDraftCheckpoint { Revision: { } revision })
+            row.Priority = await PairPriority.OfTargetAsync(db, RelationshipRecordKind.Action, revision.RecordId, !revision.TrackedIssueIds.IsEmpty,
+                cancellationToken);
     }
 
     public async Task<AnalysisSettlement<ActionDraftRun>> PrepareSettlementAsync(CollectionAttemptDbContext db, ActionAnalysisRow row,

@@ -1345,6 +1345,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("decision");
 
+                    b.Property<bool>("HasTrackedIssue")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_tracked_issue");
+
                     b.Property<string>("IssueRevisionId")
                         .IsRequired()
                         .HasMaxLength(64)

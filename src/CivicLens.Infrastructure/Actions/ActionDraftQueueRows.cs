@@ -7,11 +7,12 @@ namespace CivicLens.Infrastructure.Actions;
 
 internal static class ActionDraftQueueRows
 {
-    public static void Add(CollectionAttemptDbContext db, string candidateId, long nowTicks) => db.Add(new ActionAnalysisRow
+    public static void Add(CollectionAttemptDbContext db, string candidateId, long nowTicks, int priority) => db.Add(new ActionAnalysisRow
     {
         CandidateId = candidateId,
         Task = ActionDraftTask.Task,
         Status = AnalysisState.Pending,
-        CreatedAtUtcTicks = nowTicks
+        CreatedAtUtcTicks = nowTicks,
+        Priority = priority
     });
 }

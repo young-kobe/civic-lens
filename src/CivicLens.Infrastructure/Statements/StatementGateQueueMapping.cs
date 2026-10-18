@@ -2,6 +2,7 @@ using System.Text.Json;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Statements;
 using CivicLens.Core.Analysis;
+using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Statements.Persistence;
@@ -37,8 +38,8 @@ internal sealed class StatementGateQueueMapping : IAnalysisQueueMapping<Statemen
     {
         if (checkpoint.Status != AnalysisState.Succeeded || !StatementGateReasons.QueuesDraft(checkpoint.ErrorCode)) return;
         _ = await db.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO statement_analysis (candidate_id, task, status, fence, attempts, reserved_tokens, created_at_utc_ticks)
-            VALUES ({row.CandidateId}, {StatementDraftTask.Task}, 'Pending', 0, 0, 0, {now})
+            INSERT INTO statement_analysis (candidate_id, task, status, fence, attempts, reserved_tokens, created_at_utc_ticks, priority)
+            VALUES ({row.CandidateId}, {StatementDraftTask.Task}, 'Pending', 0, 0, 0, {now}, {ReviewPriority.Highest})
             ON CONFLICT (candidate_id, task) DO NOTHING
             """, cancellationToken);
     }

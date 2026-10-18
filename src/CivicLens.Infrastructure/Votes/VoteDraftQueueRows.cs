@@ -8,12 +8,13 @@ namespace CivicLens.Infrastructure.Votes;
 
 internal static class VoteDraftQueueRows
 {
-    public static void Add(CollectionAttemptDbContext db, string candidateId, long nowTicks) => db.Add(new VoteAnalysisRow
+    public static void Add(CollectionAttemptDbContext db, string candidateId, long nowTicks, int priority) => db.Add(new VoteAnalysisRow
     {
         CandidateId = candidateId,
         Task = VoteDraftTask.Task,
         Status = AnalysisState.Pending,
-        CreatedAtUtcTicks = nowTicks
+        CreatedAtUtcTicks = nowTicks,
+        Priority = priority
     });
 
     public static IQueryable<HouseVoteCandidateRow> WaitingForBill(CollectionAttemptDbContext db) =>

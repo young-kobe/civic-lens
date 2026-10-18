@@ -172,10 +172,11 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal((1, 0), (before, after));
     }
 
-    private async Task<PreparedBillDetail> AdmitBillDetailAsync(DateTimeOffset? updatedAt = null, int congress = 119, int number = 14)
+    private async Task<PreparedBillDetail> AdmitBillDetailAsync(DateTimeOffset? updatedAt = null, int congress = 119, int number = 14,
+        bool hasTrackedIssue = false)
     {
         var bill = await PrepareBillDetailAsync(updatedAt, congress, number);
-        await AdmitPreparedBillDetailAsync(bill);
+        await AdmitPreparedBillDetailAsync(bill, hasTrackedIssue);
         return bill;
     }
 
@@ -193,8 +194,10 @@ public sealed partial class PostgresHouseVoteTests
         return new(source, job.JobId, bill, extractionId);
     }
 
-    private Task AdmitPreparedBillDetailAsync(PreparedBillDetail prepared) =>
-        store.AdmitDetailAsync(prepared.Source, prepared.JobId, prepared.Bill, BillGateOutcome.NotRelevant(BillGateReason.UntrackedPolicyArea),
+    private Task AdmitPreparedBillDetailAsync(PreparedBillDetail prepared, bool hasTrackedIssue = false) =>
+        store.AdmitDetailAsync(prepared.Source, prepared.JobId, prepared.Bill,
+            hasTrackedIssue ? BillGateOutcome.Passed(BillGateReason.TrackedPolicyArea) with { HasTrackedIssue = true }
+                : BillGateOutcome.NotRelevant(BillGateReason.UntrackedPolicyArea),
             BillGateFixtures.Revision().Id, prepared.ExtractionId, default);
 
     private sealed record PreparedBillDetail(ConfiguredCollectionSource Source, string JobId, CongressBill Bill, string ExtractionId);
