@@ -21,18 +21,30 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
         ImmutableArray<string> recordIds, PublicationBuild build, CancellationToken cancellationToken) =>
         votes.GetForPublicationAsync(recordIds, cancellationToken);
 
-    protected override async Task<PendingRecord> BuildAsync(string recordId, PublishableVote addition,
-        PublicationBuild build, CancellationToken cancellationToken)
+    protected override PendingRecord Build(string recordId, PublishableVote addition, PublicationBuild build)
     {
         var review = addition.Review;
         RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
         var record = new PublishedVoteBuilder(build.Rules).Build(review.CurrentRevision, review.Decisions, addition.Extractions,
             build.Previous.Find(Kind, recordId), build.Now);
+        var billActionRecordId = BillActionRecordIn(addition.BillActionRecordIds, build);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
-            await build.Renderer.RenderVoteAsync(record, BillActionRecordIn(addition, build), cancellationToken));
+            (related, cancellationToken) => build.Renderer.RenderVoteAsync(record, billActionRecordId, related, cancellationToken));
     }
 
-    private static string? BillActionRecordIn(PublishableVote addition, PublicationBuild build) =>
-        addition.BillActionRecordIds.FirstOrDefault(id =>
+    public override async Task<IReadOnlyDictionary<string, string>> RenderCarriedAsync(IReadOnlyDictionary<string, byte[]> records,
+        ReleaseLinks links, PublicationBuild build, CancellationToken cancellationToken)
+    {
+        var parsed = ParseAll<PublishedVote>(records);
+        var billActionRecordIds = await votes.FindBillActionRecordIdsAsync(
+            [.. parsed.Values.Where(vote => vote.BillType is not null)
+                .Select(vote => new VoteBill(vote.RecordId, vote.Congress, vote.BillType!, vote.BillNumber!.Value))],
+            cancellationToken);
+        return await RenderEachAsync(parsed, (vote, recordId) => build.Renderer.RenderVoteAsync(vote,
+            BillActionRecordIn(billActionRecordIds.GetValueOrDefault(recordId, []), build), links.Citing(Kind, recordId), cancellationToken));
+    }
+
+    private static string? BillActionRecordIn(ImmutableArray<string> billActionRecordIds, PublicationBuild build) =>
+        billActionRecordIds.FirstOrDefault(id =>
             build.ReleaseRecords.Any(record => record.Kind == PublishedRecordKind.Action && record.RecordId == id));
 }

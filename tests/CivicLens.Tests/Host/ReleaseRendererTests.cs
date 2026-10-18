@@ -111,7 +111,7 @@ public sealed class ReleaseRendererTests
         Assert.Equal(PublicationProtocol.ManifestPath, form.GetAttribute("data-release-search"));
         Assert.Equal(PublicationProtocol.RecordPagePath("{id}"), form.GetAttribute("data-record-page"));
         Assert.True(form.Closest("section")!.HasAttribute("hidden"));
-        Assert.Equal(["", "documentChange", "statement", "action", "brief", "vote"],
+        Assert.Equal(["", "documentChange", "statement", "action", "brief", "vote", "relationship"],
             document.QuerySelectorAll("#search-kind option").Select(option => option.GetAttribute("value")));
         Assert.Equal(["text", "kind", "official", "issue", "policyArea", "from", "to"],
             form.QuerySelectorAll("input, select").Select(control => control.GetAttribute("name")));
@@ -152,7 +152,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task StatementPageShowsSpeakersDateEvidenceKindLabelsAndMarksTheCitedSourceText()
     {
-        var html = await new ReleaseRenderer().RenderStatementAsync(Statement(), CancellationToken.None);
+        var html = await new ReleaseRenderer().RenderStatementAsync(Statement(), [], CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
@@ -180,7 +180,7 @@ public sealed class ReleaseRendererTests
     public async Task StatementPageOmitsTheDateFactAndItsEvidenceWhenTheStatementHasNoEstablishedDate()
     {
         var html = await new ReleaseRenderer().RenderStatementAsync(
-            Statement() with { StatementDate = null, StatementDateEvidence = null }, CancellationToken.None);
+            Statement() with { StatementDate = null, StatementDateEvidence = null }, [], CancellationToken.None);
 
         Assert.DoesNotContain("Statement date", html, StringComparison.Ordinal);
         Assert.DoesNotContain("cite-statement-date", html, StringComparison.Ordinal);
@@ -192,13 +192,13 @@ public sealed class ReleaseRendererTests
         var statement = Statement() with { Quotations = [Statement().Quotations[0] with { Quote = "invented words" }] };
 
         await Assert.ThrowsAsync<InvalidDataException>(() =>
-            new ReleaseRenderer().RenderStatementAsync(statement, CancellationToken.None));
+            new ReleaseRenderer().RenderStatementAsync(statement, [], CancellationToken.None));
     }
 
     [Fact]
     public async Task ActionPageShowsTheBillTheSponsorshipTableTheCrsSummaryAndTheSources()
     {
-        var html = await new ReleaseRenderer().RenderActionAsync(Action(), CancellationToken.None);
+        var html = await new ReleaseRenderer().RenderActionAsync(Action(), [], CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
@@ -224,7 +224,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task EveryActionQuoteLinksToTheMarkOfTheSameTextInTheSourceAndEachSourceIsLabelledByPosition()
     {
-        var html = await new ReleaseRenderer().RenderActionAsync(Action(), CancellationToken.None);
+        var html = await new ReleaseRenderer().RenderActionAsync(Action(), [], CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         var links = document.QuerySelectorAll("a[href^='#cite-']").ToArray();
@@ -243,13 +243,13 @@ public sealed class ReleaseRendererTests
     {
         var action = Action() with { SummaryCitation = Action().SummaryCitation! with { ExtractionId = new string('9', 64) } };
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => new ReleaseRenderer().RenderActionAsync(action, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidDataException>(() => new ReleaseRenderer().RenderActionAsync(action, [], CancellationToken.None));
     }
 
     [Fact]
     public async Task VotePageShowsTheDayTheKindTheResultFactsTheCastOfEachTrackedMemberAndTheSources()
     {
-        var html = await new ReleaseRenderer().RenderVoteAsync(Vote(), null, CancellationToken.None);
+        var html = await new ReleaseRenderer().RenderVoteAsync(Vote(), null, [], CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
@@ -273,7 +273,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task EveryVoteQuoteLinksToTheMarkOfTheSameTextInTheSource()
     {
-        var html = await new ReleaseRenderer().RenderVoteAsync(Vote(), null, CancellationToken.None);
+        var html = await new ReleaseRenderer().RenderVoteAsync(Vote(), null, [], CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         var links = document.QuerySelectorAll("a[href^='#cite-']").ToArray();
@@ -290,8 +290,8 @@ public sealed class ReleaseRendererTests
     {
         var actionId = new string('c', 64);
 
-        var linked = new HtmlParser().ParseDocument(await new ReleaseRenderer().RenderVoteAsync(Vote(), actionId, CancellationToken.None));
-        var plain = new HtmlParser().ParseDocument(await new ReleaseRenderer().RenderVoteAsync(Vote(), null, CancellationToken.None));
+        var linked = new HtmlParser().ParseDocument(await new ReleaseRenderer().RenderVoteAsync(Vote(), actionId, [], CancellationToken.None));
+        var plain = new HtmlParser().ParseDocument(await new ReleaseRenderer().RenderVoteAsync(Vote(), null, [], CancellationToken.None));
 
         var link = Assert.Single(linked.QuerySelectorAll("[aria-labelledby='bill-title'] a"));
         Assert.Equal(($"../records/{actionId}.html", "HR 7, Congress 119"), (link.GetAttribute("href"), link.TextContent));
@@ -302,7 +302,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task AVoteWithoutABillShowsNoBillPanel()
     {
-        var html = await new ReleaseRenderer().RenderVoteAsync(Vote() with { BillType = null, BillNumber = null }, null, CancellationToken.None);
+        var html = await new ReleaseRenderer().RenderVoteAsync(Vote() with { BillType = null, BillNumber = null }, null, [], CancellationToken.None);
 
         Assert.Empty(new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='bill-title']"));
     }
@@ -312,7 +312,75 @@ public sealed class ReleaseRendererTests
     {
         var vote = Vote() with { VotedOnCitation = Vote().VotedOnCitation with { ExtractionId = new string('9', 64) } };
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => new ReleaseRenderer().RenderVoteAsync(vote, null, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidDataException>(() => new ReleaseRenderer().RenderVoteAsync(vote, null, [], CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task EachKindOfCitedRecordListsItsRelatedRecordsAsLinksWithTheLinkTypeAndTheStatementDate()
+    {
+        var statement = Statement();
+        var action = Action();
+        var vote = Vote() with { RecordId = new string('9', 64) };
+        var actionLink = Relationship(PublishedRecordKind.Action, action.RecordId, '7');
+        var voteLink = Relationship(PublishedRecordKind.Vote, vote.RecordId, '8') with { Type = PublishedRelationshipType.StatementAboutVote };
+        var renderer = new ReleaseRenderer();
+
+        var statementPage = new HtmlParser().ParseDocument(await renderer.RenderStatementAsync(statement, [actionLink, voteLink], CancellationToken.None));
+        var actionPage = new HtmlParser().ParseDocument(await renderer.RenderActionAsync(action, [actionLink], CancellationToken.None));
+        var votePage = new HtmlParser().ParseDocument(await renderer.RenderVoteAsync(vote, null, [voteLink], CancellationToken.None));
+
+        var rows = statementPage.QuerySelectorAll("[aria-labelledby='related-title'] li");
+        Assert.Equal(2, rows.Length);
+        var targetLink = rows[0].QuerySelectorAll("a");
+        Assert.Equal(($"../records/{action.RecordId}.html", "Housing bill funds rent aid"), (targetLink[0].GetAttribute("href"), targetLink[0].TextContent));
+        Assert.Equal($"../records/{actionLink.RecordId}.html", targetLink[1].GetAttribute("href"));
+        Assert.Contains("Action, Describes own bill, statement of 2026-05-01", rows[0].TextContent, StringComparison.Ordinal);
+        Assert.Contains("Vote, Statement about a vote", rows[1].TextContent, StringComparison.Ordinal);
+        var onAction = Assert.Single(actionPage.QuerySelectorAll("[aria-labelledby='related-title'] li"));
+        Assert.Equal(($"../records/{statement.RecordId}.html", "Doe backs a rent cap"), (onAction.QuerySelector("a")!.GetAttribute("href"), onAction.QuerySelector("a")!.TextContent));
+        var onVote = Assert.Single(votePage.QuerySelectorAll("[aria-labelledby='related-title'] li"));
+        Assert.Equal($"../records/{statement.RecordId}.html", onVote.QuerySelector("a")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task APageWithoutRelatedRecordsShowsNoRelatedPanel()
+    {
+        var renderer = new ReleaseRenderer();
+
+        Assert.Empty(new HtmlParser().ParseDocument(await renderer.RenderStatementAsync(Statement(), [], CancellationToken.None))
+            .QuerySelectorAll("[aria-labelledby='related-title']"));
+        Assert.Empty(new HtmlParser().ParseDocument(await renderer.RenderActionAsync(Action(), [], CancellationToken.None))
+            .QuerySelectorAll("[aria-labelledby='related-title']"));
+        Assert.Empty(new HtmlParser().ParseDocument(await renderer.RenderVoteAsync(Vote(), null, [], CancellationToken.None))
+            .QuerySelectorAll("[aria-labelledby='related-title']"));
+    }
+
+    [Fact]
+    public async Task RelationshipPageNamesBothCitedRevisionsLinksTheirPagesEncodesTheApprovedEvidenceAndStatesNoVerdict()
+    {
+        var link = Relationship(PublishedRecordKind.Action, new string('a', 64), '7');
+
+        var html = await new ReleaseRenderer().RenderRelationshipAsync(link, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.DoesNotContain("<b>", html, StringComparison.Ordinal);
+        Assert.Equal(link.Headline, document.QuerySelector("h1")!.TextContent);
+        var cited = document.QuerySelectorAll("[aria-labelledby='linked-title'] li");
+        Assert.Equal(["Statement, revision 2", "Action, revision 3"],
+            cited.Select(row => row.QuerySelector("span")!.TextContent.Trim()));
+        Assert.Equal([$"../records/{link.Statement.RecordId}.html", $"../records/{link.Target.RecordId}.html"],
+            cited.Select(row => row.QuerySelector("a")!.GetAttribute("href")));
+        Assert.Equal(["<b>a rent cap</b>", "Title: A housing bill"],
+            document.QuerySelectorAll("[aria-labelledby='evidence-title'] blockquote").Select(quote => quote.TextContent));
+        Assert.Contains("states no verdict", document.QuerySelector(".caveat")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RelationshipPageRejectsATypeThatDoesNotFitTheKindOfTheTarget()
+    {
+        var link = Relationship(PublishedRecordKind.Action, new string('a', 64), '7') with { Type = PublishedRelationshipType.StatementAboutVote };
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => new ReleaseRenderer().RenderRelationshipAsync(link, CancellationToken.None));
     }
 
     [Fact]
@@ -426,6 +494,25 @@ public sealed class ReleaseRendererTests
         Assert.True(match.Success, $"No mark with id {id}.");
         return match.Groups[1].Value;
     }
+
+    private static PublishedRelationship Relationship(PublishedRecordKind targetKind, string targetId, char id) => new()
+    {
+        RecordId = new string(id, 64),
+        RevisionNumber = 1,
+        Headline = "Doe backs a rent cap and Housing bill funds rent aid",
+        Statement = new() { Kind = PublishedRecordKind.Statement, RecordId = Statement().RecordId, RevisionNumber = 2, Headline = "Doe backs a rent cap" },
+        Target = new() { Kind = targetKind, RecordId = targetId, RevisionNumber = 3, Headline = "Housing bill funds rent aid" },
+        Type = PublishedRelationshipType.DescribesOwnBill,
+        Reason = "Doe says the bill is hers.",
+        Quote = "<b>a rent cap</b>",
+        TargetFact = "Title: A housing bill",
+        StatementDate = new DateOnly(2026, 5, 1),
+        Officials = [new PublishedOfficial { Id = "o1", Name = "Jane <Doe>" }],
+        IssueIds = ["housing"],
+        PolicyAreaIds = [],
+        ApprovedAtUtc = DateTimeOffset.UnixEpoch,
+        FirstPublishedAtUtc = DateTimeOffset.UnixEpoch
+    };
 
     private static PublishedBrief Brief() => new()
     {

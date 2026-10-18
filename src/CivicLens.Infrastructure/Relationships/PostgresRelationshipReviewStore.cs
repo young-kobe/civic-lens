@@ -1,5 +1,7 @@
+using System.Collections.Immutable;
 using System.Data;
 using CivicLens.Application.Paging;
+using CivicLens.Application.Publication;
 using CivicLens.Application.Relationships;
 using CivicLens.Application.Review;
 using CivicLens.Core.Relationships;
@@ -72,7 +74,7 @@ public sealed class PostgresRelationshipReviewStore(IDbContextFactory<Collection
             ? await Records.PageAsync(db, cursor, limit, filter, row => row.LastRevisedAtUtcTicks, cancellationToken)
             : await Records.PageAsync(db, cursor, limit, filter, cancellationToken);
         var histories = await Records.ReadHistoriesAsync(db, slice.Items, cancellationToken);
-        var citations = histories.Values.SelectMany(history => new[] { history.CurrentRevision!.Statement, history.CurrentRevision.Target }).ToArray();
+        var citations = histories.Values.SelectMany(history => CitationsOf(history.CurrentRevision!)).ToArray();
         var headlines = await RelationshipCitedReader.ReadHeadlinesAsync(db, citations, cancellationToken);
         var changed = await RelationshipCitedReader.FindChangedAsync(db, citations, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -91,6 +93,51 @@ public sealed class PostgresRelationshipReviewStore(IDbContextFactory<Collection
         var approved = await Records.Drafts(db, DraftStatusFilter.Approved).CountAsync(cancellationToken);
         return new(needsAction, approved);
     }
+
+    public async Task<IReadOnlyList<UnpublishedApprovedRelationship>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken)
+    {
+        PageLimit.Validate(limit);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var records = await Records.ReadUnpublishedApprovedAsync(db, RelationshipReviewQueries.UnpublishedApproved, limit, cancellationToken);
+        var citations = records.SelectMany(record => CitationsOf(record.History.CurrentRevision!)).ToArray();
+        var headlines = await RelationshipCitedReader.ReadHeadlinesAsync(db, citations, cancellationToken);
+        var notCurrent = await CitedRevisions.FindNotCurrentInActiveReleaseAsync(db, citations.Select(RelationshipRecordKinds.BindingOf), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return [.. records.Select(record =>
+        {
+            var current = record.History.CurrentRevision!;
+            return new UnpublishedApprovedRelationship(ToReview(record.Draft, record.History), headlines[current.Statement], headlines[current.Target],
+                record.PublishedRevisionNumber, CitesNotCurrent(current, notCurrent));
+        })];
+    }
+
+    public async Task<IReadOnlyDictionary<string, PublishableRelationship>> GetForPublicationAsync(ImmutableArray<string> recordIds,
+        ImmutableArray<PublishedRevisionBinding> releaseRecords, CancellationToken cancellationToken)
+    {
+        if (recordIds.IsDefaultOrEmpty || recordIds.Length > PublishRelease.MaximumRecords)
+            throw new ArgumentOutOfRangeException(nameof(recordIds));
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var drafts = await Records.ReadDraftsAsync(db, [.. recordIds], cancellationToken);
+        var histories = await Records.ReadHistoriesAsync(db, drafts, cancellationToken);
+        var currents = histories.Values.Select(history => history.CurrentRevision!).ToArray();
+        var cited = await RelationshipCitedReader.ReadCitedAsync(db, currents, cancellationToken);
+        var notCurrent = await CitedRevisions.FindNotCurrentAsync(db, currents.SelectMany(CitationsOf).Select(RelationshipRecordKinds.BindingOf),
+            releaseRecords, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return drafts.ToDictionary(draft => draft.RecordId, draft =>
+        {
+            var current = histories[draft.RecordId].CurrentRevision!;
+            return new PublishableRelationship(ToReview(draft, histories[draft.RecordId]), cited[draft.RecordId].Statement,
+                cited[draft.RecordId].Target, CitesNotCurrent(current, notCurrent));
+        }, StringComparer.Ordinal);
+    }
+
+    private static RelationshipCitation[] CitationsOf(RelationshipRevision revision) => [revision.Statement, revision.Target];
+
+    private static bool CitesNotCurrent(RelationshipRevision revision, HashSet<PublishedRevisionBinding> notCurrent) =>
+        CitationsOf(revision).Any(citation => notCurrent.Contains(RelationshipRecordKinds.BindingOf(citation)));
 
     private static RelationshipReview ToReview(RelationshipDraftRow draft, ReviewHistory<RelationshipRevision> history) =>
         new(draft.RecordId, history.CurrentRevision!, history.LoadedRevisions, draft.ReviewStateVersion,

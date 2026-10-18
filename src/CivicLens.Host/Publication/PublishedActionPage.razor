@@ -1,8 +1,11 @@
 @using CivicLens.Host.Components.Evidence
+@using System.Collections.Immutable
 @using CivicLens.Publication.Contracts
 
 <PublishedRecordFrame Headline="@Record.Headline" Summary="@Record.Summary" Facts="PublishedActionView.Facts(Record)"
                       Caveat="A sponsorship is a proposal, not a law. This record lists only the officials that Civic Lens tracks. Each date comes from the Congress.gov record at the observation time of its source.">
+    <PublishedRelatedPanel Related="Related" Kind="PublishedRecordKind.Action" RecordId="@Record.RecordId" />
+
     <Panel Title="Sponsorships" Id="sponsorships-title" Padded="true">
         <p class="muted small">Each quote is exact text from the saved Congress.gov API page as Civic Lens renders it. Each source panel marks the quotes in the full saved text.</p>
         <DataTable Items="Record.Sponsorships" Caption="Sponsorships of tracked officials">
@@ -60,4 +63,5 @@
 
 @code {
     [Parameter, EditorRequired] public PublishedAction Record { get; set; } = default!;
+    [Parameter] public ImmutableArray<PublishedRelationship> Related { get; set; }
 }

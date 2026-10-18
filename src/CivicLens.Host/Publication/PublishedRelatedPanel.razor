@@ -1,0 +1,29 @@
+@using System.Collections.Immutable
+@using CivicLens.Host.Components.Ui
+@using CivicLens.Publication.Contracts
+
+@if (!Related.IsDefaultOrEmpty)
+{
+    <Panel Title="Related records" Id="related-title" Padded="true">
+        <p class="muted small">Each link was approved by a person. It does not say that the statement is true or consistent with the record.</p>
+        <ul class="choices">
+            @foreach (var link in Related)
+            {
+                var other = link.Other(Kind, RecordId);
+                <li>
+                    <a href="@PublishedRecordView.RecordLink(other.RecordId)">@other.Headline</a>
+                    <span class="muted small">
+                        @PublishedRecordLabels.Kind(other.Kind), @PublishedRecordLabels.RelationshipType(link.Type)@(link.StatementDate is { } date ? ", statement of " + Moment.Iso(date) : "")
+                    </span>
+                    <a class="small" href="@PublishedRecordView.RecordLink(link.RecordId)">Why they are linked</a>
+                </li>
+            }
+        </ul>
+    </Panel>
+}
+
+@code {
+    [Parameter, EditorRequired] public ImmutableArray<PublishedRelationship> Related { get; set; }
+    [Parameter, EditorRequired] public PublishedRecordKind Kind { get; set; }
+    [Parameter, EditorRequired] public string RecordId { get; set; } = string.Empty;
+}

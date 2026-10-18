@@ -14,6 +14,7 @@ public static class PublicationProtocol
     public const int MaximumRecordsPerRelease = 20000;
     public const int IndexPageSize = 50;
     public const int MaximumManifestBytes = 32 * 1024 * 1024;
+    public const int MaximumRecordBytes = 16 * 1024 * 1024;
 
     public static string IndexPagePath(int page) => page == 1 ? "index.html" : $"page-{page}.html";
     public static int IndexPageCount(int recordCount) => Math.Max(1, (recordCount + IndexPageSize - 1) / IndexPageSize);
@@ -34,7 +35,8 @@ public static class PublicationProtocol
     internal static bool IsRecordId(PublishedRecordKind kind, string? value) => kind switch
     {
         PublishedRecordKind.DocumentChange => IsLowerHex(value, 32),
-        PublishedRecordKind.Statement or PublishedRecordKind.Action or PublishedRecordKind.Brief or PublishedRecordKind.Vote => IsSha256(value),
+        PublishedRecordKind.Statement or PublishedRecordKind.Action or PublishedRecordKind.Brief or PublishedRecordKind.Vote
+            or PublishedRecordKind.Relationship => IsSha256(value),
         _ => false
     };
 

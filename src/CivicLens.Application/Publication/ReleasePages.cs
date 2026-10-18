@@ -1,0 +1,38 @@
+using CivicLens.Publication.Contracts;
+
+namespace CivicLens.Application.Publication;
+
+/// <summary>Renders every page that this publish writes. A page lists the related records of the new release.</summary>
+internal sealed class ReleasePages(IReleaseDirectory releases, PublishedRecordLoaders loaders)
+{
+    public async Task<IReadOnlyDictionary<string, string>> RenderAsync(PublicationBuild build, IReadOnlyList<PendingRecord> additions,
+        CancellationToken cancellationToken)
+    {
+        var links = await ReleaseLinks.LoadAsync(releases, build.Previous, additions, cancellationToken);
+        var pages = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var addition in additions)
+            pages[addition.RecordId] = await addition.RenderPage(links.Citing(addition.Entry.Kind, addition.RecordId), cancellationToken);
+        foreach (var kind in CarriedCitedBy(links, additions).GroupBy(cited => cited.Kind))
+            foreach (var (recordId, page) in await loaders.For(kind.Key).RenderCarriedAsync(
+                await ReadAsync(build.Previous, kind, cancellationToken), links, build, cancellationToken))
+                pages[recordId] = page;
+        return pages;
+    }
+
+    private static IEnumerable<PublishedRelationshipCitation> CarriedCitedBy(ReleaseLinks links, IReadOnlyList<PendingRecord> additions)
+    {
+        var added = additions.Select(addition => (addition.Entry.Kind, addition.RecordId)).ToHashSet();
+        return links.Added.SelectMany(link => new[] { link.Statement, link.Target })
+            .Where(cited => !added.Contains((cited.Kind, cited.RecordId))).DistinctBy(cited => (cited.Kind, cited.RecordId));
+    }
+
+    private async Task<IReadOnlyDictionary<string, byte[]>> ReadAsync(PreviousRelease previous, IEnumerable<PublishedRelationshipCitation> cited,
+        CancellationToken cancellationToken)
+    {
+        var json = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        foreach (var citation in cited)
+            json[citation.RecordId] = await releases.ReadFileAsync(previous.DirectoryName!, PublicationProtocol.RecordDataPath(citation.RecordId),
+                PublicationProtocol.MaximumRecordBytes, cancellationToken);
+        return json;
+    }
+}

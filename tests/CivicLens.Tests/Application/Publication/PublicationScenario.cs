@@ -4,6 +4,9 @@ using CivicLens.Application.Actions;
 using CivicLens.Application.Briefs;
 using CivicLens.Core.Briefs;
 using CivicLens.Tests.Application.Briefs;
+using CivicLens.Tests.Application.Relationships;
+using CivicLens.Application.Relationships;
+using CivicLens.Core.Relationships;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CivicLens.Application.Publication;
@@ -35,10 +38,11 @@ internal sealed class PublicationScenario
     public FakeStatementReviewStore Statements { get; } = new();
     public FakeActionReviewStore Actions { get; } = new();
     public FakeVoteReviewStore Votes { get; } = new();
+    public FakeRelationshipReviewStore Relationships { get; } = new();
     public FakeBriefReviewStore Briefs { get; } = new();
     public Dictionary<string, string> OfficialNames { get; } = new() { ["mayor"] = "Mayor Example", ["chair"] = "Council Chair Example" };
 
-    public PublishedRecordLoaders Loaders() => new(Reviews, Statements, Actions, Votes, Briefs);
+    public PublishedRecordLoaders Loaders() => new(Reviews, Statements, Actions, Votes, Relationships, Briefs);
 
     public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer(), Loaders(),
         new PublicationCatalog(OfficialNames), Clock);
@@ -155,11 +159,12 @@ internal sealed class PublicationScenario
     }
 
     public string AddStatement(char id, ImmutableArray<ReviewDecision>? decisions = null, string[]? speakerIds = null,
-        int revisionNumber = 1)
+        int revisionNumber = 1, DateOnly? statementDate = null)
     {
         var candidateId = new string(id, 64);
         var extraction = Extraction($"Mayor said: housing matters.\nOther text {id}.\n", $"statement-{id}");
-        var revision = new StatementDraftRevision(candidateId, revisionNumber, "author", ApprovedAt, $"Statement {id}", "Summary", null, null,
+        var revision = new StatementDraftRevision(candidateId, revisionNumber, "author", ApprovedAt, $"Statement {id}", "Summary", statementDate,
+            statementDate is null ? null : new SourceSpan(extraction.ExtractionId, 0, 5),
             [.. speakerIds ?? ["mayor"]], ["Council Member"], ["housing"], ["land-use"],
             [new(new(extraction.ExtractionId, 12, 15), StatementQuotationKind.DirectQuotation)], ["HB 12"]);
         var all = decisions ?? [Decision(candidateId, 1, ReviewDecisionKind.Approve, revisionNumber)];
@@ -227,6 +232,29 @@ internal sealed class PublicationScenario
         return recordId;
     }
 
+    public string AddRelationship(char id, string statementId, string targetId, PublishedRecordKind targetKind = PublishedRecordKind.Action,
+        ReviewDecisionKind decision = ReviewDecisionKind.Approve, int statementRevision = 1, int targetRevision = 1, int revisionNumber = 1)
+    {
+        var recordId = new string(id, 64);
+        var statement = Statements.Publishable[statementId];
+        var statementRevisionRecord = statement.Review.CurrentRevision!;
+        var quote = new SourceSpan(statement.Extraction.ExtractionId, 12, 15);
+        var target = targetKind == PublishedRecordKind.Action
+            ? RelationshipTarget.Of(Actions.Publishable[targetId].Review.CurrentRevision)
+            : RelationshipTarget.Of(Votes.Publishable[targetId].Review.CurrentRevision);
+        var revision = new RelationshipRevision(recordId, revisionNumber, ReviewAuthor.AnalysisSubject, ApprovedAt,
+            new(RelationshipRecordKind.Statement, statementId, statementRevision), new(Enum.Parse<RelationshipRecordKind>(targetKind.ToString()), targetId, targetRevision),
+            new(RelationshipMatchBasis.BillNumber, quote),
+            targetKind == PublishedRecordKind.Action ? RelationshipType.DescribesOwnBill : RelationshipType.StatementAboutVote,
+            $"Statement {id} describes the record.", quote, "F2");
+        var all = ImmutableArray.Create(Decision(recordId, 1, decision, revisionNumber));
+        var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
+        var review = new RelationshipReview(recordId, revision, [revision], 1, ReviewPolicy.GetCurrentStatus(revisionNumber, all, concerns), all,
+            concerns, false);
+        Relationships.Publishable[recordId] = new(review, new ApprovedStatement(statementRevisionRecord, statement.Extraction.Text), target, false);
+        return recordId;
+    }
+
     public string AddBrief(DateOnly week, PublishedRevisionBinding[] cited, ReviewDecisionKind decision = ReviewDecisionKind.Approve)
     {
         var recordId = BriefWeek.RecordIdOf(week);
@@ -259,16 +287,24 @@ internal sealed class FakeRenderer : IReleaseRenderer
     public IReadOnlyList<ReleaseAsset> Assets { get; } = [new("assets/site.css", [1, 2, 3])];
     public Task<string> RenderRecordAsync(PublishedDocumentChange record, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>{record.RecordId}</html>");
-    public Task<string> RenderStatementAsync(PublishedStatement record, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>statement {record.RecordId}</html>");
-    public Task<string> RenderActionAsync(PublishedAction record, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>action {record.RecordId}</html>");
-    public Task<string> RenderVoteAsync(PublishedVote record, string? billActionRecordId, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>vote {record.RecordId} bill {billActionRecordId}</html>");
+    public Task<string> RenderStatementAsync(PublishedStatement record, ImmutableArray<PublishedRelationship> related,
+        CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>statement {record.RecordId}{Related(related)}</html>");
+    public Task<string> RenderActionAsync(PublishedAction record, ImmutableArray<PublishedRelationship> related,
+        CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>action {record.RecordId}{Related(related)}</html>");
+    public Task<string> RenderVoteAsync(PublishedVote record, string? billActionRecordId, ImmutableArray<PublishedRelationship> related,
+        CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>vote {record.RecordId} bill {billActionRecordId}{Related(related)}</html>");
+    public Task<string> RenderRelationshipAsync(PublishedRelationship record, CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>relationship {record.RecordId}</html>");
     public Task<string> RenderBriefAsync(PublishedBrief record, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>brief {record.RecordId}</html>");
     public Task<string> RenderIndexAsync(PublicationRelease release, int page, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>index {page} {release.Records.Length}</html>");
+
+    private static string Related(ImmutableArray<PublishedRelationship> related) =>
+        related.IsEmpty ? "" : " related " + string.Join(' ', related.Select(link => link.RecordId[..1]));
 }
 
 internal sealed class FakePublicationStore : IPublicationStore

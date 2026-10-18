@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text.Json;
 using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
 
@@ -16,6 +17,23 @@ internal abstract class PublishedRecordLoader(PublishedRecordKind kind)
 
     public abstract Task<List<PendingRecord>> LoadAsync(ImmutableArray<string> recordIds, PublicationBuild build,
         CancellationToken cancellationToken);
+
+    /// <summary>Renders again the pages of records that the release carries, so each page lists its related records. Only the kinds that a relationship cites do this.</summary>
+    public virtual Task<IReadOnlyDictionary<string, string>> RenderCarriedAsync(IReadOnlyDictionary<string, byte[]> records,
+        ReleaseLinks links, PublicationBuild build, CancellationToken cancellationToken) =>
+        throw new InvalidOperationException($"A {Kind} page does not list related records.");
+
+    protected static Dictionary<string, TRecord> ParseAll<TRecord>(IReadOnlyDictionary<string, byte[]> records) =>
+        records.ToDictionary(record => record.Key, record => JsonSerializer.Deserialize<TRecord>(record.Value, PublicationProtocol.JsonOptions)
+            ?? throw new InvalidDataException("A carried record file is empty."), StringComparer.Ordinal);
+
+    protected static async Task<IReadOnlyDictionary<string, string>> RenderEachAsync<TRecord>(Dictionary<string, TRecord> records,
+        Func<TRecord, string, Task<string>> render)
+    {
+        var pages = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (recordId, record) in records) pages[recordId] = await render(record, recordId);
+        return pages;
+    }
 }
 
 internal abstract class PublishedRecordLoader<TCandidate, TAddition>(PublishedRecordKind kind, string noun)
@@ -39,7 +57,7 @@ internal abstract class PublishedRecordLoader<TCandidate, TAddition>(PublishedRe
         {
             var addition = found.GetValueOrDefault(recordId)
                 ?? throw new ArgumentException($"{noun} {recordId} does not exist.", nameof(recordIds));
-            pending.Add(await BuildAsync(recordId, addition, build, cancellationToken));
+            pending.Add(Build(recordId, addition, build));
         }
         return pending;
     }
@@ -51,8 +69,7 @@ internal abstract class PublishedRecordLoader<TCandidate, TAddition>(PublishedRe
     protected abstract Task<IReadOnlyDictionary<string, TAddition>> GetForPublicationAsync(ImmutableArray<string> recordIds,
         PublicationBuild build, CancellationToken cancellationToken);
 
-    protected abstract Task<PendingRecord> BuildAsync(string recordId, TAddition addition, PublicationBuild build,
-        CancellationToken cancellationToken);
+    protected abstract PendingRecord Build(string recordId, TAddition addition, PublicationBuild build);
 
     protected ReadyToPublishRecord? Ready(ReviewStatus status, int unresolvedConcernCount, string recordId, string headline,
         int revisionNumber, int? publishedRevisionNumber) =>

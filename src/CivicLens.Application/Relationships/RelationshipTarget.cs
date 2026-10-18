@@ -6,16 +6,17 @@ using CivicLens.Core.Votes;
 namespace CivicLens.Application.Relationships;
 
 public sealed record RelationshipTarget(RelationshipRecordKind Kind, string RecordId, int RevisionNumber, string Headline,
-    ImmutableArray<RelationshipFact> Facts)
+    ImmutableArray<RelationshipFact> Facts, ImmutableArray<string> IssueIds, ImmutableArray<string> PolicyAreaIds)
 {
     public RelationshipCitation Citation => new(Kind, RecordId, RevisionNumber);
 
     public static RelationshipTarget Of(ActionDraftRevision action) => new(RelationshipRecordKind.Action, action.RecordId, action.RevisionNumber, action.Headline,
         Numbered([$"Bill: {action.BillType} {action.BillNumber}, Congress {action.Congress}", $"Title: {action.BillTitle}",
-            $"Headline: {action.Headline}", $"Summary: {action.Summary}"]));
+            $"Headline: {action.Headline}", $"Summary: {action.Summary}"]),
+        action.TrackedIssueIds, action.PolicyAreaId is null ? [] : [action.PolicyAreaId]);
 
     public static RelationshipTarget Of(VoteDraftRevision vote) => new(RelationshipRecordKind.Vote, vote.RecordId, vote.RevisionNumber, vote.Headline,
-        Numbered(vote.Facts.Select(fact => fact.Text)));
+        Numbered(vote.Facts.Select(fact => fact.Text)), vote.TrackedIssueIds, []);
 
     private static ImmutableArray<RelationshipFact> Numbered(IEnumerable<string> texts) =>
         [.. texts.Select((text, index) => new RelationshipFact($"F{index + 1}", text))];

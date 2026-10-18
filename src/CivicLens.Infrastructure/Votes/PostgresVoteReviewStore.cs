@@ -141,7 +141,8 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
         var histories = await Records.ReadHistoriesAsync(db, drafts, cancellationToken);
         var currents = histories.Values.Select(history => history.CurrentRevision!).ToArray();
         var extractions = (await ReadExtractionsAsync(db, currents, cancellationToken)).ToImmutableDictionary(StringComparer.Ordinal);
-        var billActions = await ReadBillActionRecordIdsAsync(db, currents, cancellationToken);
+        var billActions = await ReadBillActionRecordIdsAsync(db, [.. currents.Where(revision => revision.BillType is not null)
+            .Select(revision => new VoteBill(revision.RecordId, revision.Congress, revision.BillType!, revision.BillNumber!.Value))], cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         foreach (var current in currents) current.ValidateAgainst(extractions);
         return drafts.ToDictionary(draft => draft.RecordId, draft =>
@@ -149,19 +150,25 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
                 billActions.GetValueOrDefault(draft.RecordId, [])), StringComparer.Ordinal);
     }
 
-    private static async Task<Dictionary<string, ImmutableArray<string>>> ReadBillActionRecordIdsAsync(CollectionAttemptDbContext db,
-        IEnumerable<VoteDraftRevision> revisions, CancellationToken cancellationToken)
+    public async Task<IReadOnlyDictionary<string, ImmutableArray<string>>> FindBillActionRecordIdsAsync(ImmutableArray<VoteBill> bills,
+        CancellationToken cancellationToken)
     {
-        var withBill = revisions.Where(revision => revision.BillType is not null).ToArray();
-        var congresses = withBill.Select(revision => revision.Congress).Distinct().ToArray();
-        var billTypes = withBill.Select(revision => revision.BillType!).Distinct().ToArray();
-        var billNumbers = withBill.Select(revision => revision.BillNumber!.Value).Distinct().ToArray();
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await ReadBillActionRecordIdsAsync(db, bills, cancellationToken);
+    }
+
+    private static async Task<Dictionary<string, ImmutableArray<string>>> ReadBillActionRecordIdsAsync(CollectionAttemptDbContext db,
+        ImmutableArray<VoteBill> bills, CancellationToken cancellationToken)
+    {
+        if (bills.IsEmpty) return [];
+        var congresses = bills.Select(bill => bill.Congress).Distinct().ToArray();
+        var billTypes = bills.Select(bill => bill.BillType).Distinct().ToArray();
+        var billNumbers = bills.Select(bill => bill.BillNumber).Distinct().ToArray();
         var actions = await db.Set<ActionDraftRow>().AsNoTracking()
             .Where(row => congresses.Contains(row.Congress) && billTypes.Contains(row.BillType) && billNumbers.Contains(row.BillNumber))
             .Select(row => new { row.RecordId, row.Congress, row.BillType, row.BillNumber }).ToArrayAsync(cancellationToken);
-        return withBill.ToDictionary(revision => revision.RecordId, revision =>
-            actions.Where(action => action.Congress == revision.Congress && action.BillType == revision.BillType &&
-                    action.BillNumber == revision.BillNumber)
+        return bills.ToDictionary(bill => bill.VoteRecordId, bill =>
+            actions.Where(action => action.Congress == bill.Congress && action.BillType == bill.BillType && action.BillNumber == bill.BillNumber)
                 .Select(action => action.RecordId).Order(StringComparer.Ordinal).ToImmutableArray(), StringComparer.Ordinal);
     }
 

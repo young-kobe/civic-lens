@@ -21,13 +21,17 @@ internal sealed class ActionRecordLoader(IActionReviewStore actions)
         ImmutableArray<string> recordIds, PublicationBuild build, CancellationToken cancellationToken) =>
         actions.GetForPublicationAsync(recordIds, cancellationToken);
 
-    protected override async Task<PendingRecord> BuildAsync(string recordId, PublishableAction addition,
-        PublicationBuild build, CancellationToken cancellationToken)
+    protected override PendingRecord Build(string recordId, PublishableAction addition, PublicationBuild build)
     {
         var review = addition.Review;
         RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
         var record = new PublishedActionBuilder(build.Rules).Build(addition, build.Previous.Find(Kind, recordId), build.Now);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
-            await build.Renderer.RenderActionAsync(record, cancellationToken));
+            (related, cancellationToken) => build.Renderer.RenderActionAsync(record, related, cancellationToken));
     }
+
+    public override Task<IReadOnlyDictionary<string, string>> RenderCarriedAsync(IReadOnlyDictionary<string, byte[]> records,
+        ReleaseLinks links, PublicationBuild build, CancellationToken cancellationToken) =>
+        RenderEachAsync(ParseAll<PublishedAction>(records), (record, recordId) =>
+            build.Renderer.RenderActionAsync(record, links.Citing(Kind, recordId), cancellationToken));
 }
