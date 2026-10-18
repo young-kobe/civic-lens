@@ -72,6 +72,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - The same fingerprint settles without a call. A new record or a new revision of a record makes a new revision. Enforced by `BriefDraftStep` and `BriefFingerprint`. Tests: `BriefDraftStepTests.TheSameRecordsAndCutoffSettleUnchangedWithoutACallBecauseTheFingerprintMatches`, `BriefDraftStepTests.ANewRecordOrANewRevisionOfARecordAppendsRevisionTwoWithANewFingerprint`, and `BriefSelectionTests.TheFingerprintIgnoresInputOrderAndChangesWithTheRevisionOrTheCutoff`.
 - A group that alone exceeds the byte cap blocks the week as `overByteCap`. Enforced by `BriefDraftStep`. Test: `BriefDraftStepTests.AGroupThatAloneExceedsTheByteCapBlocksTheWeekWithoutACall`.
 - Model confidence never reaches a revision. Enforced by `BriefDraftStep`. Test: `BriefDraftStepTests.ConfidenceStaysInTheRunOutputAndNeverReachesTheRevision`.
+- A model revision never lands on an approved brief. The run keeps the outcome `DraftDiscarded` and the week settles as `unchanged`. Enforced by `BriefDraftRows.AppendAnalysisRevisionAsync` and `BriefDraftQueueMapping`. Test: `PostgresBriefDraftStoreTests.AnApprovalThatLandsWhileTheModelRunsLeavesTheApprovedRevisionAndSettlesTheWeekAsUnchanged`.
 - An append needs the expected current revision. Enforced by `BriefDraftRows` under the `PostgresAdvisoryLock.BriefReview` key. Test: `PostgresBriefDraftStoreTests.ARevisionThatFindsADifferentCurrentRevisionIsDiscardedAndRetriedSoTwoDraftersNeverShareARevisionNumber`.
 - The text of a person stays, and model text becomes a suggestion with its own citations. Enforced by `BriefRevision.ValidateAsAnalysisRevision`. Tests: `BriefRevisionTests.AnAnalysisRevisionNeverOverwritesTheTextOfAPersonAndOffersItsOwnAsASuggestion` and `BriefDraftResolverTests.WhenAPersonWroteTheCurrentTextTheModelTextOnlyBecomesASuggestionWithItsOwnCitations`.
 - A publication commit requeues the brief of the week of each record that it changes, drops, or adds again. Enforced by `BriefStaleness.RequeueAfterPublicationAsync` in the `PostgresPublicationStore` commit transaction, through `PostgresAnalysisQueue.RequeueInAsync`. Tests: `BriefStalenessTests.APublishThatChangesARevisionRequeuesOnlyTheBriefOfTheWeekThatFirstPublishedTheRecord`, `BriefStalenessTests.APublishThatChangesARecordOfAnEarlierWeekLeavesTheBriefOfThisWeekAlone`, `BriefStalenessTests.APublishThatDropsARecordRequeuesTheBriefOfItsWeekForEachKind`, `BriefStalenessTests.APublishThatOnlyAddsARecordLeavesTheFinishedBriefAloneBecauseTheNewRecordBelongsToTheOpenWeek`, `BriefStalenessTests.ARecordPublishedAgainAfterItWasDroppedRequeuesTheWeekThatFirstPublishedIt`, `BriefStalenessTests.AChangedRecordRequeuesABlockedWeekOnlyWhenItHadNoRecordToCite`, `BriefStalenessTests.APendingBriefStaysAsItIsBecauseItReadsTheSelectionWhenItRunsAnyway`, `BriefStalenessTests.ARunningBriefIsRequeuedAndItsLateSettlementIsRefusedSoItCannotSaveAStaleRevision`, and `PostgresBriefDraftStoreTests.AStaleSignalWhileTheBriefIsRunningLeadsToANewDraftAndNeverASavedStaleRevision`.
@@ -190,7 +191,7 @@ A citation error gives the run the outcome `CitationRejected`. Any other error g
 
 The worker appends a new revision to the brief of the week, written by `civic-lens:analysis` with its run ID. `BriefDraftResolver` builds the revision. The citation list holds the sent records that a paragraph cites, in ID order. If the current revision has the origin `Person`, the new revision keeps that text and its citations and stores the model text as the suggestion.
 
-The settlement takes the queue row lock and then `civic-lens-brief-review`. `BriefDraftRows.AppendAnalysisRevisionAsync` returns a refusal code or appends through `ReviewRecords.AppendRevision`. If the current revision number is not one less than the new one, the run is kept as `DraftDiscarded`. The entry moves to RetryWaiting with the code `revisionConflict`.
+The settlement takes the queue row lock and then `civic-lens-brief-review`. `BriefDraftRows.AppendAnalysisRevisionAsync` returns a refusal code or appends through `ReviewRecords.AppendRevision`. If the current revision number is not one less than the new one, the run is kept as `DraftDiscarded`. The entry moves to RetryWaiting with the code `revisionConflict`. If the brief is approved, the refusal code is `alreadyApproved`. The run is kept as `DraftDiscarded` and the entry settles as Succeeded with `unchanged`. The approved revision stays as it is.
 
 ### Brief review
 
@@ -214,9 +215,9 @@ Brief review uses the shared decision rules and review cycles in [review](review
 - the cited records, each with its ID, headline, summary, kind, and revision, a "Changed" badge, and a link to its review page
 - the coverage line, the shared `ReviewDecisionPanel`, and the shared `ReviewHistoryPanel`
 
-The page differs from the action page in two ways. It has no "Change since the last approval" panel. It has no bulk approval. The rail has a Briefs link.
+The page differs from the action page in two ways. It has no "Change since the last approval" panel. It has no bulk approval. The rail has a Briefs link. The review home has a stat card with the count of briefs that need action, and it links to the list.
 
-**Withdraw and redraft.** A flagged approved brief stays approved until a person withdraws it. No event requeues it after the withdrawal. A later publication, activation, or decision that touches a record of the week requeues it, because it is no longer approved. The owner can run `brief redraft --week` at any time. The redraft appends a revision with the new fingerprint. If the current text is model text, the revision replaces it and cites the revisions that the active release holds. If the current text is person text, the revision keeps the old citations and stores the new text as a suggestion. In that case the flag stays until one of three things happens. The person adopts the suggestion. The person drops the changed citation. The cited record is approved again.
+**Withdraw and redraft.** A flagged approved brief stays approved until a person withdraws it. No event requeues it after the withdrawal. A later publication, activation, or decision that touches a record of the week requeues it, because it is no longer approved. After a withdrawal, the owner can run `brief redraft --week`. The command refuses a week whose brief is approved, with a message to withdraw the approval first, and it makes no model call. The redraft appends a revision with the new fingerprint. If the current text is model text, the revision replaces it and cites the revisions that the active release holds. If the current text is person text, the revision keeps the old citations and stores the new text as a suggestion. In that case the flag stays until one of three things happens. The person adopts the suggestion. The person drops the changed citation. The cited record is approved again.
 
 ### Publication
 
@@ -256,7 +257,7 @@ A requeued brief reads the selection again. The record set of a closed week is f
 |---|---|---|
 | Succeeded | none | A revision was appended |
 | Succeeded | `noNewRecords` | The week has no new records, so no brief exists |
-| Succeeded | `unchanged` | The fingerprint matches the current revision |
+| Succeeded | `unchanged` | The fingerprint matches the current revision, or an approval landed while the call ran |
 | RetryWaiting | `revisionConflict` | Another writer appended first |
 | Blocked | `evidenceUnavailable`, `overByteCap`, `noCitableRecords` | The input cannot be drafted |
 | Failed | `outputRejected`, `citationRejected`, a stop code, or `attemptsExhausted` | Owner redraft needed |
@@ -273,7 +274,7 @@ Its required variables are in [operations](../operations.md#brief-drafting). A d
 |---|---|
 | `brief redraft --week <yyyy-MM-dd>` | Queues the week if it has no entry. Moves a Succeeded, Blocked, or Failed entry back to Pending. The date must be a Monday, and the week must have ended |
 
-This is an owner command. It prints the count of entries that it queued or moved. A week before the first brief week is allowed. A week that has not ended is invalid input, because its records can still change. The database clock decides.
+This is an owner command. It prints the count of entries that it queued or moved. A week before the first brief week is allowed. A week that has not ended is invalid input, because its records can still change. The database clock decides. A week whose brief is approved is also invalid input. Withdraw the approval first.
 
 ## Storage and contracts
 

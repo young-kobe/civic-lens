@@ -21,10 +21,16 @@ internal static class RelationshipDraftRows
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.RelationshipReview, cancellationToken);
         var draft = await db.Set<RelationshipDraftRow>().SingleOrDefaultAsync(row => row.RecordId == revision.RecordId, cancellationToken);
         if ((draft?.CurrentRevisionNumber ?? 0) != revision.RevisionNumber - 1) return RelationshipDraftErrorCodes.RevisionConflict;
+        if (draft?.ReviewStatus == ReviewStatus.Approved) return RelationshipDraftErrorCodes.AlreadyApproved;
+        if (draft is not null && await KeepsPersonEditAsync(db, revision, cancellationToken)) return RelationshipDraftErrorCodes.PersonEditKept;
         if (draft is null) db.Add(draft = NewDraft(revision));
         Records.AppendRevision(db, draft, revision, NewRevision(revision, runId), await Records.ReadCycleAsync(db, draft, cancellationToken));
         return null;
     }
+
+    private static async Task<bool> KeepsPersonEditAsync(CollectionAttemptDbContext db, RelationshipRevision revision, CancellationToken cancellationToken) =>
+        await ReadCurrentAsync(db, revision.RecordId, cancellationToken) is { } current &&
+        current.IsPersonRevisionCiting(revision.Statement, revision.Target);
 
     public static async Task<RelationshipRevision?> ReadCurrentAsync(CollectionAttemptDbContext db, string recordId,
         CancellationToken cancellationToken)
@@ -43,7 +49,7 @@ internal static class RelationshipDraftRows
         CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
     };
 
-    private static RelationshipRevisionRow NewRevision(RelationshipRevision revision, string runId) => new()
+    public static RelationshipRevisionRow NewRevision(RelationshipRevision revision, string? runId) => new()
     {
         RecordId = revision.RecordId,
         RevisionNumber = revision.RevisionNumber,

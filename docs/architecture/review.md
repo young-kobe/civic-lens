@@ -47,7 +47,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 The workspace centers the proposed public record beside its supporting evidence. Document history and comparisons support the investigation. Reviewers assess wording, quotation fidelity, attribution, dates, context, citations, and interpretation.
 
 - For a document change, reviewers separate a substantive source edit from navigation churn or a processing change.
-- For a relationship, reviewers verify the claimed connection.
+- For a relationship, reviewers verify the claimed connection. The page shows the statement passage beside the facts of the target, and a flag when a cited record changed.
 - For a brief, reviewers verify each assertion against the cited revision and read the coverage description. A brief shows a flag when a cited record changed.
 
 An explanation of significance is an editorial judgment that needs review. A text difference never makes it automatic. A comparison alone does not show substantive significance.
@@ -137,7 +137,7 @@ The draft list, the new-change list, and the recent collection checks use keyset
 
 A new change is a complete comparison with at least one text hunk and no draft. The draft list can filter on status in SQL. Approved means that the newest decision on the current revision approves it. Needs action means every other status. The overview counts reuse the same status filter in `ReviewRecords.Drafts`, so each count equals the total of its list.
 
-The Review home page lists new changes, drafts, source health, and recent activity. The owner also sees the latest root job of each configured source; see [collection](collection.md#sources-page). The recent activity feed reads the newest events of each kind from the review tables. For the owner only, it also reads the job and processing tables. Application merges the events by time.
+The Review home page lists new changes, drafts, source health, and recent activity. The owner also sees the latest root job of each configured source; see [collection](collection.md#sources-page). The recent activity feed reads the newest events of each kind from the review tables. For the owner only, it also reads the job and processing tables. Application merges the events by time. The stat strip also counts the weekly briefs and the relationships that need action, and each card links to its list.
 
 `RecordRoutes.Editor` maps a record kind and a record ID to its review page. It calls `DocumentRoutes`, `StatementRoutes`, `ActionRoutes`, or `BriefRoutes`. Votes have `VoteRoutes`, but no record kind in `RecordRoutes` until vote publication exists.
 
@@ -192,6 +192,7 @@ The Host uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.12 for th
 | Postgres store and helpers | `src/CivicLens.Infrastructure/Review/PostgresDocumentChangeReviewStore.cs`, `src/CivicLens.Infrastructure/Review/ReviewIdempotency.cs`, `src/CivicLens.Infrastructure/Review/ReviewDecisionHistory.cs`, `src/CivicLens.Infrastructure/Review/ReviewKeyset.cs`, `src/CivicLens.Infrastructure/Review/ReviewJson.cs`, `src/CivicLens.Infrastructure/Review/ReviewQueries.cs` |
 | Pages | `src/CivicLens.Host/Review/ReviewHome.razor`, `src/CivicLens.Host/Review/DraftEditor.razor`, `src/CivicLens.Host/Review/ReviewDecisionPanel.razor`, `src/CivicLens.Host/Review/ReviewHistoryPanel.razor`, `src/CivicLens.Host/Review/ReviewRecordPage.cs`, `src/CivicLens.Host/Review/DocumentRoutes.cs`, `src/CivicLens.Host/Review/RecordRoutes.cs` |
 | Brief review | `src/CivicLens.Host/Review/BriefList.razor`, `src/CivicLens.Host/Review/BriefEditor.razor`, `src/CivicLens.Infrastructure/Briefs/PostgresBriefReviewStore.cs`; see [briefs](briefs.md#code-map) |
+| Relationship review | `src/CivicLens.Host/Review/RelationshipList.razor`, `src/CivicLens.Host/Review/RelationshipEditor.razor`, `src/CivicLens.Infrastructure/Relationships/PostgresRelationshipReviewStore.cs`; see [statements](statements.md#relationship-review) |
 | Workspace settings | `src/CivicLens.Host/Review/ReviewWorkspace.cs`, `src/CivicLens.Host/Review/ReviewWorkspaceSettings.cs` |
 
 ## Limits and planned work

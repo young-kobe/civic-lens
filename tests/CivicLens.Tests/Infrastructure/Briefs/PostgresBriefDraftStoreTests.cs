@@ -310,6 +310,41 @@ public sealed class PostgresBriefDraftStoreTests(PostgresCollection postgres) : 
     }
 
     [Fact]
+    public async Task AnApprovalThatLandsWhileTheModelRunsLeavesTheApprovedRevisionAndSettlesTheWeekAsUnchanged()
+    {
+        await SeedWeekAsync();
+        await DraftAsync(new FakeBriefDraftModel().Draft(BriefFixtures.Output(paragraphs: [("Text.", ["R1"])])));
+        await seeder.ReleaseJsonAsync(9, InWeek.AddHours(1), active: false,
+            $$"""[{"kind":"statement","recordId":"{{S2}}","revisionNumber":1},{"kind":"statement","recordId":"{{S3}}","revisionNumber":1}]""", 2);
+        _ = await store.RedraftAsync(Week, default);
+
+        var fingerprint = (await store.ReadEvidenceAsync(BriefWeek.RecordIdOf(Week), default))!.Current!.Fingerprint;
+
+        await DraftAsync(new ApprovingModel(seeder, BriefFixtures.Output(paragraphs: [("Newer text.", ["R1"])])));
+
+        Assert.Equal(("Succeeded", BriefDraftErrorCodes.Unchanged), await StatusAsync(Week));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM brief_revisions"));
+        Assert.Equal("Approved", await ScalarAsync("SELECT review_status FROM brief_drafts"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM brief_analysis_runs WHERE outcome = 'DraftDiscarded' AND reason IS NULL"));
+        Assert.Equal(fingerprint, (await store.ReadEvidenceAsync(BriefWeek.RecordIdOf(Week), default))!.Current!.Fingerprint);
+    }
+
+    [Fact]
+    public async Task ARedraftOfAWeekWithAnApprovedBriefIsRefusedWithoutAModelCallUntilTheApprovalIsWithdrawn()
+    {
+        await SeedWeekAsync();
+        await DraftAsync(new FakeBriefDraftModel().Draft(BriefFixtures.Output(paragraphs: [("Text.", ["R1"])])));
+        await seeder.ExecuteAsync("UPDATE brief_drafts SET review_status = 'Approved'");
+
+        var refused = await Assert.ThrowsAsync<ArgumentException>(() => store.RedraftAsync(Week, default));
+
+        Assert.Contains("Withdraw the approval", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(("Succeeded", null), await StatusAsync(Week));
+        await seeder.ExecuteAsync("UPDATE brief_drafts SET review_status = 'ApprovalWithdrawn'");
+        Assert.Equal(1, await store.RedraftAsync(Week, default));
+    }
+
+    [Fact]
     public async Task AWeekWithNoNewRecordsSettlesWithNoBriefAndABypassedRun()
     {
         _ = await store.RedraftAsync(Week, default);
@@ -658,6 +693,16 @@ public sealed class PostgresBriefDraftStoreTests(PostgresCollection postgres) : 
                 INSERT INTO brief_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
                 VALUES ('{BriefWeek.RecordIdOf(BriefFixtures.Week)}', 1, 'auth0|editor', 'Person', NULL, 'x', 1);
                 """);
+            return new("end_turn", reply, new(900, 100, 0, 0), "req_fixture");
+        }
+    }
+
+    private sealed class ApprovingModel(BriefWorldSeeder seeder, string reply) : IBriefDraftModel
+    {
+        public async Task<CivicLens.Application.Analysis.AnalysisModelResponse> DraftAsync(CivicLens.Application.Analysis.AnalysisModelRequest request,
+            CancellationToken cancellationToken)
+        {
+            await seeder.ExecuteAsync("UPDATE brief_drafts SET review_status = 'Approved'");
             return new("end_turn", reply, new(900, 100, 0, 0), "req_fixture");
         }
     }

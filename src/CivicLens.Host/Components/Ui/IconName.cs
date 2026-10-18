@@ -7,6 +7,7 @@ public enum IconName
     Statements,
     Actions,
     Votes,
+    Relationships,
     Briefs,
     Labels,
     Light,

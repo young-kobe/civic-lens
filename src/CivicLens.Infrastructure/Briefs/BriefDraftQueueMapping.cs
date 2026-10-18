@@ -45,6 +45,9 @@ internal sealed class BriefDraftQueueMapping : IAnalysisQueueMapping<BriefAnalys
             throw new ArgumentException("A revision needs its drafted run.", nameof(settlement));
         var refusal = await BriefDraftRows.AppendAnalysisRevisionAsync(db, revision, run.Run.RunId, cancellationToken);
         if (refusal is null) return settlement;
+        var discarded = run with { Run = run.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded } };
+        if (refusal == BriefDraftErrorCodes.AlreadyApproved)
+            return new(checkpoint with { ErrorCode = BriefDraftErrorCodes.Unchanged, Revision = null }, discarded);
         row.RetryOfRunId = null;
         return new(checkpoint with
         {
@@ -52,6 +55,6 @@ internal sealed class BriefDraftQueueMapping : IAnalysisQueueMapping<BriefAnalys
             ErrorCode = refusal,
             RetryDelay = AnalysisPolicy.RetryDelay(row.Attempts),
             Revision = null
-        }, run with { Run = run.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded } });
+        }, discarded);
     }
 }

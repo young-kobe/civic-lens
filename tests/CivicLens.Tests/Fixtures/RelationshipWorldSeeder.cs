@@ -1,6 +1,8 @@
 using System.Text.Json;
 using CivicLens.Application.Relationships;
 using CivicLens.Core.Actions;
+using CivicLens.Core.Relationships;
+using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
 using Npgsql;
 
@@ -56,6 +58,17 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
         ("session", vote.SessionNumber), ("roll", vote.RollCallNumber), ("type", vote.BillType!), ("bill", vote.BillNumber!.Value),
         ("extraction", RelationshipFixtures.ExtractionId), ("number", vote.RevisionNumber), ("status", reviewStatus),
         ("json", JsonSerializer.Serialize(vote, Web)));
+
+    public Task RevisionAsync(RelationshipRevision revision) => ExecuteAsync("""
+        SET session_replication_role = replica;
+        INSERT INTO relationship_drafts (record_id, current_revision_number, review_state_version, review_status, no_longer_matches,
+            created_at_utc_ticks, last_revised_at_utc_ticks)
+        VALUES (@id, @number, 0, 'AwaitingReview', false, 1, 1)
+        ON CONFLICT (record_id) DO UPDATE SET current_revision_number = @number;
+        INSERT INTO relationship_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
+        VALUES (@id, @number, @author, @kind, CASE WHEN @kind = 'Analysis' THEN substr(md5(@id || @number::text), 1, 32) END, @json, 1)
+        """, ("id", revision.RecordId), ("number", revision.RevisionNumber), ("author", revision.AuthorSubject),
+        ("kind", ReviewAuthor.KindOf(revision.AuthorSubject).ToString()), ("json", JsonSerializer.Serialize(revision, Web)));
 
     public Task SetStatusAsync(string table, string idColumn, string id, string status) =>
         ExecuteAsync($"UPDATE {table} SET review_status = @status WHERE {idColumn} = @id", ("id", id), ("status", status));

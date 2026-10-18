@@ -39,6 +39,19 @@ public sealed record RelationshipRevision(string RecordId, int RevisionNumber, s
             throw new ArgumentException("A revision belongs to the record of the revision before it.");
     }
 
+    public void ValidatePersonEditOf(RelationshipRevision previous)
+    {
+        ArgumentNullException.ThrowIfNull(previous);
+        ValidateShape();
+        if (ReviewAuthor.KindOf(AuthorSubject) != ReviewAuthorKind.Person || RevisionNumber != previous.RevisionNumber + 1)
+            throw new ArgumentException("A person revision follows the current revision.");
+        if (RecordId != previous.RecordId || Statement != previous.Statement || Target != previous.Target || Match != previous.Match)
+            throw new ArgumentException("A person edits only the type, the reason, the quote, and the fact.");
+    }
+
+    public bool IsPersonRevisionCiting(RelationshipCitation statement, RelationshipCitation target) =>
+        ReviewAuthor.KindOf(AuthorSubject) == ReviewAuthorKind.Person && Statement == statement && Target == target;
+
     private void ValidateCitations()
     {
         if (Statement is not { Kind: RelationshipRecordKind.Statement } || Target is not { Kind: RelationshipRecordKind.Action or RelationshipRecordKind.Vote })
@@ -52,8 +65,7 @@ public sealed record RelationshipRevision(string RecordId, int RevisionNumber, s
     {
         if (!IsBounded(Match.Span) || !IsBounded(StatementQuote) || StatementQuote.Length > StatementDraftRevision.MaximumQuotationLength)
             throw new ArgumentException("The matched span and the quote need bounded spans.");
-        if (!Enum.IsDefined(Match.Basis) || StatementQuote.ExtractionId != Match.Span.ExtractionId ||
-            StatementQuote.Start > Match.Span.Start || Match.Span.Start + Match.Span.Length > StatementQuote.Start + StatementQuote.Length)
+        if (!Enum.IsDefined(Match.Basis) || !StatementQuote.Covers(Match.Span))
             throw new ArgumentException("The quote must cover the matched span in the same extraction.");
     }
 
