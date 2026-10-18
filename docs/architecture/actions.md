@@ -30,6 +30,7 @@ The actions feature drafts one record for each bill that has an [action candidat
 - The compact view keys each sponsorship by bioguide ID, role, and sponsorship date. A keyed entry is Changed when its withdrawal date is set, changed, or cleared, when its person ID changes, or when its original-cosponsor flag changes. A change in citations alone is not shown. Code builds each citation by exact match to the saved extraction, so the cited text states the same fact.
 - Bulk approval accepts sponsorship-only revisions only. It takes up to 64 records and records one decision for each record, with a result for each record.
 - A suggestion shows beside the text of a person, with "Use suggestion" and "Dismiss". A person's save may keep or clear the suggestion, but never change it.
+- A model revision from a newer candidate reopens an approved action on purpose, because the source changed. The release keeps the approved revision until a new approval.
 
 ## Invariants
 

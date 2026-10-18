@@ -45,6 +45,7 @@ The votes feature collects House roll-call votes from the Congress.gov `house-vo
 - Code stores the kind in the revision at draft time, with the cited `Question` line, as `PolicyAreaId` is stored for actions. Publication never derives it again.
 - Code also stores the vote day, `VotedOn`, with the cited `Started` line, as it stores the kind. The day is the date of the start time in the offset that the API gives. A vote without a start time blocks with `evidenceUnavailable`, because its day would have no citation. The vote recovers when the API sends a later roll call version, which is a new candidate. The task version is `vote-draft-v3`. Code reads no older revision shape, so the dev rows are reset.
 - The citation covers the `Question` line only. The rule test also reads the `Legislation` and `Title` facts. The same revision cites them.
+- A model revision from a newer candidate reopens an approved vote on purpose, because the source changed. The release keeps the approved revision until a new approval.
 
 ## Invariants
 

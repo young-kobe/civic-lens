@@ -88,6 +88,10 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A person quote is the saved quote or a passage of the cited statement that covers the matched words. A person fact is a fact that the cited target lists. Enforced by `RelationshipEditOptions.Require` in `PostgresRelationshipReviewStore.SaveRevisionAsync`. Tests: `PostgresRelationshipReviewStoreTests.AQuoteThatNoPassageOffersOrAFactTheTargetDoesNotListIsRefusedAndNoRevisionIsSaved` and `RelationshipReviewWorkspaceTests.ASaveChangesTheTypeReasonQuoteAndFactFromTheOfferedChoicesAndAForgedQuoteIsABadRequest`.
 - Approval needs the cited statement and the cited target to be at their approved revisions. Enforced by `PostgresRelationshipReviewStore.DecideAsync` through `RelationshipCitedReader.FindChangedAsync`. Tests: `PostgresRelationshipReviewStoreTests.ApprovalIsRefusedWhenACitedRevisionIsNoLongerTheApprovedRevisionOfItsRecord` and `RelationshipReviewWorkspaceTests.AChangedCitedRecordShowsTheFlagOnTheListAndInTheEditorAndRefusesApprovalWhileAnApprovedLinkStaysApproved`.
 - An approved relationship stays approved when a cited record changes, and the flag shows it. Enforced by `PostgresRelationshipReviewStore.ListAsync` and `GetAsync`. Test: `PostgresRelationshipReviewStoreTests.AnApprovedLinkStaysApprovedWhenACitedRecordChangesAndOnlyAPersonCanWithdraw`.
+- A model revision that cites the same statement and target revisions as a current person revision does not land. The entry settles as `unchanged` with the run kept as `DraftDiscarded`. A changed citation lets the revision land. Enforced by `RelationshipDraftRows.AppendAnalysisRevisionAsync` with the code `personEditKept`. Tests: `PostgresRelationshipDraftStoreTests.AModelRevisionThatCitesTheSameRecordsAsAPersonRevisionIsNotAppendedAndTheEntrySettlesAsUnchanged` and `PostgresRelationshipDraftStoreTests.AModelRevisionThatCitesANewerRevisionOfASideLandsOnAPersonRevision`.
+- A refresh queues a withdrawn pair again when a cited revision changed while the link was approved. Enforced by `RelationshipStaleness`. Test: `PostgresRelationshipDraftStoreTests.RefreshQueuesAWithdrawnPairAgainWhenACitedRevisionChangedWhileItWasApproved`.
+- The approval gate reads the cited records after it takes the relationship lock. Enforced by `PostgresRelationshipReviewStore.DecideAsync`. Test: `PostgresRelationshipReviewStoreTests.TheApprovalGateReadsTheCitedRecordsAfterItTakesTheRelationshipLockSoAStatementApprovalThatCommitsFirstBlocksIt`.
+- The list and the editor show the flag `no_longer_matches`. Enforced by `PostgresRelationshipReviewStore.ToReview` and the pages. Tests: `PostgresRelationshipReviewStoreTests.ANoLongerMatchingPairShowsTheFlagInTheReadAndTheList` and `RelationshipReviewWorkspaceTests.ANoLongerMatchingPairShowsABadgeOnTheListAndANoticeInTheEditor`.
 - A model revision never lands on an approved relationship. The run keeps the outcome `DraftDiscarded` and the entry settles as `unchanged`. Enforced by `RelationshipDraftRows.AppendAnalysisRevisionAsync` and `RelationshipDraftQueueMapping`. Test: `PostgresRelationshipDraftStoreTests.AnApprovalThatLandsWhileTheModelRunsLeavesTheApprovedRevisionAndSettlesTheRunAsUnchanged`.
 - Only a reviewer reads, saves, or decides, and the analysis author never decides. Enforced by the review handlers. Test: `PostgresRelationshipReviewStoreTests.OnlyAReviewerMayReadSaveOrDecideAndTheAnalysisAuthorNever`.
 - A relationship that does not exist is not found. Enforced by `GetRelationshipReview` and `RelationshipEditor`. Tests: `PostgresRelationshipReviewStoreTests.ARelationshipThatDoesNotExistIsNotFoundAndSavingOrDecidingOnItFailsLoud` and `RelationshipReviewWorkspaceTests.AnUnknownOrMalformedRelationshipIsNotFoundAndOnlyAConfiguredSubjectMayOpenThePages`.
@@ -363,7 +367,7 @@ A rejection gets one more call with the reasons added. A second rejection fails 
 |---|---|---|
 | Succeeded | none | A revision was appended |
 | Succeeded | `noRelationship` | The model answered none |
-| Succeeded | `unchanged` | The fingerprint matches the last settled input, or an approval landed while the call ran |
+| Succeeded | `unchanged` | The fingerprint matches the last settled input, an approval landed while the call ran, or a person revision cites the same records |
 | Succeeded | `noLongerMatches` | Both sides are approved, but the pair no longer matches |
 | RetryWaiting | `revisionConflict` | Another writer appended first |
 | Blocked | `evidenceUnavailable`, `sideNotApproved`, `overByteCap` | The input cannot be drafted now |
@@ -386,23 +390,23 @@ Relationship review uses the shared decision rules and review cycles in [review]
 
 **Reads.** `GetRelationshipReview` returns the review cycle and the exact cited revisions. These are the cited statement revision with its article text, and the cited target with its numbered facts. It also returns one flag for each side. `RelationshipCitedReader.FindChangedAsync` sets a flag when the cited revision is not the current revision of a draft with the status Approved. `ListRelationshipReviews` takes the filter `All`, `NeedsAction`, or `Approved`. Each item holds the headlines of both cited revisions and the combined flag.
 
-**Edit options.** `RelationshipEditOptions` offers the saved quote and each passage of the cited statement that covers the matched words. It also offers the facts of the cited target. The types come from `RelationshipTypes.For` for the kind of the target. The page, the save handler, and the store use these options, so one rule decides what a person may pick.
+**Edit options.** `RelationshipEditOptions` offers the saved quote and each passage of the cited statement that covers the matched words. It also offers the facts of the cited target. The types come from `RelationshipTypes.For` for the kind of the target. The page and the store use these options, so one rule decides what a person may pick.
 
 **Save.** `SaveRelationshipDraft` copies the expected revision, applies the four fields, and runs `RelationshipRevision.ValidatePersonEditOf`. The store runs the options check inside the save transaction, after the revision-number check. A save writes a revision with the author kind `Person`.
 
 **Decide.** `DecideRelationshipReview` builds the decision as the other review kinds do. On approval, the store refuses the decision when `FindChangedAsync` names the statement or the target. The refusal is an invalid-input error, and the page shows it as a bad request. A decision runs no after-decision hook, because no other record kind cites a relationship. A withdrawal or a request for changes has no flag check.
 
-**Pages.** `/Review/Relationships` lists the relationships with the filter tabs and their counts. A row shows the type, both headlines, and the status. It shows a "Cited records changed" badge when a flag is set. `/Review/Relationships/{record-id}` has these parts:
+**Pages.** `/Review/Relationships` lists the relationships with the filter tabs and their counts. A row shows the type, both headlines, and the status. It shows a "Cited records changed" badge and a "No longer matches" badge when those flags are set. `/Review/Relationships/{record-id}` has these parts:
 
 - the statement panel with its headline, summary, and saved quote. It also shows the cited revision, the date, the match basis, and the matched words, with a link to the statement
 - the target panel with its cited revision and its numbered facts, and a link to the action or vote review page
 - the saved revision and the "Edit link" form. The form lists the types that fit the target, a one-line reason, the offered quotes, and the facts
-- a notice and a header badge when a cited record changed, and a notice when the AI drafter wrote the revision
+- notices for a changed cited record, a pair that no longer matches, and a revision from the AI drafter. A changed record also adds a header badge
 - the shared `ReviewDecisionPanel` and `ReviewHistoryPanel`
 
-The rail has a Relationships link. The review home has no relationship count card, because the home page counts only document-change drafts.
+The rail has a Relationships link. The review home has stat cards for the briefs and the relationships that need action. Each card links to its list.
 
-**Changed record.** The flag blocks approval only. A relationship that is approved stays approved when a cited record changes, and the notice tells the reviewer to withdraw the approval. No event requeues it. The queue returns a pair to Pending only when its relationship is not approved. A model call that finishes after an approval does not append a revision: the settlement keeps the approved revision.
+**Changed record.** The flag blocks approval only. A relationship that is approved stays approved when a cited record changes, and the notice tells the reviewer to withdraw the approval. No event requeues it. The queue returns a pair to Pending only when its relationship is not approved. After a person withdraws a link with stale citations, the owner runs `relationships draft refresh`. The refresh requeues the pair, because the link is no longer approved. A model call that finishes after an approval does not append a revision: the settlement keeps the approved revision.
 
 ### Commands
 
@@ -491,7 +495,7 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 ## Limits and planned work
 
 - Actions are in [actions](actions.md). Weekly briefs are in [briefs](briefs.md).
-- Planned: relationship publication ([R-16](../roadmap.md#now)). The review pages do not show the flag `no_longer_matches` yet.
+- Planned: relationship publication ([R-16](../roadmap.md#now)). That change decides whether a withdrawal counts as a changed record.
 - Planned: structured statement extraction and temporal identity resolution.
 - Each quotation stays addressable for later matching with actions.
 - Planned after the first deploy ([R-38](../roadmap.md#later)): find the same or nearly the same sentences in releases from different offices. It shows coordinated messaging and who used the words first.

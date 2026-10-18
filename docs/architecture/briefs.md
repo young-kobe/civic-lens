@@ -217,7 +217,7 @@ Brief review uses the shared decision rules and review cycles in [review](review
 
 The page differs from the action page in two ways. It has no "Change since the last approval" panel. It has no bulk approval. The rail has a Briefs link.
 
-**Withdraw and redraft.** A flagged approved brief stays approved until a person withdraws it. No event requeues it after the withdrawal. A later publication, activation, or decision that touches a record of the week requeues it, because it is no longer approved. The owner can run `brief redraft --week` at any time. The redraft appends a revision with the new fingerprint. If the current text is model text, the revision replaces it and cites the revisions that the active release holds. If the current text is person text, the revision keeps the old citations and stores the new text as a suggestion. In that case the flag stays until one of three things happens. The person adopts the suggestion. The person drops the changed citation. The cited record is approved again.
+**Withdraw and redraft.** A flagged approved brief stays approved until a person withdraws it. No event requeues it after the withdrawal. A later publication, activation, or decision that touches a record of the week requeues it, because it is no longer approved. After a withdrawal, the owner can run `brief redraft --week`. The command refuses a week whose brief is approved, with a message to withdraw the approval first, and it makes no model call. The redraft appends a revision with the new fingerprint. If the current text is model text, the revision replaces it and cites the revisions that the active release holds. If the current text is person text, the revision keeps the old citations and stores the new text as a suggestion. In that case the flag stays until one of three things happens. The person adopts the suggestion. The person drops the changed citation. The cited record is approved again.
 
 ### Publication
 
@@ -274,7 +274,7 @@ Its required variables are in [operations](../operations.md#brief-drafting). A d
 |---|---|
 | `brief redraft --week <yyyy-MM-dd>` | Queues the week if it has no entry. Moves a Succeeded, Blocked, or Failed entry back to Pending. The date must be a Monday, and the week must have ended |
 
-This is an owner command. It prints the count of entries that it queued or moved. A week before the first brief week is allowed. A week that has not ended is invalid input, because its records can still change. The database clock decides.
+This is an owner command. It prints the count of entries that it queued or moved. A week before the first brief week is allowed. A week that has not ended is invalid input, because its records can still change. The database clock decides. A week whose brief is approved is also invalid input. Withdraw the approval first.
 
 ## Storage and contracts
 
