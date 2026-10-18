@@ -47,7 +47,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 The workspace centers the proposed public record beside its supporting evidence. Document history and comparisons support the investigation. Reviewers assess wording, quotation fidelity, attribution, dates, context, citations, and interpretation.
 
 - For a document change, reviewers separate a substantive source edit from navigation churn or a processing change.
-- For a relationship, reviewers verify the claimed connection.
+- For a relationship, reviewers verify the claimed connection. The page shows the statement passage beside the facts of the target, and a flag when a cited record changed.
 - For a brief, reviewers verify each assertion against the cited revision and read the coverage description. A brief shows a flag when a cited record changed.
 
 An explanation of significance is an editorial judgment that needs review. A text difference never makes it automatic. A comparison alone does not show substantive significance.
@@ -192,6 +192,7 @@ The Host uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.12 for th
 | Postgres store and helpers | `src/CivicLens.Infrastructure/Review/PostgresDocumentChangeReviewStore.cs`, `src/CivicLens.Infrastructure/Review/ReviewIdempotency.cs`, `src/CivicLens.Infrastructure/Review/ReviewDecisionHistory.cs`, `src/CivicLens.Infrastructure/Review/ReviewKeyset.cs`, `src/CivicLens.Infrastructure/Review/ReviewJson.cs`, `src/CivicLens.Infrastructure/Review/ReviewQueries.cs` |
 | Pages | `src/CivicLens.Host/Review/ReviewHome.razor`, `src/CivicLens.Host/Review/DraftEditor.razor`, `src/CivicLens.Host/Review/ReviewDecisionPanel.razor`, `src/CivicLens.Host/Review/ReviewHistoryPanel.razor`, `src/CivicLens.Host/Review/ReviewRecordPage.cs`, `src/CivicLens.Host/Review/DocumentRoutes.cs`, `src/CivicLens.Host/Review/RecordRoutes.cs` |
 | Brief review | `src/CivicLens.Host/Review/BriefList.razor`, `src/CivicLens.Host/Review/BriefEditor.razor`, `src/CivicLens.Infrastructure/Briefs/PostgresBriefReviewStore.cs`; see [briefs](briefs.md#code-map) |
+| Relationship review | `src/CivicLens.Host/Review/RelationshipList.razor`, `src/CivicLens.Host/Review/RelationshipEditor.razor`, `src/CivicLens.Infrastructure/Relationships/PostgresRelationshipReviewStore.cs`; see [statements](statements.md#relationship-review) |
 | Workspace settings | `src/CivicLens.Host/Review/ReviewWorkspace.cs`, `src/CivicLens.Host/Review/ReviewWorkspaceSettings.cs` |
 
 ## Limits and planned work
