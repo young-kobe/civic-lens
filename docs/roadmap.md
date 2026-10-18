@@ -22,7 +22,7 @@ Exit criteria:
 
 Each item gives its outcome, what it depends on, and where the design lives. Present the design choices before building R-22 only.
 
-The path to the first deploy is R-36, R-23 and R-18, then R-24. Decide D-07 and D-08 before R-24.
+The path to the first deploy is R-36, R-23 and R-18, then R-24.
 
 ### Next
 
@@ -40,7 +40,7 @@ The path to the first deploy is R-36, R-23 and R-18, then R-24. Decide D-07 and 
 - R-13: Measure document change, then gate it. Check the House press index pages and about 300 press release URLs daily for 2 to 4 weeks. Count byte, text, and line changes for each source, and label about 100 changes by hand. Add rules for the churn found. Add a model tier only if the changes that pass the rules are too many for people to review. Depends on: the first cloud deployment (R-24). [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-22: Ordered row locks in the job store, after the MVP. Depends on: lock waits measured on a bills-only collection run. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-23: Baseline versions before the first production deploy. Depends on: none stated. It must come before the first production deploy. [Behavior versions](architecture.md#behavior-versions)
-- R-24: Production on the Hetzner CPX21 with containers, Terraform, CI, off-server backups, and live Auth0 verification. The open host checklist items are its exit checks. Also stop the worker during a job and show that the deployed container recovers it. Depends on: the MVP exit criteria other than the document-change criterion, R-18, and R-23. [Host](architecture/host.md#limits-and-planned-work)
+- R-24: Production on the Hetzner CPX21 with containers, Terraform, CI, off-server backups, and live Auth0 verification. Public releases upload to Cloudflare R2 behind its CDN. The open host checklist items are its exit checks. Also stop the worker during a job and show that the deployed container recovers it. Depends on: the MVP exit criteria other than the document-change criterion, R-18, and R-23. [Host](architecture/host.md#limits-and-planned-work)
 - R-25: Public MCP over published releases, with source health, backup and restore, and worker service management. Depends on: the MVP exit criteria other than the document-change criterion. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-26: Read-only local MCP inspection. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
 - R-40: A public search service with its own Postgres database, fed from releases, replaces the client search. Depends on: R-24. [Publication](architecture/publication.md#limits-and-planned-work)
@@ -56,12 +56,9 @@ The path to the first deploy is R-36, R-23 and R-18, then R-24. Decide D-07 and 
 - D-03: Global search and expanded reviewer source visibility. [Review](architecture/review.md#limits-and-planned-work)
 - D-04: Bounded storage: store each distinct extraction text once, keyed by its hash. Keep raw capture bytes forever only when a gated change, draft, or release uses them or they are the latest version. Delete other bytes after a set period and keep the observation record. [Collection](architecture/collection.md#limits-and-planned-work)
 - D-05: Classification ladder, only if the R-13 measurement shows that a model tier is needed: the uncertainty signal for each tier, where the escalation policy and thresholds live, and the stronger model for the reasoning tier. [Analysis](architecture/analysis.md#limits-and-planned-work)
-- D-07: How the static file server runs locally and in production, and the release retention policy. D-14 chose static pages on a CDN. [Publication](architecture/publication.md#limits-and-planned-work)
 - D-11: Drafting the past votes of a member who is added to tracking later. [Votes](architecture/votes.md#limits-and-planned-work)
 - D-12: Content profiles for the 282 of 1,392 page, HTML, and feed sources that have none. [Documents](architecture/documents.md#limits-and-planned-work)
 - D-13: A classifier benchmark for the statement issue gate, to run as soon as possible. The gate label store, the held-out split, the owner labeling page, and the label export are built ([Statements](architecture/statements.md#gate-labels)). Still to build: a Sonnet pre-label for releases outside the held-out set, and about 100 labels by hand, starting from the 48 measured ones. Then compare Haiku 5.5, Clef-flash, Clef-omni, Clef, a fine-tuned Clef, Strands Decider 2B, a fine-tuned ModernBERT, and a feature baseline. The issue list is configuration. A decision model takes the options in each request, so it needs no retraining when the list changes. A model that runs inside the worker (ONNX Runtime) needs a reviewed boundary change first. The fine-tuning needs the dataset rules of [R-28](#later) agreed first.
-- D-08: Deployment topology: one cloud deployment, separate services, or services split across cloud providers, chosen by cost and operational needs. D-14 chose static pages on a CDN. [Host](architecture/host.md#limits-and-planned-work)
-
 
 ## Product direction
 

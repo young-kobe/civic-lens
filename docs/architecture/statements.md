@@ -23,7 +23,7 @@ The statements feature finds articles that may hold an official's statement and 
 - Labels are append-only rows, like revisions. The newest human row of a candidate is the label of record. A model row never replaces it.
 - Code assigns about 30 percent of releases to a held-out set by a hash of the candidate ID. The set is the test set of the gate benchmark ([D-13](../roadmap.md#pending-decisions)). A held-out release never gets a model label.
 - Only the owner labels releases and exports labels. `GateLabelEditor` does not extend `ReviewRecordPage`, because that base class serves revisions and decisions and a label has neither.
-- Vendor rule: only public press release text and gate labels may go to Cloudflare. Never send review notes, reviewer identity, or credentials. Encrypted backups are the one exception, as [host](host.md#decisions) states.
+- Vendor rule: only public press release text, gate labels, and published releases may go to Cloudflare. Never send review notes, reviewer identity, or credentials. Encrypted backups are the one exception, as [host](host.md#decisions) states.
 - Drafting does not cache the prompt. The article text is most of each request, and the schema changes with the covered officials of each source.
 - A relationship links one approved statement revision to one approved action or vote revision. It has a named type and no verdict. A stance such as consistent or inconsistent needs a method note first.
 - The types for an action are "describes own bill", "states position on", and "claims credit for". The only type for a vote is "statement about a vote". The model may also answer none. Then the queue row settles and no relationship record exists.
