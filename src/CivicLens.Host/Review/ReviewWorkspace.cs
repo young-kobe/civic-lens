@@ -6,6 +6,7 @@ using CivicLens.Application.Briefs;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Publication;
+using CivicLens.Application.Relationships;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
@@ -17,6 +18,7 @@ using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Publication;
+using CivicLens.Infrastructure.Relationships;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Statements;
 using CivicLens.Infrastructure.Votes;
@@ -226,6 +228,7 @@ internal static class ReviewWorkspace
         ConfigureStatementReview(services, contexts);
         ConfigureActionReview(services, contexts);
         ConfigureVoteReview(services, contexts);
+        ConfigureRelationshipReview(services, contexts);
         ConfigureBriefReview(services, contexts);
         var collection = ReviewCollectionSettings.FromEnvironment();
         if (collection is null)
@@ -283,6 +286,16 @@ internal static class ReviewWorkspace
         services.AddScoped<GetVoteReview>();
         services.AddScoped<ListVoteReviews>();
         services.AddScoped<GetVoteReviewCounts>();
+    }
+
+    private static void ConfigureRelationshipReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)
+    {
+        services.AddSingleton<IRelationshipReviewStore>(new PostgresRelationshipReviewStore(contexts));
+        services.AddScoped<SaveRelationshipDraft>();
+        services.AddScoped<DecideRelationshipReview>();
+        services.AddScoped<GetRelationshipReview>();
+        services.AddScoped<ListRelationshipReviews>();
+        services.AddScoped<GetRelationshipReviewCounts>();
     }
 
     private static void ConfigureBriefReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)

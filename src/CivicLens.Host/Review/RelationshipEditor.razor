@@ -1,0 +1,169 @@
+@page "/Review/Relationships/{RecordId}"
+@inherits ReviewRecordPage
+@using CivicLens.Application.Statements
+@using CivicLens.Core.Relationships
+@using CivicLens.Core.Review
+@using CivicLens.Host.Components.Evidence
+
+@if (detail is null)
+{
+    <TopBarTitle Crumbs="Crumbs" />
+    <div class="content">
+        @if (error is not null)
+        {
+            <Notice Tone="Tone.Bad">@error</Notice>
+        }
+        @if (notFound)
+        {
+            <Panel Label="Relationship not found">
+                <EmptyState Title="Relationship not found" Text="This relationship does not exist, or its link is not valid.">
+                    <Action><Button Href="@RelationshipRoutes.List">Go to Relationships</Button></Action>
+                </EmptyState>
+            </Panel>
+            <form @formname="save" @onsubmit="SaveAsync" hidden></form>
+            <form @formname="decide" @onsubmit="DecideAsync" hidden></form>
+        }
+    </div>
+}
+else
+{
+    var review = detail.Review;
+    var revision = review.CurrentRevision;
+    var concerns = review.UnresolvedConcerns;
+    var options = detail.Options;
+    <TopBarTitle Crumbs="Crumbs" />
+    <div class="content">
+        <PageHeader Title="@($"{RelationshipLabels.Type(revision.Type)}: {detail.CitedStatement.Revision.Headline}")" Meta="HeaderMeta(review.CurrentStatus, concerns.Length)" />
+
+        @if (error is not null)
+        {
+            <Notice Tone="Tone.Bad">@error</Notice>
+        }
+        @if (statusMessage is not null)
+        {
+            <Notice Tone="@(isConflict ? Tone.Warn : Tone.Ok)" Dismissible="@(!isConflict)">@statusMessage</Notice>
+        }
+        @if (ReviewAuthor.IsAnalysis(revision.AuthorSubject))
+        {
+            <Notice Tone="Tone.Warn">The AI drafter wrote this revision. It is not a human decision. Code found the pair and the matched words. Check the type, the reason, the quote, and the fact against both records before you approve.</Notice>
+        }
+        @if (detail.CitedRecordsChanged)
+        {
+            <Notice Tone="Tone.Warn" id="cited-changed">The statement or the @RelationshipLabels.TargetName(revision.Target.Kind).ToLowerInvariant() is no longer at the revision that this link cites. Approval is blocked.@(review.CurrentStatus == ReviewStatus.Approved ? " The link stays approved until you withdraw the approval." : "")</Notice>
+        }
+        @if (concerns.Length > 0)
+        {
+            <Notice Tone="Tone.Warn">Approval is blocked. @(concerns.Length == 1 ? "Resolve the open concern below first." : $"Resolve the {concerns.Length} open concerns below first.")</Notice>
+        }
+
+        @if (isDraftConflict && Input is not null)
+        {
+            <Panel Title="Compare the latest saved revision with your wording" Id="conflict-compare" Padded="true">
+                <div class="split">
+                    <RecordView Headline="@($"Saved revision {revision.RevisionNumber}")" Facts="SavedFacts(revision)" />
+                    <RecordView Headline="Your wording" Facts="InputFacts(Input)" />
+                </div>
+                <p class="muted small">The form still holds your wording. Saving again makes a new revision on top of the latest saved one.</p>
+            </Panel>
+        }
+
+        <div class="split">
+            <Panel Title="Statement" Id="statement" Padded="true">
+                <RecordView Headline="@detail.CitedStatement.Revision.Headline" Summary="@detail.CitedStatement.Revision.Summary" HeadingLevel="3"
+                            Facts="StatementFacts(revision)">
+                    <p class="quote">@EncodedEvidence.Markup(QuoteText(revision.StatementQuote))</p>
+                </RecordView>
+                <p class="small"><a href="@StatementRoutes.Editor(revision.Statement.RecordId)">Open the statement</a></p>
+            </Panel>
+            <Panel Title="@RelationshipLabels.TargetName(revision.Target.Kind)" Id="target" Padded="true">
+                <RecordView Headline="@TargetHeadline" HeadingLevel="3" Facts="TargetFacts(revision)" />
+                <p class="small"><a href="@RelationshipLabels.TargetEditor(revision.Target)">Open the @RelationshipLabels.TargetName(revision.Target.Kind).ToLowerInvariant()</a></p>
+            </Panel>
+        </div>
+
+        <Panel Label="Relationship" Padded="true">
+            <TabSet Label="Relationship views" Selected="@SelectedTab" Tabs="RecordTabs">
+                <TabPane Key="saved" Label="@($"Saved revision {revision.RevisionNumber}")">
+                    <RecordView Id="saved-approval-target" Headline="@RelationshipLabels.Type(revision.Type)" Summary="@revision.Reason" Facts="SavedFacts(revision)" />
+                </TabPane>
+                <TabPane Key="edit" Label="Edit link">
+                    @if (Input is not null)
+                    {
+                        <form id="draft-form" class="form" method="post" @formname="save" @onsubmit="SaveAsync"
+                              data-unsaved-form data-recovered-unsaved="@(hasUnsavedInput ? "true" : "false")">
+                            <AntiforgeryToken />
+                            <input type="hidden" name="expectedRevisionNumber" value="@revision.RevisionNumber" />
+                            <input type="hidden" name="idempotencyKey" value="@saveKey" />
+                            <FieldSet Legend="Type" Hint="Only the types that fit this kind of record.">
+                                <ul class="choices">
+                                    @foreach (var type in RelationshipTypes.For(revision.Target.Kind))
+                                    {
+                                        <li>
+                                            <Choice Name="Input.Type" Value="@RelationshipTypes.WireName(type)" Radio="true" Label="@RelationshipLabels.Type(type)"
+                                                    Checked="@(Input.Type == RelationshipTypes.WireName(type))" />
+                                        </li>
+                                    }
+                                </ul>
+                            </FieldSet>
+                            <Field Label="Reason" For="Input_Reason" Hint="@($"One line, up to {RelationshipRevision.MaximumReasonLength} characters.")">
+                                <input id="Input_Reason" name="Input.Reason" value="@Input.Reason" maxlength="@RelationshipRevision.MaximumReasonLength" aria-describedby="Input_Reason-hint" />
+                            </Field>
+                            <FieldSet Legend="Quote" Hint="Choose a passage of the statement that includes the matched words.">
+                                <ul class="choices">
+                                    @foreach (var quote in options.Quotes)
+                                    {
+                                        <li>
+                                            <Choice Name="Input.QuoteSelection" Value="@StatementSelectableSpan.KeyOf(quote.Span)" Radio="true"
+                                                    Checked="@(Input.QuoteSelection == StatementSelectableSpan.KeyOf(quote.Span))">
+                                                <span class="quote">@EncodedEvidence.Markup(quote.Text)</span>
+                                            </Choice>
+                                        </li>
+                                    }
+                                </ul>
+                            </FieldSet>
+                            <FieldSet Legend="Fact" Hint="Choose the fact of the record that the statement is about.">
+                                <ul class="choices">
+                                    @foreach (var fact in options.Facts)
+                                    {
+                                        <li>
+                                            <Choice Name="Input.FactId" Value="@fact.Id" Radio="true" Label="@fact.Text" Checked="@(Input.FactId == fact.Id)" />
+                                        </li>
+                                    }
+                                </ul>
+                            </FieldSet>
+                            <div class="actions">
+                                <Button Variant="ButtonVariant.Primary" Type="submit">Save revision @(revision.RevisionNumber + 1)</Button>
+                                <span class="actions-hint">Approval applies only to saved wording. A person cannot change the pair or the matched words. To reject a false pair, request changes with a note.</span>
+                            </div>
+                        </form>
+                    }
+                </TabPane>
+            </TabSet>
+        </Panel>
+
+        <ReviewDecisionPanel RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="review.CurrentStatus"
+                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" OnDecide="DecideAsync">
+            <Checklist>
+                <ul class="checklist">
+                    <li>Does the quote say what the reason claims about this record?</li>
+                    <li>Is the type the one that the quote supports?</li>
+                    <li>Do the statement and the record share the bill, and are they about the same thing?</li>
+                </ul>
+            </Checklist>
+        </ReviewDecisionPanel>
+
+        <ReviewHistoryPanel Entries="History" ViewerSubject="@actor.Subject" />
+    </div>
+}
+
+@code {
+    private RenderFragment HeaderMeta(ReviewStatus status, int concerns) =>
+        @<text>
+            <StatusBadge Tone="DraftStatusDisplay.Tone(status)" Text="@DraftStatusDisplay.Label(status, concerns)" />
+            @if (detail!.CitedRecordsChanged)
+            {
+                <StatusBadge Tone="Tone.Warn" Text="Cited records changed" />
+            }
+            <span class="muted small">Revision @Revision.RevisionNumber, saved @Moment.Full(Revision.CreatedAtUtc)</span>
+        </text>;
+}
