@@ -49,6 +49,9 @@ public sealed record RelationshipRevision(string RecordId, int RevisionNumber, s
             throw new ArgumentException("A person edits only the type, the reason, the quote, and the fact.");
     }
 
+    public bool IsPersonRevisionCiting(RelationshipCitation statement, RelationshipCitation target) =>
+        ReviewAuthor.KindOf(AuthorSubject) == ReviewAuthorKind.Person && Statement == statement && Target == target;
+
     private void ValidateCitations()
     {
         if (Statement is not { Kind: RelationshipRecordKind.Statement } || Target is not { Kind: RelationshipRecordKind.Action or RelationshipRecordKind.Vote })

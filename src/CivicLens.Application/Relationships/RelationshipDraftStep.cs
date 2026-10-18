@@ -28,10 +28,14 @@ public sealed class RelationshipDraftStep(IRelationshipDraftStore store, IRelati
         }
         var context = RelationshipDraftContext.Create(evidence, pair, officialNames);
         attempt.ContextJson = RelationshipDraftPrompt.SerializeContext(context);
-        return evidence.SettledFingerprint == context.Fingerprint
+        return evidence.SettledFingerprint == context.Fingerprint || KeepsPersonRevision(evidence, pair)
             ? await SettleWithoutCallAsync(attempt, context.Fingerprint, RelationshipDraftErrorCodes.Unchanged, cancellationToken)
             : await DraftAsync(attempt, context, cancellationToken);
     }
+
+    private static bool KeepsPersonRevision(RelationshipDraftEvidence evidence, RelationshipPair pair) =>
+        evidence.Current?.IsPersonRevisionCiting(
+            new(RelationshipRecordKind.Statement, pair.Statement.RecordId, pair.Statement.Revision.RevisionNumber), pair.Target.Citation) == true;
 
     private async Task<bool> DraftAsync(IAnalysisAttempt<RelationshipDraftRun> attempt, RelationshipDraftContext context,
         CancellationToken cancellationToken)

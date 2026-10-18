@@ -30,8 +30,7 @@ internal static class RelationshipDraftRows
 
     private static async Task<bool> KeepsPersonEditAsync(CollectionAttemptDbContext db, RelationshipRevision revision, CancellationToken cancellationToken) =>
         await ReadCurrentAsync(db, revision.RecordId, cancellationToken) is { } current &&
-        ReviewAuthor.KindOf(current.AuthorSubject) == ReviewAuthorKind.Person &&
-        current.Statement == revision.Statement && current.Target == revision.Target;
+        current.IsPersonRevisionCiting(revision.Statement, revision.Target);
 
     public static async Task<RelationshipRevision?> ReadCurrentAsync(CollectionAttemptDbContext db, string recordId,
         CancellationToken cancellationToken)

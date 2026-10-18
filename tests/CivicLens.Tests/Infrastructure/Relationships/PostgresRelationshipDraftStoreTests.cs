@@ -242,17 +242,37 @@ public sealed class PostgresRelationshipDraftStoreTests(PostgresCollection postg
     }
 
     [Fact]
-    public async Task AModelRevisionThatCitesTheSameRecordsAsAPersonRevisionIsNotAppendedAndTheEntrySettlesAsUnchanged()
+    public async Task APersonRevisionThatCitesTheSameRecordsSettlesAsUnchangedWithoutAModelCallAndARefreshDoesNotQueueItAgain()
     {
         var pair = await SeedPersonRevisionAsync();
-        var settled = (await store.ReadEvidenceAsync(pair.PairId, default))!.SettledFingerprint;
+        var model = new FakeRelationshipDraftModel();
 
-        await RunWorkerAsync(new FakeRelationshipDraftModel().Draft(Output()));
+        await RunWorkerAsync(model);
+
+        Assert.Empty(model.Requests);
+        Assert.Equal([["2"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions"));
+        Assert.Equal([["Succeeded", "unchanged"]], await seeder.ReadAsync("SELECT status, error_code FROM relationship_analysis"));
+        Assert.Equal([["1"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_analysis_runs WHERE outcome = 'Bypassed' AND reason = 'unchanged'"));
+        Assert.Equal(RelationshipFingerprint.Compute(pair), (await store.ReadEvidenceAsync(pair.PairId, default))!.SettledFingerprint);
+
+        await store.RefreshPairsAsync(default);
+
+        Assert.Equal([["Succeeded"]], await seeder.ReadAsync("SELECT status FROM relationship_analysis"));
+    }
+
+    [Fact]
+    public async Task TheAppendRefusesAModelRevisionThatCitesTheSameRecordsAsAPersonRevisionThatChangedDuringTheCall()
+    {
+        var pair = await SeedPersonRevisionAsync();
+        await seeder.StatementAsync(Statement(revision: 2));
+        var model = new RewritingModel(seeder, Output());
+
+        await RunWorkerAsync(model);
 
         Assert.Equal([["2"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions"));
         Assert.Equal([["Succeeded", "unchanged"]], await seeder.ReadAsync("SELECT status, error_code FROM relationship_analysis"));
         Assert.Equal([["1"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_analysis_runs WHERE outcome = 'DraftDiscarded' AND reason IS NULL"));
-        Assert.Equal(settled, (await store.ReadEvidenceAsync(pair.PairId, default))!.SettledFingerprint);
+        Assert.NotEqual(RelationshipFingerprint.Compute(pair), (await store.ReadEvidenceAsync(pair.PairId, default))!.SettledFingerprint);
     }
 
     [Fact]
@@ -348,6 +368,19 @@ public sealed class PostgresRelationshipDraftStoreTests(PostgresCollection postg
             CancellationToken cancellationToken)
         {
             await seeder.ExecuteAsync("UPDATE relationship_drafts SET review_status = 'Approved' WHERE record_id = @id", ("id", recordId));
+            return new("end_turn", reply, new(900, 100, 0, 0), "req_fixture");
+        }
+    }
+
+    private sealed class RewritingModel(RelationshipWorldSeeder seeder, string reply) : IRelationshipDraftModel
+    {
+        public async Task<CivicLens.Application.Analysis.AnalysisModelResponse> DraftAsync(CivicLens.Application.Analysis.AnalysisModelRequest request,
+            CancellationToken cancellationToken)
+        {
+            await seeder.ExecuteAsync("""
+                UPDATE relationship_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{statement,revisionNumber}', '2')::text
+                WHERE revision_number = 2
+                """);
             return new("end_turn", reply, new(900, 100, 0, 0), "req_fixture");
         }
     }

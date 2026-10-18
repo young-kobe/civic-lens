@@ -171,6 +171,8 @@ public sealed class RelationshipReviewWorkspaceTests(PostgresCollection postgres
     public async Task TheReviewHomeCountsTheBriefsAndTheRelationshipsThatNeedActionAndLinksEachList()
     {
         await SeedAsync();
+        await new BriefWorldSeeder(host.ConnectionString).BriefAsync(new DateOnly(2026, 10, 5));
+        await new BriefWorldSeeder(host.ConnectionString).BriefAsync(new DateOnly(2026, 10, 12), reviewStatus: "Approved");
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
 
         var home = await host.GetDocumentAsync("/Review");
@@ -178,7 +180,7 @@ public sealed class RelationshipReviewWorkspaceTests(PostgresCollection postgres
         var relationships = home.QuerySelector("a.stat[href='/Review/Relationships?drafts=needs-action']")!;
         Assert.Equal(["1", "Relationships need action"], relationships.Children.Select(child => child.TextContent));
         var briefs = home.QuerySelector("a.stat[href='/Review/Briefs?drafts=needs-action']")!;
-        Assert.Equal(["0", "Briefs need action"], briefs.Children.Select(child => child.TextContent));
+        Assert.Equal(["1", "Briefs need action"], briefs.Children.Select(child => child.TextContent));
     }
 
     [Fact]
