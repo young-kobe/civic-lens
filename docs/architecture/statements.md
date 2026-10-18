@@ -29,7 +29,7 @@ The statements feature finds articles that may hold an official's statement and 
 - The types for an action are "describes own bill", "states position on", and "claims credit for". The only type for a vote is "statement about a vote". The model may also answer none. Then the queue row settles and no relationship record exists.
 - Relationships are their own record kind, with a queue, a budget, drafts, revisions, review decisions, and a review lock. Review pages and publication are planned; see [limits](#limits-and-planned-work).
 - Code finds the pairs, not the model. A pair is the same official plus a shared bill. For an action, the official needs a sponsorship of the bill in any role. A cosponsor who withdrew still counts. For a vote, the official needs to have cast it.
-- Code finds the shared bill by number first and then by title. A title is the saved title of the action revision. The match ignores case, a leading "the", and a trailing year such as "of 2025". A title of fewer than three words never matches ([D-09](../roadmap.md#pending-decisions)).
+- Code finds the shared bill by number first and then by title. A title is the saved title of the action revision. The match ignores case, a leading "the", and a trailing year such as "of 2025". A title of fewer than three words never matches ([D-09](../roadmap.md#pending-decisions)). When the statement date is known, a title matches only an action of the Congress of that date.
 - A vote has no saved title, so a vote pairs by bill number only.
 - A bill number comes from `BillNumberFinder` in the quoted passages of the statement. The number has no Congress, so it takes the Congress of the statement date. A Congress starts on 3 January of an odd year, and 1 and 2 January belong to the Congress before it. A statement with no date cannot place a number. Code skips the number and counts the statement.
 - Pairs that share only a tracked issue wait for a measurement.
@@ -75,8 +75,11 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A relationship cites the exact revision of both sides. Enforced by `RelationshipDraftResolver`. Test: `RelationshipDraftStepTests.TheFirstDraftCallsTheModelOnceAndWritesRevisionOneThatCitesBothApprovedRevisions`.
 - A none answer settles the queue row and saves no relationship. Enforced by `RelationshipDraftStep`. Test: `PostgresRelationshipDraftStoreTests.ANoneAnswerSavesNoRelationshipAndTheNextPassDoesNotAskAgain`.
 - An unchanged fingerprint makes no model call. Enforced by `RelationshipDraftStep`. Test: `RelationshipDraftStepTests.AnUnchangedFingerprintSettlesWithABypassedRunAndNoModelCall`.
-- A new approved revision of a side moves an unapproved pair back to Pending, and an approved relationship never moves. Enforced by `PostgresRelationshipDraftStore.RefreshPairsAsync`. Tests: `PostgresRelationshipDraftStoreTests.ANewApprovedRevisionOfASideMovesAnUnapprovedPairBackToPendingThroughTheQueueOwner` and `PostgresRelationshipDraftStoreTests.AnApprovedRelationshipIsNeverRequeuedEvenWhenACitedRevisionChanged`.
-- A pair that is no longer found is flagged and never deleted. Enforced by `PostgresRelationshipDraftStore.RefreshPairsAsync`. Test: `PostgresRelationshipDraftStoreTests.APairThatIsNotFoundAnymoreIsFlaggedAndNotDeletedAndTheFlagClearsWhenItIsFoundAgain`.
+- A new approved revision of a side moves an unapproved pair back to Pending, and an approved relationship never moves. Enforced by `RelationshipStaleness`. Tests: `PostgresRelationshipDraftStoreTests.ANewApprovedRevisionOfASideMovesAnUnapprovedPairBackToPendingThroughTheQueueOwner` and `PostgresRelationshipDraftStoreTests.AnApprovedRelationshipIsNeverRequeuedEvenWhenACitedRevisionChanged`.
+- A pair that is no longer found is flagged and never deleted, but only while both sides are approved. Enforced by `RelationshipStaleness`. Tests: `PostgresRelationshipDraftStoreTests.APairThatIsNotFoundAnymoreIsFlaggedAndNotDeletedAndTheFlagClearsWhenItIsFoundAgain` and `PostgresStatementReviewStoreTests.ReApprovingAStatementRequeuesAPairThatBlockedWhileItWasNotApprovedAndAChangeRequestNeverFlagsIt`.
+- A review decision queues the pairs of its record in the same transaction, so an idle worker wakes. Enforced by `RelationshipStaleness.AfterDecision` in the three review stores. Tests: `PostgresStatementReviewStoreTests.ApprovingAStatementQueuesItsRelationshipPairsInTheSameTransactionSoTheRelationshipWorkerWakes` and `PostgresStatementReviewStoreTests.ADecisionWakesAnIdleRelationshipWorkerSoANewApprovalIsDraftedWithoutAnyOtherEvent`.
+- A title match respects the Congress of the statement date. Enforced by `RelationshipPairFinder`. Test: `RelationshipPairFinderTests.ATitleMatchesOnlyAnActionOfTheCongressOfTheStatementDateSoAnOlderBillWithTheSameNameIsNotPaired`.
+- The relationship hook takes the queue rows, then the relationship key, then the brief rows and key. Enforced by `AfterDecisionHooks.InOrder` in the review stores. Test: `PostgresStatementReviewStoreTests.ADecisionOnAnActiveRevisionTakesTheBriefLockBeforeItWritesSoABriefApprovalNeverInterleavesWithIt`.
 - A relationship revision is appended under the relationship review lock and follows the current revision. Enforced by `RelationshipDraftRows`. Test: `PostgresRelationshipDraftStoreTests.OneWorkerPassDraftsTheApprovedPairSavesRevisionOneUnderTheReviewLockAndLeavesTheDraftAwaitingReview`.
 - Each task charges its own budget. Enforced by the primary key of `statement_analysis_budget`. Test: `PostgresStatementGateStoreTests.TheGateChargesItsOwnDailyBudgetAndNotTheDocumentChangeBudget`.
 
@@ -298,19 +301,22 @@ The store refuses a model label for a held-out release. A person still labels a 
 
 The executor is `AnalysisWorker<RelationshipDraftRun>` with `RelationshipDraftStep`. It runs after vote drafting and before brief drafting in the `worker` process. It has its own wakeup, status row, daily limit, and run limit, and it uses `CIVIC_LENS_ANALYSIS_CONCURRENCY`. Its required variables are in [operations](../operations.md#relationship-drafting). The status row is in `document_change_analysis_status` under the task `relationship-draft`.
 
-**Pair finding.** Before each pass, the worker calls `RefreshPairsAsync`, as the brief executor does for closed weeks. The call works in this order:
+**Pair finding.** A review decision on a statement, an action, or a vote finds the pairs of that record. `RelationshipStaleness.AfterDecision` does this inside the decision transaction, as `BriefStaleness.AfterDecision` does for briefs. The review stores of the three record kinds run it before the brief hook. It works in this order:
 
-1. It reads the current revision of every approved statement, with the article text.
-2. It reads the approved actions that a speaker of those statements sponsors, in any role.
-3. It reads the approved votes on the bills that the statements mention by number.
-4. `RelationshipPairFinder` makes one pair for each statement and each action or vote that it matches. It takes the bill number first and the bill title second.
-5. In one transaction, it inserts a Pending queue row for each new pair, with `ON CONFLICT DO NOTHING`. It also moves the stale pairs back to Pending and sets the match flags.
+1. It saves the decision and takes the queue row locks and then the relationship review lock.
+2. For a statement, it reads the approved statement. It also reads the approved actions that a speaker sponsors and the approved votes on the bills that the statement mentions. For an action or a vote, it reads the approved record and the approved statements of its sponsors or members.
+3. `RelationshipPairFinder` makes one pair for each statement and each action or vote that it matches. It takes the bill number first and the bill title second.
+4. It inserts a Pending queue row for each new pair, with `ON CONFLICT DO NOTHING`. It moves the stale pairs of the record back to Pending. It sets the match flags of the pairs of the record.
 
-The transaction locks the queue rows and then takes the relationship review lock. The queue owner `PostgresAnalysisQueue` does the requeue, so the lifecycle rules still apply.
+The insert and the requeue fire the queue trigger, so an idle relationship worker wakes at commit. The queue owner `PostgresAnalysisQueue` does the requeue, so the lifecycle rules apply. A decision on a record that is not approved finds no pair and changes no row.
+
+Records that were approved before the migration have no pairs. The owner runs `relationships draft refresh` once. It runs the same finder and the same writes over every approved statement.
 
 **Staleness.** A fingerprint is a hash of the pair key, both cited revision numbers, and the match basis and span. It also covers the task version and the prompt version. The `context_json` of the latest `Drafted` or `Bypassed` run holds the fingerprint of the last settled input. A Succeeded pair returns to Pending when its fingerprint differs and its relationship is not approved. A Blocked pair with the code `sideNotApproved` returns when both sides are approved again. An approved relationship never returns. A running pair settles first and then returns by the same rule.
 
-A pair that the pass does not find has `no_longer_matches` set on its draft. Code never deletes the draft. The flag clears when the pair is found again.
+The finder may miss a pair of the decided record. Then its draft gets `no_longer_matches`, but only while both sides are approved. A statement that is back in review flags nothing. Code never deletes the draft. The flag clears when the pair is found again.
+
+A Failed row and a Blocked row with the code `overByteCap` or `evidenceUnavailable` do not return on a new revision, as for briefs. The owner requeues a Failed row. A new revision does not change an over-cap prompt.
 
 **Step.** The step reads the queue row and the current approved revision of each side. Then it follows this order:
 
@@ -351,11 +357,12 @@ A rejection gets one more call with the reasons added. A second rejection fails 
 
 | Command | Effect |
 |---|---|
-| `relationships draft status` | Queue status, limit, pause reason, and the count of statements skipped for a missing date |
+| `relationships draft status` | Queue status, limit, pause reason, and the count of statements that name a bill number and have no Congress |
 | `relationships draft list [view] [limit]` | Queue rows. Views: `drafted`, `unchanged`, `none`, `unmatched`, `pending`, `failed` |
 | `relationships draft requeue <pair-id\|--all>` | Failed rows back to Pending |
+| `relationships draft refresh` | Finds the pairs of every approved statement. Run it once after the migration |
 
-The skipped count runs the pair finding on demand. It counts statements with a bill number and no usable date.
+The count reads the approved statements only. A statement has no Congress when it has no date or a date before 1935.
 
 ### Commands
 
@@ -428,10 +435,10 @@ With `--since`, `regate` moves only candidates first captured on or after that U
 | Gate labels: label, split, store | `src/CivicLens.Core/Statements/GateLabel.cs`, `src/CivicLens.Core/Statements/GateLabelEntry.cs`, `src/CivicLens.Core/Statements/GateLabelSplit.cs`, `src/CivicLens.Application/Statements/IGateLabelStore.cs`, `src/CivicLens.Infrastructure/Statements/PostgresGateLabelStore.cs` |
 | Gate label use cases | `src/CivicLens.Application/Statements/SaveGateLabel.cs`, `src/CivicLens.Application/Statements/ListGateLabelQueue.cs`, `src/CivicLens.Application/Statements/GetGateLabelTask.cs`, `src/CivicLens.Application/Statements/ExportGateLabels.cs` |
 | Gate label pages and export | `src/CivicLens.Host/Review/GateLabelList.razor`, `src/CivicLens.Host/Review/GateLabelEditor.razor`, `src/CivicLens.Host/Statements/GateLabelExport.cs` |
-| Relationship pairs | `src/CivicLens.Application/Relationships/RelationshipPairFinder.cs`, `src/CivicLens.Application/Relationships/RelationshipPair.cs`, `src/CivicLens.Application/Relationships/RelationshipPairs.cs`, `src/CivicLens.Application/Relationships/RelationshipTarget.cs`, `src/CivicLens.Application/Relationships/ApprovedStatement.cs`, `src/CivicLens.Application/Relationships/StatementPassage.cs`, `src/CivicLens.Application/Relationships/StatementBillMentions.cs`, `src/CivicLens.Application/Relationships/BillMention.cs`, `src/CivicLens.Application/Relationships/RelationshipFingerprint.cs` |
+| Relationship pairs | `src/CivicLens.Application/Relationships/RelationshipPairFinder.cs`, `src/CivicLens.Application/Relationships/RelationshipPair.cs`, `src/CivicLens.Application/Relationships/RelationshipTarget.cs`, `src/CivicLens.Application/Relationships/ApprovedStatement.cs`, `src/CivicLens.Application/Relationships/StatementPassage.cs`, `src/CivicLens.Application/Relationships/StatementReading.cs`, `src/CivicLens.Application/Relationships/BillMention.cs`, `src/CivicLens.Application/Relationships/RelationshipFingerprint.cs` |
 | Relationship rules | `src/CivicLens.Core/Relationships/CongressCalendar.cs`, `src/CivicLens.Core/Relationships/BillTitleMatcher.cs`, `src/CivicLens.Core/Relationships/RelationshipTypes.cs`, `src/CivicLens.Core/Relationships/RelationshipRevision.cs`, `src/CivicLens.Core/Statements/BillNumberMatch.cs` |
-| Relationship drafting | `src/CivicLens.Application/Relationships/RelationshipDraftStep.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftPrompt.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftResolver.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftLifecycle.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftTask.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftErrorCodes.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftEvidence.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftContext.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftSettings.cs`, `src/CivicLens.Application/Relationships/IRelationshipDraftStore.cs`, `src/CivicLens.Application/Relationships/GetRelationshipDraftStatus.cs` |
-| Relationship stores | `src/CivicLens.Infrastructure/Relationships/PostgresRelationshipDraftStore.cs`, `src/CivicLens.Infrastructure/Relationships/RelationshipEvidenceReader.cs`, `src/CivicLens.Infrastructure/Relationships/RelationshipDraftQueueMapping.cs`, `src/CivicLens.Infrastructure/Relationships/RelationshipDraftRows.cs`, `src/CivicLens.Infrastructure/Relationships/AnthropicRelationshipDraftModel.cs`, `src/CivicLens.Infrastructure/Relationships/Persistence/`, `src/CivicLens.Infrastructure/Collection/Migrations/20261102120000_RelationshipDrafting.cs` |
+| Relationship drafting | `src/CivicLens.Application/Relationships/RelationshipDraftStep.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftPrompt.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftResolver.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftLifecycle.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftTask.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftErrorCodes.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftEvidence.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftContext.cs`, `src/CivicLens.Application/Relationships/RelationshipDraftSettings.cs`, `src/CivicLens.Application/Relationships/IRelationshipDraftStore.cs`, `src/CivicLens.Application/Relationships/GetRelationshipDraftStatus.cs`, `src/CivicLens.Application/Relationships/RefreshRelationshipPairs.cs` |
+| Relationship stores | `src/CivicLens.Infrastructure/Relationships/PostgresRelationshipDraftStore.cs`, `src/CivicLens.Infrastructure/Relationships/RelationshipStaleness.cs`, `src/CivicLens.Infrastructure/Relationships/RelationshipPairSource.cs`, `src/CivicLens.Infrastructure/Relationships/RelationshipPairScope.cs`, `src/CivicLens.Infrastructure/Review/AfterDecisionHooks.cs`, `src/CivicLens.Infrastructure/Relationships/RelationshipEvidenceReader.cs`, `src/CivicLens.Infrastructure/Relationships/RelationshipDraftQueueMapping.cs`, `src/CivicLens.Infrastructure/Relationships/RelationshipDraftRows.cs`, `src/CivicLens.Infrastructure/Relationships/AnthropicRelationshipDraftModel.cs`, `src/CivicLens.Infrastructure/Relationships/Persistence/`, `src/CivicLens.Infrastructure/Collection/Migrations/20261102120000_RelationshipDrafting.cs` |
 | Relationship CLI and composition | `src/CivicLens.Host/Relationships/RelationshipCommand.cs`, `src/CivicLens.Host/Relationships/RelationshipDraftComposition.cs`, `src/CivicLens.Host/Relationships/RelationshipDraftConfiguration.cs` |
 | Reserved author kind | `src/CivicLens.Core/Review/ReviewAuthor.cs` |
 
@@ -466,7 +473,7 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 - `BillNumberFinder` finds a bare number only. A number that names its Congress, such as "H.R. 1234 of the 118th Congress", takes the Congress of the statement date.
 - A pair for an action needs a sponsorship by a speaker. A statement about a bill that the speaker did not sponsor pairs only with a vote that the speaker cast.
 - A vote pairs by bill number only. A title match never reaches a vote, because a vote has no saved title.
-- `RefreshPairsAsync` reads every approved statement and its article text on each pass. Revisit this if the approved set grows large.
+- A vote decision reads every approved statement of its members, with the article text. Revisit this if the approved set grows large.
 - The `context_json` of a run is the only record of the last settled fingerprint. A run row that someone deletes makes the pair draft again.
 - The model answer is unmeasured. The `relationships draft list` views count how often it answers none.
 

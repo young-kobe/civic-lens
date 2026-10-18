@@ -196,7 +196,7 @@ No transaction holds a review key with a collection key.
 
 An analysis settlement can add a draft row or append a revision. It then takes its queue row lock (`FOR UPDATE` in `PostgresAnalysisQueue`) before the review key of its record kind. Review and publication writes take review keys only and never lock queue rows, so no lock cycle exists.
 
-The pair refresh of relationship drafting locks every relationship queue row first, and then takes the relationship key. A settlement that appends a revision locks its own row and then takes the same key.
+A review decision on a statement, an action, or a vote finds the relationship pairs of its record. It holds the key of its own record kind, and then it locks every relationship queue row in key order. Then it takes the relationship key. The brief hook comes last, with the brief rows and the brief key. `AfterDecisionHooks.InOrder` keeps this order. A settlement that appends a relationship revision locks its own row and then takes the relationship key.
 
 The requeue of stale briefs takes the brief key last. A review decision takes the key of its own record kind first. The requeue changes only the queue rows of finished weeks, which no worker holds.
 

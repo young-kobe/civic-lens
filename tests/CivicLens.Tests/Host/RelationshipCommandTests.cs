@@ -17,7 +17,7 @@ public sealed class RelationshipCommandTests(PostgresCollection postgres) : IAsy
     public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
 
     [Fact]
-    public async Task StatusReportsZeroCountsForEveryOutcomeAndZeroSkippedStatementsBeforeAnythingIsApproved()
+    public async Task StatusReportsZeroCountsForEveryOutcomeAndZeroStatementsWithoutACongressBeforeAnythingIsApproved()
     {
         var result = await RunAsync("auth0|owner", "relationships", "draft", "status");
 
@@ -26,7 +26,17 @@ public sealed class RelationshipCommandTests(PostgresCollection postgres) : IAsy
         var counts = status.RootElement.GetProperty("queue").GetProperty("counts");
         foreach (var view in new[] { "pending", "drafted", "unchanged", "noRelationship", "noLongerMatches", "failed" })
             Assert.Equal(0, counts.GetProperty(view).GetInt32());
-        Assert.Equal(0, status.RootElement.GetProperty("statementsSkippedWithoutDate").GetInt32());
+        Assert.Equal(0, status.RootElement.GetProperty("statementsWithoutCongress").GetInt32());
+    }
+
+    [Fact]
+    public async Task RefreshPrintsTheNumberOfPairsFoundAndIsOwnerOnly()
+    {
+        var owner = await RunAsync("auth0|owner", "relationships", "draft", "refresh");
+        var ai = await RunAsync("civic-lens:analysis", "relationships", "draft", "refresh");
+
+        Assert.Equal((0, """{"pairs":0}"""), (owner.ExitCode, owner.Output.Trim()));
+        Assert.Equal(2, ai.ExitCode);
     }
 
     [Theory]

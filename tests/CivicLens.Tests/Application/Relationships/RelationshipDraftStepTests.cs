@@ -131,14 +131,6 @@ public sealed class RelationshipDraftStepTests
         Assert.Equal(State.Failed, failed.Entries[0].Status);
     }
 
-    [Fact]
-    public async Task TheWorkerRefreshesThePairsBeforeEveryPassSoANewApprovalIsPickedUp()
-    {
-        var (store, _) = await RunAsync(null, new FakeRelationshipDraftModel());
-
-        Assert.True(store.RefreshCalls >= 1);
-    }
-
     private static RelationshipDraftEvidence Evidence(RelationshipPair pair, RelationshipRevision? current = null, string? settledFingerprint = null) =>
         RelationshipFixtures.Evidence(pair, current, settledFingerprint);
 

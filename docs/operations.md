@@ -637,7 +637,7 @@ The `worker` command drafts one relationship for each pair of an approved statem
 | `CIVIC_LENS_RELATIONSHIP_DRAFTING_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the prompt byte cap. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
-Drafting uses Claude Haiku 5.5. The stage runs after vote drafting and before brief drafting. Before each pass, the worker reads every approved statement and queues a Pending row for each new pair. The first run after the migration can queue many pairs, and it can spend up to the daily limit. A pair with a new approved revision on either side returns to Pending unless a person approved its relationship. A pair with the same input as the last settled run makes no call. The [outcomes](architecture/statements.md#relationship-drafting) table lists every code.
+Drafting uses Claude Haiku 5.5. The stage runs after vote drafting and before brief drafting. A review decision on a statement, an action, or a vote queues a Pending row for each new pair of that record. Run `relationships draft refresh` once after the migration to queue the pairs of records that were approved earlier. Then the worker can spend up to the daily limit. A pair with a new approved revision on either side returns to Pending unless a person approved its relationship. A pair with the same input as the last settled run makes no call. The [outcomes](architecture/statements.md#relationship-drafting) table lists every code.
 
 The commands below need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
@@ -645,9 +645,10 @@ The commands below need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- relationships draft status
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- relationships draft list none 50
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- relationships draft requeue <pair-id|--all>
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- relationships draft refresh
 ```
 
-`status` prints one JSON object. Its `queue` field holds the daily limit, any pause, `chargedToday`, and `counts` for each outcome. Its `statementsSkippedWithoutDate` field is the number of approved statements that name a bill number and have no statement date. Code skips their bill numbers, so set the date on the statement to pair it by number. `list` takes `drafted`, `unchanged`, `none`, `unmatched`, `pending`, or `failed`, and a limit up to 500 (default 100). `requeue` moves Failed and no other rows back to Pending. A paused or waiting stage follows the same table as document-change drafting: fix the key or the credit and restart the worker, or wait for the next UTC day.
+`status` prints one JSON object. Its `queue` field holds the daily limit, any pause, `chargedToday`, and `counts` for each outcome. Its `statementsWithoutCongress` field is the number of approved statements that name a bill number and have no date, or a date before 1935. Code skips their bill numbers, so set the date on the statement to pair it by number. `list` takes `drafted`, `unchanged`, `none`, `unmatched`, `pending`, or `failed`, and a limit up to 500 (default 100). `requeue` moves Failed and no other rows back to Pending. `refresh` prints `{"pairs":N}`, the number of pairs it found, and it is safe to repeat. A paused or waiting stage follows the same table as document-change drafting: fix the key or the credit and restart the worker, or wait for the next UTC day.
 
 ## Brief drafting
 

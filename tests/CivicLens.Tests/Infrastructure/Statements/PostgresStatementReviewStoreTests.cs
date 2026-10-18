@@ -1,5 +1,9 @@
 using System.Data.Common;
 using CivicLens.Application.Analysis;
+using CivicLens.Application.Relationships;
+using CivicLens.Infrastructure.Analysis;
+using CivicLens.Infrastructure.Relationships;
+using CivicLens.Tests.Application.Relationships;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
 using CivicLens.Core.Briefs;
@@ -57,6 +61,10 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         await postgres.DropDatabaseAsync(connectionString);
         Directory.Delete(captureRoot, recursive: true);
     }
+
+    private RelationshipWorldSeeder Relationships => new(connectionString);
+
+    private async Task<long> CountRowsAsync(string table) => long.Parse((await Relationships.ReadAsync($"SELECT count(*) FROM {table}")).Single()[0]);
 
     private CreateStatementDraft Create => new(reviews);
     private SaveStatementDraft Save => new(reviews, Reader(StatementGateFixtures.Configuration()));
@@ -182,6 +190,74 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
 
         await Save.ExecuteAsync(Owner, await SaveRequestAsync(candidate, 3, "save-3"));
         await AssertStoredStatusMatchesPolicyAsync(candidate, ReviewStatus.AwaitingReviewWithConcerns);
+    }
+
+    [Fact]
+    public async Task ApprovingAStatementQueuesItsRelationshipPairsInTheSameTransactionSoTheRelationshipWorkerWakes()
+    {
+        var candidate = await ApprovableAsync();
+        await new RelationshipWorldSeeder(connectionString).ActionAsync(RelationshipFixtures.Action(title: Quote));
+        await using var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresRelationshipDraftStore.Table,
+            RelationshipDraftTask.Task);
+        await wakeup.ConnectAsync(default);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var waiting = wakeup.WaitAsync(timeout.Token);
+        Assert.Equal(0, await CountRowsAsync("relationship_analysis"));
+
+        await Decide.ExecuteAsync(Owner, new(candidate, 2, 0, ReviewDecisionKind.Approve, null, [], "approve"));
+
+        await waiting;
+        Assert.Equal([["Pending", candidate, "Action"]], await Relationships.ReadAsync(
+            "SELECT status, statement_candidate_id, target_kind FROM relationship_analysis"));
+    }
+
+    [Fact]
+    public async Task ADecisionWakesAnIdleRelationshipWorkerSoANewApprovalIsDraftedWithoutAnyOtherEvent()
+    {
+        var candidate = await ApprovableAsync();
+        await Relationships.ActionAsync(RelationshipFixtures.Action(title: Quote));
+        var relationshipStore = new PostgresRelationshipDraftStore(factory);
+        var model = new FakeRelationshipDraftModel();
+        await using var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresRelationshipDraftStore.Table,
+            RelationshipDraftTask.Task);
+        var worker = new AnalysisWorker<RelationshipDraftRun>(new RelationshipDraftStep(relationshipStore, model,
+            new RelationshipDraftSettings(10_000_000, concurrency: 1), RelationshipFixtures.Officials),
+            new PostgresAnalysisStatusStore(factory, RelationshipDraftTask.Task), TimeProvider.System, wakeup);
+        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        var running = worker.ExecuteAsync(once: false, stop.Token);
+        await Task.Delay(1500);
+        model.Draft(RelationshipFixtures.Output(quote: Quote, factId: "F2"));
+
+        await Decide.ExecuteAsync(Owner, new(candidate, 2, 0, ReviewDecisionKind.Approve, null, [], "approve"));
+        while (model.Requests.Count == 0 && !stop.IsCancellationRequested) await Task.Delay(100);
+        await Task.Delay(500);
+        await stop.CancelAsync();
+        await running;
+
+        Assert.Single(model.Requests);
+        Assert.Equal(1, await CountRowsAsync("relationship_revisions"));
+    }
+
+    [Fact]
+    public async Task ReApprovingAStatementRequeuesAPairThatBlockedWhileItWasNotApprovedAndAChangeRequestNeverFlagsIt()
+    {
+        var candidate = await ApprovableAsync();
+        await Relationships.ActionAsync(RelationshipFixtures.Action(title: Quote));
+        await Decide.ExecuteAsync(Owner, new(candidate, 2, 0, ReviewDecisionKind.Approve, null, [], "approve"));
+        var pair = (await Relationships.ReadAsync("SELECT pair_id FROM relationship_analysis")).Single()[0];
+        await Relationships.ExecuteAsync("""
+            UPDATE relationship_analysis SET status = 'Blocked', error_code = 'sideNotApproved';
+            SET session_replication_role = replica;
+            INSERT INTO relationship_drafts (record_id, current_revision_number, review_state_version, review_status, no_longer_matches,
+                created_at_utc_ticks, last_revised_at_utc_ticks) VALUES (@id, 1, 0, 'AwaitingReview', false, 1, 1)
+            """, ("id", pair));
+        var changes = await Decide.ExecuteAsync(Owner, new(candidate, 2, 1, ReviewDecisionKind.RequestChanges, "Name the bill.", [], "changes"));
+        Assert.Equal([["Blocked", "False"]], await Relationships.ReadAsync(
+            "SELECT a.status, d.no_longer_matches FROM relationship_analysis a JOIN relationship_drafts d ON d.record_id = a.pair_id"));
+
+        await Decide.ExecuteAsync(Owner, new(candidate, 2, 2, ReviewDecisionKind.Approve, "Fixed.", [changes.DecisionId], "approve-again"));
+
+        Assert.Equal([["Pending"]], await Relationships.ReadAsync("SELECT status FROM relationship_analysis"));
     }
 
     [Fact]

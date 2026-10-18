@@ -16,18 +16,13 @@ internal sealed class FakeRelationshipDraftStore : FakeAnalysisQueue<Relationshi
 
     public RelationshipDraftEvidence? Evidence { get; }
     public List<RelationshipRevision> Revisions { get; } = [];
-    public int RefreshCalls { get; private set; }
 
     public Task<RelationshipDraftEvidence?> ReadEvidenceAsync(string pairId, CancellationToken cancellationToken) =>
         Task.FromResult(Evidence);
 
-    public Task RefreshPairsAsync(CancellationToken cancellationToken)
-    {
-        RefreshCalls++;
-        return Task.CompletedTask;
-    }
+    public Task<int> RefreshPairsAsync(CancellationToken cancellationToken) => Task.FromResult(0);
 
-    public Task<int> CountStatementsSkippedWithoutDateAsync(CancellationToken cancellationToken) => Task.FromResult(0);
+    public Task<int> CountStatementsWithoutCongressAsync(CancellationToken cancellationToken) => Task.FromResult(0);
 
     public Task<IReadOnlyList<RelationshipDraftListItem>> ListAsync(RelationshipDraftView? view, int limit, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<RelationshipDraftListItem>>([]);

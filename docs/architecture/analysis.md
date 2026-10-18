@@ -68,7 +68,7 @@ The drafting executor is `AnalysisWorker<AnalysisRun>` with `DocumentChangeDraft
 
 The executor runs beside the collection loop in the `worker` process. Its wakeup uses the `civic_lens_analysis` channel with the payload `document_change_analysis:draft`. Collection therefore never waits for a model call. With `--once`, collection drains first and drafting drains next. If one loop fails, both stop.
 
-`AnalysisWorker` takes an optional hook that runs before each drain pass, inside the same error handling as the eligible read. The brief executor uses it to queue the closed weeks. The relationship executor uses it to find the pairs and to requeue the stale ones. No other executor sets it.
+`AnalysisWorker` takes an optional hook that runs before each drain pass, inside the same error handling as the eligible read. The brief executor uses it to queue the closed weeks. No other executor sets it. The relationship executor finds its pairs in the review decision hooks instead.
 
 At most `CIVIC_LENS_ANALYSIS_CONCURRENCY` calls run at a time. The default is 2 and the maximum is 4. On shutdown the executor releases claimed entries.
 

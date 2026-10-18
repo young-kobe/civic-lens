@@ -6,7 +6,7 @@ public interface IRelationshipDraftStore : IAnalysisQueueStore<RelationshipDraft
 {
     Task<RelationshipDraftEvidence?> ReadEvidenceAsync(string pairId, CancellationToken cancellationToken);
 
-    Task RefreshPairsAsync(CancellationToken cancellationToken);
+    Task<int> RefreshPairsAsync(CancellationToken cancellationToken);
 
-    Task<int> CountStatementsSkippedWithoutDateAsync(CancellationToken cancellationToken);
+    Task<int> CountStatementsWithoutCongressAsync(CancellationToken cancellationToken);
 }

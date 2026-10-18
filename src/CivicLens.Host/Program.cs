@@ -89,6 +89,7 @@ if (args is [] or ["--help"] or ["help"])
           relationships draft status
           relationships draft list [drafted|unchanged|none|unmatched|pending|failed] [limit]
           relationships draft requeue <pair-id|--all>
+          relationships draft refresh
           brief redraft --week <yyyy-MM-dd>
           releases publish <idempotency-key> <draft-id>...
           releases list [limit]
@@ -297,7 +298,7 @@ try
         var draftStore = new PostgresRelationshipDraftStore(contexts);
         var draftCommands = new AnalysisQueueCommands<RelationshipDraftRun, RelationshipDraftView, RelationshipDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, RelationshipDraftTask.Task));
-        var relationships = new RelationshipCommand(draftCommands, new GetRelationshipDraftStatus(draftCommands.Status, draftStore), owner);
+        var relationships = new RelationshipCommand(draftCommands, new GetRelationshipDraftStatus(draftCommands.Status, draftStore), new RefreshRelationshipPairs(draftStore), owner);
         executing = true;
         return await relationships.ExecuteAsync(args, cancellation.Token);
     }

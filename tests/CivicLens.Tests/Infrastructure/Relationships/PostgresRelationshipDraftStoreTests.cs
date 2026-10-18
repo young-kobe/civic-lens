@@ -253,11 +253,11 @@ public sealed class PostgresRelationshipDraftStoreTests(PostgresCollection postg
     }
 
     [Fact]
-    public async Task TheCountOfSkippedStatementsComesFromTheApprovedStatementsThatHaveABareNumberAndNoDate()
+    public async Task TheCountOfStatementsWithoutACongressComesFromTheApprovedStatementsThatHaveABareNumberAndNoUsableDate()
     {
         await seeder.StatementAsync(Statement(dated: false));
 
-        Assert.Equal(1, await store.CountStatementsSkippedWithoutDateAsync(default));
+        Assert.Equal(1, await store.CountStatementsWithoutCongressAsync(default));
     }
 
     private async Task<RelationshipPair> SeedApprovedPairAsync()
@@ -267,7 +267,10 @@ public sealed class PostgresRelationshipDraftStoreTests(PostgresCollection postg
         return ActionPair();
     }
 
-    private Task RunWorkerAsync(FakeRelationshipDraftModel model) =>
-        AnalysisWorkers.RelationshipDrafting(store, new PostgresAnalysisStatusStore(factory, RelationshipDraftTask.Task), model,
+    private async Task RunWorkerAsync(FakeRelationshipDraftModel model)
+    {
+        _ = await store.RefreshPairsAsync(default);
+        await AnalysisWorkers.RelationshipDrafting(store, new PostgresAnalysisStatusStore(factory, RelationshipDraftTask.Task), model,
             new RelationshipDraftSettings(10_000_000, concurrency: 1), Officials, TimeProvider.System).ExecuteAsync(once: true);
+    }
 }

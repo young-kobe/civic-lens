@@ -21,6 +21,13 @@ internal static class RelationshipEvidenceReader
           AND EXISTS (SELECT 1 FROM jsonb_array_elements(r.revision_json::jsonb -> 'sponsorships') s WHERE s ->> 'personId' = ANY({0}))
         """;
 
+    private const string ApprovedStatementsOfOfficials = """
+        SELECT d.candidate_id AS "Value" FROM statement_drafts d
+        JOIN statement_revisions r ON r.candidate_id = d.candidate_id AND r.revision_number = d.current_revision_number
+        WHERE d.review_status = 'Approved'
+          AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(r.revision_json::jsonb -> 'speakerOfficialIds') o WHERE o = ANY({0}))
+        """;
+
     private const string ApprovedAction = """
         SELECT r.revision_json AS "Value" FROM action_drafts d
         JOIN action_revisions r ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
@@ -44,11 +51,11 @@ internal static class RelationshipEvidenceReader
         WHERE d.review_status = 'Approved' AND d.record_id = {0}
         """;
 
-    public static async Task<ImmutableArray<ApprovedStatement>> ReadStatementsAsync(CollectionAttemptDbContext db, string? candidateId,
+    public static async Task<ImmutableArray<ApprovedStatement>> ReadStatementsAsync(CollectionAttemptDbContext db, string[]? candidateIds,
         CancellationToken cancellationToken)
     {
         var rows = await (from draft in db.Set<StatementDraftRow>().AsNoTracking()
-                          where draft.ReviewStatus == ReviewStatus.Approved && (candidateId == null || draft.CandidateId == candidateId)
+                          where draft.ReviewStatus == ReviewStatus.Approved && (candidateIds == null || candidateIds.Contains(draft.CandidateId))
                           join revision in db.Set<StatementRevisionRow>().AsNoTracking()
                               on new { draft.CandidateId, Number = draft.CurrentRevisionNumber } equals new { revision.CandidateId, Number = revision.RevisionNumber }
                           join candidate in db.Set<StatementCandidateRow>().AsNoTracking() on draft.CandidateId equals candidate.CandidateId
@@ -57,6 +64,11 @@ internal static class RelationshipEvidenceReader
         return [.. rows.Select(row => new ApprovedStatement(
             ReviewJson.Deserialize<StatementDraftRevision>(row.RevisionJson, "statement revision"), row.Text))];
     }
+
+    public static async Task<ImmutableArray<ApprovedStatement>> ReadStatementsOfOfficialsAsync(CollectionAttemptDbContext db,
+        string[] officialIds, CancellationToken cancellationToken) =>
+        await ReadStatementsAsync(db, await db.Database.SqlQueryRaw<string>(ApprovedStatementsOfOfficials, (object)officialIds)
+            .ToArrayAsync(cancellationToken), cancellationToken);
 
     public static async Task<ImmutableArray<ActionDraftRevision>> ReadActionsSponsoredByAsync(CollectionAttemptDbContext db,
         string[] officialIds, CancellationToken cancellationToken) =>

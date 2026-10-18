@@ -39,5 +39,5 @@ internal static class AnalysisWorkers
 
     public static AnalysisWorker<RelationshipDraftRun> RelationshipDrafting(IRelationshipDraftStore store, IAnalysisStatusStore status,
         IRelationshipDraftModel model, RelationshipDraftSettings settings, IReadOnlyDictionary<string, string> officialNames, TimeProvider clock) =>
-        new(new RelationshipDraftStep(store, model, settings, officialNames), status, clock, null, store.RefreshPairsAsync);
+        new(new RelationshipDraftStep(store, model, settings, officialNames), status, clock);
 }

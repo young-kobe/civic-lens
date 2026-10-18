@@ -83,9 +83,9 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
             ReviewPolicy.ValidateDecision(draft.RecordId, draft.CurrentRevisionNumber, draft.ReviewStateVersion, history.Decisions, decision);
             await validateDecision(db, draft, history);
             db.Add(toRow(decision));
-            await afterDecision(db, draft.RecordId, decision.RevisionNumber, cancellationToken);
             draft.ReviewStateVersion = decision.ReviewStateVersion;
             draft.ReviewStatus = ReviewPolicy.GetCurrentStatus(draft.CurrentRevisionNumber, history.Decisions.Add(decision));
+            await afterDecision(db, draft.RecordId, decision.RevisionNumber, cancellationToken);
             return decision;
         }, cancellationToken);
     }

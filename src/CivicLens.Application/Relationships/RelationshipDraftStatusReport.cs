@@ -2,4 +2,4 @@ using CivicLens.Application.Analysis;
 
 namespace CivicLens.Application.Relationships;
 
-public sealed record RelationshipDraftStatusReport(AnalysisStatusReport<RelationshipDraftView> Queue, int StatementsSkippedWithoutDate);
+public sealed record RelationshipDraftStatusReport(AnalysisStatusReport<RelationshipDraftView> Queue, int StatementsWithoutCongress);

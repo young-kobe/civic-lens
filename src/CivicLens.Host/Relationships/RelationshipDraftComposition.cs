@@ -21,7 +21,7 @@ internal static class RelationshipDraftComposition
         var store = new PostgresRelationshipDraftStore(contexts);
         var names = collection.People.ToDictionary(person => person.Id, person => person.Name, StringComparer.Ordinal);
         var step = new RelationshipDraftStep(store, new AnthropicRelationshipDraftModel(configuration.ApiKey), configuration.Settings, names);
-        var worker = new AnalysisWorker<RelationshipDraftRun>(step, status, TimeProvider.System, wakeup, store.RefreshPairsAsync);
+        var worker = new AnalysisWorker<RelationshipDraftRun>(step, status, TimeProvider.System, wakeup);
         return new(status, configuration.Settings.DailyTokenLimit, worker, wakeup);
     }
 }

@@ -7,10 +7,10 @@ namespace CivicLens.Host.Relationships;
 
 internal sealed class RelationshipCommand(
     AnalysisQueueCommands<RelationshipDraftRun, RelationshipDraftView, RelationshipDraftListItem> drafts,
-    GetRelationshipDraftStatus status, ReviewActor owner)
+    GetRelationshipDraftStatus status, RefreshRelationshipPairs refresh, ReviewActor owner)
 {
     private const string Usage = "Use relationships draft status, relationships draft list [drafted|unchanged|none|unmatched|pending|failed] " +
-        "[limit], or relationships draft requeue <pair-id|--all>.";
+        "[limit], relationships draft requeue <pair-id|--all>, or relationships draft refresh.";
     private const int DefaultListLimit = 100;
 
     public static bool Matches(string[] args) => args is ["relationships", ..];
@@ -31,6 +31,9 @@ internal sealed class RelationshipCommand(
                     return 0;
                 case ["relationships", "draft", "list", var view, var limit]:
                     CommandOutput.Write(await drafts.List.ExecuteAsync(owner, ParseView(view), ParseLimit(limit), cancellationToken));
+                    return 0;
+                case ["relationships", "draft", "refresh"]:
+                    CommandOutput.Write(new { pairs = await refresh.ExecuteAsync(owner, cancellationToken) });
                     return 0;
                 case ["relationships", "draft", "requeue", "--all"]:
                     CommandOutput.Write(new { requeued = await drafts.Requeue.ExecuteAsync(owner, null, cancellationToken) });

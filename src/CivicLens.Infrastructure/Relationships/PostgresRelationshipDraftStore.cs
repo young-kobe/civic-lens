@@ -14,31 +14,7 @@ public sealed class PostgresRelationshipDraftStore : PostgresAnalysisStore<Relat
 {
     public const string Table = "relationship_analysis";
 
-    private const string InsertPairsSql = $$"""
-        INSERT INTO {{Table}} (pair_id, task, statement_candidate_id, target_kind, target_record_id, status, fence, attempts, reserved_tokens,
-                               created_at_utc_ticks)
-        SELECT p.pair_id, {0}, p.statement_candidate_id, p.target_kind, p.target_record_id, 'Pending', 0, 0, 0, {{DatabaseClock.TicksSql}}
-        FROM unnest({1}, {2}, {3}, {4}) AS p(pair_id, statement_candidate_id, target_kind, target_record_id)
-        ON CONFLICT DO NOTHING
-        """;
-
-    private static readonly string ReadStalePairIdsSql = $$"""
-        SELECT a.pair_id AS "Value" FROM {{Table}} a
-        JOIN unnest({1}, {2}) AS f(pair_id, fingerprint) ON f.pair_id = a.pair_id
-        WHERE a.task = {0}
-          AND (a.status = 'Succeeded' OR a.status = 'Blocked' AND a.error_code = '{{RelationshipDraftErrorCodes.SideNotApproved}}')
-          AND NOT EXISTS (SELECT 1 FROM relationship_drafts d WHERE d.record_id = a.pair_id AND d.review_status = 'Approved')
-          AND f.fingerprint IS DISTINCT FROM {{SettledFingerprint("a.pair_id")}}
-        """;
-
-    private const string FlagPairsNoLongerFoundSql = """
-        UPDATE relationship_drafts SET no_longer_matches = NOT (record_id = ANY({0}))
-        WHERE no_longer_matches <> NOT (record_id = ANY({0}))
-        """;
-
-    private static readonly string ReadSettledFingerprintSql = $"SELECT {SettledFingerprint("{0}")} AS \"Value\"";
-
-    private static readonly State[] RequeuedStates = [State.Succeeded, State.Blocked];
+    private static readonly string ReadSettledFingerprintSql = $"SELECT {RelationshipStaleness.SettledFingerprint("{0}")} AS \"Value\"";
 
     private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
     private readonly PostgresAnalysisQueue<RelationshipAnalysisRow, RelationshipAnalysisBudgetRow, RelationshipDraftRun> queue;
@@ -72,35 +48,28 @@ public sealed class PostgresRelationshipDraftStore : PostgresAnalysisStore<Relat
         var isAction = row.TargetKind == RelationshipRecordKind.Action;
         var settled = await db.Database.SqlQueryRaw<string>(ReadSettledFingerprintSql, pairId).SingleOrDefaultAsync(cancellationToken);
         return new(pairId, row.TargetKind,
-            (await RelationshipEvidenceReader.ReadStatementsAsync(db, row.StatementCandidateId, cancellationToken)).SingleOrDefault(),
+            (await RelationshipEvidenceReader.ReadStatementsAsync(db, [row.StatementCandidateId], cancellationToken)).SingleOrDefault(),
             isAction ? await RelationshipEvidenceReader.ReadActionAsync(db, row.TargetRecordId, cancellationToken) : null,
             isAction ? null : await RelationshipEvidenceReader.ReadVoteAsync(db, row.TargetRecordId, cancellationToken),
             settled, await RelationshipDraftRows.ReadCurrentAsync(db, pairId, cancellationToken));
     }
 
-    public async Task RefreshPairsAsync(CancellationToken cancellationToken)
+    public async Task<int> RefreshPairsAsync(CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var found = (await FindPairsAsync(db, cancellationToken)).Found;
+        var found = await RelationshipPairSource.FindAllAsync(db, cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
-        await queue.LockRowsAsync(db, cancellationToken);
-        await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.RelationshipReview, cancellationToken);
-        var ids = found.Select(pair => pair.PairId).ToArray();
-        _ = await db.Database.ExecuteSqlRawAsync(InsertPairsSql, [RelationshipDraftTask.Task, ids,
-            found.Select(pair => pair.Statement.RecordId).ToArray(), found.Select(pair => pair.Target.Kind.ToString()).ToArray(),
-            found.Select(pair => pair.Target.RecordId).ToArray()], cancellationToken);
-        var stale = await db.Database.SqlQueryRaw<string>(ReadStalePairIdsSql, RelationshipDraftTask.Task, ids,
-            found.Select(RelationshipFingerprint.Compute).ToArray()).ToArrayAsync(cancellationToken);
-        if (stale.Length > 0) _ = await queue.RequeueInAsync(db, RequeuedStates, stale, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-        _ = await db.Database.ExecuteSqlRawAsync(FlagPairsNoLongerFoundSql, [ids], cancellationToken);
+        await RelationshipStaleness.TakeLocksAsync(queue, db, cancellationToken);
+        await RelationshipStaleness.ApplyAsync(queue, db, found, RelationshipPairScope.All, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        return found.Length;
     }
 
-    public async Task<int> CountStatementsSkippedWithoutDateAsync(CancellationToken cancellationToken)
+    public async Task<int> CountStatementsWithoutCongressAsync(CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return (await FindPairsAsync(db, cancellationToken)).StatementsSkippedWithoutDate;
+        return RelationshipPairFinder.CountStatementsWithoutCongress(
+            await RelationshipEvidenceReader.ReadStatementsAsync(db, null, cancellationToken));
     }
 
     public async Task<IReadOnlyList<RelationshipDraftListItem>> ListAsync(RelationshipDraftView? view, int limit,
@@ -122,22 +91,6 @@ public sealed class PostgresRelationshipDraftStore : PostgresAnalysisStore<Relat
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         return await AnalysisQueueCounts.CountAsync<RelationshipAnalysisRow, RelationshipDraftView>(db, RelationshipDraftTask.Task, ViewOf,
             cancellationToken);
-    }
-
-    private static string SettledFingerprint(string pairId) => $"""
-        (SELECT r.context_json::jsonb ->> 'fingerprint' FROM relationship_analysis_runs r
-          WHERE r.pair_id = {pairId} AND r.task = '{RelationshipDraftTask.Task}' AND r.outcome IN ('Drafted','Bypassed') AND r.context_json::jsonb ->> 'fingerprint' IS NOT NULL
-          ORDER BY r.finished_at_utc_ticks DESC, r.run_id DESC LIMIT 1)
-        """;
-
-    private static async Task<RelationshipPairs> FindPairsAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken)
-    {
-        var statements = await RelationshipEvidenceReader.ReadStatementsAsync(db, null, cancellationToken);
-        if (statements.IsEmpty) return new([], 0);
-        var officialIds = statements.SelectMany(statement => statement.Revision.SpeakerOfficialIds).Distinct(StringComparer.Ordinal).ToArray();
-        var actions = await RelationshipEvidenceReader.ReadActionsSponsoredByAsync(db, officialIds, cancellationToken);
-        var votes = await RelationshipEvidenceReader.ReadVotesOnAsync(db, RelationshipPairFinder.BillsMentionedIn(statements), cancellationToken);
-        return RelationshipPairFinder.Find(statements, actions, votes);
     }
 
     private static Expression<Func<RelationshipAnalysisRow, bool>> InView(RelationshipDraftView view) => view switch

@@ -10,6 +10,6 @@ public sealed class GetRelationshipDraftStatus(
     public async Task<RelationshipDraftStatusReport> ExecuteAsync(ReviewActor actor, CancellationToken cancellationToken = default)
     {
         ReviewAuthorization.RequireOwner(actor);
-        return new(await queue.ExecuteAsync(actor, cancellationToken), await store.CountStatementsSkippedWithoutDateAsync(cancellationToken));
+        return new(await queue.ExecuteAsync(actor, cancellationToken), await store.CountStatementsWithoutCongressAsync(cancellationToken));
     }
 }
