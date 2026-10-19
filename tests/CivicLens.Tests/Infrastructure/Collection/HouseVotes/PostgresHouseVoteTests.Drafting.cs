@@ -135,8 +135,8 @@ public sealed partial class PostgresHouseVoteTests
         var revision = await RevisionAsync(candidate, 1);
         await ExecuteAsync($"""
             INSERT INTO vote_drafts (record_id, source_id, congress, session_number, roll_call_number, current_revision_number, review_state_version,
-                review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
-            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', 119, 1, 100, 1, 0, 'AwaitingReview', 0, 0);
+                review_status, created_at_utc_ticks)
+            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', 119, 1, 100, 1, 0, 'AwaitingReview', 0);
             INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
             VALUES ('{recordId}', 1, 'auth0|editor', 'Person', NULL, 'x', 0)
             """);
@@ -188,8 +188,8 @@ public sealed partial class PostgresHouseVoteTests
         var recordId = await RecordIdAsync(candidate);
         await ExecuteAsync($"""
             INSERT INTO vote_drafts (record_id, source_id, congress, session_number, roll_call_number, current_revision_number, review_state_version,
-                review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
-            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', 119, 1, 100, 1, 0, 'AwaitingReview', 0, 0)
+                review_status, created_at_utc_ticks)
+            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', 119, 1, 100, 1, 0, 'AwaitingReview', 0)
             """);
 
         var withoutRun = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync($"""
@@ -209,8 +209,8 @@ public sealed partial class PostgresHouseVoteTests
     {
         var insert = (string id) => $"""
             INSERT INTO vote_drafts (record_id, source_id, congress, session_number, roll_call_number, current_revision_number, review_state_version,
-                review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
-            VALUES ('{id}', 'source', 119, 1, 100, 1, 0, 'AwaitingReview', 0, 0)
+                review_status, created_at_utc_ticks)
+            VALUES ('{id}', 'source', 119, 1, 100, 1, 0, 'AwaitingReview', 0)
             """;
         await ExecuteAsync(insert(new string('a', 64)));
 

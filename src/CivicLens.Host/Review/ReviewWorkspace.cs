@@ -231,6 +231,7 @@ internal static class ReviewWorkspace
         ConfigureRelationshipReview(services, contexts);
         ConfigureBriefReview(services, contexts);
         var collection = ReviewCollectionSettings.FromEnvironment();
+        services.AddSingleton(ReviewOfficials.From(collection?.Configuration));
         if (collection is null)
         {
             services.AddScoped(provider => new GetRecentActivity(provider.GetRequiredService<IDocumentChangeReviewStore>()));
@@ -260,6 +261,7 @@ internal static class ReviewWorkspace
         services.AddScoped<DecideStatementReview>();
         services.AddScoped<GetStatementReview>();
         services.AddScoped<ListStatementReviews>();
+        services.AddScoped<GetStatementReviewCounts>();
         services.AddScoped<ListStatementsNotInReview>();
         services.AddSingleton<IGateLabelStore>(new PostgresGateLabelStore(contexts));
         services.AddScoped<SaveGateLabel>();

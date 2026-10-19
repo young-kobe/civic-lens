@@ -35,7 +35,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
 
     public async Task<TRevision> SaveRevisionAsync(IDbContextFactory<CollectionAttemptDbContext> contextFactory, string actorSubject,
         TRevision revision, int expectedRevisionNumber, string operation, string idempotencyKey, string payloadHash,
-        Func<CollectionAttemptDbContext, TRevision, Task<TRevision>> prepare, Func<TRevision, TRevisionRow> toRow,
+        Func<CollectionAttemptDbContext, TDraftRow, TRevision, Task<TRevision>> prepareAndList, Func<TRevision, TRevisionRow> toRow,
         CancellationToken cancellationToken)
     {
         ReviewIdempotency.ValidateRequest(actorSubject, idempotencyKey, payloadHash);
@@ -49,7 +49,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
             ReviewWriteRules.RequireRevisionAuthor(revision.AuthorSubject, actorSubject);
             var current = await FindRevisionAsync(db, draft.RecordId, draft.CurrentRevisionNumber, cancellationToken)
                 ?? throw new InvalidOperationException("Current draft revision is missing.");
-            var saved = await prepare(db, current);
+            var saved = await prepareAndList(db, draft, current);
             AppendRevision(db, draft, saved, toRow(saved), cycle);
             return saved;
         }, cancellationToken);
@@ -101,6 +101,10 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
             _ => throw new ArgumentOutOfRangeException(nameof(filter))
         };
     }
+
+    public async Task<(int NeedsAction, int Approved)> CountAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken) =>
+        (await Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken),
+            await Drafts(db, DraftStatusFilter.Approved).CountAsync(cancellationToken));
 
     public Task<KeysetSlice<TDraftRow>> PageAsync(CollectionAttemptDbContext db, PageCursor? cursor, int limit,
         DraftStatusFilter filter, CancellationToken cancellationToken) =>

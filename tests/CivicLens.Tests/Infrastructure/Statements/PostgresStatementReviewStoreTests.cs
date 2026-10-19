@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Data.Common;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Relationships;
@@ -6,6 +7,7 @@ using CivicLens.Infrastructure.Relationships;
 using CivicLens.Tests.Application.Relationships;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
+using CivicLens.Application.Collection.Jobs;
 using CivicLens.Core.Briefs;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
@@ -564,7 +566,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     }
 
     [Fact]
-    public async Task ListPagesByCreationTimeAndFiltersByTheStoredStatus()
+    public async Task ListOrdersByTheNewestEventDateThenTheIdAcrossPagesAndFiltersByTheStoredStatus()
     {
         var overCap = await CandidateAsync();
         var awaiting = await StartedAsync();
@@ -575,27 +577,103 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         await Decide.ExecuteAsync(Owner, new(requested, 2, 0, ReviewDecisionKind.RequestChanges, "Needs sources.", [], "request"));
         foreach (var candidate in new[] { approvedOlder, approvedNewest })
             await Decide.ExecuteAsync(Owner, new(candidate, 2, 0, ReviewDecisionKind.Approve, null, [], "approve-" + candidate[..4]));
-        var order = new[] { overCap, awaiting, requested, approvedOlder, approvedNewest };
-        for (var index = 0; index < order.Length; index++)
-            await ExecuteAsync(connectionString, $"UPDATE statement_drafts SET created_at_utc_ticks = {9_000 + index} WHERE candidate_id = '{order[index]}'");
+        await SetEventDateAsync(requested, new DateOnly(2026, 1, 1));
+        await SetEventDateAsync(approvedOlder, new DateOnly(2026, 3, 1));
+        await SetEventDateAsync(approvedNewest, new DateOnly(2026, 9, 1));
+        await SetEventDateAsync(awaiting, new DateOnly(2026, 6, 1));
+        await SetEventDateAsync(overCap, new DateOnly(2025, 12, 1));
+        await SetDraftPriorityAsync(approvedNewest, 3);
+        await SetDraftPriorityAsync(requested, 1);
         var list = new ListStatementReviews(reviews);
 
         async Task<PageWalk> Walk(DraftStatusFilter filter) => await PageWalk.RunAsync(async cursor =>
         {
-            var page = await list.ExecuteAsync(Owner, cursor?.Encode(), 2, filter);
+            var page = await list.ExecuteAsync(Owner, cursor?.Encode(), 2, new DraftListFilter(filter));
             return ([.. page.Items.Select(item => item.CandidateId)], page.NewerCursor, page.OlderCursor);
         });
 
-        (await Walk(DraftStatusFilter.All)).AssertExact([approvedNewest, approvedOlder, requested, awaiting, overCap]);
-        (await Walk(DraftStatusFilter.NeedsAction)).AssertExact([requested, awaiting, overCap]);
+        (await Walk(DraftStatusFilter.All)).AssertExact([approvedNewest, awaiting, approvedOlder, requested, overCap]);
+        (await Walk(DraftStatusFilter.NeedsAction)).AssertExact([awaiting, requested, overCap]);
         (await Walk(DraftStatusFilter.Approved)).AssertExact([approvedNewest, approvedOlder]);
-        var everything = (await list.ExecuteAsync(Owner, null, 10)).Items.ToDictionary(item => item.CandidateId);
-        Assert.Null(everything[overCap].CurrentRevision);
-        Assert.Equal(ReviewStatus.NotDrafted, everything[overCap].CurrentStatus);
-        Assert.Equal((ReviewStatus.ChangesRequested, 1, 1), (everything[requested].CurrentStatus, everything[requested].ReviewStateVersion,
-            everything[requested].UnresolvedConcernCount));
-        Assert.Equal(2, everything[approvedNewest].CurrentRevision!.RevisionNumber);
-        Assert.Equal("source", everything[approvedNewest].SourceId);
+        var everything = await list.ExecuteAsync(Owner, null, 10);
+        var byId = everything.Items.ToDictionary(item => item.CandidateId);
+        Assert.Null(byId[overCap].CurrentRevision);
+        Assert.Equal(ReviewStatus.NotDrafted, byId[overCap].CurrentStatus);
+        Assert.Equal((ReviewStatus.ChangesRequested, 1, 1), (byId[requested].CurrentStatus, byId[requested].ReviewStateVersion,
+            byId[requested].UnresolvedConcernCount));
+        Assert.Equal(2, byId[approvedNewest].CurrentRevision!.RevisionNumber);
+        Assert.Equal("source", byId[approvedNewest].SourceId);
+    }
+
+    [Fact]
+    public async Task CountsUseTheSameStatusRuleAsTheListFiltersSoADraftWithoutARevisionNeedsAction()
+    {
+        var overCap = await CandidateAsync();
+        var awaiting = await StartedAsync();
+        var approved = await ApprovableAsync();
+        await InsertRevisionLessDraftAsync(overCap);
+        await Decide.ExecuteAsync(Owner, new(approved, 2, 0, ReviewDecisionKind.Approve, null, [], "approve"));
+        var list = new ListStatementReviews(reviews);
+
+        var counts = await new GetStatementReviewCounts(reviews).ExecuteAsync(Owner);
+
+        Assert.Equal(new StatementReviewCounts(2, 1), counts);
+        Assert.Equal(counts.NeedsAction, (await list.ExecuteAsync(Owner, null, 10, new(DraftStatusFilter.NeedsAction))).Items.Length);
+        Assert.Equal(counts.Approved, (await list.ExecuteAsync(Owner, null, 10, new(DraftStatusFilter.Approved))).Items.Length);
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            new GetStatementReviewCounts(null!).ExecuteAsync(new ReviewActor("auth0|nobody", (ReviewRole)99)));
+    }
+
+    [Fact]
+    public async Task ListFiltersByIssueOfficialAndEventDateAndCombinesThemWithTheStatus()
+    {
+        var rent = await ApprovableAsync();
+        var noIssue = await CandidateAsync(AdmittedDefinition(SoleCoverage(Markey)));
+        await Create.ExecuteAsync(Owner, new(noIssue, "create-markey"));
+        await SaveWithAsync(noIssue, speakers: [Markey], issues: []);
+        await ExecuteAsync(connectionString, $"UPDATE statement_drafts SET event_on = '2026-02-01' WHERE candidate_id = '{rent}'");
+        await ExecuteAsync(connectionString, $"UPDATE statement_drafts SET event_on = '2026-08-01' WHERE candidate_id = '{noIssue}'");
+        await Decide.ExecuteAsync(Owner, new(rent, 2, 0, ReviewDecisionKind.Approve, null, [], "approve-rent"));
+        var list = new ListStatementReviews(reviews);
+
+        async Task<string[]> Ids(DraftListFilter filter) => [.. (await list.ExecuteAsync(Owner, null, 10, filter)).Items.Select(item => item.CandidateId)];
+
+        Assert.Equal([rent], await Ids(new(DraftStatusFilter.All, IssueId: RentIssue)));
+        Assert.Equal([noIssue], await Ids(new(DraftStatusFilter.All, OfficialId: Markey)));
+        Assert.Equal([noIssue], await Ids(new(DraftStatusFilter.All, From: new DateOnly(2026, 3, 1))));
+        Assert.Equal([rent], await Ids(new(DraftStatusFilter.All, To: new DateOnly(2026, 3, 1))));
+        Assert.Equal([rent], await Ids(new(DraftStatusFilter.Approved, IssueId: RentIssue)));
+        Assert.Empty(await Ids(new(DraftStatusFilter.NeedsAction, IssueId: RentIssue)));
+        Assert.Empty(await Ids(new(DraftStatusFilter.All, IssueId: RentIssue, OfficialId: Markey)));
+    }
+
+    [Fact]
+    public async Task EachWritePathSetsTheListedColumnsFromTheRevisionAndTheEventDateFallsBackToTheCaptureDate()
+    {
+        var configuration = StatementDraftFixtures.Configuration();
+        var bothSpeakers = configuration with
+        {
+            Sources = [configuration.Sources[0] with { Coverage = [new() { PersonId = Warren }, new() { PersonId = Markey }] }]
+        };
+        var candidate = await CandidateAsync(AdmittedDefinition(bothSpeakers));
+        await ExecuteAsync(connectionString, $"UPDATE statement_candidates SET created_at_utc_ticks = {new DateTime(2026, 5, 4, 13, 0, 0, DateTimeKind.Utc).Ticks} WHERE candidate_id = '{candidate}'");
+
+        await Create.ExecuteAsync(Owner, new(candidate, "create"));
+        Assert.Equal(("2026-05-04", "", ""), await ListingAsync(candidate));
+
+        await Save.ExecuteAsync(Owner, await SaveRequestAsync(candidate, 1, "save-a"));
+        Assert.Equal(("2026-05-04", RentIssue, Warren), await ListingAsync(candidate));
+
+        var extraction = (await drafts.ReadEvidenceAsync(candidate, default))!.Article.Extraction;
+        var dated = (await SaveRequestAsync(candidate, 2, "save-b")) with
+        {
+            StatementDate = new DateOnly(2026, 10, 3),
+            StatementDateEvidence = new SourceSpan(extraction.ExtractionId, extraction.Text.IndexOf("October 3, 2026", StringComparison.Ordinal), 15),
+            IssueIds = [],
+            SpeakerOfficialIds = [Warren, Markey]
+        };
+        await Save.ExecuteAsync(Owner, dated);
+        Assert.Equal(("2026-10-03", "", $"{Warren},{Markey}"), await ListingAsync(candidate));
     }
 
     [Fact]
@@ -656,8 +734,8 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         Assert.Null(await get.ExecuteAsync(Owner, new string('a', 64)));
     }
 
-    private async Task<string> CandidateAsync() =>
-        await seeder.SeedAsync($"{Article} Release {++candidateCount}.", $"https://example.test/pages/{candidateCount}");
+    private async Task<string> CandidateAsync(CollectionJobDefinition? admittedBy = null) =>
+        await seeder.SeedAsync($"{Article} Release {++candidateCount}.", $"https://example.test/pages/{candidateCount}", admittedBy);
 
     private async Task<string> StartedAsync()
     {
@@ -746,13 +824,43 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     }
 
     private Task InsertRevisionLessDraftAsync(string candidate) => ExecuteAsync(connectionString,
-        $"INSERT INTO statement_drafts (candidate_id, current_revision_number, review_state_version, review_status, created_at_utc_ticks) VALUES ('{candidate}', 0, 0, 'NotDrafted', 0)");
+        $"""
+        INSERT INTO statement_drafts (candidate_id, current_revision_number, review_state_version, review_status, created_at_utc_ticks, event_on)
+        SELECT candidate_id, 0, 0, 'NotDrafted', 0, (timestamp '0001-01-01' + created_at_utc_ticks / 10 * interval '1 microsecond')::date
+        FROM statement_candidates WHERE candidate_id = '{candidate}'
+        """);
 
     private Task SetQueueAsync(string candidate, string task, string status, string? code) => ExecuteAsync(connectionString, $"""
         INSERT INTO statement_analysis (candidate_id, task, status, fence, attempts, reserved_tokens, created_at_utc_ticks, error_code)
         VALUES ('{candidate}', '{task}', '{status}', 0, 0, 0, 0, {(code is null ? "NULL" : $"'{code}'")})
         ON CONFLICT (candidate_id, task) DO UPDATE SET status = EXCLUDED.status, error_code = EXCLUDED.error_code
         """);
+
+    private async Task SaveWithAsync(string candidate, ImmutableArray<string> speakers, ImmutableArray<string> issues) =>
+        await Save.ExecuteAsync(Owner, (await SaveRequestAsync(candidate, 1, "save-" + candidate[..8])) with
+        {
+            SpeakerOfficialIds = speakers,
+            IssueIds = issues
+        });
+
+    // Statements have no tier, so a queue priority must not change their order.
+    private Task SetDraftPriorityAsync(string candidate, int priority) => ExecuteAsync(connectionString, $"""
+        INSERT INTO statement_analysis (candidate_id, task, status, fence, attempts, reserved_tokens, created_at_utc_ticks, priority)
+        VALUES ('{candidate}', '{StatementDraftTask.Task}', 'Succeeded', 0, 0, 0, 0, {priority})
+        ON CONFLICT (candidate_id, task) DO UPDATE SET priority = EXCLUDED.priority
+        """);
+
+    private Task SetEventDateAsync(string candidate, DateOnly eventOn) =>
+        ExecuteAsync(connectionString, $"UPDATE statement_drafts SET event_on = '{eventOn:yyyy-MM-dd}' WHERE candidate_id = '{candidate}'");
+
+    private async Task<(string EventOn, string IssueIds, string OfficialIds)> ListingAsync(string candidate)
+    {
+        var row = (await Relationships.ReadAsync($"""
+            SELECT event_on::text, array_to_string(issue_ids, ','), array_to_string(official_ids, ',')
+            FROM statement_drafts WHERE candidate_id = '{candidate}'
+            """)).Single();
+        return (row[0], row[1], row[2]);
+    }
 
     private async Task<(string Status, long Revision, long Version, long Revisions)> DraftStateAsync(string candidate) =>
         (await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'"),

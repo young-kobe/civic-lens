@@ -1,3 +1,4 @@
+using CivicLens.Infrastructure.Review.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -22,11 +23,12 @@ internal sealed class VoteDraftRowConfiguration : IEntityTypeConfiguration<VoteD
         builder.Property(row => row.Congress).HasColumnName("congress");
         builder.Property(row => row.SessionNumber).HasColumnName("session_number");
         builder.Property(row => row.RollCallNumber).HasColumnName("roll_call_number");
+        builder.Property(row => row.CandidateId).HasColumnName("candidate_id").HasMaxLength(64).IsRequired().HasDefaultValue("");
         builder.Property(row => row.CurrentRevisionNumber).HasColumnName("current_revision_number");
         builder.Property(row => row.ReviewStateVersion).HasColumnName("review_state_version");
         builder.Property(row => row.ReviewStatus).HasColumnName("review_status").HasConversion<string>().HasMaxLength(32).IsRequired();
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
-        builder.Property(row => row.LastRevisedAtUtcTicks).HasColumnName("last_revised_at_utc_ticks");
+        ListedDraftTableConfiguration.ConfigureListing(builder, "vote_drafts");
         builder.HasIndex(row => new { row.SourceId, row.Congress, row.SessionNumber, row.RollCallNumber }).IsUnique()
             .HasDatabaseName("ux_vote_drafts_roll");
     }

@@ -1,4 +1,5 @@
 @page "/Review/Actions"
+@inherits DraftListPage
 @using CivicLens.Application.Actions
 
 <TopBarTitle Crumbs="Crumbs" />
@@ -34,6 +35,10 @@
         <Panel Title="Records" Id="drafts">
             <Aside><FilterTabs Label="Filter action records" Tabs="DraftTabs" /></Aside>
             <ChildContent>
+                <DraftFilterForm Label="Filter action records by issue, official, and date" Action="@($"{ActionRoutes.List}#drafts")"
+                                 ClearHref="@ClearHref(ActionRoutes.List)" Status="@DraftFilterNames.NameOf(Filter)"
+                                 Issues="Issues.Issues" Officials="OfficialChoices"
+                                 IssueId="@IssueId" OfficialId="@OfficialId" From="@From" To="@To" />
                 <DataTable Items="drafts.Items" Caption="Action records">
                     <Head>
                         <th class="fit"><span class="visually-hidden">Select</span></th>
@@ -55,6 +60,10 @@
                             @if (item.IsSponsorshipOnly)
                             {
                                 <StatusBadge Text="Sponsorship change only" />
+                            }
+                            @if (PriorityLabels.Of(drafts.Priorities[item.RecordId]) is { } tier)
+                            {
+                                <StatusBadge Text="@tier" />
                             }
                         </td>
                         <td class="fit hide-narrow">@ActionLabels.Bill(item.CurrentRevision)</td>

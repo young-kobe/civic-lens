@@ -51,6 +51,7 @@ The votes feature collects House roll-call votes from the Congress.gov `house-vo
 
 Each line gives the rule, what enforces it, and the test that protects it. Cross-feature invariants are in [architecture](../architecture.md#invariants).
 
+- The event date of a vote is its vote day. The draft row copies it, the candidate ID, the tracked issue IDs, and the member person IDs from the current revision at each append. Enforced by `VoteDraftRows.Revised`. Test: `PostgresHouseVoteTests.EachWorkerRevisionReplacesTheListedColumnsWithThoseOfTheCurrentRevision`.
 - One record exists for each vote version. Enforced by `ux_house_votes_version`. Test: `PostgresHouseVoteTests.ASecondDetailJobOfTheSameVoteVersionRecordsNothingAndAdmitsNoMembersJob`.
 - A changed vote is a new version with its own members job. Enforced by `HouseVoteJobKeys` and `PostgresCollectionJobStore.AdmitDetailAsync`. Test: `PostgresHouseVoteTests.AChangedVoteIsRecordedAsANewVersionWithItsOwnMembersJob`.
 - A bill type has a number, and a number has a type. Enforced by `ck_house_votes_bill` and `ck_house_vote_candidates_bill`. Test: `PostgresHouseVoteTests.TheDatabaseRefusesABillTypeWithoutANumber`.
@@ -271,9 +272,9 @@ Vote review uses the shared decision rules and review cycles in [review](review.
 
 **Save and decide.** `SaveVoteDraft` and `DecideVoteReview` work as the action handlers do. A decision requeues no brief until briefs can cite votes. It still calls `BriefStaleness.AfterDecision`, which takes the brief locks in the action order.
 
-**Reads.** `GetVoteReview` returns the review cycle, the extractions that the loaded revisions cite, and the configured names of the people. The names come from the configuration revisions of the candidates. `ListVoteReviews` takes the filter `All`, `NeedsAction`, or `Approved`. Needs action orders by `last_revised_at_utc_ticks`, then record ID. The other filters order by creation time, then record ID. `GetVoteReviewCounts` counts with the same status filter.
+**Reads.** `GetVoteReview` returns the review cycle, the extractions that the loaded revisions cite, and the configured names of the people. The names come from the configuration revisions of the candidates. `ListVoteReviews` takes the filter `All`, `NeedsAction`, or `Approved`. Every filter orders by tier, then newest vote day, then record ID; see [review](review.md#lists-and-paging). The list also takes an issue, an official, and a vote day range. The page holds the tier of each row. `GetVoteReviewCounts` counts with the same status filter.
 
-**Pages.** `/Review/Votes` lists the records with the filter tabs and their counts. Each row shows the headline, the roll call, the vote kind, the status, and the open concerns.
+**Pages.** `/Review/Votes` lists the records with the filter tabs and their counts, and a filter form for issue, official, and dates. A row shows a tier badge for tier 1 and tier 2. Each row shows the headline, the roll call, the vote kind, the status, and the open concerns.
 
 `/Review/Votes/{record-id}` has these parts:
 
@@ -317,6 +318,7 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 - `vote_analysis`, `vote_analysis_runs`, and `vote_analysis_budget` hold the queue, the runs, and the daily charge of the task `vote-draft`. They have the shape of the [action tables](actions.md#storage-and-contracts). A run has the reason column for a bypassed run.
 - `vote_drafts` holds one record for each source and roll call. `vote_revisions` holds its revisions as JSON, each with the run of its analysis author. `vote_review_decisions` holds the review decisions of vote records. It mirrors the action decision table.
 - A bill detail is found through `bill_gates` and `bill_pages`, which the bill stream owns. `BillDetailRows` owns this lookup for both the queue rule and the evidence read. Vote drafting adds no table and no column.
+- The migration `ReviewListColumns` adds `candidate_id`, `event_on`, `issue_ids`, and `official_ids` to `vote_drafts`, with GIN indexes on the two arrays. It drops `last_revised_at_utc_ticks`, because no list reads it. It backfills nothing.
 - The migration queues every vote candidate that existed when it ran. The first run can spend up to the daily limit on them.
 
 ## Code map
@@ -345,7 +347,7 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 | Review aggregate | `src/CivicLens.Core/Votes/VoteReview.cs` |
 | Review commands and reads | `src/CivicLens.Application/Votes/SaveVoteDraft.cs`, `src/CivicLens.Application/Votes/DecideVoteReview.cs`, `src/CivicLens.Application/Votes/GetVoteReview.cs`, `src/CivicLens.Application/Votes/ListVoteReviews.cs`, `src/CivicLens.Application/Votes/GetVoteReviewCounts.cs`, `src/CivicLens.Application/Votes/IVoteReviewStore.cs` |
 | Review store | `src/CivicLens.Infrastructure/Votes/PostgresVoteReviewStore.cs`, `src/CivicLens.Infrastructure/Review/ConfiguredPersonNames.cs` |
-| Review pages | `src/CivicLens.Host/Review/VoteList.razor`, `src/CivicLens.Host/Review/VoteEditor.razor`, `src/CivicLens.Host/Review/VoteLabels.cs`, `src/CivicLens.Host/Review/VoteRoutes.cs` |
+| Review pages | `src/CivicLens.Host/Review/VoteList.razor`, `src/CivicLens.Host/Review/DraftListPage.cs`, `src/CivicLens.Host/Review/VoteEditor.razor`, `src/CivicLens.Host/Review/VoteLabels.cs`, `src/CivicLens.Host/Review/VoteRoutes.cs` |
 | Postgres drafting store and append | `src/CivicLens.Infrastructure/Votes/PostgresVoteDraftStore.cs`, `src/CivicLens.Infrastructure/Votes/VoteDraftRows.cs`, `src/CivicLens.Infrastructure/Votes/VoteDraftQueueMapping.cs`, `src/CivicLens.Infrastructure/Votes/VoteDraftQueueRows.cs` |
 | Drafting tables and model adapter | `src/CivicLens.Infrastructure/Votes/Persistence/`, `src/CivicLens.Infrastructure/Votes/AnthropicVoteDraftModel.cs` |
 | Worker composition | `src/CivicLens.Host/Votes/VoteDraftComposition.cs`, `src/CivicLens.Host/Votes/VoteDraftConfiguration.cs` |

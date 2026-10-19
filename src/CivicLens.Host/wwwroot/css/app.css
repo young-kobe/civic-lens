@@ -125,6 +125,7 @@ tr.is-new td { animation: row-in 1.6s var(--ease); }
 .pager { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); padding: 9px var(--s4); border-top: 1px solid var(--line); color: var(--muted); font-size: var(--t-xs); }
 .pager-links { display: flex; gap: var(--s2); }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); padding: 10px var(--s4); border-bottom: 1px solid var(--line); }
+.list-filter { display: flex; flex-wrap: wrap; align-items: end; gap: var(--s3); padding: 10px var(--s4); border-bottom: 1px solid var(--line); }
 .search { width: min(100%, 280px); min-height: 30px; padding: 0 10px; border: 0; border-radius: var(--r-control); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-strong); font-size: var(--t-sm); transition: box-shadow var(--fast); }
 .search:hover { box-shadow: inset 0 0 0 1px var(--muted); }
 .search:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--focus), 0 0 0 3px var(--focus-halo); }

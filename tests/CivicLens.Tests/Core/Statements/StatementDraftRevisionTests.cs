@@ -16,6 +16,16 @@ public sealed class StatementDraftRevisionTests
         new(new string('c', 64), 1, author, DateTimeOffset.UnixEpoch, "Headline", "Summary", null, null, ["warren"], [], [], [],
             [new(Span, StatementQuotationKind.ReleaseText)], []);
 
+    // The review lists sort by this date, and a statement with no stated date still needs a place in that order.
+    [Fact]
+    public void TheEventDateIsTheStatementDateElseTheCaptureDate()
+    {
+        var captured = new DateOnly(2026, 11, 2);
+
+        Assert.Equal(captured, Revision().EventOn(captured));
+        Assert.Equal(Date, (Revision() with { StatementDate = Date, StatementDateEvidence = Span }).EventOn(captured));
+    }
+
     [Fact]
     public void ApprovalNeedsHeadlineSummarySpeakerAndQuotation()
     {

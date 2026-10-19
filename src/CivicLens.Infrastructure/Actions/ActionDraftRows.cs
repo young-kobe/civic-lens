@@ -47,6 +47,12 @@ internal static class ActionDraftRows
         return json is null ? null : ReviewJson.Deserialize<ActionDraftRevision>(json, "action revision");
     }
 
+    public static void Revised(ActionDraftRow draft, ActionDraftRevision revision)
+    {
+        draft.CandidateId = revision.CandidateId;
+        ListedDraftRows.Set(draft, revision.EventOn(), revision.TrackedIssueIds, revision.OfficialIds());
+    }
+
     private static ActionDraftRow NewDraft(ActionDraftRevision revision) => new()
     {
         RecordId = revision.RecordId,

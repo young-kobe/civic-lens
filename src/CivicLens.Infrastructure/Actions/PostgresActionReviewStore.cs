@@ -30,8 +30,7 @@ namespace CivicLens.Infrastructure.Actions;
 public sealed class PostgresActionReviewStore : IActionReviewStore
 {
     internal static readonly ReviewRecords<ActionDraftRow, ActionRevisionRow, ActionReviewDecisionRow, ActionDraftRevision> Records =
-        new(PostgresAdvisoryLock.ActionReview, "Action", nameof(ActionDraftRow.RecordId),
-            (draft, revision) => draft.LastRevisedAtUtcTicks = revision.CreatedAtUtc.UtcTicks);
+        new(PostgresAdvisoryLock.ActionReview, "Action", nameof(ActionDraftRow.RecordId), ActionDraftRows.Revised);
 
     private const string SaveOperation = "action-save";
     private const string DecideOperation = "action-decide";
@@ -68,7 +67,7 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
     public Task<ActionDraftRevision> SaveRevisionAsync(string actorSubject, ActionDraftRevision revision, int expectedRevisionNumber,
         string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
         Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
-            payloadHash, (_, current) =>
+            payloadHash, (_, _, current) =>
             {
                 revision.ValidatePersonEditOf(current);
                 return Task.FromResult(revision);
@@ -104,24 +103,24 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
         return new(ToReview(draft, history), extractions.ToImmutableDictionary(StringComparer.Ordinal), names);
     }
 
-    public async Task<ActionReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter, CancellationToken cancellationToken)
+    public async Task<ActionReviewPage> ListAsync(PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken)
     {
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var slice = filter == DraftStatusFilter.NeedsAction
-            ? await Records.PageAsync(db, cursor, limit, filter, row => row.LastRevisedAtUtcTicks, cancellationToken)
-            : await Records.PageAsync(db, cursor, limit, filter, cancellationToken);
-        var histories = await Records.ReadHistoriesAsync(db, slice.Items, cancellationToken);
+        var slice = await ListedDrafts.PageByTierAsync<ActionDraftRow, ActionAnalysisRow>(db, Records.Drafts(db, filter.Status),
+            ActionDraftTask.Task, nameof(ActionDraftRow.RecordId), cursor, limit, filter, cancellationToken);
+        var drafts = slice.Items.Select(item => item.Draft).ToArray();
+        var histories = await Records.ReadHistoriesAsync(db, drafts, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new([.. slice.Items.Select(row => ToReview(row, histories[row.RecordId]))], slice.NewerCursor, slice.OlderCursor);
+        return new([.. drafts.Select(row => ToReview(row, histories[row.RecordId]))], ListedDrafts.PrioritiesOf(slice.Items),
+            slice.NewerCursor, slice.OlderCursor);
     }
 
     public async Task<ActionReviewCounts> CountAsync(CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var needsAction = await Records.Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken);
-        var approved = await Records.Drafts(db, DraftStatusFilter.Approved).CountAsync(cancellationToken);
+        var (needsAction, approved) = await Records.CountAsync(db, cancellationToken);
         return new(needsAction, approved);
     }
 

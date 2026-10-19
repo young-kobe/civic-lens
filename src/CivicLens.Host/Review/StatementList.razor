@@ -1,4 +1,5 @@
 @page "/Review/Statements"
+@inherits DraftListPage
 
 <TopBarTitle Crumbs="Crumbs" />
 
@@ -18,11 +19,15 @@
         <input type="hidden" name="idempotencyKey" value="@renderKey" />
     </form>
 
-    @if (drafts is not null && notInReview is not null)
+    @if (drafts is not null && notInReview is not null && counts is not null)
     {
         <Panel Title="Drafts" Id="drafts">
             <Aside><FilterTabs Label="Filter statement drafts" Tabs="DraftTabs" /></Aside>
             <ChildContent>
+                <DraftFilterForm Label="Filter statement drafts by issue, official, and date" Action="@($"{StatementRoutes.List}#drafts")"
+                                 ClearHref="@ClearHref(StatementRoutes.List)" Status="@DraftFilterNames.NameOf(Filter)"
+                                 Issues="Issues.Issues" Officials="OfficialChoices"
+                                 IssueId="@IssueId" OfficialId="@OfficialId" From="@From" To="@To" />
                 <DataTable Items="drafts.Items" Caption="Statement drafts">
                     <Head>
                         <th>Statement</th>

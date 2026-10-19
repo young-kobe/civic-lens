@@ -8,25 +8,63 @@ internal static class ReviewKeyset
     private static readonly System.Reflection.MethodInfo Compare =
         typeof(string).GetMethod(nameof(string.Compare), [typeof(string), typeof(string)])!;
 
+    public static long TicksOf(DateOnly date) => date.ToDateTime(TimeOnly.MinValue).Ticks;
+
+    private static DateOnly DateOfTicks(long ticks) => DateOnly.FromDateTime(new DateTime(ticks));
+
     public static IQueryable<T> Page<T>(IQueryable<T> rows, PageCursor? cursor, Expression<Func<T, long>> ticksOf,
         Expression<Func<T, string>> idOf)
     {
+        PageCursor.RequireRank(cursor, ranked: false);
         if (cursor is null) return rows.OrderByDescending(ticksOf).ThenByDescending(idOf);
-        var (ticks, id) = (cursor.Ticks, cursor.Id);
-        var ticksValue = ((Expression<Func<long>>)(() => ticks)).Body;
-        var idValue = ((Expression<Func<string>>)(() => id)).Body;
-        var row = ticksOf.Parameters[0];
-        var rowTicks = ticksOf.Body;
-        var rowId = new ParameterReplacer(idOf.Parameters[0], row).Visit(idOf.Body);
-        var idOrder = Expression.Call(Compare, rowId, idValue);
         var older = cursor.Direction == PageDirection.Older;
-        var beyond = Expression.OrElse(
-            older ? Expression.LessThan(rowTicks, ticksValue) : Expression.GreaterThan(rowTicks, ticksValue),
-            Expression.AndAlso(Expression.Equal(rowTicks, ticksValue),
-                older ? Expression.LessThan(idOrder, Expression.Constant(0)) : Expression.GreaterThan(idOrder, Expression.Constant(0))));
-        var window = rows.Where(Expression.Lambda<Func<T, bool>>(beyond, row));
+        var window = rows.Where(Beyond<T>(older, Key(ticksOf, cursor.Ticks, true), Key(idOf, cursor.Id, true)));
         return older ? window.OrderByDescending(ticksOf).ThenByDescending(idOf) : window.OrderBy(ticksOf).ThenBy(idOf);
     }
+
+    public static IQueryable<T> Page<T>(IQueryable<T> rows, PageCursor? cursor, Expression<Func<T, int>> rankOf,
+        Expression<Func<T, DateOnly>> dateOf, Expression<Func<T, string>> idOf)
+    {
+        PageCursor.RequireRank(cursor, ranked: true);
+        if (cursor is null) return rows.OrderBy(rankOf).ThenByDescending(dateOf).ThenByDescending(idOf);
+        var older = cursor.Direction == PageDirection.Older;
+        var window = rows.Where(Beyond<T>(older, Key(rankOf, cursor.Rank!.Value, false),
+            Key(dateOf, DateOfTicks(cursor.Ticks), true), Key(idOf, cursor.Id, true)));
+        return older
+            ? window.OrderBy(rankOf).ThenByDescending(dateOf).ThenByDescending(idOf)
+            : window.OrderByDescending(rankOf).ThenBy(dateOf).ThenBy(idOf);
+    }
+
+    private static Expression<Func<T, bool>> Beyond<T>(bool older, params KeyPart<T>[] keys)
+    {
+        var row = keys[0].Selector.Parameters[0];
+        Expression? beyond = null;
+        foreach (var key in keys.Reverse())
+        {
+            var value = new ParameterReplacer(key.Selector.Parameters[0], row).Visit(key.Selector.Body);
+            var strictly = Strictly(value, key.Value, older == key.Descending);
+            beyond = beyond is null ? strictly : Expression.OrElse(strictly, Expression.AndAlso(Expression.Equal(value, key.Value), beyond));
+        }
+        return Expression.Lambda<Func<T, bool>>(beyond!, row);
+    }
+
+    private static Expression Strictly(Expression row, Expression value, bool less)
+    {
+        if (row.Type == typeof(string))
+        {
+            var order = Expression.Call(Compare, row, value);
+            return less ? Expression.LessThan(order, Expression.Constant(0)) : Expression.GreaterThan(order, Expression.Constant(0));
+        }
+        return less ? Expression.LessThan(row, value) : Expression.GreaterThan(row, value);
+    }
+
+    private static KeyPart<T> Key<T, TValue>(Expression<Func<T, TValue>> selector, TValue value, bool descending) =>
+        new(selector, Expression.Property(Expression.Constant(new Parameter<TValue>(value)), nameof(Parameter<TValue>.Value)),
+            descending);
+
+    private sealed record KeyPart<T>(LambdaExpression Selector, Expression Value, bool Descending);
+
+    private sealed record Parameter<TValue>(TValue Value);
 
     private sealed class ParameterReplacer(ParameterExpression from, ParameterExpression to) : ExpressionVisitor
     {

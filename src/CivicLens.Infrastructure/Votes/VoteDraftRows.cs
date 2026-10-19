@@ -12,8 +12,7 @@ namespace CivicLens.Infrastructure.Votes;
 internal static class VoteDraftRows
 {
     internal static readonly ReviewRecords<VoteDraftRow, VoteRevisionRow, VoteReviewDecisionRow, VoteDraftRevision> Records =
-        new(PostgresAdvisoryLock.VoteReview, "Vote", nameof(VoteDraftRow.RecordId),
-            (draft, revision) => draft.LastRevisedAtUtcTicks = revision.CreatedAtUtc.UtcTicks);
+        new(PostgresAdvisoryLock.VoteReview, "Vote", nameof(VoteDraftRow.RecordId), Revised);
 
     public static async Task<string?> AppendAnalysisRevisionAsync(CollectionAttemptDbContext db, VoteDraftRevision revision, string runId,
         CancellationToken cancellationToken)
@@ -45,6 +44,12 @@ internal static class VoteDraftRows
                           where draft.RecordId == recordId
                           select revision.RevisionJson).SingleOrDefaultAsync(cancellationToken);
         return json is null ? null : ReviewJson.Deserialize<VoteDraftRevision>(json, "vote revision");
+    }
+
+    private static void Revised(VoteDraftRow draft, VoteDraftRevision revision)
+    {
+        draft.CandidateId = revision.CandidateId;
+        ListedDraftRows.Set(draft, revision.VotedOn, revision.TrackedIssueIds, revision.OfficialIds());
     }
 
     private static VoteDraftRow NewDraft(VoteDraftRevision revision) => new()

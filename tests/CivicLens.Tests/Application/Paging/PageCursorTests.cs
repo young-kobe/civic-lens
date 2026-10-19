@@ -27,7 +27,7 @@ public sealed class PageCursorTests
     [InlineData("o.1.")]
     [InlineData("o.-1.abc")]
     [InlineData("o.+1.abc")]
-    [InlineData("o.1.2.abc")]
+    [InlineData("o.1.2.3.abc")]
     [InlineData("o.1.a b")]
     [InlineData("o.1.a'--")]
     [InlineData("o.99999999999999999999.abc")]
@@ -35,6 +35,43 @@ public sealed class PageCursorTests
     public void TamperedCursorIsRejectedAsInvalidInput(string value)
     {
         Assert.Throws<ArgumentException>(() => PageCursor.Parse(value));
+    }
+
+    [Fact]
+    public void RankedCursorRoundTripsAndTheTwoPartFormStillParses()
+    {
+        var ranked = new PageCursor(PageDirection.Older, 639_000_000_000_000_000, "abc", 2);
+
+        Assert.Equal("o.2.639000000000000000.abc", ranked.Encode());
+        Assert.Equal(ranked, PageCursor.Parse(ranked.Encode()));
+        Assert.Equal(new PageCursor(PageDirection.Newer, 7, "abc"), PageCursor.Parse("n.7.abc"));
+        Assert.Null(PageCursor.Parse("n.7.abc")!.Rank);
+    }
+
+    // The rank is the review tier, so a client cannot ask for a tier that does not exist.
+    [Theory]
+    [InlineData("o.0.2.abc")]
+    [InlineData("o.4.2.abc")]
+    [InlineData("o.-1.2.abc")]
+    [InlineData("o..2.abc")]
+    [InlineData("o.x.2.abc")]
+    [InlineData("o.99999999999.2.abc")]
+    public void ABadRankIsRejectedAsInvalidInput(string value)
+    {
+        Assert.Throws<ArgumentException>(() => PageCursor.Parse(value));
+    }
+
+    [Fact]
+    public void RankedSliceKeepsTheRankInItsCursorsAndOnAnEmptyPage()
+    {
+        var cursor = new PageCursor(PageDirection.Older, 20, "b", 2);
+
+        var slice = KeysetSlice<(int Rank, long Ticks, string Id)>.Create([(3, 10L, "a")], 2, cursor, RankedKey);
+        var empty = KeysetSlice<(int Rank, long Ticks, string Id)>.Create([], 2, cursor, RankedKey);
+
+        Assert.Equal(new PageCursor(PageDirection.Newer, 10, "a", 3), PageCursor.Parse(slice.NewerCursor));
+        Assert.Null(slice.OlderCursor);
+        Assert.Equal(new PageCursor(PageDirection.Newer, 20, "b", 2), PageCursor.Parse(empty.NewerCursor));
     }
 
     [Fact]
@@ -106,6 +143,8 @@ public sealed class PageCursorTests
         Assert.Null(slice.NewerCursor);
         Assert.Null(slice.OlderCursor);
     }
+
+    private static (int?, long, string) RankedKey((int Rank, long Ticks, string Id) row) => (row.Rank, row.Ticks, row.Id);
 
     private static (long, string) Key((long Ticks, string Id) row) => row;
 }

@@ -64,17 +64,35 @@ public sealed partial class PostgresHouseVoteTests
         var recordId = await RecordIdAsync(first);
         await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Approve);
         Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM vote_drafts WHERE record_id = '{recordId}'"));
-        var approvedAt = (long)(await ScalarAsync($"SELECT last_revised_at_utc_ticks FROM vote_drafts WHERE record_id = '{recordId}'"))!;
 
         var second = await PendingCandidateAsync(Updated.AddDays(1));
         await SettleAsync(second, await RevisionAsync(second, 2));
 
         Assert.Equal("AwaitingReview", await ScalarAsync($"SELECT review_status FROM vote_drafts WHERE record_id = '{recordId}'"));
-        Assert.True((long)(await ScalarAsync($"SELECT last_revised_at_utc_ticks FROM vote_drafts WHERE record_id = '{recordId}'"))! > approvedAt);
-        var needsAction = await new ListVoteReviews(VoteReviews()).ExecuteAsync(Reviewer, null, filter: DraftStatusFilter.NeedsAction);
+        var needsAction = await new ListVoteReviews(VoteReviews()).ExecuteAsync(Reviewer, null, filter: new DraftListFilter(DraftStatusFilter.NeedsAction));
         var item = Assert.Single(needsAction.Items);
         Assert.Equal((2, 1), (item.CurrentRevision.RevisionNumber, item.LastApprovedRevision!.RevisionNumber));
         Assert.Equal((1, 0), await CountsAsync());
+    }
+
+    // The lists filter and sort on these columns, so each new revision must replace them or the lists would show stale members.
+    [Fact]
+    public async Task EachWorkerRevisionReplacesTheListedColumnsWithThoseOfTheCurrentRevision()
+    {
+        var first = await PendingCandidateAsync();
+        await SettleAsync(first, await RevisionAsync(first, 1));
+        var recordId = await RecordIdAsync(first);
+        var second = await PendingCandidateAsync(Updated.AddDays(1));
+        var revised = await RevisionAsync(second, 2);
+        await SettleAsync(second, revised with { VotedOn = revised.VotedOn.AddDays(3), TrackedIssueIds = ["housing"] });
+
+        var stored = (string)(await ScalarAsync($"""
+            SELECT concat_ws('|', candidate_id, event_on::text, array_to_string(issue_ids, ','), array_to_string(official_ids, ','))
+            FROM vote_drafts WHERE record_id = '{recordId}'
+            """))!;
+
+        var expected = revised with { VotedOn = revised.VotedOn.AddDays(3) };
+        Assert.Equal($"{second}|{expected.VotedOn:yyyy-MM-dd}|housing|{string.Join(',', expected.OfficialIds())}", stored);
     }
 
     [Fact]

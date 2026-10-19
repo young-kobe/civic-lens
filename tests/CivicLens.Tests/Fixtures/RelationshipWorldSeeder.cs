@@ -32,14 +32,17 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
     public Task ActionAsync(ActionDraftRevision action, string reviewStatus = "Approved") => ExecuteAsync("""
         SET session_replication_role = replica;
         INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, review_state_version,
-                                   review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
-        VALUES (@id, @source, @congress, @type, @bill, @number, 0, @status, 1, 1)
-        ON CONFLICT (record_id) DO UPDATE SET current_revision_number = @number, review_status = @status;
+                                   review_status, created_at_utc_ticks, candidate_id, event_on, issue_ids, official_ids)
+        VALUES (@id, @source, @congress, @type, @bill, @number, 0, @status, 1, @candidate, @eventOn, @issues, @officials)
+        ON CONFLICT (record_id) DO UPDATE SET current_revision_number = @number, review_status = @status, candidate_id = @candidate,
+                                              event_on = @eventOn, issue_ids = @issues, official_ids = @officials;
         INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
         VALUES (@id, @number, 'auth0|editor', 'Person', NULL, @json, 1)
         ON CONFLICT (record_id, revision_number) DO UPDATE SET revision_json = EXCLUDED.revision_json
         """, ("id", action.RecordId), ("source", action.SourceId), ("congress", action.Congress), ("type", action.BillType),
-        ("bill", action.BillNumber), ("number", action.RevisionNumber), ("status", reviewStatus), ("json", JsonSerializer.Serialize(action, Web)));
+        ("bill", action.BillNumber), ("number", action.RevisionNumber), ("status", reviewStatus), ("json", JsonSerializer.Serialize(action, Web)),
+        ("candidate", action.CandidateId), ("eventOn", action.EventOn()), ("issues", action.TrackedIssueIds.ToArray()),
+        ("officials", action.OfficialIds().ToArray()));
 
     public Task VoteAsync(VoteDraftRevision vote, string reviewStatus = "Approved") => ExecuteAsync("""
         SET session_replication_role = replica;
@@ -48,16 +51,18 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
         VALUES (@candidate, @source, @congress, @session, @roll, 1, @type, @bill, 'detail', 'members', @extraction, @extraction, @extraction, 1)
         ON CONFLICT DO NOTHING;
         INSERT INTO vote_drafts (record_id, source_id, congress, session_number, roll_call_number, current_revision_number, review_state_version,
-                                 review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
-        VALUES (@id, @source, @congress, @session, @roll, @number, 0, @status, 1, 1)
-        ON CONFLICT (record_id) DO UPDATE SET current_revision_number = @number, review_status = @status;
+                                 review_status, created_at_utc_ticks, candidate_id, event_on, issue_ids, official_ids)
+        VALUES (@id, @source, @congress, @session, @roll, @number, 0, @status, 1, @candidate, @eventOn, @issues, @officials)
+        ON CONFLICT (record_id) DO UPDATE SET current_revision_number = @number, review_status = @status, candidate_id = @candidate,
+                                              event_on = @eventOn, issue_ids = @issues, official_ids = @officials;
         INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
         VALUES (@id, @number, 'auth0|editor', 'Person', NULL, @json, 1)
         ON CONFLICT (record_id, revision_number) DO UPDATE SET revision_json = EXCLUDED.revision_json
         """, ("id", vote.RecordId), ("candidate", vote.CandidateId), ("source", vote.SourceId), ("congress", vote.Congress),
         ("session", vote.SessionNumber), ("roll", vote.RollCallNumber), ("type", vote.BillType!), ("bill", vote.BillNumber!.Value),
         ("extraction", RelationshipFixtures.ExtractionId), ("number", vote.RevisionNumber), ("status", reviewStatus),
-        ("json", JsonSerializer.Serialize(vote, Web)));
+        ("json", JsonSerializer.Serialize(vote, Web)), ("eventOn", vote.VotedOn), ("issues", vote.TrackedIssueIds.ToArray()),
+        ("officials", vote.OfficialIds().ToArray()));
 
     public Task RevisionAsync(RelationshipRevision revision) => ExecuteAsync("""
         SET session_replication_role = replica;
@@ -69,6 +74,13 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
         VALUES (@id, @number, @author, @kind, CASE WHEN @kind = 'Analysis' THEN substr(md5(@id || @number::text), 1, 32) END, @json, 1)
         """, ("id", revision.RecordId), ("number", revision.RevisionNumber), ("author", revision.AuthorSubject),
         ("kind", ReviewAuthor.KindOf(revision.AuthorSubject).ToString()), ("json", JsonSerializer.Serialize(revision, Web)));
+
+    public Task PriorityAsync(string analysisTable, string candidateId, string task, int priority) => ExecuteAsync($"""
+        SET session_replication_role = replica;
+        INSERT INTO {analysisTable} (candidate_id, task, status, fence, attempts, reserved_tokens, created_at_utc_ticks, priority)
+        VALUES (@id, @task, 'Succeeded', 0, 0, 0, 1, @priority)
+        ON CONFLICT (candidate_id, task) DO UPDATE SET priority = @priority
+        """, ("id", candidateId), ("task", task), ("priority", (short)priority));
 
     public Task SetStatusAsync(string table, string idColumn, string id, string status) =>
         ExecuteAsync($"UPDATE {table} SET review_status = @status WHERE {idColumn} = @id", ("id", id), ("status", status));

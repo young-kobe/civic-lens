@@ -32,7 +32,7 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
     public Task<BriefRevision> SaveRevisionAsync(string actorSubject, BriefRevision revision, int expectedRevisionNumber,
         string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
         Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
-            payloadHash, (_, current) =>
+            payloadHash, (_, _, current) =>
             {
                 revision.ValidatePersonEditOf(current);
                 return Task.FromResult(revision);
@@ -86,8 +86,7 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
     public async Task<BriefReviewCounts> CountAsync(CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var needsAction = await Records.Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken);
-        var approved = await Records.Drafts(db, DraftStatusFilter.Approved).CountAsync(cancellationToken);
+        var (needsAction, approved) = await Records.CountAsync(db, cancellationToken);
         return new(needsAction, approved);
     }
 

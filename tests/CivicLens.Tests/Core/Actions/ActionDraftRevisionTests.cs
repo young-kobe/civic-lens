@@ -232,4 +232,23 @@ public sealed class ActionDraftRevisionTests
         Assert.Equal(revision.Headline, back.Headline);
         Assert.Equal(revision.Sponsorships[0], back.Sponsorships[0]);
     }
+
+    // The review lists sort by this date, so a late withdrawal must count as the newest event of the bill.
+    [Fact]
+    public void TheEventDateIsTheNewestSponsoredOrWithdrawnDateAmongTheSponsorships()
+    {
+        var early = Sponsorship() with { PersonId = "markey", SponsoredOn = new DateOnly(2025, 1, 3), WithdrawnOn = new DateOnly(2025, 7, 1) };
+        var later = Sponsorship() with { PersonId = "warren", SponsoredOn = new DateOnly(2025, 3, 1) };
+
+        Assert.Equal(new DateOnly(2025, 7, 1), (Model() with { Sponsorships = [early, later] }).EventOn());
+        Assert.Equal(new DateOnly(2025, 3, 1), (Model() with { Sponsorships = [early with { WithdrawnOn = null }, later] }).EventOn());
+    }
+
+    [Fact]
+    public void TheOfficialIdsNameEachSponsorOnceEvenWhenTheySponsoredAgain()
+    {
+        var again = Sponsorship() with { SponsoredOn = new DateOnly(2025, 2, 1) };
+
+        Assert.Equal(["warren"], (Model() with { Sponsorships = [Sponsorship(), again] }).OfficialIds().ToArray());
+    }
 }

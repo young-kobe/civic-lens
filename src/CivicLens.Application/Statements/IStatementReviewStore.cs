@@ -20,7 +20,9 @@ public interface IStatementReviewStore
 
     Task<StatementReviewRead?> GetAsync(string candidateId, CancellationToken cancellationToken);
 
-    Task<StatementReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter, CancellationToken cancellationToken);
+    Task<StatementReviewPage> ListAsync(PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken);
+
+    Task<StatementReviewCounts> CountAsync(CancellationToken cancellationToken);
 
     Task<StatementNotInReviewPage> ListNotInReviewAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken);
 

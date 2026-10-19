@@ -72,6 +72,7 @@ public sealed partial class PostgresCollectionJobStore
 
     private static IQueryable<JobRow> KeysetJobs(IQueryable<JobRow> rows, PageCursor? cursor)
     {
+        PageCursor.RequireRank(cursor, ranked: false);
         if (cursor is null) return rows.OrderByDescending(row => row.CreatedAt).ThenBy(row => row.JobId);
         var (ticks, id) = (cursor.Ticks, cursor.Id);
         return cursor.Direction == PageDirection.Older

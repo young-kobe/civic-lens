@@ -1,3 +1,4 @@
+using CivicLens.Infrastructure.Review.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -21,6 +22,9 @@ internal sealed class StatementDraftRowConfiguration : IEntityTypeConfiguration<
         builder.Property(row => row.ReviewStateVersion).HasColumnName("review_state_version");
         builder.Property(row => row.ReviewStatus).HasColumnName("review_status").HasConversion<string>().HasMaxLength(32).IsRequired();
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
+        ListedDraftTableConfiguration.ConfigureListing(builder, "statement_drafts");
+        builder.HasIndex(nameof(StatementDraftRow.EventOn), nameof(StatementDraftRow.CandidateId)).IsDescending(true, true)
+            .HasDatabaseName("ix_statement_drafts_listing");
         builder.HasOne<StatementCandidateRow>().WithMany().HasForeignKey(row => row.CandidateId).OnDelete(DeleteBehavior.Restrict);
     }
 }

@@ -41,7 +41,7 @@ internal sealed class FakeActionReviewStore : IActionReviewStore
 
     public Task<ActionReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-    public Task<ActionReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter, CancellationToken cancellationToken) =>
+    public Task<ActionReviewPage> ListAsync(PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
     public Task<ActionReviewCounts> CountAsync(CancellationToken cancellationToken) => throw new NotSupportedException();

@@ -1,10 +1,8 @@
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
-using CivicLens.Core.Review;
 using CivicLens.Host.Components.Layout;
 using CivicLens.Host.Components.Ui;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Authorization;
 
 namespace CivicLens.Host.Review;
 
@@ -16,29 +14,21 @@ public sealed partial class StatementList
     private static readonly IReadOnlyList<Crumb> Crumbs = [new("Review", "/Review"), new("Statements")];
 
     private readonly string renderKey = Guid.NewGuid().ToString("N");
-    private ReviewActor? actor;
     private StatementReviewPage? drafts;
     private StatementNotInReviewPage? notInReview;
-    private string? error;
+    private StatementReviewCounts? counts;
 
-    [Inject] private ReviewActorAccessor Actors { get; set; } = default!;
     [Inject] private ListStatementReviews ListDrafts { get; set; } = default!;
+    [Inject] private GetStatementReviewCounts GetCounts { get; set; } = default!;
     [Inject] private ListStatementsNotInReview ListNotInReview { get; set; } = default!;
     [Inject] private CreateStatementDraft CreateDraft { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
 
-    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
-    [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = default!;
-
-    [SupplyParameterFromQuery(Name = "drafts")] private string? DraftsFilterName { get; set; }
-    [SupplyParameterFromQuery(Name = "draftsCursor")] private string? DraftsCursor { get; set; }
     [SupplyParameterFromQuery(Name = "notInReview")] private string? NotInReviewCursor { get; set; }
     [SupplyParameterFromQuery(Name = "status")] private string? Status { get; set; }
 
     [SupplyParameterFromForm(FormName = StartForm, Name = "candidateId")] private string? StartCandidateId { get; set; }
     [SupplyParameterFromForm(FormName = StartForm, Name = "idempotencyKey")] private string? StartKey { get; set; }
-
-    private DraftStatusFilter Filter => DraftFilterNames.Parse(DraftsFilterName);
 
     private string? StatusMessage => Status switch
     {
@@ -49,35 +39,25 @@ public sealed partial class StatementList
 
     protected override async Task OnInitializedAsync()
     {
-        actor = Actors.GetActor((await AuthenticationState).User);
+        await ReadActorAsync();
         if (HttpMethods.IsPost(HttpContext.Request.Method)) return;
-        var cancellationToken = HttpContext.RequestAborted;
-        try
+        await LoadGuardedAsync(async () =>
         {
-            drafts = await ListDrafts.ExecuteAsync(actor, DraftsCursor, PageSize, Filter, cancellationToken);
-            notInReview = await ListNotInReview.ExecuteAsync(actor, NotInReviewCursor, PageSize, cancellationToken);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (ArgumentException)
-        {
-            error = "This page link is no longer valid. Go back to the first page of the list.";
-        }
-        catch (Exception)
-        {
-            error = "The statement list could not load. Refresh the page to try again.";
-        }
+            drafts = await ListDrafts.ExecuteAsync(actor, DraftsCursor, PageSize, ReadListFilter(), RequestAborted);
+            counts = await GetCounts.ExecuteAsync(actor, RequestAborted);
+            notInReview = await ListNotInReview.ExecuteAsync(actor, NotInReviewCursor, PageSize, RequestAborted);
+        }, "The statement list could not load. Refresh the page to try again.");
     }
 
     private async Task StartDraftAsync() => Navigation.NavigateTo(await StartTargetAsync());
 
     private async Task<string> StartTargetAsync()
     {
-        var cancellationToken = HttpContext.RequestAborted;
         try
         {
-            return await StatementDraftStart.ExecuteAsync(CreateDraft, actor!, StartCandidateId, StartKey, cancellationToken);
+            return await StatementDraftStart.ExecuteAsync(CreateDraft, actor, StartCandidateId, StartKey, RequestAborted);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (OperationCanceledException) when (RequestAborted.IsCancellationRequested) { throw; }
         catch (ArgumentException) { return StatementRoutes.List + "?status=invalid"; }
         catch (Exception) { return StatementRoutes.List + "?status=unavailable"; }
     }
@@ -86,22 +66,16 @@ public sealed partial class StatementList
         ? DraftStatusDisplay.Label(draft.CurrentStatus, 0) : DraftStatusDisplay.DraftName(draft.CurrentRevision.Headline);
 
     private IReadOnlyList<FilterTab> DraftTabs =>
-        DraftFilterTabs.For(Filter, name => Href(name, null, NotInReviewCursor, "drafts"));
+        DraftFilterTabs.For(Filter, name => StatementHref(name, null, NotInReviewCursor, "drafts"), counts!.NeedsAction, counts.Approved);
 
     private string? DraftsHref(string? cursor) =>
-        cursor is null ? null : Href(DraftFilterNames.NameOf(Filter), cursor, NotInReviewCursor, "drafts");
+        cursor is null ? null : StatementHref(DraftFilterNames.NameOf(Filter), cursor, NotInReviewCursor, "drafts");
 
     private string? NotInReviewHref(string? cursor) =>
-        cursor is null ? null : Href(DraftFilterNames.NameOf(Filter), DraftsCursor, cursor, "not-in-review");
+        cursor is null ? null : StatementHref(DraftFilterNames.NameOf(Filter), DraftsCursor, cursor, "not-in-review");
 
-    private static string Href(string? filter, string? draftsCursor, string? notInReviewCursor, string fragment)
-    {
-        var query = new List<string>();
-        if (filter is not null) query.Add("drafts=" + filter);
-        if (draftsCursor is not null) query.Add("draftsCursor=" + Uri.EscapeDataString(draftsCursor));
-        if (notInReviewCursor is not null) query.Add("notInReview=" + Uri.EscapeDataString(notInReviewCursor));
-        return StatementRoutes.List + (query.Count == 0 ? "" : "?" + string.Join('&', query)) + "#" + fragment;
-    }
+    private string StatementHref(string? status, string? draftsCursor, string? notInReviewCursor, string fragment) =>
+        Href(StatementRoutes.List, status, draftsCursor, fragment, Part("notInReview", notInReviewCursor));
 
     private (string Title, string Text) DraftsEmpty => Filter switch
     {

@@ -25,7 +25,8 @@ The actions feature drafts one record for each bill that has an [action candidat
 - The step verifies saved extractions against current versions before it reads any capture. A version upgrade and changed saved text therefore get different codes.
 - Actions have their own review lock key, `civic-lens-action-review`, last in the publication lock order.
 - Each record is one queue item. A newer analysis revision replaces an unreviewed one, and review shows the change since the last approved revision.
-- The analysis append computes `review_status` again under the action review lock. `last_revised_at_utc_ticks` holds the time of the current revision, and the Needs action list sorts by it.
+- The analysis append computes `review_status` again under the action review lock. The same append copies four values of the revision to the draft row. They are the candidate ID, the event date, the tracked issue IDs, and the sponsor person IDs. The lists filter and sort on them.
+- The event date of an action is the newest sponsored or withdrawn date of its sponsorships. Enforced by `ActionDraftRevision.EventOn`. Test: `ActionDraftRevisionTests.TheEventDateIsTheNewestSponsoredOrWithdrawnDateAmongTheSponsorships`.
 - A revision is sponsorship-only when its headline, summary, `textOrigin`, and suggestion equal those of the last approved revision. The bill title, policy area, policy area ID, summary version, tracked issues, issue revision, and Sponsor-role entries must also be equal. At least one sponsorship must be added, changed, or no longer listed. It gets a compact view of those sponsorships with their citations. Any other revision shows the old and the new text side by side.
 - The compact view keys each sponsorship by bioguide ID, role, and sponsorship date. A keyed entry is Changed when its withdrawal date is set, changed, or cleared, when its person ID changes, or when its original-cosponsor flag changes. A change in citations alone is not shown. Code builds each citation by exact match to the saved extraction, so the cited text states the same fact.
 - Bulk approval accepts sponsorship-only revisions only. It takes up to 64 records and records one decision for each record, with a result for each record.
@@ -153,7 +154,7 @@ A cosponsor is matched by its exact rendered line. A cosponsor who withdrew and 
 
 The worker appends a new revision to the record's draft, written by `civic-lens:analysis` with its run ID. A sponsorship-only revision copies the text, the origin, and the suggestion; see step 8. Otherwise, if the current revision has `textOrigin` `Person`, the new revision keeps that text and origin. It updates the structured part and stores the model's text as the suggestion. The origin travels with the revision, so a later run still keeps the person's text.
 
-The settlement takes the queue row lock and then `civic-lens-action-review`. `ActionDraftRows.AppendAnalysisRevisionAsync` returns a refusal code or appends through `ReviewRecords.AppendRevision`, which computes `review_status` again and sets `last_revised_at_utc_ticks`:
+The settlement takes the queue row lock and then `civic-lens-action-review`. `ActionDraftRows.AppendAnalysisRevisionAsync` returns a refusal code or appends through `ReviewRecords.AppendRevision`, which computes `review_status` again and sets the listed columns:
 
 - The bill has a newer candidate: the run is kept as `DraftDiscarded`, and the entry settles as `supersededByNewerCandidate`.
 - The draft's current revision number is not one less than the new revision: a drafted run is kept as `DraftDiscarded`. A Bypassed run stays Bypassed. The entry moves to RetryWaiting with the code `revisionConflict` and the usual backoff, and the next attempt compares again.
@@ -192,9 +193,9 @@ Action review uses the shared decision rules and review cycles in [review](revie
 
 **Bulk approval.** `ApproveSponsorshipChanges` takes 1 to 64 distinct records, each with its expected revision and review state version. It records one approval for each record in its own transaction, with the idempotency key `{key}:{record ID}`. The store refuses a record that is not sponsorship-only under the lock. Each record gets one result: Approved, Conflict, Rejected, or NotFound. A record with open concerns is Rejected, because bulk approval writes no resolution note.
 
-**Reads.** `GetActionReview` returns the review cycle, the extractions that the loaded revisions cite, and the configured names of the officials. The names come from the configuration revisions of the candidates. `ListActionReviews` takes the filter `All`, `NeedsAction`, or `Approved`. Needs action orders by `last_revised_at_utc_ticks`, then record ID. The other filters order by creation time, then record ID. `GetActionReviewCounts` counts with the same status filter as the list.
+**Reads.** `GetActionReview` returns the review cycle, the extractions that the loaded revisions cite, and the configured names of the officials. The names come from the configuration revisions of the candidates. `ListActionReviews` takes the filter `All`, `NeedsAction`, or `Approved`. Every filter orders by tier, then newest event date, then record ID; see [review](review.md#lists-and-paging). The list also takes an issue, an official, and an event date range. The page holds the tier of each row. `GetActionReviewCounts` counts with the same status filter as the list.
 
-**Pages.** `/Review/Actions` lists the records with the filter tabs and their counts. A sponsorship-only row has a checkbox for bulk approval and a badge. The page shows a result for each record after a bulk approval.
+**Pages.** `/Review/Actions` lists the records with the filter tabs and their counts, and a filter form for issue, official, and dates. A row shows a tier badge for tier 1 and tier 2. A sponsorship-only row has a checkbox for bulk approval and a badge. The page shows a result for each record after a bulk approval.
 
 `/Review/Actions/{record-id}` has these parts:
 
@@ -229,6 +230,7 @@ All are owner commands. Variables and examples are in [operations](../operations
 - For each existing candidate whose summaries had closed, the migration adds the candidate with summaries, created at the old completion time. It adds the index `ix_action_candidates_bill` on the source, the bill, and the update date. It then queues one Pending entry for every candidate.
 - `action_drafts` has no foreign key to `action_candidates`. The record ID comes from the bill identity, and each revision names its candidate in `candidateId`.
 - A Bypassed run records its reason in `action_analysis_runs`. The migration `ActionReview` adds the reason `sponsorshipsChanged` to `ck_action_analysis_runs_reason`.
+- The migration `ReviewListColumns` adds `candidate_id`, `event_on`, `issue_ids`, and `official_ids` to `action_drafts`, with GIN indexes on the two arrays. It drops `last_revised_at_utc_ticks` and `ix_action_drafts_needs_action_revised`, because no list reads them. It backfills nothing.
 - The migration `ActionReview` adds `review_state_version`, `review_status`, and `last_revised_at_utc_ticks` to `action_drafts`. Existing drafts get `AwaitingReview`, version 0, and the creation time of their current revision. It adds `action_review_decisions`, which mirrors the statement decision table, and partial indexes for the Approved and Needs action lists.
 - The commands use the replay receipt table with the operations `action-save` and `action-decide`.
 - `ActionDraftRevision` holds the headline, the summary, `textOrigin` (`Model` or `Person`), and an optional `suggestion`. The suggestion holds a headline, a summary, a run ID, and the fingerprint it was made under.
@@ -250,7 +252,7 @@ All are owner commands. Variables and examples are in [operations](../operations
 | Review aggregate and change view | `src/CivicLens.Core/Actions/ActionReview.cs`, `src/CivicLens.Core/Actions/ActionSponsorshipChanges.cs` |
 | Review commands and reads | `src/CivicLens.Application/Actions/SaveActionDraft.cs`, `src/CivicLens.Application/Actions/DecideActionReview.cs`, `src/CivicLens.Application/Actions/ApproveSponsorshipChanges.cs`, `src/CivicLens.Application/Actions/GetActionReview.cs`, `src/CivicLens.Application/Actions/ListActionReviews.cs`, `src/CivicLens.Application/Actions/GetActionReviewCounts.cs`, `src/CivicLens.Application/Actions/IActionReviewStore.cs` |
 | Review store | `src/CivicLens.Infrastructure/Actions/PostgresActionReviewStore.cs`, `src/CivicLens.Infrastructure/Actions/Persistence/ActionReviewDecisionRow.cs` |
-| Review pages | `src/CivicLens.Host/Review/ActionList.razor`, `src/CivicLens.Host/Review/ActionEditor.razor`, `src/CivicLens.Host/Review/ActionLabels.cs`, `src/CivicLens.Host/Review/ActionRoutes.cs` |
+| Review pages | `src/CivicLens.Host/Review/ActionList.razor`, `src/CivicLens.Host/Review/DraftListPage.cs`, `src/CivicLens.Host/Review/ActionEditor.razor`, `src/CivicLens.Host/Review/ActionLabels.cs`, `src/CivicLens.Host/Review/ActionRoutes.cs` |
 | Publication | `src/CivicLens.Application/Publication/ActionRecordLoader.cs`, `src/CivicLens.Application/Publication/PublishedActionBuilder.cs`, `src/CivicLens.Publication.Contracts/PublishedAction.cs`, `src/CivicLens.Host/Publication/PublishedActionPage.razor` |
 | Record ID hash | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ActionCandidates.cs` |
 | Owner requeue of Blocked entries | `src/CivicLens.Application/Actions/RequeueBlockedActionDrafts.cs` |

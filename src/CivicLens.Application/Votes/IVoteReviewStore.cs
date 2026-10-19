@@ -18,7 +18,7 @@ public interface IVoteReviewStore
 
     Task<VoteReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken);
 
-    Task<VoteReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter, CancellationToken cancellationToken);
+    Task<VoteReviewPage> ListAsync(PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken);
 
     Task<VoteReviewCounts> CountAsync(CancellationToken cancellationToken);
 

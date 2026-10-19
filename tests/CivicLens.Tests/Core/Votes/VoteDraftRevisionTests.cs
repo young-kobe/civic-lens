@@ -177,6 +177,14 @@ public sealed class VoteDraftRevisionTests
         TextOrigin = ReviewTextOrigin.Person
     };
 
+    [Fact]
+    public void TheOfficialIdsNameEachMemberOnceInTheOrderOfTheMemberVotes()
+    {
+        var revision = Revision() with { Members = [Member(), Member() with { PersonId = "markey" }, Member()] };
+
+        Assert.Equal(["aderholt", "markey"], revision.OfficialIds().ToArray());
+    }
+
     private static MemberVote Member() => new("aderholt", "A000055", "Yea", new SourceSpan(ExtractionId, 30, 40));
 
     private static VoteDraftRevision Revision(int number = 1, string author = "civic-lens:analysis") => new(

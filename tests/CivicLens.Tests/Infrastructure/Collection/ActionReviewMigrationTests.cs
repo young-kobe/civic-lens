@@ -21,7 +21,7 @@ public sealed class ActionReviewMigrationTests(PostgresCollection postgres) : IA
     public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
 
     [Fact]
-    public async Task BackfillPutsEveryDraftInReviewAndDatesItByItsCurrentRevisionSoTheNeedsActionOrderHoldsForOldDrafts()
+    public async Task BackfillPutsEveryDraftInReview()
     {
         await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>()
             .UseNpgsql(connectionString).Options);
@@ -45,10 +45,10 @@ public sealed class ActionReviewMigrationTests(PostgresCollection postgres) : IA
         await using var read = new NpgsqlConnection(connectionString);
         await read.OpenAsync();
         await using var query = new NpgsqlCommand(
-            "SELECT review_status, review_state_version, last_revised_at_utc_ticks FROM action_drafts", read);
+            "SELECT review_status, review_state_version FROM action_drafts", read);
         await using var reader = await query.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
-        Assert.Equal(("AwaitingReview", 0, 20L), (reader.GetString(0), reader.GetInt32(1), reader.GetInt64(2)));
+        Assert.Equal(("AwaitingReview", 0), (reader.GetString(0), reader.GetInt32(1)));
         Assert.False(db.Database.HasPendingModelChanges());
     }
 }

@@ -18,7 +18,7 @@ public interface IActionReviewStore
 
     Task<ActionReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken);
 
-    Task<ActionReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter, CancellationToken cancellationToken);
+    Task<ActionReviewPage> ListAsync(PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken);
 
     Task<ActionReviewCounts> CountAsync(CancellationToken cancellationToken);
 

@@ -70,7 +70,7 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
         DocumentChangeDraftRevision revision, int expectedRevisionNumber, bool changeDateChecked, string idempotencyKey,
         string payloadHash, CancellationToken cancellationToken) =>
         Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
-            payloadHash, async (db, current) =>
+            payloadHash, async (db, _, current) =>
             {
                 var saved = revision.KeepingAiChangeDateOnlyIfChecked(current, changeDateChecked) with { ComparisonId = current.ComparisonId };
                 await ValidateRevisionAgainstEvidenceAsync(db, saved, cancellationToken);
@@ -188,8 +188,7 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var newChanges = await ReviewQueries.EligibleComparisons(db).CountAsync(cancellationToken);
-        var needingAction = await Records.Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken);
-        var approved = await Records.Drafts(db, DraftStatusFilter.Approved).CountAsync(cancellationToken);
+        var (needingAction, approved) = await Records.CountAsync(db, cancellationToken);
         return new(newChanges, needingAction, approved);
     }
 

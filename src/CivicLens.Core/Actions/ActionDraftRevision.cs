@@ -24,6 +24,10 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     public IEnumerable<SourceSpan> Citations => Sponsorships.SelectMany(item => item.Citations)
         .Concat(SummaryCitation is { } summary ? [summary] : []).Concat(PolicyAreaCitation is { } area ? [area] : []);
 
+    public DateOnly EventOn() => Sponsorships.Max(item => item.WithdrawnOn ?? item.SponsoredOn);
+
+    public ImmutableArray<string> OfficialIds() => [.. Sponsorships.Select(item => item.PersonId).Distinct(StringComparer.Ordinal)];
+
     public void ValidateShape()
     {
         if (!LowercaseHex.Is(RecordId, 64) || !LowercaseHex.Is(CandidateId, 64) || !LowercaseHex.Is(Fingerprint, 64) ||
