@@ -18,6 +18,17 @@
         <Notice Tone="Tone.Bad">@error</Notice>
     }
 
+    @if (lookupMessage is not null)
+    {
+        <Notice Tone="Tone.Warn" Dismissible="true">@lookupMessage</Notice>
+    }
+    <form class="list-filter" method="get" action="/Review" role="search" aria-label="Find a draft by bill or roll call">
+        <Field Label="Find a draft" For="find" Hint="A bill such as HR 1234 or 118 HR 1234, or a roll call such as Roll 245.">
+            <input id="find" name="find" value="@Find" maxlength="64" aria-describedby="find-hint" />
+        </Field>
+        <Button Variant="ButtonVariant.Primary" Small="true" Type="submit">Find</Button>
+    </form>
+
     <form id="start-draft" method="post" @formname="start-draft" @onsubmit="StartDraftAsync">
         <AntiforgeryToken />
         <input type="hidden" name="idempotencyKey" value="@renderKey" />

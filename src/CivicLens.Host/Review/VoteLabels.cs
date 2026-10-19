@@ -5,7 +5,10 @@ namespace CivicLens.Host.Review;
 internal static class VoteLabels
 {
     public static string RollCall(VoteDraftRevision revision) =>
-        $"Roll call {revision.RollCallNumber}, Congress {revision.Congress}, session {revision.SessionNumber}";
+        RollCall(revision.Congress, revision.SessionNumber, revision.RollCallNumber);
+
+    public static string RollCall(int congress, int sessionNumber, int rollCallNumber) =>
+        $"Roll call {rollCallNumber}, Congress {congress}, session {sessionNumber}";
 
     public static string Bill(VoteDraftRevision revision) =>
         revision.BillType is null ? "None" : ActionLabels.Bill(revision.Congress, revision.BillType, revision.BillNumber!.Value);

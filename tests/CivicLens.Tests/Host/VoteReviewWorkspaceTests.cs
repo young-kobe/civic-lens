@@ -65,6 +65,47 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
     }
 
     [Fact]
+    public async Task TheVotePageLinksTheActionDraftOfItsBillAndTheRollCallOnTheClerkSite()
+    {
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+        var recordId = await SeedVoteDraftAsync(billNumber: 1234);
+        await new RelationshipWorldSeeder(host.ConnectionString).ActionAsync(RelationshipFixtures.Action(1234), "AwaitingReview");
+
+        var page = await host.GetDocumentAsync($"/Review/Votes/{recordId}");
+
+        var links = page.QuerySelectorAll("[aria-labelledby='evidence'] a").ToDictionary(link => link.TextContent, link => link);
+        Assert.Equal($"/Review/Actions/{RelationshipFixtures.ActionId}", links["Action draft of this bill"].GetAttribute("href"));
+        Assert.Equal("https://clerk.house.gov/evs/2025/roll100.xml", links["Roll call on clerk.house.gov"].GetAttribute("href"));
+        Assert.Equal("noopener noreferrer", links["Roll call on clerk.house.gov"].GetAttribute("rel"));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(1234)]
+    public async Task TheVotePageHasNoActionLinkWhenTheVoteNamesNoBillOrTheBillHasNoActionDraft(int? billNumber)
+    {
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+        var recordId = await SeedVoteDraftAsync(billNumber: billNumber);
+        await new RelationshipWorldSeeder(host.ConnectionString).ActionAsync(RelationshipFixtures.Action(99), "AwaitingReview");
+
+        var page = await host.GetDocumentAsync($"/Review/Votes/{recordId}");
+
+        Assert.Equal(["Roll call on clerk.house.gov"], page.QuerySelectorAll("[aria-labelledby='evidence'] a").Select(link => link.TextContent));
+    }
+
+    [Fact]
+    public async Task TheClerkLinkNamesTheCalendarYearOfTheSessionAndPadsTheRollNumber()
+    {
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+        var recordId = await SeedVoteDraftAsync(session: 2, roll: 5);
+
+        var page = await host.GetDocumentAsync($"/Review/Votes/{recordId}");
+
+        Assert.Equal("https://clerk.house.gov/evs/2026/roll005.xml",
+            page.QuerySelector("[aria-labelledby='evidence'] a")!.GetAttribute("href"));
+    }
+
+    [Fact]
     public async Task TheTriagePageShowsTheQuotesAndPassingCheckAndAnInlineApproveBindsTheRowRevisionThenRedirects()
     {
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
@@ -180,7 +221,8 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
         return (long)(await command.ExecuteScalarAsync())!;
     }
 
-    private async Task<string> SeedVoteDraftAsync(VoteKind kind = VoteKind.Passage, string? citedExtractionId = null)
+    private async Task<string> SeedVoteDraftAsync(VoteKind kind = VoteKind.Passage, string? citedExtractionId = null, int session = 1,
+        int roll = 100, int? billNumber = null)
     {
         const string question = "Question: On Passage";
         const string member = "Member: A000001, A, R, AL, Yea";
@@ -190,7 +232,7 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
         var recordId = new string('a', 64);
         var candidateId = new string('b', 64);
         var revision = new VoteDraftRevision(recordId, 1, "auth0|editor", DateTimeOffset.UtcNow, "The House passed a measure",
-            "The House voted on passage.", ReviewTextOrigin.Person, null, HouseVoteFixtures.SourceId, 119, 1, 100, null, null, candidateId,
+            "The House voted on passage.", ReviewTextOrigin.Person, null, HouseVoteFixtures.SourceId, 119, session, roll, billNumber is null ? null : "hr", billNumber, candidateId,
             HouseVoteFixtures.Updated, [new(question, new SourceSpan(cited, 0, question.Length))],
             new DateOnly(2025, 4, 10), new SourceSpan(cited, 0, question.Length), kind,
             new SourceSpan(cited, 0, question.Length),
@@ -202,11 +244,11 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
             INSERT INTO collection_configuration_revisions (revision_id, json, created_at) VALUES ('{configuration.Id}', @configuration, 1);
             INSERT INTO house_vote_candidates (candidate_id, source_id, congress, session_number, roll_call_number, update_date_utc_ticks,
                 detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
-            VALUES ('{candidateId}', '{HouseVoteFixtures.SourceId}', 119, 1, 100, 1, 'detail', 'members', '{extraction.ExtractionId}',
+            VALUES ('{candidateId}', '{HouseVoteFixtures.SourceId}', 119, {session}, {roll}, 1, 'detail', 'members', '{extraction.ExtractionId}',
                 '{extraction.ExtractionId}', '{configuration.Id}', 1);
             INSERT INTO vote_drafts (record_id, source_id, congress, session_number, roll_call_number, current_revision_number,
                 review_state_version, review_status, created_at_utc_ticks)
-            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', 119, 1, 100, 1, 0, 'AwaitingReview', 1);
+            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', 119, {session}, {roll}, 1, 0, 'AwaitingReview', 1);
             INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
             VALUES ('{recordId}', 1, 'auth0|editor', 'Person', NULL, @revision, 1);
             """, connection);

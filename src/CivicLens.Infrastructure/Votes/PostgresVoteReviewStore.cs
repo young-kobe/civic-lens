@@ -95,9 +95,11 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
         var history = (await Records.ReadHistoriesAsync(db, [draft], cancellationToken))[recordId];
         var extractions = await ReadExtractionsAsync(db, history.LoadedRevisions, cancellationToken);
         var names = await ReadPersonNamesAsync(db, history.LoadedRevisions, cancellationToken);
+        var billActions = await ReadBillActionRecordIdsAsync(db, VoteBill.Of(history.CurrentRevision!) is { } bill ? [bill] : [], cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         foreach (var revision in history.LoadedRevisions) revision.ValidateAgainst(extractions);
-        return new(ToReview(draft, history), extractions.ToImmutableDictionary(StringComparer.Ordinal), names);
+        return new(ToReview(draft, history), extractions.ToImmutableDictionary(StringComparer.Ordinal), names,
+            billActions.GetValueOrDefault(recordId, []));
     }
 
     public async Task<VoteReviewPage> ListAsync(PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken)
@@ -167,6 +169,14 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
         return drafts.ToDictionary(draft => draft.RecordId, draft =>
             new PublishableVote(ToReview(draft, histories[draft.RecordId]), extractions,
                 billActions.GetValueOrDefault(draft.RecordId, [])), StringComparer.Ordinal);
+    }
+
+    public async Task<string?> FindRecordIdByRollAsync(int congress, int sessionNumber, int rollCallNumber, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Set<VoteDraftRow>().AsNoTracking()
+            .Where(row => row.Congress == congress && row.SessionNumber == sessionNumber && row.RollCallNumber == rollCallNumber)
+            .OrderBy(row => row.RecordId).Select(row => row.RecordId).FirstOrDefaultAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyDictionary<string, ImmutableArray<string>>> FindBillActionRecordIdsAsync(ImmutableArray<VoteBill> bills,

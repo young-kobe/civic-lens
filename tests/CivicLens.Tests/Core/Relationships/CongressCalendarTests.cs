@@ -30,4 +30,14 @@ public sealed class CongressCalendarTests
         Assert.Equal(new DateOnly(year, 1, 3), start);
         Assert.Equal((congress, congress - 1), (CongressCalendar.CongressOn(start), CongressCalendar.CongressOn(start.AddDays(-1))));
     }
+
+    [Theory]
+    [InlineData(2025, 1, 3, 1)]
+    [InlineData(2025, 12, 31, 1)]
+    [InlineData(2026, 1, 2, 1)]
+    [InlineData(2026, 1, 3, 2)]
+    [InlineData(2027, 1, 2, 2)]
+    [InlineData(2027, 1, 3, 1)]
+    public void ASessionIsTheFirstOrSecondYearOfTheCongressAndTheTermYearRuleMatchesCongressOn(int year, int month, int day, int session) =>
+        Assert.Equal(session, CongressCalendar.SessionOn(new DateOnly(year, month, day)));
 }
