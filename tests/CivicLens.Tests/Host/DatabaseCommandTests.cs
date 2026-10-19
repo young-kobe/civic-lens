@@ -97,7 +97,6 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     [InlineData(CollectionMode.Html)]
     public async Task DiscoveryRecoveryAdmissionReplayAndArticleCollectionWorkThroughCli(CollectionMode mode)
     {
-        const string command = "discovery";
         var configPath = Path.Combine(directory, "config.json");
         var config = JsonSerializer.Deserialize<CollectionConfiguration>(await File.ReadAllTextAsync(configPath),
             ConfigurationJson.Options)!;
@@ -128,15 +127,15 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         var replay = await HostProcess.RunWithCollectorHostAsync(connectionString, "/no-collector-host",
             "receipts", "replay", root, attemptId);
         Assert.True(replay.ExitCode == 0, replay.Error);
-        var inspected = await HostProcess.RunAsync(connectionString, command, "get", attemptId);
+        var inspected = await HostProcess.RunAsync(connectionString, "discovery", "get", attemptId);
         Assert.True(inspected.ExitCode == 0, inspected.Error);
         using var discovery = JsonDocument.Parse(inspected.Output);
         Assert.Equal("parsed", discovery.RootElement.GetProperty("status").GetString());
         Assert.Equal(100, discovery.RootElement.GetProperty("urls").GetArrayLength());
-        var inactive = await HostProcess.RunAsync(connectionString, command, "admit", configPath, "source", attemptId,
+        var inactive = await HostProcess.RunAsync(connectionString, "discovery", "admit", configPath, "source", attemptId,
             "batch-1", "--as-of", "2021-01-01");
         Assert.Equal(2, inactive.ExitCode);
-        var args = new[] { command, "admit", configPath, "source", attemptId, "batch-1", "--as-of", "2020-01-01" };
+        var args = new[] { "discovery", "admit", configPath, "source", attemptId, "batch-1", "--as-of", "2020-01-01" };
         var admitted = await HostProcess.RunAsync(connectionString, args);
         Assert.True(admitted.ExitCode == 0, admitted.Error);
         var repeated = await HostProcess.RunAsync(connectionString, args);
@@ -144,7 +143,7 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         var replayAfterExpiry = await HostProcess.RunAsync(connectionString, args[..^2]);
         Assert.True(replayAfterExpiry.ExitCode == 0, replayAfterExpiry.Error);
         Assert.Equal(admitted.Output, replayAfterExpiry.Output);
-        Assert.Equal(2, (await HostProcess.RunAsync(connectionString, command, "admit", configPath, "source", attemptId, "new-after-expiry")).ExitCode);
+        Assert.Equal(2, (await HostProcess.RunAsync(connectionString, "discovery", "admit", configPath, "source", attemptId, "new-after-expiry")).ExitCode);
         using var admission = JsonDocument.Parse(admitted.Output);
         var jobId = Assert.Single(admission.RootElement.GetProperty("jobs").EnumerateArray()).GetProperty("jobId").GetString()!;
         var inspectedJob = await HostProcess.RunAsync(connectionString, "jobs", "get", jobId);

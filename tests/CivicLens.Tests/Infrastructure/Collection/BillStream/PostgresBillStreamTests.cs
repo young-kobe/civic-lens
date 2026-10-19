@@ -1124,7 +1124,7 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     private static string StuckBillQueryFromOperationsGuide()
     {
         var guide = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "docs", "operations.md"));
-        return Regex.Matches(guide, @"```sql\n(.*?)```", RegexOptions.Singleline)
+        return Regex.Matches(guide, @"```sql\r?\n(.*?)```", RegexOptions.Singleline)
             .Select(match => match.Groups[1].Value)
             .Single(query => query.Contains("g.decision = 'Passed'", StringComparison.Ordinal));
     }

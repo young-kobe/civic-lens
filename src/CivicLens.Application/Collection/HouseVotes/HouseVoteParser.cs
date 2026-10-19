@@ -6,7 +6,7 @@ public static class HouseVoteParser
 
     public static HouseVoteDetail Parse(ReadOnlySpan<byte> json, HouseVoteRoll expected)
     {
-        var wire = HouseVoteJson.Deserialize<WireDetail>(json, "House vote");
+        var wire = CongressApiJson.Deserialize<WireDetail>(json, "House vote");
         return (wire.HouseRollCallVote ?? throw new InvalidDataException("House vote must contain houseRollCallVote."))
             .ToDetail(expected);
     }

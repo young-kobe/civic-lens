@@ -1,4 +1,3 @@
-using System.Text.Json;
 using CivicLens.Collection.Contracts;
 
 namespace CivicLens.Application.Collection.Bills;
@@ -10,7 +9,7 @@ public static class CongressBillCosponsorsParser
         CongressBillListItem expected)
     {
         ArgumentNullException.ThrowIfNull(expected);
-        var wire = Deserialize(json);
+        var wire = CongressApiJson.Deserialize<WirePage>(json, "Cosponsor page");
         if (wire.Cosponsors is null || wire.Pagination is null)
             throw new InvalidDataException("Cosponsor page must contain cosponsors and pagination.");
         if (wire.Cosponsors.Length > ApiPageQuery.PageLimit)
@@ -18,19 +17,6 @@ public static class CongressBillCosponsorsParser
         var cosponsors = wire.Cosponsors.Select(ToCosponsor).ToArray();
         var next = BillPageUrl.ReadNext(wire.Pagination.Next, scope, sourceUrl, ApiResource.BillCosponsors, expected);
         return new CongressBillCosponsorsPage(cosponsors, next);
-    }
-
-    private static WirePage Deserialize(ReadOnlySpan<byte> json)
-    {
-        try
-        {
-            return JsonSerializer.Deserialize<WirePage>(json, CongressApiJson.Options)
-                ?? throw new InvalidDataException("Cosponsor page is empty.");
-        }
-        catch (JsonException exception)
-        {
-            throw new InvalidDataException("Cosponsor page is not valid JSON of the expected shape.", exception);
-        }
     }
 
     private static CongressBillCosponsor ToCosponsor(WireCosponsor? cosponsor)

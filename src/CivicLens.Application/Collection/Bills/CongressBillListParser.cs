@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Web;
 using CivicLens.Collection.Contracts;
 
@@ -11,7 +10,7 @@ public static class CongressBillListParser
     public static CongressBillListPage Parse(ReadOnlySpan<byte> json, CollectionRequest scope, BillStreamWindow window)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        var wire = Deserialize(json);
+        var wire = CongressApiJson.Deserialize<WirePage>(json, "Bill list page");
         if (wire.Bills is null || wire.Pagination is null)
             throw new InvalidDataException("Bill list page must contain bills and pagination.");
         if (wire.Bills.Length > ApiPageQuery.PageLimit)
@@ -20,19 +19,6 @@ public static class CongressBillListParser
         var bills = items.OfType<CongressBillListItem>().ToArray();
         return new CongressBillListPage(bills, ReadNext(wire.Pagination.Next, scope, window), BillStreamWindow.StartsPass(scope.Url),
             items.Length - bills.Length);
-    }
-
-    private static WirePage Deserialize(ReadOnlySpan<byte> json)
-    {
-        try
-        {
-            return JsonSerializer.Deserialize<WirePage>(json, CongressApiJson.Options)
-                ?? throw new InvalidDataException("Bill list page is empty.");
-        }
-        catch (JsonException exception)
-        {
-            throw new InvalidDataException("Bill list page is not valid JSON of the expected shape.", exception);
-        }
     }
 
     private static CongressBillListItem? ToItem(WireBill? bill)

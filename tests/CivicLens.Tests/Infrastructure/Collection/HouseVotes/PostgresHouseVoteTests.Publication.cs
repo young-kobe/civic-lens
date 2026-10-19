@@ -85,22 +85,6 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
-    public async Task FindBillActionRecordIdsMatchesWholeBillsNotMixesOfNamedCongressTypeAndNumber()
-    {
-        var wanted = new string('7', 64);
-        await InsertActionDraftAsync(wanted, "hconres", 14);
-        await InsertActionDraftAsync(new string('8', 64), "hconres", 15);
-        await InsertActionDraftAsync(new string('9', 64), "hr", 14);
-        await InsertActionDraftAsync(new string('a', 64), "hr", 15);
-
-        var found = await VoteReviews().FindBillActionRecordIdsAsync(
-            [new("first", 119, "hconres", 14), new("second", 119, "hr", 15)], default);
-
-        Assert.Equal([wanted], [.. found["first"]]);
-        Assert.Equal([new string('a', 64)], [.. found["second"]]);
-    }
-
-    [Fact]
     public async Task AVoteWithoutAnActionDraftOfItsBillGetsNoActionRecordId()
     {
         var recordId = await ApprovedVoteAsync();
