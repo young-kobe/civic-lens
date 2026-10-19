@@ -281,3 +281,4 @@ All are owner commands. Variables and examples are in [operations](../operations
 - House votes: [votes](votes.md) holds the implemented collection, drafting, review, and publication.
 - Senate votes need senate.gov data and a `lis_member_id` crosswalk, because Congress.gov has neither. The generated roster ([R-14](../roadmap.md#later)) will supply that crosswalk.
 - The congress.gov bill link follows the public page form `/bill/{ordinal}-congress/{type slug}/{number}`. No repository fixture or stored row shows that form. Check it against the live site once.
+- Bill lookup ignores the source of an action draft, because bills have one source and no code owns its ID. A second bill source needs a source filter in `FindRecordIdByBillAsync`.
