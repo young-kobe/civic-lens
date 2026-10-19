@@ -266,7 +266,7 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 
 - A vote record embeds at most `PublishedVote.MaximumSources` sources: the detail, the members, and the bill detail.
 - An action record embeds at most `PublishedAction.MaximumSources` sources. The worst case is the detail page, 3 cosponsor pages (250 rows), and the summaries page, which is 5 sources. A record over the cap fails publish loudly.
-- Correction and withdrawal releases come later. No kind can publish one yet. See R-32 in the [roadmap](../roadmap.md).
+- No kind can publish a correction or withdrawal release yet. [R-32](../roadmap.md#next) adds them before the first deploy.
 - The R2 upload, the CDN, and the local Caddy container are not built yet. They are part of R-24.
 - Issue, official, and briefing pages are planned in [R-36](../roadmap.md#next). Readers will start with a weekly briefing and recent reviewed developments. Issue pages will connect related records across officials and institutions. Official pages will show dated statements, actions, and reviewed relationships. Official and issue timelines come with R-36. They will build on the published relationships.
 - A related list orders links by the statement date. On a statement page every link has the same date, so the order there falls back to the link ID. Dates of the target records are not in the relationship file.

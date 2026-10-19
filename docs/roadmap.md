@@ -16,6 +16,10 @@ Exit criteria:
 - [ ] A weekly brief publishes with verified citation links, an explicit sample and cutoff, and versioned editorial decisions.
 - [ ] Readers search and filter all published records from the public pages.
 - [ ] Readers can report a problem with a published record, and each report reaches a person in the review queue.
+- [ ] A person can publish a correction or a withdrawal of any record kind.
+- [ ] House and Senate votes both publish.
+- [ ] Public MCP reads the same releases as the website.
+- [ ] The talk and action profile and the shared language insight publish with method notes.
 - [ ] The review queue handles the drafted volume with bulk tools.
 - [ ] The acceptance checklists in the linked feature docs pass.
 
@@ -23,7 +27,7 @@ Exit criteria:
 
 Each item gives its outcome, what it depends on, and where the design lives. Present the design choices before building R-22 only.
 
-The path to the first deploy is R-14, R-36 and R-40, then R-23 and R-18, then R-24.
+The first deploy is a complete product within the product direction. Its path is R-14, R-36, R-40, R-32, R-25, R-42, R-43, and R-38, then R-23 and R-18, then R-24.
 
 ### Next
 
@@ -32,6 +36,11 @@ The path to the first deploy is R-14, R-36 and R-40, then R-23 and R-18, then R-
 - R-36: Public briefing, official, issue, and record pages for citizens. Readers start with a weekly briefing and recent reviewed developments, and each record shows its evidence and timeline. The official, issue, and policy area pages are also the public filter pages. The search panel gets a source filter and names for issues and policy areas. Official pages show offices and dated terms from R-14, and each record page links to the R-40 report path. Depends on: R-14 for the official pages. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-40: A public search service with its own Postgres database, fed from releases, replaces the client search. It is also the public read API. Readers report a problem with a published record through it. The operational application pulls each report into the review queue, and a person handles it. It runs first as its own container and database on the CPX21, with no access to operational storage. It moves to its own server only when a measurement shows that the box is too small. Depends on: none stated. It must come before R-24. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-14: A generated member roster with dated terms. Capture an outside member dataset as a collection source, as bills are captured. Parse it into tables of offices, dated terms, and Senate member IDs, and each row cites its capture. A generator proposes members who join or leave as a configuration diff. Choose the dataset when R-14 starts. The configuration keeps tracked people and their bioguide IDs. Official pages show its offices and dated terms, and Senate votes need its Senate member IDs. Depends on: none stated. It must come before R-24. [Configuration](architecture/configuration.md#limits-and-planned-work)
+- R-32: Correction and withdrawal releases for all record kinds. No kind can publish one yet. Depends on: none stated. [Publication](architecture/publication.md#limits-and-planned-work)
+- R-25: Public MCP over published releases, with source health, backup and restore, and worker service management. Depends on: R-40. [Publication](architecture/publication.md#limits-and-planned-work)
+- R-42: Senate votes from senate.gov data, as House votes come from the House Clerk. Members match through the R-14 Senate member IDs. Depends on: R-14. [Votes](architecture/votes.md#limits-and-planned-work)
+- R-43: The talk and action profile insight. For each official, code shows the share of statements on each issue next to the share of sponsorships and votes on it, and publishes a method note. It uses no model. Depends on: R-36. [Publication](architecture/publication.md#limits-and-planned-work)
+- R-38: The shared language insight. Code finds the same or nearly the same sentences in releases from different offices, and publishes a method note. A person reviews each finding before publication. Depends on: none stated. [Statements](architecture/statements.md#limits-and-planned-work)
 - R-39: An `analyses redraft --stale` owner command requeues finished drafts whose last run used an older task, prompt, or schema version. It covers document changes, statements, actions, votes, and briefs. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-21: Process view of collection and AI stages from retained state. Depends on: none stated. [Host](architecture/host.md#limits-and-planned-work)
 - R-29: Check each policy area name against the Congress.gov API. Depends on: none stated. [Configuration](architecture/configuration.md#limits-and-planned-work)
@@ -43,14 +52,11 @@ The path to the first deploy is R-14, R-36 and R-40, then R-23 and R-18, then R-
 - R-22: Ordered row locks in the job store, after the MVP. Depends on: lock waits measured on a bills-only collection run. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-23: Baseline versions before the first production deploy. Depends on: none stated. It must come before the first production deploy. [Behavior versions](architecture.md#behavior-versions)
 - R-24: Production on the Hetzner CPX21 with containers, Terraform, CI, off-server backups, and live Auth0 verification. Public releases upload to Cloudflare R2 behind its CDN. The open host checklist items are its exit checks. Also stop the worker during a job and show that the deployed container recovers it. The R-40 search service runs as its own container on the same box. Depends on: the MVP exit criteria other than the document-change criterion, R-18, and R-23. [Host](architecture/host.md#limits-and-planned-work)
-- R-25: Public MCP over published releases, with source health, backup and restore, and worker service management. Depends on: the MVP exit criteria other than the document-change criterion. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-26: Read-only local MCP inspection. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
 - R-41: Collection concurrency for backfills, when a measured backlog is more than one worker can clear. The precedent is CIVIC_LENS_EVIDENCE_CONCURRENCY. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-27: Automatic discovery of official sources, and check cadence from measured change rates. It needs runtime writes, so people, sources, and coverage then move to tables. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-28: Datasets and fine-tuning from labels and review history. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-31: Remove the redundant hunk and context copy in saved comparisons. Depends on: none stated. [Documents](architecture/documents.md#limits-and-planned-work)
-- R-32: Correction and withdrawal releases for all record kinds. No kind can publish one yet. Depends on: none stated. [Publication](architecture/publication.md#limits-and-planned-work)
-- R-38: The shared language insight. Code finds the same or nearly the same sentences in releases from different offices, and publishes a method note. A person reviews each finding before publication. Depends on: R-24. [Statements](architecture/statements.md#limits-and-planned-work)
 
 ## Pending decisions
 
@@ -76,7 +82,7 @@ Derived insights are product goals. They make Civic Lens more than a connector t
 ## Deferred
 
 - News coverage in briefs: deferred until we measure how much of the real record a set of news feeds covers. Add coverage links and a gap signal only if that recall is high. Store feed entries only, never full articles.
-- Senate votes, Congress.gov member records, and a waiting window before sponsorship revisions: see [actions](architecture/actions.md#limits-and-planned-work) and [action decisions](architecture/actions.md#decisions).
+- Congress.gov member records and a waiting window before sponsorship revisions: see [actions](architecture/actions.md#limits-and-planned-work) and [action decisions](architecture/actions.md#decisions).
 - Self-hosted encoder models: see [analysis](architecture/analysis.md#limits-and-planned-work).
 - Browser rendering, OCR, and cross-origin robots redirects: see [collection](architecture/collection.md#limits-and-planned-work) and [robots](architecture/collection.md#robots-and-pacing).
 - Shared line-format rules for renderers: see [bills](architecture/bills.md#limits-and-planned-work).
