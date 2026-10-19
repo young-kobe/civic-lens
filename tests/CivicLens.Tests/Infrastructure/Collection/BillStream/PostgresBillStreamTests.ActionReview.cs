@@ -100,6 +100,10 @@ public sealed partial class PostgresBillStreamTests
 
         Assert.Equal((1, 1L, 1L), (await ScalarAsync($"SELECT current_revision_number FROM action_drafts WHERE record_id = '{RecordId}'"),
             await ScalarAsync("SELECT count(*) FROM action_revisions"), await ScalarAsync("SELECT count(*) FROM action_review_decisions")));
+        await ExecuteAsync(connectionString, "DROP TRIGGER fail_pair_insert ON relationship_analysis; UPDATE action_analysis SET status = 'Pending', retry_at = NULL");
+        await RunActionWorkerAsync(new FakeHeadlineSummaryModel());
+        Assert.Equal((2, 2L), (await ScalarAsync($"SELECT current_revision_number FROM action_drafts WHERE record_id = '{RecordId}'"),
+            await ScalarAsync("SELECT count(*) FROM action_review_decisions")));
     }
 
     [Fact]

@@ -32,7 +32,7 @@ The actions feature drafts one record for each bill that has an [action candidat
 - Bulk approval accepts sponsorship-only revisions with no open concern only. It takes up to 64 records and records one decision for each record, with a result for each record. It lives on the triage page, not on the list.
 - A suggestion shows beside the text of a person, with "Use suggestion" and "Dismiss". A person's save may keep or clear the suggestion, but never change it.
 - D-15 (accepted on 2026-10-19): code approves the worker revisions of an action. Code checks every citation, and the model writes only the headline and the summary. Public pages label that text as an AI summary of the official record when the origin of the published text is Model. They add no label when a person wrote the text.
-- A worker revision of a newer candidate gets a new code approval if three rules hold. No concern is open. The revision holds no text that a person wrote. The approval checks pass. A person edit stays with a person even after a person approved it. The release keeps the earlier approved revision until the owner publishes the new one. A person edit waits for a person to approve it. Reader reports on a published record wait for R-36.
+- A worker revision of a newer candidate gets a new code approval if three rules hold. No concern is open. The revision holds no text that a person wrote. The approval checks pass. A person edit stays with a person even after a person approved it. The release keeps the earlier approved revision until the owner publishes the new one. Reader reports on a published record wait for R-36.
 
 ## Invariants
 

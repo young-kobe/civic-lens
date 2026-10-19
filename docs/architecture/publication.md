@@ -8,7 +8,7 @@ The publication feature turns approved revisions into immutable, cumulative stat
 
 - Only the owner publishes or activates a release.
 - A record is published at its current revision, and only when that revision is approved and has no unresolved concerns. Code can approve an action or a vote. People approve the other kinds. The owner publishes all kinds.
-- The action and vote pages say "From the official record, checked" with the approval time. They do not claim that a person approved the record. When `textOrigin` is `model`, they add "An AI summary of the official record". A person text gets no label. `ApprovedAtUtc` holds the time of the approval, by code or by a person. Enforced by `PublishedActionView` and `PublishedVoteView`. Tests: `ReleaseRendererTests.ActionAndVotePagesSayThatTheRecordComesFromTheOfficialRecordInsteadOfClaimingAPersonApprovedIt` and `ReleaseRendererTests.ActionAndVotePagesLabelAnAiSummaryOnlyWhenAModelWroteTheText`.
+- The action and vote pages say "From the official record, checked" with the approval time. They do not claim that a person approved the record. When `textOrigin` is `model`, they add "An AI summary of the official record". Text that a person wrote gets no label. `ApprovedAtUtc` holds the time of the approval, by code or by a person. Enforced by `PublishedActionView` and `PublishedVoteView`. Tests: `ReleaseRendererTests.ActionAndVotePagesSayThatTheRecordComesFromTheOfficialRecordInsteadOfClaimingAPersonApprovedIt` and `ReleaseRendererTests.ActionAndVotePagesLabelAnAiSummaryOnlyWhenAModelWroteTheText`.
 - A newer draft never replaces published content automatically.
 - A release is cumulative. It holds the base release records plus explicit additions or replacements.
 - Carried records are hard links to the immutable files of the base release. Disk therefore grows with published records, not with the number of releases.
@@ -232,9 +232,8 @@ Each index page has a search panel. It stays hidden until `app.js` runs, because
 - The generated [publication schema](schema/publication.md) lists every table, column, key, check, index, and trigger.
 - Each release row lists its records as kind, record ID, and revision. A row written before kinds existed has no kind and counts as a document change.
 - The ready lists read the active row and match by kind, so a statement ID cannot hide a document change.
-- Schema version 2 adds the entry kind. Readers accept versions 1 to 4. A version 1 entry has no kind and means a document change. A version 1 release on disk can therefore still be the base of the next release.
-- Schema version 3 adds the entry filters. An entry from version 1 or 2 has empty filters, and publish does not backfill them.
-- Schema version 4 adds `textOrigin` (`model` or `person`) to the action and vote records. The field is required. Code reads no action or vote record from an older release, because no release exists before production.
+- Schema version 2 added the entry kind, and version 3 added the entry filters. Readers no longer accept versions 1 to 3.
+- Schema version 4 adds `textOrigin` (`model` or `person`) to the action and vote records. The field is required. Readers accept version 4 only. A release before version 4 is not readable, so reset dev releases. The schema flatten at R-23 handles production.
 
 | Filter | Document change | Statement | Action | Brief | Vote | Relationship |
 |---|---|---|---|---|---|---|

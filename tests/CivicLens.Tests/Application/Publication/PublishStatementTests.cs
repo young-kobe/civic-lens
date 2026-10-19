@@ -259,22 +259,13 @@ public sealed class PublishStatementTests
     }
 
     [Fact]
-    public async Task ReleaseWrittenAtSchemaVersionOneStillLoadsAsTheBaseOfTheNextRelease()
+    public async Task AReleaseBeforeTheOldestReadableSchemaVersionCannotBeTheBaseOfTheNextRelease()
     {
         var scenario = new PublicationScenario();
-        var old = new string('c', 32);
-        scenario.SeedVersionOneRelease(old);
+        scenario.SeedVersionOneRelease(new string('c', 32));
 
-        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-            PublicationScenario.Request("k", scenario.AddDraft('a')));
-
-        var manifest = ReadManifest(scenario, summary.DirectoryName);
-        Assert.Equal(4, manifest.SchemaVersion);
-        var carried = Assert.Single(manifest.Records, entry => entry.RecordId == old);
-        Assert.Equal(PublishedRecordKind.DocumentChange, carried.Kind);
-        Assert.Empty(carried.IssueIds);
-        Assert.Null(carried.SourceHost);
-        Assert.Contains(("seeded", PublicationProtocol.RecordDataPath(old)), scenario.Releases.Links);
+        await Assert.ThrowsAsync<InvalidDataException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k", scenario.AddDraft('a'))));
     }
 
     private static PublicationRelease ReadManifest(PublicationScenario scenario, string directory) =>

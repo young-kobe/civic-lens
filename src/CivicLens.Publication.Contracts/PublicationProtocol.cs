@@ -7,7 +7,7 @@ namespace CivicLens.Publication.Contracts;
 public static class PublicationProtocol
 {
     public const int SchemaVersion = 4;
-    public const int OldestReadableSchemaVersion = 1;
+    public const int OldestReadableSchemaVersion = 4;
     public const string ManifestPath = "release.json";
     public const string ManifestGzipPath = ManifestPath + ".gz";
     public const string ManifestBrotliPath = ManifestPath + ".br";
