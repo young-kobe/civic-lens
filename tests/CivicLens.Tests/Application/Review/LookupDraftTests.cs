@@ -1,4 +1,5 @@
 using CivicLens.Application.Review;
+using CivicLens.Tests.Application.Actions;
 using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Application.Votes;
@@ -11,10 +12,11 @@ public sealed class LookupDraftTests
     private static readonly ReviewActor Reviewer = new("auth0|reviewer", ReviewRole.Reviewer);
     private const string ActionRecord = "action-record";
     private const string VoteRecord = "vote-record";
+    private readonly FakeActionReviewStore actions = new();
     private readonly FakeVoteReviewStore votes = new();
     private readonly FakeClock clock = new(new DateTimeOffset(2026, 10, 19, 0, 0, 0, TimeSpan.Zero));
 
-    private LookupDraft Lookup() => new(votes, clock);
+    private LookupDraft Lookup() => new(actions, votes, clock);
 
     [Theory]
     [InlineData("HR 1234")]
@@ -23,7 +25,7 @@ public sealed class LookupDraftTests
     [InlineData("119 HR 1234")]
     public async Task ABillWithoutACongressMeansTheCurrentCongressAndEveryCitationSpellingFindsTheSameActionDraft(string query)
     {
-        votes.BillActions[(119, "hr", 1234)] = [ActionRecord];
+        actions.Bills[(119, "hr", 1234)] = ActionRecord;
 
         var hit = await Lookup().ExecuteAsync(Reviewer, query);
 
@@ -33,7 +35,7 @@ public sealed class LookupDraftTests
     [Fact]
     public async Task ABillOfAnEarlierCongressIsFoundOnlyWhenTheQueryNamesThatCongress()
     {
-        votes.BillActions[(118, "hjres", 5)] = [ActionRecord];
+        actions.Bills[(118, "hjres", 5)] = ActionRecord;
 
         Assert.Null(await Lookup().ExecuteAsync(Reviewer, "HJ Res 5"));
         Assert.Equal(PublishedRecordKind.Action, (await Lookup().ExecuteAsync(Reviewer, "118 H.J.Res. 5"))!.Kind);
@@ -71,7 +73,15 @@ public sealed class LookupDraftTests
     {
         await Assert.ThrowsAsync<DraftLookupFormatException>(() => Lookup().ExecuteAsync(Reviewer, query));
 
-        Assert.Equal(0, votes.BillLookups);
+        Assert.Equal((0, 0), (actions.BillLookups, votes.RollLookups));
+    }
+
+    [Fact]
+    public async Task AClockDateWithNoCongressIsAnOperationalFaultNotAUserError()
+    {
+        clock.Now = new DateTimeOffset(1900, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Lookup().ExecuteAsync(Reviewer, "HR 1"));
     }
 
     [Fact]

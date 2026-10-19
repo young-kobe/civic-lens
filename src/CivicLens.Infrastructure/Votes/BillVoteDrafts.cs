@@ -3,9 +3,6 @@ using CivicLens.Application.Votes;
 using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection;
-using CivicLens.Infrastructure.Collection.HouseVotes;
-using CivicLens.Infrastructure.Review;
-using CivicLens.Infrastructure.Votes.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Votes;
@@ -15,15 +12,19 @@ internal static class BillVoteDrafts
     public static async Task<ImmutableArray<BillVoteDraft>> ReadAsync(CollectionAttemptDbContext db, int congress, string billType,
         int billNumber, CancellationToken cancellationToken)
     {
-        var rows = await (from draft in db.Set<VoteDraftRow>().AsNoTracking()
-                          where db.Set<HouseVoteCandidateRow>().Any(candidate => candidate.CandidateId == draft.CandidateId && candidate.Congress == congress &&
-                              candidate.BillType == billType && candidate.BillNumber == billNumber)
-                          join revision in db.Set<VoteRevisionRow>().AsNoTracking()
-                              on new { draft.RecordId, Number = draft.CurrentRevisionNumber } equals new { revision.RecordId, Number = revision.RevisionNumber }
-                          orderby draft.EventOn descending, draft.RecordId
-                          select new { draft.RecordId, draft.SessionNumber, draft.RollCallNumber, draft.EventOn, draft.ReviewStatus, revision.RevisionJson })
-            .Take(BillVoteDraft.MaximumPerBill).ToArrayAsync(cancellationToken);
+        var rows = await db.Database.SqlQuery<BillVoteRow>($"""
+            SELECT d.record_id AS "RecordId", d.session_number AS "SessionNumber", d.roll_call_number AS "RollCallNumber",
+                   d.event_on AS "EventOn", d.review_status AS "ReviewStatus", r.revision_json::jsonb ->> 'kind' AS "Kind"
+            FROM vote_drafts d
+            JOIN vote_revisions r ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
+            WHERE EXISTS (SELECT 1 FROM house_vote_candidates c WHERE c.candidate_id = d.candidate_id
+                          AND c.congress = {congress} AND c.bill_type = {billType} AND c.bill_number = {billNumber})
+            ORDER BY d.event_on DESC, d.session_number DESC, d.roll_call_number DESC, d.record_id
+            LIMIT {BillVoteDraft.MaximumPerBill}
+            """).ToArrayAsync(cancellationToken);
         return [.. rows.Select(row => new BillVoteDraft(row.RecordId, row.SessionNumber, row.RollCallNumber,
-            ReviewJson.Deserialize<VoteDraftRevision>(row.RevisionJson, "vote revision").Kind, row.EventOn, row.ReviewStatus))];
+            Enum.Parse<VoteKind>(row.Kind), row.EventOn, Enum.Parse<ReviewStatus>(row.ReviewStatus)))];
     }
+
+    private sealed record BillVoteRow(string RecordId, int SessionNumber, int RollCallNumber, DateOnly EventOn, string ReviewStatus, string Kind);
 }

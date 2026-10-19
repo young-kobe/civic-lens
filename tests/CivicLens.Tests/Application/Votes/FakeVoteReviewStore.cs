@@ -17,8 +17,13 @@ internal sealed class FakeVoteReviewStore : IVoteReviewStore
     public Dictionary<(int Congress, int Session, int Roll), string> Rolls { get; } = [];
     public int BillLookups { get; private set; }
 
-    public Task<string?> FindRecordIdByRollAsync(int congress, int sessionNumber, int rollCallNumber, CancellationToken cancellationToken) =>
-        Task.FromResult(Rolls.GetValueOrDefault((congress, sessionNumber, rollCallNumber)));
+    public int RollLookups { get; private set; }
+
+    public Task<string?> FindRecordIdByRollAsync(int congress, int sessionNumber, int rollCallNumber, CancellationToken cancellationToken)
+    {
+        RollLookups++;
+        return Task.FromResult(Rolls.GetValueOrDefault((congress, sessionNumber, rollCallNumber)));
+    }
 
     public Task<IReadOnlyList<UnpublishedApprovedVote>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<UnpublishedApprovedVote>>([.. Unpublished.Take(limit)]);

@@ -15,6 +15,9 @@ internal static class DraftStatusDisplay
         _ => "Awaiting review"
     };
 
+    public static string LabelWithoutCount(ReviewStatus status) =>
+        status == ReviewStatus.AwaitingReviewWithConcerns ? "Open concerns" : Label(status, 0);
+
     public static Tone Tone(ReviewStatus status) => status switch
     {
         ReviewStatus.Approved => Components.Ui.Tone.Ok,

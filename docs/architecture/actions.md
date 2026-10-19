@@ -211,7 +211,7 @@ Action review uses the shared decision rules and review cycles in [review](revie
 - the vote drafts of the bill, each with its roll call, vote kind, vote day, and status, and a link to its vote page
 - the shared `ReviewDecisionPanel` and `ReviewHistoryPanel`
 
-The vote drafts come from the same read as the page, in the same transaction. They are the drafts whose candidate names the bill: same Congress, bill type, and bill number. The list shows the newest 25 by vote day and says so when it is full. The page stores no copy and needs no migration. A vote has no stored result, so the list shows none.
+The vote drafts come from the same read as the page, in the same transaction. They are the drafts whose candidate names the bill: same Congress, bill type, and bill number. The list shows the newest 25 by vote day and says so when it is full. The status badge has no open-concern count, because the read takes no decision history. The page stores no copy and needs no migration. A vote has no stored result, so the list shows none.
 
 "Use suggestion" saves the stored suggestion text and clears the suggestion. "Dismiss" saves the form text and clears the suggestion. The plain save keeps the suggestion. The forms use the static post-back pattern of the statement pages, and `ReviewRecordPage` maps the failures. The rail has an Actions link.
 
