@@ -26,23 +26,30 @@ public static class MemberRosterParser
             throw new InvalidDataException("Every roster member must have a bioguide ID and at least one term.");
         var terms = wireTerms.Select(ToTerm).ToArray();
         var current = wireTerms[^1]!;
-        return new RosterMember(bioguideId, Present(wire.Id!.Lis), FullNameOf(wire.Name), Present(current.Office),
-            Present(current.Phone), Present(current.Url), terms);
+        return new RosterMember(bioguideId, Capped(wire.Id!.Lis, RosterLimits.LisId), FullNameOf(wire.Name),
+            Capped(current.Office, RosterLimits.Office), Capped(current.Phone, RosterLimits.Phone),
+            Capped(current.Url, RosterLimits.Url), terms);
     }
 
     private static RosterTerm ToTerm(WireTerm? wire, int index)
     {
         if (wire is not { Start: { } start, End: { } end } || end < start || wire.Type is not (Senate or House) ||
-            Present(wire.State) is not { } state || Present(wire.Party) is not { } party)
+            Capped(wire.State, RosterLimits.State) is not { } state || Capped(wire.Party, RosterLimits.Party) is not { } party)
             throw new InvalidDataException("Every roster term must have a chamber, dates, a state, and a party.");
         return new RosterTerm(index, wire.Type, start, end, state, wire.District, wire.Class, party);
     }
 
     private static string FullNameOf(WireName? name) =>
-        Present(name?.OfficialFull) ?? Present($"{name?.First} {name?.Last}")
+        Capped(name?.OfficialFull, RosterLimits.FullName) ?? Capped($"{name?.First} {name?.Last}", RosterLimits.FullName)
         ?? throw new InvalidDataException("Every roster member must have a name.");
 
-    private static string? Present(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+    private static string? Capped(string? text, int maximumLength)
+    {
+        var present = string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+        return present is not null && present.Length > maximumLength
+            ? throw new InvalidDataException("A roster value is longer than its stored limit.")
+            : present;
+    }
 
     private sealed record WireMember(WireId? Id, WireName? Name, WireTerm?[]? Terms);
 

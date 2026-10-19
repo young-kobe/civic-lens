@@ -11,7 +11,9 @@ The roster feature captures a public member dataset once a day and keeps it as t
 - Only the current file is read. The historical file is out of scope. The 10 MB capture read limit stays as it is.
 - A roster source covers no people. It is still eligible on every date, because the file has no coverage list. `CollectionConfiguration.IsActiveOn` owns this rule for admission and for scheduled checks.
 - A snapshot is one set of member rows and term rows. Every row holds the attempt ID of its capture. A row is never updated.
-- A capture with the same body hash as the latest snapshot writes no new snapshot. Readers use the latest snapshot of the source.
+- The daily check is the body hash. The source downloads the file each day, with no ETag and no conditional request. A capture whose hash matches any earlier snapshot of the source adds only its attempt row. Preparation checks the hash before it parses.
+- Readers take the newest captured attempt of the source whose hash matches some snapshot. They read the oldest snapshot with that hash. A file that changes back to an earlier body therefore reads as that earlier snapshot.
+- Admission takes no lock. Two concurrent captures of the same new body can both write a snapshot. The duplicate is harmless, because readers pick one snapshot by a fixed order.
 - Dates are `date` columns, because the dataset gives calendar dates.
 - Rows cite the capture through the attempt. They have no text span and no extraction.
 - The office, phone, and URL of a member come from the last term of the member. A member with no `official_full` name gets the first and last name.
@@ -25,11 +27,13 @@ Each line gives the rule, what enforces it, and the test that protects it.
 - A configuration of a roster source has no credential, no coverage list, and no Congress options. Enforced by `CollectionConfiguration`. Tests: `RosterSourceConfigurationTests.ACredentialIsRejectedBecauseTheFileIsPublic`, `RosterSourceConfigurationTests.ACoverageListOrCongressOptionIsRejectedBecauseTheRosterCoversNoPeople`.
 - A roster source stays eligible with no covered people. Enforced by `CollectionConfiguration.IsActiveOn`. Tests: `RosterSourceConfigurationTests.ARosterSourceCoversNoPeopleYetStaysEligibleSoTheDailyCheckRuns`, `PostgresMemberRosterStoreTests.TheDailyCheckCreatesARosterJobWithNoCredentialEvenThoughTheSourceCoversNoPeople`.
 - A roster job fetches the source URL and no other URL. Enforced by `CollectionJobDefinition`. Test: `RosterSourceConfigurationTests.ARosterJobIsBoundToTheSourceUrlAndNoOtherUrl`.
-- A snapshot is complete or absent. Enforced by `MemberRosterParser` and one transaction in `PostgresMemberRosterStore.AdmitAsync`. Test: `MemberRosterParserTests.AnIncompleteRosterIsRejectedSoNoPartialSnapshotIsStored`.
-- A capture with an unchanged body writes nothing. Enforced by `PostgresMemberRosterStore.AdmitAsync`. Test: `PostgresMemberRosterStoreTests.ACaptureWithTheSameBodyHashAsTheLatestSnapshotWritesNothingNew`.
-- An admitted attempt is admitted once. Enforced by `PostgresMemberRosterStore.AdmitAsync` and the keys of both tables. Test: `PostgresMemberRosterStoreTests.AdmittingTheSameAttemptAgainIsHarmlessSoAReplayedJobKeepsOneSnapshot`.
+- A roster value is not longer than its column. Enforced by `MemberRosterParser` with the limits of `RosterLimits`, which the row configurations also use. Test: `MemberRosterParserTests.AValueLongerThanItsColumnIsRejectedSoThePreparationBlocksAsInvalidData`.
+- A snapshot is complete or absent. Enforced by one `SaveChanges` in `PostgresMemberRosterStore.AdmitAsync`. Test: `PostgresMemberRosterStoreTests.AFailedInsertLeavesNoPartialSnapshot`.
+- A capture whose body matches any earlier snapshot is not parsed and writes no rows. Enforced by `PostgresMemberRosterStore.HasSnapshotOfCaptureAsync` and `JobPreparation`. Tests: `PostgresMemberRosterStoreTests.ACaptureWithTheBodyOfAnEarlierSnapshotNotOnlyTheLatestIsKnown`, `JobPreparationTests.AKnownRosterCaptureIsNotParsedAndWritesNothing`.
+- Readers return the same snapshot for any admission order and any duplicate snapshot. Enforced by `PostgresMemberRosterStore.ReadLatestAsync`. Tests: `PostgresMemberRosterStoreTests.ReaderFollowsTheNewestCaptureWhateverTheAdmissionOrder`, `PostgresMemberRosterStoreTests.TwoSnapshotsOfOneBodyReadAsTheOldestOne`.
 - Old snapshots stay when a changed capture arrives. Enforced by the insert-only store. Test: `PostgresMemberRosterStoreTests.AChangedCaptureAppendsASnapshotAndReadersTakeTheLatestWhileTheOldRowsStay`.
-- A term has a chamber `sen` or `rep` and an end date that is not before its start. Enforced by `ck_roster_terms_chamber`, `ck_roster_terms_dates` and `MemberRosterParser`. Test: `MemberRosterParserTests.AnIncompleteRosterIsRejectedSoNoPartialSnapshotIsStored`.
+- A configuration has at most one roster source. Enforced by `CollectionConfiguration`. Test: `RosterSourceConfigurationTests.ASecondRosterSourceIsRejectedBecauseProposalsReadOneSource`.
+- A term has a chamber `sen` or `rep` and an end date that is not before its start. Enforced by `ck_roster_terms_chamber`, `ck_roster_terms_dates` and `MemberRosterParser`. Tests: `MemberRosterParserTests.ATermWithAnUnknownChamberIsRejected`, `MemberRosterParserTests.ATermThatEndsBeforeItStartsIsRejected`.
 - An empty snapshot never reads as every person leaving. Enforced by `ProposeRosterChanges`. Tests: `ProposeRosterChangesTests.NoSnapshotYieldsNoProposalSoAnEmptyRosterNeverReadsAsEveryoneLeaving`, `RosterCommandTests.ProposeWithoutASnapshotFailsInsteadOfProposingEveryoneAsLeaving`.
 - The propose command writes nothing. Enforced by `ProposeRosterChanges`, which has only a read port. Test: `RosterCommandTests.ProposeListsNewMembersWithAManualPressStepAndConfiguredMembersWhoLeftAndWritesNothing`.
 
@@ -37,15 +41,15 @@ Each line gives the rule, what enforces it, and the test that protects it.
 
 ### Source configuration
 
-The source sets `mode` `api`, `apiParser` `congressLegislators`, and `checkIntervalSeconds` 86400. It sets no `credential`, no `coverage`, no `minimumCongress`, and no `backfillFrom`. The file is about 1.5 MB, so the shipped source sets `maxBytes` 2,500,000. The collector needs `maxRequests` of at least 2.
+The source sets `mode` `api`, `apiParser` `congressLegislators`, and `checkIntervalSeconds` 86400. It sets no `credential`, no `coverage`, no `minimumCongress`, and no `backfillFrom`. The file is about 1.5 MB, so the shipped source sets `maxBytes` 2,500,000. The collector contract requires `maxRequests` of at least 2, so the source sets 2.
 
 ### Capture and admission
 
-The scheduler makes one root job for the source URL with `apiResource` `memberRoster`. Preparation parses the capture with `MemberRosterParser` and gives the members to `IMemberRosterStore.AdmitAsync` with the attempt ID. A parse failure fails preparation and writes nothing.
+The scheduler makes one root job for the source URL with `apiResource` `memberRoster`. A parse failure, including a value longer than its column, blocks preparation as invalid data and writes nothing.
 
-`AdmitAsync` runs in one transaction. It reads the attempt and its capture hash. It returns when the attempt already has rows. It also returns when the latest snapshot of the same source has the same capture hash. Otherwise it inserts the member rows and the term rows.
+Preparation first asks `HasSnapshotOfCaptureAsync`. It is true when any snapshot of the same source has the same capture hash. Then preparation stops, and the capture adds only its attempt row. Otherwise preparation parses the body and `AdmitAsync` inserts the member rows and the term rows in one save.
 
-A conditional request that gets a 304 has no captured body and no job output. The shipped source sets no validators, so each check fetches the file.
+Each daily check downloads the whole file. No ETag or conditional request is used. An unchanged file adds an attempt row and nothing else.
 
 ### Proposals
 
@@ -61,7 +65,7 @@ A person edits the configuration by hand and commits it. Exit codes are 0 for su
 - The generated [roster schema](schema/roster.md) lists every table, column, key, and check.
 - `roster_members` has one row for each member and snapshot. The key is the attempt ID and the bioguide ID. It holds the Senate `lis` ID, the official full name, and the office, phone, and URL of the last term.
 - `roster_terms` has one row for each term. The key is the attempt ID, the bioguide ID, and the term index. It holds the chamber, the start and end dates, the state, the district, the Senate class, and the party.
-- Both tables reference `collection_attempts`. The latest snapshot of a source is the newest attempt of that source that has member rows.
+- Both tables reference `collection_attempts`. A snapshot is the set of rows of one attempt. The reader rule is in [Decisions](#decisions).
 - `IMemberRosterStore` is the port. `PostgresMemberRosterStore` implements it.
 
 ## Code map

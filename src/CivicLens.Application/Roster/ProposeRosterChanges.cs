@@ -28,6 +28,7 @@ public sealed partial class ProposeRosterChanges(IMemberRosterStore roster)
     private static string ProposeId(RosterMember member, HashSet<string> takenIds)
     {
         var id = NotLowerAlphanumeric().Replace(WithoutAccents(member.FullName).ToLowerInvariant(), "-").Trim('-');
+        if (id.Length == 0) id = member.BioguideId.ToLowerInvariant();
         if (!takenIds.Add(id)) id = $"{id}-{member.BioguideId.ToLowerInvariant()}";
         takenIds.Add(id);
         return id;

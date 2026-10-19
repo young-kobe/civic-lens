@@ -211,7 +211,9 @@ public sealed class JobPreparation(
         CancellationToken cancellationToken)
     {
         var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
-        await roster.AdmitAsync(response.Captured.AttemptId, MemberRosterParser.Parse(response.Body), cancellationToken);
+        var attemptId = response.Captured.AttemptId;
+        if (!await roster.HasSnapshotOfCaptureAsync(attemptId, cancellationToken))
+            await roster.AdmitAsync(attemptId, MemberRosterParser.Parse(response.Body), cancellationToken);
         return JobPreparationResult.Prepared();
     }
 

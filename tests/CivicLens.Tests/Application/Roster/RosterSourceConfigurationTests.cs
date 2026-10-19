@@ -38,6 +38,15 @@ public sealed class RosterSourceConfigurationTests
     }
 
     [Fact]
+    public void ASecondRosterSourceIsRejectedBecauseProposalsReadOneSource()
+    {
+        var second = RosterFixtures.Source() with { Id = "second", Url = RosterFixtures.SourceUrl + "?copy=1" };
+        var configuration = RosterFixtures.Configuration() with { Sources = [RosterFixtures.Source(), second] };
+
+        Assert.Throws<ArgumentException>(configuration.Validate);
+    }
+
+    [Fact]
     public void ARosterSourceCoversNoPeopleYetStaysEligibleSoTheDailyCheckRuns()
     {
         var configuration = RosterFixtures.Configuration(RosterFixtures.Person("a", "A", "A000001"));

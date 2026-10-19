@@ -46,25 +46,104 @@ public sealed class MemberRosterParserTests
         Assert.Equal("Aisha Wahab", wahab.FullName);
     }
 
-    [Theory]
-    [InlineData("[]")]
-    [InlineData("""[{"id":{"bioguide":"bad"},"name":{"official_full":"A"},"terms":[]}]""")]
-    [InlineData("""[{"id":{"bioguide":"A000001"},"name":{"official_full":"A"},"terms":[]}]""")]
-    [InlineData("""[{"id":{"bioguide":"A000001"},"name":{},"terms":[{"type":"sen","start":"2025-01-03","end":"2027-01-03","state":"AL","party":"Republican"}]}]""")]
-    [InlineData("""[{"id":{"bioguide":"A000001"},"name":{"official_full":"A"},"terms":[{"type":"gov","start":"2025-01-03","end":"2027-01-03","state":"AL","party":"Republican"}]}]""")]
-    [InlineData("""[{"id":{"bioguide":"A000001"},"name":{"official_full":"A"},"terms":[{"type":"sen","start":"2027-01-03","end":"2025-01-03","state":"AL","party":"Republican"}]}]""")]
-    [InlineData("""[{"id":{"bioguide":"A000001"},"name":{"official_full":"A"},"terms":[{"type":"sen","start":"2025-01-03","end":"2027-01-03","state":"AL"}]}]""")]
-    [InlineData("""{"not":"a list"}""")]
-    public void AnIncompleteRosterIsRejectedSoNoPartialSnapshotIsStored(string json)
+    [Fact]
+    public void AValidMinimalMemberParsesSoEveryRejectionBelowBreaksOneRule()
     {
-        Assert.Throws<InvalidDataException>(() => Parse(json));
+        Assert.Single(Parse(Roster(Member())));
+    }
+
+    [Fact]
+    public void AnEmptyListIsRejectedBecauseItWouldReadAsEveryoneLeaving()
+    {
+        Assert.Throws<InvalidDataException>(() => Parse("[]"));
+    }
+
+    [Fact]
+    public void ADocumentThatIsNotAListIsRejected()
+    {
+        Assert.Throws<InvalidDataException>(() => Parse("""{"not":"a list"}"""));
+    }
+
+    [Fact]
+    public void AMalformedBioguideIdIsRejected()
+    {
+        Assert.Throws<InvalidDataException>(() => Parse(Roster(Member(bioguide: "bad"))));
+    }
+
+    [Fact]
+    public void AMemberWithoutTermsIsRejected()
+    {
+        Assert.Throws<InvalidDataException>(() => Parse(Roster(Member(terms: ""))));
+    }
+
+    [Fact]
+    public void AMemberWithoutAnyNameIsRejected()
+    {
+        Assert.Throws<InvalidDataException>(() => Parse(Roster(Member(name: "{}"))));
+    }
+
+    [Fact]
+    public void ATermWithAnUnknownChamberIsRejected()
+    {
+        Assert.Throws<InvalidDataException>(() => Parse(Roster(Member(term: Term(type: "gov")))));
+    }
+
+    [Fact]
+    public void ATermThatEndsBeforeItStartsIsRejected()
+    {
+        Assert.Throws<InvalidDataException>(() => Parse(Roster(Member(term: Term(start: "2027-01-03", end: "2025-01-03")))));
+    }
+
+    [Fact]
+    public void ATermWithoutAPartyIsRejected()
+    {
+        Assert.Throws<InvalidDataException>(() => Parse(Roster(Member(term: Term(party: "")))));
     }
 
     [Fact]
     public void ABioguideIdListedTwiceIsRejectedBecauseItNamesOneMember()
     {
-        const string member = """{"id":{"bioguide":"A000001"},"name":{"official_full":"A"},"terms":[{"type":"sen","start":"2025-01-03","end":"2027-01-03","state":"AL","party":"Republican"}]}""";
-
-        Assert.Throws<InvalidDataException>(() => Parse($"[{member},{member}]"));
+        Assert.Throws<InvalidDataException>(() => Parse(Roster(Member(), Member())));
     }
+
+    [Theory]
+    [MemberData(nameof(ValuesOneCharacterOverTheirColumn))]
+    public void AValueLongerThanItsColumnIsRejectedSoThePreparationBlocksAsInvalidData(string member)
+    {
+        Assert.Throws<InvalidDataException>(() => Parse(Roster(member)));
+    }
+
+    [Theory]
+    [MemberData(nameof(ValuesAtTheirColumnLimit))]
+    public void AValueExactlyAtItsColumnLimitIsAccepted(string member)
+    {
+        Assert.Single(Parse(Roster(member)));
+    }
+
+    public static TheoryData<string> ValuesOneCharacterOverTheirColumn => Limited(1);
+
+    public static TheoryData<string> ValuesAtTheirColumnLimit => Limited(0);
+
+    private static TheoryData<string> Limited(int excess) => new()
+    {
+        Member(lis: Text(RosterLimits.LisId + excess)),
+        Member(name: $$"""{"official_full":"{{Text(RosterLimits.FullName + excess)}}"}"""),
+        Member(term: Term(office: Text(RosterLimits.Office + excess))),
+        Member(term: Term(phone: Text(RosterLimits.Phone + excess))),
+        Member(term: Term(url: Text(RosterLimits.Url + excess))),
+        Member(term: Term(state: Text(RosterLimits.State + excess))),
+        Member(term: Term(party: Text(RosterLimits.Party + excess)))
+    };
+
+    private static string Text(int length) => new('x', length);
+
+    private static string Roster(params string[] members) => $"[{string.Join(',', members)}]";
+
+    private static string Term(string type = "sen", string start = "2025-01-03", string end = "2027-01-03", string state = "AL",
+        string party = "Republican", string office = "", string phone = "", string url = "") =>
+        $$"""{"type":"{{type}}","start":"{{start}}","end":"{{end}}","state":"{{state}}","party":"{{party}}","office":"{{office}}","phone":"{{phone}}","url":"{{url}}"}""";
+
+    private static string Member(string bioguide = "A000001", string lis = "", string name = """{"official_full":"A"}""",
+        string? terms = null, string? term = null) =>
+        $$"""{"id":{"bioguide":"{{bioguide}}","lis":"{{lis}}"},"name":{{name}},"terms":[{{terms ?? term ?? Term()}}]}""";
 }

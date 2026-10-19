@@ -6,6 +6,7 @@ using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Roster;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.Roster;
@@ -31,7 +32,7 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
     [Fact]
     public async Task ACaptureWritesOneSnapshotOfMembersAndDatedTermsThatCiteItsAttempt()
     {
-        var attemptId = await RosterFixtures.ImportCaptureAsync(attempts, new string('a', 64), Morning);
+        var attemptId = await ImportAsync('a', 0);
 
         await roster.AdmitAsync(attemptId, RosterFixtures.Members(), default);
 
@@ -44,23 +45,65 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
     }
 
     [Fact]
-    public async Task ACaptureWithTheSameBodyHashAsTheLatestSnapshotWritesNothingNew()
+    public async Task ACaptureWithTheBodyOfAnEarlierSnapshotNotOnlyTheLatestIsKnown()
     {
-        var first = await RosterFixtures.ImportCaptureAsync(attempts, new string('a', 64), Morning);
-        var unchanged = await RosterFixtures.ImportCaptureAsync(attempts, new string('a', 64), Morning.AddDays(1));
+        var a = await ImportAsync('a', 0);
+        var b = await ImportAsync('b', 1);
+        await roster.AdmitAsync(a, RosterFixtures.Members(), default);
+        await roster.AdmitAsync(b, [.. RosterFixtures.Members().Take(2)], default);
+        var aAgain = await ImportAsync('a', 2);
+        var newBody = await ImportAsync('c', 3);
+
+        Assert.True(await roster.HasSnapshotOfCaptureAsync(aAgain, default));
+        Assert.False(await roster.HasSnapshotOfCaptureAsync(newBody, default));
+        Assert.Equal(0, await CountAsync("roster_members", aAgain));
+    }
+
+    [Fact]
+    public async Task ReaderFollowsTheNewestCaptureWhateverTheAdmissionOrder()
+    {
+        var a = await ImportAsync('a', 0);
+        var b = await ImportAsync('b', 1);
+        var aAgain = await ImportAsync('a', 2);
+        await roster.AdmitAsync(a, RosterFixtures.Members(), default);
+        Assert.Equal(3, (await roster.ReadLatestAsync(RosterFixtures.SourceId, default)).Count);
+        Assert.True(await roster.HasSnapshotOfCaptureAsync(aAgain, default));
+
+        await roster.AdmitAsync(b, [.. RosterFixtures.Members().Take(2)], default);
+
+        Assert.Equal(3, (await roster.ReadLatestAsync(RosterFixtures.SourceId, default)).Count);
+    }
+
+    [Fact]
+    public async Task AFileThatChangesAndThenChangesBackReadsAsTheEarlierSnapshotWithoutANewOne()
+    {
+        var a = await ImportAsync('a', 0);
+        var b = await ImportAsync('b', 1);
+        await roster.AdmitAsync(a, RosterFixtures.Members(), default);
+        await roster.AdmitAsync(b, [.. RosterFixtures.Members().Take(2)], default);
+        Assert.Equal(2, (await roster.ReadLatestAsync(RosterFixtures.SourceId, default)).Count);
+        var aAgain = await ImportAsync('a', 2);
+
+        Assert.True(await roster.HasSnapshotOfCaptureAsync(aAgain, default));
+        Assert.Equal(3, (await roster.ReadLatestAsync(RosterFixtures.SourceId, default)).Count);
+    }
+
+    [Fact]
+    public async Task TwoSnapshotsOfOneBodyReadAsTheOldestOne()
+    {
+        var first = await ImportAsync('a', 0);
+        var raced = await ImportAsync('a', 1);
+        await roster.AdmitAsync(raced, [.. RosterFixtures.Members().Take(1)], default);
         await roster.AdmitAsync(first, RosterFixtures.Members(), default);
 
-        await roster.AdmitAsync(unchanged, RosterFixtures.Members(), default);
-
-        Assert.Equal(0, await CountAsync("roster_members", unchanged));
-        Assert.Equal(3, await CountAsync("roster_members", first));
+        Assert.Equal(3, (await roster.ReadLatestAsync(RosterFixtures.SourceId, default)).Count);
     }
 
     [Fact]
     public async Task AChangedCaptureAppendsASnapshotAndReadersTakeTheLatestWhileTheOldRowsStay()
     {
-        var first = await RosterFixtures.ImportCaptureAsync(attempts, new string('a', 64), Morning);
-        var changed = await RosterFixtures.ImportCaptureAsync(attempts, new string('b', 64), Morning.AddDays(1));
+        var first = await ImportAsync('a', 0);
+        var changed = await ImportAsync('b', 1);
         await roster.AdmitAsync(first, RosterFixtures.Members(), default);
 
         await roster.AdmitAsync(changed, [.. RosterFixtures.Members().Take(2)], default);
@@ -70,14 +113,15 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
     }
 
     [Fact]
-    public async Task AdmittingTheSameAttemptAgainIsHarmlessSoAReplayedJobKeepsOneSnapshot()
+    public async Task AFailedInsertLeavesNoPartialSnapshot()
     {
-        var attemptId = await RosterFixtures.ImportCaptureAsync(attempts, new string('a', 64), Morning);
+        var attemptId = await ImportAsync('a', 0);
+        var members = RosterFixtures.Members();
+        var broken = members[1] with { Terms = [members[1].Terms[0] with { Chamber = "gov" }] };
 
-        await roster.AdmitAsync(attemptId, RosterFixtures.Members(), default);
-        await roster.AdmitAsync(attemptId, RosterFixtures.Members(), default);
+        await Assert.ThrowsAsync<DbUpdateException>(() => roster.AdmitAsync(attemptId, [members[0], broken], default));
 
-        Assert.Equal(3, await CountAsync("roster_members", attemptId));
+        Assert.Equal((0L, 0L), (await CountAsync("roster_members", attemptId), await CountAsync("roster_terms", attemptId)));
     }
 
     [Fact]
@@ -89,7 +133,7 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
     [Fact]
     public async Task AnUnknownAttemptIsRejected()
     {
-        await Assert.ThrowsAsync<InvalidOperationException>(() => roster.AdmitAsync("missing", RosterFixtures.Members(), default));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => roster.HasSnapshotOfCaptureAsync("missing", default));
     }
 
     [Fact]
@@ -105,6 +149,9 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
         Assert.Equal((ApiResource.MemberRoster, RosterFixtures.SourceUrl, null), (job.Definition.ApiResource, job.Definition.Url,
             job.Definition.Credential));
     }
+
+    private Task<string> ImportAsync(char body, int day) =>
+        RosterFixtures.ImportCaptureAsync(attempts, new string(body, 64), Morning.AddDays(day));
 
     private async Task<long> CountAsync(string table, string attemptId)
     {

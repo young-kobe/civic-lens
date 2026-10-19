@@ -59,6 +59,9 @@ public sealed record CollectionConfiguration
 
         ValidatePacingGroups();
 
+        if (Sources.Count(source => source?.ApiParser == ApiParser.CongressLegislators) > 1)
+            throw new ArgumentException("A configuration may have only one member roster source.");
+
         var sourceUrls = new HashSet<Uri>();
         foreach (var source in Sources)
         {

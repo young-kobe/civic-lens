@@ -373,6 +373,17 @@ public sealed class JobPreparationTests
     }
 
     [Fact]
+    public async Task AKnownRosterCaptureIsNotParsedAndWritesNothing()
+    {
+        roster.Known = true;
+
+        var result = await Prepare(ApiResource.MemberRoster, RosterFixtures.SourceUrl, "not json at all", null);
+
+        Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
+        Assert.Empty(roster.Admissions);
+    }
+
+    [Fact]
     public void EveryApiResourceHasACaseInTheNeverExtractedTheory()
     {
         var covered = EveryResource.Select(row => (ApiResource?)row[0]).OfType<ApiResource>();
@@ -601,7 +612,11 @@ public sealed class JobPreparationTests
 
     private sealed class RecordingRoster : CivicLens.Application.Roster.IMemberRosterStore
     {
+        public bool Known { get; set; }
+
         public List<(string AttemptId, IReadOnlyList<CivicLens.Application.Roster.RosterMember> Members)> Admissions { get; } = [];
+
+        public Task<bool> HasSnapshotOfCaptureAsync(string attemptId, CancellationToken cancellationToken) => Task.FromResult(Known);
 
         public Task AdmitAsync(string attemptId, IReadOnlyList<CivicLens.Application.Roster.RosterMember> members, CancellationToken cancellationToken)
         {

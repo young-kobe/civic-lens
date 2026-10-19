@@ -1,3 +1,4 @@
+using CivicLens.Application.Roster;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -19,10 +20,10 @@ internal sealed class RosterTermRowConfiguration : IEntityTypeConfiguration<Rost
         builder.Property(row => row.Chamber).HasColumnName("chamber").HasMaxLength(3).IsRequired();
         builder.Property(row => row.StartsOn).HasColumnName("starts_on");
         builder.Property(row => row.EndsOn).HasColumnName("ends_on");
-        builder.Property(row => row.State).HasColumnName("state").HasMaxLength(8).IsRequired();
+        builder.Property(row => row.State).HasColumnName("state").HasMaxLength(RosterLimits.State).IsRequired();
         builder.Property(row => row.District).HasColumnName("district");
         builder.Property(row => row.SenateClass).HasColumnName("senate_class");
-        builder.Property(row => row.Party).HasColumnName("party").HasMaxLength(64).IsRequired();
+        builder.Property(row => row.Party).HasColumnName("party").HasMaxLength(RosterLimits.Party).IsRequired();
         builder.HasOne<RosterMemberRow>().WithMany().HasForeignKey(row => new { row.AttemptId, row.BioguideId })
             .OnDelete(DeleteBehavior.Restrict);
     }
