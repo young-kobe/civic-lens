@@ -75,7 +75,7 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
 
         var links = page.QuerySelectorAll("[aria-labelledby='evidence'] a").ToDictionary(link => link.TextContent, link => link);
         Assert.Equal($"/Review/Actions/{RelationshipFixtures.ActionId}", links["Action draft of this bill"].GetAttribute("href"));
-        Assert.Equal("https://clerk.house.gov/evs/2025/roll100.xml", links["Roll call on clerk.house.gov"].GetAttribute("href"));
+        Assert.Equal("https://clerk.house.gov/Votes/2025100", links["Roll call on clerk.house.gov"].GetAttribute("href"));
         Assert.Equal("noopener noreferrer", links["Roll call on clerk.house.gov"].GetAttribute("rel"));
     }
 
@@ -94,14 +94,14 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
     }
 
     [Fact]
-    public async Task TheClerkLinkNamesTheCalendarYearOfTheSessionAndPadsTheRollNumber()
+    public async Task TheClerkLinkNamesTheCalendarYearOfTheSessionAndWritesTheRollNumberWithoutPadding()
     {
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
         var recordId = await SeedVoteDraftAsync(session: 2, roll: 5);
 
         var page = await host.GetDocumentAsync($"/Review/Votes/{recordId}");
 
-        Assert.Equal("https://clerk.house.gov/evs/2026/roll005.xml",
+        Assert.Equal("https://clerk.house.gov/Votes/20265",
             page.QuerySelector("[aria-labelledby='evidence'] a")!.GetAttribute("href"));
     }
 

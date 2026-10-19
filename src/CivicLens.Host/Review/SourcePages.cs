@@ -21,7 +21,7 @@ internal static class SourcePages
         $"https://www.congress.gov/bill/{Ordinal(congress)}-congress/{BillSlugs[billType]}/{billNumber.ToString(CultureInfo.InvariantCulture)}";
 
     public static string RollCall(int congress, int sessionNumber, int rollCallNumber) =>
-        $"https://clerk.house.gov/evs/{CongressCalendar.StartOf(congress).Year + sessionNumber - 1}/roll{rollCallNumber.ToString("000", CultureInfo.InvariantCulture)}.xml";
+        $"https://clerk.house.gov/Votes/{CongressCalendar.StartOf(congress).Year + sessionNumber - 1}{rollCallNumber.ToString(CultureInfo.InvariantCulture)}";
 
     private static string Ordinal(int number)
     {

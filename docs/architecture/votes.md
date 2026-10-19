@@ -100,7 +100,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A saved extraction of an older parser blocks before any capture is parsed. Enforced by `VoteReader`. Test: `VoteDraftStepTests.AChangedParserVersionBlocksBeforeAnyCaptureIsParsedSoAnUpgradeIsNeverReportedAsBrokenData`.
 - A candidate with a newer candidate of the same roll call never becomes a revision. Enforced by `VoteDraftStep` and `VoteDraftRows.AppendAnalysisRevisionAsync`. Tests: `VoteDraftStepTests.ACandidateWithANewerCandidateOfTheSameRollCallIsSupersededWithoutACall` and `PostgresHouseVoteTests.ANewerCandidateThatArrivesAfterTheClaimSupersedesTheAppendSoTheOlderDraftNeverBecomesARevision`.
 - The vote page links the action draft of its bill only when the vote names a bill and that bill has a draft. Enforced by `PostgresVoteReviewStore.GetAsync`. Tests: `VoteReviewWorkspaceTests.TheVotePageLinksTheActionDraftOfItsBillAndTheRollCallOnTheClerkSite` and `VoteReviewWorkspaceTests.TheVotePageHasNoActionLinkWhenTheVoteNamesNoBillOrTheBillHasNoActionDraft`.
-- The clerk link names the calendar year of the session and pads the roll number to three digits. Enforced by `SourcePages.RollCall`. Test: `VoteReviewWorkspaceTests.TheClerkLinkNamesTheCalendarYearOfTheSessionAndPadsTheRollNumber`.
+- The clerk link names the calendar year of the session and writes the roll number without padding. Enforced by `SourcePages.RollCall`. Test: `VoteReviewWorkspaceTests.TheClerkLinkNamesTheCalendarYearOfTheSessionAndWritesTheRollNumberWithoutPadding`.
 - A person edits only the headline and the summary. Enforced by `VoteDraftRevision.ValidatePersonEditOf`, checked again under the vote review lock. Test: `VoteDraftRevisionTests.AVoteReviewerEditsOnlyTheHeadlineAndTheSummaryBecauseCodeOwnsTheDayTheKindTheFactsAndTheMemberVotes`.
 - A person may keep or clear the suggestion, but never change it. Enforced by `ReviewTextRules.RequireSuggestionKeptOrCleared`, checked again under the lock. Tests: `VoteDraftRevisionTests.APersonMayKeepOrClearTheSuggestionButNeverChangeItBecauseOnlyTheModelWritesSuggestions` and `PostgresHouseVoteTests.APersonSaveMayKeepOrClearTheSuggestionButTheStoreRefusesAChangedOne`.
 - A later model run keeps the text of a person and offers its own text as a suggestion. Enforced by `ReviewText.AfterModelDraft` and `ReviewTextRules.RequireAnalysisText`. Tests: `VoteDraftStepTests.APersonsTextIsKeptAndTheModelsNewTextBecomesASuggestionBecauseAModelPredictionIsNeverAHumanEdit`, `VoteDraftStepTests.ACorrectedMemberVoteKeepsAPersonsTextAndTheSuggestionWithoutAModelCall`, and `VoteDraftRevisionTests.ARevisionAfterAPersonsTextMustKeepThatTextAndOfferTheModelsAsASuggestion`.
@@ -289,12 +289,12 @@ Vote review uses the shared decision rules and review cycles in [review](review.
 - those facts are the roll call, the kind, the bill, the tracked issues, and the member votes
 - the saved revision and the "Edit wording" form, with the suggestion and its "Use suggestion" and "Dismiss" buttons
 - the evidence: the vote kind with its cited `Question` line, and each fact with its cited line
-- a link to the roll call data on clerk.house.gov
+- a link to the roll call page on clerk.house.gov
 - a link to the action draft of the bill, when the vote names a bill that has a draft
 - the tracked members: the name and the cast of each member, with the cited member line
 - the shared `ReviewDecisionPanel` and `ReviewHistoryPanel`
 
-The action link comes from `GetVoteReview`. The review read finds the action draft of the bill with `FindBillActionRecordIdsAsync` in the same transaction, which publication uses too. The clerk link is the XML file of the roll call: `https://clerk.house.gov/evs/{year}/roll{number:000}.xml`. The year is the calendar year of the session. The rest of the form is the `sourceDataURL` in the stored fixtures and in the saved detail text.
+The action link comes from `GetVoteReview`. The review read finds the action draft of the bill with `FindBillActionRecordIdsAsync` in the same transaction, which publication uses too. The clerk link is the HTML vote page: `https://clerk.house.gov/Votes/{year}{number}`. The year is the calendar year of the session. The roll number has no padding, so roll 100 of 2025 is `2025100` and roll 5 is `20255`. The format was checked against the live site on 2026-10-19.
 
 A person cannot edit the member votes. The rail has a Votes link.
 
