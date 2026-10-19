@@ -106,10 +106,11 @@ Production hosting is agreed but not implemented. The [roadmap](../roadmap.md) h
 - Containers host the application, the collection and background jobs, and PostgreSQL with persistent storage.
 - Terraform defines all infrastructure at every vendor, and CI automates deployment. Services can use more than one vendor, such as Hetzner, Cloudflare, or AWS, when cost or resilience favors it.
 - Production collection, review, publication, and recovery run without the developer workstation. Local development stays supported.
-- One CPX21 is the starting point. Separate services, or services split across cloud providers, are open in [D-08](../roadmap.md#pending-decisions).
+- One CPX21 runs the operational application: Postgres, the worker, the review workspace, and publish. Cloudflare runs public serving and holds the backups. Terraform covers both vendors.
+- Split out more services only when a measurement shows that the box is too small. The R-40 search service is the first candidate.
 - Both reviewers reach the shared workspace through their browsers. Live Auth0 tenant login and proxy verification happen in the infrastructure stage.
 - Retained evidence and database backups need off-server storage and a tested restoration.
-- A static file server on the same CPX21 serves approved releases. It is separate from the operational application and storage, and reads only published files.
+- The Cloudflare CDN serves approved releases from R2. It is separate from the operational application and storage, and reads only published files.
 - A release is a self-contained, immutable directory. Switching the active release is atomic, and earlier releases stay for rollback.
 - The public release must stay usable when the operational application, worker, or database is down while the host is up.
 - Production needs durable recovery, backup monitoring, bounded worker concurrency, capacity checks, and a restoration exercise.

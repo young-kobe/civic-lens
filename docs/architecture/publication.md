@@ -16,7 +16,10 @@ The publication feature turns approved revisions into immutable, cumulative stat
 - Every publication write takes all six review locks in one fixed order, which prevents a deadlock. The order is in [advisory locks](../architecture.md#advisory-locks).
 - A release has no status column. `is_active` marks the one active release: a commit sets it on the new row and clears the old one, and rollback moves it.
 - Rollback is a CLI command only. The workspace has no rollback or activate control.
-- All releases are kept until a retention policy is agreed.
+- Every release is kept. Carried records are hard links, so disk grows only with published records, and public MCP clients can pin a release. Review this when the R-40 search service exists.
+- In production, releases go to a Cloudflare R2 bucket behind the Cloudflare CDN on civic-lens.info. Terraform defines the bucket and the domain.
+- Publish stages and checks a release on the server, then uploads it. The active release changes only after the upload finishes.
+- Locally, a Caddy container serves the release root with `file_server { precompressed br gzip }`.
 - Host renders the shared Razor components to static HTML, so publication needs no new project.
 - Each manifest entry carries search filters, so search needs no record file reads. Each published record type owns the mapping in its `ToEntry` method. A filter that the kind has no fact for stays empty; publish never guesses it.
 - One loader owns each record kind: its ID shape, its ready list, and how publish loads and builds it. `PublishedRecordLoaders` lists them, and the publish and ready-list handlers go through that list. One loader owns the Application side of a kind. The other per-kind places are the `PublicationProtocol.IsRecordId` arm, the store state check, `PublishedRecordLabels.Kind`, the review link, and the `IReleaseRenderer` method.
@@ -32,6 +35,9 @@ The publication feature turns approved revisions into immutable, cumulative stat
 - Release JSON uses relaxed escaping (`JavaScriptEncoder.UnsafeRelaxedJsonEscaping`), so non-ASCII letters and punctuation take UTF-8 bytes, not 6-byte `\uXXXX` escapes. This is safe because release JSON is fetched as JSON and never inlined in HTML or a script tag. Readers do not change.
 - Unreviewed proposals, internal reviewer notes, operational job details, and mutation controls stay private.
 - Public serving reads release contracts only. It never reads operational storage or private notes.
+- The public UI is static pages on a CDN. Publish renders every public page, including the official, issue, policy area, and briefing pages. No server is on the public read path.
+- Search and filters read the manifest in the browser until the R-40 search service replaces them. That service is also the public read API.
+- Each public page has one stable URL, so search engines can find it.
 
 ## Invariants
 
@@ -260,7 +266,7 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - A vote record embeds at most `PublishedVote.MaximumSources` sources: the detail, the members, and the bill detail.
 - An action record embeds at most `PublishedAction.MaximumSources` sources. The worst case is the detail page, 3 cosponsor pages (250 rows), and the summaries page, which is 5 sources. A record over the cap fails publish loudly.
 - Correction and withdrawal releases come later. No kind can publish one yet. See R-32 in the [roadmap](../roadmap.md).
-- How the static file server runs locally is not decided. It must send the precompressed manifest, for example Caddy `file_server { precompressed br gzip }` or nginx `gzip_static on`. Compression by the server is the fallback.
+- The R2 upload, the CDN, and the local Caddy container are not built yet. They are part of R-24.
 - Issue, official, and briefing pages are planned in [R-36](../roadmap.md#next). Readers will start with a weekly briefing and recent reviewed developments. Issue pages will connect related records across officials and institutions. Official pages will show dated statements, actions, and reviewed relationships. Official and issue timelines come with R-36. They will build on the published relationships.
 - A related list orders links by the statement date. On a statement page every link has the same date, so the order there falls back to the link ID. Dates of the target records are not in the relationship file.
 - A publish that adds or replaces a statement, action, vote, or relationship reads the carried relationship files that cite those records. It also sends the IDs of all relationships in the release to one database query. The cost of the query grows with the number of published relationships.
@@ -279,7 +285,7 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - Each release row stores `records_json`, about 2 MB at 20,000 records. Review queries expand the active one.
 - Rolling back the `DropReleaseCountCheck` migration fails while any release holds more than 2000 records.
 - A future live public Blazor deployment must read published releases only and stay separate from the operational application.
-- The public UI shape is open in [D-14](../roadmap.md#pending-decisions). Interactive Blazor Server does not suit public pages, because search engines need complete HTML at stable URLs.
+- Each publish rebuilds the facet pages, as it rebuilds the index pages. Measure the file count and write time at 20,000 records in R-36.
 - A future mobile client would read public release contracts through an API, not operational storage.
 - Public MCP will expose `search_records`, `get_record`, `get_official_timeline`, and `compare_document_versions`. It returns published data with IDs, citations, dates, review status, coverage caveats, and the release ID.
 - Public MCP cannot start collection, inference, or edits. It bounds and pages responses, limits requests, and accepts record IDs, not arbitrary fetch URLs. It treats source passages as untrusted attributed content.
