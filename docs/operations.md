@@ -139,7 +139,7 @@ WHERE g.decision = 'Pending'
 ORDER BY g.congress, g.bill_type, g.bill_number;
 ```
 
-To list passed bills that have no action candidate because a cosponsor or actions page job failed or is blocked, run this query. A failed summaries page does not block a candidate, so the query skips it.
+To list passed bills that have no action candidate because a cosponsor or actions page job failed or is blocked, run this query. A failed summaries page does not block a candidate, so the query skips it. A test runs this exact query.
 
 ```sql
 SELECT g.detail_job_id, g.source_id, g.congress, g.bill_type, g.bill_number,

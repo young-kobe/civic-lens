@@ -221,12 +221,14 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
     {
         var wanted = drafts.Select(row => (row.DraftId, RevisionNumber: 1))
             .Concat(decisions.Select(row => (row.DraftId, row.RevisionNumber))).ToHashSet();
-        var draftIds = wanted.Select(key => key.DraftId).Distinct().ToArray();
-        var numbers = wanted.Select(key => key.RevisionNumber).Distinct().ToArray();
-        var rows = await db.Set<DocumentChangeRevisionRow>().AsNoTracking()
-            .Where(row => draftIds.Contains(row.DraftId) && numbers.Contains(row.RevisionNumber))
-            .ToArrayAsync(cancellationToken);
-        return rows.Where(row => wanted.Contains((row.DraftId, row.RevisionNumber))).ToDictionary(
+        var rows = await db.Set<DocumentChangeRevisionRow>().FromSqlRaw("""
+                SELECT r.* FROM document_change_revisions r
+                JOIN unnest({0}, {1}) AS k(draft_id, revision_number)
+                  ON r.draft_id = k.draft_id AND r.revision_number = k.revision_number
+                """,
+                wanted.Select(key => key.DraftId).ToArray(), wanted.Select(key => key.RevisionNumber).ToArray())
+            .AsNoTracking().ToArrayAsync(cancellationToken);
+        return rows.ToDictionary(
             row => (row.DraftId, row.RevisionNumber), row => ReviewJson.Deserialize<DocumentChangeDraftRevision>(row.RevisionJson, "revision"));
     }
 

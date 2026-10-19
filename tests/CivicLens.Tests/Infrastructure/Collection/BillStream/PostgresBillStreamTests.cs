@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Configuration;
 using CivicLens.Application.Collection.Bills;
@@ -1113,27 +1114,19 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
-        await using var command = new NpgsqlCommand("""
-            SELECT g.detail_job_id, g.source_id, g.congress, g.bill_type, g.bill_number,
-                   j.job_id AS stuck_job_id, j.definition_json::jsonb ->> 'apiResource' AS resource,
-                   j.state, e.status AS processing_status, e.error_code
-            FROM bill_gates g
-            JOIN bill_follow_on_jobs l ON l.detail_job_id = g.detail_job_id
-            JOIN collection_jobs j ON j.job_id = l.job_id
-            LEFT JOIN action_candidates c ON c.detail_job_id = g.detail_job_id
-            LEFT JOIN bill_pages p ON p.job_id = l.job_id
-            LEFT JOIN evidence_processing e ON e.job_id = l.job_id
-            WHERE g.decision = 'Passed'
-              AND c.candidate_id IS NULL
-              AND p.job_id IS NULL
-              AND j.definition_json::jsonb ->> 'apiResource' IN ('billCosponsors', 'billActions')
-              AND (j.state IN ('Failed', 'Cancelled') OR e.status IN ('Blocked', 'Failed'))
-            ORDER BY g.congress, g.bill_type, g.bill_number;
-            """, connection);
+        await using var command = new NpgsqlCommand(StuckBillQueryFromOperationsGuide(), connection);
         await using var reader = await command.ExecuteReaderAsync();
         var stuck = new List<StuckBill>();
         while (await reader.ReadAsync()) stuck.Add(new StuckBill(reader.GetString(0), reader.GetString(6)));
         return stuck;
+    }
+
+    private static string StuckBillQueryFromOperationsGuide()
+    {
+        var guide = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "docs", "operations.md"));
+        return Regex.Matches(guide, @"```sql\n(.*?)```", RegexOptions.Singleline)
+            .Select(match => match.Groups[1].Value)
+            .Single(query => query.Contains("g.decision = 'Passed'", StringComparison.Ordinal));
     }
 
     private static readonly DateTimeOffset UpdatedAt = new(2025, 3, 3, 12, 0, 0, TimeSpan.Zero);
