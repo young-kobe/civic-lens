@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace CivicLens.Application.Collection.Bills;
 
@@ -8,11 +7,6 @@ public static class CongressBillParser
 {
     public const string Version = "congress-bill-v1";
     private static readonly string[] UpdateDateFormats = ["yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:sszzz"];
-    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
-    {
-        NumberHandling = JsonNumberHandling.AllowReadingFromString
-    };
-
     public static CongressBill Parse(ReadOnlySpan<byte> json, CongressBillListItem expected)
     {
         ArgumentNullException.ThrowIfNull(expected);
@@ -37,7 +31,7 @@ public static class CongressBillParser
     {
         try
         {
-            return JsonSerializer.Deserialize<WireDetail>(json, Options)
+            return JsonSerializer.Deserialize<WireDetail>(json, CongressApiJson.Options)
                 ?? throw new InvalidDataException("Bill detail is empty.");
         }
         catch (JsonException exception)

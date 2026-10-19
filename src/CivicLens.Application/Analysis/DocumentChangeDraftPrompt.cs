@@ -16,8 +16,6 @@ public static class DocumentChangeDraftPrompt
         WriteIndented = true
     };
 
-    private static readonly JsonSerializerOptions CompactJson = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
-
     private static readonly string SystemPrompt = $"""
         You draft a proposed public account of a change to a government web page for Civic Lens, a nonpartisan transparency publication. A human editor reviews, edits, and approves every account. Your draft is never published as you write it.
 
@@ -60,7 +58,7 @@ public static class DocumentChangeDraftPrompt
     public static long MinimumReservation => Encoding.UTF8.GetByteCount(SystemPrompt) + (long)DocumentChangeDraftTask.MaximumOutputTokens;
 
     public static string SerializeCatalog(DocumentChangeDraftCatalog catalog) =>
-        JsonSerializer.Serialize(new { officials = Officials(catalog), issues = catalog.IssueIds }, CompactJson);
+        JsonSerializer.Serialize(new { officials = Officials(catalog), issues = catalog.IssueIds }, AnalysisPromptText.CompactJson);
 
     private static string BuildUserPrompt(DocumentChangeDraftEvidence evidence, DocumentChangeDraftCatalog catalog, ImmutableArray<string> previousErrors)
     {
@@ -144,7 +142,7 @@ public static class DocumentChangeDraftPrompt
                 }
             }
         };
-        return schema.ToJsonString(CompactJson);
+        return schema.ToJsonString(AnalysisPromptText.CompactJson);
     }
 
     private static IEnumerable<object> Officials(DocumentChangeDraftCatalog catalog) =>

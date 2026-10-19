@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Web;
 using CivicLens.Collection.Contracts;
 
@@ -9,11 +8,6 @@ public static class CongressBillListParser
 {
     public const string Version = "congress-bill-list-v1";
     private const string ApiKeyParameter = "api_key";
-    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
-    {
-        NumberHandling = JsonNumberHandling.AllowReadingFromString
-    };
-
     public static CongressBillListPage Parse(ReadOnlySpan<byte> json, CollectionRequest scope, BillStreamWindow window)
     {
         ArgumentNullException.ThrowIfNull(scope);
@@ -32,7 +26,7 @@ public static class CongressBillListParser
     {
         try
         {
-            return JsonSerializer.Deserialize<WirePage>(json, Options)
+            return JsonSerializer.Deserialize<WirePage>(json, CongressApiJson.Options)
                 ?? throw new InvalidDataException("Bill list page is empty.");
         }
         catch (JsonException exception)

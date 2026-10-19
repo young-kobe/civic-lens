@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using CivicLens.Application.Documents;
 using CivicLens.Collection.Contracts;
 
@@ -8,11 +7,6 @@ namespace CivicLens.Application.Collection.Bills;
 public static class CongressBillSummariesParser
 {
     public const string Version = "congress-bill-summaries-v1";
-    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
-    {
-        NumberHandling = JsonNumberHandling.AllowReadingFromString
-    };
-
     public static string ExtractionVersion(IDocumentTextExtractor extractor)
     {
         ArgumentNullException.ThrowIfNull(extractor);
@@ -37,7 +31,7 @@ public static class CongressBillSummariesParser
     {
         try
         {
-            return JsonSerializer.Deserialize<WirePage>(json, Options)
+            return JsonSerializer.Deserialize<WirePage>(json, CongressApiJson.Options)
                 ?? throw new InvalidDataException("Summary page is empty.");
         }
         catch (JsonException exception)

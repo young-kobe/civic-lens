@@ -1,20 +1,14 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace CivicLens.Application.Collection.HouseVotes;
 
 internal static class HouseVoteJson
 {
-    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
-    {
-        NumberHandling = JsonNumberHandling.AllowReadingFromString
-    };
-
     public static T Deserialize<T>(ReadOnlySpan<byte> json, string name)
     {
         try
         {
-            return JsonSerializer.Deserialize<T>(json, Options)
+            return JsonSerializer.Deserialize<T>(json, CongressApiJson.Options)
                 ?? throw new InvalidDataException($"{name} is empty.");
         }
         catch (JsonException exception)
