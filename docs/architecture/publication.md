@@ -36,7 +36,7 @@ The publication feature turns approved revisions into immutable, cumulative stat
 - Release JSON uses relaxed escaping (`JavaScriptEncoder.UnsafeRelaxedJsonEscaping`), so non-ASCII letters and punctuation take UTF-8 bytes, not 6-byte `\uXXXX` escapes. This is safe because release JSON is fetched as JSON and never inlined in HTML or a script tag. Readers do not change.
 - Unreviewed proposals, internal reviewer notes, operational job details, and mutation controls stay private.
 - Public serving reads release contracts only. It never reads operational storage or private notes.
-- The public UI is static pages on a CDN. Publish renders every public page, including the official, issue, policy area, and briefing pages. No server is on the public read path.
+- The public UI is static pages on a CDN. Publish renders every public page, including the official, issue, policy area, and briefing pages. No server is on the public page path. Search and reader reports go to the R-40 service.
 - Search and filters read the manifest in the browser until the R-40 search service replaces them. That service is also the public read API.
 - Each public page has one stable URL, so search engines can find it.
 
@@ -278,11 +278,12 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - Public filter pages are an MVP requirement. The R-36 official, issue, and policy area pages serve as these pages.
 - Planned, not built: a source filter and filters that are easy to clear, in R-36. The manifest already holds `sourceHost` for the source filter.
 - The R-36 pages will work at phone width. Each result will show the kind, headline, officials, issues, and dates of its record.
-- Later, in [R-40](../roadmap.md#later) after the first cloud deployment: a public search service with its own Postgres database, fed from releases. It gives full-text search over the whole processed corpus.
+- Planned in [R-40](../roadmap.md#next), before the first cloud deployment: a public search service with its own Postgres database, fed from releases. It gives full-text search over the whole processed corpus.
+- Reader reports on a published record go through the R-40 service. The operational application pulls each report into the review queue, and a person handles it. The report names the record ID and the release ID.
 - Split the manifest by kind when it grows over 4 MB.
 - At 20,000 entries the worst realistic manifest is about 14.6 MB, under three quarters of the 32 MB cap. `PublishRelease` refuses a manifest over the cap.
 - Issue and policy area filters show raw IDs, because the manifest has no names for them. R-36 owns the fix. The names come from `config/issues.json` through `PublicationCatalog`, as official names do.
-- After the first deploy, the public search service replaces the client search and the schema 3 filter fields. Delete them then.
+- When the R-40 search service replaces the client search, delete the schema 3 filter fields.
 - Each release row stores `records_json`, about 2 MB at 20,000 records. Review queries expand the active one.
 - Rolling back the `DropReleaseCountCheck` migration fails while any release holds more than 2000 records.
 - A future live public Blazor deployment must read published releases only and stay separate from the operational application.

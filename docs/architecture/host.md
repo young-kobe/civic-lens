@@ -107,6 +107,7 @@ Production hosting is agreed but not implemented. The [roadmap](../roadmap.md) h
 - Terraform defines all infrastructure at every vendor, and CI automates deployment. Services can use more than one vendor, such as Hetzner, Cloudflare, or AWS, when cost or resilience favors it.
 - Production collection, review, publication, and recovery run without the developer workstation. Local development stays supported.
 - One CPX21 runs the operational application: Postgres, the worker, the review workspace, and publish. Cloudflare runs public serving and holds the backups. Terraform covers both vendors.
+- The R-40 search service runs as its own container and database on the same box, with no access to operational storage. Public search and report requests reach it through the Cloudflare proxy.
 - Split out more services only when a measurement shows that the box is too small. The R-40 search service is the first candidate.
 - Both reviewers reach the shared workspace through their browsers. Live Auth0 tenant login and proxy verification happen in the infrastructure stage.
 - Retained evidence and database backups need off-server storage and a tested restoration.

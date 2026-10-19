@@ -32,7 +32,7 @@ The actions feature drafts one record for each bill that has an [action candidat
 - Bulk approval accepts sponsorship-only revisions with no open concern only. It takes up to 64 records and records one decision for each record, with a result for each record. It lives on the triage page, not on the list.
 - A suggestion shows beside the text of a person, with "Use suggestion" and "Dismiss". A person's save may keep or clear the suggestion, but never change it.
 - D-15 (accepted on 2026-10-19): code approves the worker revisions of an action. Code checks every citation, and the model writes only the headline and the summary. Public pages label that text as an AI summary of the official record when the origin of the published text is Model. They add no label when a person wrote the text.
-- A worker revision of a newer candidate gets a new code approval if three rules hold. No concern is open. The revision holds no text that a person wrote. The approval checks pass. A person edit stays with a person even after a person approved it. The release keeps the earlier approved revision until the owner publishes the new one. Reader reports on a published record wait for R-36.
+- A worker revision of a newer candidate gets a new code approval if three rules hold. No concern is open. The revision holds no text that a person wrote. The approval checks pass. A person edit stays with a person even after a person approved it. The release keeps the earlier approved revision until the owner publishes the new one. Reader reports on a published record wait for the R-40 service.
 
 ## Invariants
 
@@ -282,6 +282,6 @@ All are owner commands. Variables and examples are in [operations](../operations
 - After the first action slice, build in this order: House votes, reviewed relationships between statements and actions, then Congressional Record articles as a statement connector. Cosponsorship is cheap position-taking, so votes carry most of the signal about whether words match deeds. Floor speeches cover every member, including officials with no usable web source.
 - House votes do not need dated terms. Each House Clerk vote record gives the bioguide ID, party, and state of each member on the vote date. Votes match people by bioguide ID, as sponsorships do, and keep the party and state from the record.
 - House votes: [votes](votes.md) holds the implemented collection, drafting, review, and publication.
-- Senate votes need senate.gov data and a `lis_member_id` crosswalk, because Congress.gov has neither. The generated roster ([R-14](../roadmap.md#later)) will supply that crosswalk.
+- Senate votes need senate.gov data and a `lis_member_id` crosswalk, because Congress.gov has neither. The generated roster ([R-14](../roadmap.md#next)) will supply that crosswalk.
 - The congress.gov bill link follows the public page form `/bill/{ordinal}-congress/{type slug}/{number}`. No repository fixture or stored row shows that form. Check it against the live site once.
 - Bill lookup ignores the source of an action draft, because bills have one source and no code owns its ID. A second bill source needs a source filter in `FindRecordIdByBillAsync`.
