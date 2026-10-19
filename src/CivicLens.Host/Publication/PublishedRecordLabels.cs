@@ -1,3 +1,4 @@
+using CivicLens.Host.Components.Evidence;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Host.Publication;
@@ -17,6 +18,9 @@ public static class PublishedRecordLabels
 
     public static string Quotation(PublishedQuotationKind kind) =>
         kind == PublishedQuotationKind.DirectQuotation ? "Direct quotation" : "Release text";
+
+    public static IEnumerable<Fact> Wording(PublishedTextOrigin origin) =>
+        origin == PublishedTextOrigin.Model ? [new("Wording", "An AI summary of the official record")] : [];
 
     public static string Role(PublishedSponsorshipRole role) => role switch
     {

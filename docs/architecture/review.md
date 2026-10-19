@@ -14,13 +14,16 @@ The review feature is the private editorial workspace. People draft, revise, and
 - Access changes need a server configuration update and a restart. There is no management UI.
 - Approval binds to the exact public wording and evidence versions reviewed. An edit to either needs a new review. Earlier approvals stay as history and do not authorize the new revision.
 - Approval and publication are separate actions.
+- Code approves a worker revision of an action or a House vote. Their facts come from Congress.gov and the Clerk XML, and code checks every citation. The actor of that decision is the reserved subject `civic-lens:code`. People approve statements, relationships, briefs, document changes, and every revision that a person writes.
+- Code approves a worker revision only if three rules hold. No concern is open. The revision holds no text that a person wrote. The approval checks pass. If one rule fails, the revision waits for a person. A person who withdraws an approval or requests changes therefore stays effective across worker redrafts.
+- A person can still edit and withdraw a fact record. A person edit is a revision that waits for a person to approve it.
 - Writes use expected versions, not editing locks or last-write-wins. The UI never silently merges editorial wording.
 - Decisions are immutable. They cannot be edited or deleted.
 - A saved revision never resolves a concern by itself. Only an explicit approval with a resolution note does.
 - Shared Application handlers own these rules for the UI, the CLI, and future MCP callers.
 - Document changes, statements, actions, votes, and briefs share one decision policy, `ReviewPolicy`. Briefs reach it through `ReviewRecords`.
 - A review cycle starts at the latest approval. Reads load the current revision, the last approved revision, and the decisions since that approval. A cycle has no revision cap. The open-concern cap bounds its decisions.
-- One step appends a revision and computes `review_status` again. Person saves and analysis appends both use it.
+- One step appends a revision and computes `review_status` again. Person saves and analysis appends both use it. One step records a decision, and the person path and the code path both use it.
 - `review_status` and `has_changes` are stored columns that C# computes. SQL filters read them, so SQL keeps no copy of the policy.
 - Autosave and live preview are not part of the first workflow.
 
@@ -36,7 +39,10 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A batched read finds the cycle start of each record on its own. Enforced by `ReviewRecords`. Test: `PostgresDocumentChangeReviewStoreTests.AListReadsEachRecordFromItsOwnCycleStartSoStatusesAndConcernsStayApartInOneBatch`.
 - A read replays every decision of the current cycle against the policy. Enforced by `ReviewDecisionHistory`. Test: `PostgresDocumentChangeReviewStoreTests.ReadsReplayEveryDecisionSinceTheLatestApprovalSoATamperedDecisionInTheCycleFailsTheRead`.
 - A reused idempotency key with another payload fails. Enforced by `ReviewIdempotency`. Test: `PostgresDocumentChangeReviewStoreTests.DecisionReplayReturnsOriginalDecisionAndRejectsPayloadReuse`.
-- The stored status equals the policy status. Enforced by `ReviewPolicy`, `ReviewRecords.AppendRevision`, and the status check constraints. Tests: `PostgresDocumentChangeReviewStoreTests.StoredStatusEqualsThePolicyStatusAfterEveryKindOfWrite` and `PostgresBillStreamTests.AWorkerRevisionAfterAnApprovalRecomputesTheStoredStatusSoTheRecordNeedsReviewAgain`.
+- The stored status equals the policy status. Enforced by `ReviewPolicy`, `ReviewRecords.AppendRevision`, and the status check constraints. Tests: `PostgresDocumentChangeReviewStoreTests.StoredStatusEqualsThePolicyStatusAfterEveryKindOfWrite` and `PostgresBillStreamTests.APersonEditAfterACodeApprovalWaitsForAPersonAndKeepsTheCodeApprovedRevisionAsTheLastApprovedOne`.
+- Code approves a worker revision of an action or a vote in the transaction that appends it. It then runs the decision hooks of a person decision. Enforced by `ReviewRecords.AppendCodeApprovedAsync` and `ReviewRecords.AfterCodeApprovalAsync`. Tests: `PostgresBillStreamTests.CodeApprovesAWorkerRevisionInTheSameTransactionAndTheRecordIsReadyToPublish`, `PostgresHouseVoteTests.CodeApprovesAWorkerVoteRevisionInTheSameTransactionAndTheRecordIsReadyToPublish`, and `PostgresBillStreamTests.ACodeApprovalRunsTheRelationshipHookSoAnApprovedStatementOfTheSponsorQueuesItsPair`.
+- Code does not approve a revision in three cases. A concern is open, the revision holds text that a person wrote, or an approval check fails. The revision then waits for a person. The triage row shows a failed check. Enforced by `ReviewRecords.AppendCodeApprovedAsync`. Tests: `PostgresBillStreamTests.AWorkerRevisionKeepsAnOpenConcernSoCodeDoesNotApproveItAndTheBlockerStaysVisible`, `PostgresBillStreamTests.APersonWithdrawalStaysEffectiveWhenTheWorkerDraftsAgain`, `PostgresBillStreamTests.AWorkerRevisionWithTextAPersonWroteStaysForAPersonWhenNoPersonApprovedThatText`, and `PostgresBillStreamTests.ACodeApprovalLeavesTheRecordForAPersonWhenAnApprovalCheckFails`.
+- Only the worker path can use the subject `civic-lens:code`. A person, an owner, or a reviewer cannot act as it or be configured as it. Enforced by `ReviewAuthor.IsReserved` in `ReviewAuthorization`, `ReviewWriteRules`, `ReviewWorkspaceSettings`, and `PostgresPublicationStore`. Tests: `PostgresBillStreamTests.APersonCannotActAsTheCodeSubject` and `DocumentChangeDraftConfigurationTests.TheAiDrafterAndCodeCheckSubjectsCannotBeAnOwnerOrReviewer`.
 - An approval resolves every open concern. Enforced by `ReviewPolicy`. Test: `ReviewPolicyTests.RequestChangesCarriesAcrossRevisionAndApprovalMustResolveExactConcern`.
 - A withdrawal needs a current approval. Enforced by `ReviewPolicy`. Test: `ReviewPolicyTests.WithdrawalRequiresCurrentApprovalAndCreatesAConcernForReapproval`.
 - The action and vote lists order by tier, then newest event date, then record ID, for every status filter. The statement list has no tier, so it orders by newest event date, then record ID. Enforced by `ReviewKeyset.Page` and `ListedDrafts`. Tests: `PostgresReviewListTests.ActionsListTierOneBeforeANewerTierThreeAndTheNewestEventFirstWithinATierAcrossEveryPageBoundary`, `PostgresReviewListTests.VotesListByTierThenTheNewestVoteDateAndFilterByIssueOfficialAndDate`, and `PostgresStatementReviewStoreTests.ListOrdersByTheNewestEventDateThenTheIdAcrossPagesAndFiltersByTheStoredStatus`.
@@ -109,11 +115,19 @@ A saved revision starts awaiting review. A decision targets an exact revision an
 
 | Decision | Effect and requirements |
 |---|---|
-| Approve | Marks the revision suitable for publication after checking wording, attribution, dates, context, citation fidelity, and substantive significance. One authorized approval suffices. |
+| Approve | Marks the revision suitable for publication after checking wording, attribution, dates, context, citation fidelity, and substantive significance. One authorized approval suffices. For a worker revision of an action or a vote, code approves after it checks the citations; see [Code approval](#code-approval). |
 | Request changes | Blocks publication until explicitly resolved. Needs a note that describes the needed corrections. |
 | Withdraw approval | Invalidates the effective approval and blocks future publication. Needs a reason. |
 
 Either reviewer can raise a blocking concern. A later approval must acknowledge the outstanding concerns and include a resolution note. It records the exact outstanding decision IDs it resolves. The original decisions keep their original revision bindings. Unresolved concerns carry forward as publication blockers when a new revision is saved.
+
+### Code approval
+
+`ReviewRecords.AppendCodeApprovedAsync` appends the worker revision of an action or a vote. It then writes an Approve decision in the same transaction. The decision names the new revision number and the next review state version, and its actor is `civic-lens:code`. It uses the same approval checks as a person: `ValidateForApproval` with the saved extractions, and `ReviewPolicy.ValidateDecision`. The decision row, the state version, and the status come from the one step, `RecordDecision`, that `DecideAsync` also uses.
+
+The settlement calls `AfterCodeApprovalAsync` after it adds its run row. That call runs the after-decision hooks of the record kind in the order that a person decision uses: relationship staleness, then brief staleness. The hooks save the context, so they must run after the run row exists. The worker already holds the review key of the kind. The hooks then take the later keys in the declared order; see [Advisory locks](../architecture.md#advisory-locks).
+
+A failed check is not stored. The record stays awaiting review, and the triage row shows the same check result that a person sees.
 
 ### Status states
 
@@ -123,7 +137,7 @@ The check constraints on `document_change_drafts`, `statement_drafts`, and `acti
 |---|---|---|
 | NotDrafted | AwaitingReview | The first revision, by a person or by analysis |
 | Any status | AwaitingReview or AwaitingReviewWithConcerns | A saved or appended revision, with or without open concerns |
-| Any drafted status | Approved | Approve, which must resolve every open concern |
+| Any drafted status | Approved | Approve, or a code approval. Approve must resolve every open concern |
 | Any drafted status | ChangesRequested | Request changes |
 | Approved | ApprovalWithdrawn | Withdraw approval |
 

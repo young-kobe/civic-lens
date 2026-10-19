@@ -1,7 +1,6 @@
 using System.Collections.Immutable;
 using System.Data;
 using CivicLens.Application.Actions;
-using CivicLens.Application.Briefs;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
@@ -10,12 +9,7 @@ using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Actions.Persistence;
 using CivicLens.Infrastructure.Analysis;
-using CivicLens.Infrastructure.Briefs;
-using CivicLens.Infrastructure.Briefs.Persistence;
-using CivicLens.Infrastructure.Relationships;
-using CivicLens.Infrastructure.Relationships.Persistence;
 using CivicLens.Core.Relationships;
-using CivicLens.Application.Relationships;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.BillStream;
 using CivicLens.Infrastructure.Collection.Jobs;
@@ -37,19 +31,12 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
     private const string DecideOperation = "action-decide";
 
     private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
-    private readonly PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue;
-    private readonly PostgresAnalysisQueue<RelationshipAnalysisRow, RelationshipAnalysisBudgetRow, RelationshipDraftRun> relationshipQueue;
+    private readonly Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision;
 
     public PostgresActionReviewStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
-        : this(contextFactory, new(contextFactory, new BriefDraftQueueMapping()), new(contextFactory, new RelationshipDraftQueueMapping())) { }
-
-    private PostgresActionReviewStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
-        PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue,
-        PostgresAnalysisQueue<RelationshipAnalysisRow, RelationshipAnalysisBudgetRow, RelationshipDraftRun> relationshipQueue)
     {
         this.contextFactory = contextFactory;
-        this.briefQueue = briefQueue;
-        this.relationshipQueue = relationshipQueue;
+        afterDecision = AfterDecisionHooks.ForRecordKind(contextFactory, RelationshipRecordKind.Action, PublishedRecordKind.Action);
     }
 
     public static PostgresActionReviewStore FromConnectionString(string connectionString)
@@ -84,10 +71,8 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
                     throw new ArgumentException("Bulk approval needs a sponsorship-only revision with no open concern.");
                 if (decision.Kind != ReviewDecisionKind.Approve) return;
                 var current = history.CurrentRevision!;
-                current.ValidateForApproval(await ReadExtractionsAsync(db, [current], cancellationToken));
-            }, NewDecisionRow, AfterDecisionHooks.InOrder(
-                RelationshipStaleness.AfterDecision(relationshipQueue, RelationshipRecordKind.Action),
-                BriefStaleness.AfterDecision(briefQueue, PublishedRecordKind.Action)), cancellationToken);
+                await ValidateApprovalAsync(db, current, cancellationToken);
+            }, NewDecisionRow, afterDecision, cancellationToken);
 
     public async Task<string?> FindRecordIdByBillAsync(int congress, string billType, int billNumber, CancellationToken cancellationToken)
     {
@@ -184,6 +169,9 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
         new(draft.RecordId, history.CurrentRevision!, history.LastApprovedRevision, history.LoadedRevisions, draft.ReviewStateVersion,
             history.CurrentStatus, history.Decisions, history.UnresolvedConcerns);
 
+    internal static async Task ValidateApprovalAsync(CollectionAttemptDbContext db, ActionDraftRevision revision, CancellationToken cancellationToken) =>
+        revision.ValidateForApproval(await ReadExtractionsAsync(db, [revision], cancellationToken));
+
     private static Task<Dictionary<string, DocumentExtraction>> ReadExtractionsAsync(CollectionAttemptDbContext db,
         IEnumerable<ActionDraftRevision> revisions, CancellationToken cancellationToken) =>
         PostgresDocumentExtractionStore.ReadManyAsync(db,
@@ -199,7 +187,7 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
         return await ConfiguredPersonNames.ReadAsync(db, candidateIds, revisionIds, cancellationToken);
     }
 
-    private static ActionReviewDecisionRow NewDecisionRow(ReviewDecision decision) => new()
+    internal static ActionReviewDecisionRow NewDecisionRow(ReviewDecision decision) => new()
     {
         DecisionId = decision.DecisionId,
         RecordId = decision.DraftId,

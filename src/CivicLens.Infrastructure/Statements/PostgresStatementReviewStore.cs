@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using System.Data;
-using CivicLens.Application.Briefs;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
@@ -9,12 +8,7 @@ using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Infrastructure.Analysis;
-using CivicLens.Infrastructure.Briefs;
-using CivicLens.Infrastructure.Briefs.Persistence;
-using CivicLens.Infrastructure.Relationships;
-using CivicLens.Infrastructure.Relationships.Persistence;
 using CivicLens.Core.Relationships;
-using CivicLens.Application.Relationships;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Review;
@@ -32,19 +26,12 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
 
     private readonly AdmittingRevisionReader admittingRevisions = new();
     private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
-    private readonly PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue;
-    private readonly PostgresAnalysisQueue<RelationshipAnalysisRow, RelationshipAnalysisBudgetRow, RelationshipDraftRun> relationshipQueue;
+    private readonly Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision;
 
     public PostgresStatementReviewStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
-        : this(contextFactory, new(contextFactory, new BriefDraftQueueMapping()), new(contextFactory, new RelationshipDraftQueueMapping())) { }
-
-    private PostgresStatementReviewStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
-        PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue,
-        PostgresAnalysisQueue<RelationshipAnalysisRow, RelationshipAnalysisBudgetRow, RelationshipDraftRun> relationshipQueue)
     {
         this.contextFactory = contextFactory;
-        this.briefQueue = briefQueue;
-        this.relationshipQueue = relationshipQueue;
+        afterDecision = AfterDecisionHooks.ForRecordKind(contextFactory, RelationshipRecordKind.Statement, PublishedRecordKind.Statement);
     }
 
 
@@ -92,9 +79,7 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
             idempotencyKey, payloadHash, (db, _, history) => decision.Kind == ReviewDecisionKind.Approve
                 ? ValidateApprovalAsync(db, history.CurrentRevision!, approvalSelections, cancellationToken)
-                : Task.CompletedTask, NewDecisionRow, AfterDecisionHooks.InOrder(
-                RelationshipStaleness.AfterDecision(relationshipQueue, RelationshipRecordKind.Statement),
-                BriefStaleness.AfterDecision(briefQueue, PublishedRecordKind.Statement)), cancellationToken);
+                : Task.CompletedTask, NewDecisionRow, afterDecision, cancellationToken);
 
     public async Task<StatementReviewRead?> GetAsync(string candidateId, CancellationToken cancellationToken)
     {

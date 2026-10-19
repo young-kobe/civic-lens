@@ -3,11 +3,14 @@ using CivicLens.Application.Actions;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Infrastructure.Actions.Persistence;
+using CivicLens.Core.Relationships;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.BillStream;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Documents.Persistence;
+using CivicLens.Infrastructure.Review;
+using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 using State = CivicLens.Application.Analysis.AnalysisState;
 
@@ -21,7 +24,7 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
     private readonly PostgresAnalysisQueue<ActionAnalysisRow, ActionAnalysisBudgetRow, ActionDraftRun> queue;
 
     public PostgresActionDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
-        : this(contextFactory, new(contextFactory, new ActionDraftQueueMapping())) { }
+        : this(contextFactory, new(contextFactory, new ActionDraftQueueMapping(AfterDecisionHooks.ForRecordKind(contextFactory, RelationshipRecordKind.Action, PublishedRecordKind.Action)))) { }
 
     private PostgresActionDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
         PostgresAnalysisQueue<ActionAnalysisRow, ActionAnalysisBudgetRow, ActionDraftRun> queue) : base(queue)

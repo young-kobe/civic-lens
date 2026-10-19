@@ -71,6 +71,17 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     }
 
     [Fact]
+    public async Task AStatementAiRevisionIsNeverApprovedByCodeBecauseOnlyAPersonApprovesJudgment()
+    {
+        var candidate = await PassedCandidateAsync();
+
+        await DraftingWorker(new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"]))).ExecuteAsync(once: true);
+
+        Assert.Equal(0L, await ScalarAsync($"SELECT count(*) FROM statement_review_decisions WHERE candidate_id = '{candidate}'"));
+        Assert.Equal("AwaitingReview", await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+    }
+
+    [Fact]
     public async Task ASavedStatementDraftRaisesTheActionRowOfABillThatItsSpeakerSponsorsAndLeavesOtherRowsAlone()
     {
         var article = Article + "\nShe backs H.R. 77 to cap rent.";

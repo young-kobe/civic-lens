@@ -26,8 +26,8 @@ public sealed record ReviewWorkspaceSettings(
     {
         if (owner.Length > 256 || reviewers.Count > 20 || reviewers.Any(value => value.Length > 256))
             throw new ArgumentException("Review subject configuration exceeds its limits.");
-        if (ReviewAuthor.IsAnalysis(owner) || reviewers.Any(ReviewAuthor.IsAnalysis))
-            throw new ArgumentException("The AI drafter's subject cannot be an owner or a reviewer.");
+        if (ReviewAuthor.IsReserved(owner) || reviewers.Any(ReviewAuthor.IsReserved))
+            throw new ArgumentException("The AI drafter and code check subjects cannot be an owner or a reviewer.");
     }
 
     private static Uri ReadHttpsOrigin(string name)

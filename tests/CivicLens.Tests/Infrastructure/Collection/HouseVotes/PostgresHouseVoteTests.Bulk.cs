@@ -23,7 +23,7 @@ public sealed partial class PostgresHouseVoteTests
     public async Task BulkApprovalRejectsAFirstDraftThatIsNotProceduralAndWritesNoDecision()
     {
         var candidate = await PendingCandidateAsync();
-        await SettleAsync(candidate, await RevisionAsync(candidate, 1));
+        await SettleForReviewAsync(candidate, await RevisionAsync(candidate, 1));
         var recordId = await RecordIdAsync(candidate);
 
         var results = await BulkApproveAsync(new BulkApprovalTarget(recordId, 1, 0));
@@ -37,12 +37,12 @@ public sealed partial class PostgresHouseVoteTests
     {
         var older = await PendingCandidateAsync();
         var first = await RevisionAsync(older, 1);
-        await SettleAsync(older, first);
+        await SettleForReviewAsync(older, first);
         var recordId = await RecordIdAsync(older);
         await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Approve);
         var newer = await PendingCandidateAsync(Updated.AddDays(1));
         var changedMembers = await RevisionAsync(newer, 2) with { Members = [first.Members[0] with { Cast = "Nay" }] };
-        await SettleAsync(newer, changedMembers);
+        await SettleForReviewAsync(newer, changedMembers);
 
         var approved = await BulkApproveAsync(new BulkApprovalTarget(recordId, 2, 1));
 
@@ -54,11 +54,11 @@ public sealed partial class PostgresHouseVoteTests
     public async Task BulkApprovalRejectsAMemberVoteChangeThatCameWithNewTextBecauseTheApprovalDoesNotCoverTheText()
     {
         var older = await PendingCandidateAsync();
-        await SettleAsync(older, await RevisionAsync(older, 1));
+        await SettleForReviewAsync(older, await RevisionAsync(older, 1));
         var recordId = await RecordIdAsync(older);
         await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Approve);
         var newer = await PendingCandidateAsync(Updated.AddDays(1));
-        await SettleAsync(newer, await RevisionAsync(newer, 2) with { Headline = "New headline", Summary = "New summary." });
+        await SettleForReviewAsync(newer, await RevisionAsync(newer, 2) with { Headline = "New headline", Summary = "New summary." });
 
         var results = await BulkApproveAsync(new BulkApprovalTarget(recordId, 2, 1));
 
@@ -109,7 +109,7 @@ public sealed partial class PostgresHouseVoteTests
     {
         var candidate = await PendingCandidateAsync();
         var revision = await RevisionAsync(candidate, 1);
-        await SettleAsync(candidate, revision with { Kind = VoteKind.Rule, KindCitation = revision.VotedOnCitation });
+        await SettleForReviewAsync(candidate, revision with { Kind = VoteKind.Rule, KindCitation = revision.VotedOnCitation });
         return await RecordIdAsync(candidate);
     }
 

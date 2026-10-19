@@ -9,7 +9,8 @@ using CivicLens.Infrastructure.Votes.Persistence;
 
 namespace CivicLens.Infrastructure.Votes;
 
-internal sealed class VoteDraftQueueMapping : IAnalysisQueueMapping<VoteAnalysisRow, VoteDraftRun>
+internal sealed class VoteDraftQueueMapping(Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision)
+    : IAnalysisQueueMapping<VoteAnalysisRow, VoteDraftRun>
 {
     public string Table => PostgresVoteDraftStore.Table;
 
@@ -39,9 +40,10 @@ internal sealed class VoteDraftQueueMapping : IAnalysisQueueMapping<VoteAnalysis
     public async Task AfterTransitionAsync(CollectionAttemptDbContext db, VoteAnalysisRow row, AnalysisCheckpoint checkpoint, long now,
         CancellationToken cancellationToken)
     {
-        if (checkpoint is VoteDraftCheckpoint { Revision: { } revision })
-            row.Priority = await PairPriority.OfTargetAsync(db, RelationshipRecordKind.Vote, revision.RecordId, !revision.TrackedIssueIds.IsEmpty,
-                cancellationToken);
+        if (checkpoint is not VoteDraftCheckpoint { Revision: { } revision }) return;
+        row.Priority = await PairPriority.OfTargetAsync(db, RelationshipRecordKind.Vote, revision.RecordId, !revision.TrackedIssueIds.IsEmpty,
+            cancellationToken);
+        await VoteDraftRows.Records.AfterCodeApprovalAsync(db, revision.RecordId, revision.RevisionNumber, afterDecision, cancellationToken);
     }
 
     public async Task<AnalysisSettlement<VoteDraftRun>> PrepareSettlementAsync(CollectionAttemptDbContext db, VoteAnalysisRow row,

@@ -13,7 +13,7 @@ public sealed class PublishedBriefTests
     {
         var json = JsonSerializer.Serialize(Brief(), PublicationProtocol.JsonOptions);
 
-        Assert.Equal(3, PublicationProtocol.SchemaVersion);
+        Assert.Equal(4, PublicationProtocol.SchemaVersion);
         Assert.True(json == $$"""{"recordId":"{{BriefId}}","revisionNumber":1,"headline":"A week of housing news","weekStart":"2026-10-05","cutoffReleaseNumber":3,"coverage":{"considered":5,"sentToModel":4,"cited":2},"paragraphs":[{"text":"Warren backed a rent cap.","citationIds":["R1"]},{"text":"A rule changed.","citationIds":["R1","R2"]}],"citations":[{"id":"R1","kind":"statement","recordId":"1111111111111111111111111111111111111111111111111111111111111111","revisionNumber":1,"headline":"Rent cap statement"},{"id":"R2","kind":"documentChange","recordId":"22222222222222222222222222222222","revisionNumber":3,"headline":"Zoning rule change"}],"approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00"}""",
             "The published brief JSON changed. Bump PublicationProtocol.SchemaVersion, update the version table " +
             "in docs/architecture.md, then update this test. Actual: " + json);

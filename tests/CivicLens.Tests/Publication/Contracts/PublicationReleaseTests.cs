@@ -32,19 +32,19 @@ public sealed class PublicationReleaseTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(4)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(5)]
     public void RejectsASchemaVersionThisReaderDoesNotKnow(int version)
     {
         Assert.Throws<InvalidDataException>(Release(version, Entry(PublishedRecordKind.DocumentChange, ChangeId)).Validate);
     }
 
-    [Theory]
-    [InlineData(1)]
-    [InlineData(2)]
-    [InlineData(3)]
-    public void AcceptsEverySchemaVersionStillOnDisk(int version)
+    [Fact]
+    public void AcceptsTheOldestReadableSchemaVersion()
     {
-        Release(version, Entry(PublishedRecordKind.DocumentChange, ChangeId)).Validate();
+        Release(PublicationProtocol.OldestReadableSchemaVersion, Entry(PublishedRecordKind.DocumentChange, ChangeId)).Validate();
     }
 
     [Fact]
@@ -58,7 +58,7 @@ public sealed class PublicationReleaseTests
             SourceHost = "example.test",
             EventDate = new DateOnly(2026, 1, 2)
         };
-        var json = JsonSerializer.Serialize(Release(3, entry), PublicationProtocol.JsonOptions);
+        var json = JsonSerializer.Serialize(Release(PublicationProtocol.SchemaVersion, entry), PublicationProtocol.JsonOptions);
 
         var read = JsonSerializer.Deserialize<PublicationRelease>(json, PublicationProtocol.JsonOptions)!;
         read.Validate();
@@ -70,26 +70,6 @@ public sealed class PublicationReleaseTests
         Assert.Equal("example.test", filters.SourceHost);
         Assert.Equal(new DateOnly(2026, 1, 2), filters.EventDate);
         Assert.Contains("\"eventDate\":\"2026-01-02\"", json, StringComparison.Ordinal);
-    }
-
-    [Theory]
-    [InlineData(1, "", PublishedRecordKind.DocumentChange)]
-    [InlineData(2, "\"kind\":\"statement\",", PublishedRecordKind.Statement)]
-    public void OlderManifestsReadWithEmptyFiltersBecauseNothingIsBackfilled(int version, string kind, PublishedRecordKind expectedKind)
-    {
-        var id = version == 1 ? ChangeId : StatementId;
-        var json = $$"""{"schemaVersion":{{version}},"releaseNumber":3,"publishedAtUtc":"2026-01-01T00:00:00+00:00","records":[{{{kind}}"recordId":"{{id}}","revisionNumber":1,"headline":"Old","firstPublishedAtUtc":"2026-01-01T00:00:00+00:00"}]}""";
-
-        var release = JsonSerializer.Deserialize<PublicationRelease>(json, PublicationProtocol.JsonOptions)!;
-        release.Validate();
-
-        var entry = Assert.Single(release.Records);
-        Assert.Equal(expectedKind, entry.Kind);
-        Assert.Empty(entry.Officials);
-        Assert.Empty(entry.IssueIds);
-        Assert.Empty(entry.PolicyAreaIds);
-        Assert.Null(entry.SourceHost);
-        Assert.Null(entry.EventDate);
     }
 
     public static TheoryData<PublishedRecordEntry> InvalidFilters()
@@ -116,7 +96,7 @@ public sealed class PublicationReleaseTests
     [MemberData(nameof(InvalidFilters))]
     public void FiltersAreBoundedAndDistinctSoOneEntryCannotSwellTheManifest(PublishedRecordEntry entry)
     {
-        var error = Assert.Throws<InvalidDataException>(Release(3, entry).Validate);
+        var error = Assert.Throws<InvalidDataException>(Release(PublicationProtocol.SchemaVersion, entry).Validate);
 
         Assert.StartsWith("Release manifest filters", error.Message, StringComparison.Ordinal);
     }
@@ -125,7 +105,7 @@ public sealed class PublicationReleaseTests
     public void FiltersAtTheirBoundsAreAccepted()
     {
         var atLimit = new string('x', PublishedRecordEntry.MaximumFilterValueLength);
-        Release(3, Entry(PublishedRecordKind.Statement, StatementId) with
+        Release(PublicationProtocol.SchemaVersion, Entry(PublishedRecordKind.Statement, StatementId) with
         {
             IssueIds = [.. Enumerable.Range(0, PublishedRecordEntry.MaximumFilterValues).Select(index => $"issue-{index}")],
             PolicyAreaIds = [atLimit],
@@ -144,10 +124,10 @@ public sealed class PublicationReleaseTests
     [Fact]
     public void ARecordIdIsUniqueAcrossKindsBecauseAllKindsShareOneRecordFilePath()
     {
-        Release(3, Entry(PublishedRecordKind.Statement, StatementId), Entry(PublishedRecordKind.Action, new string('7', 64))).Validate();
-        Assert.Throws<InvalidDataException>(Release(3, Entry(PublishedRecordKind.Statement, StatementId),
+        Release(PublicationProtocol.SchemaVersion, Entry(PublishedRecordKind.Statement, StatementId), Entry(PublishedRecordKind.Action, new string('7', 64))).Validate();
+        Assert.Throws<InvalidDataException>(Release(PublicationProtocol.SchemaVersion, Entry(PublishedRecordKind.Statement, StatementId),
             Entry(PublishedRecordKind.Action, StatementId)).Validate);
-        Assert.Throws<InvalidDataException>(Release(3, Entry(PublishedRecordKind.DocumentChange, ChangeId),
+        Assert.Throws<InvalidDataException>(Release(PublicationProtocol.SchemaVersion, Entry(PublishedRecordKind.DocumentChange, ChangeId),
             Entry(PublishedRecordKind.DocumentChange, ChangeId)).Validate);
     }
 

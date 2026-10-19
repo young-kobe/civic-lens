@@ -14,6 +14,7 @@ public sealed record PublishedVote
     public required int RevisionNumber { get; init; }
     public required string Headline { get; init; }
     public required string Summary { get; init; }
+    public required PublishedTextOrigin TextOrigin { get; init; }
     public required int Congress { get; init; }
     public required int Session { get; init; }
     public required int RollCallNumber { get; init; }

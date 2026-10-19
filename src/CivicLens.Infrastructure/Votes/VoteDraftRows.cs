@@ -1,3 +1,4 @@
+using CivicLens.Application.Review;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
@@ -25,9 +26,14 @@ internal static class VoteDraftRows
         var draft = await db.Set<VoteDraftRow>().SingleOrDefaultAsync(row => row.RecordId == revision.RecordId, cancellationToken);
         if ((draft?.CurrentRevisionNumber ?? 0) != revision.RevisionNumber - 1) return VoteDraftErrorCodes.RevisionConflict;
         if (draft is null) db.Add(draft = NewDraft(revision));
-        Records.AppendRevision(db, draft, revision, NewRevision(revision, runId), await Records.ReadCycleAsync(db, draft, cancellationToken));
+        await Records.AppendCodeApprovedAsync(db, draft, revision, NewRevision(revision, runId), await Records.ReadCycleAsync(db, draft, cancellationToken),
+            () => PassesApprovalChecksAsync(db, revision, cancellationToken), PostgresVoteReviewStore.NewDecisionRow);
         return null;
     }
+
+    private static async Task<bool> PassesApprovalChecksAsync(CollectionAttemptDbContext db, VoteDraftRevision revision,
+        CancellationToken cancellationToken) =>
+        (await ApprovalCheck.OfAsync(() => PostgresVoteReviewStore.ValidateApprovalAsync(db, revision, cancellationToken))).Passed;
 
     public static Task<bool> HasNewerCandidateAsync(CollectionAttemptDbContext db, string sourceId, int congress, int sessionNumber,
         int rollCallNumber, long updateDateUtcTicks, CancellationToken cancellationToken) =>

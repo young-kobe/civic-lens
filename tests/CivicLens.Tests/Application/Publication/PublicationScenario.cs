@@ -183,14 +183,14 @@ internal sealed class PublicationScenario
 
     // The sponsor cites the detail page and the cosponsor cites a second API page, so the record has two sources.
     public string AddAction(char id, ImmutableArray<ReviewDecision>? decisions = null, string sponsorId = "mayor",
-        string? policyAreaId = "housing-development")
+        string? policyAreaId = "housing-development", bool personText = false)
     {
         var recordId = new string(id, 64);
         var detail = Extraction(ActionDetail, $"action-detail-{id}", "https://api.congress.gov/v3/bill/119/hr/7");
         var cosponsors = Extraction(ActionCosponsors, $"action-cosponsors-{id}", "https://api.congress.gov/v3/bill/119/hr/7/cosponsors");
         SourceSpan DetailLine(string line) => new(detail.ExtractionId, ActionDetail.IndexOf(line, StringComparison.Ordinal), line.Length);
-        var revision = new ActionDraftRevision(recordId, 1, "civic-lens:analysis", ApprovedAt, $"Action {id}", "The mayor sponsored a housing bill.",
-            ReviewTextOrigin.Model, null, "congress-bills", 119, "hr", 7, new string('b', 64), ApprovedAt, false, new string('d', 64), null, null,
+        var revision = new ActionDraftRevision(recordId, 1, personText ? "auth0|editor" : "civic-lens:analysis", ApprovedAt, $"Action {id}",
+            "The mayor sponsored a housing bill.", personText ? ReviewTextOrigin.Person : ReviewTextOrigin.Model, null, "congress-bills", 119, "hr", 7, new string('b', 64), ApprovedAt, false, new string('d', 64), null, null,
             "Housing and Community Development", DetailLine("Policy area: Housing and Community Development"), policyAreaId, ["housing"], new string('e', 64),
             [
                 new(sponsorId, "M000001", ActionSponsorshipRole.Sponsor, false, new DateOnly(2026, 1, 3), null,

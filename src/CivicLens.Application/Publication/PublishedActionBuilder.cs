@@ -19,6 +19,7 @@ internal sealed class PublishedActionBuilder(PublishedRecordRules rules)
             RevisionNumber = revision.RevisionNumber,
             Headline = revision.Headline,
             Summary = revision.Summary,
+            TextOrigin = PublishedRecordRules.TextOriginOf(revision.TextOrigin),
             Congress = revision.Congress,
             BillType = revision.BillType,
             BillNumber = revision.BillNumber,

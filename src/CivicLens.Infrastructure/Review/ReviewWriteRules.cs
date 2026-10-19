@@ -7,14 +7,14 @@ internal static class ReviewWriteRules
 {
     public static void RequireRevisionAuthor(string authorSubject, string actorSubject)
     {
-        if (authorSubject != actorSubject || ReviewAuthor.IsAnalysis(actorSubject))
+        if (authorSubject != actorSubject || ReviewAuthor.IsReserved(actorSubject))
             throw new UnauthorizedAccessException("Revision author does not match the authenticated subject.");
     }
 
     public static void RequireDecisionActor(ReviewDecision decision, string actorSubject)
     {
         ArgumentNullException.ThrowIfNull(decision);
-        if (decision.ActorSubject != actorSubject || ReviewAuthor.IsAnalysis(actorSubject))
+        if (decision.ActorSubject != actorSubject || ReviewAuthor.IsReserved(actorSubject))
             throw new UnauthorizedAccessException("Decision actor does not match the authenticated subject.");
     }
 

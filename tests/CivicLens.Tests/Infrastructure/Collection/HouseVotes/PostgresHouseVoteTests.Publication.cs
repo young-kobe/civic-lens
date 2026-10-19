@@ -40,11 +40,11 @@ public sealed partial class PostgresHouseVoteTests
     public async Task AModelRevisionAfterAnApprovalLeavesTheReadyListBecauseItNeedsReviewAgain()
     {
         var first = await PendingCandidateAsync();
-        await SettleAsync(first, await RevisionAsync(first, 1));
+        await SettleForReviewAsync(first, await RevisionAsync(first, 1));
         var recordId = await RecordIdAsync(first);
         await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Approve);
         var second = await PendingCandidateAsync(Updated.AddDays(1));
-        await SettleAsync(second, await RevisionAsync(second, 2));
+        await SettleForReviewAsync(second, await RevisionAsync(second, 2));
 
         Assert.Empty(await VoteReviews().ListUnpublishedApprovedAsync(10, default));
     }
@@ -97,7 +97,7 @@ public sealed partial class PostgresHouseVoteTests
     private async Task<string> ApprovedVoteAsync()
     {
         var candidate = await PendingCandidateAsync();
-        await SettleAsync(candidate, await RevisionAsync(candidate, 1));
+        await SettleForReviewAsync(candidate, await RevisionAsync(candidate, 1));
         var recordId = await RecordIdAsync(candidate);
         await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Approve);
         return recordId;
