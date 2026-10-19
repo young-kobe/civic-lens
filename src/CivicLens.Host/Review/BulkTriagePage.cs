@@ -8,6 +8,11 @@ public abstract class BulkTriagePage : TriagePage
 {
     protected const string BulkForm = "approve-bulk";
 
+    private static readonly ReviewFailureMessages BulkFailures = new(
+        "A record changed after you opened this page. The page shows the latest state.",
+        $"Choose 1 to {BulkApproval.MaximumRecords} records that are safe to approve in bulk.",
+        "The bulk approval could not be saved. Try again.");
+
     protected IReadOnlyList<BulkApprovalResult>? approvals;
 
     [SupplyParameterFromForm(FormName = BulkForm, Name = "targets")] private string[]? Targets { get; set; }
@@ -15,18 +20,10 @@ public abstract class BulkTriagePage : TriagePage
 
     protected abstract Task<ImmutableArray<BulkApprovalResult>> ApproveBulkAsync(BulkApprovalRequest request);
 
-    protected async Task ApproveSelectedAsync()
-    {
-        try
+    protected Task ApproveSelectedAsync() => RunAsync(
+        () => ApproveBulkAsync(new([.. (Targets ?? []).Select(TriageTargets.Parse)], $"bulk:{BulkKey}")), BulkFailures, results =>
         {
-            approvals = await ApproveBulkAsync(new([.. (Targets ?? []).Select(TriageTargets.Parse)], BulkKey ?? ""));
-        }
-        catch (OperationCanceledException) when (RequestAborted.IsCancellationRequested) { throw; }
-        catch (ArgumentException)
-        {
-            HttpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
-            error = $"Choose 1 to {BulkApproval.MaximumRecords} records that are safe to approve in bulk.";
-        }
-        await LoadAsync();
-    }
+            approvals = results;
+            return LoadAsync();
+        });
 }

@@ -59,12 +59,7 @@
                                 <StatusBadge Text="@tier" />
                             }
                             <span class="cell-sub">@revision.Summary</span>
-                            <ul class="choices">
-                                @foreach (var (label, span) in QuotesOf(revision))
-                                {
-                                    <li><CitationQuote Label="@label" Quote="@span.QuoteIn(triage.Extractions)" /></li>
-                                }
-                            </ul>
+                            <TriageQuotes Quotes="row.Quotes" />
                             <ApprovalCheckView Check="row.Check" />
                         </td>
                         <td>

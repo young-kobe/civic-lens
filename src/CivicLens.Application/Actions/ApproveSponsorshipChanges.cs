@@ -10,5 +10,5 @@ public sealed class ApproveSponsorshipChanges(IActionReviewStore store)
         CancellationToken cancellationToken = default) =>
         BulkApproval.ExecuteAsync(actor, request, (target, decision, idempotencyKey, payloadHash) =>
             store.DecideAsync(actor.Subject, decision, target.ExpectedRevisionNumber, target.ExpectedReviewStateVersion,
-                sponsorshipOnly: true, idempotencyKey, payloadHash, cancellationToken));
+                bulkSafe: true, idempotencyKey, payloadHash, cancellationToken));
 }

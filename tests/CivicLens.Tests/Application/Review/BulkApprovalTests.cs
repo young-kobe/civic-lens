@@ -9,7 +9,10 @@ namespace CivicLens.Tests.Application.Review;
 public sealed class BulkApprovalTests
 {
     private static readonly ReviewActor Reviewer = new("auth0|reviewer", ReviewRole.Reviewer);
-    private readonly ApproveBulkSafeVotes approve = new(new FakeVoteReviewStore());
+    private readonly FakeVoteReviewStore store = new();
+    private readonly ApproveBulkSafeVotes approve;
+
+    public BulkApprovalTests() => approve = new(store);
 
     [Fact]
     public async Task ABatchNeedsOneToSixtyFourDistinctRecordsBecauseEachRecordCostsOneTransaction()
@@ -22,6 +25,19 @@ public sealed class BulkApprovalTests
         await Assert.ThrowsAsync<ArgumentException>(() => approve.ExecuteAsync(Reviewer, new(default, "key")));
         await Assert.ThrowsAsync<ArgumentException>(() => approve.ExecuteAsync(Reviewer, new([Target('1'), Target('1')], "key")));
         await Assert.ThrowsAsync<ArgumentException>(() => approve.ExecuteAsync(Reviewer, new(Many(BulkApproval.MaximumRecords + 1), "key")));
+    }
+
+    [Fact]
+    public async Task ABatchOfExactlySixtyFourRecordsIsAcceptedAndEachRecordGetsItsOwnDecision()
+    {
+        ImmutableArray<BulkApprovalTarget> targets =
+            [.. Enumerable.Range(0, BulkApproval.MaximumRecords).Select(index => new BulkApprovalTarget(index.ToString("x64"), 1, 0))];
+
+        var results = await approve.ExecuteAsync(Reviewer, new(targets, "key"));
+
+        Assert.Equal(BulkApproval.MaximumRecords, results.Length);
+        Assert.All(results, result => Assert.Equal(BulkApprovalOutcome.Approved, result.Outcome));
+        Assert.Equal(BulkApproval.MaximumRecords, store.Decided.Count);
     }
 
     [Fact]

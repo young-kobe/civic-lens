@@ -12,5 +12,5 @@ public sealed record VoteReview(string RecordId, VoteDraftRevision CurrentRevisi
     private bool IsProcedural => CurrentRevision.Kind is VoteKind.Rule or VoteKind.PreviousQuestion or VoteKind.MotionToRecommit;
 
     private bool ChangesOnlyMemberVotesSinceApproval => LastApprovedRevision is { } approved &&
-        ReviewTextRules.HasSameText(CurrentRevision, approved) && CurrentRevision.Kind == approved.Kind;
+        CurrentRevision.IsMemberVoteOnlyChangeOf(approved);
 }

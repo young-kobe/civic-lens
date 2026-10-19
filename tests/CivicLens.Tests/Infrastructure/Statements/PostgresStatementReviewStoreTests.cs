@@ -622,8 +622,8 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         Assert.Equal(new[] { blank, ready }.Order(StringComparer.Ordinal), rows.Keys.Order(StringComparer.Ordinal));
         Assert.True(rows[ready].Check.Passed);
         Assert.False(rows[blank].Check.Passed);
-        var span = rows[ready].Review.CurrentRevision!.Quotations[0].Span;
-        Assert.Contains(Quote, page.Extractions[span.ExtractionId].Text.Substring(span.Start, span.Length));
+        Assert.Contains(Quote, rows[ready].Quotes[0].Text);
+        Assert.Empty(rows[blank].Quotes);
         var rent = await triage.ExecuteAsync(Owner, null, new(DraftStatusFilter.All, IssueId: RentIssue));
         Assert.Equal([ready], rent.Rows.Select(row => row.Review.CandidateId));
     }

@@ -88,6 +88,22 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
     }
 
     [Fact]
+    public async Task ARowWhoseCitedExtractionIsMissingRendersWithAFailedCheckAndNoQuoteSoOneBadRowKeepsThePageUp()
+    {
+        await SeedVoteDraftAsync(citedExtractionId: new string('f', 64));
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+
+        var page = await host.GetDocumentAsync("/Review/Votes/Triage");
+
+        var row = Assert.Single(page.QuerySelectorAll("[aria-labelledby='drafts'] tbody tr"));
+        Assert.Contains("Approval check failed", row.TextContent, StringComparison.Ordinal);
+        Assert.Contains("missing extraction", row.TextContent, StringComparison.Ordinal);
+        Assert.Null(row.QuerySelector("blockquote"));
+        Assert.Null(row.QuerySelector("button[name='approve']"));
+        Assert.NotNull(row.QuerySelector("button[name='requestChanges']"));
+    }
+
+    [Fact]
     public async Task RequestingChangesInlineNeedsANoteAndLeavesTheRowWithOnlyAnEditorLinkBecauseItNowHasAConcern()
     {
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
@@ -146,20 +162,21 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
         return (long)(await command.ExecuteScalarAsync())!;
     }
 
-    private async Task<string> SeedVoteDraftAsync(VoteKind kind = VoteKind.Passage)
+    private async Task<string> SeedVoteDraftAsync(VoteKind kind = VoteKind.Passage, string? citedExtractionId = null)
     {
         const string question = "Question: On Passage";
         const string member = "Member: A000001, A, R, AL, Yea";
         var extraction = await host.SaveExtractionAsync($"{question}\n{member}\n");
         var configuration = CollectionConfigurationRevision.Create(HouseVoteFixtures.Configuration());
+        var cited = citedExtractionId ?? extraction.ExtractionId;
         var recordId = new string('a', 64);
         var candidateId = new string('b', 64);
         var revision = new VoteDraftRevision(recordId, 1, "auth0|editor", DateTimeOffset.UtcNow, "The House passed a measure",
             "The House voted on passage.", ReviewTextOrigin.Person, null, HouseVoteFixtures.SourceId, 119, 1, 100, null, null, candidateId,
-            HouseVoteFixtures.Updated, [new(question, new SourceSpan(extraction.ExtractionId, 0, question.Length))],
-            new DateOnly(2025, 4, 10), new SourceSpan(extraction.ExtractionId, 0, question.Length), kind,
-            new SourceSpan(extraction.ExtractionId, 0, question.Length),
-            [new("with-id-a", "A000001", "Yea", new SourceSpan(extraction.ExtractionId, question.Length + 1, member.Length))], [], new string('e', 64));
+            HouseVoteFixtures.Updated, [new(question, new SourceSpan(cited, 0, question.Length))],
+            new DateOnly(2025, 4, 10), new SourceSpan(cited, 0, question.Length), kind,
+            new SourceSpan(cited, 0, question.Length),
+            [new("with-id-a", "A000001", "Yea", new SourceSpan(cited, question.Length + 1, member.Length))], [], new string('e', 64));
         await using var connection = new NpgsqlConnection(host.ConnectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand($"""

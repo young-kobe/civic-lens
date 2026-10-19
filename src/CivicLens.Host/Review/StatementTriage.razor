@@ -38,12 +38,7 @@
                         <td>
                             <a class="cell-title" href="@StatementRoutes.Editor(item.CandidateId)">@DraftStatusDisplay.DraftName(revision.Headline)</a>
                             <span class="cell-sub">@revision.Summary</span>
-                            <ul class="choices">
-                                @foreach (var quotation in revision.Quotations)
-                                {
-                                    <li><CitationQuote Label="Quotation" Quote="@quotation.Span.QuoteIn(triage.Extractions)" /></li>
-                                }
-                            </ul>
+                            <TriageQuotes Quotes="row.Quotes" />
                             <ApprovalCheckView Check="row.Check" />
                         </td>
                         <td>

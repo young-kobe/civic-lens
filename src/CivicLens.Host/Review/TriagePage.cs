@@ -50,21 +50,34 @@ public abstract class TriagePage : DraftListPage
 
     protected string? PagerHref(string? cursor) => cursor is null ? null : TriageHref(cursor);
 
-    protected async Task DecideSelectedAsync()
+    protected async Task DecideSelectedAsync() =>
+        await RunAsync(RecordDecisionAsync, DecideFailures, href =>
+        {
+            Navigation.NavigateTo(href);
+            return Task.CompletedTask;
+        });
+
+    protected async Task RunAsync<T>(Func<Task<T>> command, ReviewFailureMessages failures, Func<T, Task> onSuccess)
     {
-        var (target, failure) = await ReviewCommand.RunAsync(RecordDecisionAsync, HttpContext.Response, RequestAborted);
-        if (failure == ReviewCommandFailure.None)
+        var (result, failure) = await ReviewCommand.RunAsync(command, HttpContext.Response, RequestAborted);
+        switch (failure)
         {
-            Navigation.NavigateTo(target!);
-            return;
+            case ReviewCommandFailure.None:
+                await onSuccess(result!);
+                return;
+            case ReviewCommandFailure.AccessDenied:
+                Navigation.NavigateTo(ReviewCommand.AccessDenied);
+                return;
+            default:
+                error = failure switch
+                {
+                    ReviewCommandFailure.Conflict => failures.Conflict,
+                    ReviewCommandFailure.Invalid => failures.Invalid,
+                    _ => failures.Unavailable
+                };
+                await LoadAsync();
+                return;
         }
-        error = failure switch
-        {
-            ReviewCommandFailure.Conflict => DecideFailures.Conflict,
-            ReviewCommandFailure.Invalid => DecideFailures.Invalid,
-            _ => DecideFailures.Unavailable
-        };
-        await LoadAsync();
     }
 
     private async Task<string> RecordDecisionAsync()
@@ -73,7 +86,7 @@ public abstract class TriagePage : DraftListPage
         var target = TriageTargets.Parse(ApproveTarget ?? RequestChangesTarget ?? throw new ArgumentException("Choose a decision."));
         var note = approving ? null : Notes?.GetValueOrDefault(target.RecordId);
         await DecideRecordAsync(target, approving ? ReviewDecisionKind.Approve : ReviewDecisionKind.RequestChanges, note,
-            $"{DecideKey}:{target.RecordId}");
+            $"decide:{DecideKey}:{target.RecordId}");
         return TriageHref(DraftsCursor, Part("decided", approving ? Approved : ChangesRequested));
     }
 }

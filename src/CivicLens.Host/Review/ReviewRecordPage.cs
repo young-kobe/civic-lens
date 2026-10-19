@@ -95,6 +95,8 @@ public abstract class ReviewRecordPage : ComponentBase
         var (target, failure) = await ReviewCommand.RunAsync(command, HttpContext.Response, RequestAborted);
         switch (failure)
         {
+            case ReviewCommandFailure.AccessDenied:
+                return ReviewCommand.AccessDenied;
             case ReviewCommandFailure.Conflict:
                 isConflict = true;
                 statusMessage = messages.Conflict;

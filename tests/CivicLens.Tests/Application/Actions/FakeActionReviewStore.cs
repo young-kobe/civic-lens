@@ -37,7 +37,7 @@ internal sealed class FakeActionReviewStore : IActionReviewStore
         string idempotencyKey, string payloadHash, CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, bool sponsorshipOnly, string idempotencyKey, string payloadHash,
+        int expectedReviewStateVersion, bool bulkSafe, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<ActionReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken) => throw new NotSupportedException();

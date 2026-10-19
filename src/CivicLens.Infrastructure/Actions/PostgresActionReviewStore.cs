@@ -74,13 +74,13 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
             }, saved => ActionDraftRows.NewRevision(saved, null), cancellationToken);
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, bool sponsorshipOnly, string idempotencyKey, string payloadHash,
+        int expectedReviewStateVersion, bool bulkSafe, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken) =>
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
             idempotencyKey, payloadHash, async (db, draft, history) =>
             {
-                if (sponsorshipOnly && !ToReview(draft, history).IsBulkSafe)
-                    throw new ArgumentException("Bulk approval needs a revision that changes only sponsorships.");
+                if (bulkSafe && !ToReview(draft, history).IsBulkSafe)
+                    throw new ArgumentException("Bulk approval needs a sponsorship-only revision with no open concern.");
                 if (decision.Kind != ReviewDecisionKind.Approve) return;
                 var current = history.CurrentRevision!;
                 current.ValidateForApproval(await ReadExtractionsAsync(db, [current], cancellationToken));

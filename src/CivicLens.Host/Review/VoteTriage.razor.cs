@@ -2,7 +2,6 @@ using System.Collections.Immutable;
 using CivicLens.Application.Votes;
 using CivicLens.Application.Review;
 using CivicLens.Core.Votes;
-using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Host.Components.Layout;
 using Microsoft.AspNetCore.Components;
@@ -31,11 +30,4 @@ public sealed partial class VoteTriage
 
     protected override Task<ImmutableArray<BulkApprovalResult>> ApproveBulkAsync(BulkApprovalRequest request) =>
         Approve.ExecuteAsync(actor, request, RequestAborted);
-
-    private static IEnumerable<(string Label, SourceSpan Span)> QuotesOf(VoteDraftRevision revision)
-    {
-        yield return ("Vote day", revision.VotedOnCitation);
-        if (revision.KindCitation is { } kind) yield return ($"Vote kind: {VoteLabels.Kind(revision.Kind)}", kind);
-        foreach (var fact in revision.Facts) yield return ("Fact", fact.Citation);
-    }
 }

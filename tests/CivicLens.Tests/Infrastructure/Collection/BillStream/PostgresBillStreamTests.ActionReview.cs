@@ -195,7 +195,8 @@ public sealed partial class PostgresBillStreamTests
         var row = Assert.Single(page.Rows);
         Assert.Equal(RecordId, row.Review.RecordId);
         Assert.True(row.Check.Passed);
-        Assert.All(row.Review.CurrentRevision.Citations, span => Assert.True(page.Extractions.ContainsKey(span.ExtractionId)));
+        Assert.NotEmpty(row.Quotes);
+        Assert.All(row.Quotes, quote => Assert.NotEmpty(quote.Text));
         await DecideAsync(1, 0, ReviewDecisionKind.Approve);
         Assert.Empty((await triage.ExecuteAsync(Reviewer, null)).Rows);
     }

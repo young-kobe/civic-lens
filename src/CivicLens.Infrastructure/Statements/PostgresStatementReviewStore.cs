@@ -123,7 +123,7 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var page = await ReadPageAsync(db, Records.Drafts(db, filter.Status), cursor, limit, filter, cancellationToken);
+        var (page, _) = await ReadPageAsync(db, Records.Drafts(db, filter.Status), cursor, limit, filter, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return page;
     }
@@ -133,9 +133,8 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         var drafted = Records.Drafts(db, DraftStatusFilter.NeedsAction).Where(draft => draft.CurrentRevisionNumber > 0);
-        var page = await ReadPageAsync(db, drafted, cursor, ReviewTriage.PageSize, filter, cancellationToken);
+        var (page, candidates) = await ReadPageAsync(db, drafted, cursor, ReviewTriage.PageSize, filter, cancellationToken);
         var candidateIds = page.Items.Select(item => item.CandidateId).ToArray();
-        var candidates = await ReadCandidatesAsync(db, candidateIds, cancellationToken);
         var extractions = await PostgresDocumentExtractionStore.ReadManyAsync(db,
             [.. candidates.Values.Select(candidate => candidate.ExtractionId).Distinct(StringComparer.Ordinal)], cancellationToken);
         var configurationRevisions = await admittingRevisions.ReadManyAsync(db, candidateIds, cancellationToken);
@@ -145,7 +144,7 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
         return new([.. items], page.NewerCursor, page.OlderCursor);
     }
 
-    private async Task<StatementReviewPage> ReadPageAsync(CollectionAttemptDbContext db, IQueryable<StatementDraftRow> drafts,
+    private async Task<(StatementReviewPage Page, Dictionary<string, StatementCandidateRow> Candidates)> ReadPageAsync(CollectionAttemptDbContext db, IQueryable<StatementDraftRow> drafts,
         PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken)
     {
         var slice = await ListedDrafts.PageWithoutTierAsync(drafts, nameof(StatementDraftRow.CandidateId), cursor, limit, filter,
@@ -154,7 +153,7 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
         var candidates = await ReadCandidatesAsync(db, [.. rows.Select(row => row.CandidateId)], cancellationToken);
         var histories = await Records.ReadHistoriesAsync(db, rows, cancellationToken);
         var items = rows.Select(row => ToListItem(row, candidates[row.CandidateId], histories[row.CandidateId]));
-        return new([.. items], slice.NewerCursor, slice.OlderCursor);
+        return (new([.. items], slice.NewerCursor, slice.OlderCursor), candidates);
     }
 
     public async Task<StatementReviewCounts> CountAsync(CancellationToken cancellationToken)
