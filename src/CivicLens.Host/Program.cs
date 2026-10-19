@@ -69,7 +69,6 @@ if (args is [] or ["--help"] or ["help"])
           documents compare <before-extraction-id> <after-extraction-id>
           documents comparison <comparison-id>
           analyses requeue <comparison-id|--all>
-          analyses metrics
           statements status
           statements list [passed|skipped|failed-open|over-cap|pending|failed] [limit]
           statements run <run-id>
@@ -243,9 +242,8 @@ try
     {
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var requeue = new RequeueAnalyses<AnalysisRun>(PostgresDocumentChangeAnalysisStore.FromConnectionString(connectionString));
-        var outcomes = new GetDocumentChangeReviewOutcomes(PostgresDocumentChangeReviewOutcomeStore.FromConnectionString(connectionString));
         executing = true;
-        return await AnalysisCommand.ExecuteAsync(args, requeue, outcomes, owner, cancellation.Token);
+        return await AnalysisCommand.ExecuteAsync(args, requeue, owner, cancellation.Token);
     }
 
     if (StatementCommand.Matches(args))

@@ -488,25 +488,6 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- an
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- analyses requeue --all
 ```
 
-To see how reviewers treat AI drafts, run this command as the owner. It makes no model calls and prints one JSON document.
-
-```sh
-dotnet run --no-build --configuration Release --project src/CivicLens.Host -- analyses metrics
-```
-
-The document lists one entry for each prompt version. Drafts that a person started by hand are not counted.
-
-| Field | Meaning |
-|---|---|
-| drafts | AI drafts written with this prompt version. |
-| approvedUnchanged | Approved, and the approved revision holds the same values as revision 1. A re-save with the same values counts as unchanged. |
-| approvedEdited | Approved, and at least one field differs from revision 1. |
-| changesRequested, approvalWithdrawn | Drafts whose current status is that status. |
-| awaitingReview | Drafts that await review. This includes drafts that carry an unresolved concern from an earlier revision. |
-| fieldEdits | For approved drafts, how many differ from revision 1 in each field: headline, summary, significance, limits, institution, changeDate (date or its evidence), officialIds, issueIds, citations. Selections and citations compare as sets, so order does not matter. A citation is its extraction, start, and length. |
-
-Each draft is counted once, by its current status. A draft with a newer revision is judged on that revision.
-
 The [live test](#verification) for this adapter sends one paid call. It refuses to call if the reservation is over 25,000 tokens.
 
 ## Statement issue gate

@@ -177,14 +177,6 @@ The collector child process receives only an allowlist of environment variables:
 
 Ordinary tests use a fake model at the port. One live smoke test runs only with `CIVIC_LENS_LIVE_AI=1`.
 
-### Review outcome metrics
-
-`analyses metrics` reports how reviewers treat AI drafts, for each prompt version. It makes no model calls. A draft is an AI draft when an analysis run links to it. A person's draft is never counted.
-
-`DocumentChangeRevisionComparison` in Core/Review lists the fields that differ between two revisions. Selections and citations compare as sets. An approved draft is unchanged when no field differs from revision 1. Application/Analysis tallies the outcomes, and `AwaitingReviewWithConcerns` counts as awaiting review.
-
-Infrastructure reads AI drafts in keyset pages of 100. Each page costs four queries, whatever its size. It reuses the history validation of the review store and `ReviewPolicy` for the status.
-
 ## Storage and contracts
 
 - The generated [analysis schema](schema/analysis.md) lists every table, column, key, check, index, and trigger.
@@ -216,7 +208,6 @@ Infrastructure reads AI drafts in keyset pages of 100. Each page costs four quer
 | Ports | `src/CivicLens.Application/Analysis/IAnalysisQueue.cs`, `src/CivicLens.Application/Analysis/IAnalysisQueueStore.cs`, `src/CivicLens.Application/Analysis/IAnalysisTaskStep.cs`, `src/CivicLens.Application/Analysis/IAnalysisAttempt.cs`, `src/CivicLens.Application/Analysis/IAnalysisStatusStore.cs` |
 | Document-change drafting | `src/CivicLens.Application/Analysis/DocumentChangeDraftStep.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftTask.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftPrompt.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftResolver.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftLifecycle.cs` |
 | Owner queue handlers | `src/CivicLens.Application/Analysis/GetAnalysisStatus.cs`, `src/CivicLens.Application/Analysis/ListAnalyses.cs`, `src/CivicLens.Application/Analysis/GetAnalysisRun.cs`, `src/CivicLens.Application/Analysis/RequeueAnalyses.cs`, `src/CivicLens.Host/Analysis/AnalysisQueueCommands.cs` |
-| Review metrics | `src/CivicLens.Application/Analysis/GetDocumentChangeReviewOutcomes.cs`, `src/CivicLens.Core/Review/DocumentChangeRevisionComparison.cs` |
 | Postgres queue | `src/CivicLens.Infrastructure/Analysis/PostgresAnalysisQueue.cs`, `src/CivicLens.Infrastructure/Analysis/PostgresAnalysisStore.cs`, `src/CivicLens.Infrastructure/Analysis/PostgresAnalysisStatusStore.cs`, `src/CivicLens.Infrastructure/Analysis/PostgresAnalysisWakeup.cs`, `src/CivicLens.Infrastructure/Analysis/Persistence/AnalysisTableConfiguration.cs`, `src/CivicLens.Infrastructure/Analysis/AnalysisRunRows.cs` |
 | Document-change store and model | `src/CivicLens.Infrastructure/Analysis/PostgresDocumentChangeAnalysisStore.cs`, `src/CivicLens.Infrastructure/Analysis/DocumentChangeAnalysisQueueMapping.cs`, `src/CivicLens.Infrastructure/Analysis/AnthropicDocumentChangeDraftModel.cs`, `src/CivicLens.Infrastructure/Analysis/AnthropicStructuredCall.cs` |
 | Other shared types | `AnalysisState`, `AnalysisRecord`, `AnalysisClaim`, `AnalysisCheckpoint`, `AnalysisSettings`, `AnalysisErrorCodes`, `AnalysisTaskIdentity`, `AnalysisPromptHash`, `AnalysisModelRequest`, `AnalysisModelResponse`, and `AnalysisModelException`, each in its own file in `src/CivicLens.Application/Analysis/` |
