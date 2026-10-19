@@ -127,6 +127,39 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
+    public async Task OfficialChoicesAndSaveValidationComeFromThePeopleOfTheCollectionConfigurationAsync()
+    {
+        await SaveComparisonAsync("Before policy.\n", "After policy.\n");
+        SignIn(Owner);
+        var editorUrl = await StartFirstDraftAsync();
+        var editor = await host.GetDocumentAsync(editorUrl);
+        var chip = Assert.Single(editor.QuerySelectorAll("input[name='Input.OfficialIds']"));
+        Assert.Equal("person", chip.GetAttribute("value"));
+        Assert.Contains("Test Official", editor.QuerySelector("#draft-form")!.TextContent, StringComparison.Ordinal);
+        var reviews = PostgresDocumentChangeReviewStore.FromConnectionString(host.ConnectionString);
+        var draftId = editorUrl[(editorUrl.LastIndexOf('/') + 1)..];
+
+        var fields = Fields(editor.QuerySelector("#draft-form")!);
+        Set(fields, "Input.Headline", "Headline");
+        Set(fields, "Input.Summary", "Summary");
+        Set(fields, "Input.Institution", "Example Office");
+        fields.Add(new("Input.OfficialIds", "stranger"));
+        using var rejected = await host.Client.PostAsync(editorUrl, new FormUrlEncodedContent(fields));
+        Assert.NotEqual(HttpStatusCode.Redirect, rejected.StatusCode);
+        Assert.Equal(1, (await reviews.GetAsync(draftId, default))!.CurrentRevision.RevisionNumber);
+
+        editor = await host.GetDocumentAsync(editorUrl);
+        fields = Fields(editor.QuerySelector("#draft-form")!);
+        Set(fields, "Input.Headline", "Headline");
+        Set(fields, "Input.Summary", "Summary");
+        Set(fields, "Input.Institution", "Example Office");
+        fields.Add(new("Input.OfficialIds", "person"));
+        using var saved = await host.Client.PostAsync(editorUrl, new FormUrlEncodedContent(fields));
+        Assert.Equal(HttpStatusCode.Redirect, saved.StatusCode);
+        Assert.Equal(["person"], (await reviews.GetAsync(draftId, default))!.CurrentRevision.OfficialIds.ToArray());
+    }
+
+    [Fact]
     public async Task StaleSaveKeepsUnsavedWordingApartFromTheApprovalTargetAndBlocksDecisionsAsync()
     {
         await SaveComparisonAsync("Before policy.\n", "After policy.\n");

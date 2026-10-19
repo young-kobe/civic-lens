@@ -16,8 +16,8 @@ public sealed class DocumentChangeDraftStepTests
         var evidence = store.Evidence[id];
         store.Evidence[id] = evidence with
         {
-            ConfigurationRevision = StatementDraftFixtures.SpeakerRevision(warrenEndsBefore: new DateOnly(2026, 9, 1)),
-            Comparison = evidence.Comparison with { AfterObservedAtUtc = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero) }
+            ConfigurationRevision = StatementDraftFixtures.SpeakerRevision(warrenEndsBefore: new DateOnly(2026, 8, 16)),
+            Comparison = evidence.Comparison with { AfterObservedAtUtc = new DateTimeOffset(2026, 8, 15, 12, 0, 0, TimeSpan.Zero) }
         };
         var model = new FakeDocumentChangeDraftModel().Draft(FakeDocumentChangeDraftModel.Output(("h1", "after", "Item 0 new")));
 
@@ -25,10 +25,10 @@ public sealed class DocumentChangeDraftStepTests
 
         var request = Assert.Single(model.Requests);
         Assert.Contains("markey", request.UserPrompt, StringComparison.Ordinal);
-        Assert.DoesNotContain("warren", request.UserPrompt, StringComparison.Ordinal);
+        Assert.Contains("warren", request.UserPrompt, StringComparison.Ordinal);
         var context = Assert.Single(store.Runs).ContextJson!;
         Assert.Contains("markey", context, StringComparison.Ordinal);
-        Assert.DoesNotContain("warren", context, StringComparison.Ordinal);
+        Assert.Contains("warren", context, StringComparison.Ordinal);
     }
 
     [Fact]

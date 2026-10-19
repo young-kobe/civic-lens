@@ -1,12 +1,10 @@
 using System.Data;
 using CivicLens.Application.Analysis;
-using CivicLens.Application.Collection;
 using CivicLens.Core.Analysis;
 using CivicLens.Infrastructure.Analysis.Persistence;
 using CivicLens.Infrastructure.Collection;
-using CivicLens.Infrastructure.Collection.Jobs;
-using CivicLens.Infrastructure.Collection.Jobs.Persistence;
 using CivicLens.Infrastructure.Review;
+using CivicLens.Infrastructure.Statements;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Analysis;
@@ -16,6 +14,8 @@ public sealed class PostgresDocumentChangeAnalysisStore(IDbContextFactory<Collec
         contextFactory, new DocumentChangeAnalysisQueueMapping())), IDocumentChangeAnalysisStore
 {
     public const string Table = "document_change_analysis";
+
+    private readonly AdmittingRevisionReader admittingRevisions = new();
 
     public static PostgresDocumentChangeAnalysisStore FromConnectionString(string connectionString) =>
         new(AnalysisDbContextFactory.Create(connectionString));
@@ -58,21 +58,9 @@ public sealed class PostgresDocumentChangeAnalysisStore(IDbContextFactory<Collec
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         var verified = await PostgresDocumentChangeReviewStore.ReadVerifiedComparisonAsync(db, comparisonId, cancellationToken);
         var draftId = await PostgresDocumentChangeReviewStore.ReadDraftIdForComparisonAsync(db, comparisonId, cancellationToken);
-        var revision = verified is null ? null : await ReadConfigurationRevisionAsync(db, verified.After.SourceAttempt.AttemptId, cancellationToken);
+        var revision = verified is null ? null : await admittingRevisions.ReadForAttemptAsync(db, verified.After.SourceAttempt.AttemptId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return verified is null ? null : new(verified.Summary, verified.Before, verified.After, draftId, revision);
-    }
-
-    private static async Task<CollectionConfigurationRevision?> ReadConfigurationRevisionAsync(CollectionAttemptDbContext db,
-        string attemptId, CancellationToken cancellationToken)
-    {
-        var revisionId = await (from jobAttempt in db.Set<JobAttemptRow>().AsNoTracking()
-                                join job in db.Set<JobRow>().AsNoTracking() on jobAttempt.JobId equals job.JobId
-                                where jobAttempt.AttemptId == attemptId
-                                select job.ConfigurationRevisionId).FirstOrDefaultAsync(cancellationToken);
-        if (revisionId is null) return null;
-        var revisions = await StoredJobDefinition.LoadRevisionsAsync(db, [revisionId], cancellationToken);
-        return StoredJobDefinition.Find(revisions, revisionId);
     }
 
     private static DocumentChangeAnalysisRecord ToRecord(DocumentChangeAnalysisRow row) => new(row.ComparisonId, row.Task,

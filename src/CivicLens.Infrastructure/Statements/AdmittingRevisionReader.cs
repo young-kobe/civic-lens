@@ -15,11 +15,15 @@ internal sealed class AdmittingRevisionReader
         CancellationToken cancellationToken)
     {
         var revisionId = (await ReadRevisionIdsAsync(db, [candidateId], cancellationToken)).GetValueOrDefault(candidateId);
-        if (revisionId is null) return null;
-        if (lastRevision?.Id == revisionId) return lastRevision;
-        var revisions = await StoredJobDefinition.LoadRevisionsAsync(db, [revisionId], cancellationToken);
-        lastRevision = StoredJobDefinition.Find(revisions, revisionId);
-        return lastRevision;
+        return await LoadAsync(db, revisionId, cancellationToken);
+    }
+
+    public async Task<CollectionConfigurationRevision?> ReadForAttemptAsync(CollectionAttemptDbContext db, string attemptId,
+        CancellationToken cancellationToken)
+    {
+        var revisionId = await AttemptRevisionIds(db).Where(row => row.AttemptId == attemptId)
+            .Select(row => row.RevisionId).FirstOrDefaultAsync(cancellationToken);
+        return await LoadAsync(db, revisionId, cancellationToken);
     }
 
     public async Task<Dictionary<string, CollectionConfigurationRevision>> ReadManyAsync(CollectionAttemptDbContext db,
@@ -30,12 +34,33 @@ internal sealed class AdmittingRevisionReader
         return revisionIds.ToDictionary(pair => pair.Key, pair => StoredJobDefinition.Find(revisions, pair.Value), StringComparer.Ordinal);
     }
 
+    private async Task<CollectionConfigurationRevision?> LoadAsync(CollectionAttemptDbContext db, string? revisionId,
+        CancellationToken cancellationToken)
+    {
+        if (revisionId is null) return null;
+        var cached = lastRevision;
+        if (cached?.Id == revisionId) return cached;
+        var revisions = await StoredJobDefinition.LoadRevisionsAsync(db, [revisionId], cancellationToken);
+        return lastRevision = StoredJobDefinition.Find(revisions, revisionId);
+    }
+
     private static Task<Dictionary<string, string>> ReadRevisionIdsAsync(CollectionAttemptDbContext db, string[] candidateIds,
         CancellationToken cancellationToken) =>
         (from candidate in db.Set<StatementCandidateRow>().AsNoTracking()
-         join jobAttempt in db.Set<JobAttemptRow>().AsNoTracking() on candidate.AttemptId equals jobAttempt.AttemptId
-         join job in db.Set<JobRow>().AsNoTracking() on jobAttempt.JobId equals job.JobId
-         where candidateIds.Contains(candidate.CandidateId) && job.ConfigurationRevisionId != null
-         select new { candidate.CandidateId, RevisionId = job.ConfigurationRevisionId! })
+         join attempt in AttemptRevisionIds(db) on candidate.AttemptId equals attempt.AttemptId
+         where candidateIds.Contains(candidate.CandidateId)
+         select new { candidate.CandidateId, attempt.RevisionId })
         .ToDictionaryAsync(row => row.CandidateId, row => row.RevisionId, StringComparer.Ordinal, cancellationToken);
+
+    private static IQueryable<AttemptRevision> AttemptRevisionIds(CollectionAttemptDbContext db) =>
+        from jobAttempt in db.Set<JobAttemptRow>().AsNoTracking()
+        join job in db.Set<JobRow>().AsNoTracking() on jobAttempt.JobId equals job.JobId
+        where job.ConfigurationRevisionId != null
+        select new AttemptRevision { AttemptId = jobAttempt.AttemptId, RevisionId = job.ConfigurationRevisionId! };
+
+    private sealed class AttemptRevision
+    {
+        public string AttemptId { get; init; } = "";
+        public string RevisionId { get; init; } = "";
+    }
 }
