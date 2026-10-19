@@ -232,7 +232,7 @@ Each index page has a search panel. It stays hidden until `app.js` runs, because
 - The generated [publication schema](schema/publication.md) lists every table, column, key, check, index, and trigger.
 - Each release row lists its records as kind, record ID, and revision.
 - The ready lists read the active row and match by kind, so a statement ID cannot hide a document change.
-- Schema version 4 requires `textOrigin` (`model` or `person`) to the action and vote records. Readers accept version 4 only. A release before version 4 is not readable, so reset dev releases. The schema flatten at R-23 handles production.
+- Schema version 4 gives the action and vote records the required field `textOrigin` (`model` or `person`). Readers accept version 4 only. A release before version 4 is not readable, so reset dev releases. The schema flatten at R-23 handles production.
 
 | Filter | Document change | Statement | Action | Brief | Vote | Relationship |
 |---|---|---|---|---|---|---|
