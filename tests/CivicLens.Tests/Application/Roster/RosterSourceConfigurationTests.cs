@@ -38,6 +38,16 @@ public sealed class RosterSourceConfigurationTests
     }
 
     [Fact]
+    public void AValidatorIsRejectedBecauseA304WouldStopTheDailyCheck()
+    {
+        var configuration = RosterFixtures.Configuration();
+        var source = RosterFixtures.Source();
+
+        Assert.Throws<ArgumentException>((configuration with { Sources = [source with { ETag = "\"v1\"" }] }).Validate);
+        Assert.Throws<ArgumentException>((configuration with { Sources = [source with { LastModified = DateTimeOffset.UnixEpoch }] }).Validate);
+    }
+
+    [Fact]
     public void ASecondRosterSourceIsRejectedBecauseProposalsReadOneSource()
     {
         var second = RosterFixtures.Source() with { Id = "second", Url = RosterFixtures.SourceUrl + "?copy=1" };

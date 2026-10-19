@@ -169,6 +169,8 @@ public sealed record CollectionConfiguration
     {
         if (source.Credential is not null)
             throw new ArgumentException($"Source '{source.Id}' reads a public file and cannot set a credential.");
+        if (source.ETag is not null || source.LastModified is not null)
+            throw new ArgumentException($"Source '{source.Id}' downloads its file each day and cannot set validators.");
         if (source.Coverage is not null || source.MinimumCongress is not null || source.BackfillFrom is not null)
             throw new ArgumentException($"Source '{source.Id}' covers no people and sets no Congress options.");
     }

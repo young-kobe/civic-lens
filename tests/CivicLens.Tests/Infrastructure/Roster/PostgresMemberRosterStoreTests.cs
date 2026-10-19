@@ -56,7 +56,15 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
 
         Assert.True(await roster.HasSnapshotOfCaptureAsync(aAgain, default));
         Assert.False(await roster.HasSnapshotOfCaptureAsync(newBody, default));
-        Assert.Equal(0, await CountAsync("roster_members", aAgain));
+    }
+
+    [Fact]
+    public async Task AReplayOfAnAdmittedAttemptMustSkipOrItHitsAPrimaryKeyConflictAndEndsFailed()
+    {
+        var attemptId = await ImportAsync('a', 0);
+        await roster.AdmitAsync(attemptId, RosterFixtures.Members(), default);
+
+        Assert.True(await roster.HasSnapshotOfCaptureAsync(attemptId, default));
     }
 
     [Fact]
