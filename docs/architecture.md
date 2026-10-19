@@ -40,7 +40,7 @@ Implemented:
 - the statement gate and statement drafting
 - AI drafting of bill action records
 - AI drafting of House vote records, one for each roll call, from the vote candidates
-- action review, with bulk approval of sponsorship-only revisions, and triage pages for statements, actions, and votes
+- action review, with person edits and withdrawals on records that code approved, and a triage page for statements
 - vote review: person edits, version-bound decisions, and the tracked member votes beside their citations
 - brief review: person edits, version-bound decisions, and a derived flag for changed cited records
 - AI drafting of relationships between approved statements and approved actions or votes
@@ -349,7 +349,7 @@ This is the only navigation index.
 | Vote review pages and the cast display | [Votes](architecture/votes.md#vote-review) | `src/CivicLens.Host/Review/VoteEditor.razor` |
 | Action drafting | [Actions](architecture/actions.md#step) | `src/CivicLens.Application/Actions/ActionDraftStep.cs` |
 | Action revisions and the person edit rule | [Actions](architecture/actions.md#revision-and-append) | `src/CivicLens.Core/Actions/ActionDraftRevision.cs` |
-| Action review pages, bulk approval, sponsorship-only view | [Actions](architecture/actions.md#action-review) | `src/CivicLens.Host/Review/ActionEditor.razor` |
+| Action review pages | [Actions](architecture/actions.md#action-review) | `src/CivicLens.Host/Review/ActionEditor.razor` |
 | Action commands | [Actions](architecture/actions.md#commands) | `src/CivicLens.Host/Actions/ActionCommand.cs` |
 | Action queue outcomes and codes | [Actions](architecture/actions.md#outcomes) | `src/CivicLens.Application/Actions/ActionDraftErrorCodes.cs` |
 | Bill stream tables: cursors, gates, pages, candidates | [Bills](architecture/bills.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Collection/BillStream/` |
@@ -383,7 +383,7 @@ This is the only navigation index.
 | Review decisions, roles, concurrency | [Review](architecture/review.md#review-decisions) | `src/CivicLens.Core/Review/ReviewPolicy.cs` |
 | Review cycles, history caps, the shared append step | [Review](architecture/review.md#review-cycles) | `src/CivicLens.Infrastructure/Review/ReviewRecords.cs` |
 | Review lists, paging, overview counts | [Review](architecture/review.md#lists-and-paging) | `src/CivicLens.Application/Review/ListDocumentChangeReviews.cs` |
-| Review triage pages, inline decisions, bulk approval | [Review](architecture/review.md#triage) | `src/CivicLens.Host/Review/TriagePage.cs` |
+| Statement triage page and inline decisions | [Review](architecture/review.md#triage) | `src/CivicLens.Host/Review/TriagePage.cs` |
 | Releases, activation, rollback | [Publication](architecture/publication.md#publish) | `src/CivicLens.Application/Publication/PublishRelease.cs` |
 | Release record content and schema | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Publication.Contracts/PublicationRelease.cs` |
 | Published vote record, builder, and page | [Publication](architecture/publication.md#vote-record) | `src/CivicLens.Publication.Contracts/PublishedVote.cs` |

@@ -20,7 +20,7 @@ Exit criteria:
 - [ ] House and Senate votes both publish.
 - [ ] Public MCP reads the same releases as the website.
 - [ ] The talk and action profile and the shared language insight publish with method notes.
-- [ ] The review queue handles the drafted volume with bulk tools.
+- [ ] Code approves the action and vote records after it checks their citations. People review statements, relationships, weekly briefs, and document changes.
 - [ ] The acceptance checklists in the linked feature docs pass.
 
 ## Work queue

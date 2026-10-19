@@ -192,7 +192,6 @@ Ordinary tests use a fake model at the port. One live smoke test runs only with 
 - `document_change_analysis`, `relationship_analysis`, and `brief_analysis` keep the default tier. Their order does not change.
 - `document_change_analysis_runs` keeps one insert-only row for each model call. It holds the versions, the input hash, the token use, the output, and the catalog copy of the officials and issues that the prompt listed.
 - The run does not store prompt text. The versioned prompt in code rebuilds it from the retained comparison and the catalog copy. The input hash proves the rebuild.
-- Runs from prompt version 1 have output without confidence. No code parses stored output, so those runs stay readable without a migration.
 - A run recovered after a crash or shutdown is `Interrupted`. It keeps its real start time, has no catalog copy, and uses the current task constants as its versions.
 - `document_change_analysis_budget` holds charged tokens for each UTC day.
 - `document_change_analysis_status` holds one row for each task with its limit, time, and pause state. The statement tasks also use this table.
@@ -226,7 +225,7 @@ The [roadmap](../roadmap.md) holds the delivery order. These design rules apply 
 
 - A concurrent statement registration and action enqueue can miss a raise. The row then waits until a statement draft saves.
 - The exact tier of a saved draft changes the claim order only after a requeue.
-- Entries and gate rows written before the priority migration keep tier 3 and `has_tracked_issue` false. A change to the tracked issues does not refresh `has_tracked_issue` or the waiting tiers. No command recomputes them yet.
+- A change to the tracked issues does not refresh `has_tracked_issue` or the waiting tiers. No command recomputes them yet.
 - The early mention check scans the current statement revisions on each enqueue. On the dev database it took about 5 ms with about 244 statement drafts. A mention table is the planned fix if statement volume grows.
 - Rules from measured change history gate document changes. A model tier follows only if the R-13 measurement shows a need (D-05). A change classified as nonsubstantive skips review. Routing supports process, defer, and skip-expensive-analysis, with reasons and retained input references.
 - Skipped changes stay visible and inspectable, and a reviewer can return one to review. Audit a sample of skipped records.

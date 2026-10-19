@@ -440,13 +440,13 @@ Without the collection configuration, the Sources page reports that source check
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- review 5081
 ```
 
-Open `/Review` through the configured HTTPS origin. Keep the separate `worker` running, because it collects, extracts, and compares automatically. `/Review/Sources` is the owner Sources page. `/Review/GateLabels` is the owner page for gate labels. `/Review/Statements` lists statements, and `/Review/Statements/{candidate-id}` shows one statement for editing and decisions. `/Review/Actions` lists action records and approves sponsorship-only revisions in bulk, and `/Review/Actions/{record-id}` shows one record.
+Open `/Review` through the configured HTTPS origin. Keep the separate `worker` running, because it collects, extracts, and compares automatically. `/Review/Sources` is the owner Sources page. `/Review/GateLabels` is the owner page for gate labels. `/Review/Statements` lists statements, and `/Review/Statements/{candidate-id}` shows one statement for editing and decisions. `/Review/Actions` lists action records, and `/Review/Actions/{record-id}` shows one record.
 
 A record allows at most 64 open concerns. An approval resolves them and starts a new cycle. When a limit rejects a write, do not discard history to continue. Browsing comparisons may return an empty batch with a continuation when the batch holds only unchanged, incompatible, or limited results. Use the continuation; the empty batch does not prove that no changes exist.
 
 An AI draft is revision 1 by the AI drafter. Check every sentence and citation against the evidence. If the editor flags an unverified change date, check it, tick Date checked, and save a revision before you approve. Approved accounts stay private until the owner publishes them.
 
-Code approves a worker revision of an action or a vote after it checks the citations. The decision history shows the actor "Code check". A record shows as Needs action only if code did not approve it. A concern is open, a person wrote the text, or an approval check failed. The triage row shows the failed check. A person can edit or withdraw any record. The owner still publishes each release.
+Code approves a worker revision of an action or a vote after it checks the citations. The decision history shows the actor "Code check". A record shows as Needs action only if code did not approve it. A concern is open, a person wrote the text, or an approval check failed. A person can edit or withdraw any record. The owner still publishes each release.
 
 Auth0 tenant login and logout and the production reverse proxy still need live verification.
 
@@ -463,7 +463,7 @@ The `worker` command drafts AI accounts of changed comparisons. [Analysis](archi
 
 Tracked issues live in `config/issues.json`. The file format is in [configuration](architecture/configuration.md#tracked-issues). An invalid file stops startup.
 
-`db migrate` queues every earlier changed comparison that has no draft. The first worker run can spend up to the daily limit on those changes. Start with a low daily limit. Check the first drafts, and then raise the limit.
+The first worker run can spend up to the daily limit on queued changes. Start with a low daily limit. Check the first drafts, and then raise the limit.
 
 With `--once`, the worker drains collection first and then drafting. A second JSON line reports the drafting result. Drafting failures give exit code 1.
 
@@ -497,7 +497,7 @@ The `worker` command gates statement candidates. [Statements](architecture/state
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with drafting (default 2, 1 to 4) |
 | `CIVIC_LENS_ISSUES_CONFIG` | The issue file. Its revision ID binds each gate run. |
 
-The migration queued a gate row for every earlier candidate. The first run can spend up to the daily limit on them. Start with a low limit. With `--once`, the worker drains the stages in the [order in statements](architecture/statements.md#issue-gate) and prints one more JSON line for each stage that runs.
+The first run can spend up to the daily limit on queued candidates. Start with a low limit. With `--once`, the worker drains the stages in the [order in statements](architecture/statements.md#issue-gate) and prints one more JSON line for each stage that runs.
 
 The commands below need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
@@ -561,7 +561,7 @@ The `worker` command drafts one action record for each bill that has a candidate
 | `CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS` | Daily token limit for action drafting calls, per UTC day (about 2,000,000 is a good start). It is separate from the other limits. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
-Drafting uses Claude Haiku 5.5. The migration queued every candidate that existed when it ran, and the first run can spend up to the daily limit on them. Start with a low limit. A bill version whose summaries had already closed has two queued candidates. The older one settles as `supersededByNewerCandidate` with no call, also when the candidate with summaries blocks. The [outcomes](architecture/actions.md#outcomes) table lists every other code.
+Drafting uses Claude Haiku 5.5. The first run can spend up to the daily limit on queued candidates. Start with a low limit. A bill version whose summaries have closed has two queued candidates. The older one settles as `supersededByNewerCandidate` with no call, also when the candidate with summaries blocks. The [outcomes](architecture/actions.md#outcomes) table lists every other code.
 
 The commands below need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
@@ -587,7 +587,7 @@ The `worker` command drafts one vote record for each House roll call that has a 
 | `CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS` | Daily token limit for vote drafting calls, per UTC day. It is separate from the other limits. Start low. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
-Drafting uses Claude Haiku 5.5. The migration queued every vote candidate that existed when it ran, and the first run can spend up to the daily limit on them. The stage runs after action drafting and before brief drafting. A roll call with no tracked member, and a re-collected vote with the same facts, settle without a call. The [outcomes](architecture/votes.md#outcomes) table lists every code.
+Drafting uses Claude Haiku 5.5. The first run can spend up to the daily limit on queued vote candidates. The stage runs after action drafting and before brief drafting. A roll call with no tracked member, and a re-collected vote with the same facts, settle without a call. The [outcomes](architecture/votes.md#outcomes) table lists every code.
 
 The commands below need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
