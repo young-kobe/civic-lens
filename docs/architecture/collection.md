@@ -171,7 +171,7 @@ When a claim returns nothing, `RunCollectionJob` makes one more read, `ReadPacin
 
 A `Running` job holds an unresolved attempt, so it stays claimable for recovery while its key is closed. A grouped job's key is only its group. A closed origin row inside an open group therefore still blocks it at attempt start. The existing wakeup query already includes every `not_before`.
 
-A job with no pacing key skips the pacing check. The worker claims such a job while its origin waits, and attempt start blocks it. A large backlog of such jobs costs one claim, start, and release for each pass. Existing jobs keep a null key, because the key needs .NET origin normalization and group matching that SQL cannot repeat exactly.
+A job with no pacing key skips the pacing check. The worker claims such a job while its origin waits, and attempt start blocks it. A large backlog of such jobs costs one claim, start, and release for each pass. Jobs created before the `JobPacingKeys` migration keep a null key, because the key needs .NET origin normalization and group matching that SQL cannot repeat exactly.
 
 The checked-in federal configurations set 3,000 ms for `house.gov` and `senate.gov`, as separate groups. At about 538 House checks an hour, a 3-second delay uses about 45 percent of the group capacity. Jobs created under an older configuration revision have no pacing group until they finish.
 
