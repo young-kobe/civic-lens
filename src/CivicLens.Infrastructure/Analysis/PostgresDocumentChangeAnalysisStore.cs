@@ -4,6 +4,7 @@ using CivicLens.Core.Analysis;
 using CivicLens.Infrastructure.Analysis.Persistence;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Review;
+using CivicLens.Infrastructure.Statements;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Analysis;
@@ -13,6 +14,8 @@ public sealed class PostgresDocumentChangeAnalysisStore(IDbContextFactory<Collec
         contextFactory, new DocumentChangeAnalysisQueueMapping())), IDocumentChangeAnalysisStore
 {
     public const string Table = "document_change_analysis";
+
+    private readonly AdmittingRevisionReader admittingRevisions = new();
 
     public static PostgresDocumentChangeAnalysisStore FromConnectionString(string connectionString) =>
         new(AnalysisDbContextFactory.Create(connectionString));
@@ -55,8 +58,9 @@ public sealed class PostgresDocumentChangeAnalysisStore(IDbContextFactory<Collec
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         var verified = await PostgresDocumentChangeReviewStore.ReadVerifiedComparisonAsync(db, comparisonId, cancellationToken);
         var draftId = await PostgresDocumentChangeReviewStore.ReadDraftIdForComparisonAsync(db, comparisonId, cancellationToken);
+        var revision = verified is null ? null : await admittingRevisions.ReadForAttemptAsync(db, verified.After.SourceAttempt.AttemptId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return verified is null ? null : new(verified.Summary, verified.Before, verified.After, draftId);
+        return verified is null ? null : new(verified.Summary, verified.Before, verified.After, draftId, revision);
     }
 
     private static DocumentChangeAnalysisRecord ToRecord(DocumentChangeAnalysisRow row) => new(row.ComparisonId, row.Task,

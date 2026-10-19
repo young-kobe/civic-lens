@@ -10,7 +10,7 @@ internal sealed record VoteDraftConfiguration(VoteDraftSettings Settings, string
     {
         var environment = AnalysisEnvironment.Read("CIVIC_LENS_VOTE_DRAFTING_", "Vote drafting");
         if (environment is null) return null;
-        var settings = new VoteDraftSettings(environment.DailyTokens, environment.RunTokens,
+        var settings = new VoteDraftSettings(environment.DailyTokens,
             environment.Concurrency ?? AnalysisSettings.DefaultConcurrency);
         return new(settings, environment.ApiKey);
     }

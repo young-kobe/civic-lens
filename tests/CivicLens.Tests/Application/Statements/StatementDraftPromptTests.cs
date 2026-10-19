@@ -57,7 +57,7 @@ public sealed class StatementDraftPromptTests
 
         Assert.Equal(bytes + (long)StatementDraftTask.MaximumOutputTokens, request.ReservedTokens);
         Assert.Equal(100_000, new StatementDraftSettings(10_000_000).PromptByteCap);
-        Assert.Equal(34_000, new StatementDraftSettings(10_000_000, 50_000).PromptByteCap);
+        Assert.Equal(34_000, new StatementDraftSettings(50_000).PromptByteCap);
         Assert.Equal("claude-sonnet-5-5", request.Model);
     }
 

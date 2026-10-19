@@ -147,11 +147,11 @@ else
                                         }
                                     </select>
                                 </Field>
-                                <FieldSet Legend="Officials" Hint="@(OfficialIds.Length == 0 ? "No officials are configured." : null)">
+                                <FieldSet Legend="Officials" Hint="@(Officials.People.IsEmpty ? "No officials are configured." : null)">
                                     <div class="chips">
-                                        @foreach (var id in OfficialIds)
+                                        @foreach (var (id, name) in Officials.People)
                                         {
-                                            <Chip Name="Input.OfficialIds" Value="@id" Text="@id" Checked="@(Input.OfficialIds?.Contains(id) == true)" />
+                                            <Chip Name="Input.OfficialIds" Value="@id" Text="@name" Checked="@(Input.OfficialIds?.Contains(id) == true)" />
                                         }
                                     </div>
                                 </FieldSet>

@@ -78,7 +78,7 @@ public sealed class CommandTests
     [Fact]
     public async Task UnknownCommandsAndAttemptOverridesAreRejectedWithoutEchoingArguments()
     {
-        var result = await HostProcess.RunAsync(null, "collect-import", "config", "source", "collector", "captures",
+        var result = await HostProcess.RunAsync(null, "collect", "config", "source", "collector", "captures",
             "--attempt-id", "secret-sentinel");
         Assert.Equal(2, result.ExitCode);
         Assert.Empty(result.Output);

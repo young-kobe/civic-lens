@@ -4,7 +4,7 @@ public static class DocumentChangeDraftTask
 {
     public const string Task = "draft";
     public const string TaskVersion = "document-change-draft-v1";
-    public const string PromptVersion = "document-change-draft-prompt-v2";
+    public const string PromptVersion = "document-change-draft-prompt-v3";
     public const string SchemaVersion = "document-change-draft-schema-v2";
     public const string Model = "claude-haiku-5-5";
     public const string Effort = "medium";

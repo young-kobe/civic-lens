@@ -67,7 +67,7 @@ internal sealed class FakeDocumentChangeDraftModel : IDocumentChangeDraftModel
         var comparison = DocumentComparison.Create(before, after);
         var summary = new EligibleDocumentComparison("source", "https://example.test/page", "https://example.test/page",
             "https://example.test/page", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch.AddDays(1), comparison);
-        return new(summary, before, after, null);
+        return new(summary, before, after, null, null);
     }
 
     private static CapturedAttemptResult Attempt(string url) => new(Guid.NewGuid().ToString("N"), "source", url, url,

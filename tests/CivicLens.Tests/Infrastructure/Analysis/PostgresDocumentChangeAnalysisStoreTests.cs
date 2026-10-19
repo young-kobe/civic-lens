@@ -1,6 +1,8 @@
 using System.Collections.Immutable;
+using System.Text.Json;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Review;
+using CivicLens.Collection.Contracts;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
@@ -50,6 +52,38 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     {
         await postgres.DropDatabaseAsync(connectionString);
         Directory.Delete(captureRoot, recursive: true);
+    }
+
+    [Fact]
+    public async Task EvidenceCarriesTheConfigurationRevisionOfTheJobThatCollectedTheLaterVersion()
+    {
+        var seeder = new StatementCandidateSeeder(attempts, new PostgresDocumentExtractionStore(factory), connectionString, captureRoot);
+        var revision = StatementDraftFixtures.SpeakerRevision();
+        var revisionId = await seeder.StoreRevisionAsync(revision);
+        var definition = JsonSerializer.Serialize(StatementDraftFixtures.AdmittedDefinition(revision.Configuration) with { ConfigurationRevision = null },
+            CollectionProtocol.JsonOptions);
+        const string url = "https://example.test/pages/a";
+        var before = await seeder.ImportAsync("Deadline: October 15.\n", url, CandidateJobKind.WatchedPage);
+        var after = await seeder.ImportAsync("Deadline: October 30.\n", url, CandidateJobKind.WatchedPage, definitionJson: definition, revisionId: revisionId);
+        var extractions = new PostgresDocumentExtractionStore(factory);
+        var beforeExtraction = new DocumentExtraction(before, "parser", "normalizer", "Deadline: October 15.\n");
+        var afterExtraction = new DocumentExtraction(after, "parser", "normalizer", "Deadline: October 30.\n");
+        await extractions.SaveAsync(beforeExtraction, default);
+        await extractions.SaveAsync(afterExtraction, default);
+        var comparison = await new PostgresDocumentComparisonStore(factory).CompareAndSaveAsync(
+            beforeExtraction.ExtractionId, afterExtraction.ExtractionId, default);
+
+        var evidence = (await analysis.ReadEvidenceAsync(comparison.ComparisonId, default))!;
+
+        Assert.Equal(revision.Id, evidence.ConfigurationRevision!.Id);
+    }
+
+    [Fact]
+    public async Task EvidenceOfAnAttemptWithoutAJobHasNoConfigurationRevision()
+    {
+        var comparison = await seeder.SaveAsync("Deadline: October 15.\n", "Deadline: October 30.\n");
+
+        Assert.Null((await analysis.ReadEvidenceAsync(comparison.ComparisonId, default))!.ConfigurationRevision);
     }
 
     [Fact]
@@ -205,7 +239,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         var first = DocumentChangeDraftPrompt.Build((await analysis.ReadEvidenceAsync(comparison.ComparisonId, default))!, Catalog)!;
         var tight = new FakeDocumentChangeDraftModel().Draft(FakeDocumentChangeDraftModel.Output(("h1", "after", "October 31")));
 
-        await Worker(tight, new DocumentChangeDraftSettings(first.ReservedTokens + 1_300, first.ReservedTokens + 1_300, 1))
+        await Worker(tight, new DocumentChangeDraftSettings(first.ReservedTokens + 1_300, 1))
             .ExecuteAsync(once: true);
 
         var waiting = await EntryAsync(comparison);
@@ -351,7 +385,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
             .ReservedTokens;
         var model = new FakeDocumentChangeDraftModel().Draft(FakeDocumentChangeDraftModel.Output(("h1", "after", "Alpha two")));
 
-        await Worker(model, new DocumentChangeDraftSettings(reservation + 100, reservation + 100, 1)).ExecuteAsync(once: true);
+        await Worker(model, new DocumentChangeDraftSettings(reservation + 100, 1)).ExecuteAsync(once: true);
 
         Assert.Single(model.Requests);
         var waiting = await EntryAsync(second);
@@ -476,7 +510,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
 
     private AnalysisWorker<AnalysisRun> Worker(FakeDocumentChangeDraftModel model, DocumentChangeDraftSettings? settings = null) =>
         AnalysisWorkers.Drafting(analysis, new PostgresAnalysisStatusStore(factory), model,
-            settings ?? new DocumentChangeDraftSettings(10_000_000, concurrency: 1), Catalog, TimeProvider.System);
+            settings ?? new DocumentChangeDraftSettings(10_000_000, concurrency: 1), [], TimeProvider.System);
 
     private static AnalysisRun Run(string comparisonId, string runId, AnalysisRunOutcome outcome) => new(runId, comparisonId,
         DocumentChangeDraftTask.Task, DocumentChangeDraftTask.TaskVersion, DocumentChangeDraftTask.Model,

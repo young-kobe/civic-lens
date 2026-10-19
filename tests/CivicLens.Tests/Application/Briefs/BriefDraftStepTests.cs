@@ -108,7 +108,7 @@ public sealed class BriefDraftStepTests
     [Fact]
     public async Task AGroupThatAloneExceedsTheByteCapBlocksTheWeekWithoutACall()
     {
-        var settings = new BriefDraftSettings(10_000_000, BriefDraftPrompt.MinimumReservation);
+        var settings = new BriefDraftSettings(BriefDraftPrompt.MinimumReservation);
 
         var (store, model) = await RunAsync(Records, new FakeBriefDraftModel(), settings: settings);
 
@@ -161,7 +161,7 @@ public sealed class BriefDraftStepTests
         var large = new[] { Statement(new string('1', 64), "First", 1, "warren") with { Summary = new string('a', 6_000) },
             Statement(new string('2', 64), "Second", 1, "warren") with { Summary = new string('b', 6_000) } };
         var fullBytes = BriefDraftPrompt.Build(Window(), SelectAll(large).Sent, Officials, int.MaxValue)!.ReservedTokens - BriefDraftTask.MaximumOutputTokens;
-        var settings = new BriefDraftSettings(10_000_000, fullBytes + BriefDraftTask.MaximumOutputTokens, 1);
+        var settings = new BriefDraftSettings(fullBytes + BriefDraftTask.MaximumOutputTokens, 1);
         var model = new FakeBriefDraftModel().Draft(Output(paragraphs: [("Text.", ["R9"])])).Draft(Output());
 
         var (store, _) = await RunAsync(large, model, settings: settings);

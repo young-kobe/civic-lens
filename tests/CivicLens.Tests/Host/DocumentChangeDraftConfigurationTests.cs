@@ -141,7 +141,6 @@ public sealed class DocumentChangeDraftConfigurationTests
     [Theory]
     [InlineData("CIVIC_LENS_STATEMENT_DRAFTING_DAILY_TOKENS", "100000", null)]
     [InlineData("CIVIC_LENS_STATEMENT_DRAFTING_DAILY_TOKENS", "not-a-number", "key-sentinel")]
-    [InlineData("CIVIC_LENS_STATEMENT_DRAFTING_RUN_TOKENS", "not-a-number", "key-sentinel")]
     public async Task TheWorkerRefusesAStatementDraftingLimitWithoutAKeyOrWithAnInvalidLimit(string name, string value, string? key)
     {
         var directory = Path.Combine(Path.GetTempPath(), "civic-statement-drafting-config-" + Guid.NewGuid().ToString("N"));
@@ -155,7 +154,6 @@ public sealed class DocumentChangeDraftConfigurationTests
                    "allowedOrigin":"https://example.test","allowedPathPrefix":"/page"}]}
                 """);
             var environment = new Dictionary<string, string> { ["CIVIC_LENS_COLLECTION_CONFIG"] = config, [name] = value };
-            if (name.EndsWith("RUN_TOKENS", StringComparison.Ordinal)) environment["CIVIC_LENS_STATEMENT_DRAFTING_DAILY_TOKENS"] = "100000";
             if (key is not null) environment["ANTHROPIC_API_KEY"] = key;
 
             var result = await HostProcess.RunWithEnvironmentAsync(Database, null, environment,

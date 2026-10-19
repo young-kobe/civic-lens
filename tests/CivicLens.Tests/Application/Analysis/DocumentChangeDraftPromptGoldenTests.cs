@@ -20,7 +20,7 @@ public sealed class DocumentChangeDraftPromptGoldenTests
             $"({DocumentChangeDraftTask.PromptVersion}) or {nameof(DocumentChangeDraftTask.SchemaVersion)} " +
             $"({DocumentChangeDraftTask.SchemaVersion}), and then update the pinned hashes in this test.";
 
-        Assert.Equal("document-change-draft-prompt-v2", DocumentChangeDraftTask.PromptVersion);
+        Assert.Equal("document-change-draft-prompt-v3", DocumentChangeDraftTask.PromptVersion);
         Assert.Equal("document-change-draft-schema-v2", DocumentChangeDraftTask.SchemaVersion);
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
         Assert.True(Sha256(request.SchemaJson) == SchemaSha256, $"{bump} Schema: {Sha256(request.SchemaJson)}");

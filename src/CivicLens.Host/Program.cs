@@ -1,8 +1,8 @@
+using System.Collections.Immutable;
 using System.Text.Json;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using CivicLens.Application;
-using CivicLens.Application.Configuration;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Analysis;
 using CivicLens.Infrastructure.Analysis;
@@ -50,11 +50,9 @@ if (args is [] or ["--help"] or ["help"])
           validate <config.json>
           collect <config.json> <source-id> <collector.dll> <artifact-directory> [--as-of yyyy-MM-dd]
           db migrate
-          collect-import <config.json> <source-id> <collector.dll> <artifact-directory> [--as-of yyyy-MM-dd]
           receipts list <artifact-directory>
           receipts replay <artifact-directory> <attempt-id|--all>
           jobs enqueue <config.json> <source-id> <idempotency-key> [--as-of yyyy-MM-dd]
-          jobs run <job-id> <collector.dll> <artifact-directory>
           jobs get <job-id>
           jobs list [limit]
           jobs cancel <job-id>
@@ -69,7 +67,6 @@ if (args is [] or ["--help"] or ["help"])
           documents compare <before-extraction-id> <after-extraction-id>
           documents comparison <comparison-id>
           analyses requeue <comparison-id|--all>
-          analyses metrics
           statements status
           statements list [passed|skipped|failed-open|over-cap|pending|failed] [limit]
           statements run <run-id>
@@ -99,9 +96,9 @@ if (args is [] or ["--help"] or ["help"])
         New admissions default to today in UTC; existing keys retain their saved date when --as-of is omitted.
         --as-of selects eligibility, not historical fetching or attribution.
         Database commands require CIVIC_LENS_DATABASE (Postgres connection string with Host and Database).
-        collect and receipts list are database-free. collect-import saves a handoff before importing.
+        collect and receipts list are database-free.
         receipts replay imports saved handoffs without collecting again; use the capture directory after relocation.
-        jobs commands require the database. Each run reconciles prior work and performs at most one new fetch.
+        jobs commands require the database.
         worker also drafts document-change accounts when CIVIC_LENS_ANALYSIS_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         worker also gates statement candidates when CIVIC_LENS_STATEMENT_GATE_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
         worker requires CIVIC_LENS_ISSUES_CONFIG when a Congress.gov bill list source is enabled.
@@ -143,17 +140,17 @@ if (args.Contains("--as-of", StringComparer.Ordinal))
 {
     if (args is not [.., "--as-of", var dateText] ||
         !DateOnly.TryParseExact(dateText, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out coverageAsOf) ||
-        args[..^2] is not (["collect" or "collect-import", _, _, _, _] or
+        args[..^2] is not (["collect", _, _, _, _] or
             ["jobs", "enqueue", _, _, _] or ["discovery", "admit", _, _, _, _]))
     {
-        Console.Error.WriteLine("Use a trailing --as-of yyyy-MM-dd with collect, collect-import, jobs enqueue, or discovery admit.");
+        Console.Error.WriteLine("Use a trailing --as-of yyyy-MM-dd with collect, jobs enqueue, or discovery admit.");
         return 2;
     }
     admissionAsOf = coverageAsOf;
     args = args[..^2];
 }
 
-if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _] or ["collect-import", _, _, _, _]
+if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _]
     or ["discovery", "get", _] or ["discovery", "admit", _, _, _, _]
     or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args) &&
     !CollectionWorkerCommand.Matches(args) && !DocumentCommand.Matches(args) && !ReleaseCommand.Matches(args) &&
@@ -167,7 +164,6 @@ using var cancellation = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
 var executing = false;
 var replaying = args is ["receipts", "replay", _, _];
-var importing = args[0] == "collect-import" || replaying;
 try
 {
     if (CollectionWorkerCommand.Matches(args))
@@ -175,11 +171,10 @@ try
         using var terminate = OperatingSystem.IsWindows() ? null : PosixSignalRegistration.Create(PosixSignal.SIGTERM,
             context => { context.Cancel = true; cancellation.Cancel(); });
         CollectionWorkerCommand.ValidateArguments(args);
-        var configurationPath = Environment.GetEnvironmentVariable("CIVIC_LENS_COLLECTION_CONFIG");
-        if (string.IsNullOrWhiteSpace(configurationPath) || !Path.IsPathFullyQualified(configurationPath))
-            throw new ArgumentException("Worker requires CIVIC_LENS_COLLECTION_CONFIG to name an absolute configuration path.");
-        var workerConfiguration = await ReadConfigurationAsync(configurationPath, cancellation.Token);
-        var issues = StatementIssueRubric.FromEnvironment();
+        var workerConfiguration = ConfigurationFile.ReadCollectionFromEnvironment()
+            ?? throw new ArgumentException("Worker requires CIVIC_LENS_COLLECTION_CONFIG.");
+        var issueConfiguration = ConfigurationFile.ReadIssuesFromEnvironment();
+        var issues = StatementIssueRubric.From(issueConfiguration);
         if (issues is null && workerConfiguration.Sources.Any(source => source.Enabled && source.ApiParser == ApiParser.CongressBillList))
             throw new ArgumentException("Worker requires CIVIC_LENS_ISSUES_CONFIG when a Congress.gov bill list source is enabled.");
         var evidenceConcurrency = EvidenceProcessingConfiguration.ReadConcurrency();
@@ -188,9 +183,10 @@ try
         var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!;
         var queue = PostgresCollectionWorkerQueue.FromConnectionString(connectionString);
         var analysisContexts = AnalysisDbContextFactory.Create(connectionString);
-        var analysis = DocumentChangeDraftComposition.Create(analysisContexts, connectionString, workerConfiguration);
+        var analysis = DocumentChangeDraftComposition.Create(analysisContexts, connectionString,
+            issueConfiguration?.Issues.Select(issue => issue.Id) ?? []);
         await using var analysisWakeup = analysis.Wakeup;
-        var gate = StatementGateComposition.Create(analysisContexts, connectionString);
+        var gate = StatementGateComposition.Create(analysisContexts, connectionString, issues);
         await using var gateWakeup = gate.Wakeup;
         var statementDrafting = StatementDraftComposition.Create(analysisContexts, connectionString);
         await using var statementDraftingWakeup = statementDrafting.Wakeup;
@@ -243,9 +239,8 @@ try
     {
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var requeue = new RequeueAnalyses<AnalysisRun>(PostgresDocumentChangeAnalysisStore.FromConnectionString(connectionString));
-        var outcomes = new GetDocumentChangeReviewOutcomes(PostgresDocumentChangeReviewOutcomeStore.FromConnectionString(connectionString));
         executing = true;
-        return await AnalysisCommand.ExecuteAsync(args, requeue, outcomes, owner, cancellation.Token);
+        return await AnalysisCommand.ExecuteAsync(args, requeue, owner, cancellation.Token);
     }
 
     if (StatementCommand.Matches(args))
@@ -316,15 +311,10 @@ try
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
         if (string.IsNullOrWhiteSpace(releaseRoot))
             throw new ArgumentException("Release commands require CIVIC_LENS_RELEASE_DIRECTORY.");
-        var officialNames = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (args is ["releases", "publish", ..])
-        {
-            var configurationPath = Environment.GetEnvironmentVariable("CIVIC_LENS_COLLECTION_CONFIG");
-            if (string.IsNullOrWhiteSpace(configurationPath) || !Path.IsPathFullyQualified(configurationPath))
-                throw new ArgumentException("Publishing requires CIVIC_LENS_COLLECTION_CONFIG to name an absolute configuration path.");
-            var releaseConfiguration = await ReadConfigurationAsync(configurationPath, cancellation.Token);
-            foreach (var person in releaseConfiguration.People) officialNames.Add(person.Id, person.Name);
-        }
+        var officialNames = args is ["releases", "publish", ..]
+            ? ReviewOfficials.From(ConfigurationFile.ReadCollectionFromEnvironment()
+                ?? throw new ArgumentException("Publishing requires CIVIC_LENS_COLLECTION_CONFIG.")).Names
+            : ImmutableDictionary<string, string>.Empty;
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
         var releases = new FileReleaseDirectory(releaseRoot);
         var publish = new PublishRelease(publications, releases, new ReleaseRenderer(), new PublishedRecordLoaders(
@@ -344,7 +334,7 @@ try
     if (DocumentCommand.Matches(args))
     {
         var documentConfiguration = args is ["documents", "extract", var documentConfigPath, _, _]
-            ? await ReadConfigurationAsync(documentConfigPath, cancellation.Token) : null;
+            ? ConfigurationFile.ReadCollection(documentConfigPath) : null;
         var attempts = CreateDatabase();
         var extractions = PostgresDocumentExtractionStore.FromConnectionString(Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!);
         executing = true;
@@ -364,7 +354,7 @@ try
 
     if (args is ["discovery", "admit", var discoveryConfigPath, var discoverySourceId, var discoveryAttemptId, var admissionKey])
     {
-        var config = await ReadConfigurationAsync(discoveryConfigPath, cancellation.Token);
+        var config = ConfigurationFile.ReadCollection(discoveryConfigPath);
         var source = new ConfiguredCollectionSource(config, discoverySourceId, admissionAsOf);
         var jobs = CreateJobs();
         executing = true;
@@ -373,7 +363,7 @@ try
 
     if (args is ["jobs", "enqueue", var configPath, var sourceId, var idempotencyKey])
     {
-        var config = await ReadConfigurationAsync(configPath, cancellation.Token);
+        var config = ConfigurationFile.ReadCollection(configPath);
         var source = new ConfiguredCollectionSource(config, sourceId, admissionAsOf);
         var jobs = CreateJobs();
         executing = true;
@@ -384,9 +374,8 @@ try
     {
         CollectionJobCommand.ValidateArguments(args);
         var jobs = CreateJobs();
-        var evidence = CreateDatabase();
         executing = true;
-        return await CollectionJobCommand.ExecuteAsync(args, jobs, evidence, cancellation.Token);
+        return await CollectionJobCommand.ExecuteAsync(args, jobs, cancellation.Token);
     }
 
     if (args is ["receipts", "list", var listRoot])
@@ -419,7 +408,7 @@ try
         return 0;
     }
 
-    var configuration = await ReadConfigurationAsync(args[1], cancellation.Token);
+    var configuration = ConfigurationFile.ReadCollection(args[1]);
     if (args[0] == "validate")
     {
         Console.WriteLine($"Valid configuration: {configuration.People.Length} people, {configuration.Sources.Length} watched sources.");
@@ -428,17 +417,6 @@ try
 
     var runner = new CollectorProcess(args[3], Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet");
     var attempt = new PreparedCollectionAttempt(new ConfiguredCollectionSource(configuration, args[2], coverageAsOf), args[4]);
-    if (importing)
-    {
-        var database = CreateDatabase();
-        Console.Error.WriteLine($"Attempt ID: {attempt.AttemptId}");
-        executing = true;
-        var completion = await new CollectAndImportCollectionAttempt(runner, database,
-            new FileCollectionReceiptHandoffStore(attempt.Request.ArtifactDirectory))
-            .ExecuteAsync(attempt.AttemptId, attempt.Request, cancellation.Token);
-        return CollectionCommandOutput.WriteCompletion(completion);
-    }
-
     executing = true;
     var result = await new CollectWatchedPage(runner).ExecuteAsync(attempt, cancellation.Token);
     Console.WriteLine(JsonSerializer.Serialize(result, CollectionProtocol.JsonOptions));
@@ -446,14 +424,9 @@ try
 }
 catch (OperationCanceledException)
 {
-    if (args[0] == "jobs" && executing)
-        Console.Error.WriteLine("Job execution interrupted. Use jobs get to inspect retained progress; jobs cancel requests permanent cancellation.");
-    else if (replaying && executing)
-        Console.Error.WriteLine("Receipt replay cancelled or timed out. Persistence was not confirmed. Use receipts list to inspect retained handoffs.");
-    else
-        Console.Error.WriteLine(importing && executing
-            ? "Collection/import cancelled or timed out. Persistence was not confirmed. Use receipts list and receipts replay to recover saved handoffs."
-            : "Command cancelled or timed out.");
+    Console.Error.WriteLine(replaying && executing
+        ? "Receipt replay cancelled or timed out. Persistence was not confirmed. Use receipts list to inspect retained handoffs."
+        : "Command cancelled or timed out.");
     return 1;
 }
 catch (Exception exception) when (!executing && exception is ArgumentException or UnauthorizedAccessException or IOException or JsonException or InvalidOperationException)
@@ -464,14 +437,9 @@ catch (Exception exception) when (!executing && exception is ArgumentException o
 }
 catch (Exception)
 {
-    if (args[0] == "jobs")
-        Console.Error.WriteLine("Job operation failed. Inspect the job, retained receipts, database connectivity, and applied migrations before resuming.");
-    else if (replaying)
-        Console.Error.WriteLine("Receipt replay failed. Persistence was not confirmed. Check the capture directory, retained handoff, database connectivity, and applied migrations.");
-    else
-        Console.Error.WriteLine(importing
-            ? "Collection/import failed. Persistence was not confirmed. Check the collector, capture directory, database connectivity, and applied migrations. Use receipts list and receipts replay to recover saved handoffs."
-            : "Command failed. Check filesystem access, collector availability, or database connectivity as applicable.");
+    Console.Error.WriteLine(replaying
+        ? "Receipt replay failed. Persistence was not confirmed. Check the capture directory, retained handoff, database connectivity, and applied migrations."
+        : "Command failed. Check filesystem access, collector availability, or database connectivity as applicable.");
     return 1;
 }
 
@@ -488,18 +456,4 @@ static PostgresCollectionJobStore CreateJobs()
     var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE");
     if (string.IsNullOrWhiteSpace(connectionString)) throw new ArgumentException("CIVIC_LENS_DATABASE is required.");
     return PostgresCollectionJobStore.FromConnectionString(connectionString);
-}
-
-static async Task<CollectionConfiguration> ReadConfigurationAsync(string path, CancellationToken cancellationToken)
-{
-    await using var input = File.OpenRead(path);
-    var buffer = new byte[1_000_001];
-    var count = await input.ReadAtLeastAsync(buffer, buffer.Length, throwOnEndOfStream: false, cancellationToken);
-    if (count > 1_000_000)
-        throw new ArgumentException("Configuration exceeds 1 MB.");
-    var configuration = JsonSerializer.Deserialize<CollectionConfiguration>(
-        buffer.AsSpan(0, count), ConfigurationJson.Options)
-        ?? throw new ArgumentException("Configuration must not be null.");
-    configuration.Validate();
-    return configuration;
 }

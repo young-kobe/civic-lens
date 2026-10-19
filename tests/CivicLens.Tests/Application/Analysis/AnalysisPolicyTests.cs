@@ -14,26 +14,24 @@ public sealed class AnalysisPolicyTests
     }
 
     [Fact]
-    public void ARunCannotReserveMoreThanTheDailyLimit()
+    public void ConcurrencyAboveTheMaximumFailsAtStartup()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new DocumentChangeDraftSettings(dailyTokenLimit: 1_000, runTokenLimit: 2_000));
         Assert.Throws<ArgumentOutOfRangeException>(() => new DocumentChangeDraftSettings(dailyTokenLimit: 1_000_000, concurrency: 5));
     }
 
     [Fact]
-    public void ADailyLimitBelowTheDefaultRunLimitCapsTheRunLimitInsteadOfFailing()
+    public void ADailyLimitBelowTheDefaultCallLimitCapsTheCallLimitInsteadOfFailing()
     {
-        Assert.Equal(50_000, new DocumentChangeDraftSettings(dailyTokenLimit: 50_000).RunTokenLimit);
-        Assert.Equal(DocumentChangeDraftSettings.DefaultRunTokenLimit, new DocumentChangeDraftSettings(1_000_000).RunTokenLimit);
+        Assert.Equal(50_000, new DocumentChangeDraftSettings(dailyTokenLimit: 50_000).CallTokenLimit);
+        Assert.Equal(DocumentChangeDraftSettings.DefaultCallTokenLimit, new DocumentChangeDraftSettings(1_000_000).CallTokenLimit);
     }
 
     [Fact]
-    public void ALimitBelowTheSmallestReservationFailsAtStartup()
+    public void ADailyLimitBelowTheSmallestReservationFailsAtStartup()
     {
         var minimum = DocumentChangeDraftPrompt.MinimumReservation;
-        Assert.Throws<ArgumentOutOfRangeException>(() => new DocumentChangeDraftSettings(minimum - 1, minimum - 1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new DocumentChangeDraftSettings(minimum * 10, minimum - 1));
-        Assert.Equal(minimum, new DocumentChangeDraftSettings(minimum, minimum).RunTokenLimit);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new DocumentChangeDraftSettings(minimum - 1));
+        Assert.Equal(minimum, new DocumentChangeDraftSettings(minimum).CallTokenLimit);
     }
 
     [Fact]

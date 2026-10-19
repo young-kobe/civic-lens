@@ -45,9 +45,9 @@ public sealed class VoteDraftPromptGoldenTests
     public void TheMinimumReservationIsTheSystemPromptPlusTheOutputAllowanceAndSettingsRejectALowerRunLimit()
     {
         Assert.True(VoteDraftPrompt.MinimumReservation > VoteDraftTask.MaximumOutputTokens);
-        Assert.Throws<ArgumentOutOfRangeException>(() => new VoteDraftSettings(10_000_000, VoteDraftPrompt.MinimumReservation - 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new VoteDraftSettings(VoteDraftPrompt.MinimumReservation - 1));
         Assert.Equal(VoteDraftPrompt.MinimumReservation - VoteDraftTask.MaximumOutputTokens,
-            new VoteDraftSettings(10_000_000, VoteDraftPrompt.MinimumReservation).PromptByteCap);
+            new VoteDraftSettings(VoteDraftPrompt.MinimumReservation).PromptByteCap);
     }
 
     private static string Sha256(string text) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));

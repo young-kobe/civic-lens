@@ -39,11 +39,10 @@ public sealed class CollectorEnvironmentTests
                     ["CIVIC_LENS_AUTH0_CLIENT_SECRET"] = "client-sentinel",
                     ["DOTNET_STARTUP_HOOKS"] = ""
                 },
-                "collect-import", config, "source", marker, Path.Combine(directory, "captures"));
+                "collect", config, "source", marker, Path.Combine(directory, "captures"));
 
             Assert.Equal("absent", await File.ReadAllTextAsync(marker));
             Assert.Equal(1, result.ExitCode); // The probe intentionally emits no receipt.
-            Assert.Contains("Attempt ID:", result.Error);
             Assert.DoesNotContain("secret-sentinel", result.Output + result.Error);
             Assert.DoesNotContain("key-sentinel", result.Output + result.Error);
             Assert.DoesNotContain("token-sentinel", result.Output + result.Error);

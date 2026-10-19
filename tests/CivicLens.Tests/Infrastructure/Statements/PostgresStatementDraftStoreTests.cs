@@ -147,7 +147,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         var candidate = await PassedCandidateAsync(new string('x', 6_000), "https://example.test/pages/big", gateSettings: BigGate);
         var model = new FakeStatementDraftModel();
 
-        await DraftingWorker(model, new StatementDraftSettings(10_000_000, StatementDraftPrompt.MinimumReservation, 1)).ExecuteAsync(once: true);
+        await DraftingWorker(model, new StatementDraftSettings(StatementDraftPrompt.MinimumReservation, 1)).ExecuteAsync(once: true);
 
         Assert.Empty(model.Requests);
         Assert.Equal([(StatementDraftTask.Task, "Succeeded", "over-byte-cap")], await QueueAsync(candidate, StatementDraftTask.Task));
@@ -307,7 +307,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         Assert.Equal([(StatementDraftTask.Task, "Blocked", "speakersUnavailable")], await QueueAsync(candidate, StatementDraftTask.Task));
     }
 
-    private StatementGateSettings BigGate => new(10_000_000, StatementGatePrompt.MinimumReservation, 1);
+    private StatementGateSettings BigGate => new(StatementGatePrompt.MinimumReservation, 1);
 
     private async Task<string> PassedCandidateAsync(string article = Article, string url = "https://example.test/pages/a",
         StatementGateSettings? gateSettings = null, CollectionJobDefinition? admittedBy = null)

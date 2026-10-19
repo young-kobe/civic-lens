@@ -18,7 +18,7 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
-    public void PreparedAttemptsHaveFreshIdentitiesSeparateFromWireJobs()
+    public void PreparedAttemptsHaveFreshWireJobIds()
     {
         var revision = CollectionConfigurationRevision.Create(
             ValidConfiguration([new PersonConfiguration { Id = "person", Name = "Official" }], ["person"]));
@@ -26,7 +26,7 @@ public sealed class ConfigurationTests
         var first = new PreparedCollectionAttempt(source, "captures");
         var second = new PreparedCollectionAttempt(source, "captures");
 
-        Assert.Equal(4, new[] { first.AttemptId, first.Request.JobId, second.AttemptId, second.Request.JobId }.Distinct().Count());
+        Assert.NotEqual(first.Request.JobId, second.Request.JobId);
         Assert.Equal(Path.GetFullPath("captures"), first.Request.ArtifactDirectory);
         Assert.Equal("shared", first.Request.SourceId);
         Assert.Throws<ArgumentException>(() => new ConfiguredCollectionSource(revision, "missing"));

@@ -315,7 +315,7 @@ A person cannot edit the member votes. The rail has a Votes link.
 
 ### Executor
 
-The executor is `AnalysisWorker<VoteDraftRun>` with `VoteDraftStep`. It runs in the `worker` process after action drafting and before brief drafting, with its own wakeup, status row, daily limit, and run limit. It uses `CIVIC_LENS_ANALYSIS_CONCURRENCY`.
+The executor is `AnalysisWorker<VoteDraftRun>` with `VoteDraftStep`. It runs in the `worker` process after action drafting and before brief drafting, with its own wakeup, status row, daily limit, and call cap. It uses `CIVIC_LENS_ANALYSIS_CONCURRENCY`.
 
 Its variables are in [operations](../operations.md#vote-drafting). A daily limit without the key is a configuration error. The status row is in `document_change_analysis_status` under the task `vote-draft`.
 

@@ -1,4 +1,5 @@
 using CivicLens.Application.Analysis;
+using CivicLens.Application.Issues;
 using CivicLens.Application.Statements;
 using CivicLens.Host.Analysis;
 using CivicLens.Infrastructure.Analysis;
@@ -12,12 +13,12 @@ internal static class StatementGateComposition
 {
     public const string IssuesUnsetReason = "issuesConfigurationUnset";
 
-    public static AnalysisComposition<StatementGateRun> Create(IDbContextFactory<CollectionAttemptDbContext> contexts, string connectionString)
+    public static AnalysisComposition<StatementGateRun> Create(IDbContextFactory<CollectionAttemptDbContext> contexts, string connectionString,
+        IssueConfigurationRevision? rubric)
     {
         var status = new PostgresAnalysisStatusStore(contexts, StatementGateTask.Task);
         var configuration = StatementGateConfiguration.FromEnvironment();
         if (configuration is null) return AnalysisComposition<StatementGateRun>.Disabled(status);
-        var rubric = StatementIssueRubric.FromEnvironment();
         if (rubric is null) return new(status, configuration.Settings.DailyTokenLimit, null, null, IssuesUnsetReason);
         var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, StatementAnalysisListing.Table,
             StatementGateTask.Task);

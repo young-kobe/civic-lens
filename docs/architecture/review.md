@@ -267,7 +267,7 @@ The Host uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.12 for th
 ## Limits and planned work
 
 - Live Auth0 tenant verification is pending. Both reviewers will reach the shared production workspace on Hetzner through their browsers; see [host](host.md#limits-and-planned-work).
-- The official filter lists the `People` of the collection configuration (`CIVIC_LENS_COLLECTION_CONFIG`) with their names. Without that file the choices are empty and every `official` value is invalid.
+- The official filter, the official chips of the document-change editor, and the official IDs that a save accepts all come from `ReviewOfficials`. It lists the `People` of the collection configuration (`CIVIC_LENS_COLLECTION_CONFIG`) with their names, with no limit on the count. Without that file the choices are empty and every `official` value is invalid.
 - The filters and the order are computed for each page over the filtered set. The list has no index for a filter plus the tier order. This is fine at the present volume.
 - The tab counts ignore the issue, official, and date filters. They count every record of the status.
 - A draft row written before the `ReviewListColumns` migration has the default event date `DateOnly.MinValue`, which Postgres stores as `-infinity`, no issues, and no officials. It matches no issue or official filter, but it matches every `to` filter. An action or vote row also has no candidate ID, so it has tier 3. It lists after the other rows of its tier. A statement row lists after every dated row. The row keeps these values until its next revision. A reset of the development rows replaces them.

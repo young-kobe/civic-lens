@@ -10,7 +10,7 @@ internal sealed record ActionDraftConfiguration(ActionDraftSettings Settings, st
     {
         var environment = AnalysisEnvironment.Read("CIVIC_LENS_ACTION_DRAFTING_", "Action drafting");
         if (environment is null) return null;
-        var settings = new ActionDraftSettings(environment.DailyTokens, environment.RunTokens,
+        var settings = new ActionDraftSettings(environment.DailyTokens,
             environment.Concurrency ?? AnalysisSettings.DefaultConcurrency);
         return new(settings, environment.ApiKey);
     }

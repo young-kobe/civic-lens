@@ -10,7 +10,7 @@ internal sealed record RelationshipDraftConfiguration(RelationshipDraftSettings 
     {
         var environment = AnalysisEnvironment.Read("CIVIC_LENS_RELATIONSHIP_DRAFTING_", "Relationship drafting");
         if (environment is null) return null;
-        var settings = new RelationshipDraftSettings(environment.DailyTokens, environment.RunTokens,
+        var settings = new RelationshipDraftSettings(environment.DailyTokens,
             environment.Concurrency ?? AnalysisSettings.DefaultConcurrency);
         return new(settings, environment.ApiKey);
     }

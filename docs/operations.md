@@ -64,7 +64,7 @@ Configuration version 2 is the only supported version. For example:
 
 `startsOn` is inclusive and `endsBefore` is exclusive. Either can be left out. A person's optional `names` array holds entries with `name` and the same optional date fields. A person may also have a `bioguideId`, the Congress.gov member ID, for example `W000817`. The field rules are in [configuration](architecture/configuration.md#people-and-sources).
 
-`collect`, `collect-import`, `jobs enqueue`, and `discovery admit` accept a trailing `--as-of yyyy-MM-dd`. Selecting a past date still fetches the current source; it does not request an archived page. For a reproducible managed admission:
+`collect`, `jobs enqueue`, and `discovery admit` accept a trailing `--as-of yyyy-MM-dd`. Selecting a past date still fetches the current source; it does not request an archived page. For a reproducible managed admission:
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs enqueue config/example.json example-local-source dated-check-1 --as-of 2026-07-01
@@ -189,20 +189,9 @@ After you set the variable, run:
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- db migrate
-dotnet run --no-build --configuration Release --project src/CivicLens.Host -- collect-import config/example.json example-local-source src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures
 ```
 
-Use the local HTTP source from the tracer example. `db migrate` applies all pending checked-in EF migrations and can be repeated. Imports never apply migrations. Capture files stay in the artifact directory.
-
-Before collection, stderr shows the application-generated attempt ID. After a successful import, stdout holds one JSON summary, for example:
-
-```json
-{"attemptId":"<generated-id>","outcome":"captured","importDisposition":"newAttempt","priorCaptureLinkStatus":"notApplicable","handoffRemoved":true}
-```
-
-Exit codes are 0 for imported captured or not-modified outcomes. They are 1 for failed or deferred collection, an operational failure, a cancellation, or a confirmed import whose handoff cleanup failed. They are 2 for invalid input or configuration. Only a returned import prints the JSON summary. A confirmed import with failed cleanup prints `handoffRemoved: false`; replay stays safe.
-
-On an import failure or interruption, stderr reports that persistence was not confirmed. Evidence may still be stored. Keep the attempt ID for investigation. Running `collect-import` again collects again with a new ID. Use `receipts replay` to keep the original attempt identity and import its saved receipt without another fetch.
+`db migrate` applies all pending checked-in EF migrations and can be repeated. Imports never apply migrations. Capture files stay in the artifact directory. [Managed collection jobs](#managed-collection-jobs) collect and import evidence.
 
 For other application composition, build `PostgresCollectionAttemptStore` with `FromConnectionString`, or supply an `IDbContextFactory<CollectionAttemptDbContext>`. Call `MigrateAsync` explicitly before you import.
 
@@ -220,23 +209,22 @@ Apply `db migrate` first, also when you upgrade. Rebuild the host and collector 
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs enqueue config/example.json example-local-source check-2026-10-06
-# Use the jobId returned above:
-dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs run <job-id> src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures
+CIVIC_LENS_COLLECTION_CONFIG="$PWD/config/example.json" dotnet run --no-build --configuration Release --project src/CivicLens.Host -- worker src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures --once
+# Use the jobId returned by enqueue:
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs get <job-id>
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs list 20
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs cancel <job-id>
-CIVIC_LENS_COLLECTION_CONFIG="$PWD/config/example.json" dotnet run --no-build --configuration Release --project src/CivicLens.Host -- worker src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures
 ```
 
 Reuse an enqueue key only for the same configuration revision, source settings, policy, and any explicit coverage date. Use a new key for a new logical check.
 
-`jobs run` returns at once when a lease, the global collector slot, an origin barrier, an origin deadline, or a retry deadline blocks admission. Inspect `status`, `blockReason`, `retryAt`, and `job` in the JSON result, and run again when eligible. `jobs run` exits 0 only for a succeeded job, otherwise 1. Other job commands return 0 on success, 2 for invalid input or a missing job, and 1 for operational failures. `jobs list` defaults to 20 jobs, with a maximum of 100.
+The worker skips a job while a lease, the global collector slot, an origin barrier, an origin deadline, or a retry deadline blocks it. Use `jobs get` to see the state and `retryAt`. Job commands return 0 on success, 2 for invalid input or a missing job, and 1 for operational failures. `jobs list` defaults to 20 jobs, with a maximum of 100.
 
 Optional source `jobPolicy` fields are `maxAttempts` (default 3), `initialRetryDelaySeconds` (30), `maximumRetryDelaySeconds` (3600), `maxTotalRequests`, `maxTotalBytes`, and `maxTotalTimeoutSeconds`. Omitted aggregate limits equal the per-attempt limit times `maxAttempts`. Limits must reserve at least one complete attempt. Source `eTag` and `lastModified` are optional explicit validators.
 
 A crawl delay longer than every attempt timeout can exhaust the retries. Inspect the delay, then adjust the work budget or the source policy before you admit new work. Inspection shows immutable attempts and charged totals. The `reserved*` totals keep timeout reservations and unknown use conservatively.
 
-**Interruption.** Ctrl+C does not cancel the job permanently. After an interruption, run the same job again with the complete artifact root, including `.pending`, or its relocated copy. A same-origin unresolved attempt blocks other managed jobs until it is reconciled. `jobs run` and the worker reconcile imported evidence even when its handoff is missing. Otherwise `receipts replay` imports without a fetch.
+**Interruption.** Ctrl+C does not cancel the job permanently. After an interruption, start the worker again with the complete artifact root, including `.pending`, or its relocated copy. A same-origin unresolved attempt blocks other managed jobs until it is reconciled. The worker reconciles imported evidence even when its handoff is missing. Otherwise `receipts replay` imports without a fetch.
 
 **Worker.** `worker <collector.dll> <artifact-directory>` needs `CIVIC_LENS_COLLECTION_CONFIG` with an absolute configuration path. It runs the durable collection-to-review engine. `--once` admits due checks, drains the runnable work, and exits without waiting for future deadlines. Ctrl+C stops the worker. Change the configuration and restart the worker to apply it. Cancelling one job does not disable its source schedule. Keep one worker for each operational store. Leases and fenced checkpoints protect ownership if another worker runs.
 
@@ -248,7 +236,7 @@ Enabled sources are checked every hour unless `checkIntervalSeconds` sets anothe
 
 **Pacing groups.** Optional top-level `pacingGroups` limit the total load on shared hosts. For example, `{"hostSuffix": "house.gov", "minDelayMilliseconds": 3000}` spaces all managed jobs for any `*.house.gov` origin by at least 3 seconds. This adds to the pacing of each origin. If the queue keeps growing, lower the delay. The group rules are in [collection](architecture/collection.md#robots-and-pacing).
 
-Managed jobs share one collector slot for each operational store. Direct `collect`, `collect-import`, and standalone collector commands are outside this guarantee. Do not treat collection as exactly once. Back up the database and the complete artifact roots together.
+Managed jobs share one collector slot for each operational store. Direct `collect` and standalone collector commands are outside this guarantee. Do not treat collection as exactly once. Back up the database and the complete artifact roots together.
 
 ## Feed and HTML discovery
 
@@ -278,24 +266,26 @@ Create the feed in the same local server directory. This fixture is synthetic an
 printf '<rss version="2.0"><channel><title>Local fixture</title><item><link>/page.html</link></item></channel></rss>' > .runtime/example-source/feed.xml
 ```
 
-Apply migrations, collect and import the feed, inspect the returned attempt ID, and admit its candidates:
+Apply migrations, enqueue and run the feed check, read the attempt ID from the job, and admit its candidates:
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- db migrate
-dotnet run --no-build --configuration Release --project src/CivicLens.Host -- collect-import config/example.json example-local-feed src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs enqueue config/example.json example-local-feed local-feed-check-1
+CIVIC_LENS_COLLECTION_CONFIG="$PWD/config/example.json" dotnet run --no-build --configuration Release --project src/CivicLens.Host -- worker src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures --once
+# Use the attempt ID from the job:
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs get <job-id>
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- discovery get <attempt-id>
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- discovery admit config/example.json example-local-feed <attempt-id> local-feed-batch-1
-# Use a job ID from the admission result:
-dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs run <job-id> src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures
+CIVIC_LENS_COLLECTION_CONFIG="$PWD/config/example.json" dotnet run --no-build --configuration Release --project src/CivicLens.Host -- worker src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures --once
 ```
 
 For HTML, use the same commands with a source in `mode: "html"` and a listing-page URL.
 
-Discovery collection also works through `jobs enqueue` and `jobs run`. Inspect the job's attempts to find the evidence attempt ID. `discovery get` reports `parsed`, `invalid`, `unsupported`, or `limitExceeded`, with URLs only after complete parsing. It also prints `outOfScopeCount`. A successful capture does not prove a valid discovery. For a 304, inspect the earlier captured discovery attempt.
+Inspect the job's attempts to find the evidence attempt ID. `discovery get` reports `parsed`, `invalid`, `unsupported`, or `limitExceeded`, with URLs only after complete parsing. It also prints `outOfScopeCount`. A successful capture does not prove a valid discovery. For a 304, inspect the earlier captured discovery attempt.
 
 `discovery admit` enqueues jobs and does not fetch them. The response reports the jobs created, the duplicate count, and the deferred count. The same key and inputs return the original result; changed inputs with the same key fail. Use a new key for another bounded batch of the remaining candidates. A source and URL already admitted stays deduplicated, even when its job failed or was cancelled; inspect or recover that job instead.
 
-If an import fails, use `receipts replay`; no new fetch is needed. If an admission acknowledgment is lost, repeat its exact key and configuration. Leave out the date to reuse the saved one, or give that same date. Schema changes still need an explicit `db migrate`.
+If the worker cannot import a saved receipt, use `receipts replay`; no new fetch is needed. If an admission acknowledgment is lost, repeat its exact key and configuration. Leave out the date to reuse the saved one, or give that same date. Schema changes still need an explicit `db migrate`.
 
 ## Federal source pilot
 
@@ -316,15 +306,16 @@ Build both executables and set `CIVIC_LENS_DATABASE` as above. For the configure
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- validate config/federal-pilot.json
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs enqueue config/federal-pilot.json ted-cruz-press-feed <new-check-key>
-dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs run <job-id> src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures
+CIVIC_LENS_COLLECTION_CONFIG="$PWD/config/federal-pilot.json" dotnet run --no-build --configuration Release --project src/CivicLens.Host -- worker src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures --once
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs get <job-id>
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- discovery get <captured-attempt-id>
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- discovery admit config/federal-pilot.json ted-cruz-press-feed <captured-attempt-id> <new-admission-key>
 ```
 
-Inspect discovery before admission. Run each admitted job, then extract its captured article with the configured content profile:
+Inspect discovery before admission. Run the worker for the admitted jobs, then extract its captured article with the configured content profile:
 
 ```sh
-dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs run <article-job-id> src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures
+CIVIC_LENS_COLLECTION_CONFIG="$PWD/config/federal-pilot.json" dotnet run --no-build --configuration Release --project src/CivicLens.Host -- worker src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures --once
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents extract config/federal-pilot.json <article-attempt-id> .runtime/captures
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents get <extraction-id>
 ```
@@ -335,7 +326,7 @@ First captures are baselines. Do not compare different articles to make a change
 
 ## Recover saved receipts
 
-`collect-import` saves a versioned handoff in `<artifact-directory>/.pending/` after it verifies the receipt and capture, and before it imports. The directory also holds the hash-named gzip captures. A database outage or a missing migration leaves the handoff for replay. Missing or invalid database configuration is still rejected before collection.
+A managed job saves a versioned handoff in `<artifact-directory>/.pending/` after it verifies the receipt and capture, and before it imports. The directory also holds the hash-named gzip captures. A database outage or a missing migration leaves the handoff. The worker imports the handoff of a job that it reconciles. `receipts replay` imports a handoff that the worker does not reach, for example a late receipt of a runner that lost its job.
 
 List pending handoffs without a database. Then set `CIVIC_LENS_DATABASE`, apply migrations, and replay one attempt or all of them:
 
@@ -345,7 +336,13 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- receipts replay .runtime/captures --all
 ```
 
-Listing returns a JSON array of pending identifiers, also for entries whose contents may be invalid. A single replay prints the same import summary as `collect-import`. A batch replay writes one JSON result for each entry, with `handoffId`, `status`, an optional `import` summary, and a sanitized `error`. It continues past single failures. It returns 1 if any recovery fails, any cleanup fails, or a saved outcome is failed or deferred. An empty batch returns 0. Cancellation stops the batch and reports the completed imports and the interrupted entry. Use listing to see the remaining work.
+Listing returns a JSON array of pending identifiers, also for entries whose contents may be invalid. A single replay prints one JSON summary, for example:
+
+```json
+{"attemptId":"<generated-id>","outcome":"captured","importDisposition":"newAttempt","priorCaptureLinkStatus":"notApplicable","handoffRemoved":true}
+```
+
+The exit code is 0 for an imported captured or not-modified outcome. It is 1 for a failed or deferred outcome, an operational failure, a cancellation, or a confirmed import whose cleanup failed. A confirmed import with failed cleanup prints `handoffRemoved: false`; replay stays safe. Stderr reports that persistence was not confirmed when an import fails or stops. A batch replay writes one JSON result for each entry, with `handoffId`, `status`, an optional `import` summary, and a sanitized `error`. It continues past single failures. It returns 1 if any recovery fails, any cleanup fails, or a saved outcome is failed or deferred. An empty batch returns 0. Cancellation stops the batch and reports the completed imports and the interrupted entry. Use listing to see the remaining work.
 
 In a batch, a 304 waits with `prerequisiteUnconfirmed` when a captured import is unconfirmed or an envelope is unreadable. Prefer `--all` when you recover related captures and 304s, because a single replay cannot account for other pending evidence. Invalid receipts and missing or corrupt captures stay pending for inspection. Fresh collection and recovery in one spool wait up to 30 seconds for access, then report a failure.
 
@@ -430,8 +427,7 @@ Set these variables through the protected environment or secret mechanism of the
 | `CIVIC_LENS_REVIEW_REVIEWERS` | Optional comma-separated additional reviewer subject IDs |
 | `CIVIC_LENS_REVIEW_KEY_DIRECTORY` | Absolute persistent directory for ASP.NET data-protection keys |
 | `CIVIC_LENS_ISSUES_CONFIG` | Optional absolute path to the tracked-issue file, at most 1 MB. Its issue IDs are the configured issues. Unset means no configured issues |
-| `CIVIC_LENS_REVIEW_OFFICIALS` | Optional comma-separated configured official IDs |
-| `CIVIC_LENS_COLLECTION_CONFIG` | Optional absolute path to the collection configuration for the owner Sources page |
+| `CIVIC_LENS_COLLECTION_CONFIG` | Optional absolute path to the collection configuration for the owner Sources page and the official choices of the review pages. Without it no officials are listed |
 | `CIVIC_LENS_RELEASE_DIRECTORY` | Optional absolute path to the release root. With the collection configuration, it turns on the owner publish section |
 
 Without the collection configuration, the Sources page reports that source checks are not set up. The publish section needs the collection configuration, for the officials' display names, and the release directory. Without them, the owner sees a notice that publishing is off. Set `CIVIC_LENS_ISSUES_CONFIG` to offer issues and policy areas as choices on the statement pages.
@@ -461,10 +457,9 @@ The `worker` command drafts AI accounts of changed comparisons. [Analysis](archi
 | Variable | Meaning |
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude API key |
-| `CIVIC_LENS_ANALYSIS_DAILY_TOKENS` | Daily token limit for document-change drafting calls, per UTC day. Each other drafting stage has its own limit. |
-| `CIVIC_LENS_ANALYSIS_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller; at most the daily limit) |
+| `CIVIC_LENS_ANALYSIS_DAILY_TOKENS` | Daily token limit for document-change drafting calls, per UTC day. Each other drafting stage has its own limit. The [call cap](architecture/analysis.md#budget) bounds one call. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time (default 2, 1 to 4) |
-| `CIVIC_LENS_ISSUES_CONFIG`, `CIVIC_LENS_REVIEW_OFFICIALS` | The same issue file and official IDs that the review host reads |
+| `CIVIC_LENS_ISSUES_CONFIG` | The same issue file that the review host reads |
 
 Tracked issues live in `config/issues.json`. The file format is in [configuration](architecture/configuration.md#tracked-issues). An invalid file stops startup.
 
@@ -489,25 +484,6 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- an
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- analyses requeue --all
 ```
 
-To see how reviewers treat AI drafts, run this command as the owner. It makes no model calls and prints one JSON document.
-
-```sh
-dotnet run --no-build --configuration Release --project src/CivicLens.Host -- analyses metrics
-```
-
-The document lists one entry for each prompt version. Drafts that a person started by hand are not counted.
-
-| Field | Meaning |
-|---|---|
-| drafts | AI drafts written with this prompt version. |
-| approvedUnchanged | Approved, and the approved revision holds the same values as revision 1. A re-save with the same values counts as unchanged. |
-| approvedEdited | Approved, and at least one field differs from revision 1. |
-| changesRequested, approvalWithdrawn | Drafts whose current status is that status. |
-| awaitingReview | Drafts that await review. This includes drafts that carry an unresolved concern from an earlier revision. |
-| fieldEdits | For approved drafts, how many differ from revision 1 in each field: headline, summary, significance, limits, institution, changeDate (date or its evidence), officialIds, issueIds, citations. Selections and citations compare as sets, so order does not matter. A citation is its extraction, start, and length. |
-
-Each draft is counted once, by its current status. A draft with a newer revision is judged on that revision.
-
 The [live test](#verification) for this adapter sends one paid call. It refuses to call if the reservation is over 25,000 tokens.
 
 ## Statement issue gate
@@ -518,7 +494,6 @@ The `worker` command gates statement candidates. [Statements](architecture/state
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude API key, shared with drafting |
 | `CIVIC_LENS_STATEMENT_GATE_DAILY_TOKENS` | Daily token limit for gate calls, per UTC day. It is separate from the drafting limit. |
-| `CIVIC_LENS_STATEMENT_GATE_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the article byte cap. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with drafting (default 2, 1 to 4) |
 | `CIVIC_LENS_ISSUES_CONFIG` | The issue file. Its revision ID binds each gate run. |
 
@@ -558,7 +533,6 @@ The `worker` command drafts a statement record for each candidate that the gate 
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude API key, shared with the other stages |
 | `CIVIC_LENS_STATEMENT_DRAFTING_DAILY_TOKENS` | Daily token limit for statement drafting calls, per UTC day. It is separate from the gate and the document-change limits. |
-| `CIVIC_LENS_STATEMENT_DRAFTING_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the article byte cap. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
 Drafting uses Claude Sonnet 5.5, which costs more than the gate model. Gate rows that passed before you set the limit become draft rows, and the first run can spend up to the daily limit on them. Start with a low limit. A candidate whose article is over the byte cap gets no model call. It gets a draft with no revision, and a person writes the record. An entry blocked as `speakersUnavailable` stays blocked after a coverage change; the change applies only to articles admitted after it.
@@ -585,7 +559,6 @@ The `worker` command drafts one action record for each bill that has a candidate
 | `ANTHROPIC_API_KEY` | Claude API key, shared with the other stages |
 | `CIVIC_LENS_ISSUES_CONFIG` | Absolute path of the issue configuration, shared with the Congress.gov bill stream |
 | `CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS` | Daily token limit for action drafting calls, per UTC day (about 2,000,000 is a good start). It is separate from the other limits. |
-| `CIVIC_LENS_ACTION_DRAFTING_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the prompt byte cap. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
 Drafting uses Claude Haiku 5.5. The migration queued every candidate that existed when it ran, and the first run can spend up to the daily limit on them. Start with a low limit. A bill version whose summaries had already closed has two queued candidates. The older one settles as `supersededByNewerCandidate` with no call, also when the candidate with summaries blocks. The [outcomes](architecture/actions.md#outcomes) table lists every other code.
@@ -612,7 +585,6 @@ The `worker` command drafts one vote record for each House roll call that has a 
 | `ANTHROPIC_API_KEY` | Claude API key, shared with the other stages |
 | `CIVIC_LENS_ISSUES_CONFIG` | Absolute path of the issue configuration, shared with the Congress.gov bill stream |
 | `CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS` | Daily token limit for vote drafting calls, per UTC day. It is separate from the other limits. Start low. |
-| `CIVIC_LENS_VOTE_DRAFTING_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the prompt byte cap. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
 Drafting uses Claude Haiku 5.5. The migration queued every vote candidate that existed when it ran, and the first run can spend up to the daily limit on them. The stage runs after action drafting and before brief drafting. A roll call with no tracked member, and a re-collected vote with the same facts, settle without a call. The [outcomes](architecture/votes.md#outcomes) table lists every code.
@@ -636,7 +608,6 @@ The `worker` command drafts one relationship for each pair of an approved statem
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude API key, shared with the other stages |
 | `CIVIC_LENS_RELATIONSHIP_DRAFTING_DAILY_TOKENS` | Daily token limit for relationship drafting calls, per UTC day. It is separate from the other limits. Start low. |
-| `CIVIC_LENS_RELATIONSHIP_DRAFTING_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the prompt byte cap. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
 Drafting uses Claude Haiku 5.5. The stage runs after vote drafting and before brief drafting. A review decision on a statement, an action, or a vote queues a Pending row for each new pair of that record. Run `relationships draft refresh` once after the migration to queue the pairs of records that were approved earlier. Then the worker can spend up to the daily limit. A pair with a new approved revision on either side returns to Pending unless a person approved its relationship. A pair with the same input as the last settled run makes no call. The [outcomes](architecture/statements.md#relationship-drafting) table lists every code.
@@ -660,7 +631,6 @@ The `worker` command drafts one weekly brief for each closed week. [Briefs](arch
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude API key, shared with the other stages |
 | `CIVIC_LENS_BRIEF_DRAFTING_DAILY_TOKENS` | Daily token limit for brief drafting calls, per UTC day. It is separate from the other limits. |
-| `CIVIC_LENS_BRIEF_DRAFTING_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the prompt byte cap. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
 Drafting uses Claude Sonnet 5.5. The first run with the limit set stores its Monday as the first brief week. The worker queues each closed week from then on, and a wakeup at each Monday boundary queues the week that just closed. The worker never queues a week before the first brief week. A week with no new records makes no call and no brief.

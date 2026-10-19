@@ -8,6 +8,7 @@ using CivicLens.Application.Configuration;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Collection.Contracts;
 using CivicLens.Collector.Http;
+using CivicLens.Infrastructure.Collection;
 using CivicLens.Tests.Infrastructure.Collection;
 using Npgsql;
 
@@ -21,7 +22,6 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     private readonly TcpListener listener = new(IPAddress.Loopback, 0);
     private readonly CancellationTokenSource shutdown = new();
     private string connectionString = null!;
-    private string absentDatabase = null!;
     private Task server = Task.CompletedTask;
     private int statusCode = 200;
     private string? feedBody;
@@ -29,8 +29,6 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
-        // An import into a database that does not exist fails after collection, so its receipt stays for replay.
-        absentDatabase = new NpgsqlConnectionStringBuilder(connectionString) { Database = "civic_lens_absent" }.ConnectionString;
         Directory.CreateDirectory(directory);
         listener.Start();
         var origin = $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}";
@@ -60,39 +58,6 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Theory]
-    [InlineData(200, "captured", 0)]
-    [InlineData(404, "failed", 1)]
-    [InlineData(429, "deferred", 1)]
-    public async Task CollectImportPersistsEachOutcome(int status, string outcome, int exitCode)
-    {
-        statusCode = status;
-        var first = await CollectAsync("collect-import", connectionString);
-        Assert.Equal(exitCode, first.ExitCode);
-        using var output = JsonDocument.Parse(first.Output);
-        var id = output.RootElement.GetProperty("attemptId").GetString()!;
-        Assert.Contains(id, first.Error);
-        Assert.Equal(outcome, output.RootElement.GetProperty("outcome").GetString());
-        Assert.Equal("newAttempt", output.RootElement.GetProperty("importDisposition").GetString());
-        Assert.Equal("notApplicable", output.RootElement.GetProperty("priorCaptureLinkStatus").GetString());
-
-        var second = await CollectAsync("collect-import", connectionString);
-        Assert.Equal(exitCode, second.ExitCode);
-        using var repeated = JsonDocument.Parse(second.Output);
-        Assert.NotEqual(id, repeated.RootElement.GetProperty("attemptId").GetString());
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var stored = new NpgsqlCommand("SELECT outcome FROM collection_attempts WHERE attempt_id = @id", connection);
-        stored.Parameters.AddWithValue("id", id);
-        Assert.Equal(outcome, await stored.ExecuteScalarAsync());
-        await using var count = new NpgsqlCommand("SELECT count(*) FROM collection_attempts WHERE outcome = @outcome", connection);
-        count.Parameters.AddWithValue("outcome", outcome);
-        Assert.Equal(2L, await count.ExecuteScalarAsync());
-        await using var captures = new NpgsqlCommand("SELECT count(*) FROM collection_captures", connection);
-        Assert.Equal(status == 200 ? 1L : 0L, await captures.ExecuteScalarAsync());
-        Assert.Equal(status == 200 ? 1 : 0, Directory.GetFiles(Path.Combine(directory, "captures"), "*.gz").Length);
-    }
-
-    [Theory]
     [InlineData(CollectionMode.Feed)]
     [InlineData(CollectionMode.Html)]
     public async Task DiscoveryRecoveryAdmissionReplayAndArticleCollectionWorkThroughCli(CollectionMode mode)
@@ -118,12 +83,8 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
             : "<html><body>" + string.Concat(Enumerable.Range(0, 100).Select(index =>
                 $"<a href=\"/page/article-{index}?value={new string('a', 750)}\">Article</a>")) + "</body></html>";
         Assert.True(feedBody.Length > 65_536);
-        // An interrupted import must retain the feed and its discovery for replay.
-        var interrupted = await CollectAsync("collect-import", absentDatabase, "2020-01-01");
-        Assert.Equal(1, interrupted.ExitCode);
+        var attemptId = await SpoolReceiptAsync(new DateOnly(2020, 1, 1));
         var root = Path.Combine(directory, "captures");
-        var listed = await HostProcess.RunAsync(null, "receipts", "list", root);
-        var attemptId = Assert.Single(JsonSerializer.Deserialize<string[]>(listed.Output)!);
         var replay = await HostProcess.RunWithCollectorHostAsync(connectionString, "/no-collector-host",
             "receipts", "replay", root, attemptId);
         Assert.True(replay.ExitCode == 0, replay.Error);
@@ -150,9 +111,8 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         using var job = JsonDocument.Parse(inspectedJob.Output);
         Assert.Equal("2020-01-01", job.RootElement.GetProperty("definition").GetProperty("coverageAsOf").GetString());
         Assert.Equal(64, job.RootElement.GetProperty("definition").GetProperty("configurationRevision").GetProperty("id").GetString()!.Length);
-        File.Delete(configPath);
-        var run = await HostProcess.RunAsync(connectionString, "jobs", "run", jobId,
-            typeof(HttpCollector).Assembly.Location, root);
+        await ExpireCoverageAsync(configPath);
+        var run = await RunWorkerOnceAsync(configPath, root);
         Assert.True(run.ExitCode == 0, run.Error + run.Output);
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
@@ -161,9 +121,10 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
-    public async Task ManagedJobUsesSnapshotAndRepeatedRunDoesNotCollectAgain()
+    public async Task ManagedJobRunsOnceAndARepeatedWorkerPassDoesNotCollectAgain()
     {
-        var arguments = new[] { "jobs", "enqueue", Path.Combine(directory, "config.json"), "source", "check-1" };
+        var configPath = Path.Combine(directory, "config.json");
+        var arguments = new[] { "jobs", "enqueue", configPath, "source", "check-1" };
         var enqueued = await HostProcess.RunAsync(connectionString, arguments);
         Assert.Equal(0, enqueued.ExitCode);
         using var definition = JsonDocument.Parse(enqueued.Output);
@@ -171,19 +132,16 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         var duplicate = await HostProcess.RunAsync(connectionString, arguments);
         using var duplicateOutput = JsonDocument.Parse(duplicate.Output);
         Assert.Equal(id, duplicateOutput.RootElement.GetProperty("jobId").GetString());
-        File.Delete(Path.Combine(directory, "config.json"));
-        var run = await HostProcess.RunAsync(connectionString, "jobs", "run", id,
-            typeof(HttpCollector).Assembly.Location, Path.Combine(directory, "captures"));
+        await ExpireCoverageAsync(configPath);
+        var run = await RunWorkerOnceAsync(configPath, Path.Combine(directory, "captures"));
         Assert.True(run.ExitCode == 0, run.Error + run.Output);
-        using var result = JsonDocument.Parse(run.Output);
-        Assert.Equal("succeeded", result.RootElement.GetProperty("job").GetProperty("state").GetString());
         shutdown.Cancel();
         listener.Stop();
-        var again = await HostProcess.RunWithCollectorHostAsync(connectionString, "/no-collector-host",
-            "jobs", "run", id, "/missing-collector.dll", Path.Combine(directory, "captures"));
+        var again = await RunWorkerOnceAsync(configPath, Path.Combine(directory, "captures"));
         Assert.Equal(0, again.ExitCode);
         var inspected = await HostProcess.RunAsync(connectionString, "jobs", "get", id);
         using var inspection = JsonDocument.Parse(inspected.Output);
+        Assert.Equal("succeeded", inspection.RootElement.GetProperty("state").GetString());
         Assert.Single(inspection.RootElement.GetProperty("attempts").EnumerateArray());
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
@@ -191,10 +149,8 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         Assert.Equal(1L, await count.ExecuteScalarAsync());
     }
 
-    [Theory]
-    [InlineData("collect")]
-    [InlineData("collect-import")]
-    public async Task DirectCollectionUsesExplicitCoverageDate(string command)
+    [Fact]
+    public async Task DirectCollectionUsesExplicitCoverageDate()
     {
         var path = Path.Combine(directory, "config.json");
         var configuration = JsonSerializer.Deserialize<CollectionConfiguration>(await File.ReadAllTextAsync(path), ConfigurationJson.Options)!;
@@ -208,18 +164,17 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
             }]
         };
         await File.WriteAllTextAsync(path, JsonSerializer.Serialize(configuration, ConfigurationJson.Options));
-        var database = command == "collect-import" ? connectionString : null;
-        var inactive = await CollectAsync(command, database, "2021-01-01");
+        var inactive = await CollectAsync("2021-01-01");
         Assert.Equal(2, inactive.ExitCode);
         Assert.Empty(inactive.Output);
-        var active = await CollectAsync(command, database, "2020-01-01");
+        var active = await CollectAsync("2020-01-01");
         Assert.True(active.ExitCode == 0, active.Error);
         using var output = JsonDocument.Parse(active.Output);
         Assert.Equal("captured", output.RootElement.GetProperty("outcome").GetString());
     }
 
     [Fact]
-    public async Task DatedJobAdmissionPinsRevisionAndDateAcrossConfigRemoval()
+    public async Task DatedJobAdmissionPinsRevisionAndDateAcrossConfigChange()
     {
         var configPath = Path.Combine(directory, "config.json");
         var config = JsonNode.Parse(await File.ReadAllTextAsync(configPath))!;
@@ -252,9 +207,8 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         config["people"]![0]!["name"] = "Corrected name";
         await File.WriteAllTextAsync(configPath, config.ToJsonString());
         Assert.Equal(2, (await HostProcess.RunAsync(connectionString, arguments)).ExitCode);
-        File.Delete(configPath);
-        var run = await HostProcess.RunAsync(connectionString, "jobs", "run", id,
-            typeof(HttpCollector).Assembly.Location, Path.Combine(directory, "captures"));
+        await ExpireCoverageAsync(configPath);
+        var run = await RunWorkerOnceAsync(configPath, Path.Combine(directory, "captures"));
         Assert.True(run.ExitCode == 0, run.Error + run.Output);
         var inspected = await HostProcess.RunAsync(connectionString, "jobs", "get", id);
         using var stored = JsonDocument.Parse(inspected.Output);
@@ -262,15 +216,15 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
-    public async Task ImportNeverMigratesAndExplicitRepeatableMigrationLetsTheReceiptReplay()
+    public async Task ReplayNeverMigratesAndExplicitRepeatableMigrationLetsTheReceiptReplay()
     {
         var empty = await postgres.CreateEmptyDatabaseAsync();
         try
         {
-            var result = await CollectAsync("collect-import", empty);
+            var id = await SpoolReceiptAsync();
+            var result = await HostProcess.RunAsync(empty, "receipts", "replay", Path.Combine(directory, "captures"), id);
             Assert.Equal(1, result.ExitCode);
             Assert.Empty(result.Output);
-            Assert.Contains("Attempt ID:", result.Error);
             Assert.Contains("Persistence was not confirmed", result.Error);
             Assert.Single(Directory.GetFiles(Path.Combine(directory, "captures"), "*.gz"));
             await using (var connection = new NpgsqlConnection(empty))
@@ -297,14 +251,11 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     [InlineData(9)]
     public async Task FailedImportCanReplayAfterRelocationWithoutConfigurationOrCollector(int protocolVersion)
     {
-        var failed = await CollectAsync("collect-import", absentDatabase);
-        Assert.Equal(1, failed.ExitCode);
+        var id = await SpoolReceiptAsync();
         var original = Path.Combine(directory, "captures");
         var listed = await HostProcess.RunAsync(null, "receipts", "list", original);
         Assert.Equal(0, listed.ExitCode);
-        var ids = JsonSerializer.Deserialize<string[]>(listed.Output)!;
-        var id = Assert.Single(ids);
-        Assert.Contains(id, failed.Error);
+        Assert.Equal(id, Assert.Single(JsonSerializer.Deserialize<string[]>(listed.Output)!));
         if (protocolVersion == 7)
         {
             var path = Path.Combine(original, ".pending", id + ".json");
@@ -342,8 +293,7 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     [Fact]
     public async Task BatchRecoveryRetainsInvalidEntryAndImportsOtherPendingReceipt()
     {
-        var failed = await CollectAsync("collect-import", absentDatabase);
-        Assert.Equal(1, failed.ExitCode);
+        await SpoolReceiptAsync();
         var root = Path.Combine(directory, "captures");
         var invalid = Path.Combine(root, ".pending", "000-invalid.json");
         await File.WriteAllTextAsync(invalid, "{broken");
@@ -363,27 +313,54 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
-    public async Task TracerAndValidationRemainDatabaseFreeAndMissingDatabasePreventsCollection()
+    public async Task CollectAndValidationRemainDatabaseFree()
     {
         var validation = await HostProcess.RunAsync(null, "validate", Path.Combine(directory, "config.json"));
         Assert.Equal(0, validation.ExitCode);
-        var missing = await CollectAsync("collect-import", null);
-        Assert.Equal(2, missing.ExitCode);
-        Assert.DoesNotContain("Attempt ID:", missing.Error);
-        Assert.False(Directory.Exists(Path.Combine(directory, "captures")));
-        var traced = await CollectAsync("collect", null);
+        var traced = await CollectAsync();
         Assert.Equal(0, traced.ExitCode);
         using var receipt = JsonDocument.Parse(traced.Output);
         Assert.Equal("captured", receipt.RootElement.GetProperty("outcome").GetString());
         Assert.False(receipt.RootElement.TryGetProperty("attemptId", out _));
     }
 
-    private Task<(int ExitCode, string Output, string Error)> CollectAsync(string command, string? database, string? asOf = null)
+    private Task<(int ExitCode, string Output, string Error)> CollectAsync(string? asOf = null)
     {
-        string[] arguments = [command, Path.Combine(directory, "config.json"), "source",
+        string[] arguments = ["collect", Path.Combine(directory, "config.json"), "source",
             typeof(HttpCollector).Assembly.Location, Path.Combine(directory, "captures")];
         if (asOf is not null) arguments = [.. arguments, "--as-of", asOf];
-        return HostProcess.RunAsync(database, arguments);
+        return HostProcess.RunAsync(null, arguments);
+    }
+
+    private static async Task ExpireCoverageAsync(string configPath)
+    {
+        var config = JsonNode.Parse(await File.ReadAllTextAsync(configPath))!;
+        config["sources"]![0]!["coverage"] = new JsonArray(new JsonObject
+        {
+            ["personId"] = "person",
+            ["startsOn"] = "1990-01-01",
+            ["endsBefore"] = "1991-01-01"
+        });
+        await File.WriteAllTextAsync(configPath, config.ToJsonString());
+    }
+
+    private Task<(int ExitCode, string Output, string Error)> RunWorkerOnceAsync(string configPath, string captures) =>
+        HostProcess.RunWithEnvironmentAsync(connectionString, null,
+            new Dictionary<string, string> { ["CIVIC_LENS_COLLECTION_CONFIG"] = configPath },
+            "worker", typeof(HttpCollector).Assembly.Location, captures, "--once");
+
+    private async Task<string> SpoolReceiptAsync(DateOnly? asOf = null)
+    {
+        var configuration = JsonSerializer.Deserialize<CollectionConfiguration>(
+            await File.ReadAllTextAsync(Path.Combine(directory, "config.json")), ConfigurationJson.Options)!;
+        var root = Path.Combine(directory, "captures");
+        var attempt = new PreparedCollectionAttempt(new ConfiguredCollectionSource(configuration, "source",
+            asOf ?? DateOnly.FromDateTime(DateTime.UtcNow)), root);
+        var receipt = await new CollectorProcess(typeof(HttpCollector).Assembly.Location).RunAsync(attempt.Request, CancellationToken.None);
+        var id = Guid.NewGuid().ToString("N");
+        await new FileCollectionReceiptHandoffStore(Path.GetFullPath(root)).SaveAsync(
+            new PendingCollectionHandoff(PendingCollectionHandoff.CurrentVersion, id, attempt.Request, receipt), CancellationToken.None);
+        return id;
     }
 
     private async Task ServeAsync()

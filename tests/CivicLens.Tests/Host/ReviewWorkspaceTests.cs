@@ -103,7 +103,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
             StringComparison.Ordinal);
         var model = new FakeDocumentChangeDraftModel().Draft(FakeDocumentChangeDraftModel.Output(("h1", "after", "October 30")));
         await AnalysisWorkers.Drafting(analysis, status, model, new DocumentChangeDraftSettings(1_000_000, concurrency: 1),
-            new DocumentChangeDraftCatalog([], []), TimeProvider.System).ExecuteAsync(once: true);
+            [], TimeProvider.System).ExecuteAsync(once: true);
         var draftId = Assert.Single(await analysis.GetByComparisonIdsAsync([comparison.ComparisonId], default)).DraftId!;
         var reviews = PostgresDocumentChangeReviewStore.FromConnectionString(host.ConnectionString);
         var aiCitations = (await reviews.GetAsync(draftId, default))!.CurrentRevision.Citations;
@@ -124,6 +124,39 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.Equal(aiCitations.ToArray(), revision.Citations.ToArray());
         Assert.DoesNotContain("The AI drafter wrote this revision", (await host.GetDocumentAsync("/Review/" + draftId)).Body!.TextContent,
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task OfficialChoicesAndSaveValidationComeFromThePeopleOfTheCollectionConfigurationAsync()
+    {
+        await SaveComparisonAsync("Before policy.\n", "After policy.\n");
+        SignIn(Owner);
+        var editorUrl = await StartFirstDraftAsync();
+        var editor = await host.GetDocumentAsync(editorUrl);
+        var chip = Assert.Single(editor.QuerySelectorAll("input[name='Input.OfficialIds']"));
+        Assert.Equal("person", chip.GetAttribute("value"));
+        Assert.Contains("Test Official", editor.QuerySelector("#draft-form")!.TextContent, StringComparison.Ordinal);
+        var reviews = PostgresDocumentChangeReviewStore.FromConnectionString(host.ConnectionString);
+        var draftId = editorUrl[(editorUrl.LastIndexOf('/') + 1)..];
+
+        var fields = Fields(editor.QuerySelector("#draft-form")!);
+        Set(fields, "Input.Headline", "Headline");
+        Set(fields, "Input.Summary", "Summary");
+        Set(fields, "Input.Institution", "Example Office");
+        fields.Add(new("Input.OfficialIds", "stranger"));
+        using var rejected = await host.Client.PostAsync(editorUrl, new FormUrlEncodedContent(fields));
+        Assert.NotEqual(HttpStatusCode.Redirect, rejected.StatusCode);
+        Assert.Equal(1, (await reviews.GetAsync(draftId, default))!.CurrentRevision.RevisionNumber);
+
+        editor = await host.GetDocumentAsync(editorUrl);
+        fields = Fields(editor.QuerySelector("#draft-form")!);
+        Set(fields, "Input.Headline", "Headline");
+        Set(fields, "Input.Summary", "Summary");
+        Set(fields, "Input.Institution", "Example Office");
+        fields.Add(new("Input.OfficialIds", "person"));
+        using var saved = await host.Client.PostAsync(editorUrl, new FormUrlEncodedContent(fields));
+        Assert.Equal(HttpStatusCode.Redirect, saved.StatusCode);
+        Assert.Equal(["person"], (await reviews.GetAsync(draftId, default))!.CurrentRevision.OfficialIds.ToArray());
     }
 
     [Fact]

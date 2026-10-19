@@ -28,6 +28,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A move matches the subject, task, status, lease token, and fence. Enforced by `AnalysisLifecycle`. Test: `DocumentChangeDraftLifecycleTests.AStaleLeaseFenceOrStatusCannotMoveTheEntry`.
 - Each target status carries only its own outcome. Enforced by `AnalysisLifecycle`. Test: `DocumentChangeDraftLifecycleTests.EachTargetCarriesOnlyItsOwnOutcome`.
 - An entry gets at most eight attempts. Enforced by `PostgresAnalysisQueue` with `AnalysisPolicy`. Test: `PostgresDocumentChangeAnalysisStoreTests.TheClaimFailsAnEntryThatUsedAllItsAttemptsWithoutACall`.
+- The prompt officials are the officials that the source covers in the stored configuration revision of the after job, on the later observation date. Enforced by `StatementSpeakerRoster.OfficialsOn` through `DocumentChangeDraftStep`. Test: `DocumentChangeDraftStepTests.OnlyTheOfficialsThatTheSourceCoversOnTheLaterObservationDateReachThePromptAndTheRunContext`.
 - Charged tokens never pass the daily limit. Enforced by `PostgresAnalysisQueue`, which locks the budget row. Test: `PostgresDocumentChangeAnalysisStoreTests.ConcurrentReservationsNeverPassTheDailyLimit`.
 - The claim scan takes the lowest priority number first, then the oldest entry, then the key. Enforced by `PostgresAnalysisQueue.GetEligibleAsync` and the index `ix_<table>_active_claim`. Test: `PostgresStatementGateStoreTests.GateClaimsPreferAHigherPriorityOverAnOlderLowerPriorityRowSoTheReviewerSeesTheMostUsefulDraftsFirst`.
 - An entry has tier 1 if its record would pair with a statement. It has tier 2 if the record has a tracked issue, else tier 3. Enforced by `ReviewPriority.Of`. The bill number match is in `RelationshipPairRule`. `PairPriority` applies the pair rule to saved drafts. Tests: `ReviewPriorityTests.AWouldPairRecordOutranksATrackedIssueAndATrackedIssueOutranksTheRest`, `PostgresBillStreamTests.TheExactTierLowersAnEarlyTierOneWhenNoStatementOfASponsorPairs`, and `PostgresHouseVoteTests.TheExactTierLowersAnEarlyTierOneWhenNoMemberOfTheVoteIsTheSpeaker`.
@@ -93,7 +94,7 @@ The step decides what each end means. The drafting steps for document changes, s
 
 ### Prompt and output
 
-The prompt holds the source and both observation times. It gives each hunk an ID (`h1` and so on) with its before window, after window, and changed text. It also holds the configured officials (ID and name) and the issue IDs. Source text is marked as untrusted data. The request uses model `claude-haiku-5-5`, effort `medium`, and at most 16,000 output tokens.
+The prompt holds the source and both observation times. It gives each hunk an ID (`h1` and so on) with its before window, after window, and changed text. It also holds the issue IDs and the officials that the source covers (ID and name). Coverage comes from the configuration revision of the job that collected the later version, on the date of the later observation. `StatementSpeakerRoster` owns that rule, as for statement drafting. A comparison with no stored revision lists no officials. The evidence read loads the revision in the same transaction. Source text is marked as untrusted data. The request uses model `claude-haiku-5-5`, effort `medium`, and at most 16,000 output tokens.
 
 Structured outputs fix these fields:
 
@@ -121,7 +122,7 @@ A change date must also appear in its cited quote, in one of these forms: `2026-
 
 ### Budget
 
-`document_change_analysis_budget` holds the charged tokens for each UTC day of database time. Startup rejects a run limit below the smallest reservation, which is the system prompt bytes plus the output allowance.
+`document_change_analysis_budget` holds the charged tokens for each UTC day of database time. The call cap is the smaller of 120,000 tokens and the daily limit. One call never reserves more than the call cap. Startup rejects a daily limit below the smallest reservation, which is the system prompt bytes plus the output allowance.
 
 1. Before it reads evidence, the executor checks that the day can still hold the smallest reservation. If not, the entry waits and the drain pass stops.
 2. Before a call, the executor reserves its tokens under a row lock on that day. If they do not fit, the entry waits as WaitingForBudget until the next UTC midnight, and the pass stops.
@@ -177,14 +178,6 @@ The collector child process receives only an allowlist of environment variables:
 
 Ordinary tests use a fake model at the port. One live smoke test runs only with `CIVIC_LENS_LIVE_AI=1`.
 
-### Review outcome metrics
-
-`analyses metrics` reports how reviewers treat AI drafts, for each prompt version. It makes no model calls. A draft is an AI draft when an analysis run links to it. A person's draft is never counted.
-
-`DocumentChangeRevisionComparison` in Core/Review lists the fields that differ between two revisions. Selections and citations compare as sets. An approved draft is unchanged when no field differs from revision 1. Application/Analysis tallies the outcomes, and `AwaitingReviewWithConcerns` counts as awaiting review.
-
-Infrastructure reads AI drafts in keyset pages of 100. Each page costs four queries, whatever its size. It reuses the history validation of the review store and `ReviewPolicy` for the status.
-
 ## Storage and contracts
 
 - The generated [analysis schema](schema/analysis.md) lists every table, column, key, check, index, and trigger.
@@ -197,7 +190,7 @@ Infrastructure reads AI drafts in keyset pages of 100. Each page costs four quer
 - A saved action or vote draft gets its exact tier. `PairPriority` finds the pairs over the latest revisions with no approval filter. The entry is tier 1 only if a pair exists. A saved statement draft raises the entries of the actions and votes that pair with it. A raise never lowers a tier. `AnalysisPriority` locks the rows in key order and skips Running entries.
 - A person who edits a draft does not refresh the tier. The next draft of the record does.
 - `document_change_analysis`, `relationship_analysis`, and `brief_analysis` keep the default tier. Their order does not change.
-- `document_change_analysis_runs` keeps one insert-only row for each model call. It holds the versions, the input hash, the token use, the output, and the catalog copy.
+- `document_change_analysis_runs` keeps one insert-only row for each model call. It holds the versions, the input hash, the token use, the output, and the catalog copy of the officials and issues that the prompt listed.
 - The run does not store prompt text. The versioned prompt in code rebuilds it from the retained comparison and the catalog copy. The input hash proves the rebuild.
 - Runs from prompt version 1 have output without confidence. No code parses stored output, so those runs stay readable without a migration.
 - A run recovered after a crash or shutdown is `Interrupted`. It keeps its real start time, has no catalog copy, and uses the current task constants as its versions.
@@ -216,11 +209,10 @@ Infrastructure reads AI drafts in keyset pages of 100. Each page costs four quer
 | Ports | `src/CivicLens.Application/Analysis/IAnalysisQueue.cs`, `src/CivicLens.Application/Analysis/IAnalysisQueueStore.cs`, `src/CivicLens.Application/Analysis/IAnalysisTaskStep.cs`, `src/CivicLens.Application/Analysis/IAnalysisAttempt.cs`, `src/CivicLens.Application/Analysis/IAnalysisStatusStore.cs` |
 | Document-change drafting | `src/CivicLens.Application/Analysis/DocumentChangeDraftStep.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftTask.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftPrompt.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftResolver.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftLifecycle.cs` |
 | Owner queue handlers | `src/CivicLens.Application/Analysis/GetAnalysisStatus.cs`, `src/CivicLens.Application/Analysis/ListAnalyses.cs`, `src/CivicLens.Application/Analysis/GetAnalysisRun.cs`, `src/CivicLens.Application/Analysis/RequeueAnalyses.cs`, `src/CivicLens.Host/Analysis/AnalysisQueueCommands.cs` |
-| Review metrics | `src/CivicLens.Application/Analysis/GetDocumentChangeReviewOutcomes.cs`, `src/CivicLens.Core/Review/DocumentChangeRevisionComparison.cs` |
 | Postgres queue | `src/CivicLens.Infrastructure/Analysis/PostgresAnalysisQueue.cs`, `src/CivicLens.Infrastructure/Analysis/PostgresAnalysisStore.cs`, `src/CivicLens.Infrastructure/Analysis/PostgresAnalysisStatusStore.cs`, `src/CivicLens.Infrastructure/Analysis/PostgresAnalysisWakeup.cs`, `src/CivicLens.Infrastructure/Analysis/Persistence/AnalysisTableConfiguration.cs`, `src/CivicLens.Infrastructure/Analysis/AnalysisRunRows.cs` |
 | Document-change store and model | `src/CivicLens.Infrastructure/Analysis/PostgresDocumentChangeAnalysisStore.cs`, `src/CivicLens.Infrastructure/Analysis/DocumentChangeAnalysisQueueMapping.cs`, `src/CivicLens.Infrastructure/Analysis/AnthropicDocumentChangeDraftModel.cs`, `src/CivicLens.Infrastructure/Analysis/AnthropicStructuredCall.cs` |
 | Other shared types | `AnalysisState`, `AnalysisRecord`, `AnalysisClaim`, `AnalysisCheckpoint`, `AnalysisSettings`, `AnalysisErrorCodes`, `AnalysisTaskIdentity`, `AnalysisPromptHash`, `AnalysisModelRequest`, `AnalysisModelResponse`, and `AnalysisModelException`, each in its own file in `src/CivicLens.Application/Analysis/` |
-| Document-change parts | `DocumentChangeAnalysisRecord` adds the draft ID, and `DocumentChangeDraftCheckpoint` adds the revision. `DocumentChangeDraftErrorCodes`, `DocumentChangeDraftSettings`, `DocumentChangeDraftCatalog`, and `DocumentChangeDraftEvidence` complete the feature. |
+| Document-change parts | `DocumentChangeAnalysisRecord` adds the draft ID, and `DocumentChangeDraftCheckpoint` adds the revision. `DocumentChangeDraftErrorCodes`, `DocumentChangeDraftSettings`, `DocumentChangeDraftCatalog`, and `DocumentChangeDraftEvidence` (with the configuration revision) complete the feature. |
 | Review priority | `src/CivicLens.Core/Review/ReviewPriority.cs`, `src/CivicLens.Infrastructure/Analysis/AnalysisPriority.cs`, `src/CivicLens.Infrastructure/Relationships/PairPriority.cs`, `src/CivicLens.Infrastructure/Statements/StatementBillMentions.cs`, `src/CivicLens.Application/Relationships/RelationshipPairRule.cs`, `src/CivicLens.Infrastructure/Relationships/RelationshipRevisionScope.cs` |
 | Reserved author | `src/CivicLens.Core/Review/ReviewAuthor.cs` |
 | CLI and composition | `src/CivicLens.Host/Analysis/AnalysisCommand.cs`, `src/CivicLens.Host/Analysis/DocumentChangeDraftComposition.cs` |

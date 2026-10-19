@@ -126,7 +126,7 @@ The request uses model `claude-haiku-5-5`, effort `medium`, and at most 4,000 ou
 
 Structured outputs fix a `headline` and a `summary`, each with a text and a confidence. The confidence stays in the run output and is never in the revision. The golden test pins the system prompt, the schema, and one input hash.
 
-The byte cap is the smaller of 100,000 UTF-8 bytes and the run token limit minus the output allowance.
+The byte cap is the smaller of 100,000 UTF-8 bytes and the [call cap](analysis.md#budget) minus the output allowance.
 
 ### Checks
 
@@ -183,7 +183,7 @@ A person edits only the headline and the summary. `ActionDraftRevision.ValidateP
 
 ### Executor
 
-The executor is `AnalysisWorker<ActionDraftRun>` with `ActionDraftStep`. It runs beside the other analysis loops in the `worker` process, with its own wakeup, status row, daily limit, and run limit. It uses `CIVIC_LENS_ANALYSIS_CONCURRENCY`.
+The executor is `AnalysisWorker<ActionDraftRun>` with `ActionDraftStep`. It runs beside the other analysis loops in the `worker` process, with its own wakeup, status row, daily limit, and call cap. It uses `CIVIC_LENS_ANALYSIS_CONCURRENCY`.
 
 Its required variables are in [operations](../operations.md#action-drafting). A daily limit without the key or the issue file is a configuration error. The status row is in `document_change_analysis_status` under the task `action-draft`.
 

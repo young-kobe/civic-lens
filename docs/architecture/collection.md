@@ -221,7 +221,7 @@ Admission uses the job coordination transaction and lock. It reads the candidate
 - Automatic source checks may recheck a known URL after its latest job is terminal, within the same batch limits. Active jobs are skipped.
 - Unadmitted candidates stay available for another batch with a new key.
 
-Admission only enqueues jobs. The worker runs them under the existing retry, pacing, cancellation, and recovery rules. `jobs run` stays a manual diagnostic action.
+Admission only enqueues jobs. The worker runs them under the existing retry, pacing, cancellation, and recovery rules.
 
 ### Collection domain and import rules
 
@@ -246,11 +246,11 @@ Core/Collection implements these rules as immutable domain values and the pure `
 
 For a new 304, Infrastructure loads the possible captures of the same source and exact requested and final URLs, with no later observation time. Core `DecideFromCandidates` owns final eligibility and ambiguity. Different eligible capture identities leave the result unresolved. One shared capture selects the newest observation, with the ordinal attempt ID as the tie-break. A replay keeps its original resolved or unresolved link.
 
-**Import handler.** `CollectAndImportCollectionAttempt` maps a verified receipt under an application-owned attempt ID, independent of the wire job ID. `ICollectionAttemptStore.ImportAtomicallyAsync` loads existing and prior evidence, applies the Core policy, and commits in one atomic operation. `StoredCollectionAttempt` holds the result, the sent validators, and the prior capture link. The new-or-replay disposition belongs only to the current call.
+**Import handler.** `CollectionAttemptImporter` maps a verified receipt under an application-owned attempt ID, independent of the wire job ID. `ICollectionAttemptStore.ImportAtomicallyAsync` loads existing and prior evidence, applies the Core policy, and commits in one atomic operation. `StoredCollectionAttempt` holds the result, the sent validators, and the prior capture link. The new-or-replay disposition belongs only to the current call.
 
 Collection runs through `ICollectorProcess`, which verifies capture bytes before it returns. Receipt validation runs again before mapping. Collector errors, verification errors, invalid receipts, and cancellation prevent import. Failed and deferred outcomes are valid evidence to import. Retry-After values beyond the `TimeSpan` range are rejected before persistence, not truncated.
 
-Each fresh run collects and saves a handoff before it imports. The recovery handler replays saved receipts without the collector. Managed jobs compose the same import and handoff boundaries.
+Each managed run collects and saves a handoff before it imports. The recovery handler replays saved receipts without the collector.
 
 ### Receipt handoff and replay
 
@@ -287,7 +287,7 @@ A completed HTTP observation stays immutable. A retry creates a new attempt ID a
 - A renewable singleton collector slot admits one managed collector across all artifact roots. Recovery and waiting jobs do not hold that slot.
 - A per-origin unresolved-attempt barrier survives lease expiry until reconciliation. An unprocessed 429 receipt therefore cannot be bypassed.
 - Origin deadlines include minimum pacing and server Retry-After, also values beyond the backoff cap.
-- Direct `collect`, `collect-import`, and standalone collector runs are outside this coordination.
+- Direct `collect` and standalone collector runs are outside this coordination.
 
 **Budgets.** Admission reserves the maximum request, byte, and timeout allowance of each attempt before launch. A verified receipt refunds unused requests and bytes. Unknown use stays fully charged. Aggregate budgets and attempt caps are checked again before a retry.
 
@@ -431,16 +431,16 @@ Browser actions call Application handlers. Only the worker runs queued HTTP coll
 
 ### CLI composition
 
-Host owns command parsing and output. `collect` and `collect-import` prepare the attempt through `PreparedCollectionAttempt` before execution. `PreparedCollectionAttempt` is built from a `ConfiguredCollectionSource`, so only a validated configuration revision and an eligible source reach the handlers.
+Host owns command parsing and output. `collect` prepares the attempt through `PreparedCollectionAttempt` before execution. `PreparedCollectionAttempt` is built from a `ConfiguredCollectionSource`, so only a validated configuration revision and an eligible source reach the handlers.
 
 - `ConfiguredCollectionSource` owns request and job creation for one source. `CollectionConfiguration.EligibleSource` owns the enabled and coverage check.
-- `collect` needs no database. `collect-import` then calls the collection and import handler.
-- Application creates a fresh attempt ID and a separate wire job ID before collection. Neither is a durable job record. The CLI accepts no attempt-ID override.
-- Every `collect-import` collects again. `receipts replay` keeps the saved attempt identity and collects nothing.
+- `collect` needs no database and imports nothing.
+- Application creates a fresh wire job ID before collection. It is not a durable job record. The CLI accepts no attempt-ID override.
+- `receipts replay` keeps the saved attempt identity and collects nothing.
 
-`db migrate`, `collect-import`, and `receipts replay` need `CIVIC_LENS_DATABASE` with explicit Host and Database values. Runtime commands have no fallback database. `PostgresCollectionAttemptStore.FromConnectionString` owns the provider configuration and the context factory, so Host has no EF or Npgsql package dependency. Import never applies schema changes.
+`db migrate` and `receipts replay` need `CIVIC_LENS_DATABASE` with explicit Host and Database values. Runtime commands have no fallback database. `PostgresCollectionAttemptStore.FromConnectionString` owns the provider configuration and the context factory, so Host has no EF or Npgsql package dependency. Import never applies schema changes.
 
-Host writes the attempt ID to stderr before collection. After import it writes a JSON summary with `attemptId`, `outcome`, `importDisposition`, `priorCaptureLinkStatus`, and `handoffRemoved`.
+After a replay, Host writes a JSON summary with `attemptId`, `outcome`, `importDisposition`, `priorCaptureLinkStatus`, and `handoffRemoved`.
 
 Exit codes are in [operations](../operations.md#postgres-adapter-and-migrations).
 
@@ -480,7 +480,7 @@ Provider exception details are not printed, because they can hold connection val
 | Robots | `src/CivicLens.Collector/Http/RobotsRules.cs`, `src/CivicLens.Collector/Http/RobotsCache.cs` |
 | Feed and HTML discovery | `src/CivicLens.Collector/Http/FeedParser.cs`, `src/CivicLens.Collector/Http/HtmlParser.cs`, `src/CivicLens.Collector/Http/DiscoveryCandidates.cs` |
 | Domain results and import policy | `src/CivicLens.Core/Collection/CollectionAttemptResult.cs`, `src/CivicLens.Core/Collection/CollectionImportPolicy.cs`, `src/CivicLens.Core/Collection/CollectionImportDecision.cs`, `src/CivicLens.Core/Collection/CollectionResponse.cs` |
-| Import handler and ports | `src/CivicLens.Application/Collection/CollectAndImportCollectionAttempt.cs`, `src/CivicLens.Application/Collection/ICollectorProcess.cs`, `src/CivicLens.Application/Collection/ICollectionAttemptStore.cs`, `src/CivicLens.Application/Collection/StoredCollectionAttempt.cs` |
+| Import handler and ports | `src/CivicLens.Application/Collection/CollectionAttemptImporter.cs`, `src/CivicLens.Application/Collection/ICollectorProcess.cs`, `src/CivicLens.Application/Collection/ICollectionAttemptStore.cs`, `src/CivicLens.Application/Collection/StoredCollectionAttempt.cs` |
 | Handoff and replay | `src/CivicLens.Application/Collection/PendingCollectionHandoff.cs`, `src/CivicLens.Application/Collection/RecoverCollectionAttempts.cs`, `src/CivicLens.Infrastructure/Collection/FileCollectionReceiptHandoffStore.cs` |
 | Prepared attempts | `src/CivicLens.Application/Collection/PreparedCollectionAttempt.cs`, `src/CivicLens.Application/Collection/ConfiguredCollectionSource.cs` |
 | Pacing groups | `src/CivicLens.Application/Collection/PacingGroupConfiguration.cs`, `src/CivicLens.Application/Collection/CollectionConfiguration.cs` |
