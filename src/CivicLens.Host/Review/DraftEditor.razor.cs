@@ -32,6 +32,7 @@ public sealed partial class DraftEditor
     [Inject] private SaveDocumentChangeDraft SaveDraft { get; set; } = default!;
     [Inject] private DecideDocumentChangeReview DecideReview { get; set; } = default!;
     [Inject] private ReviewCatalog Catalog { get; set; } = default!;
+    [Inject] private ReviewOfficials Officials { get; set; } = default!;
     [Inject] private GetDocumentChangeAnalysisRun GetRun { get; set; } = default!;
     [Inject] private IDocumentExtractionStore Extractions { get; set; } = default!;
 
@@ -42,7 +43,6 @@ public sealed partial class DraftEditor
     private DocumentChangeDraftRevision Revision => review!.CurrentRevision;
     private ReviewStatus CurrentStatus =>
         ReviewPolicy.GetCurrentStatus(Revision.RevisionNumber, review!.Decisions, review.UnresolvedConcerns);
-    private ImmutableArray<string> OfficialIds => [.. Catalog.OfficialIds.Order(StringComparer.Ordinal)];
     private ImmutableArray<string> IssueIds => [.. Catalog.IssueIds.Order(StringComparer.Ordinal)];
     private int UnverifiedCitations => Revision.Citations.Length - savedCitations.Count;
 

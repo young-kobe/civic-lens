@@ -93,7 +93,7 @@ The step decides what each end means. The drafting steps for document changes, s
 
 ### Prompt and output
 
-The prompt holds the source and both observation times. It gives each hunk an ID (`h1` and so on) with its before window, after window, and changed text. It also holds the configured officials (ID and name) and the issue IDs. Source text is marked as untrusted data. The request uses model `claude-haiku-5-5`, effort `medium`, and at most 16,000 output tokens.
+The prompt holds the source and both observation times. It gives each hunk an ID (`h1` and so on) with its before window, after window, and changed text. It also holds the issue IDs and the officials that the source covers (ID and name). Coverage comes from the configuration revision of the job that collected the later version, on the date of the later observation. `StatementSpeakerRoster` owns that rule, as for statement drafting. A comparison with no stored revision lists no officials. The evidence read loads the revision in the same transaction. Source text is marked as untrusted data. The request uses model `claude-haiku-5-5`, effort `medium`, and at most 16,000 output tokens.
 
 Structured outputs fix these fields:
 
@@ -189,7 +189,7 @@ Ordinary tests use a fake model at the port. One live smoke test runs only with 
 - A saved action or vote draft gets its exact tier. `PairPriority` finds the pairs over the latest revisions with no approval filter. The entry is tier 1 only if a pair exists. A saved statement draft raises the entries of the actions and votes that pair with it. A raise never lowers a tier. `AnalysisPriority` locks the rows in key order and skips Running entries.
 - A person who edits a draft does not refresh the tier. The next draft of the record does.
 - `document_change_analysis`, `relationship_analysis`, and `brief_analysis` keep the default tier. Their order does not change.
-- `document_change_analysis_runs` keeps one insert-only row for each model call. It holds the versions, the input hash, the token use, the output, and the catalog copy.
+- `document_change_analysis_runs` keeps one insert-only row for each model call. It holds the versions, the input hash, the token use, the output, and the catalog copy of the officials and issues that the prompt listed.
 - The run does not store prompt text. The versioned prompt in code rebuilds it from the retained comparison and the catalog copy. The input hash proves the rebuild.
 - Runs from prompt version 1 have output without confidence. No code parses stored output, so those runs stay readable without a migration.
 - A run recovered after a crash or shutdown is `Interrupted`. It keeps its real start time, has no catalog copy, and uses the current task constants as its versions.
@@ -211,7 +211,7 @@ Ordinary tests use a fake model at the port. One live smoke test runs only with 
 | Postgres queue | `src/CivicLens.Infrastructure/Analysis/PostgresAnalysisQueue.cs`, `src/CivicLens.Infrastructure/Analysis/PostgresAnalysisStore.cs`, `src/CivicLens.Infrastructure/Analysis/PostgresAnalysisStatusStore.cs`, `src/CivicLens.Infrastructure/Analysis/PostgresAnalysisWakeup.cs`, `src/CivicLens.Infrastructure/Analysis/Persistence/AnalysisTableConfiguration.cs`, `src/CivicLens.Infrastructure/Analysis/AnalysisRunRows.cs` |
 | Document-change store and model | `src/CivicLens.Infrastructure/Analysis/PostgresDocumentChangeAnalysisStore.cs`, `src/CivicLens.Infrastructure/Analysis/DocumentChangeAnalysisQueueMapping.cs`, `src/CivicLens.Infrastructure/Analysis/AnthropicDocumentChangeDraftModel.cs`, `src/CivicLens.Infrastructure/Analysis/AnthropicStructuredCall.cs` |
 | Other shared types | `AnalysisState`, `AnalysisRecord`, `AnalysisClaim`, `AnalysisCheckpoint`, `AnalysisSettings`, `AnalysisErrorCodes`, `AnalysisTaskIdentity`, `AnalysisPromptHash`, `AnalysisModelRequest`, `AnalysisModelResponse`, and `AnalysisModelException`, each in its own file in `src/CivicLens.Application/Analysis/` |
-| Document-change parts | `DocumentChangeAnalysisRecord` adds the draft ID, and `DocumentChangeDraftCheckpoint` adds the revision. `DocumentChangeDraftErrorCodes`, `DocumentChangeDraftSettings`, `DocumentChangeDraftCatalog`, and `DocumentChangeDraftEvidence` complete the feature. |
+| Document-change parts | `DocumentChangeAnalysisRecord` adds the draft ID, and `DocumentChangeDraftCheckpoint` adds the revision. `DocumentChangeDraftErrorCodes`, `DocumentChangeDraftSettings`, `DocumentChangeDraftCatalog`, and `DocumentChangeDraftEvidence` (with the configuration revision) complete the feature. |
 | Review priority | `src/CivicLens.Core/Review/ReviewPriority.cs`, `src/CivicLens.Infrastructure/Analysis/AnalysisPriority.cs`, `src/CivicLens.Infrastructure/Relationships/PairPriority.cs`, `src/CivicLens.Infrastructure/Statements/StatementBillMentions.cs`, `src/CivicLens.Application/Relationships/RelationshipPairRule.cs`, `src/CivicLens.Infrastructure/Relationships/RelationshipRevisionScope.cs` |
 | Reserved author | `src/CivicLens.Core/Review/ReviewAuthor.cs` |
 | CLI and composition | `src/CivicLens.Host/Analysis/AnalysisCommand.cs`, `src/CivicLens.Host/Analysis/DocumentChangeDraftComposition.cs` |

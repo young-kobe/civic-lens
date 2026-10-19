@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+using CivicLens.Application.Statements;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Review;
 using Codes = CivicLens.Application.Analysis.DocumentChangeDraftErrorCodes;
@@ -6,9 +8,9 @@ using State = CivicLens.Application.Analysis.AnalysisState;
 namespace CivicLens.Application.Analysis;
 
 public sealed class DocumentChangeDraftStep(IDocumentChangeAnalysisStore store, IDocumentChangeDraftModel model,
-    DocumentChangeDraftSettings settings, DocumentChangeDraftCatalog catalog) : IAnalysisTaskStep<AnalysisRun>
+    DocumentChangeDraftSettings settings, ImmutableArray<string> issueIds) : IAnalysisTaskStep<AnalysisRun>
 {
-    private readonly string catalogJson = DocumentChangeDraftPrompt.SerializeCatalog(catalog);
+    private readonly StatementSpeakerRoster roster = new();
 
     public IAnalysisQueue<AnalysisRun> Queue => store;
 
@@ -20,16 +22,18 @@ public sealed class DocumentChangeDraftStep(IDocumentChangeAnalysisStore store, 
 
     public async Task<bool> RunAsync(IAnalysisAttempt<AnalysisRun> attempt, CancellationToken cancellationToken)
     {
-        attempt.ContextJson = catalogJson;
         var evidence = await store.ReadEvidenceAsync(attempt.Claim.Record.SubjectId, cancellationToken);
         if (evidence is null) return await attempt.CompleteAsync(State.Blocked, Codes.ComparisonUnavailable, cancellationToken);
         if (evidence.ExistingDraftId is not null)
             return await attempt.CompleteAsync(State.Succeeded, Codes.HumanDraftExists, cancellationToken);
+        var catalog = new DocumentChangeDraftCatalog(roster.OfficialsOn(evidence.ConfigurationRevision, evidence.Comparison.SourceId,
+            DateOnly.FromDateTime(evidence.Comparison.AfterObservedAtUtc.UtcDateTime)), issueIds);
+        attempt.ContextJson = DocumentChangeDraftPrompt.SerializeCatalog(catalog);
 
         var loop = new AnalysisValidationLoop<AnalysisRun, DocumentChangeDraftRevision>(Wrap, attempt, AnalysisRunOutcome.Drafted,
             DocumentChangeDraftTask.MaximumValidationPasses,
             errors => Bounded(DocumentChangeDraftPrompt.Build(evidence, catalog, errors)), model.DraftAsync,
-            (json, run) => Resolve(json, evidence, run), store.GetRunAsync);
+            (json, run) => Resolve(json, evidence, catalog, run), store.GetRunAsync);
         var result = await loop.RunAsync(cancellationToken);
         return result.End switch
         {
@@ -42,8 +46,8 @@ public sealed class DocumentChangeDraftStep(IDocumentChangeAnalysisStore store, 
         };
     }
 
-    private AnalysisResolution<DocumentChangeDraftRevision> Resolve(string outputJson, DocumentChangeDraftEvidence evidence,
-        AnalysisRun run)
+    private static AnalysisResolution<DocumentChangeDraftRevision> Resolve(string outputJson, DocumentChangeDraftEvidence evidence,
+        DocumentChangeDraftCatalog catalog, AnalysisRun run)
     {
         var resolution = DocumentChangeDraftResolver.Resolve(outputJson, evidence, catalog, Guid.NewGuid().ToString("N"),
             run.FinishedAtUtc);

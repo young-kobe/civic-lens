@@ -24,7 +24,6 @@ public sealed class ReviewCatalog
             if (string.IsNullOrWhiteSpace(value) || value.Length > 128)
                 throw new ArgumentException("Configured identifiers must contain 1 to 128 characters.", name);
             if (!result.Add(value)) throw new ArgumentException("Configured identifiers must be unique.", name);
-            if (result.Count > 256) throw new ArgumentException("At most 256 identifiers may be configured.", name);
         }
         return result.ToImmutable();
     }

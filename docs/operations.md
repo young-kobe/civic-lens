@@ -427,8 +427,7 @@ Set these variables through the protected environment or secret mechanism of the
 | `CIVIC_LENS_REVIEW_REVIEWERS` | Optional comma-separated additional reviewer subject IDs |
 | `CIVIC_LENS_REVIEW_KEY_DIRECTORY` | Absolute persistent directory for ASP.NET data-protection keys |
 | `CIVIC_LENS_ISSUES_CONFIG` | Optional absolute path to the tracked-issue file, at most 1 MB. Its issue IDs are the configured issues. Unset means no configured issues |
-| `CIVIC_LENS_REVIEW_OFFICIALS` | Optional comma-separated configured official IDs |
-| `CIVIC_LENS_COLLECTION_CONFIG` | Optional absolute path to the collection configuration for the owner Sources page |
+| `CIVIC_LENS_COLLECTION_CONFIG` | Optional absolute path to the collection configuration for the owner Sources page and the official choices of the review pages. Without it no officials are listed |
 | `CIVIC_LENS_RELEASE_DIRECTORY` | Optional absolute path to the release root. With the collection configuration, it turns on the owner publish section |
 
 Without the collection configuration, the Sources page reports that source checks are not set up. The publish section needs the collection configuration, for the officials' display names, and the release directory. Without them, the owner sees a notice that publishing is off. Set `CIVIC_LENS_ISSUES_CONFIG` to offer issues and policy areas as choices on the statement pages.
@@ -460,7 +459,7 @@ The `worker` command drafts AI accounts of changed comparisons. [Analysis](archi
 | `ANTHROPIC_API_KEY` | Claude API key |
 | `CIVIC_LENS_ANALYSIS_DAILY_TOKENS` | Daily token limit for document-change drafting calls, per UTC day. Each other drafting stage has its own limit. The [call cap](architecture/analysis.md#budget) bounds one call. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time (default 2, 1 to 4) |
-| `CIVIC_LENS_ISSUES_CONFIG`, `CIVIC_LENS_REVIEW_OFFICIALS` | The same issue file and official IDs that the review host reads |
+| `CIVIC_LENS_ISSUES_CONFIG` | The same issue file that the review host reads |
 
 Tracked issues live in `config/issues.json`. The file format is in [configuration](architecture/configuration.md#tracked-issues). An invalid file stops startup.
 

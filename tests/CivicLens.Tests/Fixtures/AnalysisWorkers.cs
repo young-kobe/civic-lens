@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CivicLens.Application;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Analysis;
@@ -13,9 +14,9 @@ namespace CivicLens.Tests.Fixtures;
 internal static class AnalysisWorkers
 {
     public static AnalysisWorker<AnalysisRun> Drafting(IDocumentChangeAnalysisStore store, IAnalysisStatusStore status,
-        IDocumentChangeDraftModel model, DocumentChangeDraftSettings settings, DocumentChangeDraftCatalog catalog,
+        IDocumentChangeDraftModel model, DocumentChangeDraftSettings settings, ImmutableArray<string> issueIds,
         TimeProvider clock, IWorkerWakeup? wakeup = null) =>
-        new(new DocumentChangeDraftStep(store, model, settings, catalog), status, clock, wakeup);
+        new(new DocumentChangeDraftStep(store, model, settings, issueIds), status, clock, wakeup);
 
     public static AnalysisWorker<StatementGateRun> Gate(IStatementGateStore store, IAnalysisStatusStore status,
         IStatementGateModel model, StatementGateSettings settings, IssueConfigurationRevision revision, TimeProvider clock) =>

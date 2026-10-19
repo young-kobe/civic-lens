@@ -8,7 +8,28 @@ namespace CivicLens.Tests.Application.Analysis;
 
 public sealed class DocumentChangeDraftStepTests
 {
-    private static readonly DocumentChangeDraftCatalog Catalog = new([], []);
+    [Fact]
+    public async Task OnlyTheOfficialsThatTheSourceCoversOnTheLaterObservationDateReachThePromptAndTheRunContext()
+    {
+        var store = new FakeAnalysisStore(1);
+        var id = store.Evidence.Keys.Single();
+        var evidence = store.Evidence[id];
+        store.Evidence[id] = evidence with
+        {
+            ConfigurationRevision = StatementDraftFixtures.SpeakerRevision(warrenEndsBefore: new DateOnly(2026, 9, 1)),
+            Comparison = evidence.Comparison with { AfterObservedAtUtc = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero) }
+        };
+        var model = new FakeDocumentChangeDraftModel().Draft(FakeDocumentChangeDraftModel.Output(("h1", "after", "Item 0 new")));
+
+        await Worker(store, model).ExecuteAsync(once: true);
+
+        var request = Assert.Single(model.Requests);
+        Assert.Contains("markey", request.UserPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("warren", request.UserPrompt, StringComparison.Ordinal);
+        var context = Assert.Single(store.Runs).ContextJson!;
+        Assert.Contains("markey", context, StringComparison.Ordinal);
+        Assert.DoesNotContain("warren", context, StringComparison.Ordinal);
+    }
 
     [Fact]
     public async Task AnUnexpectedModelErrorAfterTheReservationFailsTheEntryAndKeepsTheCharge()
@@ -165,7 +186,7 @@ public sealed class DocumentChangeDraftStepTests
         DocumentChangeDraftSettings? settings = null, IWorkerWakeup? wakeup = null, FakeAnalysisStatusStore? status = null,
         FakeClock? clock = null) =>
         AnalysisWorkers.Drafting(store, status ?? new FakeAnalysisStatusStore(), model,
-            settings ?? new DocumentChangeDraftSettings(10_000_000, concurrency: 1), Catalog,
+            settings ?? new DocumentChangeDraftSettings(10_000_000, concurrency: 1), [],
             clock ?? new FakeClock(DateTimeOffset.UnixEpoch), wakeup);
 
     private sealed class FakeWakeup(Action onWait) : IWorkerWakeup

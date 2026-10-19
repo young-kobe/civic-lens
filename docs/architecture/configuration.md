@@ -110,7 +110,7 @@ The file has a `version` (only 1 is supported), a list of `policyAreas` (`id`, `
 - The host reads and validates the file once at process start. An invalid file stops startup.
 - `ConfigurationFile` in Host reads and validates every collection and issue file. It rejects a file over 1 MB or a relative environment path. The largest file, `config/federal-coverage.json`, is 771 KB.
 
-`IssueConfigurationRevision` mirrors `CollectionConfigurationRevision`. It keeps the canonical JSON and its lowercase SHA-256 ID. Construction verifies the hash, strict shape, and invariants. The review host reads the file named by `CIVIC_LENS_ISSUES_CONFIG` once at start and takes the configured issue IDs from it.
+`IssueConfigurationRevision` mirrors `CollectionConfigurationRevision`. It keeps the canonical JSON and its lowercase SHA-256 ID. Construction verifies the hash, strict shape, and invariants. The review host reads the file named by `CIVIC_LENS_ISSUES_CONFIG` once at start and takes the configured issue IDs from it. The review host takes the official IDs from the `People` of the collection configuration through `ReviewOfficials`.
 
 ## Storage and contracts
 

@@ -211,7 +211,6 @@ internal static class ReviewWorkspace
         services.AddScoped<GetDocumentComparison>();
         services.AddScoped<GetDocumentCitation>();
         var issues = ConfigurationFile.ReadIssuesFromEnvironment() ?? new IssueConfiguration { PolicyAreas = [], Issues = [] };
-        services.AddSingleton(ReadCatalog(issues.Issues.Select(issue => issue.Id)));
         services.AddSingleton<IDocumentChangeReviewStore>(PostgresDocumentChangeReviewStore.FromConnectionString(connectionString));
         services.AddSingleton<IDocumentChangeAnalysisStore>(PostgresDocumentChangeAnalysisStore.FromConnectionString(connectionString));
         services.AddScoped<ListDocumentChangeAnalyses>();
@@ -236,6 +235,7 @@ internal static class ReviewWorkspace
         var collection = ConfigurationFile.ReadCollectionFromEnvironment();
         var officials = ReviewOfficials.From(collection);
         services.AddSingleton(officials);
+        services.AddSingleton(new ReviewCatalog(issues.Issues.Select(issue => issue.Id), officials.People.Select(person => person.Key)));
         if (collection is null)
         {
             services.AddScoped(provider => new GetRecentActivity(provider.GetRequiredService<IDocumentChangeReviewStore>()));
@@ -335,12 +335,6 @@ internal static class ReviewWorkspace
             provider.GetRequiredService<PublishedRecordLoaders>(), new PublicationCatalog(officials.Names), TimeProvider.System));
         services.AddScoped<ListPublishable>();
     }
-
-    internal static ReviewCatalog ReadCatalog(IEnumerable<string> issueIds) =>
-        new(issueIds, ReadIds("CIVIC_LENS_REVIEW_OFFICIALS"));
-
-    private static string[] ReadIds(string name) => (Environment.GetEnvironmentVariable(name) ?? "")
-        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private static void SetHeaders(HttpResponse response)
     {

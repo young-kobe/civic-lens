@@ -103,7 +103,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
             StringComparison.Ordinal);
         var model = new FakeDocumentChangeDraftModel().Draft(FakeDocumentChangeDraftModel.Output(("h1", "after", "October 30")));
         await AnalysisWorkers.Drafting(analysis, status, model, new DocumentChangeDraftSettings(1_000_000, concurrency: 1),
-            new DocumentChangeDraftCatalog([], []), TimeProvider.System).ExecuteAsync(once: true);
+            [], TimeProvider.System).ExecuteAsync(once: true);
         var draftId = Assert.Single(await analysis.GetByComparisonIdsAsync([comparison.ComparisonId], default)).DraftId!;
         var reviews = PostgresDocumentChangeReviewStore.FromConnectionString(host.ConnectionString);
         var aiCitations = (await reviews.GetAsync(draftId, default))!.CurrentRevision.Citations;

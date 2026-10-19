@@ -183,7 +183,7 @@ try
         var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!;
         var queue = PostgresCollectionWorkerQueue.FromConnectionString(connectionString);
         var analysisContexts = AnalysisDbContextFactory.Create(connectionString);
-        var analysis = DocumentChangeDraftComposition.Create(analysisContexts, connectionString, workerConfiguration,
+        var analysis = DocumentChangeDraftComposition.Create(analysisContexts, connectionString,
             issueConfiguration?.Issues.Select(issue => issue.Id) ?? []);
         await using var analysisWakeup = analysis.Wakeup;
         var gate = StatementGateComposition.Create(analysisContexts, connectionString, issues);

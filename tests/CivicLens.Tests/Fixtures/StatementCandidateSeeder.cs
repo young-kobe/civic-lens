@@ -33,7 +33,7 @@ internal sealed class StatementCandidateSeeder(PostgresCollectionAttemptStore at
         return (string)(await command.ExecuteScalarAsync())!;
     }
 
-    private async Task<string?> StoreRevisionAsync(CollectionConfigurationRevision? revision)
+    public async Task<string?> StoreRevisionAsync(CollectionConfigurationRevision? revision)
     {
         if (revision is null) return null;
         await using var connection = new NpgsqlConnection(connectionString);
