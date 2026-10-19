@@ -230,6 +230,8 @@ internal static class ReviewWorkspace
         ConfigureVoteReview(services, contexts);
         ConfigureRelationshipReview(services, contexts);
         ConfigureBriefReview(services, contexts);
+        services.AddScoped(provider => new LookupDraft(provider.GetRequiredService<IActionReviewStore>(),
+            provider.GetRequiredService<IVoteReviewStore>(), TimeProvider.System));
         var collection = ReviewCollectionSettings.FromEnvironment();
         services.AddSingleton(ReviewOfficials.From(collection?.Configuration));
         if (collection is null)

@@ -58,6 +58,8 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - An older candidate never becomes the newest revision. Enforced by `ActionDraftRows.HasNewerCandidateAsync`, checked when the step reads its evidence and again at the append. Tests: `PostgresBillStreamTests.ADelayedOlderCandidateIsSupersededSoItsStaleContentNeverBecomesTheNewestRevision`, `PostgresBillStreamTests.ANewerCandidateThatArrivesAfterTheClaimSupersedesTheAppendSoTheOlderDraftNeverBecomesARevision`, and `PostgresBillStreamTests.ALaterUpdateDateWithoutSummariesSupersedesAnEarlierCandidateWithSummariesBecauseTheDateDecidesFirst`.
 - More than 20 summary pages never block a bill; it drafts without them. Enforced by `ActionDraftStep`. Test: `ActionDraftStepTests.MoreThanTwentySummaryPagesDraftWithoutSummariesAndNeverReadThemBecauseSummariesAreOptionalInput`.
 - An owner requeue of Blocked drafts moves only Blocked drafts with exactly the given code. Enforced by `PostgresAnalysisQueue.RequeueAsync` and `ActionDraftLifecycle`. Tests: `PostgresBillStreamTests.RequeueBlockedMovesOnlyBlockedEntriesWithTheGivenCodeAndResetsTheirAttempts` and `ActionDraftLifecycleTests.GateStatementAndDocumentChangeTasksKeepBlockedFinalBecauseTheirLifecyclesDoNotOptIn`.
+- The vote list of an action page holds only the vote drafts of its own bill. It lists the newest vote day first, at most 25. Enforced by `BillVoteDrafts`. Tests: `BillLinksWorkspaceTests.TheActionPageListsTheVoteDraftsOfItsOwnBillNewestFirstAndSkipsOtherBillsAndCongresses` and `BillLinksWorkspaceTests.TheActionPageShowsOnlyTheNewestVoteDraftsOfABillAndSaysSo`.
+- The congress.gov link is built from the stored bill identity, with the ordinal and the slug of the bill type. Enforced by `SourcePages.Bill`. Test: `BillLinksWorkspaceTests.TheActionPageLinksTheBillOnCongressGovForEachBillTypeAndOrdinal`.
 - Model confidence never reaches a revision. Enforced by `ActionDraftStep`. Test: `ActionDraftStepTests.ConfidenceStaysInTheRunOutputAndNeverReachesTheRevision`.
 
 ## Behavior
@@ -205,7 +207,11 @@ Action review uses the shared decision rules and review cycles in [review](revie
 - the change since the last approved revision: the compact sponsorship view, or the old and the new text side by side
 - the saved revision and the "Edit wording" form, with the suggestion and its "Use suggestion" and "Dismiss" buttons
 - the evidence: each sponsorship with its cited lines, the policy area, and the CRS summary
+- a link to the bill on congress.gov, built from the stored bill identity
+- the vote drafts of the bill, each with its roll call, vote kind, vote day, and status, and a link to its vote page
 - the shared `ReviewDecisionPanel` and `ReviewHistoryPanel`
+
+The vote drafts come from the same read as the page, in the same transaction. They are the drafts whose candidate names the bill: same Congress, bill type, and bill number. The list shows the newest 25 by vote day and says so when it is full. The status badge has no open-concern count, because the read takes no decision history. The page stores no copy and needs no migration. A vote has no stored result, so the list shows none.
 
 "Use suggestion" saves the stored suggestion text and clears the suggestion. "Dismiss" saves the form text and clears the suggestion. The plain save keeps the suggestion. The forms use the static post-back pattern of the statement pages, and `ReviewRecordPage` maps the failures. The rail has an Actions link.
 
@@ -253,9 +259,9 @@ All are owner commands. Variables and examples are in [operations](../operations
 | Fingerprint and summary choice | `src/CivicLens.Application/Collection/Bills/ActionFingerprint.cs`, `src/CivicLens.Application/Collection/Bills/BillSummarySelection.cs` |
 | Store, queue mapping, model | `src/CivicLens.Infrastructure/Actions/PostgresActionDraftStore.cs`, `src/CivicLens.Infrastructure/Actions/ActionDraftQueueMapping.cs`, `src/CivicLens.Infrastructure/Actions/ActionDraftRows.cs`, `src/CivicLens.Infrastructure/Actions/AnthropicActionDraftModel.cs` |
 | Review aggregate and change view | `src/CivicLens.Core/Actions/ActionReview.cs`, `src/CivicLens.Core/Actions/ActionSponsorshipChanges.cs` |
-| Review commands and reads | `src/CivicLens.Application/Actions/SaveActionDraft.cs`, `src/CivicLens.Application/Actions/DecideActionReview.cs`, `src/CivicLens.Application/Actions/ApproveSponsorshipChanges.cs`, `src/CivicLens.Application/Actions/GetActionReview.cs`, `src/CivicLens.Application/Actions/ListActionReviews.cs`, `src/CivicLens.Application/Actions/ListActionTriage.cs`, `src/CivicLens.Application/Actions/GetActionReviewCounts.cs`, `src/CivicLens.Application/Actions/IActionReviewStore.cs` |
-| Review store | `src/CivicLens.Infrastructure/Actions/PostgresActionReviewStore.cs`, `src/CivicLens.Infrastructure/Actions/Persistence/ActionReviewDecisionRow.cs` |
-| Review pages | `src/CivicLens.Host/Review/ActionList.razor`, `src/CivicLens.Host/Review/ActionTriage.razor`, `src/CivicLens.Host/Review/DraftListPage.cs`, `src/CivicLens.Host/Review/ActionEditor.razor`, `src/CivicLens.Host/Review/ActionLabels.cs`, `src/CivicLens.Host/Review/ActionRoutes.cs` |
+| Review commands and reads | `src/CivicLens.Application/Actions/SaveActionDraft.cs`, `src/CivicLens.Application/Actions/DecideActionReview.cs`, `src/CivicLens.Application/Actions/ApproveSponsorshipChanges.cs`, `src/CivicLens.Application/Actions/GetActionReview.cs`, `src/CivicLens.Application/Actions/ListActionReviews.cs`, `src/CivicLens.Application/Actions/ListActionTriage.cs`, `src/CivicLens.Application/Actions/GetActionReviewCounts.cs`, `src/CivicLens.Application/Actions/IActionReviewStore.cs`, `src/CivicLens.Application/Votes/BillVoteDraft.cs` |
+| Review store | `src/CivicLens.Infrastructure/Actions/PostgresActionReviewStore.cs`, `src/CivicLens.Infrastructure/Actions/Persistence/ActionReviewDecisionRow.cs`, `src/CivicLens.Infrastructure/Votes/BillVoteDrafts.cs` |
+| Review pages | `src/CivicLens.Host/Review/ActionList.razor`, `src/CivicLens.Host/Review/ActionTriage.razor`, `src/CivicLens.Host/Review/DraftListPage.cs`, `src/CivicLens.Host/Review/ActionEditor.razor`, `src/CivicLens.Host/Review/ActionLabels.cs`, `src/CivicLens.Host/Review/ActionRoutes.cs`, `src/CivicLens.Host/Review/SourcePages.cs` |
 | Publication | `src/CivicLens.Application/Publication/ActionRecordLoader.cs`, `src/CivicLens.Application/Publication/PublishedActionBuilder.cs`, `src/CivicLens.Publication.Contracts/PublishedAction.cs`, `src/CivicLens.Host/Publication/PublishedActionPage.razor` |
 | Record ID hash | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ActionCandidates.cs` |
 | Owner requeue of Blocked entries | `src/CivicLens.Application/Actions/RequeueBlockedActionDrafts.cs` |
@@ -274,3 +280,5 @@ All are owner commands. Variables and examples are in [operations](../operations
 - House votes do not need dated terms. Each House Clerk vote record gives the bioguide ID, party, and state of each member on the vote date. Votes match people by bioguide ID, as sponsorships do, and keep the party and state from the record.
 - House votes: [votes](votes.md) holds the implemented collection, drafting, review, and publication.
 - Senate votes need senate.gov data and a `lis_member_id` crosswalk, because Congress.gov has neither. The generated roster ([R-14](../roadmap.md#later)) will supply that crosswalk.
+- The congress.gov bill link follows the public page form `/bill/{ordinal}-congress/{type slug}/{number}`. No repository fixture or stored row shows that form. Check it against the live site once.
+- Bill lookup ignores the source of an action draft, because bills have one source and no code owns its ID. A second bill source needs a source filter in `FindRecordIdByBillAsync`.

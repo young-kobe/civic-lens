@@ -99,6 +99,8 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - The saved extraction text must equal the new render of its capture. Enforced by `VoteReader`. Test: `VoteDraftStepTests.ARenderedTextThatDiffersFromTheSavedExtractionBlocksBeforeAnyCall`.
 - A saved extraction of an older parser blocks before any capture is parsed. Enforced by `VoteReader`. Test: `VoteDraftStepTests.AChangedParserVersionBlocksBeforeAnyCaptureIsParsedSoAnUpgradeIsNeverReportedAsBrokenData`.
 - A candidate with a newer candidate of the same roll call never becomes a revision. Enforced by `VoteDraftStep` and `VoteDraftRows.AppendAnalysisRevisionAsync`. Tests: `VoteDraftStepTests.ACandidateWithANewerCandidateOfTheSameRollCallIsSupersededWithoutACall` and `PostgresHouseVoteTests.ANewerCandidateThatArrivesAfterTheClaimSupersedesTheAppendSoTheOlderDraftNeverBecomesARevision`.
+- The vote page links the action draft of its bill only when the vote names a bill and that bill has a draft. Enforced by `PostgresVoteReviewStore.GetAsync`. Tests: `VoteReviewWorkspaceTests.TheVotePageLinksTheActionDraftOfItsBillAndTheRollCallOnTheClerkSite` and `VoteReviewWorkspaceTests.TheVotePageHasNoActionLinkWhenTheVoteNamesNoBillOrTheBillHasNoActionDraft`.
+- The clerk link names the calendar year of the session and writes the roll number without padding. Enforced by `SourcePages.RollCall`. Test: `VoteReviewWorkspaceTests.TheClerkLinkNamesTheCalendarYearOfTheSessionAndWritesTheRollNumberWithoutPadding`.
 - A person edits only the headline and the summary. Enforced by `VoteDraftRevision.ValidatePersonEditOf`, checked again under the vote review lock. Test: `VoteDraftRevisionTests.AVoteReviewerEditsOnlyTheHeadlineAndTheSummaryBecauseCodeOwnsTheDayTheKindTheFactsAndTheMemberVotes`.
 - A person may keep or clear the suggestion, but never change it. Enforced by `ReviewTextRules.RequireSuggestionKeptOrCleared`, checked again under the lock. Tests: `VoteDraftRevisionTests.APersonMayKeepOrClearTheSuggestionButNeverChangeItBecauseOnlyTheModelWritesSuggestions` and `PostgresHouseVoteTests.APersonSaveMayKeepOrClearTheSuggestionButTheStoreRefusesAChangedOne`.
 - A later model run keeps the text of a person and offers its own text as a suggestion. Enforced by `ReviewText.AfterModelDraft` and `ReviewTextRules.RequireAnalysisText`. Tests: `VoteDraftStepTests.APersonsTextIsKeptAndTheModelsNewTextBecomesASuggestionBecauseAModelPredictionIsNeverAHumanEdit`, `VoteDraftStepTests.ACorrectedMemberVoteKeepsAPersonsTextAndTheSuggestionWithoutAModelCall`, and `VoteDraftRevisionTests.ARevisionAfterAPersonsTextMustKeepThatTextAndOfferTheModelsAsASuggestion`.
@@ -287,8 +289,12 @@ Vote review uses the shared decision rules and review cycles in [review](review.
 - those facts are the roll call, the kind, the bill, the tracked issues, and the member votes
 - the saved revision and the "Edit wording" form, with the suggestion and its "Use suggestion" and "Dismiss" buttons
 - the evidence: the vote kind with its cited `Question` line, and each fact with its cited line
+- a link to the roll call page on clerk.house.gov
+- a link to the action draft of the bill, when the vote names a bill that has a draft
 - the tracked members: the name and the cast of each member, with the cited member line
 - the shared `ReviewDecisionPanel` and `ReviewHistoryPanel`
+
+The action link comes from `GetVoteReview`. The review read finds the action draft of the bill with `FindBillActionRecordIdsAsync` in the same transaction, which publication uses too. The clerk link is the HTML vote page: `https://clerk.house.gov/Votes/{year}{number}`. The year is the calendar year of the session. The roll number has no padding, so roll 100 of 2025 is `2025100` and roll 5 is `20255`. The format was checked against the live site on 2026-10-19.
 
 A person cannot edit the member votes. The rail has a Votes link.
 
@@ -350,9 +356,9 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 | Publication reads | `src/CivicLens.Application/Votes/UnpublishedApprovedVote.cs`, `src/CivicLens.Application/Votes/PublishableVote.cs`, `src/CivicLens.Infrastructure/Votes/VoteReviewQueries.cs`, `src/CivicLens.Application/Publication/VoteRecordLoader.cs` |
 | Vote revision | `src/CivicLens.Core/Votes/VoteDraftRevision.cs`, `src/CivicLens.Core/Review/ReviewText.cs`, `src/CivicLens.Core/Review/ReviewTextRules.cs`, `src/CivicLens.Core/Review/ReviewTextSuggestion.cs`, `src/CivicLens.Core/Review/IHeadlineSummaryRevision.cs` |
 | Review aggregate | `src/CivicLens.Core/Votes/VoteReview.cs` |
-| Review commands and reads | `src/CivicLens.Application/Votes/SaveVoteDraft.cs`, `src/CivicLens.Application/Votes/DecideVoteReview.cs`, `src/CivicLens.Application/Votes/GetVoteReview.cs`, `src/CivicLens.Application/Votes/ListVoteReviews.cs`, `src/CivicLens.Application/Votes/GetVoteReviewCounts.cs`, `src/CivicLens.Application/Votes/IVoteReviewStore.cs` |
-| Review store | `src/CivicLens.Infrastructure/Votes/PostgresVoteReviewStore.cs`, `src/CivicLens.Infrastructure/Review/ConfiguredPersonNames.cs` |
-| Review pages | `src/CivicLens.Host/Review/VoteList.razor`, `src/CivicLens.Host/Review/VoteTriage.razor`, `src/CivicLens.Host/Review/DraftListPage.cs`, `src/CivicLens.Host/Review/VoteEditor.razor`, `src/CivicLens.Host/Review/VoteLabels.cs`, `src/CivicLens.Host/Review/VoteRoutes.cs` |
+| Review commands and reads | `src/CivicLens.Application/Votes/SaveVoteDraft.cs`, `src/CivicLens.Application/Votes/DecideVoteReview.cs`, `src/CivicLens.Application/Votes/GetVoteReview.cs`, `src/CivicLens.Application/Votes/ListVoteReviews.cs`, `src/CivicLens.Application/Votes/GetVoteReviewCounts.cs`, `src/CivicLens.Application/Votes/IVoteReviewStore.cs`, `src/CivicLens.Application/Votes/BillVoteDraft.cs` |
+| Review store | `src/CivicLens.Infrastructure/Votes/PostgresVoteReviewStore.cs`, `src/CivicLens.Infrastructure/Review/ConfiguredPersonNames.cs`, `src/CivicLens.Infrastructure/Votes/BillVoteDrafts.cs` |
+| Review pages | `src/CivicLens.Host/Review/VoteList.razor`, `src/CivicLens.Host/Review/VoteTriage.razor`, `src/CivicLens.Host/Review/DraftListPage.cs`, `src/CivicLens.Host/Review/VoteEditor.razor`, `src/CivicLens.Host/Review/VoteLabels.cs`, `src/CivicLens.Host/Review/VoteRoutes.cs`, `src/CivicLens.Host/Review/SourcePages.cs` |
 | Postgres drafting store and append | `src/CivicLens.Infrastructure/Votes/PostgresVoteDraftStore.cs`, `src/CivicLens.Infrastructure/Votes/VoteDraftRows.cs`, `src/CivicLens.Infrastructure/Votes/VoteDraftQueueMapping.cs`, `src/CivicLens.Infrastructure/Votes/VoteDraftQueueRows.cs` |
 | Drafting tables and model adapter | `src/CivicLens.Infrastructure/Votes/Persistence/`, `src/CivicLens.Infrastructure/Votes/AnthropicVoteDraftModel.cs` |
 | Worker composition | `src/CivicLens.Host/Votes/VoteDraftComposition.cs`, `src/CivicLens.Host/Votes/VoteDraftConfiguration.cs` |
@@ -378,3 +384,4 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 - Rolling back the `VoteKindChangedReason` migration fails while any vote run has the `kindChanged` reason.
 - The session of today uses the UTC date. The new session therefore starts a few hours early on 1 January in US time zones. Its list is empty then.
 - Senate votes need senate.gov data and a `lis_member_id` crosswalk. See [actions](actions.md#limits-and-planned-work).
+- Roll call lookup ignores the source of a vote draft, because House votes have one source and no code owns its ID. A second vote source needs a source filter in `FindRecordIdByRollAsync`.

@@ -122,6 +122,13 @@ else
 
             <Panel Title="Evidence" Id="evidence" Padded="true" Raised="true" Class="split-sticky">
                 <p class="small muted">Code built each citation from the saved House vote text of @Moment.Day(revision.CandidateUpdateDate).</p>
+                <p class="small">
+                    <a href="@SourcePages.RollCall(revision.Congress, revision.SessionNumber, revision.RollCallNumber)" rel="noopener noreferrer">Roll call on clerk.house.gov</a>
+                    @if (detail!.BillActionRecordIds.FirstOrDefault() is { } actionRecordId)
+                    {
+                        <text> | </text><a href="@ActionRoutes.Editor(actionRecordId)">Action draft of this bill</a>
+                    }
+                </p>
                 <ul class="choices">
                     @if (revision.KindCitation is { } kind)
                     {

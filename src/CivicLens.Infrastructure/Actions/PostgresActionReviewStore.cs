@@ -21,6 +21,7 @@ using CivicLens.Infrastructure.Collection.BillStream;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Review;
+using CivicLens.Infrastructure.Votes;
 using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -88,6 +89,14 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
                 RelationshipStaleness.AfterDecision(relationshipQueue, RelationshipRecordKind.Action),
                 BriefStaleness.AfterDecision(briefQueue, PublishedRecordKind.Action)), cancellationToken);
 
+    public async Task<string?> FindRecordIdByBillAsync(int congress, string billType, int billNumber, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Set<ActionDraftRow>().AsNoTracking()
+            .Where(row => row.Congress == congress && row.BillType == billType && row.BillNumber == billNumber)
+            .OrderBy(row => row.RecordId).Select(row => row.RecordId).FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<ActionReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
@@ -97,9 +106,10 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
         var history = (await Records.ReadHistoriesAsync(db, [draft], cancellationToken))[recordId];
         var extractions = await ReadExtractionsAsync(db, history.LoadedRevisions, cancellationToken);
         var names = await ReadOfficialNamesAsync(db, history.LoadedRevisions, cancellationToken);
+        var billVotes = await BillVoteDrafts.ReadAsync(db, draft.Congress, draft.BillType, draft.BillNumber, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         foreach (var revision in history.LoadedRevisions) revision.ValidateAgainst(extractions);
-        return new(ToReview(draft, history), extractions.ToImmutableDictionary(StringComparer.Ordinal), names);
+        return new(ToReview(draft, history), extractions.ToImmutableDictionary(StringComparer.Ordinal), names, billVotes);
     }
 
     public async Task<ActionReviewPage> ListAsync(PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken)

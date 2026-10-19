@@ -16,6 +16,8 @@ public interface IActionReviewStore
     Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
         int expectedReviewStateVersion, bool bulkSafe, string idempotencyKey, string payloadHash, CancellationToken cancellationToken);
 
+    Task<string?> FindRecordIdByBillAsync(int congress, string billType, int billNumber, CancellationToken cancellationToken);
+
     Task<ActionReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken);
 
     Task<ActionReviewPage> ListAsync(PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken);

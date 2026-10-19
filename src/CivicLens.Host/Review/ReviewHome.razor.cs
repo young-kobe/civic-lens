@@ -40,6 +40,7 @@ public sealed partial class ReviewHome
     private RelationshipReviewCounts? relationshipCounts;
     private IReadOnlyList<FeedItem> activity = [];
     private string? error;
+    private string? lookupMessage;
 
     [Inject] private ReviewActorAccessor Actors { get; set; } = default!;
     [Inject] private IServiceProvider Services { get; set; } = default!;
@@ -54,6 +55,7 @@ public sealed partial class ReviewHome
     [Inject] private GetBriefReviewCounts GetBriefCounts { get; set; } = default!;
     [Inject] private GetRelationshipReviewCounts GetRelationshipCounts { get; set; } = default!;
     [Inject] private GetRecentActivity GetActivity { get; set; } = default!;
+    [Inject] private LookupDraft Lookup { get; set; } = default!;
     [Inject] private CreateDocumentChangeDraft CreateDraft { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
 
@@ -64,6 +66,7 @@ public sealed partial class ReviewHome
     [SupplyParameterFromQuery(Name = "drafts")] private string? DraftsFilterName { get; set; }
     [SupplyParameterFromQuery(Name = "draftsCursor")] private string? DraftsCursor { get; set; }
     [SupplyParameterFromQuery(Name = "status")] private string? Status { get; set; }
+    [SupplyParameterFromQuery(Name = "find")] private string? Find { get; set; }
 
     [SupplyParameterFromForm(FormName = "start-draft", Name = "comparisonId")] private string? StartComparisonId { get; set; }
     [SupplyParameterFromForm(FormName = "start-draft", Name = "idempotencyKey")] private string? StartKey { get; set; }
@@ -91,6 +94,7 @@ public sealed partial class ReviewHome
         publishingOff = actor.Role == ReviewRole.Owner && !canPublish;
         if (HttpMethods.IsPost(HttpContext.Request.Method)) return;
         var cancellationToken = HttpContext.RequestAborted;
+        if (Find is not null) lookupMessage = await FindDraftAsync(cancellationToken);
         try
         {
             var collection = actor.Role == ReviewRole.Owner ? Services.GetService<CollectionWorkspace>() : null;
@@ -124,6 +128,18 @@ public sealed partial class ReviewHome
             overview = null;
             error = "The review workspace could not load its records. Refresh the page to try again.";
         }
+    }
+
+    private async Task<string?> FindDraftAsync(CancellationToken cancellationToken)
+    {
+        DraftLookupHit? hit;
+        try { hit = await Lookup.ExecuteAsync(actor!, Find, cancellationToken); }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (DraftLookupFormatException invalid) { return invalid.Message; }
+        catch (Exception) { return "The lookup could not run. Refresh the page and try again."; }
+        if (hit is null) return $"No draft for “{Find!.Trim()}”.";
+        Navigation.NavigateTo(RecordRoutes.Editor(hit.Kind, hit.RecordId));
+        return null;
     }
 
     private async Task StartDraftAsync()

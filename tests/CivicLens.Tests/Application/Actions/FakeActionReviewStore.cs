@@ -12,6 +12,15 @@ internal sealed class FakeActionReviewStore : IActionReviewStore
     public ReviewTriageRead<ActionReview>? Triage { get; set; }
     public Dictionary<string, PublishableAction> Publishable { get; } = [];
     public List<UnpublishedApprovedAction> Unpublished { get; } = [];
+    public Dictionary<(int Congress, string BillType, int BillNumber), string> Bills { get; } = [];
+    public int BillLookups { get; private set; }
+
+    public Task<string?> FindRecordIdByBillAsync(int congress, string billType, int billNumber, CancellationToken cancellationToken)
+    {
+        BillLookups++;
+        return Task.FromResult(Bills.GetValueOrDefault((congress, billType, billNumber)));
+    }
+
     public int PublicationReadCount { get; private set; }
     public int UnpublishedLimit { get; private set; }
 
