@@ -289,6 +289,28 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task AnInlineApproveBindsTheRowRevisionRedirectsAndNeedsAnIdempotencyKeyAsync()
+    {
+        var candidate = await AiDraftedAsync();
+        SignIn(Owner);
+        var fields = await SaveFieldsAsync($"/Review/Statements/{candidate}");
+        fields.Add(new("Input.StatementDateChecked", "true"));
+        using var saved = await host.Client.PostAsync($"/Review/Statements/{candidate}", new FormUrlEncodedContent(fields));
+        var page = await host.GetDocumentAsync("/Review/Statements/Triage");
+        var target = page.QuerySelector("button[form='decide'][name='approve']")!.GetAttribute("value")!;
+        var withoutKey = Fields(page.QuerySelector("#decide")!).Where(field => field.Key != "idempotencyKey").Append(new("approve", target));
+
+        using var refused = await host.Client.PostAsync("/Review/Statements/Triage", new FormUrlEncodedContent(withoutKey));
+        using var approved = await host.Client.PostAsync("/Review/Statements/Triage", TriageDecision(page, "approve"));
+
+        Assert.StartsWith($"{candidate}:2:", target, StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+        Assert.EndsWith("/Review/Statements/Triage?decided=approved#drafts", approved.Headers.Location!.OriginalString, StringComparison.Ordinal);
+        Assert.Equal(ReviewStatus.Approved, (await reviews.GetAsync(candidate, default))!.Review.CurrentStatus);
+    }
+
+    [Fact]
     public async Task StartingADraftFromTheListCreatesRevisionOneAndOpensTheDetailPageAsync()
     {
         await AiDraftedAsync();
