@@ -89,6 +89,14 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
                 RelationshipStaleness.AfterDecision(relationshipQueue, RelationshipRecordKind.Action),
                 BriefStaleness.AfterDecision(briefQueue, PublishedRecordKind.Action)), cancellationToken);
 
+    public async Task<string?> FindRecordIdByBillAsync(int congress, string billType, int billNumber, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Set<ActionDraftRow>().AsNoTracking()
+            .Where(row => row.Congress == congress && row.BillType == billType && row.BillNumber == billNumber)
+            .OrderBy(row => row.RecordId).Select(row => row.RecordId).FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<ActionReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);

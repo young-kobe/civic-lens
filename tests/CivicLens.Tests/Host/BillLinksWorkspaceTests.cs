@@ -34,20 +34,24 @@ public sealed class BillLinksWorkspaceTests(PostgresCollection postgres) : IAsyn
     public async Task TheActionPageListsTheVoteDraftsOfItsOwnBillNewestFirstAndSkipsOtherBillsAndCongresses()
     {
         var action = await SeedActionAsync();
-        await SeedVoteAsync(1, action.BillNumber, new DateOnly(2025, 4, 10));
-        await SeedVoteAsync(2, action.BillNumber, new DateOnly(2025, 5, 1), "Approved");
-        await SeedVoteAsync(3, action.BillNumber + 1, new DateOnly(2025, 6, 1));
-        await SeedVoteAsync(4, action.BillNumber, new DateOnly(2025, 7, 1), congress: action.Congress - 1);
+        await SeedVoteAsync(10, action.BillNumber, new DateOnly(2025, 4, 10));
+        await SeedVoteAsync(20, action.BillNumber, new DateOnly(2025, 5, 1), "Approved");
+        await SeedVoteAsync(3, action.BillNumber, new DateOnly(2025, 9, 1), "AwaitingReviewWithConcerns", session: 2);
+        await SeedVoteAsync(30, action.BillNumber + 1, new DateOnly(2025, 6, 1));
+        await SeedVoteAsync(40, action.BillNumber, new DateOnly(2025, 7, 1), congress: action.Congress - 1);
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
 
         var page = await host.GetDocumentAsync($"/Review/Actions/{action.RecordId}");
 
         var rows = page.QuerySelectorAll("[aria-labelledby='bill-votes'] li").ToArray();
-        Assert.Equal([Id(2), Id(1)], rows.Select(row => row.QuerySelector("a")!.GetAttribute("href")!.Split('/')[^1]));
-        Assert.Contains("Roll call 2, Congress 119, session 1", rows[0].TextContent, StringComparison.Ordinal);
-        Assert.Contains("Passage, 2025-05-01", rows[0].TextContent, StringComparison.Ordinal);
-        Assert.Contains("Approved", rows[0].TextContent, StringComparison.Ordinal);
-        Assert.Contains("Roll call 1, Congress 119, session 1", rows[1].TextContent, StringComparison.Ordinal);
+        Assert.Equal([Id(3), Id(20), Id(10)], rows.Select(row => row.QuerySelector("a")!.GetAttribute("href")!.Split('/')[^1]));
+        Assert.Contains("Roll call 3, Congress 119, session 2", rows[0].TextContent, StringComparison.Ordinal);
+        Assert.Contains("Open concerns", rows[0].TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("0 open", rows[0].TextContent, StringComparison.Ordinal);
+        Assert.Contains("Roll call 20, Congress 119, session 1", rows[1].TextContent, StringComparison.Ordinal);
+        Assert.Contains("Passage, 2025-05-01", rows[1].TextContent, StringComparison.Ordinal);
+        Assert.Contains("Approved", rows[1].TextContent, StringComparison.Ordinal);
+        Assert.Contains("Roll call 10, Congress 119, session 1", rows[2].TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain("The newest", page.QuerySelector("[aria-labelledby='bill-votes']")!.TextContent, StringComparison.Ordinal);
     }
 
@@ -56,14 +60,15 @@ public sealed class BillLinksWorkspaceTests(PostgresCollection postgres) : IAsyn
     {
         var action = await SeedActionAsync();
         for (var roll = 1; roll <= BillVoteDraft.MaximumPerBill + 1; roll++)
-            await SeedVoteAsync(roll, action.BillNumber, new DateOnly(2025, 1, 1).AddDays(roll));
+            await SeedVoteAsync(roll, action.BillNumber, new DateOnly(2025, 1, 1).AddDays(100 - roll));
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
 
         var page = await host.GetDocumentAsync($"/Review/Actions/{action.RecordId}");
 
         var section = page.QuerySelector("[aria-labelledby='bill-votes']")!;
         Assert.Equal(BillVoteDraft.MaximumPerBill, section.QuerySelectorAll("li").Length);
-        Assert.DoesNotContain($"/Review/Votes/{Id(1)}", section.InnerHtml, StringComparison.Ordinal);
+        Assert.Contains($"/Review/Votes/{Id(1)}", section.InnerHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain($"/Review/Votes/{Id(BillVoteDraft.MaximumPerBill + 1)}", section.InnerHtml, StringComparison.Ordinal);
         Assert.Contains($"The newest {BillVoteDraft.MaximumPerBill} vote drafts show here.", section.TextContent, StringComparison.Ordinal);
     }
 
