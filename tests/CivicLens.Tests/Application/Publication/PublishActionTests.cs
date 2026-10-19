@@ -25,6 +25,19 @@ public sealed class PublishActionTests
     }
 
     [Fact]
+    public async Task APersonWrittenActionPublishesWithPersonTextOriginSoThePageNeverCallsItAnAiSummary()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c', personText: true);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action));
+
+        var record = JsonSerializer.Deserialize<PublishedAction>(
+            scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.RecordDataPath(action)], PublicationProtocol.JsonOptions)!;
+        Assert.Equal(PublishedTextOrigin.Person, record.TextOrigin);
+    }
+
+    [Fact]
     public async Task AnActionWithoutAStoredAreaIDPublishesNoAreaFilterBecauseTheReviewerApprovedNone()
     {
         var scenario = new PublicationScenario();
@@ -47,6 +60,7 @@ public sealed class PublishActionTests
         Assert.Contains(PublicationProtocol.RecordPagePath(action), files.Keys);
         var record = JsonSerializer.Deserialize<PublishedAction>(files[PublicationProtocol.RecordDataPath(action)], PublicationProtocol.JsonOptions)!;
         Assert.Equal([PublicationScenario.ActionDetail, PublicationScenario.ActionCosponsors], record.Sources.Select(source => source.Text));
+        Assert.Equal(PublishedTextOrigin.Model, record.TextOrigin);
         Assert.Equal(["Mayor Example", "Council Chair Example"], record.Sponsorships.Select(item => item.Official.Name));
         Assert.Equal("Sponsor: M000001", record.Sponsorships[0].Citations[0].Quote);
         Assert.Equal("Policy area: Housing and Community Development", record.PolicyAreaCitation!.Quote);

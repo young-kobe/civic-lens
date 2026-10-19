@@ -32,7 +32,7 @@ public sealed class PublicationReleaseTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(4)]
+    [InlineData(5)]
     public void RejectsASchemaVersionThisReaderDoesNotKnow(int version)
     {
         Assert.Throws<InvalidDataException>(Release(version, Entry(PublishedRecordKind.DocumentChange, ChangeId)).Validate);
@@ -42,6 +42,7 @@ public sealed class PublicationReleaseTests
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(3)]
+    [InlineData(4)]
     public void AcceptsEverySchemaVersionStillOnDisk(int version)
     {
         Release(version, Entry(PublishedRecordKind.DocumentChange, ChangeId)).Validate();

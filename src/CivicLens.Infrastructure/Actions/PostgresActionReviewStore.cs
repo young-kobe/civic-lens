@@ -71,7 +71,7 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
                     throw new ArgumentException("Bulk approval needs a sponsorship-only revision with no open concern.");
                 if (decision.Kind != ReviewDecisionKind.Approve) return;
                 var current = history.CurrentRevision!;
-                current.ValidateForApproval(await ReadExtractionsAsync(db, [current], cancellationToken));
+                await ValidateApprovalAsync(db, current, cancellationToken);
             }, NewDecisionRow, afterDecision, cancellationToken);
 
     public async Task<string?> FindRecordIdByBillAsync(int congress, string billType, int billNumber, CancellationToken cancellationToken)
@@ -169,7 +169,10 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
         new(draft.RecordId, history.CurrentRevision!, history.LastApprovedRevision, history.LoadedRevisions, draft.ReviewStateVersion,
             history.CurrentStatus, history.Decisions, history.UnresolvedConcerns);
 
-    internal static Task<Dictionary<string, DocumentExtraction>> ReadExtractionsAsync(CollectionAttemptDbContext db,
+    internal static async Task ValidateApprovalAsync(CollectionAttemptDbContext db, ActionDraftRevision revision, CancellationToken cancellationToken) =>
+        revision.ValidateForApproval(await ReadExtractionsAsync(db, [revision], cancellationToken));
+
+    private static Task<Dictionary<string, DocumentExtraction>> ReadExtractionsAsync(CollectionAttemptDbContext db,
         IEnumerable<ActionDraftRevision> revisions, CancellationToken cancellationToken) =>
         PostgresDocumentExtractionStore.ReadManyAsync(db,
             [.. revisions.SelectMany(revision => revision.Citations).Select(span => span.ExtractionId).Distinct(StringComparer.Ordinal)],

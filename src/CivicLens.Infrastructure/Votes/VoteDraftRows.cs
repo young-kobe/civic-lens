@@ -32,11 +32,8 @@ internal static class VoteDraftRows
     }
 
     private static async Task<bool> PassesApprovalChecksAsync(CollectionAttemptDbContext db, VoteDraftRevision revision,
-        CancellationToken cancellationToken)
-    {
-        var extractions = await PostgresVoteReviewStore.ReadExtractionsAsync(db, [revision], cancellationToken);
-        return ApprovalCheck.Of(() => revision.ValidateForApproval(extractions)).Passed;
-    }
+        CancellationToken cancellationToken) =>
+        (await ApprovalCheck.OfAsync(() => PostgresVoteReviewStore.ValidateApprovalAsync(db, revision, cancellationToken))).Passed;
 
     public static Task<bool> HasNewerCandidateAsync(CollectionAttemptDbContext db, string sourceId, int congress, int sessionNumber,
         int rollCallNumber, long updateDateUtcTicks, CancellationToken cancellationToken) =>

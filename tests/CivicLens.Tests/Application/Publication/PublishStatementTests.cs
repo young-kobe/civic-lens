@@ -269,7 +269,7 @@ public sealed class PublishStatementTests
             PublicationScenario.Request("k", scenario.AddDraft('a')));
 
         var manifest = ReadManifest(scenario, summary.DirectoryName);
-        Assert.Equal(3, manifest.SchemaVersion);
+        Assert.Equal(4, manifest.SchemaVersion);
         var carried = Assert.Single(manifest.Records, entry => entry.RecordId == old);
         Assert.Equal(PublishedRecordKind.DocumentChange, carried.Kind);
         Assert.Empty(carried.IssueIds);

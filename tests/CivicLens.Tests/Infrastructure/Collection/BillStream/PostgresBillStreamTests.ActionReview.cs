@@ -81,6 +81,28 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task AFailingHookRollsBackTheRevisionAndTheCodeDecisionTogether()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+        using var revision = System.Text.Json.JsonDocument.Parse((string)(await ScalarAsync(
+            $"SELECT revision_json FROM action_revisions WHERE record_id = '{RecordId}' AND revision_number = 1"))!);
+        var bill = revision.RootElement;
+        await new RelationshipWorldSeeder(connectionString).StatementAsync(RelationshipFixtures.StatementAboutBill(
+            bill.GetProperty("sponsorships")[0].GetProperty("personId").GetString()!, bill.GetProperty("congress").GetInt32(),
+            bill.GetProperty("billNumber").GetInt32()));
+        await ExecuteAsync(connectionString, """
+            CREATE FUNCTION fail_pair_insert() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'hook failed'; END $$;
+            CREATE TRIGGER fail_pair_insert BEFORE INSERT ON relationship_analysis FOR EACH ROW EXECUTE FUNCTION fail_pair_insert()
+            """);
+        _ = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(1), cosponsor: "B000002");
+
+        await RunActionWorkerAsync(new FakeHeadlineSummaryModel());
+
+        Assert.Equal((1, 1L, 1L), (await ScalarAsync($"SELECT current_revision_number FROM action_drafts WHERE record_id = '{RecordId}'"),
+            await ScalarAsync("SELECT count(*) FROM action_revisions"), await ScalarAsync("SELECT count(*) FROM action_review_decisions")));
+    }
+
+    [Fact]
     public async Task ACodeApprovalOfTheRevisionThatTheActiveReleaseServesRequeuesTheBriefOfItsWeek()
     {
         var briefs = new BriefWorldSeeder(connectionString);
@@ -120,7 +142,7 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
-    public async Task AWorkerRevisionOverAPersonEditStaysForAPersonBecauseNoPersonApprovedThePersonText()
+    public async Task AWorkerRevisionWithTextAPersonWroteStaysForAPersonWhenNoPersonApprovedThatText()
     {
         await DraftAsync(UpdatedAt, DraftableOutput);
         await SaveAsync(1, SuggestionChoice.Keep, "save-2");
@@ -129,6 +151,21 @@ public sealed partial class PostgresBillStreamTests
 
         Assert.Single(await ActionDecisionsAsync());
         Assert.Equal("AwaitingReview", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+    }
+
+    [Fact]
+    public async Task AWorkerRedraftAfterAPersonApprovedAPersonEditStaysAwaitingReviewWithTheModelSuggestionAttached()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+        await SaveAsync(1, SuggestionChoice.Keep, "save-2");
+        await DecideAsync(2, 1, ReviewDecisionKind.Approve);
+
+        await DraftAsync(UpdatedAt.AddDays(1), DraftableOutput, title: "A renamed bill");
+
+        var redraft = (await ActionReviews().GetRevisionAsync(RecordId, 3, default))!;
+        Assert.Equal((ReviewTextOrigin.Person, true), (redraft.TextOrigin, redraft.Suggestion is not null));
+        Assert.Equal("AwaitingReview", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Equal([ReviewAuthor.CodeSubject, Reviewer.Subject], (await ActionDecisionsAsync()).Select(decision => decision.ActorSubject));
     }
 
     [Fact]

@@ -19,6 +19,7 @@ internal sealed class PublishedVoteBuilder(PublishedRecordRules rules)
             RevisionNumber = revision.RevisionNumber,
             Headline = revision.Headline,
             Summary = revision.Summary,
+            TextOrigin = PublishedRecordRules.TextOriginOf(revision.TextOrigin),
             Congress = revision.Congress,
             Session = revision.SessionNumber,
             RollCallNumber = revision.RollCallNumber,

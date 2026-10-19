@@ -10,6 +10,7 @@ public sealed record PublishedAction
     public required int RevisionNumber { get; init; }
     public required string Headline { get; init; }
     public required string Summary { get; init; }
+    public required PublishedTextOrigin TextOrigin { get; init; }
     public required int Congress { get; init; }
     public required string BillType { get; init; }
     public required int BillNumber { get; init; }

@@ -66,7 +66,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
     }
 
     /// <summary>The analysis worker appends a revision of a fact record. Code approves it in the same transaction when no concern
-    /// is open, a model wrote the text, and the record's own approval checks pass. Otherwise it waits for a person. The caller runs
+    /// is open, the revision holds no text that a person wrote, and the record's own approval checks pass. Otherwise it waits for a person. The caller runs
     /// <see cref="AfterCodeApprovalAsync"/> once the rest of the transaction rows are tracked.</summary>
     public async Task AppendCodeApprovedAsync(CollectionAttemptDbContext db, TDraftRow draft, TRevision revision, TRevisionRow row,
         ImmutableArray<ReviewDecision> cycle, Func<Task<bool>> passesApprovalChecks, Func<ReviewDecision, TDecisionRow> toDecisionRow)

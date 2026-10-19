@@ -68,7 +68,7 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
                     throw new ArgumentException("Bulk approval needs a procedural vote or a revision that changes only member votes.");
                 if (decision.Kind != ReviewDecisionKind.Approve) return;
                 var current = history.CurrentRevision!;
-                current.ValidateForApproval(await ReadExtractionsAsync(db, [current], cancellationToken));
+                await ValidateApprovalAsync(db, current, cancellationToken);
             }, NewDecisionRow, afterDecision, cancellationToken);
 
     public async Task<VoteReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken)
@@ -190,7 +190,10 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
         new(draft.RecordId, history.CurrentRevision!, history.LastApprovedRevision, history.LoadedRevisions, draft.ReviewStateVersion,
             history.CurrentStatus, history.Decisions, history.UnresolvedConcerns);
 
-    internal static Task<Dictionary<string, DocumentExtraction>> ReadExtractionsAsync(CollectionAttemptDbContext db,
+    internal static async Task ValidateApprovalAsync(CollectionAttemptDbContext db, VoteDraftRevision revision, CancellationToken cancellationToken) =>
+        revision.ValidateForApproval(await ReadExtractionsAsync(db, [revision], cancellationToken));
+
+    private static Task<Dictionary<string, DocumentExtraction>> ReadExtractionsAsync(CollectionAttemptDbContext db,
         IEnumerable<VoteDraftRevision> revisions, CancellationToken cancellationToken) =>
         PostgresDocumentExtractionStore.ReadManyAsync(db,
             [.. revisions.SelectMany(revision => revision.Citations).Select(span => span.ExtractionId).Distinct(StringComparer.Ordinal)],

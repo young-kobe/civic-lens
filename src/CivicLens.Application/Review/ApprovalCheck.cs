@@ -17,4 +17,17 @@ public sealed record ApprovalCheck(string? Failure)
             return new(exception.Message);
         }
     }
+
+    public static async Task<ApprovalCheck> OfAsync(Func<Task> check)
+    {
+        try
+        {
+            await check();
+            return new(Failure: null);
+        }
+        catch (ArgumentException exception)
+        {
+            return new(exception.Message);
+        }
+    }
 }
