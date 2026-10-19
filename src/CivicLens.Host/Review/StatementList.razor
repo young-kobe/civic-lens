@@ -19,14 +19,14 @@
         <input type="hidden" name="idempotencyKey" value="@renderKey" />
     </form>
 
-    @if (drafts is not null && notInReview is not null)
+    @if (drafts is not null && notInReview is not null && counts is not null)
     {
         <Panel Title="Drafts" Id="drafts">
             <Aside><FilterTabs Label="Filter statement drafts" Tabs="DraftTabs" /></Aside>
             <ChildContent>
                 <DraftFilterForm Label="Filter statement drafts by issue, official, and date" Action="@($"{StatementRoutes.List}#drafts")"
                                  ClearHref="@ClearHref(StatementRoutes.List)" Status="@DraftFilterNames.NameOf(Filter)"
-                                 Issues="Issues.Issues" OfficialIds="[.. Catalog.OfficialIds.Order(StringComparer.Ordinal)]"
+                                 Issues="Issues.Issues" Officials="OfficialChoices"
                                  IssueId="@IssueId" OfficialId="@OfficialId" From="@From" To="@To" />
                 <DataTable Items="drafts.Items" Caption="Statement drafts">
                     <Head>
@@ -37,13 +37,7 @@
                         <th class="act"><span class="visually-hidden">Action</span></th>
                     </Head>
                     <Row Context="draft">
-                        <td>
-                            <a class="cell-title" href="@StatementRoutes.Editor(draft.CandidateId)">@HeadlineOf(draft)</a>
-                            @if (PriorityLabels.Of(drafts.Priorities[draft.CandidateId]) is { } tier)
-                            {
-                                <StatusBadge Text="@tier" />
-                            }
-                        </td>
+                        <td><a class="cell-title" href="@StatementRoutes.Editor(draft.CandidateId)">@HeadlineOf(draft)</a></td>
                         <td class="fit hide-narrow">@draft.SourceId</td>
                         <td><StatusBadge Tone="DraftStatusDisplay.Tone(draft.CurrentStatus)" Text="@DraftStatusDisplay.Label(draft.CurrentStatus, draft.UnresolvedConcernCount)" /></td>
                         <td class="num">@draft.UnresolvedConcernCount</td>

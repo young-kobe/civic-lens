@@ -16,8 +16,10 @@ public sealed partial class StatementList
     private readonly string renderKey = Guid.NewGuid().ToString("N");
     private StatementReviewPage? drafts;
     private StatementNotInReviewPage? notInReview;
+    private StatementReviewCounts? counts;
 
     [Inject] private ListStatementReviews ListDrafts { get; set; } = default!;
+    [Inject] private GetStatementReviewCounts GetCounts { get; set; } = default!;
     [Inject] private ListStatementsNotInReview ListNotInReview { get; set; } = default!;
     [Inject] private CreateStatementDraft CreateDraft { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
@@ -42,6 +44,7 @@ public sealed partial class StatementList
         await LoadGuardedAsync(async () =>
         {
             drafts = await ListDrafts.ExecuteAsync(actor, DraftsCursor, PageSize, ReadListFilter(), RequestAborted);
+            counts = await GetCounts.ExecuteAsync(actor, RequestAborted);
             notInReview = await ListNotInReview.ExecuteAsync(actor, NotInReviewCursor, PageSize, RequestAborted);
         }, "The statement list could not load. Refresh the page to try again.");
     }
@@ -63,7 +66,7 @@ public sealed partial class StatementList
         ? DraftStatusDisplay.Label(draft.CurrentStatus, 0) : DraftStatusDisplay.DraftName(draft.CurrentRevision.Headline);
 
     private IReadOnlyList<FilterTab> DraftTabs =>
-        DraftFilterTabs.For(Filter, name => StatementHref(name, null, NotInReviewCursor, "drafts"));
+        DraftFilterTabs.For(Filter, name => StatementHref(name, null, NotInReviewCursor, "drafts"), counts!.NeedsAction, counts.Approved);
 
     private string? DraftsHref(string? cursor) =>
         cursor is null ? null : StatementHref(DraftFilterNames.NameOf(Filter), cursor, NotInReviewCursor, "drafts");

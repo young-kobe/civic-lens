@@ -17,7 +17,7 @@
             <ChildContent>
                 <DraftFilterForm Label="Filter vote records by issue, official, and date" Action="@($"{VoteRoutes.List}#drafts")"
                                  ClearHref="@ClearHref(VoteRoutes.List)" Status="@DraftFilterNames.NameOf(Filter)"
-                                 Issues="Issues.Issues" OfficialIds="[.. Catalog.OfficialIds.Order(StringComparer.Ordinal)]"
+                                 Issues="Issues.Issues" Officials="OfficialChoices"
                                  IssueId="@IssueId" OfficialId="@OfficialId" From="@From" To="@To" />
                 <DataTable Items="drafts.Items" Caption="Vote records">
                     <Head>

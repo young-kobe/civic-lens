@@ -64,13 +64,11 @@ public sealed partial class PostgresHouseVoteTests
         var recordId = await RecordIdAsync(first);
         await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Approve);
         Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM vote_drafts WHERE record_id = '{recordId}'"));
-        var approvedAt = (long)(await ScalarAsync($"SELECT last_revised_at_utc_ticks FROM vote_drafts WHERE record_id = '{recordId}'"))!;
 
         var second = await PendingCandidateAsync(Updated.AddDays(1));
         await SettleAsync(second, await RevisionAsync(second, 2));
 
         Assert.Equal("AwaitingReview", await ScalarAsync($"SELECT review_status FROM vote_drafts WHERE record_id = '{recordId}'"));
-        Assert.True((long)(await ScalarAsync($"SELECT last_revised_at_utc_ticks FROM vote_drafts WHERE record_id = '{recordId}'"))! > approvedAt);
         var needsAction = await new ListVoteReviews(VoteReviews()).ExecuteAsync(Reviewer, null, filter: new DraftListFilter(DraftStatusFilter.NeedsAction));
         var item = Assert.Single(needsAction.Items);
         Assert.Equal((2, 1), (item.CurrentRevision.RevisionNumber, item.LastApprovedRevision!.RevisionNumber));

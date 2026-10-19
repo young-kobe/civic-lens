@@ -9,16 +9,26 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Review;
 
-/// <summary>The list read of statement, action, and vote drafts. The analysis row of the draft task owns the tier.</summary>
+/// <summary>The list read of statement, action, and vote drafts. The analysis row of the draft task owns the tier of actions and votes.</summary>
 internal static class ListedDrafts
 {
-    public static async Task<KeysetSlice<RankedDraft<TDraftRow>>> PageAsync<TDraftRow, TAnalysisRow>(CollectionAttemptDbContext db,
+    public static Task<KeysetSlice<RankedDraft<TDraftRow>>> PageByTierAsync<TDraftRow, TAnalysisRow>(CollectionAttemptDbContext db,
         IQueryable<TDraftRow> drafts, string analysisTask, string recordIdProperty, PageCursor? cursor, int limit, DraftListFilter filter,
         CancellationToken cancellationToken)
         where TDraftRow : class, IListedDraftRow
-        where TAnalysisRow : class
+        where TAnalysisRow : class =>
+        PageAsync(Rank<TDraftRow, TAnalysisRow>(db, Filter(drafts, filter), analysisTask), recordIdProperty, cursor, limit, cancellationToken);
+
+    public static Task<KeysetSlice<RankedDraft<TDraftRow>>> PageWithoutTierAsync<TDraftRow>(IQueryable<TDraftRow> drafts,
+        string recordIdProperty, PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken)
+        where TDraftRow : class, IListedDraftRow =>
+        PageAsync(Filter(drafts, filter).Select(draft => new RankedDraft<TDraftRow> { Draft = draft, Priority = ReviewPriority.Highest }),
+            recordIdProperty, cursor, limit, cancellationToken);
+
+    private static async Task<KeysetSlice<RankedDraft<TDraftRow>>> PageAsync<TDraftRow>(IQueryable<RankedDraft<TDraftRow>> ranked,
+        string recordIdProperty, PageCursor? cursor, int limit, CancellationToken cancellationToken)
+        where TDraftRow : class, IListedDraftRow
     {
-        var ranked = Rank<TDraftRow, TAnalysisRow>(db, Filter(drafts, filter), analysisTask);
         var fetched = await ReviewKeyset.Page(ranked, cursor, row => row.Priority, row => row.Draft.EventOn,
             row => EF.Property<string>(row.Draft, recordIdProperty)).Take(limit + 1).ToArrayAsync(cancellationToken);
         return KeysetSlice<RankedDraft<TDraftRow>>.Create(fetched, limit, cursor,

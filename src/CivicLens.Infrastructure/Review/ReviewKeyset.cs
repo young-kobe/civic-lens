@@ -15,7 +15,7 @@ internal static class ReviewKeyset
     public static IQueryable<T> Page<T>(IQueryable<T> rows, PageCursor? cursor, Expression<Func<T, long>> ticksOf,
         Expression<Func<T, string>> idOf)
     {
-        if (cursor is { Rank: not null }) throw InvalidCursor();
+        PageCursor.RequireRank(cursor, ranked: false);
         if (cursor is null) return rows.OrderByDescending(ticksOf).ThenByDescending(idOf);
         var older = cursor.Direction == PageDirection.Older;
         var window = rows.Where(Beyond<T>(older, Key(ticksOf, cursor.Ticks, true), Key(idOf, cursor.Id, true)));
@@ -25,7 +25,7 @@ internal static class ReviewKeyset
     public static IQueryable<T> Page<T>(IQueryable<T> rows, PageCursor? cursor, Expression<Func<T, int>> rankOf,
         Expression<Func<T, DateOnly>> dateOf, Expression<Func<T, string>> idOf)
     {
-        if (cursor is { Rank: null }) throw InvalidCursor();
+        PageCursor.RequireRank(cursor, ranked: true);
         if (cursor is null) return rows.OrderBy(rankOf).ThenByDescending(dateOf).ThenByDescending(idOf);
         var older = cursor.Direction == PageDirection.Older;
         var window = rows.Where(Beyond<T>(older, Key(rankOf, cursor.Rank!.Value, false),
@@ -61,8 +61,6 @@ internal static class ReviewKeyset
     private static KeyPart<T> Key<T, TValue>(Expression<Func<T, TValue>> selector, TValue value, bool descending) =>
         new(selector, Expression.Property(Expression.Constant(new Parameter<TValue>(value)), nameof(Parameter<TValue>.Value)),
             descending);
-
-    private static ArgumentException InvalidCursor() => new("Page cursor is not valid.", "cursor");
 
     private sealed record KeyPart<T>(LambdaExpression Selector, Expression Value, bool Descending);
 

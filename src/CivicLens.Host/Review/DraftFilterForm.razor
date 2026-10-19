@@ -16,9 +16,9 @@
     <Field Label="Official" For="filter-official" Optional="true">
         <select id="filter-official" name="official">
             <option value="" selected="@string.IsNullOrEmpty(OfficialId)">Any official</option>
-            @foreach (var id in OfficialIds)
+            @foreach (var (id, name) in Officials)
             {
-                <option value="@id" selected="@(id == OfficialId)">@id</option>
+                <option value="@id" selected="@(id == OfficialId)">@name</option>
             }
         </select>
     </Field>
@@ -38,7 +38,7 @@
     [Parameter, EditorRequired] public string ClearHref { get; set; } = string.Empty;
     [Parameter] public string? Status { get; set; }
     [Parameter, EditorRequired] public IReadOnlyList<TrackedIssueConfiguration> Issues { get; set; } = [];
-    [Parameter, EditorRequired] public IReadOnlyList<string> OfficialIds { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<KeyValuePair<string, string>> Officials { get; set; } = [];
     [Parameter] public string? IssueId { get; set; }
     [Parameter] public string? OfficialId { get; set; }
     [Parameter] public string? From { get; set; }

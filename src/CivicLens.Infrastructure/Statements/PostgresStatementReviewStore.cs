@@ -123,21 +123,20 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var slice = await ListedDrafts.PageAsync<StatementDraftRow, StatementAnalysisRow>(db, Records.Drafts(db, filter.Status),
-            StatementDraftTask.Task, nameof(StatementDraftRow.CandidateId), cursor, limit, filter, cancellationToken);
+        var slice = await ListedDrafts.PageWithoutTierAsync(Records.Drafts(db, filter.Status),
+            nameof(StatementDraftRow.CandidateId), cursor, limit, filter, cancellationToken);
         var drafts = slice.Items.Select(item => item.Draft).ToArray();
         var candidates = await ReadCandidatesAsync(db, [.. drafts.Select(row => row.CandidateId)], cancellationToken);
         var histories = await Records.ReadHistoriesAsync(db, drafts, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         var items = drafts.Select(row => ToListItem(row, candidates[row.CandidateId], histories[row.CandidateId]));
-        return new([.. items], ListedDrafts.PrioritiesOf(slice.Items), slice.NewerCursor, slice.OlderCursor);
+        return new([.. items], slice.NewerCursor, slice.OlderCursor);
     }
 
     public async Task<StatementReviewCounts> CountAsync(CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var needsAction = await Records.Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken);
-        var approved = await Records.Drafts(db, DraftStatusFilter.Approved).CountAsync(cancellationToken);
+        var (needsAction, approved) = await Records.CountAsync(db, cancellationToken);
         return new(needsAction, approved);
     }
 

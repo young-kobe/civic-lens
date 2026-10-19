@@ -13,7 +13,8 @@ public sealed class ActionReviewWorkspaceTests(PostgresCollection postgres) : IA
     private readonly ReviewWorkspaceHost host = new(postgres)
     {
         Issues = StatementGateFixtures.Configuration(),
-        ReviewOfficials = "warren,markey"
+        OfficialId = "warren",
+        OfficialName = "Elizabeth Warren"
     };
 
     public Task InitializeAsync() => host.StartAsync();
@@ -77,7 +78,8 @@ public sealed class ActionReviewWorkspaceTests(PostgresCollection postgres) : IA
         Assert.Equal([$"/Review/Actions?{query}#drafts", $"/Review/Actions?drafts=needs-action&{query}#drafts", $"/Review/Actions?drafts=approved&{query}#drafts"],
             filtered.QuerySelectorAll("[aria-labelledby='drafts'] a.segmented-item").Select(tab => tab.GetAttribute("href")));
         Assert.Equal(StatementGateFixtures.RentIssue, filtered.QuerySelector("#filter-issue option[selected]")!.GetAttribute("value"));
-        Assert.Equal("warren", filtered.QuerySelector("#filter-official option[selected]")!.GetAttribute("value"));
+        var official = filtered.QuerySelector("#filter-official option[selected]")!;
+        Assert.Equal(("warren", "Elizabeth Warren"), (official.GetAttribute("value"), official.TextContent));
         Assert.Equal("2025-01-01", filtered.QuerySelector("#filter-from")!.GetAttribute("value"));
         Assert.Equal("2025-12-31", filtered.QuerySelector("#filter-to")!.GetAttribute("value"));
     }
@@ -87,7 +89,6 @@ public sealed class ActionReviewWorkspaceTests(PostgresCollection postgres) : IA
     [InlineData("official=not-configured")]
     [InlineData("from=2025-13-40")]
     [InlineData("to=yesterday")]
-    [InlineData("from=2025-06-01&to=2025-01-01")]
     public async Task AFilterThatIsNotValidShowsTheSameErrorAsABadCursorAndNoRows(string query)
     {
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
@@ -96,6 +97,16 @@ public sealed class ActionReviewWorkspaceTests(PostgresCollection postgres) : IA
 
         Assert.Contains("This page link is no longer valid", page.QuerySelector(".notice")!.TextContent, StringComparison.Ordinal);
         Assert.Null(page.QuerySelector("[aria-labelledby='drafts']"));
+    }
+
+    [Fact]
+    public async Task AReversedDateRangeShowsItsOwnMessage()
+    {
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+
+        var page = await host.GetDocumentAsync("/Review/Actions?from=2025-06-01&to=2025-01-01");
+
+        Assert.Contains("The start date must not be after the end date.", page.QuerySelector(".notice")!.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

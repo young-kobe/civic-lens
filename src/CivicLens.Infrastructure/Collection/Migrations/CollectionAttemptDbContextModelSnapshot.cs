@@ -336,10 +336,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasDefaultValueSql("'{}'")
                         .HasColumnName("issue_ids");
 
-                    b.Property<long>("LastRevisedAtUtcTicks")
-                        .HasColumnType("bigint")
-                        .HasColumnName("last_revised_at_utc_ticks");
-
                     b.PrimitiveCollection<string[]>("OfficialIds")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -364,10 +360,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnName("source_id");
 
                     b.HasKey("RecordId");
-
-                    b.HasIndex("EventOn", "RecordId")
-                        .IsDescending(true, true)
-                        .HasDatabaseName("ix_action_drafts_listing");
 
                     b.HasIndex("IssueIds")
                         .HasMethod("gin")
@@ -3976,10 +3968,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasDefaultValueSql("'{}'")
                         .HasColumnName("issue_ids");
 
-                    b.Property<long>("LastRevisedAtUtcTicks")
-                        .HasColumnType("bigint")
-                        .HasColumnName("last_revised_at_utc_ticks");
-
                     b.PrimitiveCollection<string[]>("OfficialIds")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -4012,10 +4000,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnName("source_id");
 
                     b.HasKey("RecordId");
-
-                    b.HasIndex("EventOn", "RecordId")
-                        .IsDescending(true, true)
-                        .HasDatabaseName("ix_vote_drafts_listing");
 
                     b.HasIndex("IssueIds")
                         .HasMethod("gin")

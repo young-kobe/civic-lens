@@ -1,3 +1,4 @@
+using CivicLens.Application.Paging;
 using System.Data.Common;
 using System.Text.Json;
 using CivicLens.Application.Collection;
@@ -848,6 +849,12 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         });
 
         walk.AssertExact(expected);
+    }
+
+    [Fact]
+    public async Task APageCursorWithARankIsInvalidBecauseTheCheckListHasNoTiers()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.ListPageAsync(PageCursor.Parse("o.1.5.abc"), 2, default));
     }
 
     // Source health shows the latest check of each source, so a newer article job must not hide it.

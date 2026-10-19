@@ -231,6 +231,7 @@ internal static class ReviewWorkspace
         ConfigureRelationshipReview(services, contexts);
         ConfigureBriefReview(services, contexts);
         var collection = ReviewCollectionSettings.FromEnvironment();
+        services.AddSingleton(ReviewOfficials.From(collection?.Configuration));
         if (collection is null)
         {
             services.AddScoped(provider => new GetRecentActivity(provider.GetRequiredService<IDocumentChangeReviewStore>()));

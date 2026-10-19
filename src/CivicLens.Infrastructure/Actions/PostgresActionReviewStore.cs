@@ -108,7 +108,7 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var slice = await ListedDrafts.PageAsync<ActionDraftRow, ActionAnalysisRow>(db, Records.Drafts(db, filter.Status),
+        var slice = await ListedDrafts.PageByTierAsync<ActionDraftRow, ActionAnalysisRow>(db, Records.Drafts(db, filter.Status),
             ActionDraftTask.Task, nameof(ActionDraftRow.RecordId), cursor, limit, filter, cancellationToken);
         var drafts = slice.Items.Select(item => item.Draft).ToArray();
         var histories = await Records.ReadHistoriesAsync(db, drafts, cancellationToken);
@@ -120,8 +120,7 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
     public async Task<ActionReviewCounts> CountAsync(CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var needsAction = await Records.Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken);
-        var approved = await Records.Drafts(db, DraftStatusFilter.Approved).CountAsync(cancellationToken);
+        var (needsAction, approved) = await Records.CountAsync(db, cancellationToken);
         return new(needsAction, approved);
     }
 

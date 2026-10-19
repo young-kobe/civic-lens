@@ -43,12 +43,10 @@ public sealed partial class PostgresBillStreamTests
         await DraftAsync(UpdatedAt, DraftableOutput);
         await DecideAsync(1, 0, ReviewDecisionKind.Approve);
         Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
-        var approvedAt = (long)(await ScalarAsync($"SELECT last_revised_at_utc_ticks FROM action_drafts WHERE record_id = '{RecordId}'"))!;
 
         await AddSponsorAsync(UpdatedAt.AddDays(1));
 
         Assert.Equal("AwaitingReview", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
-        Assert.True((long)(await ScalarAsync($"SELECT last_revised_at_utc_ticks FROM action_drafts WHERE record_id = '{RecordId}'"))! > approvedAt);
         var needsAction = await new ListActionReviews(ActionReviews()).ExecuteAsync(Reviewer, null, filter: new DraftListFilter(DraftStatusFilter.NeedsAction));
         var item = Assert.Single(needsAction.Items);
         Assert.Equal((2, 1), (item.CurrentRevision.RevisionNumber, item.LastApprovedRevision!.RevisionNumber));

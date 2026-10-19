@@ -250,13 +250,13 @@ Infrastructure/Statements holds `PostgresStatementReviewStore` and `StatementRev
 
 **Reads.** `GetStatementReview` returns the aggregate, the status, the source ID, the URL, and the extraction for quote display. It also returns the run ID when revision 1 is an AI draft. A candidate with no draft row reads as `NotDrafted`.
 
-`ListStatementReviews` takes the filter `All`, `NeedsAction`, or `Approved`. Every filter orders by tier, then newest event date, then candidate ID; see [review](review.md#lists-and-paging). The list also takes an issue, an official, and an event date range. The page holds the tier of each row. `NotDrafted` counts as needs action. `GetStatementReviewCounts` counts each filter with the same status rule, and the Review home page shows the needs action count.
+`ListStatementReviews` takes the filter `All`, `NeedsAction`, or `Approved`. Every filter orders by newest event date, then candidate ID; the statement list has no tier. See [review](review.md#lists-and-paging). The list also takes an issue, an official, and an event date range. `NotDrafted` counts as needs action. `GetStatementReviewCounts` counts each filter with the same status rule, and the Review home page shows the needs action count.
 
 `ListStatementsNotInReview` lists candidates that have no draft revision, each with its stage and reason code. These are over-cap draft rows. They are also candidates with no draft row whose gate or draft entry is skipped, failed, or blocked. `StatementReviewQueries` holds the unpublished approved and not-in-review SQL.
 
 **Pages.** `/Review/Statements` lists the drafts and the statements that are not in review.
 
-- The drafts table has the filter tabs All, Needs action, and Approved, a filter form for issue, official, and dates, and a pager on `ListStatementReviews`. It shows the headline (or "Not drafted"), a tier badge for tier 1 and tier 2, the source, the status, and the open concern count.
+- The drafts table has the filter tabs All, Needs action, and Approved, with their counts. It has a filter form for issue, official, and dates, and a pager on `ListStatementReviews`. It shows the headline (or "Not drafted"), the source, the status, and the open concern count.
 - The query values are `drafts` (filter), `draftsCursor`, `issue`, `official`, `from`, `to`, `notInReview` (cursor), and `status`, as on the Review home page.
 - The "Not in review" table has a pager on `ListStatementsNotInReview`. It shows the source, the URL, and the reason code. Each row has a Start draft post form.
 
@@ -451,7 +451,7 @@ With `--since`, `regate` moves only candidates first captured on or after that U
 - Each `statement_revisions` row has the author kind (`ReviewAuthorKind`: `Person` or `Analysis`). Revision 1 by the analysis author is the AI revision. Code only inserts revision rows.
 - `StatementDraftRevision` holds the headline, the summary, and the statement date with its evidence span. It also holds `speakerOfficialIds`, `otherSpeakers`, `issueIds`, `policyAreaIds`, the quotations (an extraction span and a kind), and `billNumbers`. Confidence is never in the revision; it stays in the run output.
 - The review record ID is the 64-character candidate ID. `ReviewValidation.ValidateCandidateId` accepts a lowercase SHA-256 value only.
-- `statement_drafts` also has `event_on`, `issue_ids`, and `official_ids`, with GIN indexes on the two arrays and the index `ix_statement_drafts_listing`. The migration `ReviewListColumns` adds them with no backfill. Create, save, and the AI draft write them from the revision through `StatementDraftRows.SetListing`. The over-cap draft row gets the capture date.
+- `statement_drafts` also has `event_on`, `issue_ids`, and `official_ids`, with GIN indexes on the two arrays and the index `ix_statement_drafts_listing`. The migration `ReviewListColumns` adds them with no backfill. Create, save, and the AI draft each call `StatementDraftRows.SetListing` with the revision and the capture date. The over-cap draft row gets the capture date.
 - `statement_drafts` also has `review_state_version` and `review_status`. The store computes both with `ReviewPolicy` under the lock.
 - A draft with no revision has the status `NotDrafted`. A migration set old rows with revision 0 to `NotDrafted` and every other row to `AwaitingReview`.
 - `statement_review_decisions` holds the immutable decision JSON.

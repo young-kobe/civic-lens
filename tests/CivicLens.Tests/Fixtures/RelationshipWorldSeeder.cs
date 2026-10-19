@@ -32,8 +32,8 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
     public Task ActionAsync(ActionDraftRevision action, string reviewStatus = "Approved") => ExecuteAsync("""
         SET session_replication_role = replica;
         INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, review_state_version,
-                                   review_status, created_at_utc_ticks, last_revised_at_utc_ticks, candidate_id, event_on, issue_ids, official_ids)
-        VALUES (@id, @source, @congress, @type, @bill, @number, 0, @status, 1, 1, @candidate, @eventOn, @issues, @officials)
+                                   review_status, created_at_utc_ticks, candidate_id, event_on, issue_ids, official_ids)
+        VALUES (@id, @source, @congress, @type, @bill, @number, 0, @status, 1, @candidate, @eventOn, @issues, @officials)
         ON CONFLICT (record_id) DO UPDATE SET current_revision_number = @number, review_status = @status, candidate_id = @candidate,
                                               event_on = @eventOn, issue_ids = @issues, official_ids = @officials;
         INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
@@ -51,8 +51,8 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
         VALUES (@candidate, @source, @congress, @session, @roll, 1, @type, @bill, 'detail', 'members', @extraction, @extraction, @extraction, 1)
         ON CONFLICT DO NOTHING;
         INSERT INTO vote_drafts (record_id, source_id, congress, session_number, roll_call_number, current_revision_number, review_state_version,
-                                 review_status, created_at_utc_ticks, last_revised_at_utc_ticks, candidate_id, event_on, issue_ids, official_ids)
-        VALUES (@id, @source, @congress, @session, @roll, @number, 0, @status, 1, 1, @candidate, @eventOn, @issues, @officials)
+                                 review_status, created_at_utc_ticks, candidate_id, event_on, issue_ids, official_ids)
+        VALUES (@id, @source, @congress, @session, @roll, @number, 0, @status, 1, @candidate, @eventOn, @issues, @officials)
         ON CONFLICT (record_id) DO UPDATE SET current_revision_number = @number, review_status = @status, candidate_id = @candidate,
                                               event_on = @eventOn, issue_ids = @issues, official_ids = @officials;
         INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)

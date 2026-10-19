@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Globalization;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Review;
@@ -16,7 +17,7 @@ public abstract class DraftListPage : ComponentBase
 
     [Inject] protected ReviewActorAccessor Actors { get; set; } = default!;
     [Inject] protected IssueConfiguration Issues { get; set; } = default!;
-    [Inject] protected ReviewCatalog Catalog { get; set; } = default!;
+    [Inject] private ReviewOfficials Officials { get; set; } = default!;
 
     [CascadingParameter] protected HttpContext HttpContext { get; set; } = default!;
     [CascadingParameter] protected Task<AuthenticationState> AuthenticationState { get; set; } = default!;
@@ -27,6 +28,8 @@ public abstract class DraftListPage : ComponentBase
     [SupplyParameterFromQuery(Name = "official")] protected string? OfficialId { get; set; }
     [SupplyParameterFromQuery(Name = "from")] protected string? From { get; set; }
     [SupplyParameterFromQuery(Name = "to")] protected string? To { get; set; }
+
+    protected ImmutableArray<KeyValuePair<string, string>> OfficialChoices => Officials.People;
 
     protected CancellationToken RequestAborted => HttpContext.RequestAborted;
     protected DraftStatusFilter Filter => DraftFilterNames.Parse(DraftsFilterName);
@@ -40,6 +43,10 @@ public abstract class DraftListPage : ComponentBase
             await load();
         }
         catch (OperationCanceledException) when (RequestAborted.IsCancellationRequested) { throw; }
+        catch (DateRangeException exception)
+        {
+            error = exception.Message;
+        }
         catch (ArgumentException)
         {
             error = "This page link is no longer valid. Go back to the first page of the list.";
@@ -50,8 +57,13 @@ public abstract class DraftListPage : ComponentBase
         }
     }
 
-    protected DraftListFilter ReadListFilter() => new(Filter, Choose(IssueId, Issues.Issues.Select(issue => issue.Id)),
-        Choose(OfficialId, Catalog.OfficialIds), ReadDate(From), ReadDate(To));
+    protected DraftListFilter ReadListFilter()
+    {
+        var (from, to) = (ReadDate(From), ReadDate(To));
+        if (from > to) throw new DateRangeException();
+        return new(Filter, Choose(IssueId, Issues.Issues.Select(issue => issue.Id)),
+            Choose(OfficialId, Officials.People.Select(person => person.Key)), from, to);
+    }
 
     protected string Href(string route, string? statusName, string? draftsCursor, string fragment, params string?[] otherParts)
     {
@@ -81,4 +93,6 @@ public abstract class DraftListPage : ComponentBase
         return DateOnly.TryParseExact(value, DateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
             ? date : throw new ArgumentException("A list filter is not valid.");
     }
+
+    private sealed class DateRangeException() : ArgumentException("The start date must not be after the end date.");
 }

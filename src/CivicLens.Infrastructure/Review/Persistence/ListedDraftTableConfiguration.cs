@@ -5,7 +5,7 @@ namespace CivicLens.Infrastructure.Review.Persistence;
 
 internal static class ListedDraftTableConfiguration
 {
-    public static void ConfigureListing<TRow>(EntityTypeBuilder<TRow> builder, string table, string recordIdProperty)
+    public static void ConfigureListing<TRow>(EntityTypeBuilder<TRow> builder, string table)
         where TRow : class, IListedDraftRow
     {
         builder.Property<DateOnly>(nameof(IListedDraftRow.EventOn)).HasColumnName("event_on").HasColumnType("date")
@@ -16,7 +16,5 @@ internal static class ListedDraftTableConfiguration
             .HasDefaultValueSql("'{}'");
         builder.HasIndex(nameof(IListedDraftRow.IssueIds)).HasMethod("gin").HasDatabaseName($"ix_{table}_issue_ids");
         builder.HasIndex(nameof(IListedDraftRow.OfficialIds)).HasMethod("gin").HasDatabaseName($"ix_{table}_official_ids");
-        builder.HasIndex(nameof(IListedDraftRow.EventOn), recordIdProperty).IsDescending(true, true)
-            .HasDatabaseName($"ix_{table}_listing");
     }
 }

@@ -59,6 +59,22 @@ public sealed class PostgresReviewListTests(PostgresCollection postgres) : IAsyn
         Assert.Equal([1, 2, 3, 3], page.Items.Select(item => page.Priorities[item.RecordId]));
     }
 
+    // Rows with the same tier and event date differ only by ID, so a wrong ID direction would skip or repeat rows at a page edge.
+    [Fact]
+    public async Task RowsWithTheSameTierAndEventDateListByDescendingIdAcrossPagesInBothDirections()
+    {
+        for (var index = 0; index < 4; index++)
+            await SeedActionAsync((char)('1' + index), 11 + index, new DateOnly(2025, 5, 5), tier: 2);
+
+        var walk = await PageWalk.RunAsync(async cursor =>
+        {
+            var page = await listActions.ExecuteAsync(Reviewer, cursor?.Encode(), 1);
+            return ([.. page.Items.Select(item => item.RecordId)], page.NewerCursor, page.OlderCursor);
+        });
+
+        walk.AssertExact(Ids('4', '3', '2', '1'));
+    }
+
     [Fact]
     public async Task ActionsWithoutAnAnalysisRowCountAsTheLowestTierSoTheyListLast()
     {

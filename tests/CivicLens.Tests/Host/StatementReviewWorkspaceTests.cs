@@ -67,7 +67,7 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
 
         var link = page.QuerySelector("[aria-labelledby='drafts'] a.cell-title")!;
         Assert.Equal(($"/Review/Statements/{drafted}", Headline), (link.GetAttribute("href"), link.TextContent));
-        Assert.Equal(["Pairs with a statement", "Awaiting review"], page.QuerySelectorAll("[aria-labelledby='drafts'] tbody .badge").Select(badge => badge.TextContent));
+        Assert.Equal(["Awaiting review"], page.QuerySelectorAll("[aria-labelledby='drafts'] tbody .badge").Select(badge => badge.TextContent));
         var start = page.QuerySelector($"[aria-labelledby='not-in-review'] button[form='start-statement'][value='{skipped}']")!;
         Assert.Equal("Start draft", start.TextContent);
         Assert.Contains("no-tracked-issue", page.QuerySelector("[aria-labelledby='not-in-review'] tbody")!.TextContent, StringComparison.Ordinal);

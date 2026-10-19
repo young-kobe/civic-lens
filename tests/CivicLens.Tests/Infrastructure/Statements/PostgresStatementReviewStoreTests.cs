@@ -566,7 +566,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     }
 
     [Fact]
-    public async Task ListOrdersByTierThenTheNewestEventDateAcrossPagesAndFiltersByTheStoredStatus()
+    public async Task ListOrdersByTheNewestEventDateThenTheIdAcrossPagesAndFiltersByTheStoredStatus()
     {
         var overCap = await CandidateAsync();
         var awaiting = await StartedAsync();
@@ -577,10 +577,11 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         await Decide.ExecuteAsync(Owner, new(requested, 2, 0, ReviewDecisionKind.RequestChanges, "Needs sources.", [], "request"));
         foreach (var candidate in new[] { approvedOlder, approvedNewest })
             await Decide.ExecuteAsync(Owner, new(candidate, 2, 0, ReviewDecisionKind.Approve, null, [], "approve-" + candidate[..4]));
-        await SetListingAsync(requested, new DateOnly(2026, 1, 1), tier: 1);
-        await SetListingAsync(approvedOlder, new DateOnly(2026, 3, 1), tier: 2);
-        await SetListingAsync(approvedNewest, new DateOnly(2026, 9, 1), tier: 3);
-        await SetListingAsync(awaiting, new DateOnly(2026, 6, 1), tier: 3);
+        await SetEventDateAsync(requested, new DateOnly(2026, 1, 1));
+        await SetEventDateAsync(approvedOlder, new DateOnly(2026, 3, 1));
+        await SetEventDateAsync(approvedNewest, new DateOnly(2026, 9, 1));
+        await SetEventDateAsync(awaiting, new DateOnly(2026, 6, 1));
+        await SetEventDateAsync(overCap, new DateOnly(2025, 12, 1));
         var list = new ListStatementReviews(reviews);
 
         async Task<PageWalk> Walk(DraftStatusFilter filter) => await PageWalk.RunAsync(async cursor =>
@@ -589,11 +590,10 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
             return ([.. page.Items.Select(item => item.CandidateId)], page.NewerCursor, page.OlderCursor);
         });
 
-        (await Walk(DraftStatusFilter.All)).AssertExact([requested, approvedOlder, approvedNewest, awaiting, overCap]);
-        (await Walk(DraftStatusFilter.NeedsAction)).AssertExact([requested, awaiting, overCap]);
-        (await Walk(DraftStatusFilter.Approved)).AssertExact([approvedOlder, approvedNewest]);
+        (await Walk(DraftStatusFilter.All)).AssertExact([approvedNewest, awaiting, approvedOlder, requested, overCap]);
+        (await Walk(DraftStatusFilter.NeedsAction)).AssertExact([awaiting, requested, overCap]);
+        (await Walk(DraftStatusFilter.Approved)).AssertExact([approvedNewest, approvedOlder]);
         var everything = await list.ExecuteAsync(Owner, null, 10);
-        Assert.Equal([1, 2, 3, 3, 3], everything.Items.Select(item => everything.Priorities[item.CandidateId]));
         var byId = everything.Items.ToDictionary(item => item.CandidateId);
         Assert.Null(byId[overCap].CurrentRevision);
         Assert.Equal(ReviewStatus.NotDrafted, byId[overCap].CurrentStatus);
@@ -822,7 +822,11 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     }
 
     private Task InsertRevisionLessDraftAsync(string candidate) => ExecuteAsync(connectionString,
-        $"INSERT INTO statement_drafts (candidate_id, current_revision_number, review_state_version, review_status, created_at_utc_ticks) VALUES ('{candidate}', 0, 0, 'NotDrafted', 0)");
+        $"""
+        INSERT INTO statement_drafts (candidate_id, current_revision_number, review_state_version, review_status, created_at_utc_ticks, event_on)
+        SELECT candidate_id, 0, 0, 'NotDrafted', 0, (timestamp '0001-01-01' + created_at_utc_ticks / 10 * interval '1 microsecond')::date
+        FROM statement_candidates WHERE candidate_id = '{candidate}'
+        """);
 
     private Task SetQueueAsync(string candidate, string task, string status, string? code) => ExecuteAsync(connectionString, $"""
         INSERT INTO statement_analysis (candidate_id, task, status, fence, attempts, reserved_tokens, created_at_utc_ticks, error_code)
@@ -837,15 +841,8 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
             IssueIds = issues
         });
 
-    private async Task SetListingAsync(string candidate, DateOnly eventOn, int tier)
-    {
-        await ExecuteAsync(connectionString, $"UPDATE statement_drafts SET event_on = '{eventOn:yyyy-MM-dd}' WHERE candidate_id = '{candidate}'");
-        await ExecuteAsync(connectionString, $"""
-            INSERT INTO statement_analysis (candidate_id, task, status, fence, attempts, reserved_tokens, created_at_utc_ticks, priority)
-            VALUES ('{candidate}', '{StatementDraftTask.Task}', 'Succeeded', 0, 0, 0, 0, {tier})
-            ON CONFLICT (candidate_id, task) DO UPDATE SET priority = EXCLUDED.priority
-            """);
-    }
+    private Task SetEventDateAsync(string candidate, DateOnly eventOn) =>
+        ExecuteAsync(connectionString, $"UPDATE statement_drafts SET event_on = '{eventOn:yyyy-MM-dd}' WHERE candidate_id = '{candidate}'");
 
     private async Task<(string EventOn, string IssueIds, string OfficialIds)> ListingAsync(string candidate)
     {

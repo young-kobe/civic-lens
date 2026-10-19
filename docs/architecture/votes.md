@@ -318,7 +318,7 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 - `vote_analysis`, `vote_analysis_runs`, and `vote_analysis_budget` hold the queue, the runs, and the daily charge of the task `vote-draft`. They have the shape of the [action tables](actions.md#storage-and-contracts). A run has the reason column for a bypassed run.
 - `vote_drafts` holds one record for each source and roll call. `vote_revisions` holds its revisions as JSON, each with the run of its analysis author. `vote_review_decisions` holds the review decisions of vote records. It mirrors the action decision table.
 - A bill detail is found through `bill_gates` and `bill_pages`, which the bill stream owns. `BillDetailRows` owns this lookup for both the queue rule and the evidence read. Vote drafting adds no table and no column.
-- The migration `ReviewListColumns` adds `candidate_id`, `event_on`, `issue_ids`, and `official_ids` to `vote_drafts`, with GIN indexes on the two arrays and the index `ix_vote_drafts_listing`. It backfills nothing.
+- The migration `ReviewListColumns` adds `candidate_id`, `event_on`, `issue_ids`, and `official_ids` to `vote_drafts`, with GIN indexes on the two arrays. It drops `last_revised_at_utc_ticks`, because no list reads it. It backfills nothing.
 - The migration queues every vote candidate that existed when it ran. The first run can spend up to the daily limit on them.
 
 ## Code map

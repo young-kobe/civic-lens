@@ -188,8 +188,7 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var newChanges = await ReviewQueries.EligibleComparisons(db).CountAsync(cancellationToken);
-        var needingAction = await Records.Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken);
-        var approved = await Records.Drafts(db, DraftStatusFilter.Approved).CountAsync(cancellationToken);
+        var (needingAction, approved) = await Records.CountAsync(db, cancellationToken);
         return new(newChanges, needingAction, approved);
     }
 
