@@ -52,7 +52,6 @@ The votes feature collects House roll-call votes from the Congress.gov `house-vo
 
 Each line gives the rule, what enforces it, and the test that protects it. Cross-feature invariants are in [architecture](../architecture.md#invariants).
 
-- The editor shows the result of the approval check, so a person sees the check beside the decision. Enforced by `VoteReviewRead.Check` and `ApprovalCheckView`. Test: `VoteReviewWorkspaceTests.TheEditorShowsThePassingApprovalCheckBesideTheDecision`.
 - The event date of a vote is its vote day. The draft row copies it, the candidate ID, the tracked issue IDs, and the member person IDs from the current revision at each append. Enforced by `VoteDraftRows.Revised`. Test: `PostgresHouseVoteTests.EachWorkerRevisionReplacesTheListedColumnsWithThoseOfTheCurrentRevision`.
 - One record exists for each vote version. Enforced by `ux_house_votes_version`. Test: `PostgresHouseVoteTests.ASecondDetailJobOfTheSameVoteVersionRecordsNothingAndAdmitsNoMembersJob`.
 - A changed vote is a new version with its own members job. Enforced by `HouseVoteJobKeys` and `PostgresCollectionJobStore.AdmitDetailAsync`. Test: `PostgresHouseVoteTests.AChangedVoteIsRecordedAsANewVersionWithItsOwnMembersJob`.
@@ -290,7 +289,7 @@ Vote review uses the shared decision rules and review cycles in [review](review.
 - a link to the roll call page on clerk.house.gov
 - a link to the action draft of the bill, when the vote names a bill that has a draft
 - the tracked members: the name and the cast of each member, with the cited member line
-- the shared `ReviewDecisionPanel`, with the result of the approval check, and `ReviewHistoryPanel`
+- the shared `ReviewDecisionPanel` and `ReviewHistoryPanel`
 
 The action link comes from `GetVoteReview`. The review read finds the action draft of the bill with `FindBillActionRecordIdsAsync` in the same transaction, which publication uses too. The clerk link is the HTML vote page: `https://clerk.house.gov/Votes/{year}{number}`. The year is the calendar year of the session. The roll number has no padding, so roll 100 of 2025 is `2025100` and roll 5 is `20255`. The format was checked against the live site on 2026-10-19.
 

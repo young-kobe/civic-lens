@@ -161,17 +161,6 @@ public sealed class BillLinksWorkspaceTests(PostgresCollection postgres) : IAsyn
         Assert.Contains("Code check", page.QuerySelectorAll("td.hide-narrow").Select(cell => cell.TextContent));
     }
 
-    [Fact]
-    public async Task TheActionEditorShowsThePassingApprovalCheckBesideTheDecision()
-    {
-        var action = await SeedActionAsync();
-        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
-
-        var page = await host.GetDocumentAsync($"/Review/Actions/{action.RecordId}");
-
-        Assert.Contains("Approval check passed", page.QuerySelector("[aria-labelledby='decision']")!.TextContent, StringComparison.Ordinal);
-    }
-
     private async Task<ActionDraftRevision> SeedActionAsync(string type = "hr", int congress = 119, int number = 1234)
     {
         var extraction = await host.SaveExtractionAsync(SponsorText);
