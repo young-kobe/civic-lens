@@ -22,11 +22,7 @@ Exit criteria:
 
 Each item gives its outcome, what it depends on, and where the design lives. Present the design choices before building R-22 only.
 
-The path to the first deploy is R-19, R-36, R-23 and R-18, then R-24. Decide D-14 next, because R-36, D-07, and D-08 depend on it. Decide D-07 and D-08 before R-24.
-
-### Now
-
-- R-19: A clearer source-to-review path. The analysis queues claim by priority. The lists and the triage pages sort by it and filter by issue, official, and date. The triage pages show the approval check and offer inline decisions and bulk approval; see [review](architecture/review.md#triage). Still planned: links from a bill or a roll call to its drafts. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
+The path to the first deploy is R-36, R-23 and R-18, then R-24. Decide D-14 next, because R-36, D-07, and D-08 depend on it. Decide D-07 and D-08 before R-24.
 
 ### Next
 
