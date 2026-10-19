@@ -1,5 +1,6 @@
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection;
+using CivicLens.Application.Issues;
 using CivicLens.Core.Analysis;
 using CivicLens.Host.Review;
 using CivicLens.Infrastructure.Analysis;
@@ -11,13 +12,13 @@ namespace CivicLens.Host.Analysis;
 internal static class DocumentChangeDraftComposition
 {
     public static AnalysisComposition<AnalysisRun> Create(IDbContextFactory<CollectionAttemptDbContext> contexts,
-        string connectionString, CollectionConfiguration collection)
+        string connectionString, CollectionConfiguration collection, IssueConfigurationRevision? issues)
     {
         var status = new PostgresAnalysisStatusStore(contexts);
         var configuration = DocumentChangeDraftConfiguration.FromEnvironment();
         if (configuration is null) return AnalysisComposition<AnalysisRun>.Disabled(status);
-        var names = collection.People.ToDictionary(person => person.Id, person => person.Name, StringComparer.Ordinal);
-        var catalog = DocumentChangeDraftCatalog.Create(ReviewWorkspace.ReadCatalog(), names);
+        var issueIds = issues?.ReadConfiguration().Issues.Select(issue => issue.Id) ?? [];
+        var catalog = DocumentChangeDraftCatalog.Create(ReviewWorkspace.ReadCatalog(issueIds), ReviewOfficials.From(collection).Names);
         var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresDocumentChangeAnalysisStore.Table,
             DocumentChangeDraftTask.Task);
         var step = new DocumentChangeDraftStep(new PostgresDocumentChangeAnalysisStore(contexts),

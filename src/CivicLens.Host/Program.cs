@@ -1,8 +1,8 @@
+using System.Collections.Immutable;
 using System.Text.Json;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using CivicLens.Application;
-using CivicLens.Application.Configuration;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Analysis;
 using CivicLens.Infrastructure.Analysis;
@@ -171,10 +171,8 @@ try
         using var terminate = OperatingSystem.IsWindows() ? null : PosixSignalRegistration.Create(PosixSignal.SIGTERM,
             context => { context.Cancel = true; cancellation.Cancel(); });
         CollectionWorkerCommand.ValidateArguments(args);
-        var configurationPath = Environment.GetEnvironmentVariable("CIVIC_LENS_COLLECTION_CONFIG");
-        if (string.IsNullOrWhiteSpace(configurationPath) || !Path.IsPathFullyQualified(configurationPath))
-            throw new ArgumentException("Worker requires CIVIC_LENS_COLLECTION_CONFIG to name an absolute configuration path.");
-        var workerConfiguration = await ReadConfigurationAsync(configurationPath, cancellation.Token);
+        var workerConfiguration = ConfigurationFile.ReadCollectionFromEnvironment()
+            ?? throw new ArgumentException("Worker requires CIVIC_LENS_COLLECTION_CONFIG.");
         var issues = StatementIssueRubric.FromEnvironment();
         if (issues is null && workerConfiguration.Sources.Any(source => source.Enabled && source.ApiParser == ApiParser.CongressBillList))
             throw new ArgumentException("Worker requires CIVIC_LENS_ISSUES_CONFIG when a Congress.gov bill list source is enabled.");
@@ -184,9 +182,9 @@ try
         var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!;
         var queue = PostgresCollectionWorkerQueue.FromConnectionString(connectionString);
         var analysisContexts = AnalysisDbContextFactory.Create(connectionString);
-        var analysis = DocumentChangeDraftComposition.Create(analysisContexts, connectionString, workerConfiguration);
+        var analysis = DocumentChangeDraftComposition.Create(analysisContexts, connectionString, workerConfiguration, issues);
         await using var analysisWakeup = analysis.Wakeup;
-        var gate = StatementGateComposition.Create(analysisContexts, connectionString);
+        var gate = StatementGateComposition.Create(analysisContexts, connectionString, issues);
         await using var gateWakeup = gate.Wakeup;
         var statementDrafting = StatementDraftComposition.Create(analysisContexts, connectionString);
         await using var statementDraftingWakeup = statementDrafting.Wakeup;
@@ -311,15 +309,10 @@ try
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
         if (string.IsNullOrWhiteSpace(releaseRoot))
             throw new ArgumentException("Release commands require CIVIC_LENS_RELEASE_DIRECTORY.");
-        var officialNames = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (args is ["releases", "publish", ..])
-        {
-            var configurationPath = Environment.GetEnvironmentVariable("CIVIC_LENS_COLLECTION_CONFIG");
-            if (string.IsNullOrWhiteSpace(configurationPath) || !Path.IsPathFullyQualified(configurationPath))
-                throw new ArgumentException("Publishing requires CIVIC_LENS_COLLECTION_CONFIG to name an absolute configuration path.");
-            var releaseConfiguration = await ReadConfigurationAsync(configurationPath, cancellation.Token);
-            foreach (var person in releaseConfiguration.People) officialNames.Add(person.Id, person.Name);
-        }
+        var officialNames = args is ["releases", "publish", ..]
+            ? ReviewOfficials.From(ConfigurationFile.ReadCollectionFromEnvironment()
+                ?? throw new ArgumentException("Publishing requires CIVIC_LENS_COLLECTION_CONFIG.")).Names
+            : ImmutableDictionary<string, string>.Empty;
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
         var releases = new FileReleaseDirectory(releaseRoot);
         var publish = new PublishRelease(publications, releases, new ReleaseRenderer(), new PublishedRecordLoaders(
@@ -339,7 +332,7 @@ try
     if (DocumentCommand.Matches(args))
     {
         var documentConfiguration = args is ["documents", "extract", var documentConfigPath, _, _]
-            ? await ReadConfigurationAsync(documentConfigPath, cancellation.Token) : null;
+            ? ConfigurationFile.ReadCollection(documentConfigPath) : null;
         var attempts = CreateDatabase();
         var extractions = PostgresDocumentExtractionStore.FromConnectionString(Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!);
         executing = true;
@@ -359,7 +352,7 @@ try
 
     if (args is ["discovery", "admit", var discoveryConfigPath, var discoverySourceId, var discoveryAttemptId, var admissionKey])
     {
-        var config = await ReadConfigurationAsync(discoveryConfigPath, cancellation.Token);
+        var config = ConfigurationFile.ReadCollection(discoveryConfigPath);
         var source = new ConfiguredCollectionSource(config, discoverySourceId, admissionAsOf);
         var jobs = CreateJobs();
         executing = true;
@@ -368,7 +361,7 @@ try
 
     if (args is ["jobs", "enqueue", var configPath, var sourceId, var idempotencyKey])
     {
-        var config = await ReadConfigurationAsync(configPath, cancellation.Token);
+        var config = ConfigurationFile.ReadCollection(configPath);
         var source = new ConfiguredCollectionSource(config, sourceId, admissionAsOf);
         var jobs = CreateJobs();
         executing = true;
@@ -413,7 +406,7 @@ try
         return 0;
     }
 
-    var configuration = await ReadConfigurationAsync(args[1], cancellation.Token);
+    var configuration = ConfigurationFile.ReadCollection(args[1]);
     if (args[0] == "validate")
     {
         Console.WriteLine($"Valid configuration: {configuration.People.Length} people, {configuration.Sources.Length} watched sources.");
@@ -461,18 +454,4 @@ static PostgresCollectionJobStore CreateJobs()
     var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE");
     if (string.IsNullOrWhiteSpace(connectionString)) throw new ArgumentException("CIVIC_LENS_DATABASE is required.");
     return PostgresCollectionJobStore.FromConnectionString(connectionString);
-}
-
-static async Task<CollectionConfiguration> ReadConfigurationAsync(string path, CancellationToken cancellationToken)
-{
-    await using var input = File.OpenRead(path);
-    var buffer = new byte[1_000_001];
-    var count = await input.ReadAtLeastAsync(buffer, buffer.Length, throwOnEndOfStream: false, cancellationToken);
-    if (count > 1_000_000)
-        throw new ArgumentException("Configuration exceeds 1 MB.");
-    var configuration = JsonSerializer.Deserialize<CollectionConfiguration>(
-        buffer.AsSpan(0, count), ConfigurationJson.Options)
-        ?? throw new ArgumentException("Configuration must not be null.");
-    configuration.Validate();
-    return configuration;
 }

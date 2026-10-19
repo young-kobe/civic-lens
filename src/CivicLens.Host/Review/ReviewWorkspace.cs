@@ -210,7 +210,7 @@ internal static class ReviewWorkspace
         services.AddScoped<GetDocumentHistory>();
         services.AddScoped<GetDocumentComparison>();
         services.AddScoped<GetDocumentCitation>();
-        services.AddSingleton(ReadCatalog());
+        services.AddSingleton(ReadCatalog(Issues.Value.Issues.Select(issue => issue.Id)));
         services.AddSingleton<IDocumentChangeReviewStore>(PostgresDocumentChangeReviewStore.FromConnectionString(connectionString));
         services.AddSingleton<IDocumentChangeAnalysisStore>(PostgresDocumentChangeAnalysisStore.FromConnectionString(connectionString));
         services.AddScoped<ListDocumentChangeAnalyses>();
@@ -232,8 +232,9 @@ internal static class ReviewWorkspace
         ConfigureBriefReview(services, contexts);
         services.AddScoped(provider => new LookupDraft(provider.GetRequiredService<IActionReviewStore>(),
             provider.GetRequiredService<IVoteReviewStore>(), TimeProvider.System));
-        var collection = ReviewCollectionSettings.FromEnvironment();
-        services.AddSingleton(ReviewOfficials.From(collection?.Configuration));
+        var collection = ConfigurationFile.ReadCollectionFromEnvironment();
+        var officials = ReviewOfficials.From(collection);
+        services.AddSingleton(officials);
         if (collection is null)
         {
             services.AddScoped(provider => new GetRecentActivity(provider.GetRequiredService<IDocumentChangeReviewStore>()));
@@ -243,11 +244,11 @@ internal static class ReviewWorkspace
             services.AddScoped(provider => new GetRecentActivity(provider.GetRequiredService<IDocumentChangeReviewStore>(),
                 PostgresCollectionJobStore.FromConnectionString(connectionString),
                 CivicLens.Infrastructure.Collection.Processing.PostgresEvidenceProcessingStore.FromConnectionString(connectionString)));
-            services.AddScoped(_ => new CollectionWorkspace(collection.Configuration,
+            services.AddScoped(_ => new CollectionWorkspace(collection,
                 PostgresCollectionJobStore.FromConnectionString(connectionString),
                 PostgresCollectionAttemptStore.FromConnectionString(connectionString),
                 CivicLens.Infrastructure.Collection.Processing.PostgresEvidenceProcessingStore.FromConnectionString(connectionString)));
-            ConfigurePublication(services, connectionString, collection);
+            ConfigurePublication(services, connectionString, officials);
         }
     }
 
@@ -317,28 +318,27 @@ internal static class ReviewWorkspace
     }
 
     // The owner publish section needs a release directory and the configured official names.
-    private static void ConfigurePublication(IServiceCollection services, string connectionString,
-        ReviewCollectionSettings collection)
+    private static void ConfigurePublication(IServiceCollection services, string connectionString, ReviewOfficials officials)
     {
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
         if (releaseRoot is null) return;
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
         var releases = new FileReleaseDirectory(releaseRoot);
-        var officialNames = collection.Configuration.People.ToDictionary(person => person.Id, person => person.Name, StringComparer.Ordinal);
         services.AddScoped(_ => new ListPublicationReleases(publications, releases));
         services.AddSingleton(provider => new PublishedRecordLoaders(provider.GetRequiredService<IDocumentChangeReviewStore>(),
             provider.GetRequiredService<IStatementReviewStore>(), provider.GetRequiredService<IActionReviewStore>(),
             provider.GetRequiredService<IVoteReviewStore>(), provider.GetRequiredService<IRelationshipReviewStore>(),
             provider.GetRequiredService<IBriefReviewStore>()));
         services.AddScoped(provider => new PublishRelease(publications, releases, new ReleaseRenderer(),
-            provider.GetRequiredService<PublishedRecordLoaders>(), new PublicationCatalog(officialNames), TimeProvider.System));
+            provider.GetRequiredService<PublishedRecordLoaders>(), new PublicationCatalog(officials.Names), TimeProvider.System));
         services.AddScoped<ListPublishable>();
     }
 
-    private static readonly Lazy<IssueConfiguration> Issues = new(() => ReviewIssueSettings.FromEnvironment().Configuration);
+    private static readonly Lazy<IssueConfiguration> Issues = new(() =>
+        ConfigurationFile.ReadIssuesFromEnvironment() ?? new IssueConfiguration { PolicyAreas = [], Issues = [] });
 
-    internal static ReviewCatalog ReadCatalog() =>
-        new(Issues.Value.Issues.Select(issue => issue.Id), ReadIds("CIVIC_LENS_REVIEW_OFFICIALS"));
+    internal static ReviewCatalog ReadCatalog(IEnumerable<string> issueIds) =>
+        new(issueIds, ReadIds("CIVIC_LENS_REVIEW_OFFICIALS"));
 
     private static string[] ReadIds(string name) => (Environment.GetEnvironmentVariable(name) ?? "")
         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

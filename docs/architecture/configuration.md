@@ -106,8 +106,9 @@ The file has a `version` (only 1 is supported), a list of `policyAreas` (`id`, `
 - Policy area IDs and names are unique, and issue IDs are unique.
 - Each policy area ID in an issue must exist and may appear once.
 - List entries must be nonblank and unique within their list. The date range must be valid.
-- The file holds at most 256 issues. The review host accepts a file of at most 1 MB.
+- The file holds at most 256 issues. The Host accepts a file of at most 1 MB.
 - The host reads and validates the file once at process start. An invalid file stops startup.
+- `ConfigurationFile` in Host reads and validates every collection and issue file. It rejects a file over 1 MB or a relative environment path. The largest file, `config/federal-coverage.json`, is 771 KB.
 
 `IssueConfigurationRevision` mirrors `CollectionConfigurationRevision`. It keeps the canonical JSON and its lowercase SHA-256 ID. Construction verifies the hash, strict shape, and invariants. The review host reads the file named by `CIVIC_LENS_ISSUES_CONFIG` once at start and takes the configured issue IDs from it.
 
@@ -127,6 +128,7 @@ The file has a `version` (only 1 is supported), a list of `policyAreas` (`id`, `
 | Revisions | `src/CivicLens.Application/Collection/CollectionConfigurationRevision.cs`, `src/CivicLens.Application/Configuration/ConfigurationSnapshotRules.cs`, `src/CivicLens.Application/Configuration/ConfigurationJson.cs` |
 | Admission request | `src/CivicLens.Application/Collection/ConfiguredCollectionSource.cs` |
 | Issues | `src/CivicLens.Application/Issues/IssueConfiguration.cs`, `src/CivicLens.Application/Issues/IssueConfigurationRevision.cs` |
+| File loader | `src/CivicLens.Host/ConfigurationFile.cs` |
 | Files | `config/issues.json`, `config/federal-pilot.json`, `config/example.json` |
 
 ## Limits and planned work
