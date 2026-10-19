@@ -103,9 +103,9 @@ public sealed partial class PostgresBillStreamTests
         var added = Assert.Single(review.CurrentRevision.SponsorshipChangesSince(review.LastApprovedRevision!).Added);
         Assert.Equal("B000002", added.BioguideId);
 
-        var results = await BulkApproveAsync(new ActionApprovalTarget(RecordId, 2, 1));
+        var results = await BulkApproveAsync(new BulkApprovalTarget(RecordId, 2, 1));
 
-        Assert.Equal([new ActionApprovalResult(RecordId, ActionApprovalOutcome.Approved)], results);
+        Assert.Equal([new BulkApprovalResult(RecordId, BulkApprovalOutcome.Approved)], results);
         Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
         Assert.Equal(2, await ScalarAsync($"SELECT revision_number FROM action_review_decisions WHERE review_state_version = 2"));
         Assert.Equal(("Bypassed", ActionDraftErrorCodes.SponsorshipsChanged), await TupleAsync(
@@ -121,9 +121,9 @@ public sealed partial class PostgresBillStreamTests
         await DecideAsync(2, 1, ReviewDecisionKind.RequestChanges, "Check the new sponsor.");
         Assert.True((await new GetActionReview(ActionReviews()).ExecuteAsync(Reviewer, RecordId))!.Review.IsSponsorshipOnly);
 
-        var results = await BulkApproveAsync(new ActionApprovalTarget(RecordId, 2, 2));
+        var results = await BulkApproveAsync(new BulkApprovalTarget(RecordId, 2, 2));
 
-        Assert.Equal(ActionApprovalOutcome.Rejected, Assert.Single(results).Outcome);
+        Assert.Equal(BulkApprovalOutcome.Rejected, Assert.Single(results).Outcome);
         Assert.Equal("ChangesRequested", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
     }
 
@@ -134,14 +134,14 @@ public sealed partial class PostgresBillStreamTests
         await DecideAsync(1, 0, ReviewDecisionKind.Approve);
         await AddSponsorAsync(UpdatedAt.AddDays(1));
         var missing = new string('9', 64);
-        var request = new ApproveSponsorshipChangesRequest([new(RecordId, 2, 1), new(missing, 1, 0)], "bulk-1");
+        var request = new BulkApprovalRequest([new(RecordId, 2, 1), new(missing, 1, 0)], "bulk-1");
         var approve = new ApproveSponsorshipChanges(ActionReviews());
 
         var first = await approve.ExecuteAsync(Reviewer, request);
         var replay = await approve.ExecuteAsync(Reviewer, request);
 
-        Assert.Equal([ActionApprovalOutcome.Approved, ActionApprovalOutcome.NotFound], first.Select(result => result.Outcome));
-        Assert.Equal<ActionApprovalResult>(first, replay);
+        Assert.Equal([BulkApprovalOutcome.Approved, BulkApprovalOutcome.NotFound], first.Select(result => result.Outcome));
+        Assert.Equal<BulkApprovalResult>(first, replay);
         Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM action_review_decisions"));
     }
 
@@ -150,10 +150,10 @@ public sealed partial class PostgresBillStreamTests
     {
         await DraftAsync(UpdatedAt, DraftableOutput);
         var approve = new ApproveSponsorshipChanges(ActionReviews());
-        var target = new ActionApprovalTarget(RecordId, 1, 0);
+        var target = new BulkApprovalTarget(RecordId, 1, 0);
 
         await Assert.ThrowsAsync<ArgumentException>(() => approve.ExecuteAsync(Reviewer, new([target], new string('k', 192))));
-        Assert.Equal(ActionApprovalOutcome.Rejected, Assert.Single(await approve.ExecuteAsync(Reviewer, new([target], new string('k', 191)))).Outcome);
+        Assert.Equal(BulkApprovalOutcome.Rejected, Assert.Single(await approve.ExecuteAsync(Reviewer, new([target], new string('k', 191)))).Outcome);
     }
 
     [Fact]
@@ -165,9 +165,9 @@ public sealed partial class PostgresBillStreamTests
         await AddSponsorAsync(UpdatedAt.AddDays(1));
         var missing = new string('9', 64);
 
-        var results = await BulkApproveAsync(new ActionApprovalTarget(RecordId, 3, 1), new ActionApprovalTarget(missing, 1, 0));
+        var results = await BulkApproveAsync(new BulkApprovalTarget(RecordId, 3, 1), new BulkApprovalTarget(missing, 1, 0));
 
-        Assert.Equal([new ActionApprovalResult(RecordId, ActionApprovalOutcome.Rejected), new ActionApprovalResult(missing, ActionApprovalOutcome.NotFound)],
+        Assert.Equal([new BulkApprovalResult(RecordId, BulkApprovalOutcome.Rejected), new BulkApprovalResult(missing, BulkApprovalOutcome.NotFound)],
             results);
         Assert.Equal("AwaitingReview", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_review_decisions"));
@@ -178,10 +178,27 @@ public sealed partial class PostgresBillStreamTests
     {
         await DraftAsync(UpdatedAt, DraftableOutput);
 
-        var results = await BulkApproveAsync(new ActionApprovalTarget(RecordId, 1, 0));
+        var results = await BulkApproveAsync(new BulkApprovalTarget(RecordId, 1, 0));
 
-        Assert.Equal(ActionApprovalOutcome.Rejected, Assert.Single(results).Outcome);
+        Assert.Equal(BulkApprovalOutcome.Rejected, Assert.Single(results).Outcome);
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM action_review_decisions"));
+    }
+
+    [Fact]
+    public async Task TriageListsOnlyActionsThatNeedActionWithTheirExtractionsAndAPassingApprovalCheck()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+        var triage = new ListActionTriage(ActionReviews());
+
+        var page = await triage.ExecuteAsync(Reviewer, null, new(DraftStatusFilter.Approved));
+
+        var row = Assert.Single(page.Rows);
+        Assert.Equal(RecordId, row.Review.RecordId);
+        Assert.True(row.Check.Passed);
+        Assert.NotEmpty(row.Quotes);
+        Assert.All(row.Quotes, quote => Assert.NotEmpty(quote.Text));
+        await DecideAsync(1, 0, ReviewDecisionKind.Approve);
+        Assert.Empty((await triage.ExecuteAsync(Reviewer, null)).Rows);
     }
 
     [Fact]
@@ -191,7 +208,7 @@ public sealed partial class PostgresBillStreamTests
         await AddSponsorAsync(UpdatedAt.AddDays(1));
 
         await Assert.ThrowsAsync<ReviewConflictException>(() => DecideAsync(1, 0, ReviewDecisionKind.Approve));
-        Assert.Equal(ActionApprovalOutcome.Conflict, Assert.Single(await BulkApproveAsync(new ActionApprovalTarget(RecordId, 1, 0))).Outcome);
+        Assert.Equal(BulkApprovalOutcome.Conflict, Assert.Single(await BulkApproveAsync(new BulkApprovalTarget(RecordId, 1, 0))).Outcome);
         await DecideAsync(2, 0, ReviewDecisionKind.Approve);
 
         Assert.Equal(2, await ScalarAsync("SELECT revision_number FROM action_review_decisions"));
@@ -290,7 +307,7 @@ public sealed partial class PostgresBillStreamTests
         new DecideActionReview(ActionReviews()).ExecuteAsync(Reviewer,
             new(RecordId, revision, stateVersion, kind, note, [], Guid.NewGuid().ToString("N")));
 
-    private async Task<IReadOnlyList<ActionApprovalResult>> BulkApproveAsync(params ActionApprovalTarget[] targets) =>
+    private async Task<IReadOnlyList<BulkApprovalResult>> BulkApproveAsync(params BulkApprovalTarget[] targets) =>
         await new ApproveSponsorshipChanges(ActionReviews()).ExecuteAsync(Reviewer, new([.. targets], Guid.NewGuid().ToString("N")));
 
     private Task<ActionDraftRevision> SaveAsync(int expected, SuggestionChoice suggestion, string key,

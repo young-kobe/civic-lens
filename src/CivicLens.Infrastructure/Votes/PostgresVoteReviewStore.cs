@@ -73,14 +73,15 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
             }, saved => VoteDraftRows.NewRevision(saved, null), cancellationToken);
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
+        int expectedReviewStateVersion, bool bulkSafe, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
-            idempotencyKey, payloadHash, async (db, _, history) =>
+            idempotencyKey, payloadHash, async (db, draft, history) =>
             {
+                if (bulkSafe && !ToReview(draft, history).IsBulkSafe)
+                    throw new ArgumentException("Bulk approval needs a procedural vote or a revision that changes only member votes.");
                 if (decision.Kind != ReviewDecisionKind.Approve) return;
                 var current = history.CurrentRevision!;
-                current.ValidateForApproval();
-                current.ValidateAgainst(await ReadExtractionsAsync(db, [current], cancellationToken));
+                current.ValidateForApproval(await ReadExtractionsAsync(db, [current], cancellationToken));
             }, NewDecisionRow, AfterDecisionHooks.InOrder(
                 RelationshipStaleness.AfterDecision(relationshipQueue, RelationshipRecordKind.Vote),
                 BriefStaleness.AfterDecision(briefQueue, PublishedRecordKind.Vote)), cancellationToken);
@@ -104,11 +105,30 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var page = await ReadPageAsync(db, cursor, limit, filter, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return page;
+    }
+
+    public async Task<ReviewTriageRead<VoteReview>> ListTriageAsync(PageCursor? cursor, DraftListFilter filter,
+        CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var page = await ReadPageAsync(db, cursor, ReviewTriage.PageSize, filter with { Status = DraftStatusFilter.NeedsAction },
+            cancellationToken);
+        var extractions = await ReadExtractionsAsync(db, page.Items.Select(review => review.CurrentRevision), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new(page.Items, extractions.ToImmutableDictionary(StringComparer.Ordinal), page.Priorities, page.NewerCursor, page.OlderCursor);
+    }
+
+    private static async Task<VoteReviewPage> ReadPageAsync(CollectionAttemptDbContext db, PageCursor? cursor, int limit,
+        DraftListFilter filter, CancellationToken cancellationToken)
+    {
         var slice = await ListedDrafts.PageByTierAsync<VoteDraftRow, VoteAnalysisRow>(db, Records.Drafts(db, filter.Status),
             VoteDraftTask.Task, nameof(VoteDraftRow.RecordId), cursor, limit, filter, cancellationToken);
         var drafts = slice.Items.Select(item => item.Draft).ToArray();
         var histories = await Records.ReadHistoriesAsync(db, drafts, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
         return new([.. drafts.Select(row => ToReview(row, histories[row.RecordId]))], ListedDrafts.PrioritiesOf(slice.Items),
             slice.NewerCursor, slice.OlderCursor);
     }

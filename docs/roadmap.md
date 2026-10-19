@@ -26,7 +26,7 @@ The path to the first deploy is R-19, R-36, R-23 and R-18, then R-24. Decide D-1
 
 ### Now
 
-- R-19: Review volume tools beyond the sponsorship-only bulk approval of actions, and a clearer source-to-review path. The analysis queues claim by priority, and the statement, action, and vote lists sort by it and filter by issue, official, and date. Still planned: the review tools above. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
+- R-19: A clearer source-to-review path. The analysis queues claim by priority. The lists and the triage pages sort by it and filter by issue, official, and date. The triage pages show the approval check and offer inline decisions and bulk approval; see [review](architecture/review.md#triage). Still planned: links from a bill or a roll call to its drafts. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
 
 ### Next
 

@@ -3,7 +3,6 @@ using CivicLens.Application.Actions;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Review;
 using CivicLens.Core.Actions;
-using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Layout;
@@ -102,9 +101,6 @@ public sealed partial class ActionEditor
         Input = null;
         return LoadAsync();
     }
-
-    private string Quote(SourceSpan span) =>
-        new DocumentTextSpan(detail!.Extractions[span.ExtractionId], span.Start, span.Length).Quote;
 
     private string Describe(ActionSponsorship sponsorship)
     {

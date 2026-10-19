@@ -1,0 +1,15 @@
+@using CivicLens.Application.Review
+
+@if (Check.Passed)
+{
+    <StatusBadge Tone="Tone.Ok" Text="Approval check passed" />
+}
+else
+{
+    <StatusBadge Tone="Tone.Bad" Text="Approval check failed" />
+    <span class="cell-sub">@Check.Failure</span>
+}
+
+@code {
+    [Parameter, EditorRequired] public ApprovalCheck Check { get; set; } = default!;
+}

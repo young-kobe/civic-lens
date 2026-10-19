@@ -267,6 +267,28 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task TheTriagePageShowsTheQuoteAndAFailedCheckWithNoApproveAndRequestChangesNeedsANoteAsync()
+    {
+        var candidate = await AiDraftedAsync();
+        SignIn(Reviewer);
+
+        var page = await host.GetDocumentAsync("/Review/Statements/Triage");
+
+        var row = Assert.Single(page.QuerySelectorAll("[aria-labelledby='drafts'] tbody tr"));
+        Assert.Equal($"/Review/Statements/{candidate}", row.QuerySelector("a.cell-title")!.GetAttribute("href"));
+        Assert.Contains(Quote, row.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Approval check failed", row.TextContent, StringComparison.Ordinal);
+        Assert.Null(row.QuerySelector("button[name='approve']"));
+        using var withoutNote = await host.Client.PostAsync("/Review/Statements/Triage", TriageDecision(page, "requestChanges"));
+        using var withNote = await host.Client.PostAsync("/Review/Statements/Triage", TriageDecision(page, "requestChanges", "Name the housing bill."));
+        Assert.Equal(HttpStatusCode.BadRequest, withoutNote.StatusCode);
+        Assert.Equal(HttpStatusCode.Redirect, withNote.StatusCode);
+        var after = await host.GetDocumentAsync("/Review/Statements/Triage");
+        Assert.Empty(Assert.Single(after.QuerySelectorAll("[aria-labelledby='drafts'] tbody tr")).QuerySelectorAll("button, textarea"));
+        Assert.Equal(ReviewStatus.ChangesRequested, (await reviews.GetAsync(candidate, default))!.Review.CurrentStatus);
+    }
+
+    [Fact]
     public async Task StartingADraftFromTheListCreatesRevisionOneAndOpensTheDetailPageAsync()
     {
         await AiDraftedAsync();

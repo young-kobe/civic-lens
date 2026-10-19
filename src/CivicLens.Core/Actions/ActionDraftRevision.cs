@@ -74,6 +74,12 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
 
     public void ValidateForApproval() => ValidateShape();
 
+    public void ValidateForApproval(IReadOnlyDictionary<string, DocumentExtraction> extractions)
+    {
+        ValidateForApproval();
+        ValidateAgainst(extractions);
+    }
+
     public void ValidateAgainst(IReadOnlyDictionary<string, DocumentExtraction> extractions)
     {
         foreach (var span in Citations)

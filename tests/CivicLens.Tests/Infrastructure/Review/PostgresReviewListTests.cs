@@ -1,4 +1,6 @@
+using System.Data.Common;
 using CivicLens.Application.Actions;
+using CivicLens.Application.Paging;
 using CivicLens.Application.Relationships;
 using CivicLens.Application.Review;
 using CivicLens.Application.Votes;
@@ -12,6 +14,7 @@ using CivicLens.Infrastructure.Votes;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace CivicLens.Tests.Infrastructure.Review;
@@ -163,6 +166,69 @@ public sealed class PostgresReviewListTests(PostgresCollection postgres) : IAsyn
             new PooledDbContextFactory<CollectionAttemptDbContext>(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options)));
 
         await Assert.ThrowsAsync<ArgumentException>(() => relationships.ExecuteAsync(Reviewer, "o.1.5." + Id('1'), 1));
+    }
+
+    [Fact]
+    public async Task ActionTriageShowsTenNeedsActionRowsAMatchingIssueAndNeverAnApprovedRecord()
+    {
+        for (var index = 0; index < 11; index++)
+            await SeedActionAsync("123456789ab"[index], 11 + index, new DateOnly(2025, 1, 1 + index), tier: 3, issues: [Housing]);
+        await SeedActionAsync('0', 30, new DateOnly(2025, 6, 1), tier: 1, "Approved", [Housing]);
+        var triage = new ListActionTriage(PostgresActionReviewStore.FromConnectionString(connectionString));
+
+        var first = await triage.ExecuteAsync(Reviewer, null, new(DraftStatusFilter.Approved, IssueId: Housing));
+        var second = await triage.ExecuteAsync(Reviewer, PageCursor.Parse(first.OlderCursor)!.Encode(), new(DraftStatusFilter.All, IssueId: Housing));
+
+        Assert.Equal(10, first.Rows.Length);
+        Assert.Equal(Ids('1'), second.Rows.Select(row => row.Review.RecordId));
+        Assert.DoesNotContain(first.Rows.Concat(second.Rows), row => row.Review.RecordId == Id('0'));
+        Assert.Empty((await triage.ExecuteAsync(Reviewer, null, new(DraftStatusFilter.All, IssueId: Health))).Rows);
+    }
+
+    [Fact]
+    public async Task VoteTriageShowsOnlyNeedsActionVotesInTierOrderAndFiltersByOfficial()
+    {
+        await SeedVoteAsync('1', 101, new DateOnly(2025, 4, 1), tier: 3, member: "warren");
+        await SeedVoteAsync('2', 102, new DateOnly(2025, 2, 1), tier: 1, member: "markey");
+        await SeedVoteAsync('3', 103, new DateOnly(2025, 6, 1), tier: 1, "Approved", member: "markey");
+        var triage = new ListVoteTriage(PostgresVoteReviewStore.FromConnectionString(connectionString));
+
+        Assert.Equal(Ids('2', '1'), (await triage.ExecuteAsync(Reviewer, null, new(DraftStatusFilter.Approved))).Rows.Select(row => row.Review.RecordId));
+        Assert.Equal(Ids('2'), (await triage.ExecuteAsync(Reviewer, null, new(DraftStatusFilter.All, OfficialId: "markey"))).Rows
+            .Select(row => row.Review.RecordId));
+    }
+
+    [Fact]
+    public async Task TriageReadsAPageOfActionsWithAFixedNumberOfQueriesWhateverItsSize()
+    {
+        var counter = new ReadCommandCounter();
+        var store = new PostgresActionReviewStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).AddInterceptors(counter).Options));
+        await SeedActionAsync('1', 11, new DateOnly(2025, 1, 1), tier: 3);
+        await store.ListTriageAsync(null, default, default);
+        counter.ReadCount = 0;
+        await store.ListTriageAsync(null, default, default);
+        var oneRow = counter.ReadCount;
+        for (var index = 1; index < 6; index++)
+            await SeedActionAsync((char)('1' + index), 11 + index, new DateOnly(2025, 1, 1 + index), tier: 3);
+        counter.ReadCount = 0;
+
+        var read = await store.ListTriageAsync(null, default, default);
+
+        Assert.Equal(6, read.Items.Length);
+        Assert.Equal(oneRow, counter.ReadCount);
+    }
+
+    private sealed class ReadCommandCounter : DbCommandInterceptor
+    {
+        public int ReadCount { get; set; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            ReadCount++;
+            return ValueTask.FromResult(result);
+        }
     }
 
     private async Task<string[]> ActionIdsAsync(DraftListFilter filter) =>

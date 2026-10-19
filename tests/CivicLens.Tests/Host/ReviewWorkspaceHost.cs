@@ -182,6 +182,14 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
         .Select(element => new KeyValuePair<string, string>(element.GetAttribute("name")!,
             element.LocalName == "textarea" ? element.TextContent : element.GetAttribute("value") ?? "")).ToList();
 
+    public static FormUrlEncodedContent TriageDecision(IDocument page, string buttonName, string? note = null)
+    {
+        var fields = Fields(page.QuerySelector("#decide")!);
+        fields.Add(new(buttonName, page.QuerySelector($"button[form='decide'][name='{buttonName}']")!.GetAttribute("value")!));
+        if (note is not null) fields.Add(new(page.QuerySelector("textarea[form='decide']")!.GetAttribute("name")!, note));
+        return new(fields);
+    }
+
     public static void Set(List<KeyValuePair<string, string>> fields, string name, string value)
     {
         fields.RemoveAll(field => field.Key == name);

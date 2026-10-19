@@ -1,7 +1,6 @@
 using CivicLens.Application.Issues;
 using CivicLens.Application.Review;
 using CivicLens.Application.Votes;
-using CivicLens.Core.Documents;
 using CivicLens.Core.Votes;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Layout;
@@ -100,9 +99,6 @@ public sealed partial class VoteEditor
         Input = null;
         return LoadAsync();
     }
-
-    private string Quote(SourceSpan span) =>
-        new DocumentTextSpan(detail!.Extractions[span.ExtractionId], span.Start, span.Length).Quote;
 
     private string Describe(MemberVote member) =>
         $"{detail!.PersonNames.GetValueOrDefault(member.PersonId, member.PersonId)}: {member.Cast}";

@@ -8,7 +8,7 @@ The approved product direction serves regular citizens seeking transparency in U
 
 Claude drafts document-change accounts and statement records inside daily token limits. A person edits, approves, and publishes each draft in an authenticated review workspace. Approved records publish as immutable static releases.
 
-The worker drafts one action record for each tracked Congress.gov bill. Each record lists every tracked official's sponsorship and cosponsorship. A person reviews, approves, and publishes each action record. Bulk approval covers revisions that change only sponsorships.
+The worker drafts one action record for each tracked Congress.gov bill. Each record lists every tracked official's sponsorship and cosponsorship. A person reviews, approves, and publishes each action record. Bulk approval on the triage pages covers revisions that change only sponsorships, and the bulk-safe votes.
 
 The worker collects House roll-call votes and drafts one vote record for each roll call. Each record lists the vote of every tracked member. A person reviews and approves each vote record on the vote pages. An approved vote record publishes in a static release.
 

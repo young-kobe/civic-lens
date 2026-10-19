@@ -137,11 +137,11 @@ else
                     }
                     @if (revision.PolicyAreaCitation is { } area)
                     {
-                        <li><CitationQuote Label="Policy area" Quote="@Quote(area)" /></li>
+                        <li><CitationQuote Label="Policy area" Quote="@(area.QuoteIn(detail!.Extractions))" /></li>
                     }
                     @if (revision.SummaryCitation is { } summary)
                     {
-                        <li><CitationQuote Label="CRS summary" Quote="@Quote(summary)" /></li>
+                        <li><CitationQuote Label="CRS summary" Quote="@(summary.QuoteIn(detail!.Extractions))" /></li>
                     }
                 </ul>
                 <TechnicalDetails Items="TechnicalItems" />
@@ -184,7 +184,7 @@ else
         @<text>
             @for (var index = 0; index < sponsorship.Citations.Length; index++)
             {
-                <CitationQuote Label="@(index == 0 ? Describe(sponsorship) : "Also cited")" Quote="@Quote(sponsorship.Citations[index])" />
+                <CitationQuote Label="@(index == 0 ? Describe(sponsorship) : "Also cited")" Quote="@(sponsorship.Citations[index].QuoteIn(detail!.Extractions))" />
             }
         </text>;
 
