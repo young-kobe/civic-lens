@@ -1,9 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace CivicLens.Application.Collection.HouseVotes;
+namespace CivicLens.Application.Collection;
 
-internal static class HouseVoteJson
+internal static class CongressApiJson
 {
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
     {

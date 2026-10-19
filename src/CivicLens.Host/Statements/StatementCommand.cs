@@ -33,7 +33,7 @@ internal sealed class StatementCommand(AnalysisQueueCommands<StatementGateRun, S
                     CommandOutput.Write(await gates.List.ExecuteAsync(owner, ParseView(view), DefaultListLimit, cancellationToken));
                     return 0;
                 case ["statements", "list", var view, var limit]:
-                    CommandOutput.Write(await gates.List.ExecuteAsync(owner, ParseView(view), ParseLimit(limit), cancellationToken));
+                    CommandOutput.Write(await gates.List.ExecuteAsync(owner, ParseView(view), OwnerCommand.ParseLimit(limit, Usage), cancellationToken));
                     return 0;
                 case ["statements", "run", var runId]:
                     CommandOutput.Write(await gates.Run.ExecuteAsync(owner, runId, cancellationToken)
@@ -61,7 +61,7 @@ internal sealed class StatementCommand(AnalysisQueueCommands<StatementGateRun, S
                     CommandOutput.Write(await drafts.List.ExecuteAsync(owner, ParseDraftView(view), DefaultListLimit, cancellationToken));
                     return 0;
                 case ["statements", "draft", "list", var view, var limit]:
-                    CommandOutput.Write(await drafts.List.ExecuteAsync(owner, ParseDraftView(view), ParseLimit(limit), cancellationToken));
+                    CommandOutput.Write(await drafts.List.ExecuteAsync(owner, ParseDraftView(view), OwnerCommand.ParseLimit(limit, Usage), cancellationToken));
                     return 0;
                 case ["statements", "draft", "run", var runId]:
                     CommandOutput.Write(await drafts.Run.ExecuteAsync(owner, runId, cancellationToken)
@@ -115,9 +115,6 @@ internal sealed class StatementCommand(AnalysisQueueCommands<StatementGateRun, S
         "failed" => StatementDraftView.Failed,
         _ => throw new ArgumentException(Usage)
     };
-
-    private static int ParseLimit(string text) =>
-        int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var limit) ? limit : throw new ArgumentException(Usage);
 
     private static DateOnly ParseDate(string text) =>
         DateOnly.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)

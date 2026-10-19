@@ -1,4 +1,3 @@
-using System.Globalization;
 using CivicLens.Application.Relationships;
 using CivicLens.Core.Review;
 using CivicLens.Host.Analysis;
@@ -30,7 +29,7 @@ internal sealed class RelationshipCommand(
                     CommandOutput.Write(await drafts.List.ExecuteAsync(owner, ParseView(view), DefaultListLimit, cancellationToken));
                     return 0;
                 case ["relationships", "draft", "list", var view, var limit]:
-                    CommandOutput.Write(await drafts.List.ExecuteAsync(owner, ParseView(view), ParseLimit(limit), cancellationToken));
+                    CommandOutput.Write(await drafts.List.ExecuteAsync(owner, ParseView(view), OwnerCommand.ParseLimit(limit, Usage), cancellationToken));
                     return 0;
                 case ["relationships", "draft", "refresh"]:
                     CommandOutput.Write(new { pairs = await refresh.ExecuteAsync(owner, cancellationToken) });
@@ -57,7 +56,4 @@ internal sealed class RelationshipCommand(
         "failed" => RelationshipDraftView.Failed,
         _ => throw new ArgumentException(Usage)
     };
-
-    private static int ParseLimit(string text) =>
-        int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var limit) ? limit : throw new ArgumentException(Usage);
 }

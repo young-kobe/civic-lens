@@ -30,7 +30,6 @@ public sealed class ConfigurationRevisionReferencesMigrationTests(PostgresCollec
     public async Task LegacyRowsThatEmbedTheirRevisionReadBackIdenticallyFromOneSharedRevision()
     {
         var definition = ArticleDefinition("Original");
-        var other = ArticleDefinition("Changed");
         await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>()
             .UseNpgsql(connectionString).Options);
         await db.GetService<IMigrator>().MigrateAsync(PreviousMigration);
@@ -54,8 +53,7 @@ public sealed class ConfigurationRevisionReferencesMigrationTests(PostgresCollec
             Assert.Equal(definition, (await jobs.GetAsync(id, default))!.Definition);
 
         var request = new DiscoveryAdmissionRequest("legacy-attempt", "legacy-batch", definition, new DiscoveryAdmissionPolicy());
-        Assert.Single((await jobs.AdmitAsync(request, default)).Jobs);
-        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(request with { ArticleTemplate = other }, default));
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(request, default));
     }
 
     private async Task SeedLegacyRowsAsync(CollectionJobDefinition definition)

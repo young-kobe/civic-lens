@@ -190,12 +190,15 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
         ImmutableArray<VoteBill> bills, CancellationToken cancellationToken)
     {
         if (bills.IsEmpty) return [];
-        var congresses = bills.Select(bill => bill.Congress).Distinct().ToArray();
-        var billTypes = bills.Select(bill => bill.BillType).Distinct().ToArray();
-        var billNumbers = bills.Select(bill => bill.BillNumber).Distinct().ToArray();
-        var actions = await db.Set<ActionDraftRow>().AsNoTracking()
-            .Where(row => congresses.Contains(row.Congress) && billTypes.Contains(row.BillType) && billNumbers.Contains(row.BillNumber))
-            .Select(row => new { row.RecordId, row.Congress, row.BillType, row.BillNumber }).ToArrayAsync(cancellationToken);
+        var keys = bills.Select(bill => (bill.Congress, bill.BillType, bill.BillNumber)).Distinct().ToArray();
+        var actions = await db.Set<ActionDraftRow>().FromSqlRaw("""
+                SELECT d.* FROM action_drafts d
+                JOIN unnest({0}, {1}, {2}) AS k(congress, bill_type, bill_number)
+                  ON d.congress = k.congress AND d.bill_type = k.bill_type AND d.bill_number = k.bill_number
+                """,
+                keys.Select(key => key.Congress).ToArray(), keys.Select(key => key.BillType).ToArray(),
+                keys.Select(key => key.BillNumber).ToArray())
+            .AsNoTracking().Select(row => new { row.RecordId, row.Congress, row.BillType, row.BillNumber }).ToArrayAsync(cancellationToken);
         return bills.ToDictionary(bill => bill.VoteRecordId, bill =>
             actions.Where(action => action.Congress == bill.Congress && action.BillType == bill.BillType && action.BillNumber == bill.BillNumber)
                 .Select(action => action.RecordId).Order(StringComparer.Ordinal).ToImmutableArray(), StringComparer.Ordinal);

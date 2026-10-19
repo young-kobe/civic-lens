@@ -11,7 +11,7 @@ public static class HouseVoteListParser
     {
         ArgumentNullException.ThrowIfNull(scope);
         var current = HouseVoteListUrl.Read(sourceUrl, scope.Url);
-        var wire = HouseVoteJson.Deserialize<WirePage>(json, "House vote list page");
+        var wire = CongressApiJson.Deserialize<WirePage>(json, "House vote list page");
         if (wire.HouseRollCallVotes is null || wire.Pagination is null)
             throw new InvalidDataException("House vote list page must contain houseRollCallVotes and pagination.");
         if (wire.HouseRollCallVotes.Length > ApiPageQuery.PageLimit)

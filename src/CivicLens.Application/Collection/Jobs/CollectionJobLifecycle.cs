@@ -89,13 +89,6 @@ public static class CollectionJobLifecycle
         return SaturatingAdd(now, delay);
     }
 
-    public static int Remaining(CollectionJobPolicy policy, int attemptsCompleted) =>
-        Math.Max(0, policy.MaxAttempts - attemptsCompleted);
-
-    public static int ReservedRequestCharge(CollectionRequest request) => request.MaxRequests;
-    public static long ReservedByteCharge(CollectionRequest request) => request.MaxBytes;
-    public static int ReservedTimeoutCharge(CollectionRequest request) => request.TimeoutSeconds;
-
     private static TimeSpan? ToRetryDelay(long? seconds)
     {
         if (seconds is null) return null;

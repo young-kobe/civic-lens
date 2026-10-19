@@ -6,7 +6,7 @@ public static class HouseVoteMembersParser
 
     public static HouseVoteMemberVotes Parse(ReadOnlySpan<byte> json, HouseVoteRoll expected)
     {
-        var wire = HouseVoteJson.Deserialize<WireMembers>(json, "House vote members");
+        var wire = CongressApiJson.Deserialize<WireMembers>(json, "House vote members");
         var members = wire.HouseRollCallVoteMemberVotes
             ?? throw new InvalidDataException("House vote members must contain houseRollCallVoteMemberVotes.");
         if (members.Results is not { Length: > 0 } results || results.Any(IsIncomplete))

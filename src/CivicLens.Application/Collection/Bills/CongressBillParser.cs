@@ -1,6 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace CivicLens.Application.Collection.Bills;
 
@@ -8,15 +6,10 @@ public static class CongressBillParser
 {
     public const string Version = "congress-bill-v1";
     private static readonly string[] UpdateDateFormats = ["yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:sszzz"];
-    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
-    {
-        NumberHandling = JsonNumberHandling.AllowReadingFromString
-    };
-
     public static CongressBill Parse(ReadOnlySpan<byte> json, CongressBillListItem expected)
     {
         ArgumentNullException.ThrowIfNull(expected);
-        var bill = Deserialize(json).Bill
+        var bill = CongressApiJson.Deserialize<WireDetail>(json, "Bill detail").Bill
             ?? throw new InvalidDataException("Bill detail must contain a bill.");
         if (bill is not
             {
@@ -31,19 +24,6 @@ public static class CongressBillParser
         return new CongressBill(bill.Congress.Value, type, bill.Number.Value, bill.Title, bill.IntroducedDate.Value,
             ReadUpdateDate(bill.UpdateDate), ReadPolicyArea(bill.PolicyArea), ReadSponsors(bill.Sponsors),
             ReadCosponsorCount(bill.Cosponsors), ReadCount(bill.Actions, "action"), ReadCount(bill.Summaries, "summary"));
-    }
-
-    private static WireDetail Deserialize(ReadOnlySpan<byte> json)
-    {
-        try
-        {
-            return JsonSerializer.Deserialize<WireDetail>(json, Options)
-                ?? throw new InvalidDataException("Bill detail is empty.");
-        }
-        catch (JsonException exception)
-        {
-            throw new InvalidDataException("Bill detail is not valid JSON of the expected shape.", exception);
-        }
     }
 
     internal static DateTimeOffset ReadUpdateDate(string updateDate) =>

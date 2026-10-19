@@ -205,7 +205,7 @@ A 304 has no new discovery result. Retained candidates stay bound to the earlier
 
 **Evidence.** Application snapshots discovery evidence immutably, with the original request scope. Infrastructure stores it in `collection_discoveries` in the same transaction as the attempt and capture identity. A conflicting replay of candidate URLs, status, or request snapshot is rejected. Receipt replay rebuilds this evidence without another fetch. Discovery creates no document version or editorial claim.
 
-**Admission.** `discovery admit` turns one persisted parsed feed or HTML discovery into page jobs. `feeds admit` is an alias. The current enabled source configuration supplies the article job settings and the admission policy. Its source ID, discovery mode, and scope must match the retained discovery.
+**Admission.** `discovery admit` turns one persisted parsed feed or HTML discovery into page jobs. The current enabled source configuration supplies the article job settings and the admission policy. Its source ID, discovery mode, and scope must match the retained discovery.
 
 A batch reserves the full aggregate retry allowance of each admitted job against the request, byte, timeout, and job-count caps. Defaults allow at most 10 jobs, 150 requests, 60 MB, and 900 timeout seconds over their full lifetimes. These limits apply to one admission; another explicit batch authorizes more work. Unused allowance is not redistributed within a committed batch.
 
@@ -460,7 +460,7 @@ Provider exception details are not printed, because they can hold connection val
 - Conflicting attempt replays and reuse of a capture hash with another length fail without partial writes.
 - The migration adds the prior-link composite foreign key explicitly. EF alternate keys would make the capture column non-nullable for every outcome. The model keeps a unique index on the referenced pair.
 - `collection_discoveries` holds discovery evidence. `collection_admission_batches` holds batch inputs and results. `collection_candidate_jobs` holds the URL bindings of admitted candidates.
-- A migration renamed the old feed tables without rewriting evidence. Legacy feed batch input serialization stays, so old batches replay idempotently.
+- A migration renamed the old feed tables without rewriting evidence. Admission batches store the discovery mode in their input. Batches from before this change do not replay, so reset dev rows.
 - `collection_jobs`, `collection_job_attempts`, `collection_job_origins`, `collection_collector_slot`, and `collection_source_schedules` hold managed job state.
 - `collection_configuration_revisions` holds each configuration revision once.
 - `collection_jobs.source_id` is a NOT NULL copy of the definition source ID. `collection_jobs.is_root` comes from `CollectionJobDefinition.IsRoot`. `ix_collection_jobs_root_source_created` serves the latest root job of a source. `ix_collection_jobs_active_root_source_id` serves the active-root read of the scheduler.
