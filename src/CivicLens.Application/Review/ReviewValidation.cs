@@ -149,7 +149,7 @@ internal static class ReviewValidation
     public static void ValidateListFilter(DraftListFilter filter)
     {
         if (!Enum.IsDefined(filter.Status)) throw new ArgumentOutOfRangeException(nameof(filter));
-        if (filter.From > filter.To) throw new ArgumentException("The date range ends before it starts.", nameof(filter));
+        if (filter.From > filter.To) throw new DraftListDateRangeException();
         foreach (var id in new[] { filter.IssueId, filter.OfficialId })
         {
             if (id is not null && (string.IsNullOrWhiteSpace(id) || id.Length > MaximumFilterIdLength))

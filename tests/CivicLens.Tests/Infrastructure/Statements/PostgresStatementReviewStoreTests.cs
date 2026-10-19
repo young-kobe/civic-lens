@@ -582,6 +582,8 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         await SetEventDateAsync(approvedNewest, new DateOnly(2026, 9, 1));
         await SetEventDateAsync(awaiting, new DateOnly(2026, 6, 1));
         await SetEventDateAsync(overCap, new DateOnly(2025, 12, 1));
+        await SetDraftPriorityAsync(approvedNewest, 3);
+        await SetDraftPriorityAsync(requested, 1);
         var list = new ListStatementReviews(reviews);
 
         async Task<PageWalk> Walk(DraftStatusFilter filter) => await PageWalk.RunAsync(async cursor =>
@@ -840,6 +842,13 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
             SpeakerOfficialIds = speakers,
             IssueIds = issues
         });
+
+    // Statements have no tier, so a queue priority must not change their order.
+    private Task SetDraftPriorityAsync(string candidate, int priority) => ExecuteAsync(connectionString, $"""
+        INSERT INTO statement_analysis (candidate_id, task, status, fence, attempts, reserved_tokens, created_at_utc_ticks, priority)
+        VALUES ('{candidate}', '{StatementDraftTask.Task}', 'Succeeded', 0, 0, 0, 0, {priority})
+        ON CONFLICT (candidate_id, task) DO UPDATE SET priority = EXCLUDED.priority
+        """);
 
     private Task SetEventDateAsync(string candidate, DateOnly eventOn) =>
         ExecuteAsync(connectionString, $"UPDATE statement_drafts SET event_on = '{eventOn:yyyy-MM-dd}' WHERE candidate_id = '{candidate}'");

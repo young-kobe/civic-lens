@@ -43,7 +43,7 @@ public abstract class DraftListPage : ComponentBase
             await load();
         }
         catch (OperationCanceledException) when (RequestAborted.IsCancellationRequested) { throw; }
-        catch (DateRangeException exception)
+        catch (DraftListDateRangeException exception)
         {
             error = exception.Message;
         }
@@ -57,13 +57,8 @@ public abstract class DraftListPage : ComponentBase
         }
     }
 
-    protected DraftListFilter ReadListFilter()
-    {
-        var (from, to) = (ReadDate(From), ReadDate(To));
-        if (from > to) throw new DateRangeException();
-        return new(Filter, Choose(IssueId, Issues.Issues.Select(issue => issue.Id)),
-            Choose(OfficialId, Officials.People.Select(person => person.Key)), from, to);
-    }
+    protected DraftListFilter ReadListFilter() => new(Filter, Choose(IssueId, Issues.Issues.Select(issue => issue.Id)),
+        Choose(OfficialId, Officials.People.Select(person => person.Key)), ReadDate(From), ReadDate(To));
 
     protected string Href(string route, string? statusName, string? draftsCursor, string fragment, params string?[] otherParts)
     {
@@ -93,6 +88,4 @@ public abstract class DraftListPage : ComponentBase
         return DateOnly.TryParseExact(value, DateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
             ? date : throw new ArgumentException("A list filter is not valid.");
     }
-
-    private sealed class DateRangeException() : ArgumentException("The start date must not be after the end date.");
 }

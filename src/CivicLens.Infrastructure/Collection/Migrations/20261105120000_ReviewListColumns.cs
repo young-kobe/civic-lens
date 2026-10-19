@@ -37,9 +37,19 @@ public partial class ReviewListColumns : Migration
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.AddColumn<long>(name: "last_revised_at_utc_ticks", table: "action_drafts", type: "bigint", nullable: false, defaultValue: 0L);
-        migrationBuilder.AddColumn<long>(name: "last_revised_at_utc_ticks", table: "vote_drafts", type: "bigint", nullable: false, defaultValue: 0L);
         migrationBuilder.Sql("""
+            ALTER TABLE action_drafts ADD COLUMN last_revised_at_utc_ticks bigint;
+            UPDATE action_drafts d
+               SET last_revised_at_utc_ticks = r.created_at_utc_ticks
+              FROM action_revisions r
+             WHERE r.record_id = d.record_id AND r.revision_number = d.current_revision_number;
+            ALTER TABLE action_drafts ALTER COLUMN last_revised_at_utc_ticks SET NOT NULL;
+            ALTER TABLE vote_drafts ADD COLUMN last_revised_at_utc_ticks bigint;
+            UPDATE vote_drafts d
+               SET last_revised_at_utc_ticks = r.created_at_utc_ticks
+              FROM vote_revisions r
+             WHERE r.record_id = d.record_id AND r.revision_number = d.current_revision_number;
+            ALTER TABLE vote_drafts ALTER COLUMN last_revised_at_utc_ticks SET NOT NULL;
             CREATE INDEX ix_action_drafts_needs_action_revised
                 ON action_drafts (last_revised_at_utc_ticks DESC, record_id DESC) WHERE review_status <> 'Approved';
             """);

@@ -32,8 +32,10 @@ public sealed record PageCursor(PageDirection Direction, long Ticks, string Id, 
             : string.Create(CultureInfo.InvariantCulture, $"{direction}.{Ticks}.{Id}");
     }
 
-    public static PageCursor? RequireRank(PageCursor? cursor, bool ranked, string parameterName = "cursor") =>
-        cursor is not null && (cursor.Rank is not null) != ranked ? throw Invalid(parameterName) : cursor;
+    public static void RequireRank(PageCursor? cursor, bool ranked)
+    {
+        if (cursor is not null && (cursor.Rank is not null) != ranked) throw Invalid("cursor");
+    }
 
     private static bool IsValidId(string value) => value.Length is > 0 and <= MaximumIdLength &&
         value.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_');
