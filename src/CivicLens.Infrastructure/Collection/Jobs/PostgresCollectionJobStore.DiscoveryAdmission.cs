@@ -55,16 +55,13 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
             var savedTemplate = batch is null ? null : await ReadAdmissionTemplateAsync(db, batch, cancellationToken);
             var request = prepareRequest(savedTemplate, DateOnly.FromDateTime(now.UtcDateTime));
             var storedTemplate = StoredJobDefinition.WithoutRevision(request.ArticleTemplate);
-            // Keep the old feed input shape so durable batch replays created before this generalization still match.
             var inputJson = request.RecheckKnownCandidates
                 ? Write(new AutomaticAdmissionInput(request.AttemptId, storedTemplate, request.Policy,
                     request.ExpectedDiscoveryMode, request.RecheckKnownCandidates))
-                : request.ExpectedDiscoveryMode == CollectionMode.Feed
-                    ? Write(new LegacyAdmissionInput(request.AttemptId, storedTemplate, request.Policy))
-                    : Write(new AdmissionInput(request.AttemptId, storedTemplate, request.Policy, request.ExpectedDiscoveryMode));
+                : Write(new AdmissionInput(request.AttemptId, storedTemplate, request.Policy, request.ExpectedDiscoveryMode));
             if (batch is not null)
             {
-                if (!MatchesAdmission(batch, inputJson, request) && !MatchesLegacyAdmission(batch, savedTemplate!, request))
+                if (!MatchesAdmission(batch, inputJson, request))
                     throw new ArgumentException("The admission idempotency key belongs to different input.", nameof(request));
                 return Read<DiscoveryAdmissionResult>(batch.ResultJson);
             }
@@ -191,18 +188,6 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
     private static bool MatchesAdmission(DiscoveryAdmissionBatchRow batch, string inputJson, DiscoveryAdmissionRequest request) =>
         batch.ConfigurationRevisionId == request.ArticleTemplate.ConfigurationRevision?.Id && SameJson(batch.InputJson, inputJson);
 
-    private static bool MatchesLegacyAdmission(DiscoveryAdmissionBatchRow batch, CollectionJobDefinition savedTemplate,
-        DiscoveryAdmissionRequest request)
-    {
-        if (savedTemplate.ConfigurationRevision is not null || savedTemplate.CoverageAsOf is not null)
-            return false;
-        var template = request.ArticleTemplate with { ConfigurationRevision = null, CoverageAsOf = null };
-        var legacyJson = request.ExpectedDiscoveryMode == CollectionMode.Feed
-            ? Write(new LegacyAdmissionInput(request.AttemptId, template, request.Policy))
-            : Write(new AdmissionInput(request.AttemptId, template, request.Policy, request.ExpectedDiscoveryMode));
-        return SameJson(batch.InputJson, legacyJson);
-    }
-
     private static bool SameJson(string stored, string current) =>
         JsonNode.DeepEquals(JsonNode.Parse(stored), JsonNode.Parse(current));
 
@@ -221,7 +206,6 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
     }
 
-    private sealed record LegacyAdmissionInput(string AttemptId, CollectionJobDefinition ArticleTemplate, DiscoveryAdmissionPolicy Policy);
     private sealed record AdmissionInput(string AttemptId, CollectionJobDefinition ArticleTemplate, DiscoveryAdmissionPolicy Policy,
         CollectionMode ExpectedDiscoveryMode);
     private sealed record AutomaticAdmissionInput(string AttemptId, CollectionJobDefinition ArticleTemplate,

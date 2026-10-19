@@ -1,4 +1,3 @@
-using System.Globalization;
 using CivicLens.Application.Actions;
 using CivicLens.Core.Review;
 using CivicLens.Host.Analysis;
@@ -29,7 +28,7 @@ internal sealed class ActionCommand(AnalysisQueueCommands<ActionDraftRun, Action
                     CommandOutput.Write(await drafts.List.ExecuteAsync(owner, ParseView(view), DefaultListLimit, cancellationToken));
                     return 0;
                 case ["actions", "draft", "list", var view, var limit]:
-                    CommandOutput.Write(await drafts.List.ExecuteAsync(owner, ParseView(view), ParseLimit(limit), cancellationToken));
+                    CommandOutput.Write(await drafts.List.ExecuteAsync(owner, ParseView(view), OwnerCommand.ParseLimit(limit, Usage), cancellationToken));
                     return 0;
                 case ["actions", "draft", "requeue", "--all"]:
                     CommandOutput.Write(new { requeued = await drafts.Requeue.ExecuteAsync(owner, null, cancellationToken) });
@@ -59,7 +58,4 @@ internal sealed class ActionCommand(AnalysisQueueCommands<ActionDraftRun, Action
         "failed" => ActionDraftView.Failed,
         _ => throw new ArgumentException(Usage)
     };
-
-    private static int ParseLimit(string text) =>
-        int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var limit) ? limit : throw new ArgumentException(Usage);
 }

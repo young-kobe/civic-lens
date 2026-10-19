@@ -205,7 +205,7 @@ A 304 has no new discovery result. Retained candidates stay bound to the earlier
 
 **Evidence.** Application snapshots discovery evidence immutably, with the original request scope. Infrastructure stores it in `collection_discoveries` in the same transaction as the attempt and capture identity. A conflicting replay of candidate URLs, status, or request snapshot is rejected. Receipt replay rebuilds this evidence without another fetch. Discovery creates no document version or editorial claim.
 
-**Admission.** `discovery admit` turns one persisted parsed feed or HTML discovery into page jobs. `feeds admit` is an alias. The current enabled source configuration supplies the article job settings and the admission policy. Its source ID, discovery mode, and scope must match the retained discovery.
+**Admission.** `discovery admit` turns one persisted parsed feed or HTML discovery into page jobs. The current enabled source configuration supplies the article job settings and the admission policy. Its source ID, discovery mode, and scope must match the retained discovery.
 
 A batch reserves the full aggregate retry allowance of each admitted job against the request, byte, timeout, and job-count caps. Defaults allow at most 10 jobs, 150 requests, 60 MB, and 900 timeout seconds over their full lifetimes. These limits apply to one admission; another explicit batch authorizes more work. Unused allowance is not redistributed within a committed batch.
 

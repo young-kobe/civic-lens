@@ -13,7 +13,6 @@ internal static class BriefFixtures
     public static readonly DateTimeOffset InWeek = new(2026, 10, 7, 12, 0, 0, TimeSpan.Zero);
     public static readonly string Fingerprint = new('f', 64);
     public static readonly string RecordId = BriefWeek.RecordIdOf(Week);
-    public static readonly string ExampleRecordId = new('a', 64);
     public static readonly DateTimeOffset Created = new(2026, 10, 12, 9, 0, 0, TimeSpan.Zero);
 
     public static readonly IReadOnlyDictionary<string, string> Officials = new Dictionary<string, string>

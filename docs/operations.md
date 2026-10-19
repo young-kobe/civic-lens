@@ -289,7 +289,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- di
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jobs run <job-id> src/CivicLens.Collector/bin/Release/net10.0/CivicLens.Collector.dll .runtime/captures
 ```
 
-`feeds get` and `feeds admit` are aliases of `discovery get` and `discovery admit`. For HTML, use the same commands with a source in `mode: "html"` and a listing-page URL.
+For HTML, use the same commands with a source in `mode: "html"` and a listing-page URL.
 
 Discovery collection also works through `jobs enqueue` and `jobs run`. Inspect the job's attempts to find the evidence attempt ID. `discovery get` reports `parsed`, `invalid`, `unsupported`, or `limitExceeded`, with URLs only after complete parsing. It also prints `outOfScopeCount`. A successful capture does not prove a valid discovery. For a 304, inspect the earlier captured discovery attempt.
 

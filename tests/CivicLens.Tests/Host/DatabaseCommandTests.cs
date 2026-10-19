@@ -93,10 +93,11 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Theory]
-    [InlineData(CollectionMode.Feed, "feeds")]
-    [InlineData(CollectionMode.Html, "discovery")]
-    public async Task DiscoveryRecoveryAdmissionReplayAndArticleCollectionWorkThroughCli(CollectionMode mode, string command)
+    [InlineData(CollectionMode.Feed)]
+    [InlineData(CollectionMode.Html)]
+    public async Task DiscoveryRecoveryAdmissionReplayAndArticleCollectionWorkThroughCli(CollectionMode mode)
     {
+        const string command = "discovery";
         var configPath = Path.Combine(directory, "config.json");
         var config = JsonSerializer.Deserialize<CollectionConfiguration>(await File.ReadAllTextAsync(configPath),
             ConfigurationJson.Options)!;

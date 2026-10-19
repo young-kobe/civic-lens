@@ -98,7 +98,6 @@ if (args is [] or ["--help"] or ["help"])
         The review workspace binds only to 127.0.0.1 and defaults to port 5081.
         New admissions default to today in UTC; existing keys retain their saved date when --as-of is omitted.
         --as-of selects eligibility, not historical fetching or attribution.
-        feeds get/admit remain aliases for discovery get/admit.
         Database commands require CIVIC_LENS_DATABASE (Postgres connection string with Host and Database).
         collect and receipts list are database-free. collect-import saves a handoff before importing.
         receipts replay imports saved handoffs without collecting again; use the capture directory after relocation.
@@ -145,7 +144,7 @@ if (args.Contains("--as-of", StringComparer.Ordinal))
     if (args is not [.., "--as-of", var dateText] ||
         !DateOnly.TryParseExact(dateText, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out coverageAsOf) ||
         args[..^2] is not (["collect" or "collect-import", _, _, _, _] or
-            ["jobs", "enqueue", _, _, _] or ["feeds" or "discovery", "admit", _, _, _, _]))
+            ["jobs", "enqueue", _, _, _] or ["discovery", "admit", _, _, _, _]))
     {
         Console.Error.WriteLine("Use a trailing --as-of yyyy-MM-dd with collect, collect-import, jobs enqueue, or discovery admit.");
         return 2;
@@ -155,7 +154,7 @@ if (args.Contains("--as-of", StringComparer.Ordinal))
 }
 
 if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _] or ["collect-import", _, _, _, _]
-    or ["feeds" or "discovery", "get", _] or ["feeds" or "discovery", "admit", _, _, _, _]
+    or ["discovery", "get", _] or ["discovery", "admit", _, _, _, _]
     or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args) &&
     !CollectionWorkerCommand.Matches(args) && !DocumentCommand.Matches(args) && !ReleaseCommand.Matches(args) &&
     !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args) && !ActionCommand.Matches(args) && !VoteCommand.Matches(args) && !RelationshipCommand.Matches(args) && !BriefCommand.Matches(args))
@@ -355,7 +354,7 @@ try
             PostgresDocumentComparisonStore.FromConnectionString(Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!));
     }
 
-    if (args is ["feeds" or "discovery", "get", var discoveryId])
+    if (args is ["discovery", "get", var discoveryId])
     {
         if (!PendingCollectionHandoff.IsValidAttemptId(discoveryId)) throw new ArgumentException("Invalid attempt ID.");
         var evidence = CreateDatabase();
@@ -363,7 +362,7 @@ try
         return await DiscoveryCommand.InspectAsync(evidence, discoveryId, cancellation.Token);
     }
 
-    if (args is ["feeds" or "discovery", "admit", var discoveryConfigPath, var discoverySourceId, var discoveryAttemptId, var admissionKey])
+    if (args is ["discovery", "admit", var discoveryConfigPath, var discoverySourceId, var discoveryAttemptId, var admissionKey])
     {
         var config = await ReadConfigurationAsync(discoveryConfigPath, cancellation.Token);
         var source = new ConfiguredCollectionSource(config, discoverySourceId, admissionAsOf);

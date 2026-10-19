@@ -77,8 +77,8 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var result = await Runner(new RejectCollector()).ExecuteAsync(claim.Job.JobId, root, LeaseDuration);
 
         Assert.Equal(CollectionJobState.Failed, result.Job!.State);
-        Assert.Equal(5, result.Job.ReservedRequests);
-        Assert.Equal(100, result.Job.ReservedBytes);
+        Assert.Equal(5, CollectionJobCharges.Of(result.Job.Attempts).Requests);
+        Assert.Equal(100, CollectionJobCharges.Of(result.Job.Attempts).Bytes);
         Assert.Null(Assert.Single(result.Job.Attempts).Resolution!.Receipt);
         Assert.Equal(start.Attempt.AttemptId, Assert.Single(await handoffs.ListAsync(default)));
         Assert.Equal(receipt.FinalUrl, (await evidence.GetAsync(start.Attempt.AttemptId, default))!.AttemptResult.FinalUrl);
@@ -148,7 +148,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         await Assert.ThrowsAsync<InvalidOperationException>(() => jobs.SettleAttemptAsync(claim.Lease,
             start.Attempt.AttemptId, CollectionJobLifecycle.Resolve(altered), default));
         var unchanged = (await jobs.GetAsync(claim.Job.JobId, default))!;
-        Assert.Equal(5, unchanged.ReservedRequests);
+        Assert.Equal(5, CollectionJobCharges.Of(unchanged.Attempts).Requests);
         Assert.Null(Assert.Single(unchanged.Attempts).Resolution);
         Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId,
             CollectionJobLifecycle.Resolve(receipt), default));
@@ -204,9 +204,9 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
             (await jobs.TryStartAttemptAsync(competing.Lease, root, default)).BlockReason);
         Assert.True(await jobs.SettleAttemptAsync(recovered.Lease, start.Attempt.AttemptId, interrupted, default));
         var retained = (await jobs.GetAsync(original.Job.JobId, default))!;
-        Assert.Equal(5, retained.ReservedRequests);
-        Assert.Equal(100, retained.ReservedBytes);
-        Assert.Equal(10, retained.ReservedTimeoutSeconds);
+        Assert.Equal(5, CollectionJobCharges.Of(retained.Attempts).Requests);
+        Assert.Equal(100, CollectionJobCharges.Of(retained.Attempts).Bytes);
+        Assert.Equal(10, CollectionJobCharges.Of(retained.Attempts).TimeoutSeconds);
         Assert.Equal(CollectionJobState.WaitingToRetry, retained.State);
     }
 
@@ -217,9 +217,9 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var runner = Runner(new ReceiptCollector(429));
         var completed = await runner.ExecuteAsync(job.JobId, root, LeaseDuration);
         Assert.Equal(CollectionJobState.WaitingToRetry, completed.Job!.State);
-        Assert.Equal(2, completed.Job.ReservedRequests);
-        Assert.Equal(0, completed.Job.ReservedBytes);
-        Assert.Equal(10, completed.Job.ReservedTimeoutSeconds);
+        Assert.Equal(2, CollectionJobCharges.Of(completed.Job.Attempts).Requests);
+        Assert.Equal(0, CollectionJobCharges.Of(completed.Job.Attempts).Bytes);
+        Assert.Equal(10, CollectionJobCharges.Of(completed.Job.Attempts).TimeoutSeconds);
         Assert.True(await UnclaimableUntilAsync("same-origin", Definition()) > DateTimeOffset.UtcNow.AddSeconds(50));
         var unrelated = await EnqueueClaimAsync("unrelated", Definition("https://elsewhere.test"));
         Assert.Equal(CollectionJobStartStatus.Started,
@@ -262,7 +262,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         async Task<CollectionJobCharges> ChargesAsync(string jobId)
         {
             var job = (await jobs.GetAsync(jobId, default))!;
-            return new(job.ReservedRequests, job.ReservedBytes, job.ReservedTimeoutSeconds);
+            return CollectionJobCharges.Of(job.Attempts);
         }
 
         static CollectionJobCharges Reserve(CollectionJobCharges charged, CollectionRequest request) => new(
@@ -451,8 +451,8 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var result = await Runner(new RejectCollector()).ExecuteAsync(claim.Job.JobId, root, LeaseDuration);
 
         Assert.Equal(CollectionJobState.WaitingToRetry, result.Job!.State);
-        Assert.Equal(5, result.Job.ReservedRequests);
-        Assert.Equal(100, result.Job.ReservedBytes);
+        Assert.Equal(5, CollectionJobCharges.Of(result.Job.Attempts).Requests);
+        Assert.Equal(100, CollectionJobCharges.Of(result.Job.Attempts).Bytes);
         Assert.True(await UnclaimableUntilAsync("after-recovery", Definition()) > DateTimeOffset.UtcNow);
     }
 

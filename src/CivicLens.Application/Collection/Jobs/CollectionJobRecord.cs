@@ -10,9 +10,4 @@ public sealed record CollectionJobRecord(
     DateTimeOffset CreatedAt,
     DateTimeOffset? RetryAt,
     bool CancellationRequested,
-    IReadOnlyList<CollectionJobAttempt> Attempts)
-{
-    public int ReservedRequests => CollectionJobCharges.Of(Attempts).Requests;
-    public long ReservedBytes => CollectionJobCharges.Of(Attempts).Bytes;
-    public int ReservedTimeoutSeconds => CollectionJobCharges.Of(Attempts).TimeoutSeconds;
-}
+    IReadOnlyList<CollectionJobAttempt> Attempts);
