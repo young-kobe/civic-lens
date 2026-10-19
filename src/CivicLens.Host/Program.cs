@@ -173,7 +173,8 @@ try
         CollectionWorkerCommand.ValidateArguments(args);
         var workerConfiguration = ConfigurationFile.ReadCollectionFromEnvironment()
             ?? throw new ArgumentException("Worker requires CIVIC_LENS_COLLECTION_CONFIG.");
-        var issues = StatementIssueRubric.FromEnvironment();
+        var issueConfiguration = ConfigurationFile.ReadIssuesFromEnvironment();
+        var issues = StatementIssueRubric.From(issueConfiguration);
         if (issues is null && workerConfiguration.Sources.Any(source => source.Enabled && source.ApiParser == ApiParser.CongressBillList))
             throw new ArgumentException("Worker requires CIVIC_LENS_ISSUES_CONFIG when a Congress.gov bill list source is enabled.");
         var evidenceConcurrency = EvidenceProcessingConfiguration.ReadConcurrency();
@@ -182,7 +183,8 @@ try
         var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!;
         var queue = PostgresCollectionWorkerQueue.FromConnectionString(connectionString);
         var analysisContexts = AnalysisDbContextFactory.Create(connectionString);
-        var analysis = DocumentChangeDraftComposition.Create(analysisContexts, connectionString, workerConfiguration, issues);
+        var analysis = DocumentChangeDraftComposition.Create(analysisContexts, connectionString, workerConfiguration,
+            issueConfiguration?.Issues.Select(issue => issue.Id) ?? []);
         await using var analysisWakeup = analysis.Wakeup;
         var gate = StatementGateComposition.Create(analysisContexts, connectionString, issues);
         await using var gateWakeup = gate.Wakeup;

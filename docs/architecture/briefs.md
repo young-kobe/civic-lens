@@ -172,7 +172,7 @@ The request uses model `claude-sonnet-5-5`, effort `medium`, and at most 8,000 o
 
 Structured outputs fix a `headline`, a list of `paragraphs`, and a `confidence`. Each paragraph has a `text` and its `citationIds`. The schema allows only the IDs that were sent. The confidence stays in the run output and is never in the revision.
 
-The byte cap is the smaller of 100,000 UTF-8 bytes and the run token limit minus the output allowance. Filling the prompt keeps `BriefDraftTask.RetryReasonReserveBytes` (4,096 bytes) free for the rejection reasons of a retry. A first group that does not fit within the cap minus the reserve blocks the week as `overByteCap`.
+The byte cap is the smaller of 100,000 UTF-8 bytes and the [call cap](analysis.md#budget) minus the output allowance. Filling the prompt keeps `BriefDraftTask.RetryReasonReserveBytes` (4,096 bytes) free for the rejection reasons of a retry. A first group that does not fit within the cap minus the reserve blocks the week as `overByteCap`.
 
 ### Checks
 
@@ -264,7 +264,7 @@ A requeued brief reads the selection again. The record set of a closed week is f
 
 ### Executor
 
-The executor is `AnalysisWorker<BriefDraftRun>` with `BriefDraftStep`. It runs beside the other analysis loops in the `worker` process, with its own wakeup, status row, daily limit, and run limit. It uses `CIVIC_LENS_ANALYSIS_CONCURRENCY`.
+The executor is `AnalysisWorker<BriefDraftRun>` with `BriefDraftStep`. It runs beside the other analysis loops in the `worker` process, with its own wakeup, status row, daily limit, and call cap. It uses `CIVIC_LENS_ANALYSIS_CONCURRENCY`.
 
 Its required variables are in [operations](../operations.md#brief-drafting). A daily limit without the key is a configuration error. The status row is in `document_change_analysis_status` under the task `brief-draft`. The names of the officials come from the collection configuration of the worker.
 

@@ -210,7 +210,8 @@ internal static class ReviewWorkspace
         services.AddScoped<GetDocumentHistory>();
         services.AddScoped<GetDocumentComparison>();
         services.AddScoped<GetDocumentCitation>();
-        services.AddSingleton(ReadCatalog(Issues.Value.Issues.Select(issue => issue.Id)));
+        var issues = ConfigurationFile.ReadIssuesFromEnvironment() ?? new IssueConfiguration { PolicyAreas = [], Issues = [] };
+        services.AddSingleton(ReadCatalog(issues.Issues.Select(issue => issue.Id)));
         services.AddSingleton<IDocumentChangeReviewStore>(PostgresDocumentChangeReviewStore.FromConnectionString(connectionString));
         services.AddSingleton<IDocumentChangeAnalysisStore>(PostgresDocumentChangeAnalysisStore.FromConnectionString(connectionString));
         services.AddScoped<ListDocumentChangeAnalyses>();
@@ -225,7 +226,7 @@ internal static class ReviewWorkspace
         services.AddScoped<ListEligibleDocumentComparisons>();
         services.AddScoped<GetReviewOverview>();
         var contexts = AnalysisDbContextFactory.Create(connectionString);
-        ConfigureStatementReview(services, contexts);
+        ConfigureStatementReview(services, contexts, issues);
         ConfigureActionReview(services, contexts);
         ConfigureVoteReview(services, contexts);
         ConfigureRelationshipReview(services, contexts);
@@ -252,11 +253,12 @@ internal static class ReviewWorkspace
         }
     }
 
-    private static void ConfigureStatementReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)
+    private static void ConfigureStatementReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts,
+        IssueConfiguration issues)
     {
         services.AddSingleton<IStatementReviewStore>(new PostgresStatementReviewStore(contexts));
         services.AddSingleton<IStatementDraftStore>(new PostgresStatementDraftStore(contexts));
-        services.AddSingleton(Issues.Value);
+        services.AddSingleton(issues);
         services.AddSingleton<StatementSelectionResolver>();
         services.AddScoped<StatementReviewContextReader>();
         services.AddScoped<CreateStatementDraft>();
@@ -333,9 +335,6 @@ internal static class ReviewWorkspace
             provider.GetRequiredService<PublishedRecordLoaders>(), new PublicationCatalog(officials.Names), TimeProvider.System));
         services.AddScoped<ListPublishable>();
     }
-
-    private static readonly Lazy<IssueConfiguration> Issues = new(() =>
-        ConfigurationFile.ReadIssuesFromEnvironment() ?? new IssueConfiguration { PolicyAreas = [], Issues = [] });
 
     internal static ReviewCatalog ReadCatalog(IEnumerable<string> issueIds) =>
         new(issueIds, ReadIds("CIVIC_LENS_REVIEW_OFFICIALS"));

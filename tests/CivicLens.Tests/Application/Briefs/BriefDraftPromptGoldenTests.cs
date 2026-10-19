@@ -76,9 +76,9 @@ public sealed class BriefDraftPromptGoldenTests
     public void TheMinimumReservationIsTheSystemPromptPlusTheOutputAllowanceAndSettingsRejectALowerRunLimit()
     {
         Assert.True(BriefDraftPrompt.MinimumReservation > BriefDraftTask.MaximumOutputTokens);
-        Assert.Throws<ArgumentOutOfRangeException>(() => new BriefDraftSettings(10_000_000, BriefDraftPrompt.MinimumReservation - 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BriefDraftSettings(BriefDraftPrompt.MinimumReservation - 1));
         Assert.Equal(BriefDraftPrompt.MinimumReservation - BriefDraftTask.MaximumOutputTokens,
-            new BriefDraftSettings(10_000_000, BriefDraftPrompt.MinimumReservation).PromptByteCap);
+            new BriefDraftSettings(BriefDraftPrompt.MinimumReservation).PromptByteCap);
     }
 
     private static CivicLens.Application.Analysis.AnalysisModelRequest Build() =>

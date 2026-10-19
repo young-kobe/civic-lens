@@ -39,8 +39,11 @@ internal static class ConfigurationFile
 
     private static T Read<T>(string path, JsonSerializerOptions options) where T : class
     {
-        if (new FileInfo(path).Length > MaximumBytes) throw new ArgumentException("Configuration exceeds 1 MB.");
-        return JsonSerializer.Deserialize<T>(File.ReadAllBytes(path), options)
+        using var input = File.OpenRead(path);
+        var buffer = new byte[MaximumBytes + 1];
+        var count = input.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
+        if (count > MaximumBytes) throw new ArgumentException("Configuration exceeds 1 MB.");
+        return JsonSerializer.Deserialize<T>(buffer.AsSpan(0, count), options)
             ?? throw new ArgumentException("Configuration must not be null.");
     }
 }

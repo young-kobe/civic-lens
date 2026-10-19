@@ -82,7 +82,7 @@ public sealed class StatementGateStepTests
         var model = new FakeStatementGateModel();
         var smallest = StatementGatePrompt.MinimumReservation;
 
-        await Worker(store, model, new StatementGateSettings(10_000_000, smallest, 1)).ExecuteAsync(once: true);
+        await Worker(store, model, new StatementGateSettings(smallest, 1)).ExecuteAsync(once: true);
 
         Assert.Empty(model.Requests);
         Assert.Equal([store.Entries.Single().SubjectId], store.QueuedDrafts);
@@ -171,7 +171,7 @@ public sealed class StatementGateStepTests
     {
         var store = new FakeStatementGateStore(Article) { Charged = 99_000 };
         var model = new FakeStatementGateModel().Classify(Output([], 0.8, (RentIssue, "a rent cap")));
-        var worker = Worker(store, model, new StatementGateSettings(100_000, 50_000, 1));
+        var worker = Worker(store, model, new StatementGateSettings(100_000, 1));
 
         await worker.ExecuteAsync(once: true);
         Assert.Empty(model.Requests);

@@ -109,7 +109,7 @@ public sealed class RelationshipDraftStepTests
     [Fact]
     public async Task APromptOverTheByteCapBlocksWithoutACall()
     {
-        var settings = new RelationshipDraftSettings(10_000_000, RelationshipDraftPrompt.MinimumReservation);
+        var settings = new RelationshipDraftSettings(RelationshipDraftPrompt.MinimumReservation);
 
         var (store, model) = await RunAsync(Evidence(ActionPair()), new FakeRelationshipDraftModel(), settings);
 

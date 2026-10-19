@@ -52,5 +52,5 @@ public sealed class DocumentChangeDraftStep(IDocumentChangeAnalysisStore store, 
     }
 
     private AnalysisModelRequest? Bounded(AnalysisModelRequest? request) =>
-        request is not null && request.ReservedTokens <= settings.RunTokenLimit ? request : null;
+        request is not null && request.ReservedTokens <= settings.CallTokenLimit ? request : null;
 }

@@ -111,6 +111,7 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         using var job = JsonDocument.Parse(inspectedJob.Output);
         Assert.Equal("2020-01-01", job.RootElement.GetProperty("definition").GetProperty("coverageAsOf").GetString());
         Assert.Equal(64, job.RootElement.GetProperty("definition").GetProperty("configurationRevision").GetProperty("id").GetString()!.Length);
+        await ExpireCoverageAsync(configPath);
         var run = await RunWorkerOnceAsync(configPath, root);
         Assert.True(run.ExitCode == 0, run.Error + run.Output);
         await using var connection = new NpgsqlConnection(connectionString);
@@ -131,6 +132,7 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         var duplicate = await HostProcess.RunAsync(connectionString, arguments);
         using var duplicateOutput = JsonDocument.Parse(duplicate.Output);
         Assert.Equal(id, duplicateOutput.RootElement.GetProperty("jobId").GetString());
+        await ExpireCoverageAsync(configPath);
         var run = await RunWorkerOnceAsync(configPath, Path.Combine(directory, "captures"));
         Assert.True(run.ExitCode == 0, run.Error + run.Output);
         shutdown.Cancel();
@@ -205,6 +207,7 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         config["people"]![0]!["name"] = "Corrected name";
         await File.WriteAllTextAsync(configPath, config.ToJsonString());
         Assert.Equal(2, (await HostProcess.RunAsync(connectionString, arguments)).ExitCode);
+        await ExpireCoverageAsync(configPath);
         var run = await RunWorkerOnceAsync(configPath, Path.Combine(directory, "captures"));
         Assert.True(run.ExitCode == 0, run.Error + run.Output);
         var inspected = await HostProcess.RunAsync(connectionString, "jobs", "get", id);
@@ -327,6 +330,18 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
             typeof(HttpCollector).Assembly.Location, Path.Combine(directory, "captures")];
         if (asOf is not null) arguments = [.. arguments, "--as-of", asOf];
         return HostProcess.RunAsync(null, arguments);
+    }
+
+    private static async Task ExpireCoverageAsync(string configPath)
+    {
+        var config = JsonNode.Parse(await File.ReadAllTextAsync(configPath))!;
+        config["sources"]![0]!["coverage"] = new JsonArray(new JsonObject
+        {
+            ["personId"] = "person",
+            ["startsOn"] = "1990-01-01",
+            ["endsBefore"] = "1991-01-01"
+        });
+        await File.WriteAllTextAsync(configPath, config.ToJsonString());
     }
 
     private Task<(int ExitCode, string Output, string Error)> RunWorkerOnceAsync(string configPath, string captures) =>

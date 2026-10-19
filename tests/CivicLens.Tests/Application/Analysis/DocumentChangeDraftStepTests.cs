@@ -85,7 +85,7 @@ public sealed class DocumentChangeDraftStepTests
         var reads = 0;
         store.ReadEvidence = id => { reads++; return Task.FromResult<DocumentChangeDraftEvidence?>(store.Evidence[id]); };
 
-        await Worker(store, model, new DocumentChangeDraftSettings(100_000, 50_000, 1)).ExecuteAsync(once: true);
+        await Worker(store, model, new DocumentChangeDraftSettings(100_000, 1)).ExecuteAsync(once: true);
 
         Assert.Equal(0, reads);
         Assert.Empty(model.Requests);
@@ -155,7 +155,7 @@ public sealed class DocumentChangeDraftStepTests
         var model = new FakeDocumentChangeDraftModel();
         var minimum = DocumentChangeDraftPrompt.MinimumReservation;
 
-        await Worker(store, model, new DocumentChangeDraftSettings(minimum, minimum, 1)).ExecuteAsync(once: true);
+        await Worker(store, model, new DocumentChangeDraftSettings(minimum, 1)).ExecuteAsync(once: true);
 
         Assert.Empty(model.Requests);
         Assert.Equal((State.Failed, "outputRejected"), (store.Entries.Single().Status, store.Entries.Single().ErrorCode));

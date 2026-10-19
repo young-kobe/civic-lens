@@ -510,7 +510,7 @@ public sealed class ActionDraftStepTests
     {
         var world = Create(summaries: [new("00", "2025-01-03", "2025-01-05T10:00:00Z", "<p>" + new string('x', 2_000) + "</p>")]);
         var (_, probe) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output()));
-        var justFits = new ActionDraftSettings(10_000_000, probe.Requests[0].ReservedTokens + 10, 1);
+        var justFits = new ActionDraftSettings(probe.Requests[0].ReservedTokens + 10, 1);
         var model = new FakeHeadlineSummaryModel().Draft(Output(headline: "Ed Markey cosponsored a bill")).Draft(Output(headline: "Ed Markey cosponsored a bill"));
 
         var (store, _) = await RunAsync(world, model, settings: justFits);
@@ -533,7 +533,7 @@ public sealed class ActionDraftStepTests
     public async Task FactsThatAloneExceedTheByteCapStillBlockWithoutACall()
     {
         var model = new FakeHeadlineSummaryModel();
-        var settings = new ActionDraftSettings(10_000_000, ActionDraftPrompt.MinimumReservation, 1);
+        var settings = new ActionDraftSettings(ActionDraftPrompt.MinimumReservation, 1);
 
         var (store, _) = await RunAsync(Create(summaries: [Summary]), model, settings: settings);
 

@@ -121,7 +121,7 @@ A change date must also appear in its cited quote, in one of these forms: `2026-
 
 ### Budget
 
-`document_change_analysis_budget` holds the charged tokens for each UTC day of database time. Startup rejects a run limit below the smallest reservation, which is the system prompt bytes plus the output allowance.
+`document_change_analysis_budget` holds the charged tokens for each UTC day of database time. The call cap is the smaller of 120,000 tokens and the daily limit. One call never reserves more than the call cap. Startup rejects a daily limit below the smallest reservation, which is the system prompt bytes plus the output allowance.
 
 1. Before it reads evidence, the executor checks that the day can still hold the smallest reservation. If not, the entry waits and the drain pass stops.
 2. Before a call, the executor reserves its tokens under a row lock on that day. If they do not fit, the entry waits as WaitingForBudget until the next UTC midnight, and the pass stops.

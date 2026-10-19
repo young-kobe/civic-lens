@@ -159,7 +159,7 @@ public sealed class StatementDraftStepTests
     {
         var store = new FakeStatementDraftStore(DraftEvidence(new string('x', 5_000)));
         var model = new FakeStatementDraftModel();
-        var settings = new StatementDraftSettings(10_000_000, StatementDraftPrompt.MinimumReservation, 1);
+        var settings = new StatementDraftSettings(StatementDraftPrompt.MinimumReservation, 1);
 
         await Worker(store, model, settings).ExecuteAsync(once: true);
 
@@ -243,7 +243,7 @@ public sealed class StatementDraftStepTests
     {
         var store = new FakeStatementDraftStore(DraftEvidence()) { Charged = 99_000 };
         var model = new FakeStatementDraftModel().Draft(Output());
-        var worker = Worker(store, model, new StatementDraftSettings(100_000, 50_000, 1));
+        var worker = Worker(store, model, new StatementDraftSettings(100_000, 1));
 
         await worker.ExecuteAsync(once: true);
         Assert.Empty(model.Requests);

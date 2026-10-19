@@ -205,7 +205,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         var first = DocumentChangeDraftPrompt.Build((await analysis.ReadEvidenceAsync(comparison.ComparisonId, default))!, Catalog)!;
         var tight = new FakeDocumentChangeDraftModel().Draft(FakeDocumentChangeDraftModel.Output(("h1", "after", "October 31")));
 
-        await Worker(tight, new DocumentChangeDraftSettings(first.ReservedTokens + 1_300, first.ReservedTokens + 1_300, 1))
+        await Worker(tight, new DocumentChangeDraftSettings(first.ReservedTokens + 1_300, 1))
             .ExecuteAsync(once: true);
 
         var waiting = await EntryAsync(comparison);
@@ -351,7 +351,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
             .ReservedTokens;
         var model = new FakeDocumentChangeDraftModel().Draft(FakeDocumentChangeDraftModel.Output(("h1", "after", "Alpha two")));
 
-        await Worker(model, new DocumentChangeDraftSettings(reservation + 100, reservation + 100, 1)).ExecuteAsync(once: true);
+        await Worker(model, new DocumentChangeDraftSettings(reservation + 100, 1)).ExecuteAsync(once: true);
 
         Assert.Single(model.Requests);
         var waiting = await EntryAsync(second);

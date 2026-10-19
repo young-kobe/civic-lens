@@ -147,7 +147,7 @@ Code rejects an unlisted ID, a repeated ID, and a confidence that is not finite 
 
 The resolver picks the reason in this order: a verified issue, then the model answer, then the bill number. A release that passes only by a bill or a vote has no tracked issue, and its draft starts with an empty issue list. When no tracked issue is active on the capture date, the gate makes no model call and does not look for a bill number.
 
-The byte cap is the smaller of two values: 100,000 UTF-8 bytes for the full prompt, and the run token limit minus the output allowance. The settlement and the `statement-draft` insert share one transaction. A repeat insert keeps one row.
+The byte cap is the smaller of two values: 100,000 UTF-8 bytes for the full prompt, and the [call cap](analysis.md#budget) minus the output allowance. The settlement and the `statement-draft` insert share one transaction. A repeat insert keeps one row.
 
 An invalid answer gets one more call, with the rejection reasons added to the prompt. The queue keeps the ID of the rejected run, so a budget wait between the two calls resumes the second call. Both rejected runs stay.
 
@@ -162,7 +162,7 @@ A refusal, a `max_tokens` stop, an unreadable response, and other 4xx responses 
 
 ### Statement drafting
 
-The drafting executor is `AnalysisWorker<StatementDraftRun>` with `StatementDraftStep`. It drains the `statement-draft` rows that the gate queues and writes an AI draft of one statement record for each candidate. It runs beside the collection, document-change drafting, and gate loops in the `worker` process. It has its own wakeup, status row, daily limit, and run limit, and it uses `CIVIC_LENS_ANALYSIS_CONCURRENCY`.
+The drafting executor is `AnalysisWorker<StatementDraftRun>` with `StatementDraftStep`. It drains the `statement-draft` rows that the gate queues and writes an AI draft of one statement record for each candidate. It runs beside the collection, document-change drafting, and gate loops in the `worker` process. It has its own wakeup, status row, daily limit, and call cap, and it uses `CIVIC_LENS_ANALYSIS_CONCURRENCY`.
 
 The executor runs when `CIVIC_LENS_STATEMENT_DRAFTING_DAILY_TOKENS` and `ANTHROPIC_API_KEY` are set. A limit without a key is a configuration error.
 
@@ -321,7 +321,7 @@ The store refuses a model label for a held-out release. A person still labels a 
 
 ### Relationship drafting
 
-The executor is `AnalysisWorker<RelationshipDraftRun>` with `RelationshipDraftStep`. It runs after vote drafting and before brief drafting in the `worker` process. It has its own wakeup, status row, daily limit, and run limit, and it uses `CIVIC_LENS_ANALYSIS_CONCURRENCY`. Its required variables are in [operations](../operations.md#relationship-drafting). The status row is in `document_change_analysis_status` under the task `relationship-draft`.
+The executor is `AnalysisWorker<RelationshipDraftRun>` with `RelationshipDraftStep`. It runs after vote drafting and before brief drafting in the `worker` process. It has its own wakeup, status row, daily limit, and call cap, and it uses `CIVIC_LENS_ANALYSIS_CONCURRENCY`. Its required variables are in [operations](../operations.md#relationship-drafting). The status row is in `document_change_analysis_status` under the task `relationship-draft`.
 
 **Pair finding.** A review decision on a statement, an action, or a vote finds the pairs of that record. `RelationshipStaleness.AfterDecision` does this inside the decision transaction, as `BriefStaleness.AfterDecision` does for briefs. The review stores of the three record kinds run it before the brief hook. It works in this order:
 

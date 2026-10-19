@@ -64,9 +64,9 @@ public sealed class RelationshipDraftPromptGoldenTests
     public void TheMinimumReservationIsTheSystemPromptPlusTheOutputAllowanceAndSettingsRejectALowerRunLimit()
     {
         Assert.True(RelationshipDraftPrompt.MinimumReservation > RelationshipDraftTask.MaximumOutputTokens);
-        Assert.Throws<ArgumentOutOfRangeException>(() => new RelationshipDraftSettings(10_000_000, RelationshipDraftPrompt.MinimumReservation - 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new RelationshipDraftSettings(RelationshipDraftPrompt.MinimumReservation - 1));
         Assert.Equal(RelationshipDraftPrompt.MinimumReservation - RelationshipDraftTask.MaximumOutputTokens,
-            new RelationshipDraftSettings(10_000_000, RelationshipDraftPrompt.MinimumReservation).PromptByteCap);
+            new RelationshipDraftSettings(RelationshipDraftPrompt.MinimumReservation).PromptByteCap);
     }
 
     private static CivicLens.Application.Analysis.AnalysisModelRequest Build(CivicLens.Application.Relationships.RelationshipPair pair) =>

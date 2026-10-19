@@ -49,8 +49,8 @@ public sealed class ActionDraftPromptGoldenTests
     public async Task TheMinimumReservationIsTheSystemPromptPlusTheOutputAllowanceAndSettingsRejectALowerRunLimit()
     {
         Assert.True(ActionDraftPrompt.MinimumReservation > ActionDraftTask.MaximumOutputTokens);
-        Assert.Throws<ArgumentOutOfRangeException>(() => new ActionDraftSettings(10_000_000, ActionDraftPrompt.MinimumReservation - 1));
-        Assert.Equal(ActionDraftPrompt.MinimumReservation - ActionDraftTask.MaximumOutputTokens, new ActionDraftSettings(10_000_000, ActionDraftPrompt.MinimumReservation).PromptByteCap);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ActionDraftSettings(ActionDraftPrompt.MinimumReservation - 1));
+        Assert.Equal(ActionDraftPrompt.MinimumReservation - ActionDraftTask.MaximumOutputTokens, new ActionDraftSettings(ActionDraftPrompt.MinimumReservation).PromptByteCap);
         await Task.CompletedTask;
     }
 

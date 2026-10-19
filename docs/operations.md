@@ -458,7 +458,7 @@ The `worker` command drafts AI accounts of changed comparisons. [Analysis](archi
 | Variable | Meaning |
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude API key |
-| `CIVIC_LENS_ANALYSIS_DAILY_TOKENS` | Daily token limit for document-change drafting calls, per UTC day. Each other drafting stage has its own limit. One call reserves at most 120,000 tokens, or the daily limit if it is smaller. |
+| `CIVIC_LENS_ANALYSIS_DAILY_TOKENS` | Daily token limit for document-change drafting calls, per UTC day. Each other drafting stage has its own limit. The [call cap](architecture/analysis.md#budget) bounds one call. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time (default 2, 1 to 4) |
 | `CIVIC_LENS_ISSUES_CONFIG`, `CIVIC_LENS_REVIEW_OFFICIALS` | The same issue file and official IDs that the review host reads |
 

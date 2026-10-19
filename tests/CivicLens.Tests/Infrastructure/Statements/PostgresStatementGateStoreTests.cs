@@ -90,7 +90,7 @@ public sealed class PostgresStatementGateStoreTests(PostgresCollection postgres)
         var candidate = await seeder.SeedAsync(new string('x', 6_000), "https://example.test/pages/big");
         var model = new FakeStatementGateModel();
 
-        await Worker(model, Revision(), new StatementGateSettings(10_000_000, StatementGatePrompt.MinimumReservation, 1)).ExecuteAsync(once: true);
+        await Worker(model, Revision(), new StatementGateSettings(StatementGatePrompt.MinimumReservation, 1)).ExecuteAsync(once: true);
 
         Assert.Empty(model.Requests);
         Assert.Equal([("gate", "Succeeded", "over-byte-cap"), (StatementDraftTask.Task, "Pending", null)], await RowsAsync(candidate));

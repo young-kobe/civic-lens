@@ -439,7 +439,7 @@ public sealed class VoteDraftStepTests
     public async Task FactsThatAloneExceedTheByteCapBlockWithoutACall()
     {
         var model = new FakeHeadlineSummaryModel();
-        var settings = new VoteDraftSettings(10_000_000, VoteDraftPrompt.MinimumReservation, 1);
+        var settings = new VoteDraftSettings(VoteDraftPrompt.MinimumReservation, 1);
 
         var (store, _) = await RunAsync(Create(), model, settings: settings);
 
