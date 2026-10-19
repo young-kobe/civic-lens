@@ -8,7 +8,7 @@ internal sealed record DocumentChangeDraftConfiguration(DocumentChangeDraftSetti
     {
         var environment = AnalysisEnvironment.Read("CIVIC_LENS_ANALYSIS_", "AI drafting");
         if (environment is null) return null;
-        var settings = new DocumentChangeDraftSettings(environment.DailyTokens, environment.RunTokens,
+        var settings = new DocumentChangeDraftSettings(environment.DailyTokens,
             environment.Concurrency ?? DocumentChangeDraftSettings.DefaultConcurrency);
         return new(settings, environment.ApiKey);
     }

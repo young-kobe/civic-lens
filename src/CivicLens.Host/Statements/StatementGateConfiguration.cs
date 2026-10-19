@@ -10,7 +10,7 @@ internal sealed record StatementGateConfiguration(StatementGateSettings Settings
     {
         var environment = AnalysisEnvironment.Read("CIVIC_LENS_STATEMENT_GATE_", "The statement gate");
         if (environment is null) return null;
-        var settings = new StatementGateSettings(environment.DailyTokens, environment.RunTokens,
+        var settings = new StatementGateSettings(environment.DailyTokens,
             environment.Concurrency ?? AnalysisSettings.DefaultConcurrency);
         return new(settings, environment.ApiKey);
     }

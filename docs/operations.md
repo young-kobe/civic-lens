@@ -461,8 +461,7 @@ The `worker` command drafts AI accounts of changed comparisons. [Analysis](archi
 | Variable | Meaning |
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude API key |
-| `CIVIC_LENS_ANALYSIS_DAILY_TOKENS` | Daily token limit for document-change drafting calls, per UTC day. Each other drafting stage has its own limit. |
-| `CIVIC_LENS_ANALYSIS_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller; at most the daily limit) |
+| `CIVIC_LENS_ANALYSIS_DAILY_TOKENS` | Daily token limit for document-change drafting calls, per UTC day. Each other drafting stage has its own limit. One call reserves at most 120,000 tokens, or the daily limit if it is smaller. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time (default 2, 1 to 4) |
 | `CIVIC_LENS_ISSUES_CONFIG`, `CIVIC_LENS_REVIEW_OFFICIALS` | The same issue file and official IDs that the review host reads |
 
@@ -518,7 +517,6 @@ The `worker` command gates statement candidates. [Statements](architecture/state
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude API key, shared with drafting |
 | `CIVIC_LENS_STATEMENT_GATE_DAILY_TOKENS` | Daily token limit for gate calls, per UTC day. It is separate from the drafting limit. |
-| `CIVIC_LENS_STATEMENT_GATE_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the article byte cap. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with drafting (default 2, 1 to 4) |
 | `CIVIC_LENS_ISSUES_CONFIG` | The issue file. Its revision ID binds each gate run. |
 
@@ -558,7 +556,6 @@ The `worker` command drafts a statement record for each candidate that the gate 
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude API key, shared with the other stages |
 | `CIVIC_LENS_STATEMENT_DRAFTING_DAILY_TOKENS` | Daily token limit for statement drafting calls, per UTC day. It is separate from the gate and the document-change limits. |
-| `CIVIC_LENS_STATEMENT_DRAFTING_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the article byte cap. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
 Drafting uses Claude Sonnet 5.5, which costs more than the gate model. Gate rows that passed before you set the limit become draft rows, and the first run can spend up to the daily limit on them. Start with a low limit. A candidate whose article is over the byte cap gets no model call. It gets a draft with no revision, and a person writes the record. An entry blocked as `speakersUnavailable` stays blocked after a coverage change; the change applies only to articles admitted after it.
@@ -585,7 +582,6 @@ The `worker` command drafts one action record for each bill that has a candidate
 | `ANTHROPIC_API_KEY` | Claude API key, shared with the other stages |
 | `CIVIC_LENS_ISSUES_CONFIG` | Absolute path of the issue configuration, shared with the Congress.gov bill stream |
 | `CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS` | Daily token limit for action drafting calls, per UTC day (about 2,000,000 is a good start). It is separate from the other limits. |
-| `CIVIC_LENS_ACTION_DRAFTING_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the prompt byte cap. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
 Drafting uses Claude Haiku 5.5. The migration queued every candidate that existed when it ran, and the first run can spend up to the daily limit on them. Start with a low limit. A bill version whose summaries had already closed has two queued candidates. The older one settles as `supersededByNewerCandidate` with no call, also when the candidate with summaries blocks. The [outcomes](architecture/actions.md#outcomes) table lists every other code.
@@ -612,7 +608,6 @@ The `worker` command drafts one vote record for each House roll call that has a 
 | `ANTHROPIC_API_KEY` | Claude API key, shared with the other stages |
 | `CIVIC_LENS_ISSUES_CONFIG` | Absolute path of the issue configuration, shared with the Congress.gov bill stream |
 | `CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS` | Daily token limit for vote drafting calls, per UTC day. It is separate from the other limits. Start low. |
-| `CIVIC_LENS_VOTE_DRAFTING_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the prompt byte cap. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
 Drafting uses Claude Haiku 5.5. The migration queued every vote candidate that existed when it ran, and the first run can spend up to the daily limit on them. The stage runs after action drafting and before brief drafting. A roll call with no tracked member, and a re-collected vote with the same facts, settle without a call. The [outcomes](architecture/votes.md#outcomes) table lists every code.
@@ -636,7 +631,6 @@ The `worker` command drafts one relationship for each pair of an approved statem
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude API key, shared with the other stages |
 | `CIVIC_LENS_RELATIONSHIP_DRAFTING_DAILY_TOKENS` | Daily token limit for relationship drafting calls, per UTC day. It is separate from the other limits. Start low. |
-| `CIVIC_LENS_RELATIONSHIP_DRAFTING_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the prompt byte cap. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
 Drafting uses Claude Haiku 5.5. The stage runs after vote drafting and before brief drafting. A review decision on a statement, an action, or a vote queues a Pending row for each new pair of that record. Run `relationships draft refresh` once after the migration to queue the pairs of records that were approved earlier. Then the worker can spend up to the daily limit. A pair with a new approved revision on either side returns to Pending unless a person approved its relationship. A pair with the same input as the last settled run makes no call. The [outcomes](architecture/statements.md#relationship-drafting) table lists every code.
@@ -660,7 +654,6 @@ The `worker` command drafts one weekly brief for each closed week. [Briefs](arch
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude API key, shared with the other stages |
 | `CIVIC_LENS_BRIEF_DRAFTING_DAILY_TOKENS` | Daily token limit for brief drafting calls, per UTC day. It is separate from the other limits. |
-| `CIVIC_LENS_BRIEF_DRAFTING_RUN_TOKENS` | Optional limit for one call's reservation (default 120,000 or the daily limit, whichever is smaller). It also sets the prompt byte cap. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
 Drafting uses Claude Sonnet 5.5. The first run with the limit set stores its Monday as the first brief week. The worker queues each closed week from then on, and a wakeup at each Monday boundary queues the week that just closed. The worker never queues a week before the first brief week. A week with no new records makes no call and no brief.

@@ -10,7 +10,7 @@ internal sealed record StatementDraftConfiguration(StatementDraftSettings Settin
     {
         var environment = AnalysisEnvironment.Read("CIVIC_LENS_STATEMENT_DRAFTING_", "Statement drafting");
         if (environment is null) return null;
-        var settings = new StatementDraftSettings(environment.DailyTokens, environment.RunTokens,
+        var settings = new StatementDraftSettings(environment.DailyTokens,
             environment.Concurrency ?? AnalysisSettings.DefaultConcurrency);
         return new(settings, environment.ApiKey);
     }

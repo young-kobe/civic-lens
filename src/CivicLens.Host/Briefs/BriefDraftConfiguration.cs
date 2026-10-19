@@ -10,7 +10,7 @@ internal sealed record BriefDraftConfiguration(BriefDraftSettings Settings, stri
     {
         var environment = AnalysisEnvironment.Read("CIVIC_LENS_BRIEF_DRAFTING_", "Brief drafting");
         if (environment is null) return null;
-        var settings = new BriefDraftSettings(environment.DailyTokens, environment.RunTokens,
+        var settings = new BriefDraftSettings(environment.DailyTokens,
             environment.Concurrency ?? AnalysisSettings.DefaultConcurrency);
         return new(settings, environment.ApiKey);
     }
