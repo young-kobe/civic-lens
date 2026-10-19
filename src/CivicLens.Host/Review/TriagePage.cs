@@ -31,7 +31,7 @@ public abstract class TriagePage : DraftListPage
 
     protected abstract Task LoadAsync();
 
-    protected abstract Task DecideRecordAsync(BulkApprovalTarget target, ReviewDecisionKind kind, string? note, string idempotencyKey);
+    protected abstract Task DecideRecordAsync(TriageTarget target, ReviewDecisionKind kind, string? note, string idempotencyKey);
 
     protected override async Task OnInitializedAsync()
     {

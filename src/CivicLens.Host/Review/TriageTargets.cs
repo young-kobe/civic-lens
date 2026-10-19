@@ -8,7 +8,7 @@ internal static class TriageTargets
     public static string Format(string recordId, int revisionNumber, int reviewStateVersion) =>
         string.Create(CultureInfo.InvariantCulture, $"{recordId}:{revisionNumber}:{reviewStateVersion}");
 
-    public static BulkApprovalTarget Parse(string value)
+    public static TriageTarget Parse(string value)
     {
         var parts = value.Split(':');
         if (parts.Length != 3 || !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var revision) ||

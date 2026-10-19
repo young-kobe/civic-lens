@@ -1,8 +1,5 @@
 using System.Net;
 using CivicLens.Application.Actions;
-using CivicLens.Core.Actions;
-using CivicLens.Core.Documents;
-using Npgsql;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using static CivicLens.Tests.Host.ReviewWorkspaceHost;
@@ -25,7 +22,7 @@ public sealed class ActionReviewWorkspaceTests(PostgresCollection postgres) : IA
     public Task DisposeAsync() => host.StopAsync();
 
     [Fact]
-    public async Task TheRailLinksTheActionListWhichCountsEachFilterAndRefusesAnEmptyBulkApprovalAsync()
+    public async Task TheRailLinksTheActionListWhichCountsEachFilterAsync()
     {
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
 
@@ -37,102 +34,6 @@ public sealed class ActionReviewWorkspaceTests(PostgresCollection postgres) : IA
         Assert.Equal(["/Review/Actions#drafts", "/Review/Actions?drafts=needs-action#drafts", "/Review/Actions?drafts=approved#drafts"],
             page.QuerySelectorAll("[aria-labelledby='drafts'] a.segmented-item").Select(tab => tab.GetAttribute("href")));
         Assert.Equal("No action records yet", page.QuerySelector("[aria-labelledby='drafts'] .empty h3")!.TextContent);
-        Assert.Null(page.QuerySelector("form#approve-sponsorships"));
-        Assert.Null(page.QuerySelector("input[name='targets']"));
-        Assert.Equal("/Review/Actions/Triage", page.QuerySelector(".page-header-actions a")!.GetAttribute("href"));
-    }
-
-    [Fact]
-    public async Task TheTriagePageRefusesAnEmptyBulkPostAndShowsNoRowsWhenNothingNeedsAction()
-    {
-        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
-
-        var page = await host.GetDocumentAsync("/Review/Actions/Triage");
-
-        using var empty = await host.Client.PostAsync("/Review/Actions/Triage", Form(page.QuerySelector("#approve-bulk")!));
-        Assert.Equal(HttpStatusCode.BadRequest, empty.StatusCode);
-        Assert.Equal("No actions need action", page.QuerySelector("[aria-labelledby='drafts'] .empty h3")!.TextContent);
-    }
-
-    [Fact]
-    public async Task TheTriagePageShowsTheSponsorshipQuoteAndThePassingCheckWithNoCheckboxForAFirstDraft()
-    {
-        var extraction = await host.SaveExtractionAsync(SponsorText);
-        var draft = ActionOn(extraction, 1);
-        await new RelationshipWorldSeeder(host.ConnectionString).ActionAsync(draft, "AwaitingReview");
-        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
-
-        var page = await host.GetDocumentAsync("/Review/Actions/Triage");
-
-        var row = Assert.Single(page.QuerySelectorAll("[aria-labelledby='drafts'] tbody tr"));
-        Assert.Equal($"/Review/Actions/{draft.RecordId}", row.QuerySelector("a.cell-title")!.GetAttribute("href"));
-        Assert.Contains("Sponsor: Warren", row.TextContent, StringComparison.Ordinal);
-        Assert.Contains("Approval check passed", row.TextContent, StringComparison.Ordinal);
-        Assert.NotNull(row.QuerySelector("button[name='approve']"));
-        Assert.Null(row.QuerySelector("input[name='targets']"));
-    }
-
-    [Fact]
-    public async Task AnInlineApproveBindsTheRowRevisionAndRedirectsAndABulkPostThenApprovesASponsorshipOnlyChange()
-    {
-        var seeder = new RelationshipWorldSeeder(host.ConnectionString);
-        var extraction = await host.SaveExtractionAsync(SponsorText);
-        var first = ActionOn(extraction, 1);
-        await seeder.ActionAsync(first, "AwaitingReview");
-        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
-        var page = await host.GetDocumentAsync("/Review/Actions/Triage");
-        Assert.Null(page.QuerySelector("input[name='targets']"));
-
-        using var approved = await host.Client.PostAsync("/Review/Actions/Triage", TriageDecision(page, "approve"));
-
-        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
-        Assert.EndsWith("/Review/Actions/Triage?decided=approved#drafts", approved.Headers.Location!.OriginalString, StringComparison.Ordinal);
-        Assert.Equal(1L, await CountAsync("SELECT count(*) FROM action_review_decisions WHERE revision_number = 1 AND kind = 'Approve'"));
-        var cosponsor = first.Sponsorships[0] with { PersonId = "other", BioguideId = "S000033", Role = ActionSponsorshipRole.Cosponsor };
-        await seeder.ActionAsync(first with { RevisionNumber = 2, Fingerprint = new string('f', 64), Sponsorships = [first.Sponsorships[0], cosponsor] }, "AwaitingReview");
-        var next = await host.GetDocumentAsync("/Review/Actions/Triage");
-        var target = next.QuerySelector("input[name='targets']")!.GetAttribute("value")!;
-        Assert.StartsWith($"{first.RecordId}:2:", target, StringComparison.Ordinal);
-
-        using var bulk = await host.Client.PostAsync("/Review/Actions/Triage", new FormUrlEncodedContent([.. Fields(next.QuerySelector("#approve-bulk")!), new("targets", target)]));
-
-        Assert.Equal(HttpStatusCode.OK, bulk.StatusCode);
-        Assert.Contains("Approved", await bulk.Content.ReadAsStringAsync(), StringComparison.Ordinal);
-        Assert.Equal(1L, await CountAsync("SELECT count(*) FROM action_review_decisions WHERE revision_number = 2 AND kind = 'Approve'"));
-    }
-
-    [Fact]
-    public async Task ARowWithAnOpenConcernShowsOnlyTheEditorLinkWithNoDecideButtonsAndNoCheckbox()
-    {
-        var seeder = new RelationshipWorldSeeder(host.ConnectionString);
-        var extraction = await host.SaveExtractionAsync(SponsorText);
-        await seeder.ActionAsync(ActionOn(extraction, 1), "AwaitingReview");
-        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
-        var page = await host.GetDocumentAsync("/Review/Actions/Triage");
-        using var changes = await host.Client.PostAsync("/Review/Actions/Triage", TriageDecision(page, "requestChanges", "Check the date."));
-        Assert.Equal(HttpStatusCode.Redirect, changes.StatusCode);
-
-        var after = await host.GetDocumentAsync("/Review/Actions/Triage");
-
-        var row = Assert.Single(after.QuerySelectorAll("[aria-labelledby='drafts'] tbody tr"));
-        Assert.Empty(row.QuerySelectorAll("button, textarea, input"));
-        Assert.NotNull(row.QuerySelector("a.btn"));
-    }
-
-    private const string SponsorText = "Sponsor: Warren, Elizabeth\nCosponsor: Other, Person\n";
-
-    private static ActionDraftRevision ActionOn(DocumentExtraction extraction, int number) => ActionRevisionFixtures.Model(number) with
-    {
-        Sponsorships = [ActionRevisionFixtures.Sponsorship() with { Citations = [new(extraction.ExtractionId, 0, 26), new(extraction.ExtractionId, 27, 24)] }],
-        TrackedIssueIds = []
-    };
-
-    private async Task<long> CountAsync(string sql)
-    {
-        await using var connection = new NpgsqlConnection(host.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        return (long)(await command.ExecuteScalarAsync())!;
     }
 
     [Fact]

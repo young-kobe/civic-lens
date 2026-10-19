@@ -4,9 +4,7 @@
 <TopBarTitle Crumbs="Crumbs" />
 
 <div class="content">
-    <PageHeader Title="Actions" Lede="Bill sponsorship records that the AI drafter wrote. Each record has one entry, which shows its newest revision.">
-        <Actions><Button Href="@ActionRoutes.Triage">Triage</Button></Actions>
-    </PageHeader>
+    <PageHeader Title="Actions" Lede="Bill sponsorship records that the AI drafter wrote. Each record has one entry, which shows its newest revision." />
     @if (error is not null)
     {
         <Notice Tone="Tone.Bad">@error</Notice>

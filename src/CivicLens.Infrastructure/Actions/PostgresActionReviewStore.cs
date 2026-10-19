@@ -62,13 +62,11 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
             }, saved => ActionDraftRows.NewRevision(saved, null), cancellationToken);
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, bool bulkSafe, string idempotencyKey, string payloadHash,
+        int expectedReviewStateVersion, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken) =>
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
-            idempotencyKey, payloadHash, async (db, draft, history) =>
+            idempotencyKey, payloadHash, async (db, _, history) =>
             {
-                if (bulkSafe && !ToReview(draft, history).IsBulkSafe)
-                    throw new ArgumentException("Bulk approval needs a sponsorship-only revision with no open concern.");
                 if (decision.Kind != ReviewDecisionKind.Approve) return;
                 var current = history.CurrentRevision!;
                 await ValidateApprovalAsync(db, current, cancellationToken);
@@ -105,18 +103,6 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
         var page = await ReadPageAsync(db, cursor, limit, filter, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return page;
-    }
-
-    public async Task<ReviewTriageRead<ActionReview>> ListTriageAsync(PageCursor? cursor, DraftListFilter filter,
-        CancellationToken cancellationToken)
-    {
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var page = await ReadPageAsync(db, cursor, ReviewTriage.PageSize, filter with { Status = DraftStatusFilter.NeedsAction },
-            cancellationToken);
-        var extractions = await ReadExtractionsAsync(db, page.Items.Select(review => review.CurrentRevision), cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return new(page.Items, extractions.ToImmutableDictionary(StringComparer.Ordinal), page.Priorities, page.NewerCursor, page.OlderCursor);
     }
 
     private static async Task<ActionReviewPage> ReadPageAsync(CollectionAttemptDbContext db, PageCursor? cursor, int limit,

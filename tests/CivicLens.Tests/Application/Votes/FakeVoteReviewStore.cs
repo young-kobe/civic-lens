@@ -9,7 +9,6 @@ namespace CivicLens.Tests.Application.Votes;
 
 internal sealed class FakeVoteReviewStore : IVoteReviewStore
 {
-    public ReviewTriageRead<VoteReview>? Triage { get; set; }
     public List<ReviewDecision> Decided { get; } = [];
     public Dictionary<string, PublishableVote> Publishable { get; } = [];
     public List<UnpublishedApprovedVote> Unpublished { get; } = [];
@@ -52,7 +51,7 @@ internal sealed class FakeVoteReviewStore : IVoteReviewStore
         string idempotencyKey, string payloadHash, CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, bool bulkSafe, string idempotencyKey, string payloadHash, CancellationToken cancellationToken)
+        int expectedReviewStateVersion, string idempotencyKey, string payloadHash, CancellationToken cancellationToken)
     {
         Decided.Add(decision);
         return Task.FromResult(decision);
@@ -62,9 +61,6 @@ internal sealed class FakeVoteReviewStore : IVoteReviewStore
 
     public Task<VoteReviewPage> ListAsync(PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
-
-    public Task<ReviewTriageRead<VoteReview>> ListTriageAsync(PageCursor? cursor, DraftListFilter filter, CancellationToken cancellationToken) =>
-        Task.FromResult(Triage ?? throw new NotSupportedException());
 
     public Task<VoteReviewCounts> CountAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
 }

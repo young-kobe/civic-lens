@@ -21,7 +21,7 @@ public sealed partial class StatementTriage
         async () => triage = await ListTriage.ExecuteAsync(actor, DraftsCursor, ReadListFilter(), RequestAborted),
         "The statement triage could not load. Refresh the page to try again.");
 
-    protected override Task DecideRecordAsync(BulkApprovalTarget target, ReviewDecisionKind kind, string? note, string idempotencyKey) =>
+    protected override Task DecideRecordAsync(TriageTarget target, ReviewDecisionKind kind, string? note, string idempotencyKey) =>
         DecideReview.ExecuteAsync(actor, new(target.RecordId, target.ExpectedRevisionNumber, target.ExpectedReviewStateVersion, kind, note, [],
             idempotencyKey), RequestAborted);
 }
