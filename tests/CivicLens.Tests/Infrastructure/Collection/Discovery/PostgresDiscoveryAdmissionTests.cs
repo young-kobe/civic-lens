@@ -324,9 +324,6 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
             Assert.Equal(7, evidence!.Discovery!.Request.Version);
             Assert.Equal("https://example.test/article", Assert.Single(evidence.Discovery.Urls));
             var upgradedJobs = PostgresCollectionJobStore.FromConnectionString(upgradeConnectionString);
-            var replay = await upgradedJobs.AdmitAsync(new DiscoveryAdmissionRequest("historical-v7", "historical-batch",
-                Template(), new DiscoveryAdmissionPolicy()), default);
-            Assert.Equal("historical-job", Assert.Single(replay.Jobs).JobId);
             var duplicate = await upgradedJobs.AdmitAsync(new DiscoveryAdmissionRequest("historical-v7", "another-batch",
                 Template(), new DiscoveryAdmissionPolicy()), default);
             Assert.Equal(1, duplicate.DuplicateCount);
@@ -439,9 +436,8 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
     [Theory]
     [InlineData(CollectionMode.Feed)]
     [InlineData(CollectionMode.Html)]
-    public async Task AdmissionPinsRevisionsAndReplaysLegacyBatchesWithoutInventingHistory(CollectionMode mode)
+    public async Task AdmissionPinsRevisionsAndRejectsCorrectedConfigurationOnReplay(CollectionMode mode)
     {
-        var attempt = await SaveDiscoveryAsync(["https://example.test/articles/one"], mode);
         var template = Template();
         var configuration = new CollectionConfiguration
         {
@@ -457,15 +453,6 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         };
         var definition = CollectionJobDefinition.FromConfiguration(configuration, "source", new DateOnly(2026, 7, 1)) with
         { Mode = CollectionMode.Page, ETag = null, LastModified = null };
-        var legacyRequest = new DiscoveryAdmissionRequest(attempt, "legacy-revision", template, new DiscoveryAdmissionPolicy(), mode);
-        var legacy = await jobs.AdmitAsync(legacyRequest, default);
-        var replay = await jobs.AdmitAsync(legacyRequest with { ArticleTemplate = definition }, default);
-        Assert.Equal(legacy.Jobs, replay.Jobs);
-        Assert.Null((await jobs.GetAsync(Assert.Single(replay.Jobs).JobId, default))!.Definition.ConfigurationRevision);
-        var otherMode = mode == CollectionMode.Feed ? CollectionMode.Html : CollectionMode.Feed;
-        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(legacyRequest with
-        { ExpectedDiscoveryMode = otherMode }, default));
-
         var nextAttempt = await SaveDiscoveryAsync(["https://example.test/articles/two"], mode);
         var request = new DiscoveryAdmissionRequest(nextAttempt, "new-revision", definition, new DiscoveryAdmissionPolicy(), mode);
         var admitted = await jobs.AdmitAsync(request, default);
@@ -478,6 +465,8 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         { Mode = CollectionMode.Page, ETag = null, LastModified = null };
         await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(request with { ArticleTemplate = corrected }, default));
         Assert.Equal(admitted.Jobs, (await jobs.AdmitAsync(request, default)).Jobs);
+        var otherMode = mode == CollectionMode.Feed ? CollectionMode.Html : CollectionMode.Feed;
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(request with { ExpectedDiscoveryMode = otherMode }, default));
 
         var concurrentAttempt = await SaveDiscoveryAsync(["https://example.test/articles/concurrent"], mode);
         var configuredSource = new ConfiguredCollectionSource(configuration, "source");
@@ -497,9 +486,8 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
             }]
         };
         var expired = new ConfiguredCollectionSource(expiredConfiguration, "source");
-        Assert.Equal(legacy.Jobs, (await jobs.AdmitAsync(expired, attempt, "legacy-revision", default)).Jobs);
-        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(expired, attempt, "new-expired", default));
-        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(expired, "different-attempt", "legacy-revision", default));
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(expired, nextAttempt, "new-expired", default));
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(expired, "different-attempt", "new-revision", default));
     }
 
     private static ConfiguredCollectionSource ConfiguredSource(CollectionJobDefinition template) => new(
