@@ -14,11 +14,13 @@ public interface IVoteReviewStore
         string idempotencyKey, string payloadHash, CancellationToken cancellationToken);
 
     Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, string idempotencyKey, string payloadHash, CancellationToken cancellationToken);
+        int expectedReviewStateVersion, bool bulkSafe, string idempotencyKey, string payloadHash, CancellationToken cancellationToken);
 
     Task<VoteReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken);
 
     Task<VoteReviewPage> ListAsync(PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken);
+
+    Task<ReviewTriageRead<VoteReview>> ListTriageAsync(PageCursor? cursor, DraftListFilter filter, CancellationToken cancellationToken);
 
     Task<VoteReviewCounts> CountAsync(CancellationToken cancellationToken);
 

@@ -123,13 +123,37 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var slice = await ListedDrafts.PageWithoutTierAsync(Records.Drafts(db, filter.Status),
-            nameof(StatementDraftRow.CandidateId), cursor, limit, filter, cancellationToken);
-        var drafts = slice.Items.Select(item => item.Draft).ToArray();
-        var candidates = await ReadCandidatesAsync(db, [.. drafts.Select(row => row.CandidateId)], cancellationToken);
-        var histories = await Records.ReadHistoriesAsync(db, drafts, cancellationToken);
+        var page = await ReadPageAsync(db, Records.Drafts(db, filter.Status), cursor, limit, filter, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        var items = drafts.Select(row => ToListItem(row, candidates[row.CandidateId], histories[row.CandidateId]));
+        return page;
+    }
+
+    public async Task<StatementTriageRead> ListTriageAsync(PageCursor? cursor, DraftListFilter filter, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var drafted = Records.Drafts(db, DraftStatusFilter.NeedsAction).Where(draft => draft.CurrentRevisionNumber > 0);
+        var page = await ReadPageAsync(db, drafted, cursor, ReviewTriage.PageSize, filter, cancellationToken);
+        var candidateIds = page.Items.Select(item => item.CandidateId).ToArray();
+        var candidates = await ReadCandidatesAsync(db, candidateIds, cancellationToken);
+        var extractions = await PostgresDocumentExtractionStore.ReadManyAsync(db,
+            [.. candidates.Values.Select(candidate => candidate.ExtractionId).Distinct(StringComparer.Ordinal)], cancellationToken);
+        var configurationRevisions = await admittingRevisions.ReadManyAsync(db, candidateIds, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        var items = page.Items.Select(item => new StatementTriageEvidence(item, extractions[candidates[item.CandidateId].ExtractionId],
+            configurationRevisions.GetValueOrDefault(item.CandidateId)));
+        return new([.. items], page.NewerCursor, page.OlderCursor);
+    }
+
+    private async Task<StatementReviewPage> ReadPageAsync(CollectionAttemptDbContext db, IQueryable<StatementDraftRow> drafts,
+        PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken)
+    {
+        var slice = await ListedDrafts.PageWithoutTierAsync(drafts, nameof(StatementDraftRow.CandidateId), cursor, limit, filter,
+            cancellationToken);
+        var rows = slice.Items.Select(item => item.Draft).ToArray();
+        var candidates = await ReadCandidatesAsync(db, [.. rows.Select(row => row.CandidateId)], cancellationToken);
+        var histories = await Records.ReadHistoriesAsync(db, rows, cancellationToken);
+        var items = rows.Select(row => ToListItem(row, candidates[row.CandidateId], histories[row.CandidateId]));
         return new([.. items], slice.NewerCursor, slice.OlderCursor);
     }
 
@@ -205,11 +229,9 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
         StatementAllowedSelections? allowed, CancellationToken cancellationToken)
     {
         if (allowed is null) throw new ArgumentException("Approval needs the allowed selections.", nameof(allowed));
-        revision.ValidateForApproval();
-        allowed.RequireAllowed(revision);
         var article = await StatementAnalysisListing.ReadArticleAsync(db, revision.CandidateId, cancellationToken)
             ?? throw new InvalidOperationException("The extraction of a statement candidate is missing.");
-        revision.ValidateAgainst(article.Extraction);
+        allowed.RequireApprovable(revision, article.Extraction);
     }
 
     private static StatementReviewDecisionRow NewDecisionRow(ReviewDecision decision) => new()

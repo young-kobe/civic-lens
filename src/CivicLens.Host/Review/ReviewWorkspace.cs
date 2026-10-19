@@ -259,6 +259,7 @@ internal static class ReviewWorkspace
         services.AddScoped<CreateStatementDraft>();
         services.AddScoped<SaveStatementDraft>();
         services.AddScoped<DecideStatementReview>();
+        services.AddScoped<ListStatementTriage>();
         services.AddScoped<GetStatementReview>();
         services.AddScoped<ListStatementReviews>();
         services.AddScoped<GetStatementReviewCounts>();
@@ -275,6 +276,7 @@ internal static class ReviewWorkspace
         services.AddScoped<SaveActionDraft>();
         services.AddScoped<DecideActionReview>();
         services.AddScoped<ApproveSponsorshipChanges>();
+        services.AddScoped<ListActionTriage>();
         services.AddScoped<GetActionReview>();
         services.AddScoped<ListActionReviews>();
         services.AddScoped<GetActionReviewCounts>();
@@ -285,6 +287,8 @@ internal static class ReviewWorkspace
         services.AddSingleton<IVoteReviewStore>(new PostgresVoteReviewStore(contexts));
         services.AddScoped<SaveVoteDraft>();
         services.AddScoped<DecideVoteReview>();
+        services.AddScoped<ApproveBulkSafeVotes>();
+        services.AddScoped<ListVoteTriage>();
         services.AddScoped<GetVoteReview>();
         services.AddScoped<ListVoteReviews>();
         services.AddScoped<GetVoteReviewCounts>();

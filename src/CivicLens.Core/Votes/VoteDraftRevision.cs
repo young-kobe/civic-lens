@@ -52,6 +52,12 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
 
     public void ValidateForApproval() => ValidateShape();
 
+    public void ValidateForApproval(IReadOnlyDictionary<string, DocumentExtraction> extractions)
+    {
+        ValidateForApproval();
+        ValidateAgainst(extractions);
+    }
+
     public void ValidateAsAnalysisRevision(VoteDraftRevision? previous)
     {
         ValidateShape();

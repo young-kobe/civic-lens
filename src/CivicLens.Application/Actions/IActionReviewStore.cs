@@ -20,6 +20,8 @@ public interface IActionReviewStore
 
     Task<ActionReviewPage> ListAsync(PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken);
 
+    Task<ReviewTriageRead<ActionReview>> ListTriageAsync(PageCursor? cursor, DraftListFilter filter, CancellationToken cancellationToken);
+
     Task<ActionReviewCounts> CountAsync(CancellationToken cancellationToken);
 
     Task<IReadOnlyList<UnpublishedApprovedAction>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken);

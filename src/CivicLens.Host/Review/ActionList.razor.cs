@@ -19,7 +19,7 @@ public sealed partial class ActionList
     private readonly string renderKey = Guid.NewGuid().ToString("N");
     private ActionReviewPage? drafts;
     private ActionReviewCounts? counts;
-    private IReadOnlyList<ActionApprovalResult>? approvals;
+    private IReadOnlyList<BulkApprovalResult>? approvals;
 
     [Inject] private ListActionReviews ListDrafts { get; set; } = default!;
     [Inject] private GetActionReviewCounts GetCounts { get; set; } = default!;
@@ -44,21 +44,21 @@ public sealed partial class ActionList
     {
         try
         {
-            approvals = await Approve.ExecuteAsync(actor, new ApproveSponsorshipChangesRequest(ParseTargets(), ApproveKey ?? ""),
+            approvals = await Approve.ExecuteAsync(actor, new BulkApprovalRequest(ParseTargets(), ApproveKey ?? ""),
                 RequestAborted);
         }
         catch (OperationCanceledException) when (RequestAborted.IsCancellationRequested) { throw; }
         catch (ArgumentException)
         {
             HttpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
-            error = $"Choose 1 to {ApproveSponsorshipChanges.MaximumRecords} records that change only sponsorships.";
+            error = $"Choose 1 to {BulkApproval.MaximumRecords} records that change only sponsorships.";
         }
         await LoadAsync();
     }
 
-    private ImmutableArray<ActionApprovalTarget> ParseTargets() => [.. (Targets ?? []).Select(ParseTarget)];
+    private ImmutableArray<BulkApprovalTarget> ParseTargets() => [.. (Targets ?? []).Select(ParseTarget)];
 
-    private static ActionApprovalTarget ParseTarget(string value)
+    private static BulkApprovalTarget ParseTarget(string value)
     {
         var parts = value.Split(':');
         if (parts.Length != 3 || !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var revision) ||
@@ -70,11 +70,11 @@ public sealed partial class ActionList
     private static string TargetOf(ActionReview item) =>
         string.Create(CultureInfo.InvariantCulture, $"{item.RecordId}:{item.CurrentRevision.RevisionNumber}:{item.ReviewStateVersion}");
 
-    private static string OutcomeLabel(ActionApprovalOutcome outcome) => outcome switch
+    private static string OutcomeLabel(BulkApprovalOutcome outcome) => outcome switch
     {
-        ActionApprovalOutcome.Approved => "Approved",
-        ActionApprovalOutcome.Conflict => "Changed since the page loaded. Open it and check again.",
-        ActionApprovalOutcome.NotFound => "Not found",
+        BulkApprovalOutcome.Approved => "Approved",
+        BulkApprovalOutcome.Conflict => "Changed since the page loaded. Open it and check again.",
+        BulkApprovalOutcome.NotFound => "Not found",
         _ => "Not approved. It has open concerns or changes more than sponsorships."
     };
 

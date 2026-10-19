@@ -1,6 +1,7 @@
 @page "/Review/Actions"
 @inherits DraftListPage
 @using CivicLens.Application.Actions
+@using CivicLens.Application.Review
 
 <TopBarTitle Crumbs="Crumbs" />
 
@@ -20,7 +21,7 @@
                 </Head>
                 <Row Context="result">
                     <td><a class="cell-title" href="@ActionRoutes.Editor(result.RecordId)">@result.RecordId</a></td>
-                    <td><StatusBadge Tone="@(result.Outcome == ActionApprovalOutcome.Approved ? Tone.Ok : Tone.Warn)" Text="@OutcomeLabel(result.Outcome)" /></td>
+                    <td><StatusBadge Tone="@(result.Outcome == BulkApprovalOutcome.Approved ? Tone.Ok : Tone.Warn)" Text="@OutcomeLabel(result.Outcome)" /></td>
                 </Row>
             </DataTable>
         </Panel>
@@ -80,7 +81,7 @@
                 {
                     <Toolbar>
                         <Button Variant="ButtonVariant.Primary" Type="submit" form="approve-sponsorships">Approve selected sponsorship changes</Button>
-                        <span class="actions-hint">@($"Up to {ApproveSponsorshipChanges.MaximumRecords} records. Each record gets its own decision.")</span>
+                        <span class="actions-hint">@($"Up to {BulkApproval.MaximumRecords} records. Each record gets its own decision.")</span>
                     </Toolbar>
                 }
             </ChildContent>
