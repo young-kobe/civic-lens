@@ -645,6 +645,16 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- br
 
 The [live test](#verification) for brief drafting sends one paid request.
 
+### Member roster
+
+Enable the source `congress-members` in the collection configuration to capture the public member file once a day. It needs no credential. The command below needs `CIVIC_LENS_DATABASE`. It reads the latest snapshot and writes nothing.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- roster propose config/federal-coverage.json
+```
+
+The output lists the members to add and the configured people who left the roster. Edit the configuration by hand and commit it. Press sources of a new member are a manual step. See [roster](architecture/roster.md#proposals).
+
 ## Publish a static release
 
 The owner can publish from the Review home page. Select records in the Publish section and choose Review selection. The list shows each record as a document change, a statement, an action, a vote, a relationship, or a brief. The summary lists each headline with its kind, as new or a replacement, and shows the release number. Choose Publish to confirm. The page lists recent releases read-only. Rollback stays in the CLI.

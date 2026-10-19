@@ -30,6 +30,7 @@ public sealed class JobPreparationTests
     private static readonly string ListUrl = new BillStreamWindow(Backfill, Backfill).RequestUrl(SourceUrl);
     private readonly RecordingBillAdmissions admissions = new();
     private readonly RecordingVoteAdmissions votes = new();
+    private readonly RecordingRoster roster = new();
     private readonly ThrowingProcessingStore processing = new();
     private readonly RecordingExtractions extractions = new();
 
@@ -268,7 +269,8 @@ public sealed class JobPreparationTests
         { ApiResource.BillSummaries, SummariesUrl, """{"summaries":[],"pagination":{}}""" },
         { ApiResource.HouseVoteList, VoteListUrl, """{"houseRollCallVotes":[],"pagination":{}}""" },
         { ApiResource.HouseVoteDetail, VoteDetailUrl, HouseVoteFixtures.Detail() },
-        { ApiResource.HouseVoteMembers, VoteMembersUrl, HouseVoteFixtures.Members() }
+        { ApiResource.HouseVoteMembers, VoteMembersUrl, HouseVoteFixtures.Members() },
+        { ApiResource.MemberRoster, RosterFixtures.SourceUrl, RosterFixtures.Json }
     };
 
     [Fact]
@@ -361,6 +363,16 @@ public sealed class JobPreparationTests
     }
 
     [Fact]
+    public async Task ARosterJobIsParsedAndPassedToTheStoreWithTheAttemptOfItsCapture()
+    {
+        var result = await Prepare(ApiResource.MemberRoster, RosterFixtures.SourceUrl, RosterFixtures.Json, null);
+
+        Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
+        var call = Assert.Single(roster.Admissions);
+        Assert.Equal(("attempt", 3), (call.AttemptId, call.Members.Count));
+    }
+
+    [Fact]
     public void EveryApiResourceHasACaseInTheNeverExtractedTheory()
     {
         var covered = EveryResource.Select(row => (ApiResource?)row[0]).OfType<ApiResource>();
@@ -382,9 +394,12 @@ public sealed class JobPreparationTests
         IssueConfigurationRevision? issues, string? fragmentText = null)
     {
         var textExtractor = new FakeTextExtractor(fragmentText);
-        var configured = IsHouseVote(resource)
-            ? new ConfiguredCollectionSource(HouseVoteFixtures.Configuration(), HouseVoteFixtures.SourceId, Backfill)
-            : new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", Backfill);
+        var configured = resource switch
+        {
+            ApiResource.MemberRoster => new ConfiguredCollectionSource(RosterFixtures.Configuration(), RosterFixtures.SourceId, Backfill),
+            _ when IsHouseVote(resource) => new ConfiguredCollectionSource(HouseVoteFixtures.Configuration(), HouseVoteFixtures.SourceId, Backfill),
+            _ => new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", Backfill)
+        };
         var definition = resource is null
             ? configured.CreateJobDefinition(Backfill)
             : configured.CreateApiJobDefinition(resource.Value, url, Backfill);
@@ -392,7 +407,7 @@ public sealed class JobPreparationTests
             new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
         var job = new CollectionJobRecord("job", definition, "key", CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,
             false, [attempt]);
-        var preparation = new JobPreparation(new SingleJob(job), new CapturedAttempts(), new NoDiscoveryAdmissions(), admissions, votes,
+        var preparation = new JobPreparation(new SingleJob(job), new CapturedAttempts(), new NoDiscoveryAdmissions(), admissions, votes, roster,
             new FixedBody(body), processing, extractions, textExtractor, issues);
         return await preparation.PrepareAsync("job", "artifacts", default);
     }
@@ -581,6 +596,20 @@ public sealed class JobPreparationTests
                 null, null));
 
         public Task<CollectionImportDecision> ImportAtomicallyAsync(CollectionAttemptImport attempt, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class RecordingRoster : CivicLens.Application.Roster.IMemberRosterStore
+    {
+        public List<(string AttemptId, IReadOnlyList<CivicLens.Application.Roster.RosterMember> Members)> Admissions { get; } = [];
+
+        public Task AdmitAsync(string attemptId, IReadOnlyList<CivicLens.Application.Roster.RosterMember> members, CancellationToken cancellationToken)
+        {
+            Admissions.Add((attemptId, members));
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<CivicLens.Application.Roster.RosterMember>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }
 

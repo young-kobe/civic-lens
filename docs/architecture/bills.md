@@ -43,9 +43,9 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 
 ### Source configuration
 
-One `api` source with `apiParser` set to `congressBillList` follows the bill list. `ApiParser` in Application/Collection is the closed list of parsers. It holds `congressBillList` and `congressHouseVoteList`. The second one is in [votes](votes.md). Its JSON converter is registered in `ConfigurationJson`, which also serves the configuration snapshots.
+One `api` source with `apiParser` set to `congressBillList` follows the bill list. `ApiParser` in Application/Collection is the closed list of parsers. It holds `congressBillList`, `congressHouseVoteList`, and `congressLegislators`. The second one is in [votes](votes.md). The third one is in [roster](roster.md). Its JSON converter is registered in `ConfigurationJson`, which also serves the configuration snapshots.
 
-A source that sets `apiParser` also sets `credential`, `minimumCongress` (1 or more), and `backfillFrom`. Configuration allows these fields only with mode `api`. Null fields stay out of revision snapshots, so existing revision IDs do not change.
+A Congress.gov source that sets `apiParser` also sets `credential`, `minimumCongress` (1 or more), and `backfillFrom`. Configuration allows these fields only with mode `api`. Null fields stay out of revision snapshots, so existing revision IDs do not change.
 
 `CollectionConfiguration.CoveredPersonIdsOf` owns the coverage exception. The check before a scheduled check, the request check, the statement speaker roster, and source labels all read coverage through that class.
 

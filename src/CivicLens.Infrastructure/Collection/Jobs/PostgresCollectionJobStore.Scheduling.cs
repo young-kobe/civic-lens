@@ -92,7 +92,7 @@ public sealed partial class PostgresCollectionJobStore
                     throw new InvalidDataException("Schedule interval does not match its retained configuration.");
 
                 // Scheduled checks outside configured coverage consume one cadence slot without creating a job.
-                if (configuration.GetCoveredPersonIds(schedule.SourceId, currentDate).Length == 0)
+                if (!configuration.IsActiveOn(source, currentDate))
                 {
                     schedule.NextDueUtcTicks = Ticks(now.AddSeconds(schedule.IntervalSeconds));
                     continue;
@@ -138,6 +138,8 @@ public sealed partial class PostgresCollectionJobStore
                 var first = HouseVoteSession.FirstOfSweep(source.BackfillFrom!.Value, currentDate, source.MinimumCongress!.Value);
                 return first is null ? null : configured.CreateApiJobDefinition(
                     ApiResource.HouseVoteList, HouseVoteListUrl.FirstPage(source.Url, first.Value), currentDate);
+            case ApiParser.CongressLegislators:
+                return configured.CreateApiJobDefinition(ApiResource.MemberRoster, source.Url, currentDate);
             default:
                 throw new ArgumentOutOfRangeException(nameof(source));
         }

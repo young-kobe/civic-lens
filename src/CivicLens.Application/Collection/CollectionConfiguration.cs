@@ -83,7 +83,7 @@ public sealed record CollectionConfiguration
             request.Validate();
             source.JobPolicy?.Validate(request);
             source.AdmissionPolicy?.Validate();
-            if (source.ApiParser is not null)
+            if (source.ApiParser is ApiParser.CongressBillList or ApiParser.CongressHouseVoteList)
                 ValidateListAdmissionCapacity(source);
             if (source.CheckIntervalSeconds is { } interval && interval is
                 < WatchedSourceConfiguration.MinimumCheckIntervalSeconds or
@@ -100,23 +100,20 @@ public sealed record CollectionConfiguration
             ?? throw new ArgumentException($"Unknown source ID '{sourceId}'.", nameof(sourceId));
         if (!source.Enabled)
             throw new ArgumentException($"Source '{sourceId}' is disabled.", nameof(sourceId));
-        if (CoveredPersonIdsOf(source, asOf).Length == 0)
+        if (!IsActiveOn(source, asOf))
             throw new ArgumentException($"Source '{sourceId}' has no active person coverage on {asOf:yyyy-MM-dd}.", nameof(sourceId));
         return source;
     }
 
-    public string[] GetCoveredPersonIds(string sourceId, DateOnly asOf)
-    {
-        var source = Sources.FirstOrDefault(candidate => candidate is not null && candidate.Id == sourceId)
-            ?? throw new ArgumentException($"Unknown source ID '{sourceId}'.", nameof(sourceId));
-        return CoveredPersonIdsOf(source, asOf);
-    }
+    public bool IsActiveOn(WatchedSourceConfiguration source, DateOnly asOf) =>
+        source.ApiParser is ApiParser.CongressLegislators || CoveredPersonIdsOf(source, asOf).Length > 0;
 
     public string[] CoveredPersonIdsOf(WatchedSourceConfiguration source, DateOnly asOf)
     {
         IEnumerable<string> ids = source.ApiParser switch
         {
             ApiParser.CongressBillList or ApiParser.CongressHouseVoteList => asOf < source.BackfillFrom ? [] : BioguidePersonIds(),
+            ApiParser.CongressLegislators => [],
             null => source.Coverage!.Where(coverage => new DateRange(coverage.StartsOn, coverage.EndsBefore).Contains(asOf))
                 .Select(coverage => coverage.PersonId),
             _ => throw new ArgumentOutOfRangeException(nameof(source))
@@ -151,21 +148,32 @@ public sealed record CollectionConfiguration
         }
         if (source.Mode != CollectionMode.Api)
             throw new ArgumentException($"Source '{source.Id}' can set an API parser only in API mode.");
-        if (source.Credential is null)
-            throw new ArgumentException($"Source '{source.Id}' needs a credential for its API parser.");
         switch (source.ApiParser)
         {
             case ApiParser.CongressBillList:
             case ApiParser.CongressHouseVoteList:
                 ValidateCongressApiSource(source);
                 break;
+            case ApiParser.CongressLegislators:
+                ValidateLegislatorsSource(source);
+                break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(source));
         }
     }
 
+    private static void ValidateLegislatorsSource(WatchedSourceConfiguration source)
+    {
+        if (source.Credential is not null)
+            throw new ArgumentException($"Source '{source.Id}' reads a public file and cannot set a credential.");
+        if (source.Coverage is not null || source.MinimumCongress is not null || source.BackfillFrom is not null)
+            throw new ArgumentException($"Source '{source.Id}' covers no people and sets no Congress options.");
+    }
+
     private static void ValidateCongressApiSource(WatchedSourceConfiguration source)
     {
+        if (source.Credential is null)
+            throw new ArgumentException($"Source '{source.Id}' needs a credential for its API parser.");
         if (source.MinimumCongress is not >= 1 || source.BackfillFrom is null)
             throw new ArgumentException($"Source '{source.Id}' needs a minimum Congress of 1 or more and a backfill date.");
         if (source.Coverage is not null)
