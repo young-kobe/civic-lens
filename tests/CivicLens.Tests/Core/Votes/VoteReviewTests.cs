@@ -80,6 +80,8 @@ public sealed class VoteReviewTests
         Assert.False(Review(next with { BillType = "s" }, approved).IsBulkSafe);
         Assert.False(Review(next with { VotedOn = approved.VotedOn.AddDays(1) }, approved).IsBulkSafe);
         Assert.False(Review(next with { RollCallNumber = 101 }, approved).IsBulkSafe);
+        Assert.False(Review(next with { Congress = approved.Congress + 1 }, approved).IsBulkSafe);
+        Assert.False(Review(next with { SessionNumber = 2 }, approved).IsBulkSafe);
         Assert.False(Review(next with { TrackedIssueIds = ["other"] }, approved).IsBulkSafe);
     }
 

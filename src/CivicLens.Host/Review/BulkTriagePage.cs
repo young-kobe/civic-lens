@@ -20,10 +20,15 @@ public abstract class BulkTriagePage : TriagePage
 
     protected abstract Task<ImmutableArray<BulkApprovalResult>> ApproveBulkAsync(BulkApprovalRequest request);
 
-    protected Task ApproveSelectedAsync() => RunAsync(
-        () => ApproveBulkAsync(new([.. (Targets ?? []).Select(TriageTargets.Parse)], $"bulk:{BulkKey}")), BulkFailures, results =>
-        {
-            approvals = results;
-            return LoadAsync();
-        });
+    protected Task ApproveSelectedAsync() => RunAsync(ApproveTargetsAsync, BulkFailures, results =>
+    {
+        approvals = results;
+        return LoadAsync();
+    });
+
+    private Task<ImmutableArray<BulkApprovalResult>> ApproveTargetsAsync()
+    {
+        RequireKey(BulkKey);
+        return ApproveBulkAsync(new([.. (Targets ?? []).Select(TriageTargets.Parse)], $"bulk:{BulkKey}"));
+    }
 }

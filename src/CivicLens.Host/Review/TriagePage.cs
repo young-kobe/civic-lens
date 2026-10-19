@@ -48,6 +48,11 @@ public abstract class TriagePage : DraftListPage
 
     protected string TriageHref(string? cursor, params string?[] otherParts) => Href(Route, null, cursor, "drafts", otherParts);
 
+    protected static void RequireKey(string? key)
+    {
+        if (string.IsNullOrWhiteSpace(key)) throw new ArgumentException("The form needs an idempotency key.");
+    }
+
     protected string? PagerHref(string? cursor) => cursor is null ? null : TriageHref(cursor);
 
     protected async Task DecideSelectedAsync() =>
@@ -82,6 +87,7 @@ public abstract class TriagePage : DraftListPage
 
     private async Task<string> RecordDecisionAsync()
     {
+        RequireKey(DecideKey);
         var approving = ApproveTarget is not null;
         var target = TriageTargets.Parse(ApproveTarget ?? RequestChangesTarget ?? throw new ArgumentException("Choose a decision."));
         var note = approving ? null : Notes?.GetValueOrDefault(target.RecordId);

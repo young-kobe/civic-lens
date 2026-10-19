@@ -104,6 +104,24 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
     }
 
     [Fact]
+    public async Task ABulkPostAndAnInlineDecideWithoutAnIdempotencyKeyAreBadRequestsAndWriteNothing()
+    {
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+        var recordId = await SeedVoteDraftAsync(VoteKind.Rule);
+        var page = await host.GetDocumentAsync("/Review/Votes/Triage");
+        var target = page.QuerySelector("input[name='targets']")!.GetAttribute("value")!;
+        var bulk = Fields(page.QuerySelector("#approve-bulk")!).Where(field => field.Key != "idempotencyKey").Append(new("targets", target));
+        var decide = Fields(page.QuerySelector("#decide")!).Where(field => field.Key != "idempotencyKey").Append(new("approve", target));
+
+        using var bulkResponse = await host.Client.PostAsync("/Review/Votes/Triage", new FormUrlEncodedContent(bulk));
+        using var decideResponse = await host.Client.PostAsync("/Review/Votes/Triage", new FormUrlEncodedContent(decide));
+
+        Assert.Equal(HttpStatusCode.BadRequest, bulkResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, decideResponse.StatusCode);
+        Assert.Equal(0L, await CountAsync($"SELECT count(*) FROM vote_review_decisions WHERE record_id = '{recordId}'"));
+    }
+
+    [Fact]
     public async Task RequestingChangesInlineNeedsANoteAndLeavesTheRowWithOnlyAnEditorLinkBecauseItNowHasAConcern()
     {
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
