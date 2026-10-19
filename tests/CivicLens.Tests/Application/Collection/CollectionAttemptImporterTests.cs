@@ -4,7 +4,7 @@ using CivicLens.Core.Collection;
 
 namespace CivicLens.Tests.Application.Collection;
 
-public sealed class CollectAndImportCollectionAttemptTests
+public sealed class CollectionAttemptImporterTests
 {
     private static readonly DateTimeOffset ObservedAt = new(2026, 5, 1, 12, 30, 0, TimeSpan.Zero);
 
@@ -36,47 +36,17 @@ public sealed class CollectAndImportCollectionAttemptTests
     }
 
     [Fact]
-    public async Task HandoffIsDurableBeforeImportAndCleanupFollowsConfirmedImport()
-    {
-        var request = Request();
-        var result = Result(CollectionOutcome.Failed, request) with { FailureCode = CollectionFailureCode.TransportError };
-        var events = new List<string>();
-        var store = new FakeStore { OnImport = () => events.Add("import") };
-        var handoffs = new RecordingHandoffs(events);
-
-        var completion = await new CollectAndImportCollectionAttempt(
-            new FakeCollector((_, _) => Task.FromResult(result)), store, handoffs).ExecuteAsync("attempt", request);
-
-        Assert.Equal(new[] { "save", "import", "delete" }, events);
-        Assert.True(completion.HandoffRemoved);
-        Assert.Null(handoffs.LastSaved);
-    }
-
-    [Fact]
-    public async Task HandoffSaveFailurePreventsImport()
-    {
-        var request = Request();
-        var result = Result(CollectionOutcome.Failed, request) with { FailureCode = CollectionFailureCode.TransportError };
-        var store = new FakeStore();
-        var handoffs = new RecordingHandoffs([]) { FailSave = true };
-
-        await Assert.ThrowsAsync<IOException>(() => new CollectAndImportCollectionAttempt(
-            new FakeCollector((_, _) => Task.FromResult(result)), store, handoffs).ExecuteAsync("attempt", request));
-
-        Assert.Null(store.Received);
-    }
-
-    [Fact]
     public async Task UncertainCommitReplaysIdempotentlyWithOriginalAttemptIdAndRelocatedArtifactRoot()
     {
         var request = Request();
         var result = Result(CollectionOutcome.Failed, request) with { FailureCode = CollectionFailureCode.TransportError };
         var store = new FakeStore { LoseAcknowledgmentOnce = true };
-        var handoffs = new RecordingHandoffs([]);
-        var collector = new FakeCollector((_, _) => Task.FromResult(result));
-        var fresh = new CollectAndImportCollectionAttempt(collector, store, handoffs);
+        var handoffs = new RecordingHandoffs();
+        await handoffs.SaveAsync(new PendingCollectionHandoff(PendingCollectionHandoff.CurrentVersion, "attempt", request, result),
+            CancellationToken.None);
 
-        await Assert.ThrowsAsync<IOException>(() => fresh.ExecuteAsync("attempt", request));
+        await Assert.ThrowsAsync<IOException>(() => CollectionAttemptImporter.ImportAsync("attempt", request, result, store,
+            CancellationToken.None));
         var verifier = new RecordingVerifier();
         var recovery = new RecoverCollectionAttempts(handoffs, verifier, store);
         var replay = await recovery.ReplayAsync("attempt", Path.Combine(Path.GetTempPath(), "relocated-captures"));
@@ -86,23 +56,6 @@ public sealed class CollectAndImportCollectionAttemptTests
         Assert.True(replay.HandoffRemoved);
         Assert.Equal(Path.GetFullPath(Path.Combine(Path.GetTempPath(), "relocated-captures")), verifier.ArtifactRoot);
         Assert.Equal(2, store.ImportCount);
-    }
-
-    [Fact]
-    public async Task CleanupCancellationReturnsConfirmedDecisionAndLeavesHandoffPending()
-    {
-        var request = Request();
-        var result = Result(CollectionOutcome.Failed, request) with { FailureCode = CollectionFailureCode.TransportError };
-        var store = new FakeStore();
-        var handoffs = new RecordingHandoffs([]) { CancelDelete = true };
-
-        var completion = await new CollectAndImportCollectionAttempt(
-            new FakeCollector((_, _) => Task.FromResult(result)), store, handoffs).ExecuteAsync("attempt", request);
-
-        Assert.Equal(ImportDisposition.NewAttempt, completion.Decision.Disposition);
-        Assert.False(completion.HandoffRemoved);
-        Assert.NotNull(handoffs.LastSaved);
-        Assert.Contains("Handoff cleanup was interrupted", completion.CleanupFailure);
     }
 
     [Fact]
@@ -118,7 +71,7 @@ public sealed class CollectAndImportCollectionAttemptTests
         var prior = Captured("prior", request.SourceId, request.Url, result.FinalUrl);
         var store = new FakeStore { Prior = prior };
 
-        var decision = (await Handler(result, store).ExecuteAsync("attempt-304", request)).Decision;
+        var decision = await Handler(result, store).ExecuteAsync("attempt-304", request);
 
         var mapped = Assert.IsType<NotModifiedAttemptResult>(decision.AttemptResult);
         Assert.Equal("attempt-304", mapped.AttemptId);
@@ -152,7 +105,7 @@ public sealed class CollectAndImportCollectionAttemptTests
         };
         var store = new FakeStore { Prior = Captured("prior", request.SourceId, request.Url, request.Url) };
 
-        var decision = (await Handler(result, store).ExecuteAsync("normalized-304", request)).Decision;
+        var decision = await Handler(result, store).ExecuteAsync("normalized-304", request);
 
         Assert.Equal(new SentValidators("\"v1\"", ObservedAt), store.Existing!.SentValidators);
         Assert.Equal(PriorCaptureLinkStatus.Linked, decision.PriorCaptureLinkStatus);
@@ -201,47 +154,6 @@ public sealed class CollectAndImportCollectionAttemptTests
     }
 
     [Fact]
-    public async Task CollectorFailureAndCancellationNeverInvokePersistence()
-    {
-        var request = Request();
-        var store = new FakeStore();
-        var failedCollector = new FakeCollector((_, _) => throw new InvalidOperationException("verification failed"));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => new CollectAndImportCollectionAttempt(failedCollector, store, new RecordingHandoffs([]))
-            .ExecuteAsync("attempt", request));
-        Assert.Null(store.Received);
-
-        using var canceled = new CancellationTokenSource();
-        canceled.Cancel();
-        var canceledCollector = new FakeCollector((_, token) =>
-        {
-            token.ThrowIfCancellationRequested();
-            return Task.FromResult(Result(CollectionOutcome.Failed, request));
-        });
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new CollectAndImportCollectionAttempt(canceledCollector, store, new RecordingHandoffs([]))
-            .ExecuteAsync("attempt", request, canceled.Token));
-        Assert.Null(store.Received);
-    }
-
-    [Fact]
-    public async Task CancellationAfterCollectorReturnsStillSkipsPersistence()
-    {
-        var request = Request();
-        var result = Result(CollectionOutcome.Failed, request) with { FailureCode = CollectionFailureCode.TransportError };
-        using var canceled = new CancellationTokenSource();
-        var collector = new FakeCollector((_, _) =>
-        {
-            canceled.Cancel();
-            return Task.FromResult(result);
-        });
-        var store = new FakeStore();
-
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new CollectAndImportCollectionAttempt(collector, store, new RecordingHandoffs([]))
-            .ExecuteAsync("attempt", request, canceled.Token));
-
-        Assert.Null(store.Received);
-    }
-
-    [Fact]
     public async Task RetainedEvidenceExcludesDispositionAndStoreDistinguishesDuplicateFromConflict()
     {
         var request = Request();
@@ -254,8 +166,8 @@ public sealed class CollectAndImportCollectionAttemptTests
         };
         var store = new FakeStore();
         var handler = Handler(result, store);
-        var first = (await handler.ExecuteAsync("attempt", request)).Decision;
-        var duplicate = (await handler.ExecuteAsync("attempt", request)).Decision;
+        var first = await handler.ExecuteAsync("attempt", request);
+        var duplicate = await handler.ExecuteAsync("attempt", request);
 
         Assert.Equal(ImportDisposition.NewAttempt, first.Disposition);
         Assert.Equal(ImportDisposition.DuplicateAttempt, duplicate.Disposition);
@@ -278,9 +190,9 @@ public sealed class CollectAndImportCollectionAttemptTests
         };
         var store = new FakeStore();
         var handler = Handler(result, store);
-        var first = (await handler.ExecuteAsync("attempt-304", request)).Decision;
+        var first = await handler.ExecuteAsync("attempt-304", request);
         store.Prior = Captured("prior", request.SourceId, request.Url, request.Url);
-        var duplicate = (await handler.ExecuteAsync("attempt-304", request)).Decision;
+        var duplicate = await handler.ExecuteAsync("attempt-304", request);
 
         Assert.Equal(PriorCaptureLinkStatus.Unresolved, first.PriorCaptureLinkStatus);
         Assert.Equal(ImportDisposition.DuplicateAttempt, duplicate.Disposition);
@@ -360,8 +272,13 @@ public sealed class CollectAndImportCollectionAttemptTests
             new SentValidators(request.ETag, null), prior));
     }
 
-    private static CollectAndImportCollectionAttempt Handler(CollectionResult result, FakeStore store) =>
-        new(new FakeCollector((_, _) => Task.FromResult(result)), store, new RecordingHandoffs([]));
+    private static Importer Handler(CollectionResult result, FakeStore store) => new(result, store);
+
+    private sealed class Importer(CollectionResult result, FakeStore store)
+    {
+        public Task<CollectionImportDecision> ExecuteAsync(string attemptId, CollectionRequest request) =>
+            CollectionAttemptImporter.ImportAsync(attemptId, request, result, store, CancellationToken.None);
+    }
 
     private static CollectionRequest Request() => new()
     {
@@ -407,19 +324,11 @@ public sealed class CollectAndImportCollectionAttemptTests
             new CollectionResponse(200, "\"v1\"", ObservedAt, "text/html", ["br", "gzip"]),
             new CaptureIdentity(new string('a', 64), 12));
 
-    private sealed class FakeCollector(Func<CollectionRequest, CancellationToken, Task<CollectionResult>> execute)
-        : ICollectorProcess
-    {
-        public Task<CollectionResult> RunAsync(CollectionRequest request, CancellationToken cancellationToken) =>
-            execute(request, cancellationToken);
-    }
-
     private sealed class FakeStore : ICollectionAttemptStore
     {
         public Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken) =>
             Task.FromResult(Existing?.AttemptResult.AttemptId == attemptId ? Existing : null);
 
-        public Action? OnImport { get; init; }
         public bool LoseAcknowledgmentOnce { get; set; }
         public int ImportCount { get; private set; }
         public CollectionAttemptImport? Received { get; private set; }
@@ -431,7 +340,6 @@ public sealed class CollectAndImportCollectionAttemptTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             ImportCount++;
-            OnImport?.Invoke();
             Received = attempt;
             var decision = attempt.Decide(Existing, Prior);
             if (decision.Disposition == ImportDisposition.NewAttempt)
@@ -446,29 +354,23 @@ public sealed class CollectAndImportCollectionAttemptTests
         }
     }
 
-    private sealed class RecordingHandoffs(List<string> events) : ICollectionReceiptHandoffStore
+    private sealed class RecordingHandoffs : ICollectionReceiptHandoffStore
     {
-        public bool FailSave { get; init; }
-        public bool CancelDelete { get; init; }
-        public PendingCollectionHandoff? LastSaved { get; private set; }
+        private readonly Dictionary<string, PendingCollectionHandoff> entries = [];
         public ValueTask<IAsyncDisposable> AcquireRecoveryLeaseAsync(CancellationToken cancellationToken) =>
             ValueTask.FromResult<IAsyncDisposable>(new NoopLease());
         public Task SaveAsync(PendingCollectionHandoff handoff, CancellationToken cancellationToken)
         {
-            if (FailSave) throw new IOException("disk full");
-            LastSaved = handoff;
-            events.Add("save");
+            entries.Add(handoff.AttemptId, handoff);
             return Task.CompletedTask;
         }
         public Task<IReadOnlyList<string>> ListAsync(CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<string>>(LastSaved is null ? [] : [LastSaved.AttemptId]);
+            Task.FromResult<IReadOnlyList<string>>([.. entries.Keys]);
         public Task<PendingCollectionHandoff> LoadAsync(string handoffId, CancellationToken cancellationToken) =>
-            Task.FromResult(LastSaved is { } saved && handoffId == saved.AttemptId ? saved : throw new FileNotFoundException());
+            Task.FromResult(entries[handoffId]);
         public Task DeleteAsync(string handoffId, CancellationToken cancellationToken)
         {
-            if (CancelDelete) throw new OperationCanceledException();
-            events.Add("delete");
-            LastSaved = null;
+            entries.Remove(handoffId);
             return Task.CompletedTask;
         }
         private sealed class NoopLease : IAsyncDisposable
@@ -488,5 +390,4 @@ public sealed class CollectAndImportCollectionAttemptTests
             return Task.CompletedTask;
         }
     }
-
 }

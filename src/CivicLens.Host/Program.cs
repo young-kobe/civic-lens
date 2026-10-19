@@ -50,11 +50,9 @@ if (args is [] or ["--help"] or ["help"])
           validate <config.json>
           collect <config.json> <source-id> <collector.dll> <artifact-directory> [--as-of yyyy-MM-dd]
           db migrate
-          collect-import <config.json> <source-id> <collector.dll> <artifact-directory> [--as-of yyyy-MM-dd]
           receipts list <artifact-directory>
           receipts replay <artifact-directory> <attempt-id|--all>
           jobs enqueue <config.json> <source-id> <idempotency-key> [--as-of yyyy-MM-dd]
-          jobs run <job-id> <collector.dll> <artifact-directory>
           jobs get <job-id>
           jobs list [limit]
           jobs cancel <job-id>
@@ -98,9 +96,9 @@ if (args is [] or ["--help"] or ["help"])
         New admissions default to today in UTC; existing keys retain their saved date when --as-of is omitted.
         --as-of selects eligibility, not historical fetching or attribution.
         Database commands require CIVIC_LENS_DATABASE (Postgres connection string with Host and Database).
-        collect and receipts list are database-free. collect-import saves a handoff before importing.
+        collect and receipts list are database-free.
         receipts replay imports saved handoffs without collecting again; use the capture directory after relocation.
-        jobs commands require the database. Each run reconciles prior work and performs at most one new fetch.
+        jobs commands require the database.
         worker also drafts document-change accounts when CIVIC_LENS_ANALYSIS_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         worker also gates statement candidates when CIVIC_LENS_STATEMENT_GATE_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
         worker requires CIVIC_LENS_ISSUES_CONFIG when a Congress.gov bill list source is enabled.
@@ -142,17 +140,17 @@ if (args.Contains("--as-of", StringComparer.Ordinal))
 {
     if (args is not [.., "--as-of", var dateText] ||
         !DateOnly.TryParseExact(dateText, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out coverageAsOf) ||
-        args[..^2] is not (["collect" or "collect-import", _, _, _, _] or
+        args[..^2] is not (["collect", _, _, _, _] or
             ["jobs", "enqueue", _, _, _] or ["discovery", "admit", _, _, _, _]))
     {
-        Console.Error.WriteLine("Use a trailing --as-of yyyy-MM-dd with collect, collect-import, jobs enqueue, or discovery admit.");
+        Console.Error.WriteLine("Use a trailing --as-of yyyy-MM-dd with collect, jobs enqueue, or discovery admit.");
         return 2;
     }
     admissionAsOf = coverageAsOf;
     args = args[..^2];
 }
 
-if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _] or ["collect-import", _, _, _, _]
+if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _]
     or ["discovery", "get", _] or ["discovery", "admit", _, _, _, _]
     or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args) &&
     !CollectionWorkerCommand.Matches(args) && !DocumentCommand.Matches(args) && !ReleaseCommand.Matches(args) &&
@@ -166,7 +164,6 @@ using var cancellation = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
 var executing = false;
 var replaying = args is ["receipts", "replay", _, _];
-var importing = args[0] == "collect-import" || replaying;
 try
 {
     if (CollectionWorkerCommand.Matches(args))
@@ -382,9 +379,8 @@ try
     {
         CollectionJobCommand.ValidateArguments(args);
         var jobs = CreateJobs();
-        var evidence = CreateDatabase();
         executing = true;
-        return await CollectionJobCommand.ExecuteAsync(args, jobs, evidence, cancellation.Token);
+        return await CollectionJobCommand.ExecuteAsync(args, jobs, cancellation.Token);
     }
 
     if (args is ["receipts", "list", var listRoot])
@@ -426,17 +422,6 @@ try
 
     var runner = new CollectorProcess(args[3], Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet");
     var attempt = new PreparedCollectionAttempt(new ConfiguredCollectionSource(configuration, args[2], coverageAsOf), args[4]);
-    if (importing)
-    {
-        var database = CreateDatabase();
-        Console.Error.WriteLine($"Attempt ID: {attempt.AttemptId}");
-        executing = true;
-        var completion = await new CollectAndImportCollectionAttempt(runner, database,
-            new FileCollectionReceiptHandoffStore(attempt.Request.ArtifactDirectory))
-            .ExecuteAsync(attempt.AttemptId, attempt.Request, cancellation.Token);
-        return CollectionCommandOutput.WriteCompletion(completion);
-    }
-
     executing = true;
     var result = await new CollectWatchedPage(runner).ExecuteAsync(attempt, cancellation.Token);
     Console.WriteLine(JsonSerializer.Serialize(result, CollectionProtocol.JsonOptions));
@@ -444,14 +429,9 @@ try
 }
 catch (OperationCanceledException)
 {
-    if (args[0] == "jobs" && executing)
-        Console.Error.WriteLine("Job execution interrupted. Use jobs get to inspect retained progress; jobs cancel requests permanent cancellation.");
-    else if (replaying && executing)
-        Console.Error.WriteLine("Receipt replay cancelled or timed out. Persistence was not confirmed. Use receipts list to inspect retained handoffs.");
-    else
-        Console.Error.WriteLine(importing && executing
-            ? "Collection/import cancelled or timed out. Persistence was not confirmed. Use receipts list and receipts replay to recover saved handoffs."
-            : "Command cancelled or timed out.");
+    Console.Error.WriteLine(replaying && executing
+        ? "Receipt replay cancelled or timed out. Persistence was not confirmed. Use receipts list to inspect retained handoffs."
+        : "Command cancelled or timed out.");
     return 1;
 }
 catch (Exception exception) when (!executing && exception is ArgumentException or UnauthorizedAccessException or IOException or JsonException or InvalidOperationException)
@@ -462,14 +442,9 @@ catch (Exception exception) when (!executing && exception is ArgumentException o
 }
 catch (Exception)
 {
-    if (args[0] == "jobs")
-        Console.Error.WriteLine("Job operation failed. Inspect the job, retained receipts, database connectivity, and applied migrations before resuming.");
-    else if (replaying)
-        Console.Error.WriteLine("Receipt replay failed. Persistence was not confirmed. Check the capture directory, retained handoff, database connectivity, and applied migrations.");
-    else
-        Console.Error.WriteLine(importing
-            ? "Collection/import failed. Persistence was not confirmed. Check the collector, capture directory, database connectivity, and applied migrations. Use receipts list and receipts replay to recover saved handoffs."
-            : "Command failed. Check filesystem access, collector availability, or database connectivity as applicable.");
+    Console.Error.WriteLine(replaying
+        ? "Receipt replay failed. Persistence was not confirmed. Check the capture directory, retained handoff, database connectivity, and applied migrations."
+        : "Command failed. Check filesystem access, collector availability, or database connectivity as applicable.");
     return 1;
 }
 

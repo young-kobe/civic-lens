@@ -82,7 +82,7 @@ New configuration-based managed jobs bind the revision and `coverageAsOf` to the
 - Reuse of a revision-bound job or batch key with another revision conflicts. Reuse with an explicitly different date also conflicts.
 - Jobs and standalone definitions without provenance stay supported. Replay of such an admission compares its original execution settings. It returns the original record and assigns no later revision.
 - Saved receipt replay does not depend on the current configuration.
-- Direct `collect` and `collect-import` apply coverage eligibility but keep no revision. Their receipts stay source observations. Use managed jobs when the retained coverage decision matters.
+- Direct `collect` applies coverage eligibility but keeps no revision. Its receipts stay source observations. Use managed jobs when the retained coverage decision matters.
 
 ### Admission replay
 

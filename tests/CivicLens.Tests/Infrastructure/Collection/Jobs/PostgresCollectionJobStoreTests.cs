@@ -443,8 +443,8 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     {
         var claim = await EnqueueClaimAsync("already-imported", Definition());
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
-        await new CollectAndImportCollectionAttempt(new ReceiptCollector(429), evidence,
-            new FileCollectionReceiptHandoffStore(root)).ExecuteAsync(start.Attempt!.AttemptId, start.Attempt.Request);
+        var receipt = await new ReceiptCollector(429).RunAsync(start.Attempt!.Request, default);
+        await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
         await jobs.ReleaseCollectorAsync(claim.Lease, start.CollectorLease!, default);
         await jobs.ReleaseClaimAsync(claim.Lease, default);
 

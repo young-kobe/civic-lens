@@ -16,7 +16,7 @@ public sealed class RecoverCollectionAttempts(ICollectionReceiptHandoffStore han
         var handoff = await LoadAndVerifyAsync(handoffId, artifactRoot, cancellationToken);
         var decision = await CollectionAttemptImporter.ImportAsync(handoff.AttemptId, handoff.Request,
             handoff.Receipt, store, cancellationToken);
-        return await CollectAndImportCollectionAttempt.RemoveHandoffAsync(handoffId, decision, handoffs, cancellationToken);
+        return await RemoveHandoffAsync(handoffId, decision, handoffs, cancellationToken);
     }
 
     public async Task<IReadOnlyList<CollectionRecoveryItem>> ReplayAllAsync(string artifactRoot,
@@ -127,7 +127,7 @@ public sealed class RecoverCollectionAttempts(ICollectionReceiptHandoffStore han
                 "Import was not confirmed; the handoff was retained for replay.");
         }
 
-        var completion = await CollectAndImportCollectionAttempt.RemoveHandoffAsync(id, decision, handoffs, cancellationToken);
+        var completion = await RemoveHandoffAsync(id, decision, handoffs, cancellationToken);
         return completion.HandoffRemoved
             ? new CollectionRecoveryItem(id, CollectionRecoveryStatus.ImportedAndRemoved, decision, null)
             : new CollectionRecoveryItem(id, CollectionRecoveryStatus.ImportedCleanupFailed, decision, completion.CleanupFailure);
@@ -140,6 +140,24 @@ public sealed class RecoverCollectionAttempts(ICollectionReceiptHandoffStore han
         handoff.Validate();
         await verifier.VerifyAsync(handoff.Request, handoff.Receipt, Path.GetFullPath(artifactRoot), cancellationToken);
         return handoff;
+    }
+
+    private static async Task<CollectionAttemptCompletion> RemoveHandoffAsync(string id, CollectionImportDecision decision,
+        ICollectionReceiptHandoffStore handoffs, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await handoffs.DeleteAsync(id, cancellationToken);
+            return new CollectionAttemptCompletion(decision, true, null);
+        }
+        catch (OperationCanceledException)
+        {
+            return new CollectionAttemptCompletion(decision, false, "Handoff cleanup was interrupted; pending receipt was retained.");
+        }
+        catch (Exception)
+        {
+            return new CollectionAttemptCompletion(decision, false, "Handoff cleanup failed; pending receipt was retained.");
+        }
     }
 
     private sealed record ReplayEntry(string Id, CollectionOutcome? Outcome, CollectionRecoveryItem? Failure);
