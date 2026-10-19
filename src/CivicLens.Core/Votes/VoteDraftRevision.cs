@@ -52,13 +52,6 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
 
     public void ValidateForApproval() => ValidateShape();
 
-    public bool IsMemberVoteOnlyChangeOf(VoteDraftRevision approved) =>
-        RecordId == approved.RecordId && ReviewTextRules.HasSameText(this, approved) && Kind == approved.Kind &&
-        Congress == approved.Congress && SessionNumber == approved.SessionNumber && RollCallNumber == approved.RollCallNumber &&
-        BillType == approved.BillType && BillNumber == approved.BillNumber && VotedOn == approved.VotedOn &&
-        Facts.Select(fact => fact.Text).SequenceEqual(approved.Facts.Select(fact => fact.Text)) &&
-        TrackedIssueIds.SequenceEqual(approved.TrackedIssueIds);
-
     public void ValidateForApproval(IReadOnlyDictionary<string, DocumentExtraction> extractions)
     {
         ValidateForApproval();

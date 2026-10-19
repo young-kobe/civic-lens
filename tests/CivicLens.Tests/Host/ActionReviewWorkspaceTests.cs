@@ -108,7 +108,7 @@ public sealed class ActionReviewWorkspaceTests(PostgresCollection postgres) : IA
     }
 
     [Fact]
-    public async Task TheReviewHomeCountsTheStatementsActionsAndVotesThatNeedActionAndLinksEachList()
+    public async Task TheReviewHomeCountsOnlyTheStatementsThatNeedActionBecauseCodeApprovesActionsAndVotes()
     {
         var seeder = new RelationshipWorldSeeder(host.ConnectionString);
         await seeder.StatementAsync(RelationshipFixtures.Statement(), "AwaitingReview");
@@ -120,14 +120,9 @@ public sealed class ActionReviewWorkspaceTests(PostgresCollection postgres) : IA
 
         var home = await host.GetDocumentAsync("/Review");
 
-        foreach (var (label, count, route) in new[]
-                 {
-                     ("Statements need action", "1", "/Review/Statements"), ("Actions need action", "2", "/Review/Actions"),
-                     ("Votes need action", "1", "/Review/Votes")
-                 })
-        {
-            var stat = home.QuerySelector($"a.stat[href='{route}?drafts=needs-action']")!;
-            Assert.Equal([count, label], stat.Children.Select(child => child.TextContent));
-        }
+        var stat = home.QuerySelector("a.stat[href='/Review/Statements?drafts=needs-action']")!;
+        Assert.Equal(["1", "Statements need action"], stat.Children.Select(child => child.TextContent));
+        Assert.Null(home.QuerySelector("a.stat[href='/Review/Actions?drafts=needs-action']"));
+        Assert.Null(home.QuerySelector("a.stat[href='/Review/Votes?drafts=needs-action']"));
     }
 }

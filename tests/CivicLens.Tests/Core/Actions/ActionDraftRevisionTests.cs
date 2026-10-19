@@ -95,64 +95,6 @@ public sealed class ActionDraftRevisionTests
         Assert.Throws<ArgumentException>(() => (PersonEditOf(Model(), "h", "s") with { Suggestion = suggestion }).ValidatePersonEditOf(Model()));
     }
 
-    [Fact]
-    public void ARevisionIsSponsorshipOnlyWhenOnlyItsSponsorshipsDifferFromTheApprovedRevision()
-    {
-        var approved = Model();
-        var cosponsor = Sponsorship("M000133") with { Role = ActionSponsorshipRole.Cosponsor };
-        var changed = Model(2) with { Sponsorships = [Sponsorship(), cosponsor], Fingerprint = new string('f', 64) };
-
-        Assert.True(changed.IsSponsorshipOnlyChangeOf(approved));
-        Assert.False(Model(2).IsSponsorshipOnlyChangeOf(approved));
-        Assert.False((changed with { Sponsorships = [Sponsorship("M000133"), cosponsor] }).IsSponsorshipOnlyChangeOf(approved));
-        Assert.False((changed with { Headline = "Other" }).IsSponsorshipOnlyChangeOf(approved));
-        Assert.False((changed with { Summary = "Other." }).IsSponsorshipOnlyChangeOf(approved));
-        Assert.False((changed with { Suggestion = new("S", "S.", new string('1', 32), Fingerprint) }).IsSponsorshipOnlyChangeOf(approved));
-        Assert.False((changed with { BillTitle = "Other" }).IsSponsorshipOnlyChangeOf(approved));
-        Assert.False((changed with { SummaryVersion = "00@x", SummaryCitation = new(ExtractionId, 0, 3) }).IsSponsorshipOnlyChangeOf(approved));
-        Assert.False((changed with { TrackedIssueIds = ["rent"] }).IsSponsorshipOnlyChangeOf(approved));
-    }
-
-    [Fact]
-    public void SponsorshipChangesListAddedChangedAndNoLongerListedEntriesSoReviewersSeeEveryChange()
-    {
-        var stays = Sponsorship("M000133") with { Role = ActionSponsorshipRole.Cosponsor };
-        var approved = Model() with { Sponsorships = [Sponsorship(), stays] };
-        var withdrawn = stays with { WithdrawnOn = new DateOnly(2025, 2, 1), Citations = Spans((30, 5)) };
-        var added = Sponsorship("S000033") with { Role = ActionSponsorshipRole.Cosponsor };
-
-        var changes = (Model(2) with { Sponsorships = [withdrawn, added] }).SponsorshipChangesSince(approved);
-
-        Assert.Equal(added, Assert.Single(changes.Added));
-        Assert.Equal(withdrawn, Assert.Single(changes.Changed));
-        Assert.Equal(Sponsorship(), Assert.Single(changes.Removed));
-        Assert.True(Model(2).SponsorshipChangesSince(Model()).IsEmpty);
-    }
-
-    [Fact]
-    public void AnAddedCosponsorAndAReversedWithdrawalAreBothListedBecauseClearingAWithdrawalIsAChangeToo()
-    {
-        var withdrawn = Sponsorship("M000133") with { Role = ActionSponsorshipRole.Cosponsor, WithdrawnOn = new DateOnly(2025, 2, 1) };
-        var approved = Model() with { Sponsorships = [Sponsorship(), withdrawn] };
-        var reversed = withdrawn with { WithdrawnOn = null };
-        var added = Sponsorship("S000033") with { Role = ActionSponsorshipRole.Cosponsor };
-        var remapped = Sponsorship() with { PersonId = "elizabeth-warren" };
-
-        var changes = (Model(2) with { Sponsorships = [Sponsorship(), reversed, added] }).SponsorshipChangesSince(approved);
-        var personChange = (Model(2) with { Sponsorships = [remapped, withdrawn] }).SponsorshipChangesSince(approved);
-        var flagOnly = (Model(2) with { Sponsorships = [Sponsorship(), withdrawn with { IsOriginal = !withdrawn.IsOriginal }] })
-            .SponsorshipChangesSince(approved);
-        var citationOnly = (Model(2) with { Sponsorships = [Sponsorship() with { Citations = Spans((40, 5)) }, withdrawn] })
-            .SponsorshipChangesSince(approved);
-
-        Assert.Equal(added, Assert.Single(changes.Added));
-        Assert.Equal(reversed, Assert.Single(changes.Changed));
-        Assert.Empty(changes.Removed);
-        Assert.Equal(remapped, Assert.Single(personChange.Changed));
-        Assert.Equal(withdrawn with { IsOriginal = !withdrawn.IsOriginal }, Assert.Single(flagOnly.Changed));
-        Assert.True(citationOnly.IsEmpty);
-    }
-
     [Theory]
     [InlineData("")]
     [InlineData("bad\0text")]

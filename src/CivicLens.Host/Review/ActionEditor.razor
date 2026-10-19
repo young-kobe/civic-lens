@@ -70,14 +70,6 @@ else
             {
                 <p class="muted small">This revision is the approved revision.</p>
             }
-            else if (review.IsSponsorshipOnly)
-            {
-                var changes = revision.SponsorshipChangesSince(approved);
-                <p class="small">Only the sponsorships changed since approved revision @approved.RevisionNumber. The headline, the summary, and the other bill facts are the same.</p>
-                @ChangeList("Added", changes.Added)
-                @ChangeList("Changed", changes.Changed)
-                @ChangeList("No longer listed", changes.Removed)
-            }
             else
             {
                 <div class="split">
@@ -190,22 +182,6 @@ else
 }
 
 @code {
-    private RenderFragment ChangeList(string title, System.Collections.Immutable.ImmutableArray<ActionSponsorship> items) =>
-        @<text>
-            @if (!items.IsEmpty)
-            {
-                <section class="stack">
-                    <h3>@title</h3>
-                    <ul class="choices">
-                        @foreach (var sponsorship in items)
-                        {
-                            <li>@Cited(sponsorship)</li>
-                        }
-                    </ul>
-                </section>
-            }
-        </text>;
-
     private RenderFragment Cited(ActionSponsorship sponsorship) =>
         @<text>
             @for (var index = 0; index < sponsorship.Citations.Length; index++)

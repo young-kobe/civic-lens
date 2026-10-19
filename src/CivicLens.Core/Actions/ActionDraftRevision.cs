@@ -87,22 +87,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
                 ?? throw new ArgumentException("An action citation names a missing extraction."), span.Start, span.Length);
     }
 
-    public bool IsSponsorshipOnlyChangeOf(ActionDraftRevision approved) =>
-        RecordId == approved.RecordId && ReviewTextRules.HasSameText(this, approved) && HasSameBillFactsAs(approved) &&
-        HasSameSponsorsAs(approved.Sponsorships) && !SponsorshipChangesSince(approved).IsEmpty;
-
     public bool HasSameSponsorsAs(IEnumerable<ActionSponsorship> other) => SponsorsOf(Sponsorships).SequenceEqual(SponsorsOf(other));
-
-    public ActionSponsorshipChanges SponsorshipChangesSince(ActionDraftRevision approved)
-    {
-        var before = approved.Sponsorships.ToLookup(ActionSponsorship.KeyOf);
-        var after = Sponsorships.ToLookup(ActionSponsorship.KeyOf);
-        return new([.. Sponsorships.Where(item => !before.Contains(ActionSponsorship.KeyOf(item)))],
-            [.. Sponsorships.Where(item => before[ActionSponsorship.KeyOf(item)]
-                .Any(earlier => earlier.WithdrawnOn != item.WithdrawnOn || earlier.PersonId != item.PersonId ||
-                    earlier.IsOriginal != item.IsOriginal))],
-            [.. approved.Sponsorships.Where(item => !after.Contains(ActionSponsorship.KeyOf(item)))]);
-    }
 
     private static IEnumerable<(string BioguideId, string PersonId, DateOnly SponsoredOn)> SponsorsOf(IEnumerable<ActionSponsorship> sponsorships) =>
         sponsorships.Where(item => item.Role == ActionSponsorshipRole.Sponsor).Select(item => (item.BioguideId, item.PersonId, item.SponsoredOn));
