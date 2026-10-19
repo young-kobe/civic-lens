@@ -1,0 +1,90 @@
+@page "/Review/Actions/Triage"
+@inherits BulkTriagePage
+@using CivicLens.Application.Review
+@using CivicLens.Core.Actions
+
+<TopBarTitle Crumbs="Crumbs" />
+
+<div class="content">
+    <PageHeader Title="Action triage" Lede="Action records that need action, in tier order. Approve or request changes on a row, or open its editor." />
+    @if (statusMessage is not null)
+    {
+        <Notice Tone="Tone.Ok" Dismissible="true">@statusMessage</Notice>
+    }
+    @if (error is not null)
+    {
+        <Notice Tone="Tone.Bad">@error</Notice>
+    }
+    @if (approvals is not null)
+    {
+        <BulkApprovalResults Results="approvals" EditorHref="@(id => ActionRoutes.Editor(id))" />
+    }
+
+    <form id="decide" method="post" @formname="decide" @onsubmit="DecideSelectedAsync">
+        <AntiforgeryToken />
+        <input type="hidden" name="idempotencyKey" value="@renderKey" />
+    </form>
+    <form id="approve-bulk" method="post" @formname="approve-bulk" @onsubmit="ApproveSelectedAsync">
+        <AntiforgeryToken />
+        <input type="hidden" name="idempotencyKey" value="@renderKey" />
+    </form>
+
+    @if (triage is not null)
+    {
+        <Panel Title="Records" Id="drafts">
+            <Aside><a href="@ActionRoutes.List">All action records</a></Aside>
+            <ChildContent>
+                <DraftFilterForm Label="Filter action triage by issue, official, and date" Action="@($"{ActionRoutes.Triage}#drafts")"
+                                 ClearHref="@ClearHref(ActionRoutes.Triage)"
+                                 Issues="Issues.Issues" Officials="OfficialChoices"
+                                 IssueId="@IssueId" OfficialId="@OfficialId" From="@From" To="@To" />
+                <DataTable Items="triage.Rows" Caption="Action records that need action">
+                    <Head>
+                        <th class="fit"><span class="visually-hidden">Select</span></th>
+                        <th>Action</th>
+                        <th>Decision</th>
+                    </Head>
+                    <Row Context="row">
+                        @{ var review = row.Review; var revision = review.CurrentRevision; }
+                        <td class="fit">
+                            @if (review.IsBulkSafe)
+                            {
+                                <input type="checkbox" form="approve-bulk" name="targets" value="@TriageTargets.Format(review.RecordId, revision.RevisionNumber, review.ReviewStateVersion)" aria-label="@($"Select {revision.Headline}")" />
+                            }
+                        </td>
+                        <td>
+                            <a class="cell-title" href="@ActionRoutes.Editor(review.RecordId)">@revision.Headline</a>
+                            @if (PriorityLabels.Of(row.Priority) is { } tier)
+                            {
+                                <StatusBadge Text="@tier" />
+                            }
+                            <span class="cell-sub">@revision.Summary</span>
+                            <ul class="choices">
+                                @foreach (var (label, span) in QuotesOf(revision))
+                                {
+                                    <li><CitationQuote Label="@label" Quote="@span.QuoteIn(triage.Extractions)" /></li>
+                                }
+                            </ul>
+                            <ApprovalCheckView Check="row.Check" />
+                        </td>
+                        <td>
+                            <TriageDecisionControls RecordId="@review.RecordId" RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion"
+                                                    HasOpenConcerns="@(!review.UnresolvedConcerns.IsEmpty)" Check="row.Check" EditorHref="@ActionRoutes.Editor(review.RecordId)" />
+                        </td>
+                    </Row>
+                    <Empty>
+                        <EmptyState Title="No actions need action" Text="Every action record is approved, or none matches the filter." />
+                    </Empty>
+                </DataTable>
+                <Pager Label="Action triage pages" NewerHref="@PagerHref(triage.NewerCursor)" OlderHref="@PagerHref(triage.OlderCursor)" />
+                @if (triage.Rows.Any(row => row.Review.IsBulkSafe))
+                {
+                    <Toolbar>
+                        <Button Variant="ButtonVariant.Primary" Type="submit" form="approve-bulk">Approve selected sponsorship changes</Button>
+                        <span class="actions-hint">@($"Up to {BulkApproval.MaximumRecords} records. Each record gets its own decision.")</span>
+                    </Toolbar>
+                }
+            </ChildContent>
+        </Panel>
+    }
+</div>

@@ -64,7 +64,89 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
         Assert.Contains("Question: On Passage", evidence, StringComparison.Ordinal);
     }
 
-    private async Task<string> SeedVoteDraftAsync()
+    [Fact]
+    public async Task TheTriagePageShowsTheQuotesAndPassingCheckAndAnInlineApproveBindsTheRowRevisionThenRedirects()
+    {
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+        var recordId = await SeedVoteDraftAsync();
+
+        var page = await host.GetDocumentAsync("/Review/Votes/Triage");
+
+        var row = Assert.Single(page.QuerySelectorAll("[aria-labelledby='drafts'] tbody tr"));
+        Assert.Contains("Question: On Passage", row.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Approval check passed", row.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Passage", row.TextContent, StringComparison.Ordinal);
+        Assert.Null(row.QuerySelector("input[name='targets']"));
+        Assert.Equal($"/Review/Votes/{recordId}", row.QuerySelector("a.btn")!.GetAttribute("href"));
+        using var approved = await host.Client.PostAsync("/Review/Votes/Triage", TriageDecision(page, "approve"));
+
+        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+        Assert.EndsWith("/Review/Votes/Triage?decided=approved#drafts", approved.Headers.Location!.OriginalString, StringComparison.Ordinal);
+        Assert.Equal(1L, await CountAsync($"SELECT count(*) FROM vote_review_decisions WHERE record_id = '{recordId}' AND revision_number = 1 AND kind = 'Approve'"));
+        var after = await host.GetDocumentAsync("/Review/Votes/Triage");
+        Assert.Empty(after.QuerySelectorAll("[aria-labelledby='drafts'] tbody tr"));
+    }
+
+    [Fact]
+    public async Task RequestingChangesInlineNeedsANoteAndLeavesTheRowWithOnlyAnEditorLinkBecauseItNowHasAConcern()
+    {
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+        await SeedVoteDraftAsync();
+        var page = await host.GetDocumentAsync("/Review/Votes/Triage");
+
+        using var withoutNote = await host.Client.PostAsync("/Review/Votes/Triage", TriageDecision(page, "requestChanges"));
+        using var withNote = await host.Client.PostAsync("/Review/Votes/Triage", TriageDecision(page, "requestChanges", "Check the question."));
+
+        Assert.Equal(HttpStatusCode.BadRequest, withoutNote.StatusCode);
+        Assert.Contains("Requesting changes needs a note", await withoutNote.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.Redirect, withNote.StatusCode);
+        var after = await host.GetDocumentAsync("/Review/Votes/Triage?decided=changes-requested");
+        var row = Assert.Single(after.QuerySelectorAll("[aria-labelledby='drafts'] tbody tr"));
+        Assert.Contains("Changes are requested", after.QuerySelector(".notice")!.TextContent, StringComparison.Ordinal);
+        Assert.Empty(row.QuerySelectorAll("button, textarea, input"));
+        Assert.NotNull(row.QuerySelector("a.btn"));
+    }
+
+    [Fact]
+    public async Task ABulkSafeRowGetsACheckboxAndTheBulkPostApprovesIt()
+    {
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+        var recordId = await SeedVoteDraftAsync(VoteKind.Rule);
+        var page = await host.GetDocumentAsync("/Review/Votes/Triage");
+        var fields = Fields(page.QuerySelector("#approve-bulk")!);
+        var target = page.QuerySelector("input[name='targets']")!.GetAttribute("value")!;
+        Assert.Equal($"{recordId}:1:0", target);
+
+        using var approved = await host.Client.PostAsync("/Review/Votes/Triage", new FormUrlEncodedContent([.. fields, new("targets", target)]));
+
+        Assert.Equal(HttpStatusCode.OK, approved.StatusCode);
+        Assert.Contains("Approved", await approved.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Equal(1L, await CountAsync("SELECT count(*) FROM vote_review_decisions"));
+    }
+
+    [Fact]
+    public async Task TheTriagePageRefusesAnEmptyBulkPostAndTheListLinksTheTriagePage()
+    {
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+        var triage = await host.GetDocumentAsync("/Review/Votes/Triage");
+        var list = await host.GetDocumentAsync("/Review/Votes");
+
+        using var empty = await host.Client.PostAsync("/Review/Votes/Triage", Form(triage.QuerySelector("#approve-bulk")!));
+
+        Assert.Equal(HttpStatusCode.BadRequest, empty.StatusCode);
+        Assert.Equal("/Review/Votes/Triage", list.QuerySelector(".page-header-actions a")!.GetAttribute("href"));
+        Assert.Equal("No votes need action", triage.QuerySelector("[aria-labelledby='drafts'] .empty h3")!.TextContent);
+    }
+
+    private async Task<long> CountAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(host.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        return (long)(await command.ExecuteScalarAsync())!;
+    }
+
+    private async Task<string> SeedVoteDraftAsync(VoteKind kind = VoteKind.Passage)
     {
         const string question = "Question: On Passage";
         const string member = "Member: A000001, A, R, AL, Yea";
@@ -75,7 +157,7 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
         var revision = new VoteDraftRevision(recordId, 1, "auth0|editor", DateTimeOffset.UtcNow, "The House passed a measure",
             "The House voted on passage.", ReviewTextOrigin.Person, null, HouseVoteFixtures.SourceId, 119, 1, 100, null, null, candidateId,
             HouseVoteFixtures.Updated, [new(question, new SourceSpan(extraction.ExtractionId, 0, question.Length))],
-            new DateOnly(2025, 4, 10), new SourceSpan(extraction.ExtractionId, 0, question.Length), VoteKind.Passage,
+            new DateOnly(2025, 4, 10), new SourceSpan(extraction.ExtractionId, 0, question.Length), kind,
             new SourceSpan(extraction.ExtractionId, 0, question.Length),
             [new("with-id-a", "A000001", "Yea", new SourceSpan(extraction.ExtractionId, question.Length + 1, member.Length))], [], new string('e', 64));
         await using var connection = new NpgsqlConnection(host.ConnectionString);

@@ -9,7 +9,6 @@ public abstract class ReviewRecordPage : ComponentBase
 {
     protected const string SaveForm = "save";
     protected const string DecideForm = "decide";
-    private const string AccessDenied = "/access-denied";
 
     protected static readonly ReviewFailureMessages SaveFailures = new(
         "Someone saved a newer revision. Your wording is kept below. Compare both versions, then save again.",
@@ -81,7 +80,7 @@ public abstract class ReviewRecordPage : ComponentBase
             await load();
         }
         catch (OperationCanceledException) when (RequestAborted.IsCancellationRequested) { throw; }
-        catch (UnauthorizedAccessException) { Navigation.NavigateTo(AccessDenied); }
+        catch (UnauthorizedAccessException) { Navigation.NavigateTo(ReviewCommand.AccessDenied); }
         catch (ArgumentException) { ShowNotFound(); }
         catch (Exception)
         {
@@ -93,30 +92,22 @@ public abstract class ReviewRecordPage : ComponentBase
     protected async Task<string?> RunCommandAsync(Func<Task<string>> command, ReviewFailureMessages messages,
         Func<Task> reloadAfterConflict)
     {
-        try
+        var (target, failure) = await ReviewCommand.RunAsync(command, HttpContext.Response, RequestAborted);
+        switch (failure)
         {
-            return await command();
+            case ReviewCommandFailure.Conflict:
+                isConflict = true;
+                statusMessage = messages.Conflict;
+                await reloadAfterConflict();
+                break;
+            case ReviewCommandFailure.Invalid:
+                error = messages.Invalid;
+                break;
+            case ReviewCommandFailure.Unavailable:
+                error = messages.Unavailable;
+                break;
         }
-        catch (OperationCanceledException) when (RequestAborted.IsCancellationRequested) { throw; }
-        catch (UnauthorizedAccessException) { return AccessDenied; }
-        catch (ReviewConflictException)
-        {
-            HttpContext.Response.StatusCode = StatusCodes.Status409Conflict;
-            isConflict = true;
-            statusMessage = messages.Conflict;
-            await reloadAfterConflict();
-        }
-        catch (ArgumentException)
-        {
-            HttpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
-            error = messages.Invalid;
-        }
-        catch (Exception)
-        {
-            HttpContext.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-            error = messages.Unavailable;
-        }
-        return null;
+        return target;
     }
 
     protected void NavigateWhenSet(string? target)

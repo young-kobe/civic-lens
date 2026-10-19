@@ -1,0 +1,27 @@
+@using CivicLens.Application.Review
+
+<Panel Title="Bulk approval results" Id="approval-results">
+    <DataTable Items="Results" Caption="Bulk approval results">
+        <Head>
+            <th>Record</th>
+            <th>Result</th>
+        </Head>
+        <Row Context="result">
+            <td><a class="cell-title" href="@EditorHref(result.RecordId)">@result.RecordId</a></td>
+            <td><StatusBadge Tone="@(result.Outcome == BulkApprovalOutcome.Approved ? Tone.Ok : Tone.Warn)" Text="@OutcomeLabel(result.Outcome)" /></td>
+        </Row>
+    </DataTable>
+</Panel>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<BulkApprovalResult> Results { get; set; } = [];
+    [Parameter, EditorRequired] public Func<string, string> EditorHref { get; set; } = default!;
+
+    private static string OutcomeLabel(BulkApprovalOutcome outcome) => outcome switch
+    {
+        BulkApprovalOutcome.Approved => "Approved",
+        BulkApprovalOutcome.Conflict => "Changed since the page loaded. Open it and check again.",
+        BulkApprovalOutcome.NotFound => "Not found",
+        _ => "Not approved. It has an open concern or is not safe to approve in bulk."
+    };
+}

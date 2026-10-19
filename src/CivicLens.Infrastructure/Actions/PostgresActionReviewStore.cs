@@ -79,7 +79,7 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
             idempotencyKey, payloadHash, async (db, draft, history) =>
             {
-                if (sponsorshipOnly && !ToReview(draft, history).IsSponsorshipOnly)
+                if (sponsorshipOnly && !ToReview(draft, history).IsBulkSafe)
                     throw new ArgumentException("Bulk approval needs a revision that changes only sponsorships.");
                 if (decision.Kind != ReviewDecisionKind.Approve) return;
                 var current = history.CurrentRevision!;
@@ -121,7 +121,7 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
             cancellationToken);
         var extractions = await ReadExtractionsAsync(db, page.Items.Select(review => review.CurrentRevision), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new(page.Items, extractions.ToImmutableDictionary(StringComparer.Ordinal), page.NewerCursor, page.OlderCursor);
+        return new(page.Items, extractions.ToImmutableDictionary(StringComparer.Ordinal), page.Priorities, page.NewerCursor, page.OlderCursor);
     }
 
     private static async Task<ActionReviewPage> ReadPageAsync(CollectionAttemptDbContext db, PageCursor? cursor, int limit,

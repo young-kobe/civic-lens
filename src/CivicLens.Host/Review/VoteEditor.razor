@@ -125,11 +125,11 @@ else
                 <ul class="choices">
                     @if (revision.KindCitation is { } kind)
                     {
-                        <li><CitationQuote Label="@($"Vote kind: {VoteLabels.Kind(revision.Kind)}")" Quote="@Quote(kind)" /></li>
+                        <li><CitationQuote Label="@($"Vote kind: {VoteLabels.Kind(revision.Kind)}")" Quote="@(kind.QuoteIn(detail!.Extractions))" /></li>
                     }
                     @foreach (var fact in revision.Facts)
                     {
-                        <li><CitationQuote Label="Fact" Quote="@Quote(fact.Citation)" /></li>
+                        <li><CitationQuote Label="Fact" Quote="@(fact.Citation.QuoteIn(detail!.Extractions))" /></li>
                     }
                 </ul>
                 <TechnicalDetails Items="TechnicalItems" />
@@ -140,7 +140,7 @@ else
             <ul class="choices">
                 @foreach (var member in revision.Members)
                 {
-                    <li><CitationQuote Label="@Describe(member)" Quote="@Quote(member.Citation)" /></li>
+                    <li><CitationQuote Label="@Describe(member)" Quote="@(member.Citation.QuoteIn(detail!.Extractions))" /></li>
                 }
             </ul>
         </Panel>

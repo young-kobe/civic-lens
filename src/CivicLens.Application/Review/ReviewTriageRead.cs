@@ -4,4 +4,4 @@ using CivicLens.Core.Documents;
 namespace CivicLens.Application.Review;
 
 public sealed record ReviewTriageRead<TReview>(ImmutableArray<TReview> Items,
-    ImmutableDictionary<string, DocumentExtraction> Extractions, string? NewerCursor, string? OlderCursor);
+    ImmutableDictionary<string, DocumentExtraction> Extractions, ImmutableDictionary<string, int> Priorities, string? NewerCursor, string? OlderCursor);

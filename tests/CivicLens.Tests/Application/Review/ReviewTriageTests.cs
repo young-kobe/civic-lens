@@ -17,13 +17,16 @@ public sealed class ReviewTriageTests
     private static readonly ReviewActor Reviewer = new("auth0|reviewer", ReviewRole.Reviewer);
     private static readonly ImmutableDictionary<string, DocumentExtraction> NoExtractions = ImmutableDictionary<string, DocumentExtraction>.Empty;
 
+    private static ImmutableDictionary<string, int> Priorities(string recordId) =>
+        ImmutableDictionary<string, int>.Empty.Add(recordId, ReviewPriority.Highest);
+
     [Fact]
     public async Task AVoteRowShowsAnApprovalCheckThatFailsWhenACitedExtractionIsMissingSoTheReviewerSeesItBeforeDeciding()
     {
         var vote = RelationshipFixtures.Vote();
         var store = new FakeVoteReviewStore
         {
-            Triage = new([new(vote.RecordId, vote, null, [vote], 0, ReviewStatus.AwaitingReview, [], [])], NoExtractions, null, "older")
+            Triage = new([new(vote.RecordId, vote, null, [vote], 0, ReviewStatus.AwaitingReview, [], [])], NoExtractions, Priorities(vote.RecordId), null, "older")
         };
 
         var page = await new ListVoteTriage(store).ExecuteAsync(Reviewer, null);
@@ -40,7 +43,7 @@ public sealed class ReviewTriageTests
         var action = RelationshipFixtures.Action() with { Headline = "" };
         var store = new FakeActionReviewStore
         {
-            Triage = new([new(action.RecordId, action, null, [action], 0, ReviewStatus.AwaitingReview, [], [])], NoExtractions, null, null)
+            Triage = new([new(action.RecordId, action, null, [action], 0, ReviewStatus.AwaitingReview, [], [])], NoExtractions, Priorities(action.RecordId), null, null)
         };
 
         var row = Assert.Single((await new ListActionTriage(store).ExecuteAsync(Reviewer, null)).Rows);

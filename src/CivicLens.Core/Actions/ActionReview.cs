@@ -8,4 +8,6 @@ public sealed record ActionReview(string RecordId, ActionDraftRevision CurrentRe
     ImmutableArray<ReviewDecision> UnresolvedConcerns)
 {
     public bool IsSponsorshipOnly => LastApprovedRevision is { } approved && CurrentRevision.IsSponsorshipOnlyChangeOf(approved);
+
+    public bool IsBulkSafe => UnresolvedConcerns.IsEmpty && IsSponsorshipOnly;
 }

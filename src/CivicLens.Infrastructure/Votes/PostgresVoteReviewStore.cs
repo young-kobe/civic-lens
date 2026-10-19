@@ -119,7 +119,7 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
             cancellationToken);
         var extractions = await ReadExtractionsAsync(db, page.Items.Select(review => review.CurrentRevision), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new(page.Items, extractions.ToImmutableDictionary(StringComparer.Ordinal), page.NewerCursor, page.OlderCursor);
+        return new(page.Items, extractions.ToImmutableDictionary(StringComparer.Ordinal), page.Priorities, page.NewerCursor, page.OlderCursor);
     }
 
     private static async Task<VoteReviewPage> ReadPageAsync(CollectionAttemptDbContext db, PageCursor? cursor, int limit,
