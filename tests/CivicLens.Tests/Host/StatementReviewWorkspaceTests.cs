@@ -311,6 +311,28 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task AnInlineApproveOfARevisionThatAPersonReplacedAfterThePageLoadedIsAConflictAsync()
+    {
+        var candidate = await AiDraftedAsync();
+        SignIn(Owner);
+        var url = $"/Review/Statements/{candidate}";
+        var first = await SaveFieldsAsync(url);
+        first.Add(new("Input.StatementDateChecked", "true"));
+        using var savedFirst = await host.Client.PostAsync(url, new FormUrlEncodedContent(first));
+        var page = await host.GetDocumentAsync("/Review/Statements/Triage");
+        var second = await SaveFieldsAsync(url);
+        Set(second, "Input.Headline", "A later headline");
+        second.Add(new("Input.StatementDateChecked", "true"));
+        using var savedSecond = await host.Client.PostAsync(url, new FormUrlEncodedContent(second));
+
+        using var stale = await host.Client.PostAsync("/Review/Statements/Triage", TriageDecision(page, "approve"));
+
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        Assert.Equal(3, (await reviews.GetAsync(candidate, default))!.Review.CurrentRevision!.RevisionNumber);
+        Assert.NotEqual(ReviewStatus.Approved, (await reviews.GetAsync(candidate, default))!.Review.CurrentStatus);
+    }
+
+    [Fact]
     public async Task StartingADraftFromTheListCreatesRevisionOneAndOpensTheDetailPageAsync()
     {
         await AiDraftedAsync();

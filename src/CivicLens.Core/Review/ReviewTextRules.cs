@@ -43,7 +43,7 @@ public static class ReviewTextRules
             throw new ArgumentException("A person may keep or clear the suggestion, but never change it.");
     }
 
-    public static bool HasSameText(IHeadlineSummaryRevision revision, IHeadlineSummaryRevision other) =>
+    private static bool HasSameText(IHeadlineSummaryRevision revision, IHeadlineSummaryRevision other) =>
         revision.Headline == other.Headline && revision.Summary == other.Summary && revision.TextOrigin == other.TextOrigin &&
         revision.Suggestion == other.Suggestion;
 }

@@ -227,7 +227,7 @@ The write that creates a candidate also adds its `action_analysis` queue row in 
 - `bill_stream_pages` records each list job that changed the counter. `unknown_type_count` counts the items on that page with an unknown bill type.
 - `bill_gates` holds one row for each bill version, keyed by its detail job.
 - `issue_revision_id` names the issue configuration revision that the gate used. It has no foreign key, because issue revisions are not stored in a table.
-- `summary_count` is 0 or more.
+- `summary_count` is 0 or more. A gate with 0 has no summary chain.
 - `cosponsor_count` stores the detail cosponsor count, because the completeness check must know whether a cosponsor chain exists.
 - The decision and reason are stored as PascalCase strings, like other enums.
 - A second detail job for a gated version records nothing, admits nothing, and counts as a duplicate.

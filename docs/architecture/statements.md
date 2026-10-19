@@ -227,7 +227,7 @@ A span is a `DirectQuotation` when it lies entirely inside one quoted passage. E
 
 Statement review mirrors document-change review and uses the shared decision rules in [review](review.md#review-decisions). The Host has statement pages on top of the shared handlers.
 
-**Ownership.** Core/Statements holds `StatementReview`, the aggregate of one candidate, and the rules on `StatementDraftRevision`. Application/Statements holds the commands `CreateStatementDraft`, `SaveStatementDraft`, and `DecideStatementReview`. It also holds the reads `GetStatementReview`, `ListStatementReviews`, `ListStatementTriage`, and `ListStatementsNotInReview`, and the store boundary `IStatementReviewStore`.
+**Ownership.** Core/Statements holds `StatementReview`, the aggregate of one candidate, and the rules on `StatementDraftRevision`. Application/Statements holds the commands `CreateStatementDraft`, `SaveStatementDraft`, and `DecideStatementReview`. It also holds the reads `GetStatementReview`, `ListStatementReviews`, `ListStatementTriage` with `StatementTriagePage` and `StatementTriageRow`, and `ListStatementsNotInReview`, and the store boundary `IStatementReviewStore`.
 
 Infrastructure/Statements holds `PostgresStatementReviewStore` and `StatementReviewQueries`. The store runs on the shared `ReviewRecords` core; see [review](review.md#storage-and-contracts). The handlers use `ReviewAuthorization`, `ReviewValidation`, `PageCursor`, `KeysetSlice`, and `PageLimit`. Every command needs a reviewer. The AI author can never decide or author a person revision.
 

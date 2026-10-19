@@ -37,6 +37,17 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
     }
 
     [Fact]
+    public async Task TheEditorShowsThePassingApprovalCheckBesideTheDecision()
+    {
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+        var recordId = await SeedVoteDraftAsync();
+
+        var page = await host.GetDocumentAsync($"/Review/Votes/{recordId}");
+
+        Assert.Contains("Approval check passed", page.QuerySelector("[aria-labelledby='decision']")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AnUnknownOrMalformedVoteRecordIsNotFound()
     {
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|owner"));

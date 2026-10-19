@@ -383,7 +383,7 @@ This is the only navigation index.
 | Review decisions, roles, concurrency | [Review](architecture/review.md#review-decisions) | `src/CivicLens.Core/Review/ReviewPolicy.cs` |
 | Review cycles, history caps, the shared append step | [Review](architecture/review.md#review-cycles) | `src/CivicLens.Infrastructure/Review/ReviewRecords.cs` |
 | Review lists, paging, overview counts | [Review](architecture/review.md#lists-and-paging) | `src/CivicLens.Application/Review/ListDocumentChangeReviews.cs` |
-| Statement triage page and inline decisions | [Review](architecture/review.md#triage) | `src/CivicLens.Host/Review/TriagePage.cs` |
+| Statement triage page and inline decisions | [Review](architecture/review.md#triage) | `src/CivicLens.Host/Review/StatementTriage.razor.cs` |
 | Releases, activation, rollback | [Publication](architecture/publication.md#publish) | `src/CivicLens.Application/Publication/PublishRelease.cs` |
 | Release record content and schema | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Publication.Contracts/PublicationRelease.cs` |
 | Published vote record, builder, and page | [Publication](architecture/publication.md#vote-record) | `src/CivicLens.Publication.Contracts/PublishedVote.cs` |

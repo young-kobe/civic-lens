@@ -1,12 +1,10 @@
-@using CivicLens.Application.Review
-
 <ul class="choices">
     @foreach (var quote in Quotes)
     {
-        <li><CitationQuote Label="@quote.Label" Quote="@quote.Text" /></li>
+        <li><CitationQuote Label="Quotation" Quote="@quote" /></li>
     }
 </ul>
 
 @code {
-    [Parameter, EditorRequired] public IReadOnlyList<ReviewTriageQuote> Quotes { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<string> Quotes { get; set; } = [];
 }

@@ -155,6 +155,7 @@ else
         <ReviewDecisionPanel RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="review.CurrentStatus"
                              Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" OnDecide="DecideAsync">
             <Checklist>
+                <ApprovalCheckView Check="detail!.Check" />
                 <ul class="checklist">
                     <li>Does the headline match the result and the vote kind?</li>
                     <li>Does the summary use only the cited facts and name no member?</li>
