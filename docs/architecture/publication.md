@@ -7,7 +7,8 @@ The publication feature turns approved revisions into immutable, cumulative stat
 ## Decisions
 
 - Only the owner publishes or activates a release.
-- A record is published at its current revision, and only when that revision is approved and has no unresolved concerns.
+- A record is published at its current revision, and only when that revision is approved and has no unresolved concerns. Code can approve an action or a vote. People approve the other kinds. The owner publishes all kinds.
+- The action and vote pages say "From the official record, checked" with the approval time. They do not claim that a person approved the record. `ApprovedAtUtc` holds the time of the approval, by code or by a person. Enforced by `PublishedActionView` and `PublishedVoteView`. Test: `ReleaseRendererTests.ActionAndVotePagesSayThatTheRecordComesFromTheOfficialRecordInsteadOfClaimingAPersonApprovedIt`.
 - A newer draft never replaces published content automatically.
 - A release is cumulative. It holds the base release records plus explicit additions or replacements.
 - Carried records are hard links to the immutable files of the base release. Disk therefore grows with published records, not with the number of releases.
@@ -286,6 +287,7 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - Rolling back the `DropReleaseCountCheck` migration fails while any release holds more than 2000 records.
 - A future live public Blazor deployment must read published releases only and stay separate from the operational application.
 - Each publish rebuilds the facet pages, as it rebuilds the index pages. Measure the file count and write time at 20,000 records in R-36.
+- D-15 plans that the action and vote pages also say that the headline and the summary are an AI summary of the official record. `PublishedAction` and `PublishedVote` hold no text origin today, so the page cannot tell a model text from a text that a person wrote. The label waits for an owner choice on a contract field.
 - A future mobile client would read public release contracts through an API, not operational storage.
 - Public MCP will expose `search_records`, `get_record`, `get_official_timeline`, and `compare_document_versions`. It returns published data with IDs, citations, dates, review status, coverage caveats, and the release ID.
 - Public MCP cannot start collection, inference, or edits. It bounds and pages responses, limits requests, and accepts record IDs, not arbitrary fetch URLs. It treats source passages as untrusted attributed content.

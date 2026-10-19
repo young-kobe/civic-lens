@@ -168,6 +168,7 @@ public sealed partial class ReviewHome
     private FeedItem Describe(ActivityEvent item)
     {
         var who = ReviewAuthor.IsAnalysis(item.ActorSubject) ? "The AI drafter"
+            : ReviewAuthor.IsCode(item.ActorSubject) ? "The code check"
             : item.ActorSubject == actor!.Subject ? "You" : "A reviewer";
         var draft = string.IsNullOrWhiteSpace(item.Headline) ? "an untitled draft" : $"“{item.Headline}”";
         var source = item.SourceId is null ? "a source" : SourceLabels.Name(configuration, item.SourceId);

@@ -18,7 +18,7 @@ public sealed partial class PostgresHouseVoteTests
     public async Task ApprovingAVoteQueuesTheRelationshipPairWithAnApprovedStatementOfAMember()
     {
         var candidate = await PendingCandidateAsync();
-        await SettleAsync(candidate, await RevisionAsync(candidate, 1));
+        await SettleForReviewAsync(candidate, await RevisionAsync(candidate, 1));
         var recordId = await RecordIdAsync(candidate);
         using var revision = System.Text.Json.JsonDocument.Parse((string)(await ScalarAsync(
             $"SELECT revision_json FROM vote_revisions WHERE record_id = '{recordId}' AND revision_number = 1"))!);
@@ -39,7 +39,7 @@ public sealed partial class PostgresHouseVoteTests
     public async Task ApprovingAVotePairsOnlyDatedStatementsOfItsCongressBecauseAVotePairsByNumberAndANumberNeedsTheDate()
     {
         var candidate = await PendingCandidateAsync();
-        await SettleAsync(candidate, await RevisionAsync(candidate, 1));
+        await SettleForReviewAsync(candidate, await RevisionAsync(candidate, 1));
         var recordId = await RecordIdAsync(candidate);
         using var revision = System.Text.Json.JsonDocument.Parse((string)(await ScalarAsync(
             $"SELECT revision_json FROM vote_revisions WHERE record_id = '{recordId}' AND revision_number = 1"))!);
@@ -57,22 +57,100 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
-    public async Task AWorkerRevisionAfterAnApprovalNeedsReviewAgainBecauseAModelRevisionNeverCountsAsApproval()
+    public async Task CodeApprovesAWorkerVoteRevisionInTheSameTransactionAndTheRecordIsReadyToPublish()
+    {
+        var candidate = await PendingCandidateAsync();
+
+        await SettleAsync(candidate, await RevisionAsync(candidate, 1));
+
+        var recordId = await RecordIdAsync(candidate);
+        var decision = Assert.Single(await VoteDecisionsAsync());
+        Assert.Equal((ReviewDecisionKind.Approve, ReviewAuthor.CodeSubject, 1, 1), (decision.Kind, decision.ActorSubject, decision.RevisionNumber,
+            decision.ReviewStateVersion));
+        Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM vote_drafts WHERE record_id = '{recordId}'"));
+        Assert.Equal(recordId, Assert.Single(await VoteReviews().ListUnpublishedApprovedAsync(10, default)).Vote.RecordId);
+    }
+
+    [Fact]
+    public async Task CodeApprovesAWorkerRevisionAfterAnEarlierCodeApprovalAndCountsItAsApproved()
     {
         var first = await PendingCandidateAsync();
         await SettleAsync(first, await RevisionAsync(first, 1));
         var recordId = await RecordIdAsync(first);
-        await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Approve);
-        Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM vote_drafts WHERE record_id = '{recordId}'"));
 
         var second = await PendingCandidateAsync(Updated.AddDays(1));
         await SettleAsync(second, await RevisionAsync(second, 2));
 
+        Assert.Equal([(1, ReviewAuthor.CodeSubject), (2, ReviewAuthor.CodeSubject)],
+            (await VoteDecisionsAsync()).Select(decision => (decision.RevisionNumber, decision.ActorSubject)));
+        Assert.Equal((0, 1), await CountsAsync());
+    }
+
+    [Fact]
+    public async Task ACodeApprovalOfAVoteRunsTheRelationshipHookSoAnApprovedStatementOfAMemberQueuesItsPair()
+    {
+        var first = await PendingCandidateAsync();
+        await SettleAsync(first, await RevisionAsync(first, 1));
+        var recordId = await RecordIdAsync(first);
+        using var revision = System.Text.Json.JsonDocument.Parse((string)(await ScalarAsync(
+            $"SELECT revision_json FROM vote_revisions WHERE record_id = '{recordId}' AND revision_number = 1"))!);
+        var vote = revision.RootElement;
+        var member = vote.GetProperty("members")[0].GetProperty("personId").GetString()!;
+        await new RelationshipWorldSeeder(connectionString).StatementAsync(RelationshipFixtures.StatementAboutBill(member,
+            vote.GetProperty("congress").GetInt32(), vote.GetProperty("billNumber").GetInt32(), "H.Con.Res."));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM relationship_analysis"));
+
+        var second = await PendingCandidateAsync(Updated.AddDays(1));
+        await SettleAsync(second, await RevisionAsync(second, 2));
+
+        Assert.Equal(("Pending", "Vote", recordId), ((string)(await ScalarAsync("SELECT status FROM relationship_analysis"))!,
+            (string)(await ScalarAsync("SELECT target_kind FROM relationship_analysis"))!,
+            (string)(await ScalarAsync("SELECT target_record_id FROM relationship_analysis"))!));
+    }
+
+    [Fact]
+    public async Task ACodeApprovalLeavesAVoteForAPersonWhenAnApprovalCheckFails()
+    {
+        var candidate = await PendingCandidateAsync();
+        var revision = await RevisionAsync(candidate, 1);
+
+        await SettleAsync(candidate, revision with { Facts = [new("Result: Passed", new(new string('f', 64), 0, 5))] });
+
+        Assert.Empty(await VoteDecisionsAsync());
+        var row = Assert.Single((await new ListVoteTriage(VoteReviews()).ExecuteAsync(Reviewer, null)).Rows);
+        Assert.False(row.Check.Passed);
+        Assert.Equal(ReviewStatus.AwaitingReview, row.Review.CurrentStatus);
+    }
+
+    [Fact]
+    public async Task AWorkerRevisionKeepsAnOpenConcernSoCodeDoesNotApproveIt()
+    {
+        var first = await PendingCandidateAsync();
+        await SettleForReviewAsync(first, await RevisionAsync(first, 1));
+        var recordId = await RecordIdAsync(first);
+        await DecideAsync(recordId, 1, 0, ReviewDecisionKind.RequestChanges, "Name the bill.");
+
+        var second = await PendingCandidateAsync(Updated.AddDays(1));
+        await SettleAsync(second, await RevisionAsync(second, 2));
+
+        Assert.Equal("AwaitingReviewWithConcerns", await ScalarAsync($"SELECT review_status FROM vote_drafts WHERE record_id = '{recordId}'"));
+        Assert.Equal(ReviewDecisionKind.RequestChanges, Assert.Single(await VoteDecisionsAsync()).Kind);
+    }
+
+    [Fact]
+    public async Task APersonEditAfterACodeApprovalWaitsForAPersonAndAWorkerRevisionOverItStaysForAPerson()
+    {
+        var first = await PendingCandidateAsync();
+        await SettleAsync(first, await RevisionAsync(first, 1));
+        var recordId = await RecordIdAsync(first);
+        await SaveAsync(recordId, 1, SuggestionChoice.Keep, "save-2");
         Assert.Equal("AwaitingReview", await ScalarAsync($"SELECT review_status FROM vote_drafts WHERE record_id = '{recordId}'"));
-        var needsAction = await new ListVoteReviews(VoteReviews()).ExecuteAsync(Reviewer, null, filter: new DraftListFilter(DraftStatusFilter.NeedsAction));
-        var item = Assert.Single(needsAction.Items);
-        Assert.Equal((2, 1), (item.CurrentRevision.RevisionNumber, item.LastApprovedRevision!.RevisionNumber));
-        Assert.Equal((1, 0), await CountsAsync());
+
+        var second = await PendingCandidateAsync(Updated.AddDays(1));
+        await SettleAsync(second, (await RevisionAsync(second, 3)) with { TextOrigin = ReviewTextOrigin.Person, Headline = "Person headline", Summary = "Person summary." });
+
+        Assert.Single(await VoteDecisionsAsync());
+        Assert.Equal("AwaitingReview", await ScalarAsync($"SELECT review_status FROM vote_drafts WHERE record_id = '{recordId}'"));
     }
 
     // The lists filter and sort on these columns, so each new revision must replace them or the lists would show stale members.
@@ -80,11 +158,11 @@ public sealed partial class PostgresHouseVoteTests
     public async Task EachWorkerRevisionReplacesTheListedColumnsWithThoseOfTheCurrentRevision()
     {
         var first = await PendingCandidateAsync();
-        await SettleAsync(first, await RevisionAsync(first, 1));
+        await SettleForReviewAsync(first, await RevisionAsync(first, 1));
         var recordId = await RecordIdAsync(first);
         var second = await PendingCandidateAsync(Updated.AddDays(1));
         var revised = await RevisionAsync(second, 2);
-        await SettleAsync(second, revised with { VotedOn = revised.VotedOn.AddDays(3), TrackedIssueIds = ["housing"] });
+        await SettleForReviewAsync(second, revised with { VotedOn = revised.VotedOn.AddDays(3), TrackedIssueIds = ["housing"] });
 
         var stored = (string)(await ScalarAsync($"""
             SELECT concat_ws('|', candidate_id, event_on::text, array_to_string(issue_ids, ','), array_to_string(official_ids, ','))
@@ -99,10 +177,10 @@ public sealed partial class PostgresHouseVoteTests
     public async Task ApprovalBindsToTheExactRevisionSoAWorkerRevisionAfterThePageLoadedTurnsItIntoAConflict()
     {
         var first = await PendingCandidateAsync();
-        await SettleAsync(first, await RevisionAsync(first, 1));
+        await SettleForReviewAsync(first, await RevisionAsync(first, 1));
         var recordId = await RecordIdAsync(first);
         var second = await PendingCandidateAsync(Updated.AddDays(1));
-        await SettleAsync(second, await RevisionAsync(second, 2));
+        await SettleForReviewAsync(second, await RevisionAsync(second, 2));
 
         await Assert.ThrowsAsync<ReviewConflictException>(() => DecideAsync(recordId, 1, 0, ReviewDecisionKind.Approve));
         await DecideAsync(recordId, 2, 0, ReviewDecisionKind.Approve);
@@ -114,7 +192,7 @@ public sealed partial class PostgresHouseVoteTests
     public async Task ADecisionWithAStaleReviewStateVersionIsAConflictSoTwoReviewersCannotOverwriteEachOther()
     {
         var candidate = await PendingCandidateAsync();
-        await SettleAsync(candidate, await RevisionAsync(candidate, 1));
+        await SettleForReviewAsync(candidate, await RevisionAsync(candidate, 1));
         var recordId = await RecordIdAsync(candidate);
         await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Approve);
 
@@ -128,7 +206,7 @@ public sealed partial class PostgresHouseVoteTests
     {
         var candidate = await PendingCandidateAsync();
         var revision = await RevisionAsync(candidate, 1);
-        await SettleAsync(candidate, revision with { Facts = [new("Result: Passed", new(new string('c', 64), 0, 5))] });
+        await SettleForReviewAsync(candidate, revision with { Facts = [new("Result: Passed", new(new string('c', 64), 0, 5))] });
         var recordId = await RecordIdAsync(candidate);
 
         await Assert.ThrowsAsync<ArgumentException>(() => DecideAsync(recordId, 1, 0, ReviewDecisionKind.Approve));
@@ -140,7 +218,7 @@ public sealed partial class PostgresHouseVoteTests
     public async Task TheReviewReadHoldsTheCitedExtractionsAndTheConfiguredNamesOfTheTrackedMembersSoThePageCanShowEachCast()
     {
         var candidate = await PendingCandidateAsync();
-        await SettleAsync(candidate, await RevisionAsync(candidate, 1));
+        await SettleForReviewAsync(candidate, await RevisionAsync(candidate, 1));
         var recordId = await RecordIdAsync(candidate);
 
         var read = (await new GetVoteReview(VoteReviews()).ExecuteAsync(Reviewer, recordId))!;
@@ -155,7 +233,7 @@ public sealed partial class PostgresHouseVoteTests
     public async Task TheReviewReadFailsLoudWhenARevisionNamesACandidateThatIsMissingSoNoCastShowsWithoutItsNames()
     {
         var candidate = await PendingCandidateAsync();
-        await SettleAsync(candidate, await RevisionAsync(candidate, 1));
+        await SettleForReviewAsync(candidate, await RevisionAsync(candidate, 1));
         var recordId = await RecordIdAsync(candidate);
         await ExecuteAsync($"SET session_replication_role = replica; DELETE FROM house_vote_candidates WHERE candidate_id = '{candidate}'");
 
@@ -197,7 +275,7 @@ public sealed partial class PostgresHouseVoteTests
     public async Task UsingASuggestionThatTheRevisionDoesNotHaveIsRefused()
     {
         var candidate = await PendingCandidateAsync();
-        await SettleAsync(candidate, await RevisionAsync(candidate, 1));
+        await SettleForReviewAsync(candidate, await RevisionAsync(candidate, 1));
 
         var recordId = await RecordIdAsync(candidate);
 
@@ -207,12 +285,12 @@ public sealed partial class PostgresHouseVoteTests
     private async Task<string> RecordWithPersonTextAndSuggestionAsync()
     {
         var first = await PendingCandidateAsync();
-        await SettleAsync(first, await RevisionAsync(first, 1));
+        await SettleForReviewAsync(first, await RevisionAsync(first, 1));
         var recordId = await RecordIdAsync(first);
         var edited = await SaveAsync(recordId, 1, SuggestionChoice.Keep, "save-2");
         var second = await PendingCandidateAsync(Updated.AddDays(1));
         var text = ReviewText.AfterModelDraft(edited, "Model headline", "Model summary.", new string('1', 32), new string('d', 64));
-        await SettleAsync(second, (await RevisionAsync(second, 3)) with
+        await SettleForReviewAsync(second, (await RevisionAsync(second, 3)) with
         {
             Headline = text.Headline,
             Summary = text.Summary,
@@ -220,6 +298,12 @@ public sealed partial class PostgresHouseVoteTests
             Suggestion = text.Suggestion
         });
         return recordId;
+    }
+
+    private async Task<IReadOnlyList<ReviewDecision>> VoteDecisionsAsync()
+    {
+        var json = (string)(await ScalarAsync("SELECT coalesce(jsonb_agg(decision_json::jsonb ORDER BY review_state_version), '[]')::text FROM vote_review_decisions"))!;
+        return System.Text.Json.JsonSerializer.Deserialize<ReviewDecision[]>(json, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
     }
 
     private PostgresVoteReviewStore VoteReviews() => new(new PooledDbContextFactory<CollectionAttemptDbContext>(

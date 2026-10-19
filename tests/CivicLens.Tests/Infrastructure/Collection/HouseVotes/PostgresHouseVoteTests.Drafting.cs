@@ -284,6 +284,23 @@ public sealed partial class PostgresHouseVoteTests
         Assert.True(await store.CheckpointAsync(VoteDraftCheckpoint.From(claim, revision), DraftedRun(runId, candidate), default));
     }
 
+    private async Task SettleForReviewAsync(string candidate, VoteDraftRevision revision)
+    {
+        await SettleAsync(candidate, revision);
+        await ReopenAsync(revision.RecordId);
+    }
+
+    // Puts the record in the state of a worker revision that code did not approve, for tests of the person flow.
+    private Task ReopenAsync(string recordId) => ExecuteAsync($"""
+        WITH removed AS (
+            DELETE FROM vote_review_decisions d USING vote_drafts r
+             WHERE d.record_id = r.record_id AND d.record_id = '{recordId}' AND d.review_state_version = r.review_state_version
+               AND d.decision_json::jsonb ->> 'actorSubject' = '{ReviewAuthor.CodeSubject}'
+         RETURNING 1)
+        UPDATE vote_drafts SET review_state_version = review_state_version - 1, review_status = 'AwaitingReview'
+         WHERE record_id = '{recordId}' AND EXISTS (SELECT 1 FROM removed)
+        """);
+
     private static async Task<string> ReserveAsync(PostgresVoteDraftStore store, AnalysisClaim claim)
     {
         var runId = Guid.NewGuid().ToString("N");

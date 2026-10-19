@@ -222,6 +222,19 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task ActionAndVotePagesSayThatTheRecordComesFromTheOfficialRecordInsteadOfClaimingAPersonApprovedIt()
+    {
+        var renderer = new ReleaseRenderer();
+
+        foreach (var html in new[] { await renderer.RenderActionAsync(Action(), [], CancellationToken.None),
+                     await renderer.RenderVoteAsync(Vote(), null, [], CancellationToken.None) })
+        {
+            Assert.Contains("From the official record, checked", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("Approved 20", html, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public async Task EveryActionQuoteLinksToTheMarkOfTheSameTextInTheSourceAndEachSourceIsLabelledByPosition()
     {
         var html = await new ReleaseRenderer().RenderActionAsync(Action(), [], CancellationToken.None);

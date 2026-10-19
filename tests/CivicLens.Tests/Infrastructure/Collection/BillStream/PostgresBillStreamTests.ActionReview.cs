@@ -20,7 +20,7 @@ public sealed partial class PostgresBillStreamTests
     [Fact]
     public async Task ApprovingAnActionQueuesTheRelationshipPairWithAnApprovedStatementOfItsSponsor()
     {
-        await DraftAsync(UpdatedAt, DraftableOutput);
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         using var revision = System.Text.Json.JsonDocument.Parse((string)(await ScalarAsync(
             $"SELECT revision_json FROM action_revisions WHERE record_id = '{RecordId}' AND revision_number = 1"))!);
         var bill = revision.RootElement;
@@ -38,29 +38,146 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
-    public async Task AWorkerRevisionAfterAnApprovalRecomputesTheStoredStatusSoTheRecordNeedsReviewAgain()
+    public async Task CodeApprovesAWorkerRevisionInTheSameTransactionAndTheRecordIsReadyToPublish()
     {
         await DraftAsync(UpdatedAt, DraftableOutput);
-        await DecideAsync(1, 0, ReviewDecisionKind.Approve);
+
+        var decision = Assert.Single(await ActionDecisionsAsync());
+        Assert.Equal((ReviewDecisionKind.Approve, ReviewAuthor.CodeSubject, 1, 1), (decision.Kind, decision.ActorSubject, decision.RevisionNumber,
+            decision.ReviewStateVersion));
         Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Equal(RecordId, Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, default)).Action.RecordId);
+    }
+
+    [Fact]
+    public async Task CodeApprovesAWorkerRevisionThatOnlyCopiesTheTextAfterANewSponsorJoins()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
 
         await AddSponsorAsync(UpdatedAt.AddDays(1));
 
+        Assert.Equal([(1, ReviewAuthor.CodeSubject), (2, ReviewAuthor.CodeSubject)],
+            (await ActionDecisionsAsync()).Select(decision => (decision.RevisionNumber, decision.ActorSubject)));
+        Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+    }
+
+    [Fact]
+    public async Task ACodeApprovalRunsTheRelationshipHookSoAnApprovedStatementOfTheSponsorQueuesItsPair()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+        using var revision = System.Text.Json.JsonDocument.Parse((string)(await ScalarAsync(
+            $"SELECT revision_json FROM action_revisions WHERE record_id = '{RecordId}' AND revision_number = 1"))!);
+        var bill = revision.RootElement;
+        var sponsor = bill.GetProperty("sponsorships")[0].GetProperty("personId").GetString()!;
+        await new RelationshipWorldSeeder(connectionString).StatementAsync(RelationshipFixtures.StatementAboutBill(sponsor,
+            bill.GetProperty("congress").GetInt32(), bill.GetProperty("billNumber").GetInt32()));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM relationship_analysis"));
+
+        await AddSponsorAsync(UpdatedAt.AddDays(1));
+
+        Assert.Equal(("Pending", "Action", RecordId), ((string)(await ScalarAsync("SELECT status FROM relationship_analysis"))!,
+            (string)(await ScalarAsync("SELECT target_kind FROM relationship_analysis"))!,
+            (string)(await ScalarAsync("SELECT target_record_id FROM relationship_analysis"))!));
+    }
+
+    [Fact]
+    public async Task ACodeApprovalOfTheRevisionThatTheActiveReleaseServesRequeuesTheBriefOfItsWeek()
+    {
+        var briefs = new BriefWorldSeeder(connectionString);
+        await briefs.ReleaseWithoutApprovalsAsync(1, BriefFixtures.InWeek, active: true, BriefWorldSeeder.Binding(PublishedRecordKind.Action, RecordId, 1));
+        await briefs.BriefAsync(BriefFixtures.Week);
+
+        await DraftAsync(UpdatedAt, DraftableOutput);
+
+        Assert.Equal("Pending:0", await briefs.BriefQueueStatusAsync(BriefFixtures.Week));
+    }
+
+    [Fact]
+    public async Task ACodeApprovalLeavesTheRecordForAPersonWhenAnApprovalCheckFails()
+    {
+        var candidate = await CandidateWithoutSummariesAsync();
+
+        await SettleAsync(candidate, Revision(candidate, 1));
+
+        Assert.Empty(await ActionDecisionsAsync());
+        var row = Assert.Single((await new ListActionTriage(ActionReviews()).ExecuteAsync(Reviewer, null)).Rows);
+        Assert.False(row.Check.Passed);
+        Assert.Equal(ReviewStatus.AwaitingReview, row.Review.CurrentStatus);
+    }
+
+    [Fact]
+    public async Task APersonEditAfterACodeApprovalWaitsForAPersonAndKeepsTheCodeApprovedRevisionAsTheLastApprovedOne()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+
+        await SaveAsync(1, SuggestionChoice.Keep, "save-2");
+
+        Assert.Single(await ActionDecisionsAsync());
         Assert.Equal("AwaitingReview", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
         var needsAction = await new ListActionReviews(ActionReviews()).ExecuteAsync(Reviewer, null, filter: new DraftListFilter(DraftStatusFilter.NeedsAction));
         var item = Assert.Single(needsAction.Items);
         Assert.Equal((2, 1), (item.CurrentRevision.RevisionNumber, item.LastApprovedRevision!.RevisionNumber));
     }
 
+    [Fact]
+    public async Task AWorkerRevisionOverAPersonEditStaysForAPersonBecauseNoPersonApprovedThePersonText()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+        await SaveAsync(1, SuggestionChoice.Keep, "save-2");
+
+        await AddSponsorAsync(UpdatedAt.AddDays(1));
+
+        Assert.Single(await ActionDecisionsAsync());
+        Assert.Equal("AwaitingReview", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+    }
+
+    [Fact]
+    public async Task AWorkerRevisionKeepsAnOpenConcernSoCodeDoesNotApproveItAndTheBlockerStaysVisible()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await DecideAsync(1, 0, ReviewDecisionKind.RequestChanges, "Name the bill.");
+
+        await AddSponsorAsync(UpdatedAt.AddDays(1));
+
+        Assert.Equal("AwaitingReviewWithConcerns", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Equal(ReviewDecisionKind.RequestChanges, Assert.Single(await ActionDecisionsAsync()).Kind);
+    }
+
+    [Fact]
+    public async Task APersonWithdrawalStaysEffectiveWhenTheWorkerDraftsAgain()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+        await DecideAsync(1, 1, ReviewDecisionKind.WithdrawApproval, "The sponsor list is wrong.");
+
+        await AddSponsorAsync(UpdatedAt.AddDays(1));
+
+        Assert.Equal("AwaitingReviewWithConcerns", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Equal([ReviewDecisionKind.Approve, ReviewDecisionKind.WithdrawApproval], (await ActionDecisionsAsync()).Select(decision => decision.Kind));
+    }
+
+    [Fact]
+    public async Task APersonCannotActAsTheCodeSubject()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        var impostor = new ReviewActor(ReviewAuthor.CodeSubject, ReviewRole.Owner);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new DecideActionReview(ActionReviews()).ExecuteAsync(impostor,
+            new(RecordId, 1, 0, ReviewDecisionKind.Approve, null, [], Guid.NewGuid().ToString("N"))));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => ActionReviews().DecideAsync(ReviewAuthor.CodeSubject,
+            new(Guid.NewGuid().ToString("N"), RecordId, 1, 1, ReviewDecisionKind.Approve, ReviewAuthor.CodeSubject, null, [], DateTimeOffset.UtcNow),
+            1, 0, false, "key", new string('a', 64), default));
+        Assert.Empty(await ActionDecisionsAsync());
+    }
+
     // The lists filter and sort on these columns, so each new revision must replace them or the lists would show stale sponsors.
     [Fact]
     public async Task EachWorkerRevisionReplacesTheListedColumnsWithThoseOfTheCurrentRevision()
     {
-        await DraftAsync(UpdatedAt, DraftableOutput);
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         var first = await ListedColumnsAsync();
         Assert.Single(first.Officials);
 
-        await AddSponsorAsync(UpdatedAt.AddDays(1));
+        await AddSponsorForReviewAsync(UpdatedAt.AddDays(1));
 
         var second = await ListedColumnsAsync();
         Assert.Equal(2, second.Officials.Length);
@@ -71,7 +188,7 @@ public sealed partial class PostgresBillStreamTests
     [Fact]
     public async Task ADecisionOnTheRevisionThatTheActiveReleaseServesRequeuesTheBriefOfItsWeek()
     {
-        await DraftAsync(UpdatedAt, DraftableOutput);
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         var briefs = new BriefWorldSeeder(connectionString);
         await briefs.ReleaseWithoutApprovalsAsync(1, BriefFixtures.InWeek, active: true, BriefWorldSeeder.Binding(PublishedRecordKind.Action, RecordId, 1));
         await briefs.BriefAsync(BriefFixtures.Week);
@@ -82,22 +199,11 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
-    public async Task AWorkerRevisionKeepsAnOpenConcernSoTheNewRevisionStillShowsItsBlocker()
-    {
-        await DraftAsync(UpdatedAt, DraftableOutput);
-        await DecideAsync(1, 0, ReviewDecisionKind.RequestChanges, "Name the bill.");
-
-        await AddSponsorAsync(UpdatedAt.AddDays(1));
-
-        Assert.Equal("AwaitingReviewWithConcerns", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
-    }
-
-    [Fact]
     public async Task BulkApprovalApprovesARevisionThatChangesOnlySponsorshipsAndBindsTheDecisionToThatRevision()
     {
-        await DraftAsync(UpdatedAt, DraftableOutput);
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         await DecideAsync(1, 0, ReviewDecisionKind.Approve);
-        await AddSponsorAsync(UpdatedAt.AddDays(1));
+        await AddSponsorForReviewAsync(UpdatedAt.AddDays(1));
         var review = (await new GetActionReview(ActionReviews()).ExecuteAsync(Reviewer, RecordId))!.Review;
         Assert.True(review.IsSponsorshipOnly);
         var added = Assert.Single(review.CurrentRevision.SponsorshipChangesSince(review.LastApprovedRevision!).Added);
@@ -115,9 +221,9 @@ public sealed partial class PostgresBillStreamTests
     [Fact]
     public async Task BulkApprovalRefusesASponsorshipOnlyRevisionWithAnOpenConcernBecauseItWritesNoResolutionNote()
     {
-        await DraftAsync(UpdatedAt, DraftableOutput);
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         await DecideAsync(1, 0, ReviewDecisionKind.Approve);
-        await AddSponsorAsync(UpdatedAt.AddDays(1));
+        await AddSponsorForReviewAsync(UpdatedAt.AddDays(1));
         await DecideAsync(2, 1, ReviewDecisionKind.RequestChanges, "Check the new sponsor.");
         Assert.True((await new GetActionReview(ActionReviews()).ExecuteAsync(Reviewer, RecordId))!.Review.IsSponsorshipOnly);
 
@@ -130,9 +236,9 @@ public sealed partial class PostgresBillStreamTests
     [Fact]
     public async Task ABulkReplayWithTheSameKeyReturnsTheSameResultForEachRecordAndWritesNothingNew()
     {
-        await DraftAsync(UpdatedAt, DraftableOutput);
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         await DecideAsync(1, 0, ReviewDecisionKind.Approve);
-        await AddSponsorAsync(UpdatedAt.AddDays(1));
+        await AddSponsorForReviewAsync(UpdatedAt.AddDays(1));
         var missing = new string('9', 64);
         var request = new BulkApprovalRequest([new(RecordId, 2, 1), new(missing, 1, 0)], "bulk-1");
         var approve = new ApproveSponsorshipChanges(ActionReviews());
@@ -148,7 +254,7 @@ public sealed partial class PostgresBillStreamTests
     [Fact]
     public async Task ABulkKeyThatLeavesNoRoomForTheRecordIdIsABadRequestAndNotARejectionOfEachRecord()
     {
-        await DraftAsync(UpdatedAt, DraftableOutput);
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         var approve = new ApproveSponsorshipChanges(ActionReviews());
         var target = new BulkApprovalTarget(RecordId, 1, 0);
 
@@ -159,10 +265,10 @@ public sealed partial class PostgresBillStreamTests
     [Fact]
     public async Task BulkApprovalRejectsARevisionWhoseTextChangedAndReportsEachRecordOnItsOwn()
     {
-        await DraftAsync(UpdatedAt, DraftableOutput);
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         await DecideAsync(1, 0, ReviewDecisionKind.Approve);
         await SaveAsync(1, SuggestionChoice.Keep, "save-2");
-        await AddSponsorAsync(UpdatedAt.AddDays(1));
+        await AddSponsorForReviewAsync(UpdatedAt.AddDays(1));
         var missing = new string('9', 64);
 
         var results = await BulkApproveAsync(new BulkApprovalTarget(RecordId, 3, 1), new BulkApprovalTarget(missing, 1, 0));
@@ -176,7 +282,7 @@ public sealed partial class PostgresBillStreamTests
     [Fact]
     public async Task BulkApprovalNeedsAnApprovedRevisionBecauseAFirstDraftHasNoChangeToCompare()
     {
-        await DraftAsync(UpdatedAt, DraftableOutput);
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
 
         var results = await BulkApproveAsync(new BulkApprovalTarget(RecordId, 1, 0));
 
@@ -187,7 +293,7 @@ public sealed partial class PostgresBillStreamTests
     [Fact]
     public async Task TriageListsOnlyActionsThatNeedActionWithTheirExtractionsAndAPassingApprovalCheck()
     {
-        await DraftAsync(UpdatedAt, DraftableOutput);
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         var triage = new ListActionTriage(ActionReviews());
 
         var page = await triage.ExecuteAsync(Reviewer, null, new(DraftStatusFilter.Approved));
@@ -204,8 +310,8 @@ public sealed partial class PostgresBillStreamTests
     [Fact]
     public async Task ApprovalBindsToTheExactRevisionSoAWorkerRevisionAfterThePageLoadedTurnsItIntoAConflict()
     {
-        await DraftAsync(UpdatedAt, DraftableOutput);
-        await AddSponsorAsync(UpdatedAt.AddDays(1));
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await AddSponsorForReviewAsync(UpdatedAt.AddDays(1));
 
         await Assert.ThrowsAsync<ReviewConflictException>(() => DecideAsync(1, 0, ReviewDecisionKind.Approve));
         Assert.Equal(BulkApprovalOutcome.Conflict, Assert.Single(await BulkApproveAsync(new BulkApprovalTarget(RecordId, 1, 0))).Outcome);
@@ -217,9 +323,9 @@ public sealed partial class PostgresBillStreamTests
     [Fact]
     public async Task APersonSaveMayKeepOrClearTheSuggestionButTheStoreRefusesAChangedOne()
     {
-        await DraftAsync(UpdatedAt, DraftableOutput);
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         await SaveAsync(1, SuggestionChoice.Keep, "save-2");
-        await DraftAsync(UpdatedAt.AddDays(1), DraftableOutput, title: "A renamed bill");
+        await DraftForReviewAsync(UpdatedAt.AddDays(1), DraftableOutput, title: "A renamed bill");
         var withSuggestion = (await ActionReviews().GetRevisionAsync(RecordId, 3, default))!;
         Assert.Equal(("Person headline", ReviewTextOrigin.Person), (withSuggestion.Headline, withSuggestion.TextOrigin));
         Assert.NotNull(withSuggestion.Suggestion);
@@ -238,9 +344,9 @@ public sealed partial class PostgresBillStreamTests
     [Fact]
     public async Task UsingTheSuggestionSavesItsStoredTextAndClearsItEvenWhenThePostedTextDiffers()
     {
-        await DraftAsync(UpdatedAt, DraftableOutput);
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         await SaveAsync(1, SuggestionChoice.Keep, "save-2");
-        await DraftAsync(UpdatedAt.AddDays(1), DraftableOutput, title: "A renamed bill");
+        await DraftForReviewAsync(UpdatedAt.AddDays(1), DraftableOutput, title: "A renamed bill");
         var suggestion = (await ActionReviews().GetRevisionAsync(RecordId, 3, default))!.Suggestion!;
 
         var used = await SaveAsync(3, SuggestionChoice.Use, "save-4", headline: "Posted headline", summary: "Posted summary.");
@@ -252,7 +358,7 @@ public sealed partial class PostgresBillStreamTests
     [Fact]
     public async Task UsingASuggestionThatTheRevisionDoesNotHaveIsRefused()
     {
-        await DraftAsync(UpdatedAt, DraftableOutput);
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
 
         await Assert.ThrowsAsync<ArgumentException>(() => SaveAsync(1, SuggestionChoice.Use, "save-2"));
     }
@@ -260,7 +366,7 @@ public sealed partial class PostgresBillStreamTests
     [Fact]
     public async Task TheDatabaseRefusesAnActionStatusThatThePolicyNeverStores()
     {
-        await DraftAsync(UpdatedAt, DraftableOutput);
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
 
         await Assert.ThrowsAsync<PostgresException>(() =>
             ExecuteAsync(connectionString, $"UPDATE action_drafts SET review_status = 'NotDrafted' WHERE record_id = '{RecordId}'"));
@@ -302,6 +408,35 @@ public sealed partial class PostgresBillStreamTests
         _ = await ReadableCandidateAsync("A000001", updatedAt, cosponsor: "B000002");
         Assert.Empty((await RunActionWorkerAsync(new FakeHeadlineSummaryModel())).Requests);
     }
+
+    private async Task<IReadOnlyList<ReviewDecision>> ActionDecisionsAsync()
+    {
+        var json = (string)(await ScalarAsync("SELECT coalesce(jsonb_agg(decision_json::jsonb ORDER BY review_state_version), '[]')::text FROM action_review_decisions"))!;
+        return System.Text.Json.JsonSerializer.Deserialize<ReviewDecision[]>(json, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+    }
+
+    private async Task DraftForReviewAsync(DateTimeOffset updatedAt, string output, string? title = null)
+    {
+        await DraftAsync(updatedAt, output, title);
+        await ReopenAsync();
+    }
+
+    private async Task AddSponsorForReviewAsync(DateTimeOffset updatedAt)
+    {
+        await AddSponsorAsync(updatedAt);
+        await ReopenAsync();
+    }
+
+    // Puts the record in the state of a worker revision that code did not approve, for tests of the person flow.
+    private Task ReopenAsync() => ExecuteAsync(connectionString, $"""
+        WITH removed AS (
+            DELETE FROM action_review_decisions d USING action_drafts r
+             WHERE d.record_id = r.record_id AND d.record_id = '{RecordId}' AND d.review_state_version = r.review_state_version
+               AND d.decision_json::jsonb ->> 'actorSubject' = '{ReviewAuthor.CodeSubject}'
+         RETURNING 1)
+        UPDATE action_drafts SET review_state_version = review_state_version - 1, review_status = 'AwaitingReview'
+         WHERE record_id = '{RecordId}' AND EXISTS (SELECT 1 FROM removed)
+        """);
 
     private Task<ReviewDecision> DecideAsync(int revision, int stateVersion, ReviewDecisionKind kind, string? note = null) =>
         new DecideActionReview(ActionReviews()).ExecuteAsync(Reviewer,

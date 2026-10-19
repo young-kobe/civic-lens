@@ -15,7 +15,7 @@ internal static class ReviewAuthorization
     {
         ArgumentNullException.ThrowIfNull(actor);
         if (string.IsNullOrWhiteSpace(actor.Subject) || actor.Subject.Length > 256 || !actor.CanReview || !Enum.IsDefined(actor.Role) ||
-            ReviewAuthor.IsAnalysis(actor.Subject))
+            ReviewAuthor.IsReserved(actor.Subject))
             throw new UnauthorizedAccessException("The authenticated subject is not authorized for editorial review.");
     }
 
@@ -23,7 +23,7 @@ internal static class ReviewAuthorization
     {
         ArgumentNullException.ThrowIfNull(actor);
         if (string.IsNullOrWhiteSpace(actor.Subject) || actor.Subject.Length > 256 || actor.Role != ReviewRole.Owner ||
-            ReviewAuthor.IsAnalysis(actor.Subject))
+            ReviewAuthor.IsReserved(actor.Subject))
             throw new UnauthorizedAccessException("The authenticated subject is not authorized to publish.");
     }
 }

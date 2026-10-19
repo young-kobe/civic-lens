@@ -22,7 +22,7 @@ public sealed partial class PostgresBillStreamTests
     [Fact]
     public async Task AnActionDecisionAfterTheBuildBlocksTheCommitBecauseApprovalMayHaveChanged()
     {
-        await DraftAsync(UpdatedAt, DraftableOutput);
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         await DecideAsync(1, 0, ReviewDecisionKind.Approve);
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
 
@@ -38,7 +38,6 @@ public sealed partial class PostgresBillStreamTests
     public async Task ACommittedActionLeavesTheReadyListBecauseTheReleaseRowCarriesTheActionKind()
     {
         await DraftAsync(UpdatedAt, DraftableOutput);
-        await DecideAsync(1, 0, ReviewDecisionKind.Approve);
         var ready = Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, default));
         Assert.Null(ready.PublishedRevisionNumber);
 
@@ -52,7 +51,7 @@ public sealed partial class PostgresBillStreamTests
     [Fact]
     public async Task PublicationReadReturnsTheApprovedActionWithEachCitedExtractionAndOmitsUnknownIds()
     {
-        await DraftAsync(UpdatedAt, DraftableOutput);
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         await DecideAsync(1, 0, ReviewDecisionKind.Approve);
 
         var found = await ActionReviews().GetForPublicationAsync([RecordId, new string('f', 64)], default);
@@ -68,7 +67,7 @@ public sealed partial class PostgresBillStreamTests
     [Fact]
     public async Task AnApprovedDraftedActionPublishesWithEveryCitationQuotingItsSavedApiPage()
     {
-        await DraftAsync(UpdatedAt, DraftableOutput);
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         await DecideAsync(1, 0, ReviewDecisionKind.Approve);
         var revision = (await ActionReviews().GetRevisionAsync(RecordId, 1, default))!;
         var names = revision.Sponsorships.Select(item => item.PersonId).Distinct().ToDictionary(id => id, id => $"Official {id}");

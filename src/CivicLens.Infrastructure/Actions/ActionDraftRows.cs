@@ -1,4 +1,5 @@
 using CivicLens.Application.Actions;
+using CivicLens.Application.Review;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Actions.Persistence;
@@ -23,8 +24,16 @@ internal static class ActionDraftRows
         if ((draft?.CurrentRevisionNumber ?? 0) != revision.RevisionNumber - 1) return ActionDraftErrorCodes.RevisionConflict;
         if (draft is null) db.Add(draft = NewDraft(revision));
         var records = PostgresActionReviewStore.Records;
-        records.AppendRevision(db, draft, revision, NewRevision(revision, runId), await records.ReadCycleAsync(db, draft, cancellationToken));
+        await records.AppendCodeApprovedAsync(db, draft, revision, NewRevision(revision, runId), await records.ReadCycleAsync(db, draft, cancellationToken),
+            () => PassesApprovalChecksAsync(db, revision, cancellationToken), PostgresActionReviewStore.NewDecisionRow);
         return null;
+    }
+
+    private static async Task<bool> PassesApprovalChecksAsync(CollectionAttemptDbContext db, ActionDraftRevision revision,
+        CancellationToken cancellationToken)
+    {
+        var extractions = await PostgresActionReviewStore.ReadExtractionsAsync(db, [revision], cancellationToken);
+        return ApprovalCheck.Of(() => revision.ValidateForApproval(extractions)).Passed;
     }
 
     public static Task<bool> HasNewerCandidateAsync(CollectionAttemptDbContext db, ActionDraftCandidate candidate, CancellationToken cancellationToken)

@@ -173,13 +173,15 @@ public sealed class DocumentChangeDraftConfigurationTests
     [Theory]
     [InlineData("civic-lens:analysis", "")]
     [InlineData("auth0|owner", "auth0|friend,civic-lens:analysis")]
-    public void TheAiDrafterSubjectCannotBeAnOwnerOrReviewer(string owner, string reviewers)
+    [InlineData("civic-lens:code", "")]
+    [InlineData("auth0|owner", "auth0|friend,civic-lens:code")]
+    public void TheAiDrafterAndCodeCheckSubjectsCannotBeAnOwnerOrReviewer(string owner, string reviewers)
     {
         var configured = reviewers.Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal);
 
         var error = Assert.Throws<ArgumentException>(() => ReviewWorkspaceSettings.ValidateSubjects(owner, configured));
 
-        Assert.Contains("AI drafter", error.Message, StringComparison.Ordinal);
+        Assert.Contains("code check", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]

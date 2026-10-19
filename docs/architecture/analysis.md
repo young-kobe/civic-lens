@@ -17,6 +17,7 @@ The analysis feature runs model tasks over retained evidence through durable, bu
 - The byte bound also keeps each prompt in the lower Haiku 5.5 price tier.
 - A call that may have been billed stays fully charged. A crash or a lost connection therefore never hides spend.
 - AI drafts use the reserved author subject `civic-lens:analysis`. That subject can never decide, so an AI author can never approve its own draft.
+- Code approves a worker revision of an action or a vote under the reserved subject `civic-lens:code`, after it checks the citations. This is a code decision and not a model decision. No other task gets a code approval.
 - An AI-proposed change date needs explicit human confirmation. A published record never carries an unconfirmed AI date.
 
 ## Invariants
@@ -273,7 +274,7 @@ Classification acceptance:
 Pending decisions for the ladder are [D-05](../roadmap.md#pending-decisions).
 
 - Model extraction is planned. Extraction returns validated source evidence.
-- The worker drafts action records, vote records, and weekly briefs as proposed revisions. Each published record still needs a human approval bound to its exact revision.
+- The worker drafts action records, vote records, and weekly briefs as proposed revisions. Code approves an action or vote revision after it checks the citations; see [review](review.md#code-approval). A brief still needs a human approval. Each published record is bound to its exact approved revision.
 - Match statements and actions on identifiers, people, dates, jurisdiction, and issue candidates before any model comparison. Relationship assessments need editorial context.
 - Briefs use bounded evidence selections and citation IDs; see [briefs](briefs.md#selection).
 - Do not silently truncate long documents. Record chunk coverage and extraction failures.

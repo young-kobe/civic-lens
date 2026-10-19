@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The briefs feature drafts one weekly brief from the records that Civic Lens published during one week. A brief is short text with cited records: statements, document changes, and action records. A person reviews and approves each brief. A model prediction is never a human decision.
+The briefs feature drafts one weekly brief from the records that Civic Lens published during one week. A brief is short text with cited records: statements, document changes, and action records. A person reviews and approves each brief. The action records that it cites carry an approval by code or by a person. A model prediction is never a human decision.
 
 The feature stores, queues, selects, drafts, and reviews briefs. A person edits, requests changes, approves, and withdraws approval on private pages. The owner publishes an approved brief in a release, with the records that it cites. See [Publication](#publication).
 
@@ -42,7 +42,7 @@ The feature stores, queues, selects, drafts, and reviews briefs. A person edits,
 - The editor shows the headline and the summary of the exact cited revision for each citation. It links to the review page of that record. One batch read of the exact kind, record, and revision triples feeds it.
 - A citation has changed when the active release holds another revision of the record or none. It has also changed when the latest decision on the cited revision is not an approval. A brief is flagged "cited records changed" when any citation has changed. Code derives the flag at each read. No column or lock holds it.
 - Approval needs an unflagged brief. The approval gate and the flag share one read, `BriefRecordReader.FindChangedAsync`.
-- A flagged brief that is approved stays approved. This differs on purpose from actions, where a worker revision resets an approved action. The approval of a brief covers the text of the reviewer, which a record change does not rewrite.
+- A flagged brief that is approved stays approved. This differs on purpose from actions, where a worker revision gets a new code approval when the rules allow it. The approval of a brief covers the text of the reviewer, which a record change does not rewrite.
 - The remedy for a flagged approved brief is a person Withdraw. The page also shows the flag on the list. Publication of briefs refuses a flagged brief; see [Publication](#publication).
 - There is no bulk approval for briefs. A reviewer reads each brief.
 

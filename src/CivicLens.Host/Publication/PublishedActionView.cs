@@ -14,7 +14,7 @@ internal static class PublishedActionView
         new("Title", action.BillTitle),
         new("Policy area", action.PolicyArea ?? "None"),
         Fact.List("Tracked issues", action.TrackedIssueIds),
-        new("Published", $"Approved {Moment.Full(action.ApprovedAtUtc)}; first published {Moment.Full(action.FirstPublishedAtUtc)}"),
+        new("Published", $"From the official record, checked {Moment.Full(action.ApprovedAtUtc)}; first published {Moment.Full(action.FirstPublishedAtUtc)}"),
         new("Revision", action.RevisionNumber.ToString(CultureInfo.InvariantCulture))
     ];
 

@@ -28,5 +28,6 @@
     [Parameter, EditorRequired] public string ViewerSubject { get; set; } = string.Empty;
 
     private string Who(string subject) => ReviewAuthor.IsAnalysis(subject) ? "AI drafter"
+        : ReviewAuthor.IsCode(subject) ? "Code check"
         : subject == ViewerSubject ? "You" : "Another reviewer";
 }

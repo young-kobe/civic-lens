@@ -65,6 +65,40 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         draft.ReviewStatus = ReviewPolicy.GetCurrentStatus(draft.CurrentRevisionNumber, cycle);
     }
 
+    /// <summary>The analysis worker appends a revision of a fact record. Code approves it in the same transaction when no concern
+    /// is open, a model wrote the text, and the record's own approval checks pass. Otherwise it waits for a person. The caller runs
+    /// <see cref="AfterCodeApprovalAsync"/> once the rest of the transaction rows are tracked.</summary>
+    public async Task AppendCodeApprovedAsync(CollectionAttemptDbContext db, TDraftRow draft, TRevision revision, TRevisionRow row,
+        ImmutableArray<ReviewDecision> cycle, Func<Task<bool>> passesApprovalChecks, Func<ReviewDecision, TDecisionRow> toDecisionRow)
+    {
+        AppendRevision(db, draft, revision, row, cycle);
+        if (!ReviewPolicy.GetUnresolvedConcerns(cycle).IsEmpty || revision is IHeadlineSummaryRevision { TextOrigin: ReviewTextOrigin.Person } ||
+            !await passesApprovalChecks())
+            return;
+        var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), draft.RecordId, revision.RevisionNumber, draft.ReviewStateVersion + 1,
+            ReviewDecisionKind.Approve, ReviewAuthor.CodeSubject, null, [], new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero));
+        ReviewPolicy.ValidateDecision(draft.RecordId, draft.CurrentRevisionNumber, draft.ReviewStateVersion, cycle, decision);
+        RecordDecision(db, draft, cycle, decision, toDecisionRow);
+    }
+
+    /// <summary>Runs the after-decision hooks for a code approval that this transaction tracked. The hooks save the context, so the
+    /// caller must call this after it adds the rows that the revision row refers to.</summary>
+    public async Task AfterCodeApprovalAsync(CollectionAttemptDbContext db, string recordId, int revisionNumber,
+        Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision, CancellationToken cancellationToken)
+    {
+        var approved = db.Set<TDraftRow>().Local.Any(draft => draft.RecordId == recordId && draft.CurrentRevisionNumber == revisionNumber &&
+            draft.ReviewStatus == ReviewStatus.Approved);
+        if (approved) await afterDecision(db, recordId, revisionNumber, cancellationToken);
+    }
+
+    private void RecordDecision(CollectionAttemptDbContext db, TDraftRow draft, ImmutableArray<ReviewDecision> cycle, ReviewDecision decision,
+        Func<ReviewDecision, TDecisionRow> toRow)
+    {
+        db.Add(toRow(decision));
+        draft.ReviewStateVersion = decision.ReviewStateVersion;
+        draft.ReviewStatus = ReviewPolicy.GetCurrentStatus(draft.CurrentRevisionNumber, cycle.Add(decision));
+    }
+
     public async Task<ReviewDecision> DecideAsync(IDbContextFactory<CollectionAttemptDbContext> contextFactory, string actorSubject,
         ReviewDecision decision, int expectedRevisionNumber, int expectedReviewStateVersion, string operation, string idempotencyKey,
         string payloadHash, Func<CollectionAttemptDbContext, TDraftRow, ReviewHistory<TRevision>, Task> validateDecision,
@@ -82,9 +116,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
                 expectedReviewStateVersion, decision);
             ReviewPolicy.ValidateDecision(draft.RecordId, draft.CurrentRevisionNumber, draft.ReviewStateVersion, history.Decisions, decision);
             await validateDecision(db, draft, history);
-            db.Add(toRow(decision));
-            draft.ReviewStateVersion = decision.ReviewStateVersion;
-            draft.ReviewStatus = ReviewPolicy.GetCurrentStatus(draft.CurrentRevisionNumber, history.Decisions.Add(decision));
+            RecordDecision(db, draft, history.Decisions, decision, toRow);
             await afterDecision(db, draft.RecordId, decision.RevisionNumber, cancellationToken);
             return decision;
         }, cancellationToken);

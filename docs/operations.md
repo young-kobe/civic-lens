@@ -450,6 +450,8 @@ A record allows at most 64 open concerns. An approval resolves them and starts a
 
 An AI draft is revision 1 by the AI drafter. Check every sentence and citation against the evidence. If the editor flags an unverified change date, check it, tick Date checked, and save a revision before you approve. Approved accounts stay private until the owner publishes them.
 
+Code approves a worker revision of an action or a vote after it checks the citations. The decision history shows the actor "Code check". A record appears in the lists as Needs action only when code did not approve it: a concern is open, a person wrote the current text, or an approval check failed. The triage row shows the failed check. A person can edit or withdraw any record. The owner still publishes each release.
+
 Auth0 tenant login and logout and the production reverse proxy still need live verification.
 
 ## AI drafting of document-change accounts

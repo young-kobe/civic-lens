@@ -25,6 +25,7 @@ The system has one repository and three runtime parts. A C# application runs col
 - Coverage is selective. A missing record does not show inactivity. Relevant source failures stay visible as coverage limits.
 - A capture is not a document version, an approval, or a publication.
 - A model prediction is never a human approval. Approval binds to the exact revision and evidence reviewed.
+- Code approves action records and House vote records, because their facts come from Congress.gov and the Clerk XML and code checks every citation. People approve all other records. Public pages label the headline and the summary of a fact record as an AI summary of the official record.
 - Approval and publication are separate actions. Public serving reads published releases only.
 
 ### Status
@@ -196,7 +197,7 @@ Extraction and comparison saves take no advisory lock. Each uses `INSERT ... ON 
 
 No transaction holds a review key with a collection key.
 
-An analysis settlement can add a draft row or append a revision. It then takes its queue row lock (`FOR UPDATE` in `PostgresAnalysisQueue`) before the review key of its record kind. Review and publication writes take review keys only and never lock queue rows, so no lock cycle exists.
+An analysis settlement can add a draft row or append a revision. It then takes its queue row lock (`FOR UPDATE` in `PostgresAnalysisQueue`) before the review key of its record kind. Review and publication writes take review keys only and never lock queue rows, so no lock cycle exists. An action or vote settlement that code approves then runs the same hooks as a person decision. It locks the relationship queue rows, takes the relationship key, locks the brief queue rows, and takes the brief key, in that order.
 
 A review decision on a statement, an action, or a vote finds the relationship pairs of its record. It saves the decision first. It holds the key of its own record kind, and a record that is not approved ends the hook. Otherwise it locks only the relationship queue rows of its record in pair key order. Then it takes the relationship key. The brief hook comes last, with the brief rows and the brief key. For these three stores, the decision and draft writes happen before the brief locks. `AfterDecisionHooks.InOrder` keeps this order. A settlement that appends a relationship revision locks its own row and then takes the relationship key.
 
@@ -208,6 +209,7 @@ These rules cross features. Each line gives the rule, what enforces it, and the 
 
 - A capture never changes after import. Enforced by the primary key of `collection_captures` and the insert-only `PostgresCollectionAttemptStore`. Test: `PostgresCollectionAttemptStoreTests.SerializesConcurrentSameAndDistinctAttemptsAndRejectsHashLengthConflict`.
 - A model prediction is never a human approval. Enforced by `ReviewPolicy`, which refuses decisions by the analysis author. Test: `ReviewPolicyTests.TheAiDrafterCannotRecordAnyDecisionEvenOnItsOwnDraft`.
+- Only the worker path approves by code, and only for actions and House votes. The reserved subject `civic-lens:code` is the actor. A person cannot act as it, and it cannot publish. Enforced by `ReviewAuthor.IsReserved`, `ReviewAuthorization`, `ReviewWriteRules`, and `ReviewRecords.AppendCodeApprovedAsync`. Tests: `PostgresBillStreamTests.APersonCannotActAsTheCodeSubject` and `PostgresStatementDraftStoreTests.AStatementAiRevisionIsNeverApprovedByCodeBecauseOnlyAPersonApprovesJudgment`.
 - A release holds the exact approved revision. Enforced by `PublishedRecordRules` and `PostgresPublicationStore`, which recheck the review state at commit. Test: `PostgresPublicationStoreTests.ASaveAfterTheBuildBlocksTheCommitBecauseTheServedRevisionWouldBeStale`.
 - The collector depends on Collection.Contracts only. Enforced by the dependency map in `ArchitectureTests`. Test: `ArchitectureTests.ProductionProjectsHaveOnlyApprovedDependencies`.
 - Only the current lease holder moves queue work. Each claim issues a new token and a higher fence, and a stale write fails. Enforced by `PostgresCollectionJobStore`, `EvidenceProcessingLifecycle`, and `AnalysisLifecycle`. Test: `PostgresDocumentChangeAnalysisStoreTests.AnExpiredLeaseIsRecoveredAsAnInterruptedRunAndTheStaleOwnerIsFenced`.
