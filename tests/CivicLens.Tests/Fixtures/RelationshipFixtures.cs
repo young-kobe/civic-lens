@@ -88,7 +88,7 @@ internal static class RelationshipFixtures
 
     public static RelationshipDraftEvidence Evidence(RelationshipPair pair, RelationshipRevision? current = null, string? settledFingerprint = null) =>
         new(pair.PairId, pair.Target.Kind, pair.Statement, pair.Target.Kind == RelationshipRecordKind.Action ? Action() : null,
-            pair.Target.Kind == RelationshipRecordKind.Vote ? Vote() : null, settledFingerprint, current);
+            pair.Target.Kind == RelationshipRecordKind.Vote ? Vote() : null, settledFingerprint, current, false);
 
     public static string Output(string type = "describesOwnBill", string reason = "Warren says she introduced the bill.",
         string? quote = BillSentence, string? factId = "F2") => JsonSerializer.Serialize(

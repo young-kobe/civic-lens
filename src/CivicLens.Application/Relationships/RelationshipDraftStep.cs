@@ -31,11 +31,12 @@ public sealed class RelationshipDraftStep(IRelationshipDraftStore store, IRelati
         attempt.ContextJson = RelationshipDraftPrompt.SerializeContext(context);
         if (KeepsPersonRevision(evidence, pair)) return await SettleUnchangedAsync(attempt, context, cancellationToken);
         if (evidence.SettledFingerprint != context.Fingerprint) return await DraftAsync(attempt, context, cancellationToken);
+        if (evidence.SettledAsNone)
+            return await SettleWithoutCallAsync(attempt, context.Fingerprint, RelationshipDraftErrorCodes.NoRelationship, cancellationToken);
         return evidence.Current switch
         {
             null => await SettleUnchangedAsync(attempt, context, cancellationToken),
-            { } current when evidence.SettledAsNone || current.Target == pair.Target.Citation =>
-                await SettleUnchangedAsync(attempt, context, cancellationToken),
+            { } current when current.Target == pair.Target.Citation => await SettleUnchangedAsync(attempt, context, cancellationToken),
             { } current when CanRecite(current, pair) => await ReciteAsync(attempt, context, cancellationToken),
             _ => await DraftAsync(attempt, context, cancellationToken)
         };

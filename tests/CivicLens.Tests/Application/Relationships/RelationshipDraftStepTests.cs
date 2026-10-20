@@ -101,7 +101,7 @@ public sealed class RelationshipDraftStepTests
 
         Assert.Empty(model.Requests);
         Assert.Empty(store.Revisions);
-        Assert.Equal(RelationshipDraftErrorCodes.Unchanged, store.Entries[0].ErrorCode);
+        Assert.Equal(RelationshipDraftErrorCodes.NoRelationship, store.Entries[0].ErrorCode);
     }
 
     [Fact]

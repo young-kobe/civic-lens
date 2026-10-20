@@ -293,6 +293,25 @@ public sealed class PostgresRelationshipDraftStoreTests(PostgresCollection postg
     }
 
     [Fact]
+    public async Task ANoCallPassAfterANoneAnswerKeepsTheNoneReasonSoALaterTargetChangeNeverCopiesTheOldRevision()
+    {
+        await SeedApprovedPairAsync();
+        await DraftNoneAfterASummaryChangeAsync();
+        await seeder.ExecuteAsync("UPDATE relationship_analysis SET status = 'Pending', error_code = NULL");
+        var noCall = new FakeRelationshipDraftModel();
+        await RunWorkerAsync(noCall);
+        Assert.Empty(noCall.Requests);
+        await seeder.ActionAsync(Action(revision: 3) with { Summary = "A new summary of the bill." });
+        var model = new FakeRelationshipDraftModel();
+
+        await RunWorkerAsync(model);
+
+        Assert.Empty(model.Requests);
+        Assert.Equal([["1"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions"));
+        Assert.Equal([["Succeeded", "noRelationship"]], await seeder.ReadAsync("SELECT status, error_code FROM relationship_analysis"));
+    }
+
+    [Fact]
     public async Task ANoneAnswerAfterAPersonRevisionStartsNoFurtherModelCallOnLaterRefreshes()
     {
         await SeedPersonRevisionAsync();
