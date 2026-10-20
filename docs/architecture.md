@@ -49,6 +49,7 @@ Implemented:
 - the authenticated review workspace
 - static release publication of document changes, statements, actions, votes, weekly briefs, and relationships
 - related records on the statement, action, and vote pages
+- the public search service with its own Postgres database, fed from published releases, and the search page of each release
 
 Pending: live Auth0 tenant verification, production deployment, AI classification, correction and withdrawal releases, and MCP. The [roadmap](roadmap.md) holds the order.
 
@@ -201,6 +202,13 @@ A transaction that takes a brief queue row lock takes it before `civic-lens-brie
 Extraction and comparison saves take no advisory lock. Each uses `INSERT ... ON CONFLICT DO NOTHING` in one ReadCommitted transaction. See [documents](architecture/documents.md#invariants).
 
 No transaction holds a review key with a collection key.
+
+The search service has its own database and its own two locks, owned by `SearchLocks` in `CivicLens.PublicApi`. The service does not reference Infrastructure and the databases are separate, so these locks cannot join the order above. Postgres hashes each text key with `hashtextextended(key, 0)`.
+
+- `civic-lens-search-schema`: `SchemaMigrator` takes it as a session lock. The migrator runs several statements and one transaction for each file. A transaction lock would end at the first commit. The session lock covers the whole run, and the migrator releases it at the end.
+- `civic-lens-search-ingest`: `IndexTransaction` takes it as a transaction lock at the start of each ingest. It keeps a second service from writing a release at the same time.
+
+No transaction holds both search keys.
 
 An analysis settlement can add a draft row or append a revision. It then takes its queue row lock (`FOR UPDATE` in `PostgresAnalysisQueue`) before the review key of its record kind. Review and publication writes take review keys only and never lock queue rows, so no lock cycle exists. An action or vote settlement that code approves then runs the same hooks as a person decision. It locks the relationship queue rows, takes the relationship key, locks the brief queue rows, and takes the brief key, in that order.
 

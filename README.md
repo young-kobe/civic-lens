@@ -6,7 +6,7 @@ The approved product direction serves regular citizens seeking transparency in U
 
 **Current state:** A durable worker collects configured official sources, the Congress.gov bill list, and the Congress.gov House vote list. A separate bounded collector fetches them. The worker stores immutable captures, extracts text, and compares versions in Postgres. Checked-in EF migrations apply schema changes.
 
-Claude drafts document-change accounts and statement records inside daily token limits. A person edits, approves, and publishes each draft in an authenticated review workspace. Approved records publish as immutable static releases.
+Claude drafts document-change accounts and statement records inside daily token limits. A person edits, approves, and publishes each draft in an authenticated review workspace. Approved records publish as immutable static releases. A separate search service, `src/CivicLens.PublicApi`, reads each published release into its own Postgres database. It serves full-text search and a read API; see [search](docs/architecture/search.md).
 
 The worker drafts one action record for each tracked Congress.gov bill. Each record lists every tracked official's sponsorship and cosponsorship. Code approves each action record after it checks the citations. A person can edit or withdraw a record, and the owner publishes.
 
@@ -54,6 +54,7 @@ No credentials, database, or paid services are required for the tracer. Tests ne
 | `src/CivicLens.Application` | Use cases and external interfaces |
 | `src/CivicLens.Infrastructure` | Postgres stores, process execution, parsers, and the Claude API adapter |
 | `src/CivicLens.Host` | CLI, worker, authenticated Blazor review workspace, and static release builder |
+| `src/CivicLens.PublicApi` | The public search service: release ingest, its own search index, and the read API. It references the publication contract only |
 | `src/CivicLens.Collector` | `Http/` contains bounded collection and immutable capture production |
 | `tests/CivicLens.Tests` | Tests mirror their owning layer and feature; `Architecture/` checks dependencies |
 | `tools/render-architecture.py` | Shared diagram definitions and offline visual generator |

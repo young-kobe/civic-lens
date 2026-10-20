@@ -11,7 +11,7 @@ The search service gives readers full-text search over every published record. I
 - The service reads the public release files over HTTP. The base address is `CIVIC_LENS_RELEASE_BASE_URL`. A dev or test server can serve the release root.
 - The ingest polls `release.json` every 2 minutes with a conditional GET. It sends the ETag and the Last-Modified time that the server gave. An unchanged manifest costs one empty reply.
 - The ingest reuses the contract rules. `PublicationRelease.Validate` checks the manifest, and the `Validate` method of each record type checks the record. Search copies no contract rule.
-- One release is ingested in one transaction. A release that the service already stored, or an older one, changes nothing.
+- One release is ingested in one transaction. A release that the service stored already only becomes the active release again. A release that is older than the newest stored release and was never stored is refused, logged, and the service keeps serving the active release.
 - Each row stores a range of a record revision: its first release and its last release. The last release is null while the range is open. A release that drops or replaces a revision closes its range. A revision that returns later gets a new row, so a pinned search in the gap never sees it.
 - A query reads the active release by default. The active release is the number in `release.json`, so the service follows a rollback of the static site. A query can pin another ingested release with `release=N`.
 - The schema is a set of numbered SQL files built into the project as embedded resources. The service applies them in order at startup under a Postgres advisory lock. A `schema_migrations` table records them. This departs from the EF migrations of the operational database. The service uses plain Npgsql, so it has no model to migrate.
@@ -20,7 +20,7 @@ The search service gives readers full-text search over every published record. I
 - Queries use `websearch_to_tsquery('english', q)` and `ts_rank_cd`. A snippet comes from `ts_headline` over the first 50,000 characters of the record body. The snippet marks each match between U+E000 and U+E001, so a reader script never needs HTML from the service.
 - Paging uses a keyset cursor, as the review UI does. The cursor carries its release, so all pages of one search read the same release. This service pages forward only, so the cursor has no direction.
 - The public address will be `api.civic-lens.info`. Every response allows any origin. The service sets no cookie and checks no credential.
-- The rate limiter is the ASP.NET built-in fixed window. It keys on `CF-Connecting-IP` only when the connection comes from a configured Cloudflare range. Otherwise it keys on the remote address.
+- The rate limiter is the ASP.NET built-in fixed window. It keys on `CF-Connecting-IP` only when the connection comes from a configured Cloudflare range. Otherwise it keys on the remote address. An IPv6 client counts as its /64 network.
 - A record file holds the full source text. The service indexes it and does not serve it. The API returns index rows and the paths of the record files.
 - Publish writes `search.html` in every release. The page fills its filters from the manifest. Issue and policy area names come from the publication catalog. A script calls the service at `CIVIC_LENS_PUBLIC_API_URL`. Without the variable, the page says that search is not available.
 - The facet pages are the path for readers without JavaScript.
@@ -32,7 +32,9 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - The service references the publication contracts and Npgsql only. Enforced by the project references. Tests: `ArchitectureTests.ProductionProjectsHaveOnlyApprovedDependencies` and `ArchitectureTests.ThePublicApiReadsReleasesOnlyAndReferencesNoOperationalAssembly`.
 - A record is indexed only after the contract validation of its kind. Enforced by `RecordReader.Read`. Tests: `RecordReaderTests.ARecordThatBreaksItsContractIsRefusedByTheContractValidation` and `ReleaseIngestTests.ARecordThatFailsItsContractValidationIsNotIndexedAndTheIngestReportsItWhileTheOthersAreIndexed`.
 - A record file matches its manifest entry by ID and revision. Enforced by `RecordReader.Read`. Test: `ReleaseIngestTests.ARecordFileThatDoesNotMatchItsManifestEntryIsNotIndexed`.
-- A record with a NUL character is refused, because Postgres cannot store it. Enforced by `RecordReader.Read`. Test: `RecordReaderTests.ARecordWithANulCharacterIsRefusedBecausePostgresCannotStoreIt`.
+- A record with a NUL character is refused, because Postgres cannot store it. Enforced by `RecordReader.Read`. Test: `RecordReaderTests.ARecordWithANulCharacterIsRefusedBecausePostgresCannotStoreIt` and `RecordReaderTests.AnEscapedBackslashBeforeU0000IsPlainTextAndNotANulCharacter`.
+- A record that makes the reader throw any error is skipped and reported, and the release still commits. Enforced by `ReleaseIngest`. Test: `ReleaseIngestTests.ARecordThatMakesTheReaderThrowAnyOtherErrorIsSkippedAndReportedAndTheReleaseStillCommits`.
+- A timeout of the feed is logged and the worker runs again at the next interval. Enforced by `IngestWorker`. Test: `IngestWorkerTests.AFeedTimeoutIsLoggedAndTheNextTickRunsSoOneSlowReplyNeverStopsTheService`.
 - A fetch failure stores nothing from the release, and the next run tries again. Enforced by `ReleaseIngest` and `IndexTransaction`. Test: `ReleaseIngestTests.AFetchFailureRollsBackTheWholeReleaseAndTheNextRunTriesAgain`.
 - An ingest of a stored release fetches nothing and only sets the active pointer. Enforced by `ReleaseIngest`. Tests: `ReleaseIngestTests.IngestingTheSameReleaseAgainChangesNothingSoARetryAfterACrashIsSafe`, `ReleaseIngestTests.AManifestThatGoesBackToAStoredReleaseOnlyMovesTheActivePointerAndFetchesNothing`, `ReleaseIngestTests.ARollbackThenANewerReleaseMakesTheNewerReleaseActive`, and `SearchEndpointsTests.WhenTheSiteGoesBackToAnEarlierReleaseTheReleaseEndpointAndAnUnpinnedSearchFollowAndAPinToTheLaterReleaseStillWorks`.
 - A release older than the newest stored release, and never stored, is refused. Enforced by `ReleaseIngest`. Test: `ReleaseIngestTests.AnOlderReleaseThatWasNeverStoredIsRefusedBecauseItsRangesCannotBeOrdered`.
@@ -53,7 +55,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A cursor keeps its release, and a named release that differs is refused. Enforced by `SearchRequest.Parse`. Tests: `SearchRequestTests.ACursorPinsItsReleaseAndANamedReleaseThatDiffersIsRefused` and `SearchEndpointsTests.TheLimitIsHonoredUpToTheMaximumAndTheCursorContinuesInTheSameRelease`.
 - The query is at most 200 characters, a page holds at most 50 results, and each filter value is bounded. Enforced by `SearchRequest.Parse`. Tests: `SearchEndpointsTests.AQueryOfMoreThanTheMaximumLengthIsRefusedAndOneAtTheMaximumIsAccepted` and `SearchEndpointsTests.BadParametersAreRefusedWith400`.
 - A statement that runs over the timeout stops, and the service answers 503. Enforced by the statement timeout of the reader connection. Test: `SearchEndpointsTests.AStatementThatRunsLongerThanTheTimeoutIsStoppedAndAnswers503`.
-- The rate limiter trusts `CF-Connecting-IP` only from a configured range. Enforced by `ClientAddress`. Tests: `ClientAddressTests.TheForwardedHeaderIsIgnoredWhenTheConnectionComesFromOutsideTheCloudflareRangesBecauseAnyCallerCanSendIt`, `RateLimitTests.TheRateLimitCountsEachForwardedClientSeparatelyWhenTheConnectionIsTrusted`, and `RateLimitTests.TheRateLimitIgnoresAForgedHeaderFromAnUntrustedConnectionSoRotatingItBuysNoMoreRequests`.
+- The rate limiter trusts `CF-Connecting-IP` only from a configured range. Enforced by `ClientAddress`. Tests: `ClientAddressTests.AllAddressesOfOneIpv6Slash64AreOneClientBecauseAReaderHoldsTheWholeNetwork`, `ClientAddressTests.TheForwardedHeaderIsIgnoredWhenTheConnectionComesFromOutsideTheCloudflareRangesBecauseAnyCallerCanSendIt`, `RateLimitTests.TheRateLimitCountsEachForwardedClientSeparatelyWhenTheConnectionIsTrusted`, and `RateLimitTests.TheRateLimitIgnoresAForgedHeaderFromAnUntrustedConnectionSoRotatingItBuysNoMoreRequests`.
 - Every response allows any origin and sets no cookie. Enforced by `PublicApiApp`. Test: `SearchEndpointsTests.EveryResponseAllowsAnyOriginAndSetsNoCookie`.
 - Each schema file runs once, even when two services start together. Enforced by `SchemaMigrator`. Test: `SchemaMigratorTests.TwoServicesThatStartTogetherApplyEachFileOnceAndRecordItInSchemaMigrations`.
 - Every release holds `search.html`, written before the manifest. Enforced by `PublishRelease`. Test: `PublishReleaseTests.EveryReleaseHoldsASearchPageThatIsWrittenBeforeTheManifestAndListsTheReleaseRecords`.
@@ -70,7 +72,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 3. `ReleaseIngest` opens one transaction and takes an advisory lock. If the manifest release is stored already, it only sets the active release and ends the run.
 4. It stores the release row. It reads the stored revisions. A revision that the manifest lists and the table holds only as closed gets a new row that copies the stored text. An open revision that the manifest lacks is closed at the newest stored release.
 5. For each listed revision that the table lacks, it fetches `records/{id}.json`. `RecordReader` reads the file as the type of its kind and calls its `Validate` method. It builds the weighted texts and the service inserts the row. It then sets the active release.
-6. A record that fails validation is skipped and reported in the result. The worker logs it. A failed fetch rolls the transaction back.
+6. A record that fails to read or validate, for any reason except cancellation, is skipped and reported in the result. The worker logs it. A failed fetch or a database error rolls the transaction back.
 7. The feed keeps the ETag and Last-Modified values after the release is stored, so a failed run reads the manifest again.
 
 ### Search
@@ -107,7 +109,7 @@ A result has the manifest entry fields, `firstRelease`, `lastRelease`, `pagePath
 | `CIVIC_LENS_RELEASE_BASE_URL` | Required. The address of the release root. |
 | `CIVIC_LENS_SEARCH_DATABASE` | Required. The Npgsql connection string of the search database. |
 | `CIVIC_LENS_TRUSTED_PROXY_RANGES` | Optional. Comma-separated CIDR ranges of Cloudflare. Empty means that the remote address names the client. |
-| `CIVIC_LENS_REQUESTS_PER_MINUTE` | Optional. The rate limit for each client. The default is 60. |
+| `CIVIC_LENS_REQUESTS_PER_MINUTE` | Optional. The rate limit for each client, 1 or more. The default is 60. A lower value stops the service at startup. |
 | `CIVIC_LENS_PUBLIC_API_URL` | Read by publish, not by the service. The address that `search.html` calls. |
 
 The poll interval is 2 minutes and the statement timeout is 2 seconds. Both are options of `PublicApiOptions`.
@@ -141,7 +143,10 @@ Run commands are in [operations](../operations.md#run-the-search-service).
 
 - Reader reports on a published record are planned in [R-40](../roadmap.md#next) as the second part. They are not built.
 - Only the first full ingest is long, because it fetches every record inside one transaction. Later ingests fetch only new revisions. Readers are not blocked, because they read committed rows.
-- A release that was never stored and is older than the newest stored release is refused. This happens only if the service missed a release and the site then rolls back to it.
+- A release that was never stored and is older than the newest stored release is refused and logged. The service keeps serving the active release. This happens only if the service missed a release and the site rolls back to it.
+- One service runs per search database. Two replicas could move the active release back and forth when they read different copies of the site.
+- A local proxy or tunnel in front of the API makes every reader share one rate limit bucket. The R-24 deployment must pass the client address as `CF-Connecting-IP` from a trusted range.
+- The ingest reads and inserts one record at a time. It does not read every record before the first insert, because a full corpus could use more memory than the host has.
 - A record that fails validation stays out of the index. Later releases try it again, because it is not stored.
 - The index keeps every revision of every release. Storage grows with published revisions. Review this with the retention rule of [publication](publication.md#limits-and-planned-work).
 - A search without text returns no snippet.
