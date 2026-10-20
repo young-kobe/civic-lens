@@ -1,0 +1,43 @@
+@using CivicLens.Application.Publication
+@using CivicLens.Publication.Contracts
+
+<PublicPage Title="@Official.Profile.Name" RootPath="../">
+    <a class="back-link" href="@("../" + PublicationProtocol.OfficialsPagePath)">Officials</a>
+    <PageHeader Title="@Official.Profile.Name" Lede="@($"{Official.RecordCount} published records, newest first.")" />
+    <Panel Title="Offices">
+        <DataTable Items="Official.Profile.Terms" Caption="@($"Offices of {Official.Profile.Name}")">
+            <Head><th>Office</th><th>Party</th><th class="fit num">From</th><th class="fit num">To</th></Head>
+            <Row Context="term">
+                <td>@PublishedOfficialView.Office(term)</td>
+                <td>@term.Party</td>
+                <td class="fit num">@Moment.Iso(term.Start)</td>
+                <td class="fit num">@Moment.Iso(term.End)</td>
+            </Row>
+            <Empty><EmptyState Title="No office on record" Text="The rosters list no dated office for this official." /></Empty>
+        </DataTable>
+    </Panel>
+    <Panel Title="Records">
+        <DataTable Items="Rows" Caption="@($"Published records of {Official.Profile.Name}")">
+            <Head><th class="fit num">Date</th><th>Record</th><th class="hide-narrow">Cast</th></Head>
+            <Row Context="row">
+                <td class="fit num">@Moment.Iso(row.Date)</td>
+                <td>
+                    <a class="cell-title" href="@("../" + PublicationProtocol.RecordPagePath(row.RecordId))">@row.Headline</a>
+                    <StatusBadge Text="@PublishedRecordLabels.Kind(row.Kind)" />
+                    @if (row.Detail is not null)
+                    {
+                        <div class="muted small">@row.Detail</div>
+                    }
+                </td>
+                <td class="hide-narrow">@row.Cast</td>
+            </Row>
+            <Empty><EmptyState Title="No records yet" Text="There are no records here." /></Empty>
+        </DataTable>
+    </Panel>
+</PublicPage>
+
+@code {
+    [Parameter, EditorRequired] public ReleaseOfficial Official { get; set; } = default!;
+
+    private IReadOnlyList<PublishedOfficialRow> Rows => PublishedOfficialView.Rows(Official);
+}

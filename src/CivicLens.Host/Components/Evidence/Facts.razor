@@ -2,7 +2,28 @@
     @foreach (var fact in Items)
     {
         <dt>@fact.Label</dt>
-        <dd>@fact.Value</dd>
+        <dd>
+            @if (fact.Links is null)
+            {
+                @fact.Value
+            }
+            else
+            {
+                @for (var index = 0; index < fact.Links.Count; index++)
+                {
+                    var link = fact.Links[index];
+                    @(index > 0 ? ", " : "")
+                    @if (link.Href is null)
+                    {
+                        @link.Text
+                    }
+                    else
+                    {
+                        <a href="@link.Href">@link.Text</a>
+                    }
+                }
+            }
+        </dd>
     }
 </dl>
 

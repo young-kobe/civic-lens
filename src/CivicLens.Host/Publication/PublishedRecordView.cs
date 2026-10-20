@@ -13,6 +13,12 @@ internal static class PublishedRecordView
 
     public static string RecordLink(string recordId) => "../" + PublicationProtocol.RecordPagePath(recordId);
 
+    public static string? OfficialLink(string officialId) =>
+        PublicationProtocol.IsPathSegment(officialId) ? "../" + PublicationProtocol.OfficialPagePath(officialId) : null;
+
+    public static Fact Officials(string label, IEnumerable<PublishedOfficial> officials) =>
+        Fact.LinkList(label, [.. officials.Select(official => new FactLink(official.Name, OfficialLink(official.Id)))]);
+
     public static ImmutableArray<DocumentComparisonHunk> Hunks(PublishedDocumentChange record) =>
         [.. record.Changes.Select(change => new DocumentComparisonHunk(
             change.BeforeStart, change.BeforeLength, change.AfterStart, change.AfterLength,

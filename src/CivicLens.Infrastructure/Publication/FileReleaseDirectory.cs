@@ -41,6 +41,24 @@ public sealed class FileReleaseDirectory : IReleaseDirectory
         return buffer;
     }
 
+    public Task<IReadOnlyList<string>> ListFilesAsync(string directoryName, string folder, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        string path;
+        try
+        {
+            path = ReleasePaths.ResolveWithoutLinks(rootPath, directoryName, folder);
+        }
+        catch (FileNotFoundException)
+        {
+            return Task.FromResult<IReadOnlyList<string>>([]);
+        }
+
+        IReadOnlyList<string> files = [.. Directory.EnumerateFiles(path).Select(file => $"{folder}/{Path.GetFileName(file)}")
+            .Order(StringComparer.Ordinal)];
+        return Task.FromResult(files);
+    }
+
     public Task DeleteAsync(string directoryName, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();

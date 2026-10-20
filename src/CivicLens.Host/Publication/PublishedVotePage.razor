@@ -51,7 +51,7 @@
         <DataTable Items="Record.Members" Caption="Votes of tracked members">
             <Head><th>Official</th><th>Cast</th><th>Evidence</th></Head>
             <Row Context="member">
-                <td>@member.Official.Name</td>
+                <td><PublishedOfficialName Official="member.Official" /></td>
                 <td>@member.Cast</td>
                 <td>
                     <blockquote class="quote">@EncodedEvidence.Markup(member.Citation.Quote)</blockquote>

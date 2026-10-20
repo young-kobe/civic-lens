@@ -269,6 +269,15 @@ public sealed class FileReleaseDirectoryTests : IDisposable
         await Assert.ThrowsAsync<InvalidDataException>(() => staging.LinkFileAsync(baseName, "leak.txt", default));
     }
 
+    [Fact]
+    public async Task ListingAFolderNamesItsFilesByReleasePathAndAMissingFolderHasNoFiles()
+    {
+        var name = await BuildReleaseAsync(1, "one");
+
+        Assert.Equal(["records/a.json"], await releases.ListFilesAsync(name, "records", default));
+        Assert.Empty(await releases.ListFilesAsync(name, "officials/mayor", default));
+    }
+
     private async Task<string> BuildReleaseAsync(int number, string manifest)
     {
         await using var staging = await releases.BeginAsync(default);

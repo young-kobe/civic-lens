@@ -37,6 +37,7 @@
                                 <option value="@official.Id">@official.Name</option>
                             }
                         </select>
+                        <a class="field-hint" href="@PublicationProtocol.OfficialsPagePath">Browse officials</a>
                     </Field>
                     <Field Label="Issue" For="search-issue">
                         <select id="search-issue" name="issue">
@@ -77,7 +78,7 @@
         <Panel Title="How search works" Padded="true">
             <p>Search reads the headline, the summary, the quoted text, and the first @SourceTextLimit characters of each source text. A word in the headline ranks above the same word in the source text. Longer source texts are cut off at that limit.</p>
             <p>A date filter matches the date of the event. Records without one do not match.</p>
-            <p>Search needs JavaScript. Without it, browse by <a href="@PublicationProtocol.FacetsPath">issue or policy area</a>, or see <a href="@PublicationProtocol.AllRecordsPagePath(1)">all records</a>.</p>
+            <p>Search needs JavaScript. Without it, browse by <a href="@PublicationProtocol.FacetsPath">issue or policy area</a> or by <a href="@PublicationProtocol.OfficialsPagePath">official</a>, or see <a href="@PublicationProtocol.AllRecordsPagePath(1)">all records</a>.</p>
         </Panel>
     }
 </PublicPage>

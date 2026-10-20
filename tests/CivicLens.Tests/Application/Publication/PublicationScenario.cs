@@ -232,25 +232,29 @@ internal sealed class PublicationScenario
     public const string VoteMembers = "Member: M000001, Mayor Example, D, MA, Yea\n";
 
     public string AddVote(char id, ImmutableArray<ReviewDecision>? decisions = null, ReviewTextOrigin origin = ReviewTextOrigin.Model,
-        string? billType = "hr", ImmutableArray<string>? billActionRecordIds = null)
+        string? billType = "hr", ImmutableArray<string>? billActionRecordIds = null, string[]? memberIds = null, int congress = 119)
     {
         var recordId = new string(id, 64);
+        string[] memberPersonIds = memberIds ?? ["mayor"];
+        var memberLines = memberPersonIds.Select(person => $"Member: M000001, {OfficialNames[person]}, D, MA, Yea").ToArray();
+        var memberText = string.Concat(memberLines.Select(line => line + "\n"));
         var detail = Extraction(VoteDetail, $"vote-detail-{id}", "https://api.congress.gov/v3/house-vote/119/1/100");
-        var members = Extraction(VoteMembers, $"vote-members-{id}", "https://api.congress.gov/v3/house-vote/119/1/100/members");
+        var members = Extraction(memberText, $"vote-members-{id}", "https://api.congress.gov/v3/house-vote/119/1/100/members");
         SourceSpan Line(DocumentExtraction extraction, string text, string line) =>
             new(extraction.ExtractionId, text.IndexOf(line, StringComparison.Ordinal), line.Length);
         VoteFact Fact(string line) => new(line, Line(detail, VoteDetail, line));
         var revision = new VoteDraftRevision(recordId, 1, origin == ReviewTextOrigin.Model ? "civic-lens:analysis" : "auth0|editor", ApprovedAt,
-            $"Vote {id}", "The House voted on passage.", origin, null, "congress-house-votes", 119, 1, 100, billType, billType is null ? null : 7,
+            $"Vote {id}", "The House voted on passage.", origin, null, "congress-house-votes", congress, 1, 100, billType, billType is null ? null : 7,
             new string('b', 64), ApprovedAt,
             [Fact("Started: 2025-04-10T11:08:00-04:00"), Fact("Question: On Passage"), Fact("Result: Passed"), Fact("Legislation: HR 7")],
             new DateOnly(2025, 4, 10), Line(detail, VoteDetail, "Started: 2025-04-10T11:08:00-04:00"), VoteKind.Passage,
             Line(detail, VoteDetail, "Question: On Passage"),
-            [new("mayor", "M000001", "Yea", Line(members, VoteMembers, "Member: M000001, Mayor Example, D, MA, Yea"))], ["housing"], new string('e', 64));
+            [.. memberPersonIds.Select((person, index) => new MemberVote(person, "M000001", "Yea", Line(members, memberText, memberLines[index])))],
+            ["housing"], new string('e', 64));
         var all = decisions ?? [Decision(recordId, 1, ReviewDecisionKind.Approve)];
         var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
         var review = new VoteReview(recordId, revision, null, [revision], all.Length, ReviewPolicy.GetCurrentStatus(1, all, concerns), all, concerns);
-        if (billType is not null) Votes.BillActions[(119, billType, 7)] = billActionRecordIds ?? [];
+        if (billType is not null) Votes.BillActions[(congress, billType, 7)] = billActionRecordIds ?? [];
         Votes.Publishable[recordId] = new(review, ImmutableDictionary.CreateRange(StringComparer.Ordinal,
             [KeyValuePair.Create(detail.ExtractionId, detail), KeyValuePair.Create(members.ExtractionId, members)]),
             billActionRecordIds ?? []);
@@ -335,6 +339,10 @@ internal sealed class FakeRenderer : IReleaseRenderer
         Task.FromResult($"<html>facet {facet.Name} {page} {string.Join(',', facet.Records.Select(entry => entry.RecordId))}</html>");
     public Task<string> RenderFacetsAsync(ReleaseFacets facets, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>facets {facets.Issues.Length} {facets.PolicyAreas.Length}</html>");
+    public Task<string> RenderOfficialAsync(ReleaseOfficial official, CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>official {official.Profile.Id} {string.Join(',', official.Records.Select(entry => entry.RecordId))} {string.Join(',', official.Votes.Select(vote => vote.RecordId))}</html>");
+    public Task<string> RenderOfficialsAsync(IReadOnlyList<ReleaseOfficial> officials, CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>officials {string.Join(',', officials.Select(official => official.Profile.Id))}</html>");
     public Task<string> RenderSearchAsync(PublicationRelease release, ReleaseFacets facets, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>search {release.Records.Length} {facets.Issues.Length}</html>");
 
@@ -437,7 +445,16 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
     {
         ReadPaths.Add(relativePath);
         Events?.Add($"read {relativePath.Split('/', '.')[^2][..1]}");
-        return Task.FromResult(Directories[directoryName][relativePath]);
+        var content = Directories[directoryName][relativePath];
+        if (content.Length > maximumBytes) throw new InvalidDataException("Release file exceeds the allowed size.");
+        return Task.FromResult(content);
+    }
+
+    public Task<IReadOnlyList<string>> ListFilesAsync(string directoryName, string folder, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<string> files = [.. Directories[directoryName].Keys.Where(path => path.StartsWith(folder + "/", StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal)];
+        return Task.FromResult(files);
     }
 
     public Task DeleteAsync(string directoryName, CancellationToken cancellationToken)

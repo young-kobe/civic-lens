@@ -11,7 +11,7 @@
         <DataTable Items="Record.Sponsorships" Caption="Sponsorships of tracked officials">
             <Head><th>Official</th><th>Role</th><th>Original</th><th class="fit num">Sponsored</th><th class="fit num">Withdrawn</th><th>Evidence</th></Head>
             <Row Context="sponsorship">
-                <td>@sponsorship.Official.Name</td>
+                <td><PublishedOfficialName Official="sponsorship.Official" Linked="@(sponsorship.Role == PublishedSponsorshipRole.Sponsor)" /></td>
                 <td>@PublishedRecordLabels.Role(sponsorship.Role)</td>
                 <td>@(sponsorship.IsOriginal ? "Yes" : "No")</td>
                 <td class="fit num">@Moment.Iso(sponsorship.SponsoredOn)</td>

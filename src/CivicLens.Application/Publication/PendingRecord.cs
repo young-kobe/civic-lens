@@ -6,12 +6,12 @@ namespace CivicLens.Application.Publication;
 
 internal delegate Task<string> PageRenderer(ImmutableArray<PublishedRelationship> related, CancellationToken cancellationToken);
 
-internal sealed record PendingRecord(PublishedRecordEntry Entry, int ReviewStateVersion, byte[] Json, PageRenderer RenderPage)
+internal sealed record PendingRecord(PublishedRecordEntry Entry, int ReviewStateVersion, object Record, byte[] Json, PageRenderer RenderPage)
 {
     public static PendingRecord Create<TRecord>(PublishedRecordEntry entry, int reviewStateVersion, TRecord record,
         PageRenderer renderPage)
         where TRecord : class =>
-        new(entry, reviewStateVersion, JsonSerializer.SerializeToUtf8Bytes(record, PublicationProtocol.JsonOptions), renderPage);
+        new(entry, reviewStateVersion, record, JsonSerializer.SerializeToUtf8Bytes(record, PublicationProtocol.JsonOptions), renderPage);
 
     public string RecordId => Entry.RecordId;
 

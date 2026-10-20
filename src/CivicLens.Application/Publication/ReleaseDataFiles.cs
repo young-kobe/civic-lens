@@ -6,12 +6,14 @@ namespace CivicLens.Application.Publication;
 /// <summary>Writes the data files built from the manifest: the officials with a published record, and the issue and policy area names.</summary>
 internal sealed class ReleaseDataFiles(VoteRecordLoader votes, PublicationOfficials officials)
 {
-    public async Task WriteAsync(IReleaseStaging staging, PublicationRelease manifest, ReleaseFacets facets,
+    public async Task<PublishedOfficials> WriteAsync(IReleaseStaging staging, PublicationRelease manifest, ReleaseFacets facets,
         CancellationToken cancellationToken)
     {
         var ids = await PublishedOfficialIdsAsync(manifest, cancellationToken);
-        await WriteAsync(staging, PublicationProtocol.OfficialsPath, await officials.ResolveAsync(ids, cancellationToken), cancellationToken);
+        var published = await officials.ResolveAsync(ids, cancellationToken);
+        await WriteAsync(staging, PublicationProtocol.OfficialsPath, published, cancellationToken);
         await WriteAsync(staging, PublicationProtocol.CatalogPath, CatalogOf(facets), cancellationToken);
+        return published;
     }
 
     private async Task<HashSet<string>> PublishedOfficialIdsAsync(PublicationRelease manifest, CancellationToken cancellationToken)
