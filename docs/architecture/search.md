@@ -152,4 +152,4 @@ Run commands are in [operations](../operations.md#run-the-search-service).
 - A search without text returns no snippet.
 - A snippet scans the first 50,000 characters of the record body. A match later in the body gives a snippet from the start of the body.
 - The service has no Dockerfile. [R-24](../roadmap.md#later) adds the container.
-- Public MCP ([R-25](../roadmap.md#next)) will use this API and the same release pinning.
+- After the first deploy, public MCP ([R-25](../roadmap.md#later)) will use this API and the same release pinning.

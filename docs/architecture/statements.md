@@ -507,7 +507,7 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 - Actions are in [actions](actions.md). Weekly briefs are in [briefs](briefs.md).
 - Planned: structured statement extraction and temporal identity resolution.
 - Each quotation stays addressable for later matching with actions.
-- Planned before the first deploy ([R-38](../roadmap.md#next)): find the same or nearly the same sentences in releases from different offices. It shows coordinated messaging and who used the words first.
+- Planned after the first deploy ([R-38](../roadmap.md#later)): find the same or nearly the same sentences in releases from different offices. It shows coordinated messaging and who used the words first.
 - Gate runs from before `statement-gate-v2` have no `namesBillOrVote` answer. `StatementGateCarryOver` reads them with a null answer.
 - Rolling back the `GateBillOrVoteReasons` migration fails while any gate run holds a `passed-bill-or-vote` or `passed-bill-number` reason. Remove or change those rows first.
 - The bill or vote answer of the model is unmeasured. The `passed-bill-or-vote` and `passed-bill-number` counts show how often each path fires. The bill number rule finds only the forms that `BillNumberFinder` accepts.

@@ -508,7 +508,7 @@ The shared wakeup and lease mechanics are in [Shared worker mechanics](../archit
 - Future wire changes need an explicit compatibility decision.
 - Browser rendering and OCR are deferred until a selected source needs them.
 - An article whose path equals the configured page path or the prefix, and which only its query names, is also skipped. An example is `/?p=123`. No admitted URL in the dev data has this form.
-- Planned engine policies in R-18: one shared configuration loader with a higher size limit, an engine-health view, and a documented spending total. Source fairness is an open choice.
+- Planned engine policies: a worker heartbeat, a documented spending total, and a decision on source fairness come with R-24. An engine-health view follows in R-18. A higher size limit for the shared configuration loader is needed only if the coverage file would pass 1 MB before the deploy.
 - Later, in R-41: collection concurrency for backfills, when a measured backlog is more than one worker can clear. Backlog limits and live configuration reload are not planned.
 - Agreed upgrade ([R-22](../roadmap.md#later)): ordered row locks in place of the single global lock of the job store. Measure lock waits on a bills-only collection run before the design.
 - Fix the remaining format and parser limits that the federal coverage found ([R-30](../roadmap.md#next)).

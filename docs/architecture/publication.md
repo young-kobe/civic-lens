@@ -316,8 +316,11 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - Monitoring must cover freshness, skipped and deferred work, source failures, storage, and spend.
 - See [roadmap](../roadmap.md) for order.
 
-Public MCP and operations acceptance:
+Public MCP acceptance (after the first deploy, R-25):
 
 - [ ] Public tools never access operational data, change records, crawl, or call models.
 - [ ] The website and MCP use the same release.
+
+Operations acceptance (part of R-24):
+
 - [ ] Show restore, rollback, release-pinned reads, pagination, bounded traffic behavior, and visible coverage gaps.

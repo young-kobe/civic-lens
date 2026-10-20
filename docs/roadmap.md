@@ -4,52 +4,56 @@ This page holds pending work only. Current behavior and agreed designs are in th
 
 ## MVP definition
 
-The MVP delivers the full product: officials' statements, authoritative actions, substantive document changes, and evidence-backed weekly briefs. A release with document changes only is a milestone, not the MVP. Coverage may start small, but all four record kinds must work end to end. Each one collects evidence, keeps exact inspectable provenance, gets human review, and publishes in a static release. AI drafts every record kind. Code approves action and House vote records after it checks their citations (D-15, accepted on 2026-10-19). People edit and approve the other kinds, and the owner publishes. Review must handle a large volume of statements, relationships, briefs, and document changes. The dev box reaches MVP features, correctness, and a sufficient citizen and reviewer UI before the first cloud deployment. The document-change criterion is checked after that deployment.
+The MVP delivers the full product: officials' statements, authoritative actions, substantive document changes, and evidence-backed weekly briefs. A release with document changes only is a milestone, not the MVP. Coverage may start small, but all four record kinds must work end to end. Each one collects evidence, keeps exact inspectable provenance, gets human review, and publishes in a static release. AI drafts every record kind. Code approves action and House vote records after it checks their citations (D-15, accepted on 2026-10-19). People edit and approve the other kinds, and the owner publishes. Review must handle a large volume of statements, relationships, briefs, and document changes. The dev box reaches the features, correctness, and citizen and reviewer UI of the first deploy before the first cloud deployment. Public MCP, the shared language insight, and the document-change criterion are checked after that deployment.
 
-Exit criteria:
+Exit criteria for the first deploy:
 
 - [ ] Statements, actions, document changes, and weekly briefs each run from collection to a published static release.
 - [ ] The public release stays usable during an outage of the operational application.
 - [ ] Approval binds to the exact evidence version. Model output never counts as approval, and code approves only official fact records. People review the other kinds.
 - [ ] Statements and actions support reviewed relationships and timelines.
-- [ ] Document changes separate substantive edits from navigation churn and parser upgrades. Separate extraction streams isolate parser upgrades. Rules from measured change history filter churn, and a model tier is added only when the measurement shows a need. This criterion is checked after the first cloud deployment.
 - [ ] A weekly brief publishes with verified citation links, an explicit sample and cutoff, and versioned editorial decisions.
 - [ ] Readers search and filter all published records from the public pages.
 - [ ] Readers can report a problem with a published record, and each report reaches a person in the review queue.
 - [ ] A person can publish a correction or a withdrawal of any record kind.
 - [ ] House and Senate votes both publish.
+- [ ] The talk and action profile publishes with a method note.
+- [ ] The acceptance checklists in the linked feature docs pass, except the public MCP acceptance checklist.
+
+After the first deploy:
+
 - [ ] Public MCP reads the same releases as the website.
-- [ ] The talk and action profile and the shared language insight publish with method notes.
-- [ ] The acceptance checklists in the linked feature docs pass.
+- [ ] The shared language insight publishes with a method note.
+- [ ] Document changes separate substantive edits from navigation churn and parser upgrades. Separate extraction streams isolate parser upgrades. Rules from measured change history filter churn, and a model tier is added only when the measurement shows a need.
 
 ## Work queue
 
 Each item gives its outcome, what it depends on, and where the design lives. Present the design choices before building R-22 only.
 
-The first deploy is a complete product within the product direction. Its path is R-36, R-40, R-32, R-25, R-42, R-43, and R-38, then R-23 and R-18, then R-24.
+The first deploy is a complete product within the product direction. Its path is R-36, R-40, R-32, R-42, and R-43, then R-23, then R-24. R-25, R-38, R-21, and R-18 come after R-24.
 
 ### Next
 
 - R-17: Congressional Record articles as a statement connector. Depends on: none stated. [Actions](architecture/actions.md#limits-and-planned-work)
-- R-18: Engine policies for broad coverage. The coverage file is 771 KB of the 1 MB limit of the shared configuration loader. A health view and a worker heartbeat, built with R-21. The spending total documented in operations. Source fairness is an open choice: a job class column, or a production backfill before press sources start. Depends on: none stated. It must come before R-24. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-36: Official pages and timelines for citizens. Each record shows its evidence and timeline. The official pages are also public filter pages, and they show offices and dated terms from the [roster](architecture/roster.md). Each record page links to the R-40 report path. The weekly briefing home page and the issue and policy area pages are built. Each release also holds `officials.json` with the offices and dated terms, and `catalog.json`. The official profile pages, the vote index files, and the config `offices` array are not built. Depends on: none stated. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-40: Readers report a problem with a published record through the search service. The operational application pulls each report into the review queue, and a person handles it. The service itself is built; see [search](architecture/search.md). It runs first as its own container and database on the CPX21, with no access to operational storage. It moves to its own server only when a measurement shows that the box is too small. Depends on: none stated. It must come before R-24. [Search](architecture/search.md#limits-and-planned-work)
 - R-32: Correction and withdrawal releases for all record kinds. No kind can publish one yet. Depends on: none stated. [Publication](architecture/publication.md#limits-and-planned-work)
-- R-25: Public MCP over published releases, with source health, backup and restore, and worker service management. Depends on: R-40. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-42: Senate votes from senate.gov data, as House votes come from the House Clerk. Members match through the Senate member IDs of the [roster](architecture/roster.md). Depends on: none stated. [Votes](architecture/votes.md#limits-and-planned-work)
 - R-43: The talk and action profile insight. For each official, code shows the share of statements on each issue next to the share of sponsorships and votes on it, and publishes a method note. It uses no model. Depends on: R-36. [Publication](architecture/publication.md#limits-and-planned-work)
-- R-38: The shared language insight. Code finds the same or nearly the same sentences in releases from different offices, and publishes a method note. A person reviews each finding before publication. Depends on: none stated. [Statements](architecture/statements.md#limits-and-planned-work)
 - R-39: An `analyses redraft --stale` owner command requeues finished drafts whose last run used an older task, prompt, or schema version. It covers document changes, statements, actions, votes, and briefs. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
-- R-21: Process view of collection and AI stages from retained state. Depends on: none stated. [Host](architecture/host.md#limits-and-planned-work)
 - R-29: Check each policy area name against the Congress.gov API. Depends on: none stated. [Configuration](architecture/configuration.md#limits-and-planned-work)
 - R-30: Fix the remaining format and parser limits that the federal coverage found. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
 
 ### Later
 
+- R-25: Public MCP over published releases, and source health. Depends on: R-24. [Publication](architecture/publication.md#limits-and-planned-work)
+- R-38: The shared language insight. Code finds the same or nearly the same sentences in releases from different offices, and publishes a method note. A person reviews each finding before publication. Depends on: R-24. [Statements](architecture/statements.md#limits-and-planned-work)
+- R-21: Process view of collection and AI stages from retained state. Depends on: R-24. [Host](architecture/host.md#limits-and-planned-work)
+- R-18: An engine-health view, built with R-21. The worker heartbeat, the spending total, and source fairness are in R-24. Depends on: R-24. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-13: Measure document change, then gate it. Check the House press index pages and about 300 press release URLs daily for 2 to 4 weeks. Count byte, text, and line changes for each source, and label about 100 changes by hand. Add rules for the churn found. Add a model tier only if the changes that pass the rules are too many for people to review. Depends on: the first cloud deployment (R-24). [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-22: Ordered row locks in the job store, after the MVP. Depends on: lock waits measured on a bills-only collection run. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-23: Baseline versions before the first production deploy. Depends on: none stated. It must come before the first production deploy. [Behavior versions](architecture.md#behavior-versions)
-- R-24: Production on the Hetzner CPX21 with containers, Terraform, CI, off-server backups, and live Auth0 verification. Public releases upload to Cloudflare R2 behind its CDN. The open host checklist items are its exit checks. Also stop the worker during a job and show that the deployed container recovers it. The R-40 search service runs as its own container on the same box. Depends on: the MVP exit criteria other than the document-change criterion, R-18, and R-23. [Host](architecture/host.md#limits-and-planned-work)
+- R-24: Production on the Hetzner CPX21 with containers, Terraform, CI, off-server backups, and live Auth0 verification. Public releases upload to Cloudflare R2 behind its CDN. The open host checklist items are its exit checks. Also stop the worker during a job and show that the deployed container recovers it. The R-40 search service runs as its own container on the same box. R-24 also holds backup and restore, worker service management, a worker heartbeat, and the documented spending total. Source fairness is an open choice: a job class column, or a production backfill before press sources start. Decide it before R-24. The coverage file is 771 KB of the 1 MB limit of the shared configuration loader. Raise the limit before R-24 only if the file would pass 1 MB before the deploy. Depends on: the exit criteria of the first deploy and R-23. [Host](architecture/host.md#limits-and-planned-work)
 - R-26: Read-only local MCP inspection. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
 - R-41: Collection concurrency for backfills, when a measured backlog is more than one worker can clear. The precedent is CIVIC_LENS_EVIDENCE_CONCURRENCY. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-27: Automatic discovery of official sources, and check cadence from measured change rates. It needs runtime writes, so people, sources, and coverage then move to tables. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
