@@ -88,6 +88,21 @@ public sealed class PublishReleaseTests
     }
 
     [Fact]
+    public async Task EveryReleaseHoldsASearchPageThatIsWrittenBeforeTheManifestAndListsTheReleaseRecords()
+    {
+        var scenario = new PublicationScenario();
+        scenario.SeedRelease(2, withFiles: true);
+        var draft = scenario.AddDraft('a');
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft));
+
+        var order = scenario.Releases.WriteOrder;
+        Assert.InRange(order.IndexOf(PublicationProtocol.SearchPagePath), 0, order.IndexOf(PublicationProtocol.ManifestPath) - 1);
+        Assert.Contains("<html>search 3</html>", System.Text.Encoding.UTF8.GetString(
+            scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.SearchPagePath]));
+    }
+
+    [Fact]
     public async Task PrecompressedManifestsHoldExactlyTheManifestBytesSoTheServerNeverSendsADifferentRelease()
     {
         var scenario = new PublicationScenario();

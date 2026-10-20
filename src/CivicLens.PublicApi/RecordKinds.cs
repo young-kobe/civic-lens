@@ -9,7 +9,7 @@ public static class RecordKinds
     private static readonly Dictionary<string, PublishedRecordKind> ByText =
         Enum.GetValues<PublishedRecordKind>().ToDictionary(Text, StringComparer.Ordinal);
 
-    public static string Text(PublishedRecordKind kind) => JsonNamingPolicy.CamelCase.ConvertName(kind.ToString());
+    public static string Text(PublishedRecordKind kind) => JsonSerializer.Serialize(kind, PublicationProtocol.JsonOptions).Trim('"');
 
     public static bool TryParse(string? text, out PublishedRecordKind kind)
     {

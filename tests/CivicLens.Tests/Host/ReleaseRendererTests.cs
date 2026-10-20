@@ -104,19 +104,63 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task AllRecordsPageSearchReadsTheReleaseManifestAndStaysHiddenUntilScriptRuns()
+    public async Task SearchPageCallsTheServiceAtTheConfiguredAddressAndStaysHiddenUntilScriptRuns()
     {
-        var html = await new ReleaseRenderer().RenderAllRecordsAsync(ReleaseOf(1), 1, CancellationToken.None);
+        var html = await new ReleaseRenderer("https://api.example.test").RenderSearchAsync(ReleaseWithFilters(), SearchFacets(), CancellationToken.None);
         var document = new HtmlParser().ParseDocument(html);
 
-        var form = document.QuerySelector("form[data-release-search]")!;
-        Assert.Equal(PublicationProtocol.ManifestPath, form.GetAttribute("data-release-search"));
-        Assert.Equal(PublicationProtocol.RecordPagePath("{id}"), form.GetAttribute("data-record-page"));
+        var form = document.QuerySelector("form[data-search-api]")!;
+        Assert.Equal("https://api.example.test", form.GetAttribute("data-search-api"));
         Assert.True(form.Closest("section")!.HasAttribute("hidden"));
+        Assert.Equal(["q", "kind", "official", "issue", "policyArea", "source", "from", "to"],
+            form.QuerySelectorAll("input, select").Select(control => control.GetAttribute("name")));
         Assert.Equal(["", "documentChange", "statement", "action", "brief", "vote", "relationship"],
             document.QuerySelectorAll("#search-kind option").Select(option => option.GetAttribute("value")));
-        Assert.Equal(["text", "kind", "official", "issue", "policyArea", "from", "to"],
-            form.QuerySelectorAll("input, select").Select(control => control.GetAttribute("name")));
+    }
+
+    [Fact]
+    public async Task SearchPageFiltersListTheOfficialsAndSourcesOfTheManifestAndTheIssuesAndAreasWithTheirCatalogNames()
+    {
+        var html = await new ReleaseRenderer("https://api.example.test").RenderSearchAsync(ReleaseWithFilters(), SearchFacets(), CancellationToken.None);
+        var document = new HtmlParser().ParseDocument(html);
+
+        string[] Options(string id) => [.. document.QuerySelectorAll($"#{id} option").Select(option => option.GetAttribute("value")!)];
+        Assert.Equal(["", "o1", "o2"], Options("search-official"));
+        Assert.Equal(["Ann Roe", "Jane Doe"], document.QuerySelectorAll("#search-official option:not([value=''])").Select(option => option.TextContent));
+        Assert.Equal(["", "housing", "transit"], Options("search-issue"));
+        Assert.Equal(["Any", "Housing costs", "Transit"], document.QuerySelectorAll("#search-issue option").Select(option => option.TextContent));
+        Assert.Equal(["", "area-one"], Options("search-policy-area"));
+        Assert.Equal(["Any", "Area One"], document.QuerySelectorAll("#search-policy-area option").Select(option => option.TextContent));
+        Assert.Equal(["", "a.gov", "b.gov"], Options("search-source"));
+    }
+
+    [Fact]
+    public async Task SearchPageStatesTheSourceTextLimitSoReadersKnowWhatSearchReads()
+    {
+        var html = await new ReleaseRenderer("https://api.example.test").RenderSearchAsync(ReleaseWithFilters(), SearchFacets(), CancellationToken.None);
+
+        Assert.Contains("first 200,000 characters of each source text", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SearchPageWithoutAServiceAddressSaysThatSearchIsNotAvailableAndShowsNoForm()
+    {
+        var html = await new ReleaseRenderer().RenderSearchAsync(ReleaseWithFilters(), SearchFacets(), CancellationToken.None);
+        var document = new HtmlParser().ParseDocument(html);
+
+        Assert.Contains("Search is not available", html, StringComparison.Ordinal);
+        Assert.Null(document.QuerySelector("form"));
+    }
+
+    [Fact]
+    public async Task EveryPublicPageLinksToTheSearchPageAndTheAllRecordsPageHoldsNoBrowserSearch()
+    {
+        var index = await new ReleaseRenderer().RenderAllRecordsAsync(ReleaseOf(1), 1, CancellationToken.None);
+        var record = await new ReleaseRenderer().RenderRecordAsync(Record(), CancellationToken.None);
+
+        Assert.Contains("href=\"search.html\"", index, StringComparison.Ordinal);
+        Assert.Contains("href=\"../search.html\"", record, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-release-search", index, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -588,6 +632,38 @@ public sealed class ReleaseRendererTests
     {
         PolicyAreas = [new() { Id = "land-use", Name = "Land use" }],
         Issues = [new() { Id = id, Name = name, Definition = "d", PolicyAreaIds = ["land-use"] }]
+    };
+
+    private static ReleaseFacets SearchFacets() => ReleaseFacets.From(ReleaseWithFilters(), new PublicationCatalog(new Dictionary<string, string>(),
+        new IssueConfiguration
+        {
+            PolicyAreas = [new() { Id = "area-one", Name = "Area One" }],
+            Issues =
+            [
+                new() { Id = "housing", Name = "Housing costs", Definition = "d", PolicyAreaIds = ["area-one"] },
+                new() { Id = "transit", Name = "Transit", Definition = "d", PolicyAreaIds = ["area-one"] }
+            ]
+        }));
+
+    private static PublicationRelease ReleaseWithFilters() => new()
+    {
+        SchemaVersion = PublicationProtocol.SchemaVersion,
+        ReleaseNumber = 4,
+        PublishedAtUtc = new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero),
+        Records =
+        [
+            new PublishedRecordEntry
+            {
+                RecordId = new string('c', 32), RevisionNumber = 1, Headline = "One", FirstPublishedAtUtc = DateTimeOffset.UnixEpoch,
+                Officials = [new PublishedOfficial { Id = "o2", Name = "Jane Doe" }], IssueIds = ["transit"], SourceHost = "b.gov"
+            },
+            new PublishedRecordEntry
+            {
+                RecordId = new string('d', 32), RevisionNumber = 1, Headline = "Two", FirstPublishedAtUtc = DateTimeOffset.UnixEpoch,
+                Officials = [new PublishedOfficial { Id = "o1", Name = "Ann Roe" }], IssueIds = ["housing", "transit"],
+                PolicyAreaIds = ["area-one"], SourceHost = "a.gov"
+            }
+        ]
     };
 
     private static PublicationRelease ReleaseOf(int count) => new()

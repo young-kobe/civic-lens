@@ -78,75 +78,66 @@
         if (warning) warning.hidden = false;
     };
 
-    const searchLimit = 50;
-    const byText = ([, a], [, b]) => a.localeCompare(b);
-    const addOptions = (select, values) =>
-        [...values].sort(byText).forEach(([value, text]) => select.append(new Option(text, value)));
-    const matchesSearch = (record, query) =>
-        (!query.text || record.headline.toLowerCase().includes(query.text)) &&
-        (!query.kind || record.kind === query.kind) &&
-        (!query.official || record.officials.some(official => official.id === query.official)) &&
-        (!query.issue || record.issueIds.includes(query.issue)) &&
-        (!query.policyArea || record.policyAreaIds.includes(query.policyArea)) &&
-        (!query.from || (record.eventDate !== null && record.eventDate >= query.from)) &&
-        (!query.to || (record.eventDate !== null && record.eventDate <= query.to));
-    const initReleaseSearch = form => {
-        const field = name => form.elements.namedItem(name);
+    const markStart = "\uE000", markEnd = "\uE001";
+    const snippetNodes = snippet => snippet.split(markStart).flatMap((part, index) => {
+        if (index === 0) return [part];
+        const [match, ...rest] = part.split(markEnd);
+        const mark = document.createElement("mark");
+        mark.textContent = match;
+        return [mark, rest.join(markEnd)];
+    });
+    const initSearchService = form => {
+        const api = form.dataset.searchApi;
         const status = form.querySelector("[data-search-status]");
         const results = form.querySelector("[data-search-results]");
-        const kindLabels = new Map(Array.from(field("kind").options, option => [option.value, option.text]));
-        let records = [];
-        let loading = null;
-        const load = async () => {
-            const response = await fetch(form.dataset.releaseSearch);
-            if (!response.ok) throw new Error(`Release request failed with ${response.status}.`);
-            records = (await response.json()).records;
-            const officials = new Map(), issues = new Map(), policyAreas = new Map();
-            for (const record of records) {
-                record.officials.forEach(official => officials.set(official.id, official.name));
-                record.issueIds.forEach(id => issues.set(id, id));
-                record.policyAreaIds.forEach(id => policyAreas.set(id, id));
-            }
-            addOptions(field("official"), officials);
-            addOptions(field("issue"), issues);
-            addOptions(field("policyArea"), policyAreas);
-        };
-        const resultItem = record => {
+        const more = form.querySelector("[data-search-more]");
+        const kindLabels = new Map(Array.from(form.elements.namedItem("kind").options, option => [option.value, option.text]));
+        let nextCursor = null;
+        let running = 0;
+        const resultItem = hit => {
             const item = document.createElement("li");
             const link = document.createElement("a");
             link.className = "cell-title";
-            link.href = form.dataset.recordPage.replace("{id}", record.recordId);
-            link.textContent = record.headline;
+            link.href = hit.pagePath;
+            link.textContent = hit.headline;
             const facts = document.createElement("span");
             facts.className = "cell-sub";
-            facts.textContent = [kindLabels.get(record.kind), ...record.officials.map(official => official.name),
-                ...record.issueIds, record.eventDate].filter(Boolean).join(" · ");
+            facts.textContent = [kindLabels.get(hit.kind), ...hit.officials.map(official => official.name), ...hit.issueIds, hit.eventDate]
+                .filter(Boolean).join(" \u00B7 ");
             item.append(link, facts);
+            if (hit.snippet) {
+                const snippet = document.createElement("p");
+                snippet.className = "cell-sub";
+                snippet.append(...snippetNodes(hit.snippet));
+                item.append(snippet);
+            }
             return item;
         };
-        const show = () => {
-            const query = Object.fromEntries(new FormData(form));
-            query.text = query.text.trim().toLowerCase();
-            if (!Object.values(query).some(Boolean)) {
-                status.textContent = "";
-                results.replaceChildren();
-                return;
-            }
-            const found = records.filter(record => matchesSearch(record, query));
-            status.textContent = found.length > searchLimit
-                ? `${found.length} records match. The first ${searchLimit} show.`
-                : `${found.length} records match.`;
-            results.replaceChildren(...found.slice(0, searchLimit).map(resultItem));
+        const failure = response => response.status === 429 ? "Too many searches. Try again in a minute."
+            : response.status === 404 ? "This release is not indexed yet."
+            : "Search is not available now. Try again later.";
+        const run = async append => {
+            const params = new URLSearchParams();
+            for (const [name, value] of new FormData(form)) if (value) params.set(name, value);
+            if (append) params.set("cursor", nextCursor);
+            const mine = ++running;
+            status.textContent = "Searching.";
+            let response;
+            try { response = await fetch(`${api}/v1/search?${params}`); }
+            catch { if (mine === running) status.textContent = failure({ status: 0 }); return; }
+            if (mine !== running) return;
+            if (!response.ok) { status.textContent = failure(response); return; }
+            const page = await response.json();
+            if (mine !== running) return;
+            const items = page.hits.map(resultItem);
+            if (append) results.append(...items); else results.replaceChildren(...items);
+            nextCursor = page.nextCursor;
+            more.hidden = nextCursor === null;
+            status.textContent = results.children.length === 0 ? "No records match." : `Showing ${results.children.length} records from release ${page.release}.`;
         };
         form.closest("section").hidden = false;
-        form.addEventListener("submit", event => event.preventDefault());
-        form.addEventListener("input", () => {
-            loading ??= load();
-            loading.then(show, () => {
-                loading = null;
-                status.textContent = "Search could not load this release.";
-            });
-        });
+        form.addEventListener("submit", event => { event.preventDefault(); run(false); });
+        more.addEventListener("click", () => run(true));
     };
 
     const init = () => {
@@ -154,7 +145,7 @@
         all("[data-layout-switch]").forEach(control => { control.hidden = false; });
         showTheme(root.dataset.theme || "");
         initTabs();
-        all("[data-release-search]").forEach(initReleaseSearch);
+        all("[data-search-api]").forEach(initSearchService);
         const unsaved = document.querySelector("[data-unsaved-form]");
         if (unsaved?.dataset.recoveredUnsaved === "true") markDirty();
         measureAll();

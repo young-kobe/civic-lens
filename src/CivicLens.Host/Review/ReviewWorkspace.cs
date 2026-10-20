@@ -329,7 +329,7 @@ internal static class ReviewWorkspace
             provider.GetRequiredService<IStatementReviewStore>(), provider.GetRequiredService<IActionReviewStore>(),
             provider.GetRequiredService<IVoteReviewStore>(), provider.GetRequiredService<IRelationshipReviewStore>(),
             provider.GetRequiredService<IBriefReviewStore>()));
-        services.AddScoped(provider => new PublishRelease(publications, releases, new ReleaseRenderer(),
+        services.AddScoped(provider => new PublishRelease(publications, releases, ReleaseRenderer.FromEnvironment(),
             provider.GetRequiredService<PublishedRecordLoaders>(), new PublicationCatalog(officials.Names, issues), TimeProvider.System));
         services.AddScoped<ListPublishable>();
     }

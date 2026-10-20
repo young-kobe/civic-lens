@@ -8,8 +8,11 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CivicLens.Host.Publication;
 
-public sealed class ReleaseRenderer : IReleaseRenderer
+/// <param name="publicApiUrl">The address of the search service. The search page needs it, and says that search is not available without it.</param>
+public sealed class ReleaseRenderer(string? publicApiUrl = null) : IReleaseRenderer
 {
+    public const string PublicApiUrlVariable = "CIVIC_LENS_PUBLIC_API_URL";
+
     private static readonly ServiceProvider Services = new ServiceCollection().BuildServiceProvider();
 
     public IReadOnlyList<ReleaseAsset> Assets { get; } = PublicAssets.Load();
@@ -125,6 +128,20 @@ public sealed class ReleaseRenderer : IReleaseRenderer
         return RenderAsync<PublishedFacetsPage>(new Dictionary<string, object?>
         {
             [nameof(PublishedFacetsPage.Facets)] = facets
+        });
+    }
+
+    public static ReleaseRenderer FromEnvironment() => new(Environment.GetEnvironmentVariable(PublicApiUrlVariable)?.TrimEnd('/') is { Length: > 0 } url ? url : null);
+
+    public Task<string> RenderSearchAsync(PublicationRelease release, ReleaseFacets facets, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(release);
+        ArgumentNullException.ThrowIfNull(facets);
+        return RenderAsync<PublishedSearchPage>(new Dictionary<string, object?>
+        {
+            [nameof(PublishedSearchPage.Release)] = release,
+            [nameof(PublishedSearchPage.Facets)] = facets,
+            [nameof(PublishedSearchPage.PublicApiUrl)] = publicApiUrl
         });
     }
 
