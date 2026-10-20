@@ -116,6 +116,15 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
+    public async Task ARevisionOfAnotherKindIsRefusedBeforeAnyQueryBecauseAMixedCallWouldReadTheWrongTable()
+    {
+        var recordId = await ApprovedVoteAsync();
+
+        await Assert.ThrowsAsync<ArgumentException>(() => VoteReviews().ReadMemberPersonIdsAsync(
+            [new(PublishedRecordKind.Vote, recordId, 1), new(PublishedRecordKind.Statement, recordId, 1)], default));
+    }
+
+    [Fact]
     public async Task AVoteWithoutAnActionDraftOfItsBillGetsNoActionRecordId()
     {
         var recordId = await ApprovedVoteAsync();
