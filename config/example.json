@@ -3,7 +3,8 @@
   "people": [
     {
       "id": "example-official",
-      "name": "Example Official"
+      "name": "Example Official",
+      "offices": [{ "title": "Example Office", "startsOn": "2025-01-01" }]
     }
   ],
   "sources": [

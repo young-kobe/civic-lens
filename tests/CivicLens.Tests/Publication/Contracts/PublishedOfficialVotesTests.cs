@@ -15,7 +15,7 @@ public sealed class PublishedOfficialVotesTests
     }
 
     [Fact]
-    public void TheNewestVoteComesFirstSoAProfileNeedsNoSortOfItsOwn()
+    public void AFileHoldsItsVotesNewestFirst()
     {
         var file = PublishedOfficialVotes.Of([Vote('a', new DateOnly(2026, 1, 1), 5), Vote('b', new DateOnly(2026, 2, 1), 9)]);
 

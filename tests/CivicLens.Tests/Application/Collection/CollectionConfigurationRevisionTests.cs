@@ -106,6 +106,22 @@ public sealed class CollectionConfigurationRevisionTests
     }
 
     [Fact]
+    public void OfficesSurviveRevisionRoundTripAndAbsentOfficesLeaveTheSnapshotUnchanged()
+    {
+        var configuration = Configuration(["person"]);
+        var withOffice = configuration with
+        {
+            People = [new PersonConfiguration { Id = "person", Name = "Official", Offices = [new() { Title = "Secretary", StartsOn = new(2025, 1, 21) }] }]
+        };
+
+        var revision = CollectionConfigurationRevision.Create(withOffice);
+
+        Assert.Contains("\"offices\":[{\"title\":\"Secretary\",\"startsOn\":\"2025-01-21\"}]", revision.Json, StringComparison.Ordinal);
+        Assert.Equal("Secretary", revision.ReadConfiguration().People[0].Offices![0].Title);
+        Assert.DoesNotContain("offices", CollectionConfigurationRevision.Create(configuration).Json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ExplicitSourceIntervalChangesConfigurationRevision()
     {
         var configuration = Configuration(["person"]);

@@ -131,17 +131,17 @@ public sealed class ReleaseRenderer(string? publicApiUrl = null) : IReleaseRende
         });
     }
 
-    public Task<string> RenderOfficialAsync(ReleaseOfficial official, CancellationToken cancellationToken)
+    public Task<string> RenderOfficialAsync(ReleaseOfficialPage page, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(official);
-        official.Profile.Validate();
+        ArgumentNullException.ThrowIfNull(page);
+        page.Profile.Validate();
         return RenderAsync<PublishedOfficialPage>(new Dictionary<string, object?>
         {
-            [nameof(PublishedOfficialPage.Official)] = official
+            [nameof(PublishedOfficialPage.Page)] = page
         });
     }
 
-    public Task<string> RenderOfficialsAsync(IReadOnlyList<ReleaseOfficial> officials, CancellationToken cancellationToken)
+    public Task<string> RenderOfficialsAsync(IReadOnlyList<OfficialListing> officials, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(officials);
         return RenderAsync<PublishedOfficialsPage>(new Dictionary<string, object?>

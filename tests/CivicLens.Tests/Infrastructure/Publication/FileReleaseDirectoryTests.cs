@@ -270,12 +270,21 @@ public sealed class FileReleaseDirectoryTests : IDisposable
     }
 
     [Fact]
-    public async Task ListingAFolderNamesItsFilesByReleasePathAndAMissingFolderHasNoFiles()
+    public async Task ListingAFolderNamesItsDirectFilesByReleasePathAndAMissingFolderHasNoFiles()
     {
         var name = await BuildReleaseAsync(1, "one");
 
-        Assert.Equal(["records/a.json"], await releases.ListFilesAsync(name, "records", default));
-        Assert.Empty(await releases.ListFilesAsync(name, "officials/mayor", default));
+        Assert.Equal(["records/a.json"], await releases.ListFilesAsync(name, "records", 10, default));
+        Assert.Empty(await releases.ListFilesAsync(name, "officials/mayor", 10, default));
+    }
+
+    [Fact]
+    public async Task ListingAFolderWithMoreFilesThanTheCapIsRefusedSoAFolderCannotGrowWithoutBound()
+    {
+        var name = await BuildReleaseAsync(1, "one");
+        File.WriteAllText(Path.Combine(root, "releases", name, "records", "b.json"), "{}");
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => releases.ListFilesAsync(name, "records", 1, default));
     }
 
     private async Task<string> BuildReleaseAsync(int number, string manifest)

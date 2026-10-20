@@ -5,20 +5,24 @@ namespace CivicLens.Application.Publication;
 
 internal sealed class PreviousRelease
 {
-    private PreviousRelease(string? directoryName, IReadOnlyList<PublishedRecordEntry> entries)
+    private PreviousRelease(string? directoryName, IReadOnlyList<PublishedRecordEntry> entries,
+        IReadOnlyDictionary<string, PublishedOfficialProfile> officials)
     {
         DirectoryName = directoryName;
         Entries = entries;
+        Officials = officials;
     }
 
     public string? DirectoryName { get; }
 
     public IReadOnlyList<PublishedRecordEntry> Entries { get; }
 
+    public IReadOnlyDictionary<string, PublishedOfficialProfile> Officials { get; }
+
     public static async Task<PreviousRelease> LoadAsync(IReleaseDirectory releases, PublicationReleaseSummary? active,
         CancellationToken cancellationToken)
     {
-        if (active is null) return new(null, []);
+        if (active is null) return new(null, [], new Dictionary<string, PublishedOfficialProfile>());
         var bytes = await releases.ReadFileAsync(active.DirectoryName, PublicationProtocol.ManifestPath,
             PublicationProtocol.MaximumManifestBytes, cancellationToken);
         var manifest = JsonSerializer.Deserialize<PublicationRelease>(bytes, PublicationProtocol.JsonOptions)
@@ -26,7 +30,18 @@ internal sealed class PreviousRelease
         manifest.Validate();
         if (manifest.ReleaseNumber != active.ReleaseNumber)
             throw new InvalidDataException("Release manifest does not match the active release.");
-        return new(active.DirectoryName, manifest.Records);
+        return new(active.DirectoryName, manifest.Records, await ReadOfficialsAsync(releases, active.DirectoryName, cancellationToken));
+    }
+
+    private static async Task<Dictionary<string, PublishedOfficialProfile>> ReadOfficialsAsync(IReleaseDirectory releases,
+        string directoryName, CancellationToken cancellationToken)
+    {
+        var bytes = await releases.ReadFileAsync(directoryName, PublicationProtocol.OfficialsPath, PublishedOfficials.MaximumBytes,
+            cancellationToken);
+        var officials = JsonSerializer.Deserialize<PublishedOfficials>(bytes, PublicationProtocol.JsonOptions)
+            ?? throw new InvalidDataException("Release officials file is empty.");
+        officials.Validate();
+        return officials.Officials.ToDictionary(official => official.Id, StringComparer.Ordinal);
     }
 
     public PublishedRecordEntry? Find(PublishedRecordKind kind, string recordId) =>

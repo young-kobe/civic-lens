@@ -1,8 +1,8 @@
 @using CivicLens.Publication.Contracts
 
-@if (PublishedRecordView.OfficialLink(Official.Id) is { } href && Linked)
+@if (Linked)
 {
-    <a href="@href">@Official.Name</a>
+    <a href="@PublishedRecordView.OfficialLink(Official.Id)">@Official.Name</a>
 }
 else
 {

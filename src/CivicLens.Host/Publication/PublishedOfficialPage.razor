@@ -1,28 +1,38 @@
 @using CivicLens.Application.Publication
 @using CivicLens.Publication.Contracts
 
-<PublicPage Title="@Official.Profile.Name" RootPath="../">
-    <a class="back-link" href="@("../" + PublicationProtocol.OfficialsPagePath)">Officials</a>
-    <PageHeader Title="@Official.Profile.Name" Lede="@($"{Official.RecordCount} published records, newest first.")" />
-    <Panel Title="Offices">
-        <DataTable Items="Official.Profile.Terms" Caption="@($"Offices of {Official.Profile.Name}")">
-            <Head><th>Office</th><th>Party</th><th class="fit num">From</th><th class="fit num">To</th></Head>
-            <Row Context="term">
-                <td>@PublishedOfficialView.Office(term)</td>
-                <td>@term.Party</td>
-                <td class="fit num">@Moment.Iso(term.Start)</td>
-                <td class="fit num">@Moment.Iso(term.End)</td>
-            </Row>
-            <Empty><EmptyState Title="No office on record" Text="The rosters list no dated office for this official." /></Empty>
-        </DataTable>
-    </Panel>
+<PublicPage Title="@Title" RootPath="@Page.RootPath">
+    @if (Page.IsCurrent)
+    {
+        <a class="back-link" href="@(Page.RootPath + PublicationProtocol.OfficialsPagePath)">Officials</a>
+    }
+    else
+    {
+        <a class="back-link" href="@("../" + Page.Profile.Id + ".html")">@Page.Profile.Name</a>
+    }
+    <PageHeader Title="@Page.Profile.Name" Lede="@Lede" />
+    @if (Page.IsCurrent)
+    {
+        <Panel Title="Offices">
+            <DataTable Items="Page.Profile.Terms" Caption="@($"Offices of {Page.Profile.Name}")">
+                <Head><th>Office</th><th>Party</th><th class="fit num">From</th><th class="fit num">To</th></Head>
+                <Row Context="term">
+                    <td>@PublishedOfficialView.Office(term)</td>
+                    <td>@term.Party</td>
+                    <td class="fit num">@Moment.Iso(term.Start)</td>
+                    <td class="fit num">@(term.End is { } end ? Moment.Iso(end) : "Present")</td>
+                </Row>
+                <Empty><EmptyState Title="No office on record" Text="The rosters and the configuration list no dated office for this official." /></Empty>
+            </DataTable>
+        </Panel>
+    }
     <Panel Title="Records">
-        <DataTable Items="Rows" Caption="@($"Published records of {Official.Profile.Name}")">
+        <DataTable Items="Rows" Caption="@($"Published records of {Page.Profile.Name}")">
             <Head><th class="fit num">Date</th><th>Record</th><th class="hide-narrow">Cast</th></Head>
             <Row Context="row">
                 <td class="fit num">@Moment.Iso(row.Date)</td>
                 <td>
-                    <a class="cell-title" href="@("../" + PublicationProtocol.RecordPagePath(row.RecordId))">@row.Headline</a>
+                    <a class="cell-title" href="@(Page.RootPath + PublicationProtocol.RecordPagePath(row.RecordId))">@row.Headline</a>
                     <StatusBadge Text="@PublishedRecordLabels.Kind(row.Kind)" />
                     @if (row.Detail is not null)
                     {
@@ -34,10 +44,29 @@
             <Empty><EmptyState Title="No records yet" Text="There are no records here." /></Empty>
         </DataTable>
     </Panel>
+    @if (!Page.PastCongresses.IsEmpty)
+    {
+        <Panel Title="Earlier Congresses" Padded="true">
+            <ul class="choices">
+                @foreach (var congress in Page.PastCongresses)
+                {
+                    <li><a href="@($"{Page.Profile.Id}/{congress}.html")">Votes in Congress @congress</a></li>
+                }
+            </ul>
+        </Panel>
+    }
 </PublicPage>
 
 @code {
-    [Parameter, EditorRequired] public ReleaseOfficial Official { get; set; } = default!;
+    [Parameter, EditorRequired] public ReleaseOfficialPage Page { get; set; } = default!;
 
-    private IReadOnlyList<PublishedOfficialRow> Rows => PublishedOfficialView.Rows(Official);
+    private IReadOnlyList<PublishedOfficialRow> Rows => PublishedOfficialView.Rows(Page);
+
+    private string Title => Page.IsCurrent ? Page.Profile.Name : $"{Page.Profile.Name}, Congress {Page.Congress}";
+
+    private string Lede => Page.IsCurrent
+        ? Page.Congress is { } congress
+            ? $"{Page.Records.Length} records name this official. The votes are those of Congress {congress}. Rows are newest first."
+            : $"{Page.Records.Length} records name this official. Rows are newest first."
+        : $"Votes in Congress {Page.Congress}, newest first.";
 }

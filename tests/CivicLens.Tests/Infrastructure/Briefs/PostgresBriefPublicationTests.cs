@@ -270,6 +270,8 @@ public sealed class PostgresBriefPublicationTests(PostgresCollection postgres) :
             Records = entries
         };
         File.WriteAllBytes(Path.Combine(folder, PublicationProtocol.ManifestPath), JsonSerializer.SerializeToUtf8Bytes(manifest, PublicationProtocol.JsonOptions));
+        File.WriteAllBytes(Path.Combine(folder, PublicationProtocol.OfficialsPath),
+            JsonSerializer.SerializeToUtf8Bytes(new PublishedOfficials { Officials = [] }, PublicationProtocol.JsonOptions));
         Directory.CreateDirectory(Path.Combine(folder, "records"));
         foreach (var entry in entries)
         {

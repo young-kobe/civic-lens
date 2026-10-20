@@ -3,7 +3,7 @@
 
 <PublicPage Title="Officials">
     <a class="back-link" href="@PublicationProtocol.HomePath">Home</a>
-    <PageHeader Title="Officials" Lede="Each page lists the published records of one official." />
+    <PageHeader Title="Officials" Lede="Each page lists the published records of one official and the votes of the current Congress. The count shows the records that name the official, and no votes." />
     <Panel Label="Officials">
         <DataTable Items="Officials" Caption="Officials with published records">
             <Head><th>Name</th><th class="fit num">Records</th></Head>
@@ -17,5 +17,5 @@
 </PublicPage>
 
 @code {
-    [Parameter, EditorRequired] public IReadOnlyList<ReleaseOfficial> Officials { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<OfficialListing> Officials { get; set; } = [];
 }

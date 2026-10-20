@@ -11,16 +11,8 @@
             {
                 @for (var index = 0; index < fact.Links.Count; index++)
                 {
-                    var link = fact.Links[index];
                     @(index > 0 ? ", " : "")
-                    @if (link.Href is null)
-                    {
-                        @link.Text
-                    }
-                    else
-                    {
-                        <a href="@link.Href">@link.Text</a>
-                    }
+                    <a href="@fact.Links[index].Href">@fact.Links[index].Text</a>
                 }
             }
         </dd>

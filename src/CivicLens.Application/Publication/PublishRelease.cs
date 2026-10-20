@@ -148,7 +148,7 @@ public sealed class PublishRelease
             Compress(manifestJson, stream => new BrotliStream(stream, CompressionLevel.Optimal)), cancellationToken);
         var facets = ReleaseFacets.From(manifest, catalog);
         await indexPages.WriteAsync(staging, manifest, facets, additions, previous, cancellationToken);
-        var officials = await dataFiles.WriteAsync(staging, manifest, facets, cancellationToken);
+        var officials = await dataFiles.WriteAsync(staging, manifest, facets, previous, cancellationToken);
         await officialPages.WriteAsync(staging, manifest, officials, additions, previous, cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestPath, manifestJson, cancellationToken);
         return (await staging.CompleteAsync(number, cancellationToken), entries);

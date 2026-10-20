@@ -18,8 +18,8 @@ internal static class PublishedOfficialView
         _ => term.Office
     };
 
-    public static IReadOnlyList<PublishedOfficialRow> Rows(ReleaseOfficial official) =>
-    [.. official.Records.Select(PublishedOfficialRow.Of).Concat(official.Votes.Select(PublishedOfficialRow.Of))
+    public static IReadOnlyList<PublishedOfficialRow> Rows(ReleaseOfficialPage page) =>
+    [.. page.Records.Select(PublishedOfficialRow.Of).Concat(page.Votes.Select(PublishedOfficialRow.Of))
         .OrderByDescending(row => row.Date).ThenBy(row => row.RecordId, StringComparer.Ordinal)];
 
     public static string RollCall(PublishedOfficialVote vote)

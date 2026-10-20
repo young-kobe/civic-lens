@@ -47,6 +47,7 @@ internal sealed class PublicationScenario
     public Dictionary<string, string> OfficialNames { get; } = new() { ["mayor"] = "Mayor Example", ["chair"] = "Council Chair Example" };
 
     public Dictionary<string, (string? BioguideId, string? WikidataId)> ExternalIds { get; } = [];
+    public Dictionary<string, OfficeConfiguration[]> Offices { get; } = [];
     public RosterMember[] RosterMembers { get; set; } = [];
     public ExecutiveOfficial[] ExecutiveOfficials { get; set; } = [];
 
@@ -57,7 +58,8 @@ internal sealed class PublicationScenario
             Id = name.Key,
             Name = name.Value,
             BioguideId = ExternalIds.GetValueOrDefault(name.Key).BioguideId,
-            WikidataId = ExternalIds.GetValueOrDefault(name.Key).WikidataId
+            WikidataId = ExternalIds.GetValueOrDefault(name.Key).WikidataId,
+            Offices = Offices.GetValueOrDefault(name.Key)
         })],
         Sources = [RosterFixtures.Source(), ExecutiveFixtures.Source()]
     };
@@ -80,7 +82,7 @@ internal sealed class PublicationScenario
         RevisionNumber = 1,
         Headline = string.Concat(Enumerable.Repeat(PunctuatedHeadline, headlineLength / PunctuatedHeadline.Length + 1))[..headlineLength],
         FirstPublishedAtUtc = ApprovedAt.AddMinutes(-index),
-        Officials = [new() { Id = "mayor", Name = "Mayor Example" }, new() { Id = "council-chair", Name = "Council Chair Example" }],
+        Officials = [new() { Id = "mayor", Name = "Mayor Example" }, new() { Id = "chair", Name = "Council Chair Example" }],
         IssueIds = ["housing", "public-transit", .. Enumerable.Range(0, extraIssueIds).Select(issue => $"{issue:x2}".PadRight(256, 'i'))],
         PolicyAreaIds = ["land-use", "transportation"],
         SourceHost = "council.example.gov",
@@ -117,7 +119,8 @@ internal sealed class PublicationScenario
         };
         var files = new Dictionary<string, byte[]>
         {
-            [PublicationProtocol.ManifestPath] = JsonSerializer.SerializeToUtf8Bytes(manifest, PublicationProtocol.JsonOptions)
+            [PublicationProtocol.ManifestPath] = JsonSerializer.SerializeToUtf8Bytes(manifest, PublicationProtocol.JsonOptions),
+            [PublicationProtocol.OfficialsPath] = JsonSerializer.SerializeToUtf8Bytes(new PublishedOfficials { Officials = [] }, PublicationProtocol.JsonOptions)
         };
         if (withFiles)
             foreach (var entry in entries)
@@ -339,10 +342,10 @@ internal sealed class FakeRenderer : IReleaseRenderer
         Task.FromResult($"<html>facet {facet.Name} {page} {string.Join(',', facet.Records.Select(entry => entry.RecordId))}</html>");
     public Task<string> RenderFacetsAsync(ReleaseFacets facets, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>facets {facets.Issues.Length} {facets.PolicyAreas.Length}</html>");
-    public Task<string> RenderOfficialAsync(ReleaseOfficial official, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>official {official.Profile.Id} {string.Join(',', official.Records.Select(entry => entry.RecordId))} {string.Join(',', official.Votes.Select(vote => vote.RecordId))}</html>");
-    public Task<string> RenderOfficialsAsync(IReadOnlyList<ReleaseOfficial> officials, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>officials {string.Join(',', officials.Select(official => official.Profile.Id))}</html>");
+    public Task<string> RenderOfficialAsync(ReleaseOfficialPage page, CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>official {page.Profile.Id} {(page.IsCurrent ? "current" : "past")} {page.Congress} past [{string.Join(',', page.PastCongresses)}] records [{string.Join(',', page.Records.Select(entry => entry.RecordId))}] votes [{string.Join(',', page.Votes.Select(vote => vote.RecordId))}]</html>");
+    public Task<string> RenderOfficialsAsync(IReadOnlyList<OfficialListing> officials, CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>officials {string.Join(',', officials.Select(official => $"{official.Profile.Id}:{official.RecordCount}"))}</html>");
     public Task<string> RenderSearchAsync(PublicationRelease release, ReleaseFacets facets, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>search {release.Records.Length} {facets.Issues.Length}</html>");
 
@@ -450,10 +453,14 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
         return Task.FromResult(content);
     }
 
-    public Task<IReadOnlyList<string>> ListFilesAsync(string directoryName, string folder, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<string>> ListFilesAsync(string directoryName, string folder, int maximumFiles,
+        CancellationToken cancellationToken)
     {
-        IReadOnlyList<string> files = [.. Directories[directoryName].Keys.Where(path => path.StartsWith(folder + "/", StringComparison.Ordinal))
-            .Order(StringComparer.Ordinal)];
+        IReadOnlyList<string> files = Directories.TryGetValue(directoryName, out var directory)
+            ? [.. directory.Keys.Where(path => path.StartsWith(folder + "/", StringComparison.Ordinal) && !path[(folder.Length + 1)..].Contains('/'))
+                .Order(StringComparer.Ordinal)]
+            : [];
+        if (files.Count > maximumFiles) throw new InvalidDataException("Release folder holds more files than allowed.");
         return Task.FromResult(files);
     }
 

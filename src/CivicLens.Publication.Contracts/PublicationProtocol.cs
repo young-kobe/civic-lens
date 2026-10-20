@@ -23,6 +23,7 @@ public static class PublicationProtocol
     public const string OfficialsPath = "officials.json";
     public const string CatalogPath = "catalog.json";
     public const string OfficialsPagePath = "officials.html";
+    public const int MaximumOfficialFiles = 512;
 
     public static string AllRecordsPagePath(int page) => page == 1 ? "all.html" : $"all-{page}.html";
     public static string IssuePagePath(string issueId, int page) => FacetPagePath("issues", issueId, page);
@@ -31,10 +32,21 @@ public static class PublicationProtocol
     public static bool IsPathSegment(string id) =>
         id.Length is > 0 and <= MaximumFacetIdLength && id.All(c => c is (>= '0' and <= '9') or (>= 'a' and <= 'z') or '-');
     public static string OfficialPagePath(string officialId) => $"officials/{officialId}.html";
+    public static string OfficialCongressPagePath(string officialId, int congress) => $"officials/{officialId}/{congress}.html";
     public static string OfficialVotesPath(string officialId, int congress) => $"officials/{officialId}/votes-{congress}.json";
-    public static string OfficialVotesFolder(string officialId) => $"officials/{officialId}";
+    public static string OfficialFolder(string officialId) => $"officials/{officialId}";
+    public static int? VotesCongressOf(string path) => CongressIn(path, "/votes-", ".json");
+    public static int? CongressPageOf(string path) => CongressIn(path, "/", ".html");
     public static string RecordDataPath(string recordId) => $"records/{recordId}.json";
     public static string RecordPagePath(string recordId) => $"records/{recordId}.html";
+
+    private static int? CongressIn(string path, string prefix, string suffix)
+    {
+        var name = path[path.LastIndexOf('/')..];
+        if (!name.StartsWith(prefix, StringComparison.Ordinal) || !name.EndsWith(suffix, StringComparison.Ordinal)) return null;
+        var digits = name[prefix.Length..^suffix.Length];
+        return digits.Length is > 0 and <= 4 && digits[0] != '0' && digits.All(char.IsAsciiDigit) ? int.Parse(digits) : null;
+    }
 
     private static string FacetPagePath(string folder, string facetId, int page) =>
         page == 1 ? $"{folder}/{facetId}.html" : $"{folder}/{facetId}.page-{page}.html";

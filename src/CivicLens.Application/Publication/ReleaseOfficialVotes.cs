@@ -1,93 +1,68 @@
-using System.Collections.Immutable;
 using System.Text.Json;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
-/// <summary>
-/// Writes the vote files of the officials. A file changes only when this publish adds or replaces a vote that names its
-/// official, now or in the replaced revision. Every other file is a hard link to the file of the previous release.
-/// </summary>
+/// <summary>Finds, reads, and rewrites the vote files of the officials. The rows of a publish come from the vote records that it holds.</summary>
 internal sealed class ReleaseOfficialVotes(IReleaseDirectory releases, VoteRecordLoader votes)
 {
-    public async Task<IReadOnlyDictionary<string, ImmutableArray<PublishedOfficialVote>>> WriteAsync(IReleaseStaging staging,
-        PublishedOfficials officials, IReadOnlyList<PendingRecord> additions, PreviousRelease previous, CancellationToken cancellationToken)
-    {
-        var added = additions.Select(addition => addition.Record).OfType<PublishedVote>().ToArray();
-        var changes = await ChangesAsync(added, previous, cancellationToken);
-        var addedIds = added.Select(vote => vote.RecordId).ToHashSet(StringComparer.Ordinal);
-        var votesByOfficial = new Dictionary<string, ImmutableArray<PublishedOfficialVote>>(StringComparer.Ordinal);
-        foreach (var official in officials.Officials.Where(official => PublicationProtocol.IsPathSegment(official.Id)))
-        {
-            var rows = await WriteOfficialAsync(staging, official.Id, changes, addedIds, previous, cancellationToken);
-            if (!rows.IsEmpty) votesByOfficial[official.Id] = rows;
-        }
-        return votesByOfficial;
-    }
-
-    private async Task<ImmutableArray<PublishedOfficialVote>> WriteOfficialAsync(IReleaseStaging staging, string officialId,
-        Dictionary<string, List<PublishedOfficialVote>> changes, HashSet<string> addedIds, PreviousRelease previous,
+    public async Task<OfficialVoteChanges> ChangesAsync(IReadOnlyList<PendingRecord> additions, PreviousRelease previous,
         CancellationToken cancellationToken)
     {
-        var existing = previous.DirectoryName is null ? []
-            : await releases.ListFilesAsync(previous.DirectoryName, PublicationProtocol.OfficialVotesFolder(officialId), cancellationToken);
-        var changedPaths = changes.Keys.Where(path => path.StartsWith(PublicationProtocol.OfficialVotesFolder(officialId) + "/", StringComparison.Ordinal));
-        var rows = ImmutableArray.CreateBuilder<PublishedOfficialVote>();
-        foreach (var path in existing.Union(changedPaths, StringComparer.Ordinal))
+        var added = additions.OfType<PendingRecord<PublishedVote>>().Select(addition => addition.Record).ToArray();
+        var changes = new Dictionary<string, Dictionary<int, List<PublishedOfficialVote>>>(StringComparer.Ordinal);
+        foreach (var vote in added)
+            foreach (var member in vote.Members)
+                RowsOf(changes, member.Official.Id, vote.Congress).Add(PublishedOfficialVote.Of(vote, member));
+
+        var congressOf = added.ToDictionary(vote => vote.RecordId, vote => vote.Congress, StringComparer.Ordinal);
+        var replaced = previous.Entries.Where(entry => entry.Kind == PublishedRecordKind.Vote && congressOf.ContainsKey(entry.RecordId)).ToArray();
+        if (replaced.Length > 0)
         {
-            var kept = existing.Contains(path) ? await ReadAsync(previous, path, cancellationToken) : [];
-            rows.AddRange(changes.TryGetValue(path, out var changed)
-                ? await RewriteAsync(staging, path, kept, changed, addedIds, cancellationToken)
-                : await CarryAsync(staging, previous, path, kept, cancellationToken));
+            var congresses = replaced.Select(entry => congressOf[entry.RecordId]).Distinct().ToArray();
+            foreach (var officialId in await votes.MemberPersonIdsAsync(replaced, cancellationToken))
+                foreach (var congress in congresses) RowsOf(changes, officialId, congress);
         }
-        return rows.ToImmutable();
+        return new(changes, [.. congressOf.Keys]);
     }
 
-    private static async Task<PublishedOfficialVote[]> CarryAsync(IReleaseStaging staging, PreviousRelease previous, string path,
-        PublishedOfficialVote[] kept, CancellationToken cancellationToken)
+    public async Task<OfficialFiles> ListAsync(PreviousRelease previous, string officialId, CancellationToken cancellationToken)
     {
-        await staging.LinkFileAsync(previous.DirectoryName!, path, cancellationToken);
-        return kept;
+        if (previous.DirectoryName is null) return OfficialFiles.None;
+        var paths = await releases.ListFilesAsync(previous.DirectoryName, PublicationProtocol.OfficialFolder(officialId),
+            PublicationProtocol.MaximumOfficialFiles, cancellationToken);
+        return new([.. paths.Select(PublicationProtocol.VotesCongressOf).OfType<int>()],
+            [.. paths.Select(PublicationProtocol.CongressPageOf).OfType<int>()]);
     }
 
-    private static async Task<PublishedOfficialVote[]> RewriteAsync(IReleaseStaging staging, string path, PublishedOfficialVote[] kept,
-        List<PublishedOfficialVote> changed, HashSet<string> addedIds, CancellationToken cancellationToken)
+    public async Task<PublishedOfficialVote[]> ReadAsync(PreviousRelease previous, string officialId, int congress,
+        CancellationToken cancellationToken)
     {
-        var file = PublishedOfficialVotes.Of(kept.Where(vote => !addedIds.Contains(vote.RecordId)).Concat(changed));
-        if (file.Votes.Length == 0) return [];
-        await staging.WriteFileAsync(path, JsonSerializer.SerializeToUtf8Bytes(file, PublicationProtocol.JsonOptions), cancellationToken);
-        return file.Votes;
-    }
-
-    private async Task<PublishedOfficialVote[]> ReadAsync(PreviousRelease previous, string path, CancellationToken cancellationToken)
-    {
-        var json = await releases.ReadFileAsync(previous.DirectoryName!, path, PublishedOfficialVotes.MaximumBytes, cancellationToken);
+        var json = await releases.ReadFileAsync(previous.DirectoryName!, PublicationProtocol.OfficialVotesPath(officialId, congress),
+            PublishedOfficialVotes.MaximumBytes, cancellationToken);
         var file = JsonSerializer.Deserialize<PublishedOfficialVotes>(json, PublicationProtocol.JsonOptions)
             ?? throw new InvalidDataException("An official vote file is empty.");
         file.Validate();
+        if (file.Votes.Any(vote => vote.Congress != congress))
+            throw new InvalidDataException("An official vote file holds a vote of another Congress.");
         return file.Votes;
     }
 
-    private async Task<Dictionary<string, List<PublishedOfficialVote>>> ChangesAsync(PublishedVote[] added, PreviousRelease previous,
-        CancellationToken cancellationToken)
+    public async Task<PublishedOfficialVote[]> RewriteAsync(IReleaseStaging staging, string officialId, int congress,
+        PublishedOfficialVote[] kept, List<PublishedOfficialVote> added, OfficialVoteChanges changes, CancellationToken cancellationToken)
     {
-        var changes = new Dictionary<string, List<PublishedOfficialVote>>(StringComparer.Ordinal);
-        foreach (var vote in added)
-            foreach (var member in vote.Members)
-                ChangesOf(changes, member.Official.Id, vote.Congress).Add(PublishedOfficialVote.Of(vote, member));
-
-        var congressOf = added.ToDictionary(vote => vote.RecordId, vote => vote.Congress, StringComparer.Ordinal);
-        var replaced = previous.Entries.Where(entry => entry.Kind == PublishedRecordKind.Vote && congressOf.ContainsKey(entry.RecordId));
-        foreach (var congress in replaced.GroupBy(entry => congressOf[entry.RecordId]))
-            foreach (var officialId in await votes.MemberPersonIdsAsync(congress, cancellationToken))
-                ChangesOf(changes, officialId, congress.Key);
-        return changes;
+        var file = PublishedOfficialVotes.Of(kept.Where(vote => !changes.Replaces(vote.RecordId)).Concat(added));
+        if (file.Votes.Length == 0) return [];
+        await staging.WriteFileAsync(PublicationProtocol.OfficialVotesPath(officialId, congress),
+            JsonSerializer.SerializeToUtf8Bytes(file, PublicationProtocol.JsonOptions), cancellationToken);
+        return file.Votes;
     }
 
-    private static List<PublishedOfficialVote> ChangesOf(Dictionary<string, List<PublishedOfficialVote>> changes, string officialId, int congress)
+    private static List<PublishedOfficialVote> RowsOf(Dictionary<string, Dictionary<int, List<PublishedOfficialVote>>> changes,
+        string officialId, int congress)
     {
-        var path = PublicationProtocol.OfficialVotesPath(officialId, congress);
-        if (!changes.TryGetValue(path, out var rows)) changes[path] = rows = [];
+        if (!changes.TryGetValue(officialId, out var byCongress)) changes[officialId] = byCongress = [];
+        if (!byCongress.TryGetValue(congress, out var rows)) byCongress[congress] = rows = [];
         return rows;
     }
 }

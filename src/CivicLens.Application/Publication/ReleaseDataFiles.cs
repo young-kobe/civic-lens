@@ -7,11 +7,14 @@ namespace CivicLens.Application.Publication;
 internal sealed class ReleaseDataFiles(VoteRecordLoader votes, PublicationOfficials officials)
 {
     public async Task<PublishedOfficials> WriteAsync(IReleaseStaging staging, PublicationRelease manifest, ReleaseFacets facets,
-        CancellationToken cancellationToken)
+        PreviousRelease previous, CancellationToken cancellationToken)
     {
         var ids = await PublishedOfficialIdsAsync(manifest, cancellationToken);
-        var published = await officials.ResolveAsync(ids, cancellationToken);
-        await WriteAsync(staging, PublicationProtocol.OfficialsPath, published, cancellationToken);
+        var published = await officials.ResolveAsync(ids, previous.Officials, cancellationToken);
+        var officialsJson = JsonSerializer.SerializeToUtf8Bytes(published, PublicationProtocol.JsonOptions);
+        if (officialsJson.Length > PublishedOfficials.MaximumBytes)
+            throw new ArgumentException("The officials file would exceed its size limit.", nameof(manifest));
+        await staging.WriteFileAsync(PublicationProtocol.OfficialsPath, officialsJson, cancellationToken);
         await WriteAsync(staging, PublicationProtocol.CatalogPath, CatalogOf(facets), cancellationToken);
         return published;
     }

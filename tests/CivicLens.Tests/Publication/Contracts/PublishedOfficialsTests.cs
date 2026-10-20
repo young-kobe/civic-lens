@@ -59,6 +59,20 @@ public sealed class PublishedOfficialsTests
     }
 
     [Fact]
+    public void AConfiguredOfficeHasNoPartyAndNoEndSoTheJsonShowsNullAndTheTermIsOngoing()
+    {
+        var officials = new PublishedOfficials
+        {
+            Officials = [new() { Id = "sec", Name = "Secretary Example", Terms = [new() { Office = "Secretary of State", Start = new(2025, 1, 21) }] }]
+        };
+
+        officials.Validate();
+
+        Assert.Equal("""{"officials":[{"id":"sec","name":"Secretary Example","wikidataId":null,"terms":[{"office":"Secretary of State","state":null,"district":null,"party":null,"start":"2025-01-21","end":null}]}]}""",
+            JsonSerializer.Serialize(officials, PublicationProtocol.JsonOptions));
+    }
+
+    [Fact]
     public void TwoOfficialsWithOneIdAreRefusedBecauseAProfilePageNeedsOnePerson()
     {
         var official = new PublishedOfficialProfile { Id = "mayor", Name = "Mayor Example" };

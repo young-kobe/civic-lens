@@ -41,7 +41,8 @@ public sealed class FileReleaseDirectory : IReleaseDirectory
         return buffer;
     }
 
-    public Task<IReadOnlyList<string>> ListFilesAsync(string directoryName, string folder, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<string>> ListFilesAsync(string directoryName, string folder, int maximumFiles,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         string path;
@@ -54,8 +55,9 @@ public sealed class FileReleaseDirectory : IReleaseDirectory
             return Task.FromResult<IReadOnlyList<string>>([]);
         }
 
-        IReadOnlyList<string> files = [.. Directory.EnumerateFiles(path).Select(file => $"{folder}/{Path.GetFileName(file)}")
-            .Order(StringComparer.Ordinal)];
+        IReadOnlyList<string> files = [.. Directory.EnumerateFiles(path).Take(maximumFiles + 1)
+            .Select(file => $"{folder}/{Path.GetFileName(file)}").Order(StringComparer.Ordinal)];
+        if (files.Count > maximumFiles) throw new InvalidDataException("Release folder holds more files than allowed.");
         return Task.FromResult(files);
     }
 

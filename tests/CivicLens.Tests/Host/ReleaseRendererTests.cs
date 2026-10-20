@@ -223,17 +223,17 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task RecordPagesLinkASpeakerToTheOfficialPageAndLeaveAnIdThatIsNotAPathSegmentAsText()
+    public async Task RecordPagesLinkEachSpeakerToTheOfficialPageBecauseEverySpeakerOfAPublishedRecordHasOne()
     {
         var statement = Statement() with
         {
-            Speakers = [new() { Id = "o1", Name = "Jane Doe" }, new() { Id = "Not A Path", Name = "Ann Roe" }]
+            Speakers = [new() { Id = "o1", Name = "Jane Doe" }, new() { Id = "o2", Name = "Ann Roe" }]
         };
 
         var html = await new ReleaseRenderer().RenderStatementAsync(statement, [], CancellationToken.None);
 
         var speakers = new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts dd").First(dd => dd.TextContent.Contains("Jane Doe", StringComparison.Ordinal));
-        Assert.Equal(["../officials/o1.html"], speakers.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
+        Assert.Equal(["../officials/o1.html", "../officials/o2.html"], speakers.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
         Assert.Equal("Jane Doe, Ann Roe", speakers.TextContent);
     }
 

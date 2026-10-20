@@ -105,6 +105,38 @@ public sealed class PublishOfficialVotesTests
     }
 
     [Fact]
+    public async Task APublishThatReplacesTwoVotesOfDifferentCongressesRewritesTheFileOfEachCongress()
+    {
+        var scenario = new PublicationScenario();
+        var recent = scenario.AddVote('a');
+        var older = scenario.AddVote('b', congress: 118);
+        await PublishVotesAsync(scenario, "k1", recent, older);
+        Revise(scenario, recent, headline: "Recent, second revision", members: ["mayor"]);
+        Revise(scenario, older, headline: "Older, second revision", members: ["chair"]);
+
+        var second = await PublishVotesAsync(scenario, "k2", recent, older);
+
+        Assert.Equal(["Recent, second revision"], VotesOf(scenario, second.DirectoryName, MayorFile).Votes.Select(vote => vote.Headline));
+        Assert.DoesNotContain(PublicationProtocol.OfficialVotesPath("mayor", 118), scenario.Releases.Directories[second.DirectoryName].Keys);
+        Assert.Equal(["Older, second revision"],
+            VotesOf(scenario, second.DirectoryName, PublicationProtocol.OfficialVotesPath("chair", 118)).Votes.Select(vote => vote.Headline));
+    }
+
+    [Fact]
+    public async Task AVoteFileHoldingAVoteOfAnotherCongressIsRefusedSoAMisplacedFileCannotHideARow()
+    {
+        var scenario = new PublicationScenario();
+        scenario.SeedRelease(withFiles: true, []);
+        var misplaced = PublishedOfficialVotes.Of([new PublishedOfficialVote
+        {
+            RecordId = new string('f', 64), VotedOn = new DateOnly(2024, 1, 1), Congress = 118, Session = 1, RollCallNumber = 1, Cast = "Yea", Headline = "Misplaced"
+        }]);
+        scenario.Releases.Directories["seeded"][MayorFile] = JsonSerializer.SerializeToUtf8Bytes(misplaced, PublicationProtocol.JsonOptions);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => PublishVotesAsync(scenario, "k", scenario.AddVote('a')));
+    }
+
+    [Fact]
     public async Task AnOfficialWithNoVoteGetsNoVoteFile()
     {
         var scenario = new PublicationScenario();
