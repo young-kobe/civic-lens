@@ -45,10 +45,14 @@ public static class AnalysisAnswerRules
 
     public static void CheckText(string? value, int maximumLength, string name, bool required, List<string> errors)
     {
-        if (value is null && !required) return;
-        if (string.IsNullOrWhiteSpace(value) && required) errors.Add($"{name} is required.");
-        else if (value is not null && (value.Length > maximumLength || value.Contains('\0')))
-            errors.Add($"{name} must be at most {maximumLength} characters with no NUL character.");
+        if (string.IsNullOrWhiteSpace(value) && required)
+        {
+            errors.Add($"{name} is required.");
+            return;
+        }
+        if (value is null) return;
+        if (value.Length > maximumLength) errors.Add($"{name} has {value.Length} characters. Write at most {maximumLength}.");
+        if (value.Contains('\0')) errors.Add($"{name} must contain no NUL character.");
     }
 
     public static bool StatesDate(string quote, DateOnly date) =>
