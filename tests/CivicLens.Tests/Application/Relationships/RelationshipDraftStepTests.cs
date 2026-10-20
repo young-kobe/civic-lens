@@ -79,6 +79,46 @@ public sealed class RelationshipDraftStepTests
     }
 
     [Fact]
+    public async Task ACurrentRevisionThatCitesTheCurrentTargetIsNotCopied()
+    {
+        var pair = ActionPair();
+        var current = RelationshipDraftResolver.Resolve(Output(), Context(pair), Created).Accepted!;
+
+        var (store, model) = await RunAsync(Evidence(pair, current, RelationshipFingerprint.Compute(pair)), new FakeRelationshipDraftModel());
+
+        Assert.Empty(model.Requests);
+        Assert.Empty(store.Revisions);
+    }
+
+    [Fact]
+    public async Task ARevisionThatCitesAnOlderStatementRevisionDraftsAgainInsteadOfCopyingTheOldStatementCitation()
+    {
+        var pair = ActionPair();
+        var older = Revision(pair);
+        var newer = ActionPair(Statement(revision: 2));
+        var evidence = Evidence(newer, older, RelationshipFingerprint.Compute(newer)) with { Action = Action(revision: 2) };
+
+        var (store, model) = await RunAsync(evidence, new FakeRelationshipDraftModel().Draft(Output()));
+
+        Assert.Single(model.Requests);
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal((2, 2), (revision.Statement.RevisionNumber, revision.Target.RevisionNumber));
+    }
+
+    [Fact]
+    public async Task ARevisionThatCitesAnotherMatchDraftsAgainInsteadOfCopyingTheOldMatch()
+    {
+        var pair = ActionPair();
+        var otherMatch = Revision(pair) with { Match = pair.Match with { Span = pair.Match.Span with { Start = pair.Match.Span.Start + 1 } } };
+        var evidence = Evidence(pair, otherMatch, RelationshipFingerprint.Compute(pair)) with { Action = Action(revision: 2) };
+
+        var (store, model) = await RunAsync(evidence, new FakeRelationshipDraftModel().Draft(Output()));
+
+        Assert.Single(model.Requests);
+        Assert.Equal(pair.Match, Assert.Single(store.Revisions).Match);
+    }
+
+    [Fact]
     public async Task APersonRevisionThatCitesAnOlderTargetRevisionDraftsAgainSoItsCitationDoesNotStayStale()
     {
         var pair = ActionPair();

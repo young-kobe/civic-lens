@@ -7,6 +7,8 @@ namespace CivicLens.Application.Relationships;
 public sealed record RelationshipPair(ApprovedStatement Statement, RelationshipTarget Target, RelationshipMatch Match, string OfficialId,
     string OfficialRole)
 {
+    public RelationshipCitation StatementCitation => new(RelationshipRecordKind.Statement, Statement.RecordId, Statement.Revision.RevisionNumber);
+
     public string PairId => IdOf(Statement.RecordId, Target.Kind, Target.RecordId);
 
     public static string IdOf(string statementRecordId, RelationshipRecordKind targetKind, string targetRecordId) =>

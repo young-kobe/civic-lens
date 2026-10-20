@@ -35,8 +35,7 @@ public sealed class RelationshipDraftStep(IRelationshipDraftStore store, IRelati
         {
             null => await SettleUnchangedAsync(attempt, context, cancellationToken),
             { } current when current.Target == pair.Target.Citation => await SettleUnchangedAsync(attempt, context, cancellationToken),
-            { } current when ReviewAuthor.KindOf(current.AuthorSubject) == ReviewAuthorKind.Analysis =>
-                await ReciteAsync(attempt, context, cancellationToken),
+            { } current when CanRecite(current, pair) => await ReciteAsync(attempt, context, cancellationToken),
             _ => await DraftAsync(attempt, context, cancellationToken)
         };
     }
@@ -55,8 +54,11 @@ public sealed class RelationshipDraftStep(IRelationshipDraftStore store, IRelati
     }
 
     private static bool KeepsPersonRevision(RelationshipDraftEvidence evidence, RelationshipPair pair) =>
-        evidence.Current?.IsPersonRevisionCiting(
-            new(RelationshipRecordKind.Statement, pair.Statement.RecordId, pair.Statement.Revision.RevisionNumber), pair.Target.Citation) == true;
+        evidence.Current?.IsPersonRevisionCiting(pair.StatementCitation, pair.Target.Citation) == true;
+
+    private static bool CanRecite(RelationshipRevision current, RelationshipPair pair) =>
+        ReviewAuthor.KindOf(current.AuthorSubject) == ReviewAuthorKind.Analysis && current.Statement == pair.StatementCitation &&
+        current.Match == pair.Match;
 
     private async Task<bool> DraftAsync(IAnalysisAttempt<RelationshipDraftRun> attempt, RelationshipDraftContext context,
         CancellationToken cancellationToken)

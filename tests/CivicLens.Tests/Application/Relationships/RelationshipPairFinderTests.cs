@@ -171,6 +171,16 @@ public sealed class RelationshipPairFinderTests
     }
 
     [Fact]
+    public void TheFingerprintChangesWithThePairedOfficialBecauseThePromptNamesThem()
+    {
+        var statement = Statement();
+        var first = ActionPair(statement, Action(sponsor: "warren"));
+        var second = first with { OfficialId = "markey" };
+
+        Assert.NotEqual(RelationshipFingerprint.Compute(first), RelationshipFingerprint.Compute(second));
+    }
+
+    [Fact]
     public void TheFingerprintIgnoresTheTargetRevisionNumberAndTheCastsOfOtherMembers()
     {
         Assert.Equal(RelationshipFingerprint.Compute(ActionPair()), RelationshipFingerprint.Compute(ActionPair(action: Action(revision: 2))));
@@ -180,5 +190,5 @@ public sealed class RelationshipPairFinderTests
 
     [Fact]
     public void TheFingerprintIsPinnedSoAStoredSettledInputKeepsItsMeaningUntilTheVersionIsBumped() =>
-        Assert.Equal("f0bc7bb8b5326d1e96bd3b615db6f461b541406632ea09d67bcc8bbfbe6e5344", RelationshipFingerprint.Compute(ActionPair()));
+        Assert.Equal("b063f692caf5c8147cca1f79b814ee641ca10c069b912319edfa80791407badd", RelationshipFingerprint.Compute(ActionPair()));
 }

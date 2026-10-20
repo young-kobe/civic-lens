@@ -1,4 +1,6 @@
+using CivicLens.Application.Analysis;
 using CivicLens.Application.Relationships;
+using CivicLens.Core.Analysis;
 using CivicLens.Core.Relationships;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Analysis;
@@ -248,6 +250,29 @@ public sealed class PostgresRelationshipDraftStoreTests(PostgresCollection postg
         var read = (await new PostgresRelationshipReviewStore(factory).GetAsync(pair.PairId, default))!;
         Assert.Equal(2, read.Review.CurrentRevision.Target.RevisionNumber);
         Assert.False(read.CitedRecordsChanged);
+    }
+
+    [Fact]
+    public async Task ABypassedRunStaysBypassedWhenItsReciteConflictsWithTheCurrentRevisionSoTheEntryRetries()
+    {
+        var pair = await SeedApprovedPairAsync();
+        await RunWorkerAsync(new FakeRelationshipDraftModel().Draft(Output()));
+        await seeder.ActionAsync(Action(revision: 2));
+        await store.RefreshPairsAsync(default);
+        var claim = (await store.TryClaimAsync(pair.PairId, TimeSpan.FromSeconds(30), default))!;
+        var identity = RelationshipDraftTask.Identity;
+        var started = DateTimeOffset.UtcNow;
+        var run = new AnalysisRun(Guid.NewGuid().ToString("N"), pair.PairId, identity.Task, identity.TaskVersion, RelationshipDraftTask.Model,
+            identity.PromptVersion, identity.SchemaVersion, new string('a', 64), null, AnalysisRunOutcome.Bypassed, AnalysisTokenUsage.None, 0, null,
+            null, null, [], "{}", started, started);
+        var conflicting = Revision(pair) with { RevisionNumber = 3 };
+
+        Assert.True(await store.CheckpointAsync(RelationshipDraftCheckpoint.From(claim, conflicting),
+            new RelationshipDraftRun(run, RelationshipDraftErrorCodes.Unchanged), default));
+
+        Assert.Equal([["RetryWaiting", "revisionConflict"]], await seeder.ReadAsync("SELECT status, error_code FROM relationship_analysis"));
+        Assert.Equal([[$"Bypassed"]], await seeder.ReadAsync($"SELECT outcome FROM relationship_analysis_runs WHERE run_id = '{run.RunId}'"));
+        Assert.Equal([["1"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions"));
     }
 
     [Fact]

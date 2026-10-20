@@ -29,7 +29,7 @@ public static class RelationshipDraftResolver
         if (errors.Count > 0) return AnalysisResolution<RelationshipRevision?>.Reject(Bound(errors), citationErrors.Count > 0);
         var current = context.Evidence.Current;
         var revision = new RelationshipRevision(pair.PairId, (current?.RevisionNumber ?? 0) + 1, ReviewAuthor.AnalysisSubject, createdAtUtc,
-            new(RelationshipRecordKind.Statement, pair.Statement.RecordId, pair.Statement.Revision.RevisionNumber), pair.Target.Citation,
+            pair.StatementCitation, pair.Target.Citation,
             pair.Match, type!.Value, output.Reason, quote!, output.TargetFactId!);
         revision.ValidateAsAnalysisRevision(current);
         return AnalysisResolution<RelationshipRevision?>.Accept(revision);
