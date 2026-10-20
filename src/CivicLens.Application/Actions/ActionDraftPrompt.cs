@@ -17,7 +17,7 @@ public static class ActionDraftPrompt
         Write plain, neutral language for a general reader. Use only the facts in the user message. You may name the sponsors listed in the facts, and give each name exactly as listed. Do not name any other person. Do not name any cosponsor, and do not state how many cosponsors the bill has, because the list beside your text holds them and changes over time. Do not state the status of the bill, because the facts do not include it. An introduced bill is not a law. Do not add motives, consequences, or judgments.
 
         Fields:
-        - headline: one short line, at most {ActionDraftRevision.MaximumHeadlineLength} characters, that states what the bill does, and who sponsored it when the facts list a sponsor.
+        - headline: one sentence of about 150 characters or fewer that states what the bill does, and who sponsored it when the facts list a sponsor. Name the bill by its number, such as H.R. 764. Do not copy the full bill title, because the page shows it.
         - summary: one to three short paragraphs, at most {ActionDraftRevision.MaximumSummaryLength} characters. Say what the bill does according to the summary or the title, and who sponsored it and when, if the facts list a sponsor.
         Each field has a text and a confidence. The confidence is your probability that a careful human reviewer would approve the text without changing its substance. It is a number from 0 to 1. Civic Lens records the values to calibrate them against human review. No rule acts on them. Use the full range honestly.
         """;

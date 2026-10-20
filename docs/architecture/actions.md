@@ -116,7 +116,7 @@ The tracked issues use the issue configuration that the worker loaded at the tim
 
 The request uses model `claude-haiku-5-5`, effort `medium`, and at most 4,000 output tokens. The user message holds the bill: its identity, title, introduced date, and policy area. It also holds the tracked issues, the names of the tracked sponsors, and the newest summary text. It holds no cosponsor and no latest action. The system prompt tells the model not to name a cosponsor or give a cosponsor count.
 
-Structured outputs fix a `headline` and a `summary`, each with a text and a confidence. The confidence stays in the run output and is never in the revision. The golden test pins the system prompt, the schema, and one input hash.
+Structured outputs fix a `headline` and a `summary`, each with a text and a confidence. The confidence stays in the run output and is never in the revision. The prompt asks for a headline of about 150 characters or fewer. It tells the model to name the bill by its number. It tells the model not to copy the bill title, because the public page shows it. The validator bound stays 256. Text length rejections follow the [shared rule](analysis.md#validation-loop). The golden test pins the system prompt, the schema, and one input hash.
 
 The byte cap is the smaller of 100,000 UTF-8 bytes and the [call cap](analysis.md#budget) minus the output allowance.
 

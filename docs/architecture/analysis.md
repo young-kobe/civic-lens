@@ -90,6 +90,8 @@ The loop returns one of four ends:
 - Exhausted: a second rejection, or a retry prompt over the cap.
 - Not sent: the first prompt is over the cap, or the resumed retry prompt is.
 
+Every task checks its text fields with `AnalysisAnswerRules.CheckText`. A text over its bound is rejected with its actual length, so the retry can shorten it. A required blank text gets only the required message.
+
 The step decides what each end means. The drafting steps for document changes, statements, actions, votes, relationships, and briefs call `AnalysisValidationLoop.FailAsync`, which fails the entry with the rejection code. The statement gate fails open.
 
 ### Prompt and output
