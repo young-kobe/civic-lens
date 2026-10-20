@@ -32,7 +32,7 @@ The publication feature turns approved revisions into immutable, cumulative stat
 - An action record embeds the full text of each cited extraction once. Each citation names its extraction, and the contract checks the quote against that source.
 - A relationship record links one statement to one action or vote. It embeds no source text. It holds the wording that a person approved, the quote of the statement, and the fact of the target. Both are text. It also holds a citation of each side. A citation names a record by kind, ID, and revision, and carries a copy of the headline. A relationship publishes only when the new release holds both cited revisions and the latest decision on each is an approval. A link that a release already holds stays in later releases, whatever happens to the records that it cites. See [relationship record](#relationship-record).
 - A vote record embeds the full text of each cited extraction once, as an action record does. Its citations are the vote day, the kind, the result facts, and the cast of each tracked member. `PublishedEvidenceRules` owns the source and citation checks for actions and votes.
-- The manifest schema version is 3. Actions, votes, briefs, and relationships added record kinds without a version bump, because every reader ships with or after the release it reads. Versions flatten under roadmap R-23. The publisher reads releases that it or an older publisher wrote. `app.js` ships inside each release. An older publisher fails loudly on the unknown kind.
+- The manifest schema version is 3. A new record kind needs no version bump, because every reader ships with or after the release it reads. Versions flatten under roadmap R-23. The publisher reads releases that it or an older publisher wrote. `app.js` ships inside each release. An older publisher fails loudly on the unknown kind.
 - Release JSON uses relaxed escaping (`JavaScriptEncoder.UnsafeRelaxedJsonEscaping`), so non-ASCII letters and punctuation take UTF-8 bytes, not 6-byte `\uXXXX` escapes. This is safe because release JSON is fetched as JSON and never inlined in HTML or a script tag. Readers do not change.
 - Unreviewed proposals, internal reviewer notes, operational job details, and mutation controls stay private.
 - Public serving reads release contracts only. It never reads operational storage or private notes.
@@ -230,10 +230,9 @@ Each index page has a search panel. It stays hidden until `app.js` runs, because
 ## Storage and contracts
 
 - The generated [publication schema](schema/publication.md) lists every table, column, key, check, index, and trigger.
-- Each release row lists its records as kind, record ID, and revision. A row written before kinds existed has no kind and counts as a document change.
+- Each release row lists its records as kind, record ID, and revision.
 - The ready lists read the active row and match by kind, so a statement ID cannot hide a document change.
-- Schema version 2 added the entry kind, and version 3 added the entry filters. Readers no longer accept versions 1 to 3.
-- Schema version 4 adds `textOrigin` (`model` or `person`) to the action and vote records. The field is required. Readers accept version 4 only. A release before version 4 is not readable, so reset dev releases. The schema flatten at R-23 handles production.
+- Schema version 4 gives the action and vote records the required field `textOrigin` (`model` or `person`). Readers accept version 4 only. A release before version 4 is not readable, so reset dev releases. The schema flatten at R-23 handles production.
 
 | Filter | Document change | Statement | Action | Brief | Vote | Relationship |
 |---|---|---|---|---|---|---|

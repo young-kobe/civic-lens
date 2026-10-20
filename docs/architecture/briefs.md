@@ -44,7 +44,7 @@ The feature stores, queues, selects, drafts, and reviews briefs. A person edits,
 - Approval needs an unflagged brief. The approval gate and the flag share one read, `BriefRecordReader.FindChangedAsync`.
 - A flagged brief that is approved stays approved. This differs on purpose from actions, where a worker revision gets a new code approval when the rules allow it. The approval of a brief covers the text of the reviewer, which a record change does not rewrite.
 - The remedy for a flagged approved brief is a person Withdraw. The page also shows the flag on the list. Publication of briefs refuses a flagged brief; see [Publication](#publication).
-- There is no bulk approval for briefs. A reviewer reads each brief.
+- A reviewer reads each brief before approval.
 
 ## Invariants
 
@@ -215,7 +215,7 @@ Brief review uses the shared decision rules and review cycles in [review](review
 - the cited records, each with its ID, headline, summary, kind, and revision, a "Changed" badge, and a link to its review page
 - the coverage line, the shared `ReviewDecisionPanel`, and the shared `ReviewHistoryPanel`
 
-The page differs from the action page in two ways. It has no "Change since the last approval" panel. It has no bulk approval. The rail has a Briefs link. The review home has a stat card with the count of briefs that need action, and it links to the list.
+The page differs from the action page: it has no "Change since the last approval" panel. The rail has a Briefs link. The review home has a stat card with the count of briefs that need action, and it links to the list.
 
 **Withdraw and redraft.** A flagged approved brief stays approved until a person withdraws it. No event requeues it after the withdrawal. A later publication, activation, or decision that touches a record of the week requeues it, because it is no longer approved. After a withdrawal, the owner can run `brief redraft --week`. The command refuses a week whose brief is approved, with a message to withdraw the approval first, and it makes no model call. The redraft appends a revision with the new fingerprint. If the current text is model text, the revision replaces it and cites the revisions that the active release holds. If the current text is person text, the revision keeps the old citations and stores the new text as a suggestion. In that case the flag stays until one of three things happens. The person adopts the suggestion. The person drops the changed citation. The cited record is approved again.
 
@@ -279,7 +279,7 @@ This is an owner command. It prints the count of entries that it queued or moved
 ## Storage and contracts
 
 - The generated [briefs schema](schema/briefs.md) lists every table, column, key, check, index, and trigger.
-- The migration `WeeklyBriefs` adds seven tables: `brief_analysis`, `brief_analysis_runs`, `brief_analysis_budget`, `brief_schedule`, `brief_drafts`, `brief_revisions`, and `brief_review_decisions`.
+- Seven tables hold weekly briefs: `brief_analysis`, `brief_analysis_runs`, `brief_analysis_budget`, `brief_schedule`, `brief_drafts`, `brief_revisions`, and `brief_review_decisions`.
 - The commands use the replay receipt table with the operations `brief-save` and `brief-decide`.
 - The review of briefs adds no table, column, or lock. It uses `brief_drafts`, `brief_revisions`, and `brief_review_decisions`.
 - The citations of a brief stay in `revision_json`. No table indexes them.

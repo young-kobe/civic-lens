@@ -118,7 +118,7 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         var drafted = Records.Drafts(db, DraftStatusFilter.NeedsAction).Where(draft => draft.CurrentRevisionNumber > 0);
-        var (page, candidates) = await ReadPageAsync(db, drafted, cursor, ReviewTriage.PageSize, filter, cancellationToken);
+        var (page, candidates) = await ReadPageAsync(db, drafted, cursor, ListStatementTriage.PageSize, filter, cancellationToken);
         var candidateIds = page.Items.Select(item => item.CandidateId).ToArray();
         var extractions = await PostgresDocumentExtractionStore.ReadManyAsync(db,
             [.. candidates.Values.Select(candidate => candidate.ExtractionId).Distinct(StringComparer.Ordinal)], cancellationToken);

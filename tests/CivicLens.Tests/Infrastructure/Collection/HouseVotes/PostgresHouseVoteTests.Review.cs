@@ -117,9 +117,8 @@ public sealed partial class PostgresHouseVoteTests
         await SettleAsync(candidate, revision with { Facts = [new("Result: Passed", new(new string('f', 64), 0, 5))] });
 
         Assert.Empty(await VoteDecisionsAsync());
-        var row = Assert.Single((await new ListVoteTriage(VoteReviews()).ExecuteAsync(Reviewer, null)).Rows);
-        Assert.False(row.Check.Passed);
-        Assert.Equal(ReviewStatus.AwaitingReview, row.Review.CurrentStatus);
+        var listed = Assert.Single((await new ListVoteReviews(VoteReviews()).ExecuteAsync(Reviewer, null)).Items);
+        Assert.Equal(ReviewStatus.AwaitingReview, listed.CurrentStatus);
     }
 
     [Fact]

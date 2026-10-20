@@ -10,7 +10,7 @@ Exit criteria:
 
 - [ ] Statements, actions, document changes, and weekly briefs each run from collection to a published static release.
 - [ ] The public release stays usable during an outage of the operational application.
-- [ ] Approval binds to the exact evidence version. Model output never counts as approval, and code approves only official fact records.
+- [ ] Approval binds to the exact evidence version. Model output never counts as approval, and code approves only official fact records. People review the other kinds.
 - [ ] Statements and actions support reviewed relationships and timelines.
 - [ ] Document changes separate substantive edits from navigation churn and parser upgrades. Separate extraction streams isolate parser upgrades. Rules from measured change history filter churn, and a model tier is added only when the measurement shows a need. This criterion is checked after the first cloud deployment.
 - [ ] A weekly brief publishes with verified citation links, an explicit sample and cutoff, and versioned editorial decisions.
@@ -20,7 +20,6 @@ Exit criteria:
 - [ ] House and Senate votes both publish.
 - [ ] Public MCP reads the same releases as the website.
 - [ ] The talk and action profile and the shared language insight publish with method notes.
-- [ ] The review queue handles the drafted volume with bulk tools.
 - [ ] The acceptance checklists in the linked feature docs pass.
 
 ## Work queue

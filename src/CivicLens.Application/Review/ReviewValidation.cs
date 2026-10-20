@@ -30,13 +30,13 @@ internal static class ReviewAuthorization
 
 internal static class ReviewValidation
 {
-    public const int MaximumIdempotencyKeyLength = 256;
+    private const int MaximumIdempotencyKeyLength = 256;
     private const int MaximumFilterIdLength = 128;
 
-    public static void ValidateIdempotencyKey(string value, int maximumLength = MaximumIdempotencyKeyLength)
+    public static void ValidateIdempotencyKey(string value)
     {
-        if (string.IsNullOrWhiteSpace(value) || value.Length > maximumLength)
-            throw new ArgumentException($"Idempotency key must contain 1 to {maximumLength} characters.", nameof(value));
+        if (string.IsNullOrWhiteSpace(value) || value.Length > MaximumIdempotencyKeyLength)
+            throw new ArgumentException($"Idempotency key must contain 1 to {MaximumIdempotencyKeyLength} characters.", nameof(value));
     }
 
     public static string ValidateHash(string value, string parameterName)

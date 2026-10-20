@@ -1,6 +1,6 @@
 using System.Collections.Immutable;
-using CivicLens.Core.Actions;
 using CivicLens.Application.Votes;
+using CivicLens.Core.Actions;
 using CivicLens.Core.Documents;
 
 namespace CivicLens.Application.Actions;
