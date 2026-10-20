@@ -26,6 +26,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - Only configuration version 2 loads. Enforced by `CollectionConfiguration`. Test: `ConfigurationTests.OnlyConfigurationVersionTwoIsSupported`.
 - A revision ID is the hash of its canonical snapshot. Enforced by `ConfigurationSnapshotRules`. Test: `CollectionConfigurationRevisionTests.ConstructorRejectsHashMismatchMalformedJsonAndInvalidConfiguration`.
 - Two people cannot share one bioguide ID. Enforced by `CollectionConfiguration`. Test: `ConfigurationTests.TwoPeopleCannotShareOneBioguideIdBecauseItNamesOneMember`.
+- Two people cannot share one Wikidata ID, and the ID has the form `Q` and digits without a leading zero. Enforced by `CollectionConfiguration`. Tests: `ConfigurationTests.WikidataIdMustBeQAndDigitsWithoutALeadingZero`, `ConfigurationTests.TwoPeopleCannotShareOneWikidataIdBecauseItNamesOnePerson`.
 - Coverage intervals of one person on one source do not overlap. Enforced by `CollectionConfiguration`. Test: `ConfigurationTests.VersionTwoRejectsOverlappingCoverageButAllowsAdjacentIntervalsAndDifferentPeople`.
 - A tracked issue links to a known policy area. Enforced by `IssueConfiguration`. Test: `IssueConfigurationRevisionTests.IssueMustLinkToKnownPolicyAreaSoItCanReachBills`.
 
@@ -35,7 +36,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 
 Version 2 is the only supported collection configuration version. Each source has nonempty `coverage` entries. An entry has a `personId`, an optional `startsOn`, and an optional `endsBefore`. The wire contract rejects the older `personIds` field.
 
-A person has a stable `id` and a current display `name`. Optional dated `names` use the same date fields. A person can also carry a `bioguideId`, the Congress.gov member identifier: one uppercase letter and six digits. Two people cannot share one. Snapshots leave out an absent `bioguideId`, so revision IDs without it do not change.
+A person has a stable `id` and a current display `name`. Optional dated `names` use the same date fields. A person can also carry a `bioguideId`, the Congress.gov member identifier: one uppercase letter and six digits. A person can also carry a `wikidataId`: the letter `Q` and digits, with no leading zero. Two people cannot share one bioguide ID or one Wikidata ID. Snapshots leave out an absent `bioguideId` or `wikidataId`, so revision IDs without them do not change. No shipped person sets a `wikidataId` yet.
 
 `config/federal-coverage.json` lists all 539 current members of Congress, delegates included, each with a bioguide ID. It has 1,392 member sources and the `congress-bills` and `congress-house-votes` sources. Persistent pages are checked every 6 hours, and feeds and listings every hour.
 
@@ -124,7 +125,7 @@ The file has a `version` (only 1 is supported), a list of `policyAreas` (`id`, `
 | Concern | Files |
 |---|---|
 | Date ranges and dated names | `src/CivicLens.Core/Registry/DateRange.cs`, `src/CivicLens.Core/Registry/DatedName.cs` |
-| Collection configuration | `src/CivicLens.Application/Collection/CollectionConfiguration.cs`, `src/CivicLens.Application/Collection/PersonConfiguration.cs`, `src/CivicLens.Application/Collection/SourceCoverageConfiguration.cs`, `src/CivicLens.Application/Collection/WatchedSourceConfiguration.cs` |
+| Collection configuration | `src/CivicLens.Application/Collection/CollectionConfiguration.cs`, `src/CivicLens.Application/Collection/PersonConfiguration.cs`, `src/CivicLens.Application/Collection/WikidataId.cs`, `src/CivicLens.Application/Collection/SourceCoverageConfiguration.cs`, `src/CivicLens.Application/Collection/WatchedSourceConfiguration.cs` |
 | Revisions | `src/CivicLens.Application/Collection/CollectionConfigurationRevision.cs`, `src/CivicLens.Application/Configuration/ConfigurationSnapshotRules.cs`, `src/CivicLens.Application/Configuration/ConfigurationJson.cs` |
 | Admission request | `src/CivicLens.Application/Collection/ConfiguredCollectionSource.cs` |
 | Issues | `src/CivicLens.Application/Issues/IssueConfiguration.cs`, `src/CivicLens.Application/Issues/IssueConfigurationRevision.cs` |

@@ -10,7 +10,8 @@ The roster feature captures a public member dataset once a day and keeps it as t
 - The source is an `api` source with `apiParser` set to `congressLegislators`. It checks once a day. The shipped source `congress-members` is disabled, like the other `api` sources.
 - Only the current file is read. The historical file is out of scope. The 10 MB capture read limit stays as it is.
 - A roster source covers no people. It is still eligible on every date, because the file has no coverage list. `CollectionConfiguration.IsActiveOn` owns this rule for admission and for scheduled checks.
-- A snapshot is one set of member rows and term rows. Every row holds the attempt ID of its capture. A row is never updated.
+- A snapshot is one header row in `roster_snapshots`, with the member rows and term rows below it. The header holds the attempt ID of the capture and the source ID. Every row holds that attempt ID. A row is never updated.
+- The header table is the one owner of the snapshot rules. The hash rule and the reader rule below read the headers of one source.
 - The daily check is the body hash. The source downloads the file each day, with no ETag and no conditional request. `CollectionConfiguration` enforces this. A capture whose hash matches any snapshot of the source adds only its attempt row. Preparation checks the hash before it parses.
 - Readers take the newest captured attempt of the source whose hash matches some snapshot. They read the oldest snapshot with that hash. A file that changes back to an earlier body therefore reads as that earlier snapshot.
 - Admission takes no lock. Two concurrent captures of the same new body can both write a snapshot. The duplicate is harmless, because readers pick one snapshot by a fixed order.
@@ -29,6 +30,9 @@ Each line gives the rule, what enforces it, and the test that protects it.
 - A roster job fetches the source URL and no other URL. Enforced by `CollectionJobDefinition`. Test: `RosterSourceConfigurationTests.ARosterJobIsBoundToTheSourceUrlAndNoOtherUrl`.
 - A roster value is not longer than its column. Enforced by `MemberRosterParser` with the limits of `RosterLimits`, which the row configurations also use. Test: `MemberRosterParserTests.AValueLongerThanItsColumnIsRejectedSoThePreparationBlocksAsInvalidData`.
 - A snapshot is complete or absent. Enforced by one `SaveChanges` in `PostgresMemberRosterStore.AdmitAsync`. Test: `PostgresMemberRosterStoreTests.AFailedInsertLeavesNoPartialSnapshot`.
+- A member row has a header row. Enforced by the foreign key `FK_roster_members_roster_snapshots_attempt_id`. Test: `PostgresMemberRosterStoreTests.AMemberRowWithoutAHeaderIsRefusedSoNoSnapshotExistsWithoutIt`.
+- A snapshot of one source never satisfies the rules of another source. Enforced by `PostgresMemberRosterStore`, which reads the headers of one source. Test: `PostgresMemberRosterStoreTests.TheHeaderNamesTheSourceOfItsAttemptSoASnapshotOfAnotherSourceIsNotKnown`.
+- The migration `RosterSnapshotHeaders` adds one header for each existing snapshot, so no reader needs the old shape. Test: `RosterSnapshotHeadersMigrationTests.EachExistingSnapshotGetsOneHeaderWithItsSourceSoNoReaderNeedsTheOldShape`.
 - A capture whose body matches any snapshot of the source is not parsed and writes no rows. Enforced by `PostgresMemberRosterStore.HasSnapshotOfCaptureAsync` and `JobPreparation`. Tests: `PostgresMemberRosterStoreTests.ACaptureWithTheBodyOfAnEarlierSnapshotNotOnlyTheLatestIsKnown`, `JobPreparationTests.AKnownRosterCaptureIsNotParsedAndWritesNothing`.
 - Readers return the same snapshot for any admission order and any duplicate snapshot. Enforced by `PostgresMemberRosterStore.ReadLatestAsync`. Tests: `PostgresMemberRosterStoreTests.ReaderFollowsTheNewestCaptureWhateverTheAdmissionOrder`, `PostgresMemberRosterStoreTests.TwoSnapshotsOfOneBodyReadAsTheOldestOne`.
 - Old snapshots stay when a changed capture arrives. Enforced by the insert-only store. Test: `PostgresMemberRosterStoreTests.AChangedCaptureAppendsASnapshotAndReadersTakeTheLatestWhileTheOldRowsStay`.
@@ -66,7 +70,7 @@ A person edits the configuration by hand and commits it. Exit codes are 0 for su
 - The generated [roster schema](schema/roster.md) lists every table, column, key, and check.
 - `roster_members` has one row for each member and snapshot. The key is the attempt ID and the bioguide ID. It holds the Senate `lis` ID, the official full name, and the office, phone, and URL of the last term.
 - `roster_terms` has one row for each term. The key is the attempt ID, the bioguide ID, and the term index. It holds the chamber, the start and end dates, the state, the district, the Senate class, and the party.
-- Both tables reference `collection_attempts`. A snapshot is the set of rows of one attempt. The reader rule is in [Decisions](#decisions).
+- `roster_snapshots` has one row for each admitted snapshot. The key is the attempt ID, which references `collection_attempts`. It also holds the source ID. The member rows reference this header row, and the term rows reference the member rows. A snapshot is the header row and the rows of its attempt. The reader rule is in [Decisions](#decisions).
 - `IMemberRosterStore` is the port. `PostgresMemberRosterStore` implements it.
 
 ## Code map
@@ -77,8 +81,8 @@ A person edits the configuration by hand and commits it. Exit codes are 0 for su
 | Store port and proposals | `src/CivicLens.Application/Roster/IMemberRosterStore.cs`, `src/CivicLens.Application/Roster/ProposeRosterChanges.cs`, `src/CivicLens.Application/Roster/RosterProposal.cs` |
 | Preparation | `src/CivicLens.Application/Collection/Processing/JobPreparation.cs` |
 | Eligibility and validation | `src/CivicLens.Application/Collection/CollectionConfiguration.cs` |
-| Store and rows | `src/CivicLens.Infrastructure/Roster/PostgresMemberRosterStore.cs`, `src/CivicLens.Infrastructure/Roster/Persistence/RosterMemberRow.cs`, `src/CivicLens.Infrastructure/Roster/Persistence/RosterTermRow.cs` |
-| Migration | `src/CivicLens.Infrastructure/Collection/Migrations/20261106120000_RosterSnapshots.cs` |
+| Store and rows | `src/CivicLens.Infrastructure/Roster/PostgresMemberRosterStore.cs`, `src/CivicLens.Infrastructure/Roster/Persistence/RosterSnapshotRow.cs`, `src/CivicLens.Infrastructure/Roster/Persistence/RosterMemberRow.cs`, `src/CivicLens.Infrastructure/Roster/Persistence/RosterTermRow.cs` |
+| Migration | `src/CivicLens.Infrastructure/Collection/Migrations/20261106120000_RosterSnapshots.cs`, `src/CivicLens.Infrastructure/Collection/Migrations/20261107120000_RosterSnapshotHeaders.cs` |
 | Command | `src/CivicLens.Host/Roster/RosterCommand.cs` |
 | Source | `config/federal-coverage.json` |
 

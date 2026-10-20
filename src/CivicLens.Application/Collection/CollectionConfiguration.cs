@@ -33,12 +33,14 @@ public sealed record CollectionConfiguration
 
         var peopleById = new Dictionary<string, PersonConfiguration>(StringComparer.Ordinal);
         var bioguideIds = new HashSet<string>(StringComparer.Ordinal);
+        var wikidataIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var person in People)
         {
             if (person is null || string.IsNullOrWhiteSpace(person.Id) || string.IsNullOrWhiteSpace(person.Name))
                 throw new ArgumentException("Every person must have a nonblank ID and name.");
             ValidateNames(person);
-            ValidateBioguideId(person, bioguideIds);
+            ValidateExternalId(person, person.BioguideId, "bioguide", BioguideId.IsValid, bioguideIds);
+            ValidateExternalId(person, person.WikidataId, "Wikidata", WikidataId.IsValid, wikidataIds);
             if (!peopleById.TryAdd(person.Id, person))
                 throw new ArgumentException($"Duplicate person ID '{person.Id}'.");
         }
@@ -251,13 +253,14 @@ public sealed record CollectionConfiguration
         }
     }
 
-    private static void ValidateBioguideId(PersonConfiguration person, HashSet<string> bioguideIds)
+    private static void ValidateExternalId(PersonConfiguration person, string? id, string label, Func<string, bool> isValid,
+        HashSet<string> seen)
     {
-        if (person.BioguideId is null)
+        if (id is null)
             return;
-        if (!BioguideId.IsValid(person.BioguideId))
-            throw new ArgumentException($"Person '{person.Id}' has an invalid bioguide ID.");
-        if (!bioguideIds.Add(person.BioguideId))
-            throw new ArgumentException($"Duplicate bioguide ID '{person.BioguideId}'.");
+        if (!isValid(id))
+            throw new ArgumentException($"Person '{person.Id}' has an invalid {label} ID.");
+        if (!seen.Add(id))
+            throw new ArgumentException($"Duplicate {label} ID '{id}'.");
     }
 }

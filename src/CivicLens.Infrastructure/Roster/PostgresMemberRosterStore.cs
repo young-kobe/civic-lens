@@ -33,6 +33,8 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
         ArgumentException.ThrowIfNullOrWhiteSpace(attemptId);
         ArgumentNullException.ThrowIfNull(members);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var attempt = await db.Attempts.AsNoTracking().SingleAsync(row => row.AttemptId == attemptId, cancellationToken);
+        db.Add(new RosterSnapshotRow { AttemptId = attemptId, SourceId = attempt.SourceId });
         foreach (var member in members)
         {
             db.Add(ToRow(attemptId, member));
@@ -62,9 +64,10 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
     }
 
     private static IQueryable<AttemptRow> SnapshotAttempts(CollectionAttemptDbContext db, string sourceId) =>
-        db.Attempts.AsNoTracking()
-            .Where(attempt => attempt.SourceId == sourceId &&
-                db.Set<RosterMemberRow>().Any(member => member.AttemptId == attempt.AttemptId));
+        from snapshot in db.Set<RosterSnapshotRow>().AsNoTracking()
+        where snapshot.SourceId == sourceId
+        join attempt in db.Attempts.AsNoTracking() on snapshot.AttemptId equals attempt.AttemptId
+        select attempt;
 
     private static RosterMemberRow ToRow(string attemptId, RosterMember member) => new()
     {

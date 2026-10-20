@@ -63,12 +63,12 @@ internal static class RosterFixtures
         new() { Id = id, Name = name, BioguideId = bioguideId };
 
     public static async Task<string> ImportCaptureAsync(PostgresCollectionAttemptStore attempts, string captureSha256,
-        DateTimeOffset observedAt)
+        DateTimeOffset observedAt, string sourceId = SourceId)
     {
         var attemptId = Guid.NewGuid().ToString("N");
         var request = Request() with
         {
-            SourceId = SourceId,
+            SourceId = sourceId,
             Url = SourceUrl,
             AllowedOrigin = "https://unitedstates.github.io",
             AllowedPathPrefix = "/congress-legislators"

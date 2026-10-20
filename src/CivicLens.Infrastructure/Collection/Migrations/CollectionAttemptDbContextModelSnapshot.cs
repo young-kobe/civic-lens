@@ -1790,6 +1790,22 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Roster.Persistence.RosterSnapshotRow", b =>
+                {
+                    b.Property<string>("AttemptId")
+                        .HasColumnType("text")
+                        .HasColumnName("attempt_id");
+
+                    b.Property<string>("SourceId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("source_id");
+
+                    b.HasKey("AttemptId");
+
+                    b.ToTable("roster_snapshots", (string)null);
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Roster.Persistence.RosterTermRow", b =>
                 {
                     b.Property<string>("AttemptId")
@@ -4502,6 +4518,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Roster.Persistence.RosterMemberRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Roster.Persistence.RosterSnapshotRow", null)
+                        .WithMany()
+                        .HasForeignKey("AttemptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Roster.Persistence.RosterSnapshotRow", b =>
                 {
                     b.HasOne("CivicLens.Infrastructure.Collection.Persistence.AttemptRow", null)
                         .WithMany()

@@ -231,6 +231,46 @@ public sealed class ConfigurationTests
         DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }], person).Validate();
     }
 
+    [Theory]
+    [InlineData("q22686")]
+    [InlineData("Q")]
+    [InlineData("Q0")]
+    [InlineData("Q022686")]
+    [InlineData("Q22686a")]
+    [InlineData(" Q22686")]
+    [InlineData("Q22686\n")]
+    [InlineData("")]
+    public void WikidataIdMustBeQAndDigitsWithoutALeadingZero(string wikidataId)
+    {
+        var person = new PersonConfiguration { Id = "one", Name = "One", WikidataId = wikidataId };
+
+        Assert.Throws<ArgumentException>(() => DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }], person).Validate());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("Q22686")]
+    [InlineData("Q1")]
+    public void WikidataIdIsOptional(string? wikidataId)
+    {
+        var person = new PersonConfiguration { Id = "one", Name = "One", WikidataId = wikidataId };
+
+        DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }], person).Validate();
+    }
+
+    [Fact]
+    public void TwoPeopleCannotShareOneWikidataIdBecauseItNamesOnePerson()
+    {
+        var configuration = DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }],
+            new PersonConfiguration { Id = "one", Name = "One", WikidataId = "Q22686" });
+        var shared = configuration with
+        {
+            People = [configuration.People[0], configuration.People[1] with { WikidataId = "Q22686" }]
+        };
+
+        Assert.Throws<ArgumentException>(shared.Validate);
+    }
+
     [Fact]
     public void TwoPeopleCannotShareOneBioguideIdBecauseItNamesOneMember()
     {
