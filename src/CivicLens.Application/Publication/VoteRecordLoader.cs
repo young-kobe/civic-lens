@@ -16,7 +16,7 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
 
     protected override ReadyToPublishRecord? ToReady(UnpublishedApprovedVote candidate) =>
         Ready(candidate.Vote.CurrentStatus, candidate.Vote.UnresolvedConcerns.Length, candidate.Vote.RecordId,
-            candidate.Vote.CurrentRevision.Headline, candidate.Vote.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber);
+            candidate.Vote.CurrentRevision.Headline, candidate.Vote.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber, candidate.Vote.Decisions);
 
     protected override Task<IReadOnlyDictionary<string, PublishableVote>> GetForPublicationAsync(
         ImmutableArray<string> recordIds, PublicationBuild build, CancellationToken cancellationToken) =>

@@ -16,7 +16,7 @@ internal sealed class ActionRecordLoader(IActionReviewStore actions)
 
     protected override ReadyToPublishRecord? ToReady(UnpublishedApprovedAction candidate) =>
         Ready(candidate.Action.CurrentStatus, candidate.Action.UnresolvedConcerns.Length, candidate.Action.RecordId,
-            candidate.Action.CurrentRevision.Headline, candidate.Action.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber);
+            candidate.Action.CurrentRevision.Headline, candidate.Action.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber, candidate.Action.Decisions);
 
     protected override Task<IReadOnlyDictionary<string, PublishableAction>> GetForPublicationAsync(
         ImmutableArray<string> recordIds, PublicationBuild build, CancellationToken cancellationToken) =>

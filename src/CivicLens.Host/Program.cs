@@ -206,6 +206,8 @@ try
         await using var relationshipDraftingWakeup = relationshipDrafting.Wakeup;
         var briefDrafting = BriefDraftComposition.Create(analysisContexts, connectionString, workerConfiguration);
         await using var briefDraftingWakeup = briefDrafting.Wakeup;
+        var factPublishing = FactPublishingComposition.Create(connectionString, workerConfiguration, issueConfiguration);
+        await using var factPublishingWakeup = factPublishing?.Wakeup;
         executing = true;
         await jobs.SynchronizeAsync(workerConfiguration, cancellation.Token);
         await analysis.RecordStartAsync(cancellation.Token);
@@ -237,7 +239,8 @@ try
                 AnalysisStage.For("actionDrafting", actionDrafting.Worker),
                 AnalysisStage.For("voteDrafting", voteDrafting.Worker),
                 AnalysisStage.For("relationshipDrafting", relationshipDrafting.Worker),
-                AnalysisStage.For("briefDrafting", briefDrafting.Worker)
+                AnalysisStage.For("briefDrafting", briefDrafting.Worker),
+                factPublishing?.Stage
             }.OfType<AnalysisStage>()]);
     }
 
@@ -336,16 +339,7 @@ try
             : IssueConfiguration.None;
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
         var releases = new FileReleaseDirectory(releaseRoot);
-        var publish = new PublishRelease(publications, releases, ReleaseRenderer.FromEnvironment(), new PublishedRecordLoaders(
-                PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
-                PostgresStatementReviewStore.FromConnectionString(connectionString),
-                PostgresActionReviewStore.FromConnectionString(connectionString),
-                PostgresVoteReviewStore.FromConnectionString(connectionString),
-                new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)),
-                new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString))),
-            new PublicationCatalog(ReviewOfficials.From(publishConfiguration).Names, issueConfiguration),
-            new PublicationOfficials(publishConfiguration, PostgresMemberRosterStore.FromConnectionString(connectionString),
-                PostgresExecutiveRosterStore.FromConnectionString(connectionString)), TimeProvider.System);
+        var (publish, _) = PublicationComposition.Create(connectionString, publications, releases, publishConfiguration, issueConfiguration);
         executing = true;
         return await ReleaseCommand.ExecuteAsync(args, publish, new ListPublicationReleases(publications, releases),
             new ActivatePublicationRelease(publications, releases), owner,

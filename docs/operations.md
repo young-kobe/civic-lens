@@ -657,6 +657,18 @@ Enable the source `executive-officials` the same way to capture the executive fi
 
 The output lists the members to add and the configured people who left the roster. Edit the configuration by hand and commit it. Press sources of a new member are a manual step. See [roster](architecture/roster.md#proposals).
 
+## Automatic publication of facts
+
+The `worker` command can publish code-approved actions and votes. [Publication](architecture/publication.md#automatic-publication-of-facts) holds the rules. A person still publishes statements, relationships, briefs, and document changes. The stage is off by default. It runs when the variable below is `1`. Any other value stops the worker with exit code 2.
+
+| Variable | Meaning |
+|---|---|
+| `CIVIC_LENS_FACT_PUBLISHING` | Set to `1` to run the stage. Unset means off |
+| `CIVIC_LENS_RELEASE_DIRECTORY` | The release root, shared with the review workspace and the `releases` commands. Required when the stage runs |
+| `CIVIC_LENS_ISSUES_CONFIG` | The issue file. Required when the stage runs |
+
+The worker also needs `CIVIC_LENS_COLLECTION_CONFIG`, as always. The stage ticks when the worker starts and then at each full hour by the database clock. A tick publishes batches of up to 64 records until no code-approved record is ready. A failure prints `factPublishing failed: <error type>` on stderr and counts in the stage result. Each release is about 29 MB in development. Releases stay until [R-24](roadmap.md#later) adds retention.
+
 ## Publish a static release
 
 The owner can publish from the Review home page. Select records in the Publish section and choose Review selection. The list shows each record as a document change, a statement, an action, a vote, a relationship, or a brief. The summary lists each headline with its kind, as new or a replacement, and shows the release number. Choose Publish to confirm. The page lists recent releases read-only. Rollback stays in the CLI.

@@ -59,9 +59,10 @@ internal abstract class PublishedRecordLoader<TCandidate, TAddition>(PublishedRe
     protected abstract PendingRecord Build(string recordId, TAddition addition, PublicationBuild build);
 
     protected ReadyToPublishRecord? Ready(ReviewStatus status, int unresolvedConcernCount, string recordId, string headline,
-        int revisionNumber, int? publishedRevisionNumber) =>
+        int revisionNumber, int? publishedRevisionNumber, ImmutableArray<ReviewDecision> decisions = default) =>
         PublishedRecordRules.IsPublishable(status, unresolvedConcernCount)
-            ? new(Kind, recordId, headline, revisionNumber, publishedRevisionNumber)
+            ? new(Kind, recordId, headline, revisionNumber, publishedRevisionNumber,
+                ApprovedByCode: !decisions.IsDefault && PublishedRecordRules.IsApprovedByCode(revisionNumber, decisions))
             : null;
 
     protected void RequirePublishable(string recordId, int revisionNumber, ImmutableArray<ReviewDecision> decisions,

@@ -11,9 +11,15 @@ internal sealed class PublishedRecordRules(PublicationCatalog catalog)
         status == ReviewStatus.Approved && unresolvedConcernCount == 0;
 
     public static DateTimeOffset GetApprovalTime(int revisionNumber, ImmutableArray<ReviewDecision> decisions) =>
+        ApprovalOf(revisionNumber, decisions)!.CreatedAtUtc;
+
+    public static bool IsApprovedByCode(int revisionNumber, ImmutableArray<ReviewDecision> decisions) =>
+        ReviewAuthor.IsCode(ApprovalOf(revisionNumber, decisions)?.ActorSubject);
+
+    private static ReviewDecision? ApprovalOf(int revisionNumber, ImmutableArray<ReviewDecision> decisions) =>
         decisions
             .Where(item => item.RevisionNumber == revisionNumber && item.Kind == ReviewDecisionKind.Approve)
-            .MaxBy(item => item.ReviewStateVersion)!.CreatedAtUtc;
+            .MaxBy(item => item.ReviewStateVersion);
 
     public static PublishedTextOrigin TextOriginOf(ReviewTextOrigin origin) =>
         origin == ReviewTextOrigin.Person ? PublishedTextOrigin.Person : PublishedTextOrigin.Model;

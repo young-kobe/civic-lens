@@ -113,8 +113,8 @@ public sealed class PostgresPublicationStore : IPublicationStore
         string idempotencyKey, string payloadHash, CancellationToken cancellationToken)
     {
         ReviewIdempotency.ValidateRequest(actorSubject, idempotencyKey, payloadHash);
-        if (ReviewAuthor.IsReserved(actorSubject))
-            throw new UnauthorizedAccessException("A model author or the code check cannot publish.");
+        if (ReviewAuthor.IsAnalysis(actorSubject))
+            throw new UnauthorizedAccessException("A model author cannot publish.");
         ValidateCommit(commit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.ReviewKeysBeforeBriefs, cancellationToken);

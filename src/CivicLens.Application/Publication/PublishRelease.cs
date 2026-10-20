@@ -43,7 +43,7 @@ public sealed class PublishRelease
     public async Task<PublicationReleaseSummary> ExecuteAsync(ReviewActor actor, PublishReleaseRequest request,
         CancellationToken cancellationToken = default)
     {
-        ReviewAuthorization.RequireOwner(actor);
+        ReviewAuthorization.RequireOwner(actor, allowCode: IsOnlyFactRecords(request));
         var references = ValidateRequest(request);
         var payloadHash = ReviewValidation.HashPayload(request);
         var replay = await publications.FindReplayAsync(actor.Subject, request.IdempotencyKey, payloadHash, cancellationToken);
@@ -80,6 +80,11 @@ public sealed class PublishRelease
         _ = await publications.ServeActiveAsync(releases.ActivateAsync, cancellationToken)
             ?? throw new InvalidDataException("A release was committed but none is active.");
     }
+
+    // Judgment records need a person, so the code subject may publish only the records that code approves.
+    private static bool IsOnlyFactRecords(PublishReleaseRequest request) =>
+        request is { Records.IsDefaultOrEmpty: false } &&
+        request.Records.All(record => record.Kind is PublishedRecordKind.Action or PublishedRecordKind.Vote);
 
     private ImmutableArray<PublishedRecordReference> ValidateRequest(PublishReleaseRequest request)
     {
