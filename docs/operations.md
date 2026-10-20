@@ -681,6 +681,38 @@ python3 -m http.server 8090 --bind 127.0.0.1 --directory "$CIVIC_LENS_RELEASE_DI
 
 Open `http://127.0.0.1:8090/`. The home page shows the latest brief, the 20 newest records, and links to the issue and policy area pages. `all.html` shows 50 records for each page, with links to the previous and next pages, and a kind label next to each headline. Every page links to `search.html`. A document change page shows the account, the changes, the citations, and both full document versions. A statement page shows the speakers, the statement date with its evidence, each quotation with its kind, and the full source text with the quotations marked. An action page shows the bill, a sponsorship table with cited quotes, the policy area and CRS summary citations, and its Congress.gov sources. A statement, action, or vote page lists the related records that published relationships link to it. A relationship page shows the quote, the fact, and the two linked records. The production static server is still a deployment decision.
 
+## Run the search service
+
+The search service reads a published release over HTTP and keeps its own Postgres database. It needs no operational credential. The design is in [search](architecture/search.md).
+
+Start a separate Postgres container. Use another port and another volume than the operational database:
+
+```sh
+docker run -d --name civic-lens-search-db -e POSTGRES_USER=search -e POSTGRES_PASSWORD=search -e POSTGRES_DB=search \
+  -p 127.0.0.1:5433:5432 postgres:18.3-alpine@sha256:54451ecb8ab38c24c3ec123f2fd501303a3a1856a5c66e98cecf2460d5e1e9d7
+```
+
+Serve the active release root with a plain static server:
+
+```sh
+python3 -m http.server 8090 --bind 127.0.0.1 --directory "$CIVIC_LENS_RELEASE_DIRECTORY/current"
+```
+
+Run the service in a second shell. It applies its schema at startup, ingests the release, and polls every 2 minutes:
+
+```sh
+export CIVIC_LENS_RELEASE_BASE_URL=http://127.0.0.1:8090/
+export CIVIC_LENS_SEARCH_DATABASE="Host=127.0.0.1;Port=5433;Database=search;Username=search;Password=search"
+export ASPNETCORE_URLS=http://127.0.0.1:8100
+dotnet run --project src/CivicLens.PublicApi
+```
+
+Check it with `curl 'http://127.0.0.1:8100/v1/release'` and `curl 'http://127.0.0.1:8100/v1/search?q=housing'`. A 503 reply means that the first ingest is not done. Stop the service with Ctrl+C. Remove the database with `docker rm -f civic-lens-search-db`.
+
+To use the search page, set `CIVIC_LENS_PUBLIC_API_URL=http://127.0.0.1:8100` in the environment of the process that publishes (the `releases publish` command or the review workspace), and serve the release root from a server that sends no cross-origin limit. The service allows any origin. Without the variable, `search.html` says that search is not available.
+
+Optional variables: `CIVIC_LENS_TRUSTED_PROXY_RANGES` (the Cloudflare ranges, empty in development) and `CIVIC_LENS_REQUESTS_PER_MINUTE` (default 60). There is no Dockerfile yet. R-24 adds it.
+
 ## Runtime data
 
 Runtime data belongs in ignored .runtime/. Generated publication and evaluation artifacts belong in ignored artifacts/. Never commit credentials or copy operational directories from the legacy repository. There is no deploy command and no public endpoint yet. Published releases live under the configured release directory, not in the repository. Production backup and restore and MCP runbooks will come here when they exist.
