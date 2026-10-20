@@ -111,6 +111,14 @@ public sealed class PostgresRelationshipPublicationTests(PostgresCollection post
     }
 
     [Fact]
+    public async Task TheReadFailsLoudWhenACitedRevisionIsNotStoredInsteadOfDroppingTheSide()
+    {
+        await releases.ExecuteAsync("SET session_replication_role = replica; DELETE FROM statement_revisions WHERE candidate_id = @id", ("id", StatementId));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => reviews.GetAsync(recordId, default));
+    }
+
+    [Fact]
     public async Task AnIdWithoutADraftIsLeftOutOfThePublicationRead()
     {
         await ApproveAsync();

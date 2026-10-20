@@ -99,6 +99,22 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
+    public async Task AVoteRevisionThatIsNotNamedIsNotReadBecauseTheReleaseBindsToTheExactRevision()
+    {
+        var first = await PendingCandidateAsync();
+        await SettleForReviewAsync(first, await RevisionAsync(first, 1));
+        var recordId = await RecordIdAsync(first);
+        var second = await PendingCandidateAsync(Updated.AddDays(1));
+        await SettleForReviewAsync(second, await RevisionAsync(second, 2));
+        var stored = await VoteReviews().GetRevisionAsync(recordId, 1, default);
+
+        var ids = await VoteReviews().ReadMemberPersonIdsAsync([new(PublishedRecordKind.Vote, recordId, 1)], default);
+
+        Assert.NotNull(await VoteReviews().GetRevisionAsync(recordId, 2, default));
+        Assert.Equal(stored!.OfficialIds().Order(), ids.Order());
+    }
+
+    [Fact]
     public async Task AVoteWithoutAnActionDraftOfItsBillGetsNoActionRecordId()
     {
         var recordId = await ApprovedVoteAsync();

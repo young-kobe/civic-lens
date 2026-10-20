@@ -38,19 +38,18 @@ internal static class BriefRecordReader
         ImmutableArray<PublishedRevisionBinding> bindings, bool approvedOnly, CancellationToken cancellationToken)
     {
         var records = new List<BriefRecord>();
-        records.AddRange(await ReadKindAsync<DocumentChangeRevisionRow, DocumentChangeDraftRevision>(db, bindings,
+        records.AddRange(await ReadKindAsync<DocumentChangeDraftRevision>(db, bindings,
             BriefCitationKind.DocumentChange, approvedOnly, BriefRecord.From, cancellationToken));
-        records.AddRange(await ReadKindAsync<StatementRevisionRow, StatementDraftRevision>(db, bindings,
+        records.AddRange(await ReadKindAsync<StatementDraftRevision>(db, bindings,
             BriefCitationKind.Statement, approvedOnly, BriefRecord.From, cancellationToken));
-        records.AddRange(await ReadKindAsync<ActionRevisionRow, ActionDraftRevision>(db, bindings,
+        records.AddRange(await ReadKindAsync<ActionDraftRevision>(db, bindings,
             BriefCitationKind.Action, approvedOnly, BriefRecord.From, cancellationToken));
         return [.. records.OrderBy(record => record.Kind).ThenBy(record => record.RecordId, StringComparer.Ordinal)];
     }
 
-    private static async Task<IReadOnlyList<BriefRecord>> ReadKindAsync<TRow, TRevision>(CollectionAttemptDbContext db,
+    private static async Task<IReadOnlyList<BriefRecord>> ReadKindAsync<TRevision>(CollectionAttemptDbContext db,
         ImmutableArray<PublishedRevisionBinding> bindings, BriefCitationKind kind, bool approvedOnly,
         Func<TRevision, BriefRecord> toRecord, CancellationToken cancellationToken)
-        where TRow : class, IReviewRevisionRow
         where TRevision : class, IReviewRevision
     {
         var publishedKind = BriefCitationKinds.PublishedKindOf(kind);
@@ -58,14 +57,7 @@ internal static class BriefRecordReader
         var wanted = approvedOnly
             ? requested.Except(await CitedRevisions.FindNotApprovedAsync(db, publishedKind, requested, cancellationToken)).ToArray() : requested;
         if (wanted.Length == 0) return [];
-        var (table, _, idColumn) = ReviewTables.For(publishedKind);
-        var sql = $"SELECT r.* FROM {table} r JOIN unnest({{0}}, {{1}}) AS k(id, number) ON r.{idColumn} = k.id AND r.revision_number = k.number";
-        var rows = await db.Set<TRow>().FromSqlRaw(sql, wanted.Select(binding => binding.RecordId).ToArray(),
-            wanted.Select(binding => binding.RevisionNumber).ToArray()).AsNoTracking().ToArrayAsync(cancellationToken);
-        if (rows.Length != wanted.Length)
-            throw new InvalidDataException(approvedOnly
-                ? $"A release names a {kind} revision that is not stored."
-                : $"A brief cites a {kind} revision that is not stored.");
-        return [.. rows.Select(row => toRecord(ReviewJson.Deserialize<TRevision>(row.RevisionJson, "revision")))];
+        var json = await CitedRevisions.ReadRevisionJsonAsync(db, publishedKind, wanted, cancellationToken);
+        return [.. json.Select(item => toRecord(ReviewJson.Deserialize<TRevision>(item, "revision")))];
     }
 }
