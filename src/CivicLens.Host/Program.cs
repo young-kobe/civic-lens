@@ -1,10 +1,10 @@
-using CivicLens.Application.Issues;
 using System.Collections.Immutable;
 using System.Text.Json;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using CivicLens.Application;
 using CivicLens.Application.Analysis;
+using CivicLens.Application.Issues;
 using CivicLens.Core.Analysis;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Application.Collection;

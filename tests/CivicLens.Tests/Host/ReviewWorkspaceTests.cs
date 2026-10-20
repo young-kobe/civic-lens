@@ -311,6 +311,24 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
+    public async Task OwnerLearnsWhyPublishingIsOffWhenNoIssuesFileIsSetAsync()
+    {
+        var unconfigured = new ReviewWorkspaceHost(postgres) { IssuesFile = false };
+        await unconfigured.StartAsync();
+        try
+        {
+            unconfigured.Client.DefaultRequestHeaders.Add("Cookie", unconfigured.CreateCookie(Owner));
+            var owner = await unconfigured.GetDocumentAsync("/Review");
+            Assert.Contains("CIVIC_LENS_ISSUES_CONFIG", owner.QuerySelector("#publish")!.TextContent, StringComparison.Ordinal);
+            Assert.Null(owner.QuerySelector("#publish-confirm"));
+        }
+        finally
+        {
+            await unconfigured.StopAsync();
+        }
+    }
+
+    [Fact]
     public async Task OwnerLearnsWhyPublishingIsOffWhenNoReleaseDirectoryIsSetAsync()
     {
         // A silently missing section would leave the owner unsure whether publishing exists at all.
