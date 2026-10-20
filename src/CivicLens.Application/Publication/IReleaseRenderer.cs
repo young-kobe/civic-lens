@@ -13,7 +13,10 @@ public interface IReleaseRenderer
         CancellationToken cancellationToken);
     Task<string> RenderRelationshipAsync(PublishedRelationship record, CancellationToken cancellationToken);
     Task<string> RenderBriefAsync(PublishedBrief record, CancellationToken cancellationToken);
-    Task<string> RenderIndexAsync(PublicationRelease release, int page, CancellationToken cancellationToken);
+    Task<string> RenderHomeAsync(PublicationRelease release, PublishedBrief? brief, ReleaseFacets facets, CancellationToken cancellationToken);
+    Task<string> RenderAllRecordsAsync(PublicationRelease release, int page, CancellationToken cancellationToken);
+    Task<string> RenderFacetPageAsync(ReleaseFacet facet, int page, CancellationToken cancellationToken);
+    Task<string> RenderFacetsAsync(ReleaseFacets facets, CancellationToken cancellationToken);
 
     IReadOnlyList<ReleaseAsset> Assets { get; }
 }

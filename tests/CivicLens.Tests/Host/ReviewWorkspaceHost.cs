@@ -46,6 +46,7 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
     public string OfficialId { get; init; } = "person";
     public string OfficialName { get; init; } = "Test Official";
     public bool Publishing { get; init; } = true;
+    public bool IssuesFile { get; init; } = true;
     public IssueConfiguration? Issues { get; init; }
 
     public async Task StartAsync()
@@ -92,10 +93,11 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
             """);
         start.Environment["CIVIC_LENS_COLLECTION_CONFIG"] = collectionPath;
         if (Publishing) start.Environment["CIVIC_LENS_RELEASE_DIRECTORY"] = ReleaseDirectory;
-        if (Issues is not null)
+        var issues = Issues ?? (IssuesFile ? IssueConfiguration.None : null);
+        if (issues is not null)
         {
             var issuesPath = Path.Combine(KeyDirectory, "issues.json");
-            await File.WriteAllTextAsync(issuesPath, JsonSerializer.Serialize(Issues, CollectionProtocol.JsonOptions));
+            await File.WriteAllTextAsync(issuesPath, JsonSerializer.Serialize(issues, CollectionProtocol.JsonOptions));
             start.Environment["CIVIC_LENS_ISSUES_CONFIG"] = issuesPath;
         }
         process = Process.Start(start)!;

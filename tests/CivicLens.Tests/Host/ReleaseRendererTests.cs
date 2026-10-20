@@ -1,5 +1,7 @@
+using CivicLens.Application.Issues;
 using System.Text.RegularExpressions;
 using AngleSharp.Html.Parser;
+using CivicLens.Application.Publication;
 using CivicLens.Host.Publication;
 using CivicLens.Publication.Contracts;
 
@@ -66,7 +68,7 @@ public sealed class ReleaseRendererTests
         Assert.DoesNotContain("not published", html, StringComparison.Ordinal);
         Assert.Contains("href=\"../assets/css/theme.css\"", html, StringComparison.Ordinal);
         Assert.Contains("src=\"../assets/js/app.js\"", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"../index.html\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"../all.html\"", html, StringComparison.Ordinal);
         Assert.DoesNotMatch(new Regex("(?:href|src)=\"(?:/|//)"), html);
         Assert.Contains("rel=\"noopener noreferrer nofollow\"", html, StringComparison.Ordinal);
     }
@@ -102,9 +104,9 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task IndexPageSearchReadsTheReleaseManifestAndStaysHiddenUntilScriptRuns()
+    public async Task AllRecordsPageSearchReadsTheReleaseManifestAndStaysHiddenUntilScriptRuns()
     {
-        var html = await new ReleaseRenderer().RenderIndexAsync(ReleaseOf(1), 1, CancellationToken.None);
+        var html = await new ReleaseRenderer().RenderAllRecordsAsync(ReleaseOf(1), 1, CancellationToken.None);
         var document = new HtmlParser().ParseDocument(html);
 
         var form = document.QuerySelector("form[data-release-search]")!;
@@ -118,7 +120,7 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task IndexPageListsRecordsWithRelativeLinks()
+    public async Task AllRecordsPageListsRecordsWithRelativeLinks()
     {
         var release = new PublicationRelease
         {
@@ -137,7 +139,7 @@ public sealed class ReleaseRendererTests
             ]
         };
 
-        var html = await new ReleaseRenderer().RenderIndexAsync(release, 1, CancellationToken.None);
+        var html = await new ReleaseRenderer().RenderAllRecordsAsync(release, 1, CancellationToken.None);
 
         Assert.Contains($"href=\"records/{new string('c', 32)}.html\"", html, StringComparison.Ordinal);
         Assert.Contains("Headline &lt;i&gt;one&lt;/i&gt;", html, StringComparison.Ordinal);
@@ -446,7 +448,7 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task IndexPageLabelsEachEntryWithItsKindSoReadersKnowWhatTheyOpen()
+    public async Task AllRecordsPageLabelsEachEntryWithItsKindSoReadersKnowWhatTheyOpen()
     {
         var release = ReleaseOf(2);
         release = release with
@@ -455,7 +457,7 @@ public sealed class ReleaseRendererTests
                 release.Records[1] with { Kind = PublishedRecordKind.Action, RecordId = new string('f', 64) }]
         };
 
-        var html = await new ReleaseRenderer().RenderIndexAsync(release, 1, CancellationToken.None);
+        var html = await new ReleaseRenderer().RenderAllRecordsAsync(release, 1, CancellationToken.None);
 
         var rows = new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody tr")
             .Select(row => (row.QuerySelector("a")!.GetAttribute("href"), row.QuerySelector(".badge")!.TextContent));
@@ -464,21 +466,21 @@ public sealed class ReleaseRendererTests
     }
 
     [Theory]
-    [InlineData(1, 50, 0, "Page 1 of 3", false, "page-2.html")]
-    [InlineData(2, 50, 50, "Page 2 of 3", true, "page-3.html")]
+    [InlineData(1, 50, 0, "Page 1 of 3", false, "all-2.html")]
+    [InlineData(2, 50, 50, "Page 2 of 3", true, "all-3.html")]
     [InlineData(3, 20, 100, "Page 3 of 3", true, null)]
-    public async Task IndexPageShowsOnlyItsSliceInManifestOrderWithPagerLinksWhereTheyApply(
+    public async Task AllRecordsPageShowsOnlyItsSliceInManifestOrderWithPagerLinksWhereTheyApply(
         int page, int expectedCount, int firstIndex, string label, bool hasPrevious, string? next)
     {
         var release = ReleaseOf(120);
 
-        var html = await new ReleaseRenderer().RenderIndexAsync(release, page, CancellationToken.None);
+        var html = await new ReleaseRenderer().RenderAllRecordsAsync(release, page, CancellationToken.None);
 
         var shown = Regex.Matches(html, "href=\"records/([0-9a-f]{32})\\.html\"").Select(match => match.Groups[1].Value).ToList();
         Assert.Equal(release.Records.Skip(firstIndex).Take(expectedCount).Select(entry => entry.RecordId), shown);
         Assert.Contains(label, html, StringComparison.Ordinal);
         var document = new HtmlParser().ParseDocument(html);
-        var previous = page == 2 ? "index.html" : "page-2.html";
+        var previous = page == 2 ? "all.html" : "all-2.html";
         Assert.Equal(hasPrevious ? previous : null, document.QuerySelector("a[rel='prev']")?.GetAttribute("href"));
         Assert.Equal(next, document.QuerySelector("a[rel='next']")?.GetAttribute("href"));
         Assert.Contains("href=\"assets/css/theme.css\"", html, StringComparison.Ordinal);
@@ -488,10 +490,86 @@ public sealed class ReleaseRendererTests
     [Theory]
     [InlineData(0)]
     [InlineData(4)]
-    public async Task IndexPageRejectsAPageOutsideTheRelease(int page)
+    public async Task AllRecordsPageRejectsAPageOutsideTheRelease(int page)
     {
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
-            new ReleaseRenderer().RenderIndexAsync(ReleaseOf(120), page, CancellationToken.None));
+            new ReleaseRenderer().RenderAllRecordsAsync(ReleaseOf(120), page, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task HomeShowsTheBriefWithCitationLinksToItsPageThenOnlyTheTwentyNewestRecords()
+    {
+        var release = ReleaseOf(30);
+        var brief = Brief();
+
+        var html = await new ReleaseRenderer().RenderHomeAsync(release, brief, NoFacets, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.Equal("A week of <housing> news", document.QuerySelector("h2")!.TextContent);
+        Assert.Equal(["Warren backed a rent cap.", "A rule changed."],
+            document.QuerySelectorAll("p.record-body").Select(paragraph => paragraph.FirstChild!.TextContent.Trim()));
+        var briefPage = $"records/{brief.RecordId}.html";
+        Assert.Equal([$"{briefPage}#citation-R1", $"{briefPage}#citation-R1", $"{briefPage}#citation-R2"],
+            document.QuerySelectorAll("p.record-body a").Select(link => link.GetAttribute("href")));
+        Assert.Equal(release.Records.Take(20).Select(entry => $"records/{entry.RecordId}.html"),
+            document.QuerySelectorAll("tbody a.cell-title").Select(link => link.GetAttribute("href")));
+        Assert.NotNull(document.QuerySelector("a[href='all.html']"));
+    }
+
+    [Fact]
+    public async Task HomeSaysSoWhenNoBriefExistsInsteadOfShowingAnEmptyPanel()
+    {
+        var html = await new ReleaseRenderer().RenderHomeAsync(ReleaseOf(1), null, NoFacets, CancellationToken.None);
+
+        Assert.Contains("No briefing yet", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HomeAndTheFacetListLinkOnlyFacetsThatHavePagesAndShowNamesAndCounts()
+    {
+        var release = ReleaseOf(3) with { Records = [.. ReleaseOf(3).Records.Select(entry => entry with { IssueIds = ["housing", "Not A Path"] })] };
+        var facets = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), IssuesNamed("housing", "Housing costs")));
+
+        var home = await new ReleaseRenderer().RenderHomeAsync(release, null, facets, CancellationToken.None);
+        var list = await new ReleaseRenderer().RenderFacetsAsync(facets, CancellationToken.None);
+
+        foreach (var html in new[] { home, list })
+        {
+            var rows = new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody tr").ToList();
+            var housing = rows.Single(row => row.TextContent.Contains("Housing costs", StringComparison.Ordinal));
+            Assert.Equal("issues/housing.html", housing.QuerySelector("a")!.GetAttribute("href"));
+            Assert.Contains("3", housing.TextContent, StringComparison.Ordinal);
+            var unsafeId = rows.Single(row => row.TextContent.Contains("Not A Path", StringComparison.Ordinal));
+            Assert.Null(unsafeId.QuerySelector("a"));
+        }
+    }
+
+    [Fact]
+    public async Task FacetPageLinksResolveFromItsSubfolderAndPageThroughItsRecordsNewestFirst()
+    {
+        var release = ReleaseOf(120) with { Records = [.. ReleaseOf(120).Records.Select(entry => entry with { PolicyAreaIds = ["land-use"] })] };
+        var facet = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None)).PolicyAreas.Single();
+
+        var html = await new ReleaseRenderer().RenderFacetPageAsync(facet, 2, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.Equal(release.Records.Skip(50).Take(50).Select(entry => $"../records/{entry.RecordId}.html"),
+            document.QuerySelectorAll("tbody a.cell-title").Select(link => link.GetAttribute("href")));
+        Assert.Equal("../policy-areas/land-use.html", document.QuerySelector("a[rel='prev']")!.GetAttribute("href"));
+        Assert.Equal("../policy-areas/land-use.page-3.html", document.QuerySelector("a[rel='next']")!.GetAttribute("href"));
+        Assert.Contains("href=\"../assets/css/theme.css\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"../index.html\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"../issues.html\"", html, StringComparison.Ordinal);
+        Assert.DoesNotMatch(new Regex("(?:href|src)=\"(?:/|//|https?:)"), html);
+    }
+
+    [Fact]
+    public async Task FacetPageRejectsAPageOutsideTheFacet()
+    {
+        var release = ReleaseOf(3) with { Records = [.. ReleaseOf(3).Records.Select(entry => entry with { IssueIds = ["housing"] })] };
+        var facet = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None)).Issues.Single();
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => new ReleaseRenderer().RenderFacetPageAsync(facet, 2, CancellationToken.None));
     }
 
     [Fact]
@@ -503,6 +581,14 @@ public sealed class ReleaseRendererTests
                      "assets/fonts/instrument-sans.woff2", "assets/fonts/newsreader.woff2" })
             Assert.Contains(assets, asset => asset.RelativePath == path && asset.Content.Length > 0);
     }
+
+    private static readonly ReleaseFacets NoFacets = new([], []);
+
+    private static IssueConfiguration IssuesNamed(string id, string name) => new()
+    {
+        PolicyAreas = [new() { Id = "land-use", Name = "Land use" }],
+        Issues = [new() { Id = id, Name = name, Definition = "d", PolicyAreaIds = ["land-use"] }]
+    };
 
     private static PublicationRelease ReleaseOf(int count) => new()
     {

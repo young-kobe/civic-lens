@@ -426,11 +426,11 @@ Set these variables through the protected environment or secret mechanism of the
 | `CIVIC_LENS_REVIEW_OWNER` | Exact Auth0 `sub` of the owner |
 | `CIVIC_LENS_REVIEW_REVIEWERS` | Optional comma-separated additional reviewer subject IDs |
 | `CIVIC_LENS_REVIEW_KEY_DIRECTORY` | Absolute persistent directory for ASP.NET data-protection keys |
-| `CIVIC_LENS_ISSUES_CONFIG` | Optional absolute path to the tracked-issue file, at most 1 MB. Its issue IDs are the configured issues. Unset means no configured issues |
+| `CIVIC_LENS_ISSUES_CONFIG` | Absolute path to the tracked-issue file, at most 1 MB. Its issue IDs are the configured issues. Publishing needs it. Unset means no configured issues and no publishing |
 | `CIVIC_LENS_COLLECTION_CONFIG` | Optional absolute path to the collection configuration for the owner Sources page and the official choices of the review pages. Without it no officials are listed |
 | `CIVIC_LENS_RELEASE_DIRECTORY` | Optional absolute path to the release root. With the collection configuration, it turns on the owner publish section |
 
-Without the collection configuration, the Sources page reports that source checks are not set up. The publish section needs the collection configuration, for the officials' display names, and the release directory. Without them, the owner sees a notice that publishing is off. Set `CIVIC_LENS_ISSUES_CONFIG` to offer issues and policy areas as choices on the statement pages.
+Without the collection configuration, the Sources page reports that source checks are not set up. The publish section needs the collection configuration, for the officials' display names, the issue file, for issue and policy area names, and the release directory. Without them, the owner sees a notice that publishing is off. The issue file also offers issues and policy areas as choices on the statement pages. The `releases publish` command needs the same two files.
 
 **Auth0 and proxy.** Set the Auth0 allowed callback URL to `<CIVIC_LENS_REVIEW_ORIGIN>/signin-oidc`. Configure an HTTPS reverse proxy on the same host. It forwards to loopback and keeps the configured external Host header, with its port if it is not standard. Public access must end HTTPS at the proxy. Local workstation testing also needs a local HTTPS proxy and an allowed Auth0 callback; there is no unauthenticated review mode.
 
@@ -659,7 +659,7 @@ The output lists the members to add and the configured people who left the roste
 
 The owner can publish from the Review home page. Select records in the Publish section and choose Review selection. The list shows each record as a document change, a statement, an action, a vote, a relationship, or a brief. The summary lists each headline with its kind, as new or a replacement, and shows the release number. Choose Publish to confirm. The page lists recent releases read-only. Rollback stays in the CLI.
 
-The CLI is a local owner command. Set `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER` (the owner subject recorded on the release), and `CIVIC_LENS_RELEASE_DIRECTORY` (an absolute path, for example `$PWD/.runtime/releases`). Publishing also needs `CIVIC_LENS_COLLECTION_CONFIG`, an absolute configuration path that supplies the officials' display names. The command trusts the local operator, who already holds database credentials.
+The CLI is a local owner command. Set `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER` (the owner subject recorded on the release), and `CIVIC_LENS_RELEASE_DIRECTORY` (an absolute path, for example `$PWD/.runtime/releases`). Publishing also needs `CIVIC_LENS_COLLECTION_CONFIG`, an absolute configuration path that supplies the officials' display names, and `CIVIC_LENS_ISSUES_CONFIG`, an absolute path that supplies the issue and policy area names. The command trusts the local operator, who already holds database credentials.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases publish <idempotency-key> <kind>:<id> [<kind>:<id>...]
@@ -679,7 +679,7 @@ To check that the public pages work without the operational application, stop th
 python3 -m http.server 8090 --bind 127.0.0.1 --directory "$CIVIC_LENS_RELEASE_DIRECTORY/current"
 ```
 
-Open `http://127.0.0.1:8090/`. The index shows 50 records for each page, with links to the previous and next pages, and a kind label next to each headline. A document change page shows the account, the changes, the citations, and both full document versions. A statement page shows the speakers, the statement date with its evidence, each quotation with its kind, and the full source text with the quotations marked. An action page shows the bill, a sponsorship table with cited quotes, the policy area and CRS summary citations, and its Congress.gov sources. A statement, action, or vote page lists the related records that published relationships link to it. A relationship page shows the quote, the fact, and the two linked records. The production static server is still a deployment decision.
+Open `http://127.0.0.1:8090/`. The home page shows the latest brief, the 20 newest records, and links to the issue and policy area pages. `all.html` shows 50 records for each page, with links to the previous and next pages, and a kind label next to each headline. A document change page shows the account, the changes, the citations, and both full document versions. A statement page shows the speakers, the statement date with its evidence, each quotation with its kind, and the full source text with the quotations marked. An action page shows the bill, a sponsorship table with cited quotes, the policy area and CRS summary citations, and its Congress.gov sources. A statement, action, or vote page lists the related records that published relationships link to it. A relationship page shows the quote, the fact, and the two linked records. The production static server is still a deployment decision.
 
 ## Runtime data
 

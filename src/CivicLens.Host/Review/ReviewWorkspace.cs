@@ -210,7 +210,8 @@ internal static class ReviewWorkspace
         services.AddScoped<GetDocumentHistory>();
         services.AddScoped<GetDocumentComparison>();
         services.AddScoped<GetDocumentCitation>();
-        var issues = ConfigurationFile.ReadIssuesFromEnvironment() ?? new IssueConfiguration { PolicyAreas = [], Issues = [] };
+        var configuredIssues = ConfigurationFile.ReadIssuesFromEnvironment();
+        var issues = configuredIssues ?? IssueConfiguration.None;
         services.AddSingleton<IDocumentChangeReviewStore>(PostgresDocumentChangeReviewStore.FromConnectionString(connectionString));
         services.AddSingleton<IDocumentChangeAnalysisStore>(PostgresDocumentChangeAnalysisStore.FromConnectionString(connectionString));
         services.AddScoped<ListDocumentChangeAnalyses>();
@@ -249,7 +250,7 @@ internal static class ReviewWorkspace
                 PostgresCollectionJobStore.FromConnectionString(connectionString),
                 PostgresCollectionAttemptStore.FromConnectionString(connectionString),
                 CivicLens.Infrastructure.Collection.Processing.PostgresEvidenceProcessingStore.FromConnectionString(connectionString)));
-            ConfigurePublication(services, connectionString, officials);
+            if (configuredIssues is not null) ConfigurePublication(services, connectionString, officials, configuredIssues);
         }
     }
 
@@ -315,8 +316,9 @@ internal static class ReviewWorkspace
         services.AddScoped<GetBriefReviewCounts>();
     }
 
-    // The owner publish section needs a release directory and the configured official names.
-    private static void ConfigurePublication(IServiceCollection services, string connectionString, ReviewOfficials officials)
+    // The owner publish section needs a release directory and the configured official, issue, and policy area names.
+    private static void ConfigurePublication(IServiceCollection services, string connectionString, ReviewOfficials officials,
+        IssueConfiguration issues)
     {
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
         if (releaseRoot is null) return;
@@ -328,7 +330,7 @@ internal static class ReviewWorkspace
             provider.GetRequiredService<IVoteReviewStore>(), provider.GetRequiredService<IRelationshipReviewStore>(),
             provider.GetRequiredService<IBriefReviewStore>()));
         services.AddScoped(provider => new PublishRelease(publications, releases, new ReleaseRenderer(),
-            provider.GetRequiredService<PublishedRecordLoaders>(), new PublicationCatalog(officials.Names), TimeProvider.System));
+            provider.GetRequiredService<PublishedRecordLoaders>(), new PublicationCatalog(officials.Names, issues), TimeProvider.System));
         services.AddScoped<ListPublishable>();
     }
 

@@ -102,7 +102,7 @@ Tracked issues are in a separate file, `config/issues.json`, with its own versio
 
 The file has a `version` (only 1 is supported), a list of `policyAreas` (`id`, `name`), and a list of `issues`. Each issue has an `id`, a `name`, a `definition`, and at least one `policyAreaIds` entry. It may also have `includes`, `excludes`, `startsOn` (inclusive), and `endsBefore` (exclusive).
 
-- IDs use lowercase words joined by hyphens, with at most 128 characters.
+- IDs use lowercase words joined by hyphens, with at most 60 characters, the `PublicationProtocol.MaximumFacetIdLength` limit.
 - Policy area IDs and names are unique, and issue IDs are unique.
 - Each policy area ID in an issue must exist and may appear once.
 - List entries must be nonblank and unique within their list. The date range must be valid.

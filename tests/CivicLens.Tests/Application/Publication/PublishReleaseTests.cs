@@ -83,7 +83,7 @@ public sealed class PublishReleaseTests
 
         var order = scenario.Releases.WriteOrder;
         Assert.Equal(PublicationProtocol.ManifestPath, order[^1]);
-        Assert.Equal(PublicationProtocol.IndexPagePath(1), order[^2]);
+        Assert.Equal(PublicationProtocol.HomePath, order[^2]);
         Assert.True(order.IndexOf(PublicationProtocol.RecordDataPath(draft)) < order.IndexOf("assets/site.css"));
     }
 
@@ -115,12 +115,13 @@ public sealed class PublishReleaseTests
         Assert.Equal(120, summary.RecordCount);
         var order = scenario.Releases.WriteOrder;
         Assert.Equal(
-            [PublicationProtocol.IndexPagePath(1), "page-2.html", "page-3.html", PublicationProtocol.ManifestPath],
-            order.TakeLast(4));
-        Assert.Equal("index.html", PublicationProtocol.IndexPagePath(1));
-        Assert.DoesNotContain("page-4.html", order);
+            [PublicationProtocol.AllRecordsPagePath(1), "all-2.html", "all-3.html", PublicationProtocol.IssuePagePath("housing", 1),
+                PublicationProtocol.FacetsPath, PublicationProtocol.HomePath, PublicationProtocol.ManifestPath],
+            order.TakeLast(7));
+        Assert.Equal("all.html", PublicationProtocol.AllRecordsPagePath(1));
+        Assert.DoesNotContain("all-4.html", order);
         Assert.Contains("<html>index 3 120</html>", System.Text.Encoding.UTF8.GetString(
-            scenario.Releases.Directories[summary.DirectoryName]["page-3.html"]));
+            scenario.Releases.Directories[summary.DirectoryName]["all-3.html"]));
     }
 
     [Fact]

@@ -1,12 +1,14 @@
 using System.Text.RegularExpressions;
 using System.Text.Json.Serialization;
+using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Issues;
 
 public sealed partial record IssueConfiguration
 {
     public const int MaximumIssues = 256;
-    private const int MaximumIdLength = 128;
+
+    public static IssueConfiguration None { get; } = new() { PolicyAreas = [], Issues = [] };
 
     [JsonRequired]
     public int Version { get; init; } = 1;
@@ -39,8 +41,8 @@ public sealed partial record IssueConfiguration
 
     internal static void ValidateId(string? id, string kind)
     {
-        if (string.IsNullOrWhiteSpace(id) || id.Length > MaximumIdLength || !IdPattern().IsMatch(id))
-            throw new ArgumentException($"{kind} ID '{id}' must be lowercase words joined by hyphens, at most {MaximumIdLength} characters.");
+        if (string.IsNullOrWhiteSpace(id) || id.Length > PublicationProtocol.MaximumFacetIdLength || !IdPattern().IsMatch(id))
+            throw new ArgumentException($"{kind} ID '{id}' must be lowercase words joined by hyphens, at most {PublicationProtocol.MaximumFacetIdLength} characters.");
     }
 
     private HashSet<string> ValidatePolicyAreas()

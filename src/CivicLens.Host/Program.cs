@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using CivicLens.Application;
 using CivicLens.Application.Analysis;
+using CivicLens.Application.Issues;
 using CivicLens.Core.Analysis;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Application.Collection;
@@ -329,6 +330,10 @@ try
             ? ReviewOfficials.From(ConfigurationFile.ReadCollectionFromEnvironment()
                 ?? throw new ArgumentException("Publishing requires CIVIC_LENS_COLLECTION_CONFIG.")).Names
             : ImmutableDictionary<string, string>.Empty;
+        var issueConfiguration = args is ["releases", "publish", ..]
+            ? ConfigurationFile.ReadIssuesFromEnvironment()
+                ?? throw new ArgumentException("Publishing requires CIVIC_LENS_ISSUES_CONFIG.")
+            : IssueConfiguration.None;
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
         var releases = new FileReleaseDirectory(releaseRoot);
         var publish = new PublishRelease(publications, releases, new ReleaseRenderer(), new PublishedRecordLoaders(
@@ -338,7 +343,7 @@ try
                 PostgresVoteReviewStore.FromConnectionString(connectionString),
                 new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)),
                 new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString))),
-            new PublicationCatalog(officialNames), TimeProvider.System);
+            new PublicationCatalog(officialNames, issueConfiguration), TimeProvider.System);
         executing = true;
         return await ReleaseCommand.ExecuteAsync(args, publish, new ListPublicationReleases(publications, releases),
             new ActivatePublicationRelease(publications, releases), owner,
