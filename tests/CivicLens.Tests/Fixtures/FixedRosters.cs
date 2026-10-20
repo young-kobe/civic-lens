@@ -27,5 +27,5 @@ internal sealed class FixedExecutiveRoster(ExecutiveOfficial[] officials) : IExe
 
 internal static class FixedRosters
 {
-    public static PublicationOfficials NoOfficials() => new(null, new FixedMemberRoster([]), new FixedExecutiveRoster([]));
+    public static PublicationOfficials NoOfficials() => new(RosterFixtures.Configuration(), new FixedMemberRoster([]), new FixedExecutiveRoster([]));
 }

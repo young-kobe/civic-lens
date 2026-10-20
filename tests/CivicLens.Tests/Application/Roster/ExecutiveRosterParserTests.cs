@@ -67,6 +67,13 @@ public sealed class ExecutiveRosterParserTests
         Assert.Throws<InvalidDataException>(() => Parse(Roster(Official(), Official())));
     }
 
+    [Fact]
+    public void AWikidataIdListedTwiceIsRejectedBecausePublishJoinsAPersonByIt()
+    {
+        Assert.Throws<InvalidDataException>(() => Parse(Roster(
+            Official("""{"govtrack":1,"wikidata":"Q76"}"""), Official("""{"govtrack":2,"wikidata":"Q76"}"""))));
+    }
+
     [Theory]
     [InlineData("q76")]
     [InlineData("Q0")]

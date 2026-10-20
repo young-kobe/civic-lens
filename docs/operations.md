@@ -669,7 +669,14 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases activate <release-number>
 ```
 
-The first publish of schema version 5 needs an empty release directory. A reader refuses a release of an older schema. Before that publish, stop the static server and delete the contents of `CIVIC_LENS_RELEASE_DIRECTORY`. Do this once. Production has no older release.
+The first publish of schema version 5 needs a clean development reset. The publisher reads the active release and refuses a release of an older schema. Do these steps once, in order. Production has no older release.
+
+1. Stop the static server, the review workspace, and the worker.
+2. Delete the contents of `CIVIC_LENS_RELEASE_DIRECTORY`.
+3. Run `DELETE FROM publication_releases;` in the development database.
+4. Run `DELETE FROM document_change_review_idempotency WHERE operation = 'publish-release';`. A replayed key would otherwise return a release that no longer exists.
+
+The dates of the first publication of briefs start again after this reset. This is acceptable in development.
 
 Write each record as `<kind>:<id>`. The kind is `documentChange`, `statement`, `action`, `vote`, `brief`, or `relationship`. For example, use `documentChange:` and a 32-character draft ID, `statement:` and a 64-character candidate ID, or `action:` and a 64-character action record ID. The other three kinds take a 64-character record ID too. The command never guesses the kind from the ID. An unknown kind or a bad shape exits with code 2. The revision must be approved with no unresolved concerns.
 

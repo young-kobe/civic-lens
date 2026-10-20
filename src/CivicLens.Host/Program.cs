@@ -329,7 +329,7 @@ try
         var publishConfiguration = args is ["releases", "publish", ..]
             ? ConfigurationFile.ReadCollectionFromEnvironment()
                 ?? throw new ArgumentException("Publishing requires CIVIC_LENS_COLLECTION_CONFIG.")
-            : null;
+            : new CollectionConfiguration { People = [], Sources = [] };
         var issueConfiguration = args is ["releases", "publish", ..]
             ? ConfigurationFile.ReadIssuesFromEnvironment()
                 ?? throw new ArgumentException("Publishing requires CIVIC_LENS_ISSUES_CONFIG.")

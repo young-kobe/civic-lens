@@ -15,6 +15,9 @@ public static class ExecutiveRosterParser
             throw new InvalidDataException("Executive roster must list at least one official.");
         if (officials.DistinctBy(official => official.GovtrackId).Count() != officials.Length)
             throw new InvalidDataException("Executive roster must list each GovTrack ID once.");
+        var wikidataIds = officials.Where(official => official.WikidataId is not null).Select(official => official.WikidataId).ToArray();
+        if (wikidataIds.Distinct(StringComparer.Ordinal).Count() != wikidataIds.Length)
+            throw new InvalidDataException("Executive roster must list each Wikidata ID once.");
         return officials;
     }
 

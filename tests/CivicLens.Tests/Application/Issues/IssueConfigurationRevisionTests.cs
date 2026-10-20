@@ -126,6 +126,16 @@ public sealed class IssueConfigurationRevisionTests
     }
 
     [Fact]
+    public void ANameLongerThanThePublishedNameLimitIsRejectedSoPublishNeverFailsOnIt()
+    {
+        var longName = new string('n', 257);
+
+        AssertInvalid(Configuration(Issue() with { Name = longName }));
+        AssertInvalid(Configuration() with { PolicyAreas = [Area() with { Name = longName }] });
+        Configuration(Issue() with { Name = new string('n', 256) }).Validate();
+    }
+
+    [Fact]
     public void BadDateRangeIsRejected() =>
         AssertInvalid(Configuration(Issue() with { StartsOn = new DateOnly(2026, 2, 1), EndsBefore = new DateOnly(2026, 2, 1) }));
 

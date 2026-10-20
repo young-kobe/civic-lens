@@ -1,6 +1,6 @@
 namespace CivicLens.Publication.Contracts;
 
-/// <summary>One dated term as the roster gives it. The office is sen, rep, prez, or viceprez. A president has no state or district.</summary>
+/// <summary>One dated term as the roster gives it. The office is the roster value. An executive has no state or district.</summary>
 public sealed record PublishedOfficeTerm
 {
     public required string Office { get; init; }

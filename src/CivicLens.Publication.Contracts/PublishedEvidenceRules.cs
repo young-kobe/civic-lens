@@ -44,9 +44,8 @@ internal static class PublishedEvidenceRules
     public static bool IsRange(string text, int start, int length) =>
         start >= 0 && length >= 0 && start <= text.Length - length;
 
-    public const int MaximumBoundedTextLength = 256;
-
-    public static bool IsBoundedText(string? value) => !string.IsNullOrWhiteSpace(value) && value.Length <= MaximumBoundedTextLength;
+    public static bool IsBoundedText(string? value) =>
+        !string.IsNullOrWhiteSpace(value) && value.Length <= PublishedRecordEntry.MaximumFilterValueLength;
 
     public static bool AreDistinctAndNotBlank(IEnumerable<string?> labels)
     {

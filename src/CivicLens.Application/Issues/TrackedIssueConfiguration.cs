@@ -18,6 +18,7 @@ public sealed record TrackedIssueConfiguration
         IssueConfiguration.ValidateId(Id, "Issue");
         if (string.IsNullOrWhiteSpace(Name) || string.IsNullOrWhiteSpace(Definition))
             throw new ArgumentException($"Issue '{Id}' must have a nonblank name and definition.");
+        IssueConfiguration.ValidateNameLength(Name, $"Issue '{Id}'");
         ValidatePolicyAreas(policyAreaIds);
         ValidateTerms(Includes, "includes");
         ValidateTerms(Excludes, "excludes");

@@ -75,7 +75,7 @@ public sealed class PublishedOfficialsTests
     }
 
     [Fact]
-    public void TheFilesHaveSizeCapsSoAHostileReleaseCannotExhaustAReader()
+    public void TheFilesHaveSizeCapsSoTheirSizeStaysBounded()
     {
         var many = Enumerable.Range(0, PublishedOfficials.MaximumOfficials + 1)
             .Select(index => new PublishedOfficialProfile { Id = $"p{index}", Name = "A" }).ToArray();
