@@ -11,7 +11,6 @@ internal sealed class RosterSnapshotRowConfiguration : IEntityTypeConfiguration<
         builder.ToTable("roster_snapshots");
         builder.HasKey(row => row.AttemptId);
         builder.Property(row => row.AttemptId).HasColumnName("attempt_id");
-        builder.Property(row => row.SourceId).HasColumnName("source_id").IsRequired();
         builder.HasOne<AttemptRow>().WithMany().HasForeignKey(row => row.AttemptId).OnDelete(DeleteBehavior.Restrict);
     }
 }

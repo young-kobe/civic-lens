@@ -46,13 +46,12 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
     }
 
     [Fact]
-    public async Task TheHeaderNamesTheSourceOfItsAttemptSoASnapshotOfAnotherSourceIsNotKnown()
+    public async Task ASnapshotOfOneSourceIsNotKnownToAnotherSourceThatCapturedTheSameBody()
     {
         var attemptId = await ImportAsync('a', 0);
         await roster.AdmitAsync(attemptId, RosterFixtures.Members(), default);
         var otherSource = await RosterFixtures.ImportCaptureAsync(attempts, new string('a', 64), Morning.AddDays(1), "other-members");
 
-        Assert.Equal(RosterFixtures.SourceId, await ReadSnapshotSourceAsync(attemptId));
         Assert.False(await roster.HasSnapshotOfCaptureAsync(otherSource, default));
         Assert.Empty(await roster.ReadLatestAsync("other-members", default));
     }
@@ -194,15 +193,6 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
         await using var command = new NpgsqlCommand($"SELECT count(*) FROM {table} WHERE attempt_id = @attempt", connection);
         command.Parameters.AddWithValue("attempt", attemptId);
         return (long)(await command.ExecuteScalarAsync())!;
-    }
-
-    private async Task<string> ReadSnapshotSourceAsync(string attemptId)
-    {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand("SELECT source_id FROM roster_snapshots WHERE attempt_id = @attempt", connection);
-        command.Parameters.AddWithValue("attempt", attemptId);
-        return (string)(await command.ExecuteScalarAsync())!;
     }
 
     private async Task ExecuteAsync(string sql)

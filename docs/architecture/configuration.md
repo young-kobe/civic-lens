@@ -36,7 +36,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 
 Version 2 is the only supported collection configuration version. Each source has nonempty `coverage` entries. An entry has a `personId`, an optional `startsOn`, and an optional `endsBefore`. The wire contract rejects the older `personIds` field.
 
-A person has a stable `id` and a current display `name`. Optional dated `names` use the same date fields. A person can also carry a `bioguideId`, the Congress.gov member identifier: one uppercase letter and six digits. A person can also carry a `wikidataId`: the letter `Q` and digits, with no leading zero. Two people cannot share one bioguide ID or one Wikidata ID. Snapshots leave out an absent `bioguideId` or `wikidataId`, so revision IDs without them do not change. No shipped person sets a `wikidataId` yet.
+A person has a stable `id` and a current display `name`. Optional dated `names` use the same date fields. A person can also carry a `bioguideId`, the Congress.gov member identifier: one uppercase letter and six digits. A person can also carry a `wikidataId`: the letter `Q` and digits, with no leading zero. Two people cannot share one bioguide ID or one Wikidata ID. Snapshots leave out an absent `bioguideId` or `wikidataId`, so revision IDs without them do not change. No shipped person sets a `wikidataId` yet. A later change links the executive roster to people through it.
 
 `config/federal-coverage.json` lists all 539 current members of Congress, delegates included, each with a bioguide ID. It has 1,392 member sources and the `congress-bills` and `congress-house-votes` sources. Persistent pages are checked every 6 hours, and feeds and listings every hour.
 
@@ -44,7 +44,7 @@ A person has a stable `id` and a current display `name`. Optional dated `names` 
 - Britt and Kim have no press source, because their press listings refuse our requests.
 - The House Drupal `rss.xml` feeds stay unused. A sample showed site-wide content, at most 10 items, and no overlap with the press-release listings.
 
-Three source types have no coverage list: the Congress.gov bill list, the Congress.gov House vote list, and the member roster file. See [bills](bills.md#source-configuration), [votes](votes.md#source-configuration), and [roster](roster.md#source-configuration).
+Four source types have no coverage list: the Congress.gov bill list, the Congress.gov House vote list, the member roster file, and the executive roster file. See [bills](bills.md#source-configuration), [votes](votes.md#source-configuration), and [roster](roster.md#source-configuration).
 
 ### Dates and intervals
 
@@ -60,7 +60,7 @@ A shared source is collected once.
 
 ### Eligibility
 
-`CoveredPersonIdsOf` answers coverage on an explicit date. It includes configured relationships on disabled sources. `IsActiveOn` adds one case: a [roster](roster.md) source covers no people and stays eligible. Enabling a source is a separate execution gate. New collection or admission needs an enabled source with active coverage.
+`CoveredPersonIdsOf` answers coverage on an explicit date. It includes configured relationships on disabled sources. `IsActiveOn` adds one case: a [roster](roster.md) source of either kind covers no people and stays eligible. Enabling a source is a separate execution gate. New collection or admission needs an enabled source with active coverage.
 
 `--as-of yyyy-MM-dd` gives an explicit date. Direct collection sets an omitted date once to the current UTC date. Managed admission keeps an omitted date unresolved until the existing key is checked in its database transaction. Publisher, event, and observation times keep their separate meanings.
 

@@ -9,4 +9,5 @@ public static class RosterLimits
     public const int Url = 512;
     public const int State = 8;
     public const int Party = 64;
+    public const int WikidataId = 16;
 }

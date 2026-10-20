@@ -57,6 +57,52 @@ public sealed class RosterSourceConfigurationTests
     }
 
     [Fact]
+    public void ASecondSourceOfTheOtherRosterKindIsAccepted()
+    {
+        var configuration = RosterFixtures.Configuration() with { Sources = [RosterFixtures.Source(), ExecutiveFixtures.Source()] };
+
+        configuration.Validate();
+    }
+
+    [Fact]
+    public void ASecondExecutiveSourceIsRejectedBecauseEachKindHasOneSource()
+    {
+        var second = ExecutiveFixtures.Source() with { Id = "second", Url = ExecutiveFixtures.SourceUrl + "?copy=1" };
+        var configuration = RosterFixtures.Configuration() with { Sources = [ExecutiveFixtures.Source(), second] };
+
+        Assert.Throws<ArgumentException>(configuration.Validate);
+    }
+
+    [Fact]
+    public void AnExecutiveSourceFollowsTheRulesOfARosterFileAndStaysEligible()
+    {
+        var configuration = ExecutiveFixtures.Configuration();
+        var source = configuration.Sources.Single();
+
+        configuration.Validate();
+        Assert.Throws<ArgumentException>((configuration with
+        {
+            Sources = [source with { Credential = CollectionCredentials.CongressGov }]
+        }).Validate);
+        Assert.Throws<ArgumentException>((configuration with { Sources = [source with { ETag = "\"v1\"" }] }).Validate);
+        Assert.Throws<ArgumentException>((configuration with { Sources = [source with { BackfillFrom = Today }] }).Validate);
+        Assert.Empty(configuration.CoveredPersonIdsOf(source, Today));
+        Assert.Equal(source, configuration.EligibleSource(source.Id, Today));
+    }
+
+    [Fact]
+    public void AnExecutiveJobIsBoundToTheSourceUrlAndTheExecutiveResource()
+    {
+        var source = new ConfiguredCollectionSource(ExecutiveFixtures.Configuration(), ExecutiveFixtures.SourceId, Today);
+
+        _ = source.CreateApiJobDefinition(ApiResource.ExecutiveRoster, ExecutiveFixtures.SourceUrl, Today);
+        Assert.Throws<ArgumentException>(() =>
+            source.CreateApiJobDefinition(ApiResource.MemberRoster, ExecutiveFixtures.SourceUrl, Today));
+        Assert.Throws<ArgumentException>(() =>
+            source.CreateApiJobDefinition(ApiResource.ExecutiveRoster, ExecutiveFixtures.SourceUrl + "?x=1", Today));
+    }
+
+    [Fact]
     public void ARosterSourceCoversNoPeopleYetStaysEligibleSoTheDailyCheckRuns()
     {
         var configuration = RosterFixtures.Configuration(RosterFixtures.Person("a", "A", "A000001"));

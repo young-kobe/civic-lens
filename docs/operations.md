@@ -653,6 +653,8 @@ Enable the source `congress-members` in the collection configuration to capture 
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- roster propose config/federal-coverage.json
 ```
 
+Enable the source `executive-officials` the same way to capture the executive file, which lists presidents and vice presidents. Nothing reads it yet.
+
 The output lists the members to add and the configured people who left the roster. Edit the configuration by hand and commit it. Press sources of a new member are a manual step. See [roster](architecture/roster.md#proposals).
 
 ## Publish a static release

@@ -1,6 +1,5 @@
 using CivicLens.Application.Roster;
 using CivicLens.Infrastructure.Collection;
-using CivicLens.Infrastructure.Collection.Persistence;
 using CivicLens.Infrastructure.Roster.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -21,11 +20,7 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(attemptId);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var attempt = await db.Attempts.AsNoTracking().SingleOrDefaultAsync(row => row.AttemptId == attemptId, cancellationToken);
-        if (attempt?.CaptureSha256 is null)
-            throw new InvalidOperationException("A roster snapshot needs an imported captured attempt.");
-        return await SnapshotAttempts(db, attempt.SourceId).AnyAsync(snapshot => snapshot.CaptureSha256 == attempt.CaptureSha256,
-            cancellationToken);
+        return await RosterSnapshots.HasSnapshotOfCaptureAsync(db, attemptId, cancellationToken);
     }
 
     public async Task AdmitAsync(string attemptId, IReadOnlyList<RosterMember> members, CancellationToken cancellationToken)
@@ -33,8 +28,7 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
         ArgumentException.ThrowIfNullOrWhiteSpace(attemptId);
         ArgumentNullException.ThrowIfNull(members);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var attempt = await db.Attempts.AsNoTracking().SingleAsync(row => row.AttemptId == attemptId, cancellationToken);
-        db.Add(new RosterSnapshotRow { AttemptId = attemptId, SourceId = attempt.SourceId });
+        RosterSnapshots.AddHeader(db, attemptId);
         foreach (var member in members)
         {
             db.Add(ToRow(attemptId, member));
@@ -46,28 +40,14 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
     public async Task<IReadOnlyList<RosterMember>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var snapshots = SnapshotAttempts(db, sourceId);
-        var newestCapture = await db.Attempts.AsNoTracking()
-            .Where(attempt => attempt.SourceId == sourceId && attempt.CaptureSha256 != null &&
-                snapshots.Any(snapshot => snapshot.CaptureSha256 == attempt.CaptureSha256))
-            .OrderByDescending(attempt => attempt.ObservedAtUtcTicks).ThenByDescending(attempt => attempt.AttemptId)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (newestCapture is null) return [];
-        var snapshot = await snapshots.Where(candidate => candidate.CaptureSha256 == newestCapture.CaptureSha256)
-            .OrderBy(candidate => candidate.ObservedAtUtcTicks).ThenBy(candidate => candidate.AttemptId)
-            .FirstAsync(cancellationToken);
-        var members = await db.Set<RosterMemberRow>().AsNoTracking().Where(row => row.AttemptId == snapshot.AttemptId)
+        if (await RosterSnapshots.ReadLatestSnapshotAttemptIdAsync(db, sourceId, cancellationToken) is not { } snapshotAttemptId)
+            return [];
+        var members = await db.Set<RosterMemberRow>().AsNoTracking().Where(row => row.AttemptId == snapshotAttemptId)
             .OrderBy(row => row.BioguideId).ToListAsync(cancellationToken);
-        var terms = (await db.Set<RosterTermRow>().AsNoTracking().Where(row => row.AttemptId == snapshot.AttemptId)
+        var terms = (await db.Set<RosterTermRow>().AsNoTracking().Where(row => row.AttemptId == snapshotAttemptId)
             .OrderBy(row => row.TermIndex).ToListAsync(cancellationToken)).ToLookup(row => row.BioguideId);
         return [.. members.Select(member => ToMember(member, terms[member.BioguideId]))];
     }
-
-    private static IQueryable<AttemptRow> SnapshotAttempts(CollectionAttemptDbContext db, string sourceId) =>
-        from snapshot in db.Set<RosterSnapshotRow>().AsNoTracking()
-        where snapshot.SourceId == sourceId
-        join attempt in db.Attempts.AsNoTracking() on snapshot.AttemptId equals attempt.AttemptId
-        select attempt;
 
     private static RosterMemberRow ToRow(string attemptId, RosterMember member) => new()
     {

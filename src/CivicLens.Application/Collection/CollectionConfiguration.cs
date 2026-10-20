@@ -61,8 +61,8 @@ public sealed record CollectionConfiguration
 
         ValidatePacingGroups();
 
-        if (Sources.Count(source => source?.ApiParser == ApiParser.CongressLegislators) > 1)
-            throw new ArgumentException("A configuration may have only one member roster source.");
+        if (Sources.Where(source => IsRosterFile(source?.ApiParser)).GroupBy(source => source.ApiParser).Any(kind => kind.Count() > 1))
+            throw new ArgumentException("A configuration may have only one roster source of each kind.");
 
         var sourceUrls = new HashSet<Uri>();
         foreach (var source in Sources)
@@ -111,14 +111,14 @@ public sealed record CollectionConfiguration
     }
 
     public bool IsActiveOn(WatchedSourceConfiguration source, DateOnly asOf) =>
-        source.ApiParser is ApiParser.CongressLegislators || CoveredPersonIdsOf(source, asOf).Length > 0;
+        IsRosterFile(source.ApiParser) || CoveredPersonIdsOf(source, asOf).Length > 0;
 
     public string[] CoveredPersonIdsOf(WatchedSourceConfiguration source, DateOnly asOf)
     {
         IEnumerable<string> ids = source.ApiParser switch
         {
             ApiParser.CongressBillList or ApiParser.CongressHouseVoteList => asOf < source.BackfillFrom ? [] : BioguidePersonIds(),
-            ApiParser.CongressLegislators => [],
+            ApiParser.CongressLegislators or ApiParser.CongressLegislatorsExecutive => [],
             null => source.Coverage!.Where(coverage => new DateRange(coverage.StartsOn, coverage.EndsBefore).Contains(asOf))
                 .Select(coverage => coverage.PersonId),
             _ => throw new ArgumentOutOfRangeException(nameof(source))
@@ -160,14 +160,18 @@ public sealed record CollectionConfiguration
                 ValidateCongressApiSource(source);
                 break;
             case ApiParser.CongressLegislators:
-                ValidateLegislatorsSource(source);
+            case ApiParser.CongressLegislatorsExecutive:
+                ValidateRosterFileSource(source);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(source));
         }
     }
 
-    private static void ValidateLegislatorsSource(WatchedSourceConfiguration source)
+    private static bool IsRosterFile(ApiParser? parser) =>
+        parser is ApiParser.CongressLegislators or ApiParser.CongressLegislatorsExecutive;
+
+    private static void ValidateRosterFileSource(WatchedSourceConfiguration source)
     {
         if (source.Credential is not null)
             throw new ArgumentException($"Source '{source.Id}' reads a public file and cannot set a credential.");

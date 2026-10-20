@@ -63,7 +63,7 @@ public sealed class EvidenceProcessingWorkerConcurrencyTests
         public EvidenceProcessingWorker Worker(int degree)
         {
             var jobs = new FixedJobStore { Get = AwaitGateAsync };
-            var preparation = new JobPreparation(jobs, null!, null!, null!, null!, null!, null!, null!, null!, null!, null);
+            var preparation = new JobPreparation(jobs, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null);
             return new(jobs, preparation, new Store(records, Released), null!, null!, null!, degree);
         }
 

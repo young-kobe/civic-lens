@@ -19,7 +19,7 @@ public sealed class RosterSnapshotHeadersMigrationTests(PostgresCollection postg
     public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
 
     [Fact]
-    public async Task EachExistingSnapshotGetsOneHeaderWithItsSourceSoNoReaderNeedsTheOldShape()
+    public async Task EachExistingSnapshotGetsOneHeaderSoNoReaderNeedsTheOldShape()
     {
         await using var db = CreateContext();
         await db.GetService<IMigrator>().MigrateAsync(PreviousMigration);
@@ -28,7 +28,7 @@ public sealed class RosterSnapshotHeadersMigrationTests(PostgresCollection postg
 
         await db.Database.MigrateAsync();
 
-        Assert.Equal(["a1:members", "a2:members", "a3:other"], await ReadHeadersAsync());
+        Assert.Equal(["a1", "a2", "a3"], await ReadHeadersAsync());
         Assert.False(db.Database.HasPendingModelChanges());
     }
 
@@ -65,7 +65,7 @@ public sealed class RosterSnapshotHeadersMigrationTests(PostgresCollection postg
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
-        await using var command = new NpgsqlCommand("SELECT attempt_id || ':' || source_id FROM roster_snapshots ORDER BY 1", connection);
+        await using var command = new NpgsqlCommand("SELECT attempt_id FROM roster_snapshots ORDER BY 1", connection);
         await using var reader = await command.ExecuteReaderAsync();
         var rows = new List<string>();
         while (await reader.ReadAsync()) rows.Add(reader.GetString(0));
