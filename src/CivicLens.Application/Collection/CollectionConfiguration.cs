@@ -24,6 +24,9 @@ public sealed record CollectionConfiguration
         return PacingGroups.Where(group => group.Matches(host)).MaxBy(group => group.HostSuffix.Length);
     }
 
+    public WatchedSourceConfiguration? RosterSourceOf(ApiParser parser) =>
+        Sources.FirstOrDefault(source => source.ApiParser == parser);
+
     public void Validate()
     {
         if (Version != 2)

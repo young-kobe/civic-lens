@@ -6,8 +6,8 @@ namespace CivicLens.Publication.Contracts;
 
 public static class PublicationProtocol
 {
-    public const int SchemaVersion = 4;
-    public const int OldestReadableSchemaVersion = 4;
+    public const int SchemaVersion = 5;
+    public const int OldestReadableSchemaVersion = 5;
     public const string ManifestPath = "release.json";
     public const string ManifestGzipPath = ManifestPath + ".gz";
     public const string ManifestBrotliPath = ManifestPath + ".br";
@@ -20,6 +20,8 @@ public static class PublicationProtocol
     public const int MaximumManifestBytes = 32 * 1024 * 1024;
     public const int SearchSourceTextCharacters = 200_000;
     public const string SearchPagePath = "search.html";
+    public const string OfficialsPath = "officials.json";
+    public const string CatalogPath = "catalog.json";
 
     public static string AllRecordsPagePath(int page) => page == 1 ? "all.html" : $"all-{page}.html";
     public static string IssuePagePath(string issueId, int page) => FacetPagePath("issues", issueId, page);

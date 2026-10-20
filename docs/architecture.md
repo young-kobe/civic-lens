@@ -254,7 +254,7 @@ Before the first production deploy ([R-23](roadmap.md#later)), reset the develop
 | --- | --- | --- | --- | --- |
 | Collection protocol | `10` (`Version`; reads `OldestReadableVersion` 7 and `ApiVersion` 9) | `src/CivicLens.Collection.Contracts/CollectionProtocol.cs` | Collector requests, receipts, saved handoffs, job definitions | Collector fetch, parse, or receipt rules change |
 | Receipt handoff | `1` | `src/CivicLens.Application/Collection/PendingCollectionHandoff.cs` | Spool files of unimported receipts | The envelope shape changes |
-| Publication schema | `4` (reads `4`) | `src/CivicLens.Publication.Contracts/PublicationProtocol.cs` | Release manifests and record JSON | The published JSON shape changes |
+| Publication schema | `5` (reads `5`) | `src/CivicLens.Publication.Contracts/PublicationProtocol.cs` | Release manifests and record JSON | The published JSON shape changes |
 | Collection configuration | `2` | `src/CivicLens.Application/Collection/CollectionConfiguration.cs` | Configuration files and stored revision snapshots | Coverage or source fields change meaning |
 | Issue configuration | `1` | `src/CivicLens.Application/Issues/IssueConfiguration.cs` (revisions in `IssueConfigurationRevision.cs`) | `config/issues.json` and revision IDs | The snapshot format changes |
 | Parser | `capture-text-v2` | `src/CivicLens.Infrastructure/Documents/CaptureDocumentTextExtractor.cs` | Extraction IDs, text, and citations | HTML or text decoding output changes |
@@ -410,6 +410,7 @@ This is the only navigation index.
 | Public search service: ingest, index, read API, rate limit | [Search](architecture/search.md#decisions) | `src/CivicLens.PublicApi/PublicApiApp.cs` |
 | Search ingest of a release | [Search](architecture/search.md#ingest) | `src/CivicLens.PublicApi/Ingest/ReleaseIngest.cs` |
 | Search API routes and errors | [Search](architecture/search.md#api) | `src/CivicLens.PublicApi/Search/SearchEndpoints.cs` |
+| Officials and catalog files of a release | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/PublicationOfficials.cs` |
 | Public filter pages (planned) | [Publication](architecture/publication.md#limits-and-planned-work), [roadmap R-36](roadmap.md#next) | none |
 | Pending work, decisions, MVP criteria | [Roadmap](roadmap.md) | none |
 | Commands and procedures | [Operations](operations.md) | `src/CivicLens.Host/Program.cs` |

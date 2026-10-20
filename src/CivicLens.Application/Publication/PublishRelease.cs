@@ -17,19 +17,23 @@ public sealed class PublishRelease
     private readonly IReleaseRenderer renderer;
     private readonly PublishedRecordLoaders loaders;
     private readonly ReleasePages releasePages;
+    private readonly PublicationCatalog catalog;
     private readonly ReleaseIndexPages indexPages;
+    private readonly ReleaseDataFiles dataFiles;
     private readonly PublishedRecordRules rules;
     private readonly TimeProvider clock;
 
     public PublishRelease(IPublicationStore publications, IReleaseDirectory releases, IReleaseRenderer renderer,
-        PublishedRecordLoaders loaders, PublicationCatalog catalog, TimeProvider clock)
+        PublishedRecordLoaders loaders, PublicationCatalog catalog, PublicationOfficials officials, TimeProvider clock)
     {
         this.publications = publications;
         this.releases = releases;
         this.renderer = renderer;
         this.loaders = loaders;
         releasePages = new ReleasePages(releases, loaders);
-        indexPages = new ReleaseIndexPages(releases, renderer, catalog);
+        this.catalog = catalog;
+        indexPages = new ReleaseIndexPages(releases, renderer);
+        dataFiles = new ReleaseDataFiles(loaders.Votes, officials);
         this.clock = clock;
         rules = new PublishedRecordRules(catalog);
     }
@@ -140,7 +144,9 @@ public sealed class PublishRelease
             Compress(manifestJson, stream => new GZipStream(stream, CompressionLevel.Optimal)), cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestBrotliPath,
             Compress(manifestJson, stream => new BrotliStream(stream, CompressionLevel.Optimal)), cancellationToken);
-        await indexPages.WriteAsync(staging, manifest, additions, previous, cancellationToken);
+        var facets = ReleaseFacets.From(manifest, catalog);
+        await indexPages.WriteAsync(staging, manifest, facets, additions, previous, cancellationToken);
+        await dataFiles.WriteAsync(staging, manifest, facets, cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestPath, manifestJson, cancellationToken);
         return (await staging.CompleteAsync(number, cancellationToken), entries);
     }

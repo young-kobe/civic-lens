@@ -37,6 +37,18 @@ public sealed class PostgresExecutiveRosterStore(IDbContextFactory<CollectionAtt
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<ExecutiveOfficial>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        if (await RosterSnapshotRules.ReadLatestSnapshotAttemptIdAsync(db, sourceId, cancellationToken) is not { } snapshotAttemptId)
+            return [];
+        var officials = await db.Set<ExecutiveOfficialRow>().AsNoTracking().Where(row => row.AttemptId == snapshotAttemptId)
+            .OrderBy(row => row.GovtrackId).ToListAsync(cancellationToken);
+        var terms = (await db.Set<ExecutiveTermRow>().AsNoTracking().Where(row => row.AttemptId == snapshotAttemptId)
+            .OrderBy(row => row.TermIndex).ToListAsync(cancellationToken)).ToLookup(row => row.GovtrackId);
+        return [.. officials.Select(official => ToOfficial(official, terms[official.GovtrackId]))];
+    }
+
     private static ExecutiveOfficialRow ToRow(string attemptId, ExecutiveOfficial official) => new()
     {
         AttemptId = attemptId,
@@ -55,4 +67,8 @@ public sealed class PostgresExecutiveRosterStore(IDbContextFactory<CollectionAtt
         EndsOn = term.End,
         Party = term.Party
     };
+
+    private static ExecutiveOfficial ToOfficial(ExecutiveOfficialRow official, IEnumerable<ExecutiveTermRow> terms) =>
+        new(official.GovtrackId, official.WikidataId, official.FullName,
+            [.. terms.Select(term => new ExecutiveTerm(term.TermIndex, term.Office, term.StartsOn, term.EndsOn, term.Party))]);
 }

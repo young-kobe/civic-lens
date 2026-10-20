@@ -111,6 +111,38 @@ public sealed class PostgresExecutiveRosterStoreTests(PostgresCollection postgre
     }
 
     [Fact]
+    public async Task ReaderFollowsTheNewestCaptureWhateverTheAdmissionOrder()
+    {
+        var a = await ImportExecutiveAsync('a', 0);
+        var b = await ImportExecutiveAsync('b', 1);
+        await ImportExecutiveAsync('a', 2);
+        await executives.AdmitAsync(a, ExecutiveFixtures.Officials(), default);
+        await executives.AdmitAsync(b, [.. ExecutiveFixtures.Officials().Take(2)], default);
+
+        Assert.Equal(3, (await executives.ReadLatestAsync(ExecutiveFixtures.SourceId, default)).Count);
+    }
+
+    [Fact]
+    public async Task ReaderReturnsEachOfficialWithTheDatedTermsInOrder()
+    {
+        await executives.AdmitAsync(await ImportExecutiveAsync('a', 0), ExecutiveFixtures.Officials(), default);
+
+        var expected = ExecutiveFixtures.Officials().Single(official => official.WikidataId == "Q6279");
+
+        var biden = (await executives.ReadLatestAsync(ExecutiveFixtures.SourceId, default)).Single(official => official.GovtrackId == expected.GovtrackId);
+
+        Assert.Equal((expected.WikidataId, expected.FullName), (biden.WikidataId, biden.FullName));
+        Assert.Equal(expected.Terms, biden.Terms);
+        Assert.Equal(["viceprez", "viceprez", "prez"], biden.Terms.Select(term => term.Office));
+    }
+
+    [Fact]
+    public async Task NoSnapshotReadsAsEmpty()
+    {
+        Assert.Empty(await executives.ReadLatestAsync(ExecutiveFixtures.SourceId, default));
+    }
+
+    [Fact]
     public async Task AnUnknownAttemptIsRejected()
     {
         await Assert.ThrowsAsync<InvalidOperationException>(() => executives.HasSnapshotOfCaptureAsync("missing", default));

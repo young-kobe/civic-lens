@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Paging;
+using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Review;
@@ -33,6 +34,14 @@ internal sealed class FakeVoteReviewStore : IVoteReviewStore
         IReadOnlyDictionary<string, PublishableVote> found = recordIds.Where(Publishable.ContainsKey)
             .ToDictionary(id => id, id => Publishable[id]);
         return Task.FromResult(found);
+    }
+
+    public Task<IReadOnlyList<string>> ReadMemberPersonIdsAsync(ImmutableArray<PublishedRevisionBinding> revisions,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<string> ids = [.. revisions.SelectMany(item => Publishable[item.RecordId].Review.Revisions
+            .Single(revision => revision.RevisionNumber == item.RevisionNumber).OfficialIds()).Distinct(StringComparer.Ordinal)];
+        return Task.FromResult(ids);
     }
 
     public Task<IReadOnlyDictionary<string, ImmutableArray<string>>> FindBillActionRecordIdsAsync(ImmutableArray<VoteBill> bills,

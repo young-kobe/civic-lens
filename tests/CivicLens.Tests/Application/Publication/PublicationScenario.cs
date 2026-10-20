@@ -1,3 +1,5 @@
+using CivicLens.Application.Collection;
+using CivicLens.Application.Roster;
 using CivicLens.Application.Paging;
 using System.Collections.Immutable;
 using CivicLens.Application.Actions;
@@ -44,6 +46,22 @@ internal sealed class PublicationScenario
     public FakeBriefReviewStore Briefs { get; } = new();
     public Dictionary<string, string> OfficialNames { get; } = new() { ["mayor"] = "Mayor Example", ["chair"] = "Council Chair Example" };
 
+    public Dictionary<string, (string? BioguideId, string? WikidataId)> ExternalIds { get; } = [];
+    public RosterMember[] RosterMembers { get; set; } = [];
+    public ExecutiveOfficial[] ExecutiveOfficials { get; set; } = [];
+
+    private CollectionConfiguration Collection() => RosterFixtures.Configuration() with
+    {
+        People = [.. OfficialNames.Select(name => new PersonConfiguration
+        {
+            Id = name.Key,
+            Name = name.Value,
+            BioguideId = ExternalIds.GetValueOrDefault(name.Key).BioguideId,
+            WikidataId = ExternalIds.GetValueOrDefault(name.Key).WikidataId
+        })],
+        Sources = [RosterFixtures.Source(), ExecutiveFixtures.Source()]
+    };
+
     public PublicationScenario() => Releases = new() { Events = Events };
 
     public PublishedRecordLoaders Loaders() => new(Reviews, Statements, Actions, Votes, Relationships, Briefs);
@@ -51,7 +69,7 @@ internal sealed class PublicationScenario
     public IssueConfiguration Issues { get; set; } = IssueConfiguration.None;
 
     public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events }, Loaders(),
-        new PublicationCatalog(OfficialNames, Issues), Clock);
+        new PublicationCatalog(OfficialNames, Issues), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers), new FixedExecutiveRoster(ExecutiveOfficials)), Clock);
 
     private const string PunctuatedHeadline = "Mayor\u2019s \u201Chousing\u201D plan: caf\u00E9 owners, r\u00E9sum\u00E9 rules; it\u2019s 100% ready? ";
 

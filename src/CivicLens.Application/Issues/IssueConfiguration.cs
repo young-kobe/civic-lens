@@ -45,6 +45,12 @@ public sealed partial record IssueConfiguration
             throw new ArgumentException($"{kind} ID '{id}' must be lowercase words joined by hyphens, at most {PublicationProtocol.MaximumFacetIdLength} characters.");
     }
 
+    internal static void ValidateNameLength(string name, string owner)
+    {
+        if (name.Length > PublishedRecordEntry.MaximumFilterValueLength)
+            throw new ArgumentException($"{owner} name must be at most {PublishedRecordEntry.MaximumFilterValueLength} characters.");
+    }
+
     private HashSet<string> ValidatePolicyAreas()
     {
         var ids = new HashSet<string>(StringComparer.Ordinal);
@@ -56,6 +62,7 @@ public sealed partial record IssueConfiguration
             ValidateId(area.Id, "Policy area");
             if (string.IsNullOrWhiteSpace(area.Name))
                 throw new ArgumentException($"Policy area '{area.Id}' must have a nonblank name.");
+            ValidateNameLength(area.Name, $"Policy area '{area.Id}'");
             if (!ids.Add(area.Id))
                 throw new ArgumentException($"Duplicate policy area ID '{area.Id}'.");
             if (!names.Add(area.Name))

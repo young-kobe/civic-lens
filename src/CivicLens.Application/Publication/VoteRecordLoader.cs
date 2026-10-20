@@ -33,6 +33,10 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
             (related, cancellationToken) => build.Renderer.RenderVoteAsync(record, billActionRecordId, related, cancellationToken));
     }
 
+    public Task<IReadOnlyList<string>> MemberPersonIdsAsync(IEnumerable<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
+        votes.ReadMemberPersonIdsAsync([.. entries.Where(entry => entry.Kind == Kind).Select(PublishedRevisionBinding.Of)],
+            cancellationToken);
+
     public async Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
         CancellationToken cancellationToken)
     {

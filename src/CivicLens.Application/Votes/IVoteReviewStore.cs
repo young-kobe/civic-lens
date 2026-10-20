@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Paging;
+using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
@@ -25,6 +26,9 @@ public interface IVoteReviewStore
     Task<IReadOnlyList<UnpublishedApprovedVote>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken);
 
     Task<IReadOnlyDictionary<string, PublishableVote>> GetForPublicationAsync(ImmutableArray<string> recordIds,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<string>> ReadMemberPersonIdsAsync(ImmutableArray<PublishedRevisionBinding> revisions,
         CancellationToken cancellationToken);
 
     Task<string?> FindRecordIdByRollAsync(int congress, int sessionNumber, int rollCallNumber, CancellationToken cancellationToken);

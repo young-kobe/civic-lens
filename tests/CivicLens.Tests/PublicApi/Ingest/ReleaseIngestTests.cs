@@ -1,3 +1,4 @@
+using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Ingest;
 using CivicLens.Tests.Infrastructure.Collection;
 using Npgsql;
@@ -26,6 +27,19 @@ public sealed class ReleaseIngestTests(PostgresCollection postgres) : IAsyncLife
         Assert.Equal((IngestOutcome.AlreadyActive, 0), (again.Outcome, again.Indexed));
         Assert.Equal(2L, await CountAsync("SELECT count(*) FROM records"));
         Assert.Equal(1L, await CountAsync("SELECT count(*) FROM releases"));
+    }
+
+    [Fact]
+    public async Task TheOfficialsAndCatalogFilesOfASchemaFiveReleaseAreNeverFetchedSoTheSearchIndexHoldsTheSameRecords()
+    {
+        world.Site.Publish(1, PublishedSamples.Statement('a', "Rent cap"), PublishedSamples.Statement('b', "Zoning"));
+
+        var result = await world.IngestAsync();
+
+        Assert.Equal((IngestOutcome.Ingested, 2), (result.Outcome, result.Indexed));
+        Assert.Equal(2L, await CountAsync("SELECT count(*) FROM records"));
+        Assert.DoesNotContain(PublicationProtocol.OfficialsPath, world.Site.Requests);
+        Assert.DoesNotContain(PublicationProtocol.CatalogPath, world.Site.Requests);
     }
 
     [Fact]

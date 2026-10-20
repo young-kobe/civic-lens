@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Text.Json;
 using System.Globalization;
 using System.Runtime.InteropServices;
@@ -327,10 +326,10 @@ try
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
         if (string.IsNullOrWhiteSpace(releaseRoot))
             throw new ArgumentException("Release commands require CIVIC_LENS_RELEASE_DIRECTORY.");
-        var officialNames = args is ["releases", "publish", ..]
-            ? ReviewOfficials.From(ConfigurationFile.ReadCollectionFromEnvironment()
-                ?? throw new ArgumentException("Publishing requires CIVIC_LENS_COLLECTION_CONFIG.")).Names
-            : ImmutableDictionary<string, string>.Empty;
+        var publishConfiguration = args is ["releases", "publish", ..]
+            ? ConfigurationFile.ReadCollectionFromEnvironment()
+                ?? throw new ArgumentException("Publishing requires CIVIC_LENS_COLLECTION_CONFIG.")
+            : new CollectionConfiguration { People = [], Sources = [] };
         var issueConfiguration = args is ["releases", "publish", ..]
             ? ConfigurationFile.ReadIssuesFromEnvironment()
                 ?? throw new ArgumentException("Publishing requires CIVIC_LENS_ISSUES_CONFIG.")
@@ -344,7 +343,9 @@ try
                 PostgresVoteReviewStore.FromConnectionString(connectionString),
                 new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)),
                 new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString))),
-            new PublicationCatalog(officialNames, issueConfiguration), TimeProvider.System);
+            new PublicationCatalog(ReviewOfficials.From(publishConfiguration).Names, issueConfiguration),
+            new PublicationOfficials(publishConfiguration, PostgresMemberRosterStore.FromConnectionString(connectionString),
+                PostgresExecutiveRosterStore.FromConnectionString(connectionString)), TimeProvider.System);
         executing = true;
         return await ReleaseCommand.ExecuteAsync(args, publish, new ListPublicationReleases(publications, releases),
             new ActivatePublicationRelease(publications, releases), owner,
