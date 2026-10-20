@@ -18,6 +18,8 @@ public sealed class PublishedRecordLoaders(IDocumentChangeReviewStore documentCh
 
     internal RelationshipRecordLoader Relationships => All.OfType<RelationshipRecordLoader>().Single();
 
+    internal VoteRecordLoader Votes => All.OfType<VoteRecordLoader>().Single();
+
     internal ICarriedPageLoader Carried(PublishedRecordKind kind) =>
         For(kind) as ICarriedPageLoader ?? throw new ArgumentException($"A {kind} page does not list related records.", nameof(kind));
 

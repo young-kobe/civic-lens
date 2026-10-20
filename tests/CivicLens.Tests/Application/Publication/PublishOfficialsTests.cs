@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Publication;
+using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 
@@ -47,9 +48,41 @@ public sealed class PublishOfficialsTests
         var scenario = new PublicationScenario();
         await PublishAsync(scenario, scenario.AddVote('a'));
 
+        scenario.Releases.ReadPaths.Clear();
+
         var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", scenario.AddDraft('b')));
 
         Assert.Equal(["mayor"], OfficialsOf(scenario, second.DirectoryName).Officials.Select(official => official.Id));
+        Assert.DoesNotContain(scenario.Releases.ReadPaths, path => path.StartsWith("records/", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AReplacedVoteRevisionListsTheMembersOfTheNewRevisionNotTheCarriedOne()
+    {
+        var scenario = new PublicationScenario();
+        var vote = scenario.AddVote('a');
+        await PublishAsync(scenario, vote);
+        var review = scenario.Votes.Publishable[vote].Review;
+        var revised = review.CurrentRevision with
+        {
+            RevisionNumber = 2,
+            Members = [review.CurrentRevision.Members[0] with { PersonId = "chair" }]
+        };
+        scenario.Votes.Publishable[vote] = scenario.Votes.Publishable[vote] with
+        {
+            Review = review with
+            {
+                CurrentRevision = revised,
+                Revisions = review.Revisions.Add(revised),
+                Decisions = review.Decisions.Add(PublicationScenario.Decision(vote, 2, ReviewDecisionKind.Approve) with { RevisionNumber = 2 }),
+                ReviewStateVersion = 2
+            }
+        };
+
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k2", new PublishedRecordReference(PublishedRecordKind.Vote, vote)));
+
+        Assert.Equal(["chair"], OfficialsOf(scenario, second.DirectoryName).Officials.Select(official => official.Id));
     }
 
     [Fact]

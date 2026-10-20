@@ -150,6 +150,23 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
             .OrderBy(row => row.RecordId).Select(row => row.RecordId).FirstOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<string>> ReadMemberPersonIdsAsync(ImmutableArray<(string RecordId, int RevisionNumber)> revisions,
+        CancellationToken cancellationToken)
+    {
+        if (revisions.IsEmpty) return [];
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var json = await db.Set<VoteRevisionRow>().FromSqlRaw("""
+                SELECT r.* FROM vote_revisions r
+                JOIN unnest({0}, {1}) AS k(record_id, revision_number)
+                  ON r.record_id = k.record_id AND r.revision_number = k.revision_number
+                """,
+                revisions.Select(revision => revision.RecordId).ToArray(), revisions.Select(revision => revision.RevisionNumber).ToArray())
+            .AsNoTracking().Select(row => row.RevisionJson).ToArrayAsync(cancellationToken);
+        if (json.Length != revisions.Length) throw new InvalidDataException("A release lists a vote revision that is not stored.");
+        return [.. json.SelectMany(item => ReviewJson.Deserialize<VoteDraftRevision>(item, "vote revision").OfficialIds())
+            .Distinct(StringComparer.Ordinal)];
+    }
+
     public async Task<IReadOnlyDictionary<string, ImmutableArray<string>>> FindBillActionRecordIdsAsync(ImmutableArray<VoteBill> bills,
         CancellationToken cancellationToken)
     {
