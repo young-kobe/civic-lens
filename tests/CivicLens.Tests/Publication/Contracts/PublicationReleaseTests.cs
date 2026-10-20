@@ -35,7 +35,8 @@ public sealed class PublicationReleaseTests
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(3)]
-    [InlineData(5)]
+    [InlineData(4)]
+    [InlineData(6)]
     public void RejectsASchemaVersionThisReaderDoesNotKnow(int version)
     {
         Assert.Throws<InvalidDataException>(Release(version, Entry(PublishedRecordKind.DocumentChange, ChangeId)).Validate);

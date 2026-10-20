@@ -1,16 +1,14 @@
 using System.Text;
-using System.Text.Json;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
 /// <summary>Writes the pages built from the manifest: home, all records, search, and the issue and policy area pages.</summary>
-internal sealed class ReleaseIndexPages(IReleaseDirectory releases, IReleaseRenderer renderer, PublicationCatalog catalog)
+internal sealed class ReleaseIndexPages(IReleaseDirectory releases, IReleaseRenderer renderer)
 {
-    public async Task WriteAsync(IReleaseStaging staging, PublicationRelease manifest, IReadOnlyList<PendingRecord> additions,
-        PreviousRelease previous, CancellationToken cancellationToken)
+    public async Task WriteAsync(IReleaseStaging staging, PublicationRelease manifest, ReleaseFacets facets,
+        IReadOnlyList<PendingRecord> additions, PreviousRelease previous, CancellationToken cancellationToken)
     {
-        var facets = ReleaseFacets.From(manifest, catalog);
         for (var page = 1; page <= PublicationProtocol.PageCount(manifest.Records.Length); page++)
             await WriteAsync(staging, PublicationProtocol.AllRecordsPagePath(page),
                 await renderer.RenderAllRecordsAsync(manifest, page, cancellationToken), cancellationToken);
@@ -34,11 +32,7 @@ internal sealed class ReleaseIndexPages(IReleaseDirectory releases, IReleaseRend
         var latest = manifest.Records.Where(entry => entry.Kind == PublishedRecordKind.Brief)
             .MaxBy(entry => entry.EventDate);
         if (latest is null) return null;
-        var json = additions.FirstOrDefault(addition => addition.Entry.Kind == latest.Kind && addition.RecordId == latest.RecordId)?.Json
-            ?? await releases.ReadFileAsync(previous.DirectoryName!, PublicationProtocol.RecordDataPath(latest.RecordId),
-                PublishedRecordFiles.MaximumCitedRecordBytes, cancellationToken);
-        var brief = JsonSerializer.Deserialize<PublishedBrief>(json, PublicationProtocol.JsonOptions)
-            ?? throw new InvalidDataException("A brief file is empty.");
+        var brief = await ReleaseRecordFiles.ReadAsync<PublishedBrief>(releases, latest, additions, previous, cancellationToken);
         brief.Validate();
         return brief;
     }

@@ -653,7 +653,7 @@ Enable the source `congress-members` in the collection configuration to capture 
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- roster propose config/federal-coverage.json
 ```
 
-Enable the source `executive-officials` the same way to capture the executive file, which lists presidents and vice presidents. Nothing reads it yet.
+Enable the source `executive-officials` the same way to capture the executive file, which lists presidents and vice presidents. Publish reads it to write the terms of a configured person with a Wikidata ID.
 
 The output lists the members to add and the configured people who left the roster. Edit the configuration by hand and commit it. Press sources of a new member are a manual step. See [roster](architecture/roster.md#proposals).
 
@@ -668,6 +668,8 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases list [limit]
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases activate <release-number>
 ```
+
+The first publish of schema version 5 needs an empty release directory. A reader refuses a release of an older schema. Before that publish, stop the static server and delete the contents of `CIVIC_LENS_RELEASE_DIRECTORY`. Do this once. Production has no older release.
 
 Write each record as `<kind>:<id>`. The kind is `documentChange`, `statement`, `action`, `vote`, `brief`, or `relationship`. For example, use `documentChange:` and a 32-character draft ID, `statement:` and a 64-character candidate ID, or `action:` and a 64-character action record ID. The other three kinds take a 64-character record ID too. The command never guesses the kind from the ID. An unknown kind or a bad shape exits with code 2. The revision must be approved with no unresolved concerns.
 

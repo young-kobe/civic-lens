@@ -15,6 +15,7 @@ internal sealed class FakeReleaseSite : HttpMessageHandler
     public int ManifestRequests { get; private set; }
     public int NotModifiedReplies { get; private set; }
     public List<string> RecordRequests { get; } = [];
+    public List<string> Requests { get; } = [];
 
     public void Publish(int number, params SampleRecord[] records)
     {
@@ -27,6 +28,10 @@ internal sealed class FakeReleaseSite : HttpMessageHandler
         };
         files.Clear();
         files[PublicationProtocol.ManifestPath] = JsonSerializer.SerializeToUtf8Bytes(manifest, PublicationProtocol.JsonOptions);
+        files[PublicationProtocol.OfficialsPath] = JsonSerializer.SerializeToUtf8Bytes(
+            new PublishedOfficials { Officials = [new() { Id = "mayor", Name = "Mayor Example" }] }, PublicationProtocol.JsonOptions);
+        files[PublicationProtocol.CatalogPath] = JsonSerializer.SerializeToUtf8Bytes(
+            new PublishedCatalog { Issues = [new() { Id = "housing", Name = "Housing costs" }], PolicyAreas = [] }, PublicationProtocol.JsonOptions);
         foreach (var record in records)
             files[PublicationProtocol.RecordDataPath(record.Entry.RecordId)] = JsonSerializer.SerializeToUtf8Bytes(record.Body, PublicationProtocol.JsonOptions);
         entityTag = $"\"release-{number}\"";
@@ -50,6 +55,7 @@ internal sealed class FakeReleaseSite : HttpMessageHandler
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var path = request.RequestUri!.AbsolutePath.TrimStart('/');
+        Requests.Add(path);
         if (path == PublicationProtocol.ManifestPath)
         {
             ManifestRequests++;
