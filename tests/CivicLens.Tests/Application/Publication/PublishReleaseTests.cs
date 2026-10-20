@@ -98,7 +98,7 @@ public sealed class PublishReleaseTests
 
         var order = scenario.Releases.WriteOrder;
         Assert.InRange(order.IndexOf(PublicationProtocol.SearchPagePath), 0, order.IndexOf(PublicationProtocol.ManifestPath) - 1);
-        Assert.Contains("<html>search 3</html>", System.Text.Encoding.UTF8.GetString(
+        Assert.Contains("<html>search 3 1</html>", System.Text.Encoding.UTF8.GetString(
             scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.SearchPagePath]));
     }
 
