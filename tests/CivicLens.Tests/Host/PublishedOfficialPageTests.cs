@@ -61,18 +61,18 @@ public sealed class PublishedOfficialPageTests
         var html = await new ReleaseRenderer().RenderOfficialAsync(page, CancellationToken.None);
 
         var links = new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-earlier-congresses'] a");
-        Assert.Equal(["mayor/118.html", "mayor/117.html"], links.Select(link => link.GetAttribute("href")));
+        Assert.Equal(["../officials/mayor/118.html", "../officials/mayor/117.html"], links.Select(link => link.GetAttribute("href")));
     }
 
     [Fact]
     public async Task AnEarlierCongressPageHoldsOnlyThatCongressVotesAndLinksBackAndResolvesItsAssetsFromTwoFoldersDeep()
     {
-        var page = new ReleaseOfficialPage(Profile(), 118, false, [], [], [Vote('3', new DateOnly(2024, 4, 1)) with { Congress = 118 }]);
+        var page = new ReleaseOfficialPage(Profile(), true, 118, false, [], [], [Vote('3', new DateOnly(2024, 4, 1)) with { Congress = 118 }]);
 
         var html = await new ReleaseRenderer().RenderOfficialAsync(page, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
-        Assert.Equal("../mayor.html", document.QuerySelector("a.back-link")!.GetAttribute("href"));
+        Assert.Equal("../../officials/mayor.html", document.QuerySelector("a.back-link")!.GetAttribute("href"));
         Assert.Equal(["../../records/" + new string('3', 64) + ".html"], document.QuerySelectorAll("tbody a.cell-title").Select(link => link.GetAttribute("href")));
         Assert.Contains("href=\"../../assets/css/theme.css\"", html, StringComparison.Ordinal);
         Assert.Null(document.QuerySelector("[aria-labelledby='panel-offices']"));
@@ -89,19 +89,30 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task TheOfficialListLinksEachPageAndShowsTheCountOfRecordsThatNameTheOfficial()
+    public async Task AnOfficialWhoLeftTheConfigurationSaysThatCivicLensNoLongerTracksThem()
+    {
+        var html = await new ReleaseRenderer().RenderOfficialAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []) with { IsTracked = false },
+            CancellationToken.None);
+
+        Assert.Contains("Civic Lens no longer tracks this official", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("The rosters and the configuration list no dated office", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheOfficialListLinksEachPageAndShowsTheCountOfRecordsOtherThanVotesThatNameTheOfficial()
     {
         var html = await new ReleaseRenderer().RenderOfficialsAsync([new OfficialListing(Profile(), 2)], CancellationToken.None);
 
         var row = new HtmlParser().ParseDocument(html).QuerySelector("tbody tr")!;
         Assert.Equal("officials/mayor.html", row.QuerySelector("a")!.GetAttribute("href"));
         Assert.Equal("2", row.QuerySelector("td.num")!.TextContent);
+        Assert.Equal("Records other than votes", new HtmlParser().ParseDocument(html).QuerySelector("thead th.num")!.TextContent);
     }
 
     private static PublishedOfficialProfile Profile() => new() { Id = "mayor", Name = "Mayor Example" };
 
     private static ReleaseOfficialPage Current(PublishedRecordEntry[] entries, PublishedOfficialVote[] votes) =>
-        new(Profile(), 119, true, [], [.. entries], [.. votes]);
+        new(Profile(), true, 119, true, [], [.. entries], [.. votes]);
 
     private static PublishedRecordEntry Entry(char id, PublishedRecordKind kind, DateOnly date) => new()
     {

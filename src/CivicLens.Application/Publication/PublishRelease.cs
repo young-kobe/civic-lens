@@ -34,8 +34,8 @@ public sealed class PublishRelease
         releasePages = new ReleasePages(releases, loaders);
         this.catalog = catalog;
         indexPages = new ReleaseIndexPages(releases, renderer);
-        dataFiles = new ReleaseDataFiles(loaders.Votes, officials);
-        officialPages = new ReleaseOfficialPages(new ReleaseOfficialVotes(releases, loaders.Votes), renderer);
+        dataFiles = new ReleaseDataFiles(releases, loaders.Votes, officials);
+        officialPages = new ReleaseOfficialPages(new ReleaseOfficialVotes(releases, loaders.Votes), officials, renderer);
         this.clock = clock;
         rules = new PublishedRecordRules(catalog);
     }
@@ -148,7 +148,7 @@ public sealed class PublishRelease
             Compress(manifestJson, stream => new BrotliStream(stream, CompressionLevel.Optimal)), cancellationToken);
         var facets = ReleaseFacets.From(manifest, catalog);
         await indexPages.WriteAsync(staging, manifest, facets, additions, previous, cancellationToken);
-        var officials = await dataFiles.WriteAsync(staging, manifest, facets, previous, cancellationToken);
+        var officials = await dataFiles.WriteAsync(staging, manifest, facets, additions, previous, cancellationToken);
         await officialPages.WriteAsync(staging, manifest, officials, additions, previous, cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestPath, manifestJson, cancellationToken);
         return (await staging.CompleteAsync(number, cancellationToken), entries);

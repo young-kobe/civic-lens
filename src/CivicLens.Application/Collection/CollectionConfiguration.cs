@@ -274,13 +274,14 @@ public sealed record CollectionConfiguration
             throw new ArgumentException($"Person '{person.Id}' has more than {OfficeConfiguration.MaximumPerPerson} offices.");
         foreach (var office in person.Offices)
         {
-            if (office is null || !IsBoundedText(office.Title) || office.Party is not null && !IsBoundedText(office.Party) || office.EndsOn < office.StartsOn)
+            if (office is null || string.IsNullOrWhiteSpace(office.Title) || office.Party is not null && string.IsNullOrWhiteSpace(office.Party) ||
+                office.EndsOn < office.StartsOn)
                 throw new ArgumentException($"Person '{person.Id}' has an invalid office.");
+            IssueConfiguration.ValidateNameLength(office.Title, $"Person '{person.Id}' office title");
+            if (office.Party is not null)
+                IssueConfiguration.ValidateNameLength(office.Party, $"Person '{person.Id}' office party");
         }
     }
-
-    private static bool IsBoundedText(string text) =>
-        !string.IsNullOrWhiteSpace(text) && text.Length <= PublishedRecordEntry.MaximumFilterValueLength;
 
     private static void ValidateExternalId(PersonConfiguration person, string? id, string label, Func<string, bool> isValid,
         HashSet<string> seen)

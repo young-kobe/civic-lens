@@ -28,7 +28,7 @@ public interface IVoteReviewStore
     Task<IReadOnlyDictionary<string, PublishableVote>> GetForPublicationAsync(ImmutableArray<string> recordIds,
         CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<string>> ReadMemberPersonIdsAsync(ImmutableArray<PublishedRevisionBinding> revisions,
+    Task<IReadOnlyList<VoteMembership>> ReadMembersAsync(ImmutableArray<PublishedRevisionBinding> revisions,
         CancellationToken cancellationToken);
 
     Task<string?> FindRecordIdByRollAsync(int congress, int sessionNumber, int rollCallNumber, CancellationToken cancellationToken);

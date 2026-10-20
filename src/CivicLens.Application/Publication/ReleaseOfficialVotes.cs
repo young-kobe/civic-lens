@@ -20,7 +20,7 @@ internal sealed class ReleaseOfficialVotes(IReleaseDirectory releases, VoteRecor
         if (replaced.Length > 0)
         {
             var congresses = replaced.Select(entry => congressOf[entry.RecordId]).Distinct().ToArray();
-            foreach (var officialId in await votes.MemberPersonIdsAsync(replaced, cancellationToken))
+            foreach (var officialId in (await votes.MembersAsync(replaced, cancellationToken)).Select(member => member.PersonId).Distinct())
                 foreach (var congress in congresses) RowsOf(changes, officialId, congress);
         }
         return new(changes, [.. congressOf.Keys]);

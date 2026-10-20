@@ -15,8 +15,4 @@ public sealed record PublishedOfficialProfile
         foreach (var term in Terms) term.Validate();
     }
 
-    public bool Equals(PublishedOfficialProfile? other) =>
-        other is not null && Id == other.Id && Name == other.Name && WikidataId == other.WikidataId && Terms.SequenceEqual(other.Terms);
-
-    public override int GetHashCode() => HashCode.Combine(Id, Name, WikidataId, Terms.Length);
 }

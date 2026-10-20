@@ -343,7 +343,7 @@ internal sealed class FakeRenderer : IReleaseRenderer
     public Task<string> RenderFacetsAsync(ReleaseFacets facets, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>facets {facets.Issues.Length} {facets.PolicyAreas.Length}</html>");
     public Task<string> RenderOfficialAsync(ReleaseOfficialPage page, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>official {page.Profile.Id} {(page.IsCurrent ? "current" : "past")} {page.Congress} past [{string.Join(',', page.PastCongresses)}] records [{string.Join(',', page.Records.Select(entry => entry.RecordId))}] votes [{string.Join(',', page.Votes.Select(vote => vote.RecordId))}]</html>");
+        Task.FromResult($"<html>official {page.Profile.Id} {(page.IsTracked ? "tracked" : "untracked")} {(page.IsCurrent ? "current" : "past")} {page.Congress} past [{string.Join(',', page.PastCongresses)}] records [{string.Join(',', page.Records.Select(entry => entry.RecordId))}] votes [{string.Join(',', page.Votes.Select(vote => vote.RecordId))}]</html>");
     public Task<string> RenderOfficialsAsync(IReadOnlyList<OfficialListing> officials, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>officials {string.Join(',', officials.Select(official => $"{official.Profile.Id}:{official.RecordCount}"))}</html>");
     public Task<string> RenderSearchAsync(PublicationRelease release, ReleaseFacets facets, CancellationToken cancellationToken) =>

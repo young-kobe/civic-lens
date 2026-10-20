@@ -1,16 +1,21 @@
 using System.Text.Json;
+using CivicLens.Application.Votes;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
 /// <summary>Writes the data files built from the manifest: the officials with a published record, and the issue and policy area names.</summary>
-internal sealed class ReleaseDataFiles(VoteRecordLoader votes, PublicationOfficials officials)
+internal sealed class ReleaseDataFiles(IReleaseDirectory releases, VoteRecordLoader votes, PublicationOfficials officials)
 {
     public async Task<PublishedOfficials> WriteAsync(IReleaseStaging staging, PublicationRelease manifest, ReleaseFacets facets,
-        PreviousRelease previous, CancellationToken cancellationToken)
+        IReadOnlyList<PendingRecord> additions, PreviousRelease previous, CancellationToken cancellationToken)
     {
-        var ids = await PublishedOfficialIdsAsync(manifest, cancellationToken);
-        var published = await officials.ResolveAsync(ids, previous.Officials, cancellationToken);
+        var members = await votes.MembersAsync(manifest.Records, cancellationToken);
+        var entryNames = manifest.Records.SelectMany(entry => entry.Officials).DistinctBy(official => official.Id)
+            .ToDictionary(official => official.Id, official => official.Name, StringComparer.Ordinal);
+        var ids = entryNames.Keys.Concat(members.Select(member => member.PersonId)).ToHashSet(StringComparer.Ordinal);
+        var recordNames = await RecordNamesAsync(manifest, ids, entryNames, members, additions, previous, cancellationToken);
+        var published = await officials.ResolveAsync(ids, recordNames, cancellationToken);
         var officialsJson = JsonSerializer.SerializeToUtf8Bytes(published, PublicationProtocol.JsonOptions);
         if (officialsJson.Length > PublishedOfficials.MaximumBytes)
             throw new ArgumentException("The officials file would exceed its size limit.", nameof(manifest));
@@ -19,11 +24,25 @@ internal sealed class ReleaseDataFiles(VoteRecordLoader votes, PublicationOffici
         return published;
     }
 
-    private async Task<HashSet<string>> PublishedOfficialIdsAsync(PublicationRelease manifest, CancellationToken cancellationToken)
+    // Only an official who left the configuration needs a name from the records. A vote file gives the name of a vote-only member.
+    private async Task<Dictionary<string, string>> RecordNamesAsync(PublicationRelease manifest, HashSet<string> ids,
+        Dictionary<string, string> entryNames, IReadOnlyList<VoteMembership> members, IReadOnlyList<PendingRecord> additions,
+        PreviousRelease previous, CancellationToken cancellationToken)
     {
-        var ids = manifest.Records.SelectMany(entry => entry.Officials).Select(official => official.Id).ToHashSet(StringComparer.Ordinal);
-        ids.UnionWith(await votes.MemberPersonIdsAsync(manifest.Records, cancellationToken));
-        return ids;
+        var names = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var id in ids.Where(id => !officials.IsConfigured(id)))
+        {
+            var name = entryNames.GetValueOrDefault(id);
+            if (name is null)
+            {
+                var entry = manifest.Records.First(entry => entry.Kind == PublishedRecordKind.Vote &&
+                    entry.RecordId == members.First(member => member.PersonId == id).RecordId);
+                var vote = await ReleaseRecordFiles.ReadAsync<PublishedVote>(releases, entry, additions, previous, cancellationToken);
+                name = vote.Members.FirstOrDefault(member => member.Official.Id == id)?.Official.Name;
+            }
+            if (name is not null) names[id] = name;
+        }
+        return names;
     }
 
     private static PublishedCatalog CatalogOf(ReleaseFacets facets)

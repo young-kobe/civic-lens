@@ -6,14 +6,18 @@ namespace CivicLens.Application.Publication;
 
 /// <summary>
 /// Builds the profile of each official that a record names. A configured person matches roster terms by bioguide ID, else by
-/// Wikidata ID, else gets the configured offices. A person who left the configuration keeps the profile of the previous release.
+/// Wikidata ID, else gets the configured offices. A person who left the configuration keeps the name that the records hold, and has no terms.
 /// </summary>
 public sealed class PublicationOfficials(CollectionConfiguration configuration, IMemberRosterStore members, IExecutiveRosterStore executives)
 {
     private static readonly PublishedOfficeTerm[] NoTerms = [];
 
+    private readonly HashSet<string> configuredIds = [.. configuration.People.Select(person => person.Id)];
+
+    public bool IsConfigured(string officialId) => configuredIds.Contains(officialId);
+
     public async Task<PublishedOfficials> ResolveAsync(IReadOnlySet<string> officialIds,
-        IReadOnlyDictionary<string, PublishedOfficialProfile> previous, CancellationToken cancellationToken)
+        IReadOnlyDictionary<string, string> recordNames, CancellationToken cancellationToken)
     {
         var people = configuration.People.Where(person => officialIds.Contains(person.Id)).ToArray();
         var memberTerms = await ReadMemberTermsAsync(people.Any(person => person.BioguideId is not null), cancellationToken);
@@ -22,7 +26,7 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
         var published = new PublishedOfficials
         {
             Officials = [.. people.Select(person => ToProfile(person, memberTerms, executiveTerms))
-                .Concat(officialIds.Except(people.Select(person => person.Id)).Select(id => Carried(id, previous)))
+                .Concat(officialIds.Except(people.Select(person => person.Id)).Select(id => Unconfigured(id, recordNames)))
                 .OrderBy(profile => profile.Name, StringComparer.Ordinal).ThenBy(profile => profile.Id, StringComparer.Ordinal)]
         };
         published.Validate();
@@ -62,10 +66,10 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
         End = term.End
     };
 
-    private static PublishedOfficialProfile Carried(string id, IReadOnlyDictionary<string, PublishedOfficialProfile> previous) =>
-        previous.TryGetValue(id, out var profile)
-            ? profile
-            : throw new InvalidDataException($"Official {id} is named by a record but has no configured name or earlier profile.");
+    private static PublishedOfficialProfile Unconfigured(string id, IReadOnlyDictionary<string, string> recordNames) =>
+        recordNames.TryGetValue(id, out var name)
+            ? new() { Id = id, Name = name }
+            : throw new InvalidDataException($"Official {id} is named by a record but no record holds a name for the official.");
 
     private static PublishedOfficialProfile ToProfile(PersonConfiguration person, Dictionary<string, PublishedOfficeTerm[]> memberTerms,
         Dictionary<string, PublishedOfficeTerm[]> executiveTerms) => new()

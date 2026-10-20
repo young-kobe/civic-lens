@@ -3,10 +3,10 @@
 
 <PublicPage Title="Officials">
     <a class="back-link" href="@PublicationProtocol.HomePath">Home</a>
-    <PageHeader Title="Officials" Lede="Each page lists the published records of one official and the votes of the current Congress. The count shows the records that name the official, and no votes." />
+    <PageHeader Title="Officials" Lede="Each page lists the published records of one official and the votes of the current Congress. The count shows the records other than votes that name the official." />
     <Panel Label="Officials">
         <DataTable Items="Officials" Caption="Officials with published records">
-            <Head><th>Name</th><th class="fit num">Records</th></Head>
+            <Head><th>Name</th><th class="fit num">Records other than votes</th></Head>
             <Row Context="official">
                 <td><a class="cell-title" href="@official.PagePath">@official.Profile.Name</a></td>
                 <td class="fit num">@official.RecordCount</td>

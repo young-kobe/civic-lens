@@ -150,14 +150,14 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
             .OrderBy(row => row.RecordId).Select(row => row.RecordId).FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<string>> ReadMemberPersonIdsAsync(ImmutableArray<PublishedRevisionBinding> revisions,
+    public async Task<IReadOnlyList<VoteMembership>> ReadMembersAsync(ImmutableArray<PublishedRevisionBinding> revisions,
         CancellationToken cancellationToken)
     {
         if (revisions.IsEmpty) return [];
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var json = await CitedRevisions.ReadRevisionJsonAsync(db, PublishedRecordKind.Vote, revisions, cancellationToken);
-        return [.. json.SelectMany(item => ReviewJson.Deserialize<VoteDraftRevision>(item, "vote revision").OfficialIds())
-            .Distinct(StringComparer.Ordinal)];
+        return [.. json.Select(item => ReviewJson.Deserialize<VoteDraftRevision>(item, "vote revision"))
+            .SelectMany(revision => revision.OfficialIds().Select(personId => new VoteMembership(revision.RecordId, personId)))];
     }
 
     public async Task<IReadOnlyDictionary<string, ImmutableArray<string>>> FindBillActionRecordIdsAsync(ImmutableArray<VoteBill> bills,

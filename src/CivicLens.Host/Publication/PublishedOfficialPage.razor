@@ -8,7 +8,7 @@
     }
     else
     {
-        <a class="back-link" href="@("../" + Page.Profile.Id + ".html")">@Page.Profile.Name</a>
+        <a class="back-link" href="@(Page.RootPath + PublicationProtocol.OfficialPagePath(Page.Profile.Id))">@Page.Profile.Name</a>
     }
     <PageHeader Title="@Page.Profile.Name" Lede="@Lede" />
     @if (Page.IsCurrent)
@@ -22,7 +22,7 @@
                     <td class="fit num">@Moment.Iso(term.Start)</td>
                     <td class="fit num">@(term.End is { } end ? Moment.Iso(end) : "Present")</td>
                 </Row>
-                <Empty><EmptyState Title="No office on record" Text="The rosters and the configuration list no dated office for this official." /></Empty>
+                <Empty><EmptyState Title="No office on record" Text="@NoOfficeText" /></Empty>
             </DataTable>
         </Panel>
     }
@@ -50,7 +50,7 @@
             <ul class="choices">
                 @foreach (var congress in Page.PastCongresses)
                 {
-                    <li><a href="@($"{Page.Profile.Id}/{congress}.html")">Votes in Congress @congress</a></li>
+                    <li><a href="@(Page.RootPath + PublicationProtocol.OfficialCongressPagePath(Page.Profile.Id, congress))">Votes in Congress @congress</a></li>
                 }
             </ul>
         </Panel>
@@ -59,6 +59,10 @@
 
 @code {
     [Parameter, EditorRequired] public ReleaseOfficialPage Page { get; set; } = default!;
+
+    private string NoOfficeText => Page.IsTracked
+        ? "The rosters and the configuration list no dated office for this official."
+        : "Civic Lens no longer tracks this official, so it lists no office. The records below stay published.";
 
     private IReadOnlyList<PublishedOfficialRow> Rows => PublishedOfficialView.Rows(Page);
 
