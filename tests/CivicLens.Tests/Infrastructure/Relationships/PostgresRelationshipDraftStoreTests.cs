@@ -246,7 +246,7 @@ public sealed class PostgresRelationshipDraftStoreTests(PostgresCollection postg
         Assert.Empty(model.Requests);
         Assert.Equal([["2"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions"));
         Assert.Equal([["Succeeded", "null"]], await seeder.ReadAsync("SELECT status, error_code FROM relationship_analysis"));
-        Assert.Equal([["1"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_analysis_runs WHERE outcome = 'Bypassed' AND reason = 'unchanged'"));
+        Assert.Equal([["1"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_analysis_runs WHERE outcome = 'Bypassed' AND reason = 'targetRecited'"));
         var read = (await new PostgresRelationshipReviewStore(factory).GetAsync(pair.PairId, default))!;
         Assert.Equal(2, read.Review.CurrentRevision.Target.RevisionNumber);
         Assert.False(read.CitedRecordsChanged);
@@ -268,11 +268,67 @@ public sealed class PostgresRelationshipDraftStoreTests(PostgresCollection postg
         var conflicting = Revision(pair) with { RevisionNumber = 3 };
 
         Assert.True(await store.CheckpointAsync(RelationshipDraftCheckpoint.From(claim, conflicting),
-            new RelationshipDraftRun(run, RelationshipDraftErrorCodes.Unchanged), default));
+            new RelationshipDraftRun(run, RelationshipDraftErrorCodes.TargetRecited), default));
 
         Assert.Equal([["RetryWaiting", "revisionConflict"]], await seeder.ReadAsync("SELECT status, error_code FROM relationship_analysis"));
-        Assert.Equal([[$"Bypassed"]], await seeder.ReadAsync($"SELECT outcome FROM relationship_analysis_runs WHERE run_id = '{run.RunId}'"));
+        Assert.Equal([["Bypassed", "targetRecited"]], await seeder.ReadAsync($"SELECT outcome, reason FROM relationship_analysis_runs WHERE run_id = '{run.RunId}'"));
         Assert.Equal([["1"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions"));
+    }
+
+    [Fact]
+    public async Task ANoneAnswerAfterAnAiRevisionLeavesItUncopiedAndNotApprovableWhenTheTargetRevisionChangesAgain()
+    {
+        var pair = await SeedApprovedPairAsync();
+        await DraftNoneAfterASummaryChangeAsync();
+        await seeder.ActionAsync(Action(revision: 3) with { Summary = "A new summary of the bill." });
+        var model = new FakeRelationshipDraftModel();
+
+        await RunWorkerAsync(model);
+        await RunWorkerAsync(model);
+
+        Assert.Empty(model.Requests);
+        Assert.Equal([["1"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions"));
+        Assert.Equal([["Succeeded", "noRelationship"]], await seeder.ReadAsync("SELECT status, error_code FROM relationship_analysis"));
+        Assert.True((await new PostgresRelationshipReviewStore(factory).GetAsync(pair.PairId, default))!.CitedRecordsChanged);
+    }
+
+    [Fact]
+    public async Task ANoneAnswerAfterAPersonRevisionStartsNoFurtherModelCallOnLaterRefreshes()
+    {
+        await SeedPersonRevisionAsync();
+        await DraftNoneAfterASummaryChangeAsync();
+        await seeder.ActionAsync(Action(revision: 3) with { Summary = "A new summary of the bill." });
+        var model = new FakeRelationshipDraftModel();
+
+        await RunWorkerAsync(model);
+        await RunWorkerAsync(model);
+
+        Assert.Empty(model.Requests);
+        Assert.Equal([["2"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions"));
+    }
+
+    [Fact]
+    public async Task ALaterFingerprintChangeAfterANoneAnswerDraftsAgain()
+    {
+        await SeedApprovedPairAsync();
+        await RunWorkerAsync(new FakeRelationshipDraftModel().Draft(Output()));
+        await DraftNoneAfterASummaryChangeAsync();
+        await seeder.ActionAsync(Action(revision: 3) with { Summary = "Another summary of the bill." });
+        var model = new FakeRelationshipDraftModel().Draft(Output());
+
+        await RunWorkerAsync(model);
+
+        Assert.Single(model.Requests);
+        Assert.Equal([["2"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions"));
+    }
+
+    private async Task DraftNoneAfterASummaryChangeAsync()
+    {
+        if (await seeder.ReadAsync("SELECT 1 FROM relationship_drafts") is [])
+            await RunWorkerAsync(new FakeRelationshipDraftModel().Draft(Output()));
+        await seeder.ActionAsync(Action(revision: 2) with { Summary = "A new summary of the bill." });
+        await RunWorkerAsync(new FakeRelationshipDraftModel().Draft(None()));
+        Assert.Equal([["Succeeded", "noRelationship"]], await seeder.ReadAsync("SELECT status, error_code FROM relationship_analysis"));
     }
 
     [Fact]

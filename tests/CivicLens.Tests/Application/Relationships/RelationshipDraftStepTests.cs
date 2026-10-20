@@ -75,7 +75,7 @@ public sealed class RelationshipDraftStepTests
         Assert.Equal((2, 2, 1, ReviewAuthor.AnalysisSubject), (revision.RevisionNumber, revision.Target.RevisionNumber, revision.Statement.RevisionNumber, revision.AuthorSubject));
         Assert.Equal((current.Type, current.Reason, current.StatementQuote, current.TargetFactId), (revision.Type, revision.Reason, revision.StatementQuote, revision.TargetFactId));
         Assert.Equal((State.Succeeded, null), (store.Entries[0].Status, store.Entries[0].ErrorCode));
-        Assert.Equal((AnalysisRunOutcome.Bypassed, RelationshipDraftErrorCodes.Unchanged), (Assert.Single(store.Runs).Run.Outcome, store.Runs[0].Reason));
+        Assert.Equal((AnalysisRunOutcome.Bypassed, RelationshipDraftErrorCodes.TargetRecited), (Assert.Single(store.Runs).Run.Outcome, store.Runs[0].Reason));
     }
 
     [Fact]
@@ -88,6 +88,20 @@ public sealed class RelationshipDraftStepTests
 
         Assert.Empty(model.Requests);
         Assert.Empty(store.Revisions);
+    }
+
+    [Fact]
+    public async Task ARevisionBehindANoneAnswerIsNeverCopiedToTheNewTargetCitation()
+    {
+        var pair = ActionPair();
+        var current = RelationshipDraftResolver.Resolve(Output(), Context(pair), Created).Accepted!;
+        var evidence = Evidence(pair, current, RelationshipFingerprint.Compute(pair)) with { Action = Action(revision: 2), SettledAsNone = true };
+
+        var (store, model) = await RunAsync(evidence, new FakeRelationshipDraftModel());
+
+        Assert.Empty(model.Requests);
+        Assert.Empty(store.Revisions);
+        Assert.Equal(RelationshipDraftErrorCodes.Unchanged, store.Entries[0].ErrorCode);
     }
 
     [Fact]

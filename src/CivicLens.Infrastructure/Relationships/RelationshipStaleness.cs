@@ -30,7 +30,7 @@ internal static class RelationshipStaleness
           AND (a.status = 'Succeeded' OR a.status = 'Blocked' AND a.error_code = '{{RelationshipDraftErrorCodes.SideNotApproved}}')
           AND NOT EXISTS (SELECT 1 FROM relationship_drafts d WHERE d.record_id = a.pair_id AND d.review_status = 'Approved')
           AND (f.fingerprint IS DISTINCT FROM {{SettledFingerprint("a.pair_id")}}
-               OR EXISTS (SELECT 1 FROM relationship_drafts d JOIN relationship_revisions r
+               OR {{SettledReason("a.pair_id")}} IS DISTINCT FROM '{{RelationshipDraftErrorCodes.NoRelationship}}' AND EXISTS (SELECT 1 FROM relationship_drafts d JOIN relationship_revisions r
                             ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
                           WHERE d.record_id = a.pair_id AND (r.revision_json::jsonb -> 'target' ->> 'revisionNumber')::int <> f.target_revision))
         """;
@@ -55,8 +55,12 @@ internal static class RelationshipStaleness
           AND d.no_longer_matches <> NOT (d.record_id = ANY({3}))
         """;
 
-    public static string SettledFingerprint(string pairId) => $"""
-        (SELECT r.context_json::jsonb ->> 'fingerprint' FROM relationship_analysis_runs r
+    public static string SettledFingerprint(string pairId) => LatestSettledRun(pairId, "r.context_json::jsonb ->> 'fingerprint'");
+
+    public static string SettledReason(string pairId) => LatestSettledRun(pairId, "r.reason");
+
+    private static string LatestSettledRun(string pairId, string column) => $"""
+        (SELECT {column} FROM relationship_analysis_runs r
           WHERE r.pair_id = {pairId} AND r.task = '{RelationshipDraftTask.Task}' AND r.outcome IN ('Drafted','Bypassed')
             AND r.context_json::jsonb ->> 'fingerprint' IS NOT NULL
           ORDER BY r.finished_at_utc_ticks DESC, r.run_id DESC LIMIT 1)

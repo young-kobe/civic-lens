@@ -34,7 +34,8 @@ public sealed class RelationshipDraftStep(IRelationshipDraftStore store, IRelati
         return evidence.Current switch
         {
             null => await SettleUnchangedAsync(attempt, context, cancellationToken),
-            { } current when current.Target == pair.Target.Citation => await SettleUnchangedAsync(attempt, context, cancellationToken),
+            { } current when evidence.SettledAsNone || current.Target == pair.Target.Citation =>
+                await SettleUnchangedAsync(attempt, context, cancellationToken),
             { } current when CanRecite(current, pair) => await ReciteAsync(attempt, context, cancellationToken),
             _ => await DraftAsync(attempt, context, cancellationToken)
         };
@@ -49,7 +50,7 @@ public sealed class RelationshipDraftStep(IRelationshipDraftStore store, IRelati
     {
         var run = attempt.BypassRun(RelationshipDraftTask.Model, context.Fingerprint, null);
         var revision = RelationshipDraftResolver.Recite(context, run.FinishedAtUtc);
-        return attempt.SettleAsync(new RelationshipDraftRun(run, RelationshipDraftErrorCodes.Unchanged),
+        return attempt.SettleAsync(new RelationshipDraftRun(run, RelationshipDraftErrorCodes.TargetRecited),
             RelationshipDraftCheckpoint.From(attempt.Claim, revision), cancellationToken);
     }
 
