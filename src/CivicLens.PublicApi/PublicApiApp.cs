@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http;
 using System.Threading.RateLimiting;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Ingest;

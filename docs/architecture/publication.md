@@ -17,12 +17,12 @@ The publication feature turns approved revisions into immutable, cumulative stat
 - Every publication write takes all six review locks in one fixed order, which prevents a deadlock. The order is in [advisory locks](../architecture.md#advisory-locks).
 - A release has no status column. `is_active` marks the one active release: a commit sets it on the new row and clears the old one, and rollback moves it.
 - Rollback is a CLI command only. The workspace has no rollback or activate control.
-- Every release is kept. Carried records are hard links, so disk grows only with published records, and public MCP clients can pin a release. Review this when the R-40 search service exists.
+- Every release is kept. Carried records are hard links, so disk grows only with published records, and public MCP clients can pin a release. The [search](search.md) service pins releases too.
 - In production, releases go to a Cloudflare R2 bucket behind the Cloudflare CDN on civic-lens.info. Terraform defines the bucket and the domain.
 - Publish stages and checks a release on the server, then uploads it. The active release changes only after the upload finishes.
 - Locally, a Caddy container serves the release root with `file_server { precompressed br gzip }`.
 - Host renders the shared Razor components to static HTML, so publication needs no new project.
-- Each manifest entry carries search filters, so search needs no record file reads. Each published record type owns the mapping in its `ToEntry` method. A filter that the kind has no fact for stays empty; publish never guesses it.
+- Each manifest entry carries filters, so the facet pages and the search filters need no record file reads. Each published record type owns the mapping in its `ToEntry` method. A filter that the kind has no fact for stays empty; publish never guesses it.
 - One loader owns each record kind: its ID shape, its ready list, and how publish loads and builds it. `PublishedRecordLoaders` lists them, and the publish and ready-list handlers go through that list. One loader owns the Application side of a kind. The other per-kind places are the `PublicationProtocol.IsRecordId` arm, the store state check, `PublishedRecordLabels.Kind`, the review link, and the `IReleaseRenderer` method.
 - The loader base class gives each kind one owner for its Application rules. A non-generic base exists only so `PublishedRecordLoaders` can hold all record kinds in one list. The six kinds are real variation, with different IDs, stores, and records. The precedents are `PostgresAnalysisStore<TRun>` and `ReviewRecordPage`.
 - `PublishedRecordLoader<TCandidate, TAddition>` owns the ready-list and load steps once. A kind supplies only its store reads, its ready row, and how it builds and renders one record. `PublishedRecordRules.Cite` is the one owner of a published citation for every kind.
@@ -37,7 +37,7 @@ The publication feature turns approved revisions into immutable, cumulative stat
 - Unreviewed proposals, internal reviewer notes, operational job details, and mutation controls stay private.
 - Public serving reads release contracts only. It never reads operational storage or private notes.
 - The public UI is static pages on a CDN. Publish renders every public page, including the official, issue, policy area, and briefing pages. No server is on the public page path. Search and reader reports go to the R-40 service.
-- Search and filters read the manifest in the browser until the R-40 search service replaces them. That service is also the public read API.
+- Search goes to the R-40 [search](search.md) service, which is also the public read API. Each release holds `search.html`, which calls it. The browser no longer searches the manifest.
 - Each public page has one stable URL, so search engines can find it.
 
 ## Invariants
@@ -222,7 +222,7 @@ A record page that no new link cites, and that the publish does not add or repla
 
 ### Rendering
 
-The release builder renders public components to static HTML through `PublicPage`. The pages are the home, all-records, facet list, and facet pages, and one record page for each kind. `PublishedHomePage` shows the brief through `PublishedBriefText`. The brief page uses the same component. `PublishedAllRecordsPage`, `PublishedFacetPage`, and `PublishedHomePage` list records through `PublishedRecordTable`. `PublishedFacetsPage` and `PublishedHomePage` list facets through `PublishedFacetBrowser`. The record pages are `PublishedRecordPage`, `PublishedStatementPage`, `PublishedActionPage`, `PublishedVotePage`, `PublishedBriefPage`, and `PublishedRelationshipPage`.
+The release builder renders public components to static HTML through `PublicPage`. The pages are the home, all-records, search, facet list, and facet pages, and one record page for each kind. `PublishedHomePage` shows the brief through `PublishedBriefText`. The brief page uses the same component. `PublishedAllRecordsPage`, `PublishedFacetPage`, and `PublishedHomePage` list records through `PublishedRecordTable`. `PublishedSearchPage` renders `search.html`. `PublishedFacetsPage` and `PublishedHomePage` list facets through `PublishedFacetBrowser`. The record pages are `PublishedRecordPage`, `PublishedStatementPage`, `PublishedActionPage`, `PublishedVotePage`, `PublishedBriefPage`, and `PublishedRelationshipPage`.
 
 A statement, action, or vote page shows the "Related records" panel of `PublishedRelatedPanel` when its list is not empty. Each row links to the other record and to the relationship page, with the link type and the statement date.
 
@@ -236,7 +236,7 @@ A release copies `assets/css/theme.css`, `assets/css/app.css`, `assets/js/theme.
 
 ### Search
 
-Each all-records page has a search panel. It stays hidden until `app.js` runs, because search needs JavaScript. On the first input, the script fetches `release.json` once and fills the official, issue, and policy area lists from the entries. It matches headline text and filters by kind, official, issue, policy area, and a date range. A date filter matches the event date only, so a record without an event date never matches it. The panel shows the first 50 matches, each linked to its record page. Search reads only the release files, so it works without the operational application.
+Every release holds `search.html`, rendered by `PublishedSearchPage`. Every public page links to it. The page fills the kind, official, issue, policy area, and source filters from the manifest and the catalog names. A script on the page calls the [search](search.md) service at `CIVIC_LENS_PUBLIC_API_URL`, which publish reads. The form stays hidden until `app.js` runs, because search needs JavaScript. Without the variable, the page says that search is not available. A method note on the page states the source text limit.
 
 ## Storage and contracts
 
@@ -267,7 +267,7 @@ Each all-records page has a search panel. It stays hidden until `app.js` runs, b
 | Record rules and builders | `src/CivicLens.Application/Publication/PublishedRecordRules.cs`, `src/CivicLens.Application/Publication/PublishedRecordBuilder.cs`, `src/CivicLens.Application/Publication/PublishedStatementBuilder.cs`, `src/CivicLens.Application/Publication/PublishedActionBuilder.cs`, `src/CivicLens.Application/Publication/PublishedVoteBuilder.cs`, `src/CivicLens.Application/Publication/PublishedBriefBuilder.cs`, `src/CivicLens.Application/Publication/PublishedRelationshipBuilder.cs` |
 | Release pages | `src/CivicLens.Application/Publication/ReleasePages.cs`, `src/CivicLens.Application/Publication/ReleaseIndexPages.cs`, `src/CivicLens.Application/Publication/ReleaseFacets.cs`, `src/CivicLens.Application/Publication/ReleaseFacet.cs`, `src/CivicLens.Application/Publication/PublicationCatalog.cs`, `src/CivicLens.Application/Publication/ReleaseLinks.cs`, `src/CivicLens.Application/Publication/PendingRecord.cs`, `src/CivicLens.Application/Publication/ICarriedPageLoader.cs`, `src/CivicLens.Application/Publication/PublishedRecordFiles.cs` |
 | Postgres and files | `src/CivicLens.Infrastructure/Publication/PostgresPublicationStore.cs`, `src/CivicLens.Infrastructure/Publication/FileReleaseStaging.cs`, `src/CivicLens.Infrastructure/Publication/FileReleaseDirectory.cs`, `src/CivicLens.Infrastructure/Publication/ReleasePaths.cs`, `src/CivicLens.Infrastructure/Review/CitedRevisions.cs`, `src/CivicLens.Infrastructure/Review/ReviewTables.cs`, `src/CivicLens.Infrastructure/Relationships/PostgresRelationshipReviewStore.cs` |
-| Rendering and CLI | `src/CivicLens.Host/Publication/ReleaseRenderer.cs`, `src/CivicLens.Host/Publication/PublicPage.razor`, `src/CivicLens.Host/Publication/PublishedHomePage.razor`, `src/CivicLens.Host/Publication/PublishedAllRecordsPage.razor`, `src/CivicLens.Host/Publication/PublishedFacetPage.razor`, `src/CivicLens.Host/Publication/PublishedFacetsPage.razor`, `src/CivicLens.Host/Publication/PublishedFacetBrowser.razor`, `src/CivicLens.Host/Publication/PublishedFacetTable.razor`, `src/CivicLens.Host/Publication/PublishedRecordTable.razor`, `src/CivicLens.Host/Publication/PublishedBriefText.razor`, `src/CivicLens.Host/Publication/PublishedRecordPage.razor`, `src/CivicLens.Host/Publication/PublishedStatementPage.razor`, `src/CivicLens.Host/Publication/PublishedActionPage.razor`, `src/CivicLens.Host/Publication/PublishedVotePage.razor`, `src/CivicLens.Host/Publication/PublishedVoteView.cs`, `src/CivicLens.Host/Publication/PublishedBriefPage.razor`, `src/CivicLens.Host/Publication/PublishedRelationshipPage.razor`, `src/CivicLens.Host/Publication/PublishedRelationshipView.cs`, `src/CivicLens.Host/Publication/PublishedRelatedPanel.razor`, `src/CivicLens.Host/Publication/ReleaseCommand.cs` |
+| Rendering and CLI | `src/CivicLens.Host/Publication/ReleaseRenderer.cs`, `src/CivicLens.Host/Publication/PublicPage.razor`, `src/CivicLens.Host/Publication/PublishedHomePage.razor`, `src/CivicLens.Host/Publication/PublishedAllRecordsPage.razor`, `src/CivicLens.Host/Publication/PublishedSearchPage.razor`, `src/CivicLens.Host/Publication/PublishedFacetPage.razor`, `src/CivicLens.Host/Publication/PublishedFacetsPage.razor`, `src/CivicLens.Host/Publication/PublishedFacetBrowser.razor`, `src/CivicLens.Host/Publication/PublishedFacetTable.razor`, `src/CivicLens.Host/Publication/PublishedRecordTable.razor`, `src/CivicLens.Host/Publication/PublishedBriefText.razor`, `src/CivicLens.Host/Publication/PublishedRecordPage.razor`, `src/CivicLens.Host/Publication/PublishedStatementPage.razor`, `src/CivicLens.Host/Publication/PublishedActionPage.razor`, `src/CivicLens.Host/Publication/PublishedVotePage.razor`, `src/CivicLens.Host/Publication/PublishedVoteView.cs`, `src/CivicLens.Host/Publication/PublishedBriefPage.razor`, `src/CivicLens.Host/Publication/PublishedRelationshipPage.razor`, `src/CivicLens.Host/Publication/PublishedRelationshipView.cs`, `src/CivicLens.Host/Publication/PublishedRelatedPanel.razor`, `src/CivicLens.Host/Publication/ReleaseCommand.cs` |
 | Owner publish section | `src/CivicLens.Host/Review/ReviewHome.Publication.cs` |
 
 Release and rollback commands are in [operations](../operations.md#publish-a-static-release). Backup, retention, and monitoring rules are in [Limits and planned work](#limits-and-planned-work).
@@ -286,15 +286,13 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - A relationship waits in the owner publish list until both cited records are in the active release. This follows the rule for briefs. The owner publishes the cited records first, and then the relationship.
 - Timelines, expandable evidence, and shareable records are planned against published releases.
 - Public filter pages are an MVP requirement. The issue and policy area pages are built. The R-36 official pages will complete them.
-- Planned, not built: a source filter and filters that are easy to clear, in R-40. The manifest already holds `sourceHost` for the source filter.
 - A facet page lists the kind, headline, and first publication date of each record. Officials, issues, and event dates are not on it yet.
-- Planned in [R-40](../roadmap.md#next), before the first cloud deployment: a public search service with its own Postgres database, fed from releases. It gives full-text search over the whole processed corpus.
+- The R-40 search service gives full-text search over the published corpus. Limits of the service are in [search](search.md#limits-and-planned-work).
 - Reader reports on a published record go through the R-40 service. The operational application pulls each report into the review queue, and a person handles it. The report names the record ID and the release ID.
 - Split the manifest by kind when it grows over 4 MB.
 - At 20,000 entries the worst realistic manifest is about 14.6 MB, under three quarters of the 32 MB cap. `PublishRelease` refuses a manifest over the cap.
-- The search panel filters show raw issue and policy area IDs, because the manifest has no names for them. The R-40 search service replaces the client search. It adds the names and the source filter. The facet pages show names from `config/issues.json` through `PublicationCatalog`, as official names do.
 - A facet ID that the catalog does not name still gets pages, and they show the ID. This keeps a carried record from blocking a later publish after an issue leaves the configuration. `PublicationProtocol.MaximumFacetIdLength` is the one length limit. `IssueConfiguration` applies it to configured issue and policy area IDs, so the configuration fails to load on a longer ID. A carried manifest ID can still be longer or can hold other characters. Such a facet ID gets no pages. The facet list shows its ID with no link.
-- When the R-40 search service replaces the client search, delete the schema 3 filter fields.
+- The manifest filter fields stay, because the facet pages and the search service use them.
 - Each release row stores `records_json`, about 2 MB at 20,000 records. Review queries expand the active one.
 - Rolling back the `DropReleaseCountCheck` migration fails while any release holds more than 2000 records.
 - A future live public Blazor deployment must read published releases only and stay separate from the operational application.
@@ -302,7 +300,7 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - A future mobile client would read public release contracts through an API, not operational storage.
 - Public MCP will expose `search_records`, `get_record`, `get_official_timeline`, and `compare_document_versions`. It returns published data with IDs, citations, dates, review status, coverage caveats, and the release ID.
 - Public MCP cannot start collection, inference, or edits. It bounds and pages responses, limits requests, and accepts record IDs, not arbitrary fetch URLs. It treats source passages as untrusted attributed content.
-- Public MCP will search the same manifest entries as the website. The website and public MCP will share one release, and clients can pin it across calls.
+- Public MCP will search through the search service API, over the same entries as the website. The website and public MCP will share one release, and clients can pin it across calls.
 - Public MCP needs request compute, but never the local database or AI inference.
 - Postgres and capture files need coordinated backups and a tested restore. Production backup rules are in [host](host.md#limits-and-planned-work).
 - Retention must keep the evidence that published releases reference. Disposable captures follow an explicit policy, which is not agreed yet.

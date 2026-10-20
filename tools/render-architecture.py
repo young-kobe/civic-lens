@@ -16,7 +16,7 @@ VIEWS = [
             ("evidence", "Evidence store", "Local Postgres import adapter and content-addressed files are implemented. CLI migration, collection/import, and filesystem receipt handoff/replay are implemented. Immutable versioned text extraction, reusable content profiles, and exact local citations are implemented. Derived document histories and immutable contextual comparisons are implemented; substantive-change judgments remain planned."),
             ("analysis", "Selective analysis", "AI drafting of document-change accounts, bill action records, weekly briefs, and the statement issue gate are implemented through separate durable queues and shared model-call plumbing. Deterministic records first; evaluated classification and evidence extraction only where useful remain planned."),
             ("review", "Private review and MCP", "Auth0-protected draft/review workspace implemented. Human decisions bind to exact immutable revisions; the owner publishes approved revisions as static releases; MCP remains planned."),
-            ("release", "Versioned release", "Implemented: approved records as immutable static pages, verified before an atomic switch of the active release. A search index remains planned."),
+            ("release", "Versioned release", "Implemented: approved records as immutable static pages, verified before an atomic switch of the active release. A separate search service ingests each release."),
             ("public", "Website and public MCP", "Read published releases only. Never crawl, call models or access private operational data."),
         ],
         "edges": [("config", "app"), ("app", "collector"), ("collector", "evidence"), ("evidence", "analysis"), ("analysis", "review"), ("review", "release"), ("release", "public")],
@@ -30,10 +30,11 @@ VIEWS = [
             ("app", "Application", "Use cases and external interfaces; no infrastructure reference."),
             ("core", "Core", "Domain invariants. No project or third-party dependencies."),
             ("cc", "Collection.Contracts", "Versioned page/feed/HTML requests, capture/response metadata, bounded discovery and receipt validation. No dependencies."),
-            ("pc", "Publication.Contracts", "Future public release contract. No dependencies."),
+            ("pc", "Publication.Contracts", "Public release contract, read by Application and PublicApi. No dependencies."),
+            ("api", "PublicApi", "Public search service and read API over its own Postgres database, fed from published releases. References Publication.Contracts only."),
             ("collector", "Collector", "Independent executable referencing Collection.Contracts only."),
         ],
-        "edges": [("host", "app"), ("host", "infra"), ("infra", "app"), ("app", "core"), ("app", "cc"), ("app", "pc"), ("collector", "cc")],
+        "edges": [("host", "app"), ("host", "infra"), ("infra", "app"), ("app", "core"), ("app", "cc"), ("app", "pc"), ("collector", "cc"), ("api", "pc")],
     },
 ]
 
