@@ -1745,6 +1745,79 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Roster.Persistence.ExecutiveOfficialRow", b =>
+                {
+                    b.Property<string>("AttemptId")
+                        .HasColumnType("text")
+                        .HasColumnName("attempt_id");
+
+                    b.Property<int>("GovtrackId")
+                        .HasColumnType("integer")
+                        .HasColumnName("govtrack_id");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("full_name");
+
+                    b.Property<string>("WikidataId")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("wikidata_id");
+
+                    b.HasKey("AttemptId", "GovtrackId");
+
+                    b.ToTable("executive_officials", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_executive_officials_identity", "govtrack_id > 0 AND (wikidata_id IS NULL OR wikidata_id ~ '^Q[1-9][0-9]*$') AND length(btrim(full_name)) > 0");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Roster.Persistence.ExecutiveTermRow", b =>
+                {
+                    b.Property<string>("AttemptId")
+                        .HasColumnType("text")
+                        .HasColumnName("attempt_id");
+
+                    b.Property<int>("GovtrackId")
+                        .HasColumnType("integer")
+                        .HasColumnName("govtrack_id");
+
+                    b.Property<int>("TermIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("term_index");
+
+                    b.Property<DateOnly>("EndsOn")
+                        .HasColumnType("date")
+                        .HasColumnName("ends_on");
+
+                    b.Property<string>("Office")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("office");
+
+                    b.Property<string>("Party")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("party");
+
+                    b.Property<DateOnly>("StartsOn")
+                        .HasColumnType("date")
+                        .HasColumnName("starts_on");
+
+                    b.HasKey("AttemptId", "GovtrackId", "TermIndex");
+
+                    b.ToTable("executive_terms", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_executive_terms_dates", "term_index >= 0 AND ends_on >= starts_on");
+
+                            t.HasCheckConstraint("ck_executive_terms_office", "office IN ('prez', 'viceprez')");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Roster.Persistence.RosterMemberRow", b =>
                 {
                     b.Property<string>("AttemptId")
@@ -1788,6 +1861,17 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         {
                             t.HasCheckConstraint("ck_roster_members_identity", "bioguide_id ~ '^[A-Z][0-9]{6}$' AND length(btrim(full_name)) > 0");
                         });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Roster.Persistence.RosterSnapshotRow", b =>
+                {
+                    b.Property<string>("AttemptId")
+                        .HasColumnType("text")
+                        .HasColumnName("attempt_id");
+
+                    b.HasKey("AttemptId");
+
+                    b.ToTable("roster_snapshots", (string)null);
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Roster.Persistence.RosterTermRow", b =>
@@ -4501,7 +4585,34 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Roster.Persistence.ExecutiveOfficialRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Roster.Persistence.RosterSnapshotRow", null)
+                        .WithMany()
+                        .HasForeignKey("AttemptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Roster.Persistence.ExecutiveTermRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Roster.Persistence.ExecutiveOfficialRow", null)
+                        .WithMany()
+                        .HasForeignKey("AttemptId", "GovtrackId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Roster.Persistence.RosterMemberRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Roster.Persistence.RosterSnapshotRow", null)
+                        .WithMany()
+                        .HasForeignKey("AttemptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Roster.Persistence.RosterSnapshotRow", b =>
                 {
                     b.HasOne("CivicLens.Infrastructure.Collection.Persistence.AttemptRow", null)
                         .WithMany()

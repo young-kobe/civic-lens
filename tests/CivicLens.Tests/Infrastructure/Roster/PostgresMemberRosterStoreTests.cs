@@ -42,6 +42,30 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
         Assert.Equal(("S275", "511 Hart Senate Office Building"), (cantwell.LisId, cantwell.Office));
         Assert.Equal([new DateOnly(1993, 1, 5), new DateOnly(2025, 1, 3)], cantwell.Terms.Select(term => term.Start));
         Assert.Equal((3L, 5L), (await CountAsync("roster_members", attemptId), await CountAsync("roster_terms", attemptId)));
+        Assert.Equal(1L, await CountAsync("roster_snapshots", attemptId));
+    }
+
+    [Fact]
+    public async Task ASnapshotOfOneSourceIsNotKnownToAnotherSourceThatCapturedTheSameBody()
+    {
+        var attemptId = await ImportAsync('a', 0);
+        await roster.AdmitAsync(attemptId, RosterFixtures.Members(), default);
+        var otherSource = await RosterFixtures.ImportCaptureAsync(attempts, new string('a', 64), Morning.AddDays(1), "other-members");
+
+        Assert.False(await roster.HasSnapshotOfCaptureAsync(otherSource, default));
+        Assert.Empty(await roster.ReadLatestAsync("other-members", default));
+    }
+
+    [Fact]
+    public async Task AMemberRowWithoutAHeaderIsRefusedSoNoSnapshotExistsWithoutIt()
+    {
+        var attemptId = await ImportAsync('a', 0);
+
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync($"""
+            INSERT INTO roster_members (attempt_id, bioguide_id, full_name) VALUES ('{attemptId}', 'A000001', 'A')
+            """));
+
+        Assert.Equal("FK_roster_members_roster_snapshots_attempt_id", failure.ConstraintName);
     }
 
     [Fact]
@@ -129,7 +153,8 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
 
         await Assert.ThrowsAsync<DbUpdateException>(() => roster.AdmitAsync(attemptId, [members[0], broken], default));
 
-        Assert.Equal((0L, 0L), (await CountAsync("roster_members", attemptId), await CountAsync("roster_terms", attemptId)));
+        Assert.Equal((0L, 0L, 0L), (await CountAsync("roster_members", attemptId), await CountAsync("roster_terms", attemptId),
+            await CountAsync("roster_snapshots", attemptId)));
     }
 
     [Fact]

@@ -1,5 +1,4 @@
 using CivicLens.Application.Roster;
-using CivicLens.Infrastructure.Collection.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -22,6 +21,6 @@ internal sealed class RosterMemberRowConfiguration : IEntityTypeConfiguration<Ro
         builder.Property(row => row.Office).HasColumnName("office").HasMaxLength(RosterLimits.Office);
         builder.Property(row => row.Phone).HasColumnName("phone").HasMaxLength(RosterLimits.Phone);
         builder.Property(row => row.Url).HasColumnName("url").HasMaxLength(RosterLimits.Url);
-        builder.HasOne<AttemptRow>().WithMany().HasForeignKey(row => row.AttemptId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<RosterSnapshotRow>().WithMany().HasForeignKey(row => row.AttemptId).OnDelete(DeleteBehavior.Restrict);
     }
 }

@@ -18,6 +18,7 @@ public sealed class JobPreparation(
     IBillStreamAdmissionStore billAdmissions,
     IHouseVoteAdmissionStore voteAdmissions,
     IMemberRosterStore roster,
+    IExecutiveRosterStore executives,
     ICaptureBodyReader bodies,
     IEvidenceProcessingStore processing,
     IDocumentExtractionStore extractions,
@@ -103,6 +104,7 @@ public sealed class JobPreparation(
             ApiResource.HouseVoteDetail => AdmitHouseVoteDetailAsync(job, artifactRoot, cancellationToken),
             ApiResource.HouseVoteMembers => AdmitHouseVoteMembersAsync(job, artifactRoot, cancellationToken),
             ApiResource.MemberRoster => AdmitMemberRosterAsync(job, artifactRoot, cancellationToken),
+            ApiResource.ExecutiveRoster => AdmitExecutiveRosterAsync(job, artifactRoot, cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(job))
         };
 
@@ -214,6 +216,16 @@ public sealed class JobPreparation(
         var attemptId = response.Captured.AttemptId;
         if (!await roster.HasSnapshotOfCaptureAsync(attemptId, cancellationToken))
             await roster.AdmitAsync(attemptId, MemberRosterParser.Parse(response.Body), cancellationToken);
+        return JobPreparationResult.Prepared();
+    }
+
+    private async Task<JobPreparationResult> AdmitExecutiveRosterAsync(CollectionJobRecord job, string artifactRoot,
+        CancellationToken cancellationToken)
+    {
+        var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
+        var attemptId = response.Captured.AttemptId;
+        if (!await executives.HasSnapshotOfCaptureAsync(attemptId, cancellationToken))
+            await executives.AdmitAsync(attemptId, ExecutiveRosterParser.Parse(response.Body), cancellationToken);
         return JobPreparationResult.Prepared();
     }
 

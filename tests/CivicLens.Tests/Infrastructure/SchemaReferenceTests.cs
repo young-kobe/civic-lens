@@ -34,7 +34,7 @@ public sealed partial class SchemaReferenceTests(PostgresCollection postgres) : 
             "brief_review_decisions", "brief_revisions", "brief_schedule"]),
         ("review", ["document_change_drafts", "document_change_review_decisions", "document_change_review_idempotency",
             "document_change_revisions"]),
-        ("roster", ["roster_members", "roster_terms"]),
+        ("roster", ["roster_snapshots", "roster_members", "roster_terms", "executive_officials", "executive_terms"]),
         ("publication", ["publication_releases"])
     ];
 

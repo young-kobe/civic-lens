@@ -221,6 +221,7 @@ try
         var processingStore = PostgresEvidenceProcessingStore.FromConnectionString(connectionString);
         var processing = new EvidenceProcessingWorker(jobs,
             new JobPreparation(jobs, attempts, jobs, jobs, jobs, PostgresMemberRosterStore.FromConnectionString(connectionString),
+                PostgresExecutiveRosterStore.FromConnectionString(connectionString),
                 new CaptureBodyReader(), processingStore, extractions, textExtractor, issues),
             processingStore,
             new ExtractDocument(attempts, textExtractor, extractions),

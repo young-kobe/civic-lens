@@ -140,6 +140,8 @@ public sealed partial class PostgresCollectionJobStore
                     ApiResource.HouseVoteList, HouseVoteListUrl.FirstPage(source.Url, first.Value), currentDate);
             case ApiParser.CongressLegislators:
                 return configured.CreateApiJobDefinition(ApiResource.MemberRoster, source.Url, currentDate);
+            case ApiParser.CongressLegislatorsExecutive:
+                return configured.CreateApiJobDefinition(ApiResource.ExecutiveRoster, source.Url, currentDate);
             default:
                 throw new ArgumentOutOfRangeException(nameof(source));
         }

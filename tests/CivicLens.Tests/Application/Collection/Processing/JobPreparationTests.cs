@@ -31,6 +31,7 @@ public sealed class JobPreparationTests
     private readonly RecordingBillAdmissions admissions = new();
     private readonly RecordingVoteAdmissions votes = new();
     private readonly RecordingRoster roster = new();
+    private readonly RecordingExecutive executives = new();
     private readonly ThrowingProcessingStore processing = new();
     private readonly RecordingExtractions extractions = new();
 
@@ -270,7 +271,8 @@ public sealed class JobPreparationTests
         { ApiResource.HouseVoteList, VoteListUrl, """{"houseRollCallVotes":[],"pagination":{}}""" },
         { ApiResource.HouseVoteDetail, VoteDetailUrl, HouseVoteFixtures.Detail() },
         { ApiResource.HouseVoteMembers, VoteMembersUrl, HouseVoteFixtures.Members() },
-        { ApiResource.MemberRoster, RosterFixtures.SourceUrl, RosterFixtures.Json }
+        { ApiResource.MemberRoster, RosterFixtures.SourceUrl, RosterFixtures.Json },
+        { ApiResource.ExecutiveRoster, ExecutiveFixtures.SourceUrl, ExecutiveFixtures.Json }
     };
 
     [Fact]
@@ -384,6 +386,28 @@ public sealed class JobPreparationTests
     }
 
     [Fact]
+    public async Task AnExecutiveJobIsParsedAndPassedToItsOwnStoreAndNotToTheMemberStore()
+    {
+        var result = await Prepare(ApiResource.ExecutiveRoster, ExecutiveFixtures.SourceUrl, ExecutiveFixtures.Json, null);
+
+        Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
+        var call = Assert.Single(executives.Admissions);
+        Assert.Equal(("attempt", 3), (call.AttemptId, call.Officials.Count));
+        Assert.Empty(roster.Admissions);
+    }
+
+    [Fact]
+    public async Task AKnownExecutiveCaptureIsNotParsedAndWritesNothing()
+    {
+        executives.Known = true;
+
+        var result = await Prepare(ApiResource.ExecutiveRoster, ExecutiveFixtures.SourceUrl, "not json at all", null);
+
+        Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
+        Assert.Empty(executives.Admissions);
+    }
+
+    [Fact]
     public void EveryApiResourceHasACaseInTheNeverExtractedTheory()
     {
         var covered = EveryResource.Select(row => (ApiResource?)row[0]).OfType<ApiResource>();
@@ -408,6 +432,7 @@ public sealed class JobPreparationTests
         var configured = resource switch
         {
             ApiResource.MemberRoster => new ConfiguredCollectionSource(RosterFixtures.Configuration(), RosterFixtures.SourceId, Backfill),
+            ApiResource.ExecutiveRoster => new ConfiguredCollectionSource(ExecutiveFixtures.Configuration(), ExecutiveFixtures.SourceId, Backfill),
             _ when IsHouseVote(resource) => new ConfiguredCollectionSource(HouseVoteFixtures.Configuration(), HouseVoteFixtures.SourceId, Backfill),
             _ => new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", Backfill)
         };
@@ -418,7 +443,7 @@ public sealed class JobPreparationTests
             new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
         var job = new CollectionJobRecord("job", definition, "key", CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,
             false, [attempt]);
-        var preparation = new JobPreparation(new SingleJob(job), new CapturedAttempts(), new NoDiscoveryAdmissions(), admissions, votes, roster,
+        var preparation = new JobPreparation(new SingleJob(job), new CapturedAttempts(), new NoDiscoveryAdmissions(), admissions, votes, roster, executives,
             new FixedBody(body), processing, extractions, textExtractor, issues);
         return await preparation.PrepareAsync("job", "artifacts", default);
     }
@@ -626,6 +651,21 @@ public sealed class JobPreparationTests
 
         public Task<IReadOnlyList<CivicLens.Application.Roster.RosterMember>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class RecordingExecutive : CivicLens.Application.Roster.IExecutiveRosterStore
+    {
+        public bool Known { get; set; }
+
+        public List<(string AttemptId, IReadOnlyList<CivicLens.Application.Roster.ExecutiveOfficial> Officials)> Admissions { get; } = [];
+
+        public Task<bool> HasSnapshotOfCaptureAsync(string attemptId, CancellationToken cancellationToken) => Task.FromResult(Known);
+
+        public Task AdmitAsync(string attemptId, IReadOnlyList<CivicLens.Application.Roster.ExecutiveOfficial> officials, CancellationToken cancellationToken)
+        {
+            Admissions.Add((attemptId, officials));
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class NoDiscoveryAdmissions : IDiscoveryAdmissionStore

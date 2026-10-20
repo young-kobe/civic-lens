@@ -90,6 +90,22 @@ public sealed class CollectionConfigurationRevisionTests
     }
 
     [Fact]
+    public void WikidataIdSurvivesRevisionRoundTrip()
+    {
+        var configuration = new CollectionConfiguration
+        {
+            Version = 2,
+            People = [new PersonConfiguration { Id = "person", Name = "Official", WikidataId = "Q22686" }],
+            Sources = [Configuration(["person"]).Sources[0]]
+        };
+
+        var revision = CollectionConfigurationRevision.Create(configuration);
+
+        Assert.Contains("\"wikidataId\":\"Q22686\"", revision.Json, StringComparison.Ordinal);
+        Assert.Equal("Q22686", revision.ReadConfiguration().People[0].WikidataId);
+    }
+
+    [Fact]
     public void ExplicitSourceIntervalChangesConfigurationRevision()
     {
         var configuration = Configuration(["person"]);
