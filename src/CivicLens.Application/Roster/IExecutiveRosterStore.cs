@@ -5,4 +5,6 @@ public interface IExecutiveRosterStore
     Task<bool> HasSnapshotOfCaptureAsync(string attemptId, CancellationToken cancellationToken);
 
     Task AdmitAsync(string attemptId, IReadOnlyList<ExecutiveOfficial> officials, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<ExecutiveOfficial>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken);
 }

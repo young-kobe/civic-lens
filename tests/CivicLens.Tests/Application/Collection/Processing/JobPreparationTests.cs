@@ -666,6 +666,9 @@ public sealed class JobPreparationTests
             Admissions.Add((attemptId, officials));
             return Task.CompletedTask;
         }
+
+        public Task<IReadOnlyList<CivicLens.Application.Roster.ExecutiveOfficial>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class NoDiscoveryAdmissions : IDiscoveryAdmissionStore
