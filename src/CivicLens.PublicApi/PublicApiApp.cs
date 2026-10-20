@@ -2,6 +2,7 @@ using System.Net;
 using System.Threading.RateLimiting;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Ingest;
+using CivicLens.PublicApi.Reports;
 using CivicLens.PublicApi.Schema;
 using CivicLens.PublicApi.Search;
 using Microsoft.AspNetCore.Builder;
@@ -14,8 +15,9 @@ namespace CivicLens.PublicApi;
 
 public static class PublicApiApp
 {
-    /// <summary>Builds the service. A test passes a handler that serves the release files in place of the network.</summary>
-    public static WebApplication Build(PublicApiOptions options, string[] args, HttpMessageHandler? releaseHandler = null)
+    /// <summary>Builds the service. A test passes a handler that serves the release files in place of the network, and one that answers the bot check.</summary>
+    public static WebApplication Build(PublicApiOptions options, string[] args, HttpMessageHandler? releaseHandler = null,
+        HttpMessageHandler? turnstileHandler = null)
     {
         var builder = WebApplication.CreateBuilder(args);
         var writer = NpgsqlDataSource.Create(options.Database);
@@ -31,6 +33,10 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new SchemaMigrator(writer));
         builder.Services.AddSingleton(new ReleaseIngest(feed, writer));
         builder.Services.AddSingleton(new SearchIndex(reader));
+        builder.Services.AddSingleton(new ReportStore(writer, options));
+        if (options.Turnstile is { } turnstile)
+            builder.Services.AddSingleton<ITurnstileVerifier>(new TurnstileVerifier(
+                new HttpClient(turnstileHandler ?? new SocketsHttpHandler()) { Timeout = TurnstileVerifier.Timeout }, turnstile));
         builder.Services.AddHostedService<SchemaStartup>();
         builder.Services.AddHostedService<IngestWorker>();
         var clients = new ClientAddress(options.TrustedProxyRanges);
@@ -38,12 +44,9 @@ public static class PublicApiApp
         {
             limits.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
             limits.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-                RateLimitPartition.GetFixedWindowLimiter(clients.Of(context), _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = options.RequestsPerMinute,
-                    Window = TimeSpan.FromMinutes(1),
-                    QueueLimit = 0
-                }));
+                RateLimitPartition.GetFixedWindowLimiter(clients.Of(context), _ => Window(options.RequestsPerMinute, TimeSpan.FromMinutes(1))));
+            limits.AddPolicy(ReportEndpoints.RateLimitPolicy, context =>
+                RateLimitPartition.GetFixedWindowLimiter(clients.Of(context), _ => Window(options.ReportsPerHour, TimeSpan.FromHours(1))));
         });
 
         var app = builder.Build();
@@ -59,6 +62,10 @@ public static class PublicApiApp
         });
         app.UseRateLimiter();
         app.MapSearch();
+        app.MapReports(options);
         return app;
     }
+
+    private static FixedWindowRateLimiterOptions Window(int permits, TimeSpan window) =>
+        new() { PermitLimit = permits, Window = window, QueueLimit = 0 };
 }

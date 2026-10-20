@@ -52,7 +52,7 @@ public sealed record SearchRequest
 
     public static int? ReleaseNumber(IQueryCollection query) => Number(query, "release", 1, int.MaxValue);
 
-    private static string? Value(IQueryCollection query, string name)
+    internal static string? Value(IQueryCollection query, string name)
     {
         if (!query.TryGetValue(name, out var values)) return null;
         return values.Count == 1 ? values[0] : throw new ArgumentException($"{name} must appear once.", name);
@@ -90,7 +90,7 @@ public sealed record SearchRequest
             : throw new ArgumentException($"{name} must be a date as yyyy-MM-dd.", name);
     }
 
-    private static int? Number(IQueryCollection query, string name, int minimum, int maximum)
+    internal static int? Number(IQueryCollection query, string name, int minimum, int maximum)
     {
         var value = Value(query, name);
         if (string.IsNullOrEmpty(value)) return null;

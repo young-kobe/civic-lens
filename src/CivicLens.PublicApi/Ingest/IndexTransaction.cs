@@ -22,7 +22,7 @@ public sealed class IndexTransaction : IAsyncDisposable
         var connection = await database.OpenConnectionAsync(cancellationToken);
         var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var index = new IndexTransaction(connection, transaction);
-        await using var command = index.Command("SELECT pg_advisory_xact_lock(hashtextextended(@key, 0))", ("key", SearchLocks.Ingest));
+        await using var command = index.Command(SearchLocks.TakeTransactionLockSql, ("key", SearchLocks.Ingest));
         await command.ExecuteNonQueryAsync(cancellationToken);
         return index;
     }

@@ -1,5 +1,6 @@
 using CivicLens.PublicApi;
 using CivicLens.PublicApi.Ingest;
+using CivicLens.PublicApi.Reports;
 using CivicLens.PublicApi.Schema;
 using CivicLens.PublicApi.Search;
 using CivicLens.Tests.Infrastructure.Collection;
@@ -22,12 +23,14 @@ internal sealed class SearchWorld : IAsyncDisposable
         reader = NpgsqlDataSource.Create(options.ReaderDatabase);
         Ingest = new ReleaseIngest(new ReleaseFeed(new HttpClient(Site) { BaseAddress = options.ReleaseBaseUrl }), writer);
         Index = new SearchIndex(reader);
+        Reports = new ReportStore(writer, options);
     }
 
     public PublicApiOptions Options { get; }
     public FakeReleaseSite Site { get; } = new();
     public ReleaseIngest Ingest { get; }
     public SearchIndex Index { get; }
+    public ReportStore Reports { get; }
     public NpgsqlDataSource Database => writer;
 
     public static async Task<SearchWorld> CreateAsync(PostgresCollection postgres, TimeSpan? queryTimeout = null)
