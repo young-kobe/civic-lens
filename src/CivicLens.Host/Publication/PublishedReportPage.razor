@@ -14,9 +14,9 @@
     else
     {
         <Panel Label="Report form" Padded="true" hidden data-report-form-panel>
-            <form class="form" data-report-api="@PublicApiUrl" data-record-page="@PublicationProtocol.RecordPagePath("{id}")">
-                <input type="hidden" name="@ReaderReportProtocol.RecordIdField" />
-                <input type="hidden" name="@ReaderReportProtocol.RevisionField" />
+            <form class="form" data-report-api="@(PublicApiUrl + ReaderReportProtocol.SubmitPath)" data-record-page="@PublicationProtocol.RecordPagePath("{id}")">
+                <input type="hidden" name="@ReaderReportProtocol.RecordIdField" data-report-query />
+                <input type="hidden" name="@ReaderReportProtocol.RevisionField" data-report-query />
                 <Field Label="What is wrong" For="report-category">
                     <select id="report-category" name="@ReaderReportProtocol.CategoryField" data-text-required="@ReaderReportProtocol.OtherCategory" required>
                         <option value="">Choose one</option>
@@ -26,15 +26,15 @@
                         }
                     </select>
                 </Field>
-                <Field Label="Details" For="report-text" Optional="true"
-                       Hint="@($"Say where in the record the problem is. This is required for \"{PublishedRecordLabels.ReportCategory(ReaderReportProtocol.OtherCategory)}\". Use at most {ReaderReportProtocol.MaximumTextCharacters:N0} characters. Do not add your name or contact details.")">
+                <Field Label="Details" For="report-text"
+                       Hint="@($"Say where in the record the problem is. Details are required for \"{PublishedRecordLabels.ReportCategory(ReaderReportProtocol.OtherCategory)}\". Use at most {ReaderReportProtocol.MaximumTextCharacters:N0} characters. Do not add your name or contact details.")">
                     <textarea id="report-text" name="@ReaderReportProtocol.TextField" rows="5" maxlength="@ReaderReportProtocol.MaximumTextCharacters" aria-describedby="report-text-hint"></textarea>
                 </Field>
                 <div class="cf-turnstile" data-sitekey="@TurnstileSiteKey"></div>
                 <div class="row"><Button Type="submit" Variant="ButtonVariant.Primary">Send report</Button></div>
             </form>
         </Panel>
-        <Notice Tone="Tone.Neutral" hidden data-report-result></Notice>
+        <div role="status" tabindex="-1" data-report-result></div>
         <Panel Label="No record chosen" Padded="true" hidden data-report-missing>
             <EmptyState Title="No record chosen"
                         Text="Open a record page and use its link to report a problem. This page needs that link to know which record you mean.">

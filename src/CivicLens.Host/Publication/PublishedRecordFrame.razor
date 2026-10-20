@@ -6,7 +6,7 @@
                 Limits="@Limits" Facts="Facts" />
     @ChildContent
     <Caveat>@Caveat</Caveat>
-    <a class="back-link" href="@("../" + PublicationProtocol.ReportPageLink(RecordId, RevisionNumber))">Report a problem with this record</a>
+    <p class="muted small"><a href="@("../" + PublicationProtocol.ReportPageLink(RecordId, RevisionNumber))">Report a problem with this record</a></p>
 </PublicPage>
 
 @code {

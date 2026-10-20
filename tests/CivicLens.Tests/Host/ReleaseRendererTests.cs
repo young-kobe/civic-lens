@@ -188,14 +188,14 @@ public sealed class ReleaseRendererTests
         var document = new HtmlParser().ParseDocument(html);
 
         var form = document.QuerySelector("form[data-report-api]")!;
-        Assert.Equal("https://api.example.test", form.GetAttribute("data-report-api"));
+        Assert.Equal("https://api.example.test" + ReaderReportProtocol.SubmitPath, form.GetAttribute("data-report-api"));
         Assert.Equal("site-key-1", document.QuerySelector(".cf-turnstile")!.GetAttribute("data-sitekey"));
         Assert.Equal(["", .. ReaderReportProtocol.Categories],
             document.QuerySelectorAll("#report-category option").Select(option => option.GetAttribute("value")));
         Assert.All(document.QuerySelectorAll("#report-category option[value]:not([value=''])"),
             option => Assert.Equal(PublishedRecordLabels.ReportCategory(option.GetAttribute("value")!), option.TextContent));
         Assert.Equal([ReaderReportProtocol.RecordIdField, ReaderReportProtocol.RevisionField],
-            form.QuerySelectorAll("input[type=hidden]").Select(input => input.GetAttribute("name")));
+            form.QuerySelectorAll("input[type=hidden][data-report-query]").Select(input => input.GetAttribute("name")));
         Assert.Equal(ReaderReportProtocol.TextField, document.QuerySelector("#report-text")!.GetAttribute("name"));
         Assert.Equal(ReaderReportProtocol.MaximumTextCharacters.ToString(), document.QuerySelector("#report-text")!.GetAttribute("maxlength"));
         Assert.True(form.Closest("section")!.HasAttribute("hidden"));

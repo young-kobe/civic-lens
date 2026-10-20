@@ -143,7 +143,7 @@
 
     const reportMessages = {
         202: ["ok", "Your report is saved. A person will check the record. You can go back to the record now."],
-        400: ["bad", "The service did not accept the report. Choose a category, complete the check that you are not a robot, and send the report again."],
+        400: ["bad", "The service did not accept the report. Choose a category, add details if the category needs them, complete the check that you are not a robot, and send the report again."],
         404: ["bad", "The service does not know this version of the record. A new release may not be indexed yet. Try again later."],
         413: ["bad", "The report is too large. Shorten the details and send the report again."],
         429: ["bad", "You sent too many reports. Wait one hour and try again."],
@@ -151,7 +151,8 @@
     };
     const initReportForm = form => {
         const query = new URLSearchParams(location.search);
-        const [recordId, revision] = Array.from(form.querySelectorAll("input[type=hidden]"), input => query.get(input.name) ?? "");
+        const queryInputs = Array.from(form.querySelectorAll("[data-report-query]"));
+        const [recordId, revision] = queryInputs.map(input => query.get(input.name) ?? "");
         const panel = form.closest("[data-report-form-panel]");
         const result = document.querySelector("[data-report-result]");
         const category = form.querySelector("#report-category");
@@ -160,8 +161,8 @@
         const show = (tone, message) => {
             result.className = `notice notice-${tone}`;
             result.setAttribute("role", tone === "bad" ? "alert" : "status");
-            result.querySelector("span").textContent = message;
-            result.hidden = false;
+            result.textContent = message;
+            result.focus();
         };
         const validRecord = /^([0-9a-f]{32}|[0-9a-f]{64})$/.test(recordId) && /^[0-9]+$/.test(revision)
             && Number(revision) >= 1 && Number(revision) <= 2147483647;
@@ -169,14 +170,20 @@
         const back = document.querySelector("[data-report-record]");
         back.href = form.dataset.recordPage.replace("{id}", recordId);
         back.textContent = "Back to the record";
-        form.querySelectorAll("input[type=hidden]").forEach(input => { input.value = query.get(input.name); });
-        category.addEventListener("change", () => { text.required = category.value === category.dataset.textRequired; });
+        queryInputs.forEach(input => { input.value = query.get(input.name); });
+        const checkText = () => {
+            const required = category.value === category.dataset.textRequired;
+            text.required = required;
+            text.setCustomValidity(required && text.value.trim() === "" ? "Add details to explain what is wrong." : "");
+        };
+        category.addEventListener("change", checkText);
+        text.addEventListener("input", checkText);
         form.addEventListener("submit", async event => {
             event.preventDefault();
             submit.disabled = true;
             let outcome = ["bad", "The report did not reach the service. Check your connection and send the report again."];
             try {
-                const response = await fetch(`${form.dataset.reportApi}/v1/reports`, { method: "POST", body: new URLSearchParams(new FormData(form)) });
+                const response = await fetch(`${form.dataset.reportApi}`, { method: "POST", body: new URLSearchParams(new FormData(form)) });
                 outcome = reportMessages[response.status] ?? ["bad", `The service answered with the unexpected status ${response.status}. Try again later.`];
             } catch {}
             show(...outcome);
