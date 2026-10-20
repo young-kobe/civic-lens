@@ -338,7 +338,7 @@ try
                 PostgresVoteReviewStore.FromConnectionString(connectionString),
                 new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)),
                 new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString))),
-            new PublicationCatalog(officialNames), TimeProvider.System);
+            new PublicationCatalog(officialNames, ConfigurationFile.ReadIssuesFromEnvironment()), TimeProvider.System);
         executing = true;
         return await ReleaseCommand.ExecuteAsync(args, publish, new ListPublicationReleases(publications, releases),
             new ActivatePublicationRelease(publications, releases), owner,

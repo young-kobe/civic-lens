@@ -81,15 +81,50 @@ public sealed class ReleaseRenderer : IReleaseRenderer
         });
     }
 
-    public Task<string> RenderIndexAsync(PublicationRelease release, int page, CancellationToken cancellationToken)
+    public Task<string> RenderHomeAsync(PublicationRelease release, PublishedBrief? brief, ReleaseFacets facets,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(release);
+        ArgumentNullException.ThrowIfNull(facets);
+        brief?.Validate();
+        return RenderAsync<PublishedHomePage>(new Dictionary<string, object?>
+        {
+            [nameof(PublishedHomePage.Release)] = release,
+            [nameof(PublishedHomePage.Brief)] = brief,
+            [nameof(PublishedHomePage.Facets)] = facets
+        });
+    }
+
+    public Task<string> RenderAllRecordsAsync(PublicationRelease release, int page, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(release);
         ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(page, PublicationProtocol.IndexPageCount(release.Records.Length));
-        return RenderAsync<PublishedIndexPage>(new Dictionary<string, object?>
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(page, PublicationProtocol.PageCount(release.Records.Length));
+        return RenderAsync<PublishedAllRecordsPage>(new Dictionary<string, object?>
         {
-            [nameof(PublishedIndexPage.Release)] = release,
-            [nameof(PublishedIndexPage.Page)] = page
+            [nameof(PublishedAllRecordsPage.Release)] = release,
+            [nameof(PublishedAllRecordsPage.Page)] = page
+        });
+    }
+
+    public Task<string> RenderFacetPageAsync(ReleaseFacet facet, int page, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(facet);
+        ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(page, facet.PageCount);
+        return RenderAsync<PublishedFacetPage>(new Dictionary<string, object?>
+        {
+            [nameof(PublishedFacetPage.Facet)] = facet,
+            [nameof(PublishedFacetPage.Page)] = page
+        });
+    }
+
+    public Task<string> RenderFacetsAsync(ReleaseFacets facets, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(facets);
+        return RenderAsync<PublishedFacetsPage>(new Dictionary<string, object?>
+        {
+            [nameof(PublishedFacetsPage.Facets)] = facets
         });
     }
 

@@ -12,13 +12,24 @@ public static class PublicationProtocol
     public const string ManifestGzipPath = ManifestPath + ".gz";
     public const string ManifestBrotliPath = ManifestPath + ".br";
     public const int MaximumRecordsPerRelease = 20000;
-    public const int IndexPageSize = 50;
+    public const int PageSize = 50;
+    public const int HomeRecordCount = 20;
+    public const int MaximumFacetIdLength = 60;
+    public const string HomePath = "index.html";
+    public const string FacetsPath = "issues.html";
     public const int MaximumManifestBytes = 32 * 1024 * 1024;
 
-    public static string IndexPagePath(int page) => page == 1 ? "index.html" : $"page-{page}.html";
-    public static int IndexPageCount(int recordCount) => Math.Max(1, (recordCount + IndexPageSize - 1) / IndexPageSize);
+    public static string AllRecordsPagePath(int page) => page == 1 ? "all.html" : $"all-{page}.html";
+    public static string IssuePagePath(string issueId, int page) => FacetPagePath("issues", issueId, page);
+    public static string PolicyAreaPagePath(string policyAreaId, int page) => FacetPagePath("policy-areas", policyAreaId, page);
+    public static int PageCount(int recordCount) => Math.Max(1, (recordCount + PageSize - 1) / PageSize);
+    public static bool HasFacetPages(string facetId) =>
+        facetId.Length is > 0 and <= MaximumFacetIdLength && facetId.All(c => c is (>= '0' and <= '9') or (>= 'a' and <= 'z') or '-');
     public static string RecordDataPath(string recordId) => $"records/{recordId}.json";
     public static string RecordPagePath(string recordId) => $"records/{recordId}.html";
+
+    private static string FacetPagePath(string folder, string facetId, int page) =>
+        page == 1 ? $"{folder}/{facetId}.html" : $"{folder}/{facetId}.page-{page}.html";
 
     static PublicationProtocol() => JsonOptions.MakeReadOnly(populateMissingResolver: true);
     public static JsonSerializerOptions JsonOptions { get; } = new(JsonSerializerDefaults.Web)

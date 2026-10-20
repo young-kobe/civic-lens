@@ -17,6 +17,7 @@ public sealed class PublishRelease
     private readonly IReleaseRenderer renderer;
     private readonly PublishedRecordLoaders loaders;
     private readonly ReleasePages releasePages;
+    private readonly ReleaseIndexPages indexPages;
     private readonly PublishedRecordRules rules;
     private readonly TimeProvider clock;
 
@@ -28,6 +29,7 @@ public sealed class PublishRelease
         this.renderer = renderer;
         this.loaders = loaders;
         releasePages = new ReleasePages(releases, loaders);
+        indexPages = new ReleaseIndexPages(releases, renderer, catalog);
         this.clock = clock;
         rules = new PublishedRecordRules(catalog);
     }
@@ -138,11 +140,7 @@ public sealed class PublishRelease
             Compress(manifestJson, stream => new GZipStream(stream, CompressionLevel.Optimal)), cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestBrotliPath,
             Compress(manifestJson, stream => new BrotliStream(stream, CompressionLevel.Optimal)), cancellationToken);
-        for (var page = 1; page <= PublicationProtocol.IndexPageCount(entries.Count); page++)
-        {
-            var index = await renderer.RenderIndexAsync(manifest, page, cancellationToken);
-            await staging.WriteFileAsync(PublicationProtocol.IndexPagePath(page), Encoding.UTF8.GetBytes(index), cancellationToken);
-        }
+        await indexPages.WriteAsync(staging, manifest, additions, previous, cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestPath, manifestJson, cancellationToken);
         return (await staging.CompleteAsync(number, cancellationToken), entries);
     }

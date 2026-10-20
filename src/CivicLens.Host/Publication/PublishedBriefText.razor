@@ -1,0 +1,17 @@
+@using CivicLens.Publication.Contracts
+
+@foreach (var paragraph in Record.Paragraphs)
+{
+    <p class="record-body">
+        @paragraph.Text
+        @foreach (var id in paragraph.CitationIds)
+        {
+            <a class="small" href="@(BriefHref + "#" + PublishedBriefView.CitationAnchor(id))">[@id]</a>
+        }
+    </p>
+}
+
+@code {
+    [Parameter, EditorRequired] public PublishedBrief Record { get; set; } = default!;
+    [Parameter] public string BriefHref { get; set; } = string.Empty;
+}

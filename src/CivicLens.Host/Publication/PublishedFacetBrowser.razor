@@ -1,0 +1,13 @@
+@using CivicLens.Application.Publication
+
+<Panel Title="Issues">
+    <PublishedFacetTable Facets="Facets.Issues" Caption="Issues" RootPath="@RootPath" />
+</Panel>
+<Panel Title="Policy areas">
+    <PublishedFacetTable Facets="Facets.PolicyAreas" Caption="Policy areas" RootPath="@RootPath" />
+</Panel>
+
+@code {
+    [Parameter, EditorRequired] public ReleaseFacets Facets { get; set; } = default!;
+    [Parameter] public string RootPath { get; set; } = string.Empty;
+}

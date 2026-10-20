@@ -3,16 +3,7 @@
 <PublishedRecordFrame Headline="@Record.Headline" Summary="" Facts="PublishedBriefView.Facts(Record)"
                       Caveat="@PublishedBriefView.Sample(Record)">
     <Panel Title="Brief" Id="brief-title" Padded="true">
-        @foreach (var paragraph in Record.Paragraphs)
-        {
-            <p class="record-body">
-                @paragraph.Text
-                @foreach (var id in paragraph.CitationIds)
-                {
-                    <a class="small" href="@("#" + PublishedBriefView.CitationAnchor(id))">[@id]</a>
-                }
-            </p>
-        }
+        <PublishedBriefText Record="Record" />
     </Panel>
 
     <Panel Title="Cited records" Id="citations-title" Padded="true">

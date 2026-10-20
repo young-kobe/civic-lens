@@ -2,6 +2,7 @@ using CivicLens.Application.Paging;
 using System.Collections.Immutable;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Briefs;
+using CivicLens.Application.Issues;
 using CivicLens.Core.Briefs;
 using CivicLens.Tests.Application.Briefs;
 using CivicLens.Tests.Application.Relationships;
@@ -47,8 +48,10 @@ internal sealed class PublicationScenario
 
     public PublishedRecordLoaders Loaders() => new(Reviews, Statements, Actions, Votes, Relationships, Briefs);
 
+    public IssueConfiguration? Issues { get; set; }
+
     public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events }, Loaders(),
-        new PublicationCatalog(OfficialNames), Clock);
+        new PublicationCatalog(OfficialNames, Issues), Clock);
 
     private const string PunctuatedHeadline = "Mayor\u2019s \u201Chousing\u201D plan: caf\u00E9 owners, r\u00E9sum\u00E9 rules; it\u2019s 100% ready? ";
 
@@ -305,8 +308,15 @@ internal sealed class FakeRenderer : IReleaseRenderer
         Task.FromResult($"<html>relationship {record.RecordId}</html>");
     public Task<string> RenderBriefAsync(PublishedBrief record, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>brief {record.RecordId}</html>");
-    public Task<string> RenderIndexAsync(PublicationRelease release, int page, CancellationToken cancellationToken) =>
+    public Task<string> RenderHomeAsync(PublicationRelease release, PublishedBrief? brief, ReleaseFacets facets,
+        CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>home {release.Records.Length} brief {brief?.RecordId}</html>");
+    public Task<string> RenderAllRecordsAsync(PublicationRelease release, int page, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>index {page} {release.Records.Length}</html>");
+    public Task<string> RenderFacetPageAsync(ReleaseFacet facet, int page, CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>facet {facet.Name} {page} {string.Join(',', facet.Records.Select(entry => entry.RecordId))}</html>");
+    public Task<string> RenderFacetsAsync(ReleaseFacets facets, CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>facets {facets.Issues.Length} {facets.PolicyAreas.Length}</html>");
 
     private Task<string> Logged(string entry, string page)
     {

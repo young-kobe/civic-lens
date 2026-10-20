@@ -1,8 +1,9 @@
 @using System.Text.Json
 @using CivicLens.Publication.Contracts
 
-<PublicPage Title="Published records">
-    <PageHeader Title="Published records" Lede="@($"Release {Release.ReleaseNumber}, published {Moment.Full(Release.PublishedAtUtc)}.")" />
+<PublicPage Title="All published records">
+    <a class="back-link" href="@PublicationProtocol.HomePath">Home</a>
+    <PageHeader Title="All published records" Lede="@($"Release {Release.ReleaseNumber}, published {Moment.Full(Release.PublishedAtUtc)}.")" />
     <Panel Title="Search records" Padded="true" hidden>
         <form class="release-search" data-release-search="@PublicationProtocol.ManifestPath"
               data-record-page="@PublicationProtocol.RecordPagePath("{id}")">
@@ -29,17 +30,10 @@
         </form>
     </Panel>
     <Panel Label="Records">
-        <DataTable Items="PageRecords" Caption="Published records">
-            <Head><th>Record</th><th class="fit num hide-narrow">First published</th></Head>
-            <Row Context="entry">
-                <td><a class="cell-title" href="@PublicationProtocol.RecordPagePath(entry.RecordId)">@entry.Headline</a> <StatusBadge Text="@PublishedRecordLabels.Kind(entry.Kind)" /></td>
-                <td class="time fit num hide-narrow"><Timestamp Value="entry.FirstPublishedAtUtc" Format="TimestampFormat.Day" /></td>
-            </Row>
-            <Empty><EmptyState Title="No records yet" Text="This release has no records." /></Empty>
-        </DataTable>
+        <PublishedRecordTable Records="PageRecords" Caption="Published records" />
         <Pager Label="Pages" Summary="@($"Page {Page} of {PageCount}")" NewerText="Previous" OlderText="Next"
-               NewerHref="@(Page > 1 ? PublicationProtocol.IndexPagePath(Page - 1) : null)"
-               OlderHref="@(Page < PageCount ? PublicationProtocol.IndexPagePath(Page + 1) : null)" />
+               NewerHref="@(Page > 1 ? PublicationProtocol.AllRecordsPagePath(Page - 1) : null)"
+               OlderHref="@(Page < PageCount ? PublicationProtocol.AllRecordsPagePath(Page + 1) : null)" />
     </Panel>
 </PublicPage>
 
@@ -50,8 +44,8 @@
     private static string KindValue(PublishedRecordKind kind) =>
         JsonSerializer.Serialize(kind, PublicationProtocol.JsonOptions).Trim('"');
 
-    private int PageCount => PublicationProtocol.IndexPageCount(Release.Records.Length);
+    private int PageCount => PublicationProtocol.PageCount(Release.Records.Length);
 
     private IReadOnlyList<PublishedRecordEntry> PageRecords =>
-        [.. Release.Records.Skip((Page - 1) * PublicationProtocol.IndexPageSize).Take(PublicationProtocol.IndexPageSize)];
+        [.. Release.Records.Skip((Page - 1) * PublicationProtocol.PageSize).Take(PublicationProtocol.PageSize)];
 }

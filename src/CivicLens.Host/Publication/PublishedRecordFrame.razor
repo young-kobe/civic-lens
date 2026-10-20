@@ -1,7 +1,7 @@
 @using CivicLens.Publication.Contracts
 
 <PublicPage Title="@Headline" RootPath="../">
-    <a class="back-link" href="@("../" + PublicationProtocol.IndexPagePath(1))">All records</a>
+    <a class="back-link" href="@("../" + PublicationProtocol.AllRecordsPagePath(1))">All records</a>
     <RecordView HeadingLevel="1" Headline="@Headline" Summary="@Summary" Significance="@Significance"
                 Limits="@Limits" Facts="Facts" />
     @ChildContent
