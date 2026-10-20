@@ -20,6 +20,7 @@ public static class PublicationProtocol
     public const int MaximumManifestBytes = 32 * 1024 * 1024;
     public const int SearchSourceTextCharacters = 200_000;
     public const string SearchPagePath = "search.html";
+    public const string ReportPagePath = "report.html";
     public const string OfficialsPath = "officials.json";
     public const string CatalogPath = "catalog.json";
     public const string OfficialsPagePath = "officials.html";
@@ -39,6 +40,8 @@ public static class PublicationProtocol
     public static int? CongressPageOf(string path) => CongressIn(path, "/", ".html");
     public static string RecordDataPath(string recordId) => $"records/{recordId}.json";
     public static string RecordPagePath(string recordId) => $"records/{recordId}.html";
+    public static string ReportPageLink(string recordId, int revision) =>
+        $"{ReportPagePath}?{ReaderReportProtocol.RecordIdField}={recordId}&{ReaderReportProtocol.RevisionField}={revision}";
 
     private static int? CongressIn(string path, string prefix, string suffix)
     {

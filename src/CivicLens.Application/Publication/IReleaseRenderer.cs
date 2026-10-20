@@ -19,6 +19,7 @@ public interface IReleaseRenderer
     Task<string> RenderFacetsAsync(ReleaseFacets facets, CancellationToken cancellationToken);
     Task<string> RenderOfficialAsync(ReleaseOfficialPage page, CancellationToken cancellationToken);
     Task<string> RenderOfficialsAsync(IReadOnlyList<OfficialListing> officials, CancellationToken cancellationToken);
+    Task<string> RenderReportAsync(CancellationToken cancellationToken);
     Task<string> RenderSearchAsync(PublicationRelease release, ReleaseFacets facets, CancellationToken cancellationToken);
 
     IReadOnlyList<ReleaseAsset> Assets { get; }

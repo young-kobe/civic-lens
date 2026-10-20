@@ -164,6 +164,70 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task EveryRecordPageLinksToTheReportPageWithItsRecordAndRevisionSoAReportBindsToTheVersionTheReaderSaw()
+    {
+        var renderer = new ReleaseRenderer();
+        var record = Record();
+        var vote = Vote();
+
+        var pages = new[]
+        {
+            (record.RecordId, record.RevisionNumber, await renderer.RenderRecordAsync(record, CancellationToken.None)),
+            (vote.RecordId, vote.RevisionNumber, await renderer.RenderVoteAsync(vote, null, [], CancellationToken.None))
+        };
+
+        foreach (var (recordId, revision, html) in pages)
+            Assert.Equal($"../report.html?recordId={recordId}&revision={revision}",
+                new HtmlParser().ParseDocument(html).QuerySelector("a[href^='../report.html']")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task ReportPageHoldsEveryProtocolCategoryWithALabelAndPostsToTheConfiguredServiceWithTheSiteKey()
+    {
+        var html = await new ReleaseRenderer("https://api.example.test", "site-key-1").RenderReportAsync(CancellationToken.None);
+        var document = new HtmlParser().ParseDocument(html);
+
+        var form = document.QuerySelector("form[data-report-api]")!;
+        Assert.Equal("https://api.example.test", form.GetAttribute("data-report-api"));
+        Assert.Equal("site-key-1", document.QuerySelector(".cf-turnstile")!.GetAttribute("data-sitekey"));
+        Assert.Equal(["", .. ReaderReportProtocol.Categories],
+            document.QuerySelectorAll("#report-category option").Select(option => option.GetAttribute("value")));
+        Assert.All(document.QuerySelectorAll("#report-category option[value]:not([value=''])"),
+            option => Assert.Equal(PublishedRecordLabels.ReportCategory(option.GetAttribute("value")!), option.TextContent));
+        Assert.Equal([ReaderReportProtocol.RecordIdField, ReaderReportProtocol.RevisionField],
+            form.QuerySelectorAll("input[type=hidden]").Select(input => input.GetAttribute("name")));
+        Assert.Equal(ReaderReportProtocol.TextField, document.QuerySelector("#report-text")!.GetAttribute("name"));
+        Assert.Equal(ReaderReportProtocol.MaximumTextCharacters.ToString(), document.QuerySelector("#report-text")!.GetAttribute("maxlength"));
+        Assert.True(form.Closest("section")!.HasAttribute("hidden"));
+    }
+
+    [Fact]
+    public async Task OnlyTheReportPageLoadsTheTurnstileScript()
+    {
+        var report = await new ReleaseRenderer("https://api.example.test", "site-key-1").RenderReportAsync(CancellationToken.None);
+        var search = await new ReleaseRenderer("https://api.example.test", "site-key-1").RenderSearchAsync(ReleaseWithFilters(), SearchFacets(), CancellationToken.None);
+
+        Assert.Contains("challenges.cloudflare.com/turnstile", report, StringComparison.Ordinal);
+        Assert.DoesNotContain("challenges.cloudflare.com", search, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("https://api.example.test", null)]
+    [InlineData(null, "site-key-1")]
+    public async Task ReportPageWithoutTheServiceAddressOrTheSiteKeySaysThatReportingIsNotAvailableAndShowsNoFormOrKey(string? apiUrl, string? siteKey)
+    {
+        var html = await new ReleaseRenderer(apiUrl, siteKey).RenderReportAsync(CancellationToken.None);
+        var document = new HtmlParser().ParseDocument(html);
+
+        Assert.Contains("Reporting is not available", html, StringComparison.Ordinal);
+        Assert.Null(document.QuerySelector("form"));
+        Assert.DoesNotContain("data-sitekey", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("challenges.cloudflare.com", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("api.example.test", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AllRecordsPageListsRecordsWithRelativeLinks()
     {
         var release = new PublicationRelease

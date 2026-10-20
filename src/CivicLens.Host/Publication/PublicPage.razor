@@ -12,6 +12,10 @@
     }
     <script src="@(RootPath + PublicAssets.ThemeScript)"></script>
     <script src="@(RootPath + PublicAssets.Script)" defer></script>
+    @if (ExternalScript is not null)
+    {
+        <script src="@ExternalScript" async defer></script>
+    }
 </head>
 <body>
     <a class="skip" href="#main">Skip to content</a>
@@ -27,6 +31,7 @@
 
 @code {
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? ExternalScript { get; set; }
     [Parameter] public string RootPath { get; set; } = string.Empty;
     [Parameter] public RenderFragment? ChildContent { get; set; }
 }

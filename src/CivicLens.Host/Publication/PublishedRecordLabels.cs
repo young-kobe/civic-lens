@@ -16,6 +16,17 @@ public static class PublishedRecordLabels
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no label.")
     };
 
+    public static string ReportCategory(string category) => category switch
+    {
+        "wrong-quote" => "The quoted text is wrong",
+        "wrong-date" => "A date is wrong",
+        "wrong-attribution" => "The wrong person or source is named",
+        "missing-context" => "Context is missing",
+        "broken-source-link" => "A source link is broken",
+        ReaderReportProtocol.OtherCategory => "Something else",
+        _ => throw new ArgumentOutOfRangeException(nameof(category), category, "Report category has no label.")
+    };
+
     public static string Quotation(PublishedQuotationKind kind) =>
         kind == PublishedQuotationKind.DirectQuotation ? "Direct quotation" : "Release text";
 

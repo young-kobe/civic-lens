@@ -8,10 +8,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CivicLens.Host.Publication;
 
-/// <param name="publicApiUrl">The address of the search service. The search page needs it, and says that search is not available without it.</param>
-public sealed class ReleaseRenderer(string? publicApiUrl = null) : IReleaseRenderer
+/// <param name="publicApiUrl">The address of the search service. The search page and the report page need it, and say that they are not available without it.</param>
+/// <param name="turnstileSiteKey">The public Turnstile site key. The report page needs it, and says that reporting is not available without it.</param>
+public sealed class ReleaseRenderer(string? publicApiUrl = null, string? turnstileSiteKey = null) : IReleaseRenderer
 {
     public const string PublicApiUrlVariable = "CIVIC_LENS_PUBLIC_API_URL";
+    public const string TurnstileSiteKeyVariable = "CIVIC_LENS_TURNSTILE_SITE_KEY";
 
     private static readonly ServiceProvider Services = new ServiceCollection().BuildServiceProvider();
 
@@ -150,7 +152,16 @@ public sealed class ReleaseRenderer(string? publicApiUrl = null) : IReleaseRende
         });
     }
 
-    public static ReleaseRenderer FromEnvironment() => new(Environment.GetEnvironmentVariable(PublicApiUrlVariable)?.TrimEnd('/') is { Length: > 0 } url ? url : null);
+    public static ReleaseRenderer FromEnvironment() => new(
+        Environment.GetEnvironmentVariable(PublicApiUrlVariable)?.TrimEnd('/') is { Length: > 0 } url ? url : null,
+        Environment.GetEnvironmentVariable(TurnstileSiteKeyVariable)?.Trim() is { Length: > 0 } siteKey ? siteKey : null);
+
+    public Task<string> RenderReportAsync(CancellationToken cancellationToken) =>
+        RenderAsync<PublishedReportPage>(new Dictionary<string, object?>
+        {
+            [nameof(PublishedReportPage.PublicApiUrl)] = publicApiUrl,
+            [nameof(PublishedReportPage.TurnstileSiteKey)] = turnstileSiteKey
+        });
 
     public Task<string> RenderSearchAsync(PublicationRelease release, ReleaseFacets facets, CancellationToken cancellationToken)
     {
