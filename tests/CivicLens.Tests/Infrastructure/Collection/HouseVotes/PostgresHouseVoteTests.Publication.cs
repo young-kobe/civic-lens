@@ -99,6 +99,32 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
+    public async Task AVoteRevisionThatIsNotNamedIsNotReadBecauseTheReleaseBindsToTheExactRevision()
+    {
+        var first = await PendingCandidateAsync();
+        await SettleForReviewAsync(first, await RevisionAsync(first, 1));
+        var recordId = await RecordIdAsync(first);
+        var second = await PendingCandidateAsync(Updated.AddDays(1));
+        var newer = await RevisionAsync(second, 2);
+        await SettleForReviewAsync(second, newer with { Members = [newer.Members[0] with { PersonId = "other-member" }] });
+
+        var ids = await VoteReviews().ReadMemberPersonIdsAsync([new(PublishedRecordKind.Vote, recordId, 1)], default);
+
+        Assert.Equal(["other-member"], [.. (await VoteReviews().GetRevisionAsync(recordId, 2, default))!.OfficialIds()]);
+        Assert.Equal([.. (await VoteReviews().GetRevisionAsync(recordId, 1, default))!.OfficialIds()], ids);
+        Assert.DoesNotContain("other-member", ids);
+    }
+
+    [Fact]
+    public async Task ARevisionOfAnotherKindIsRefusedBeforeAnyQueryBecauseAMixedCallWouldReadTheWrongTable()
+    {
+        var recordId = await ApprovedVoteAsync();
+
+        await Assert.ThrowsAsync<ArgumentException>(() => VoteReviews().ReadMemberPersonIdsAsync(
+            [new(PublishedRecordKind.Vote, recordId, 1), new(PublishedRecordKind.Statement, recordId, 1)], default));
+    }
+
+    [Fact]
     public async Task AVoteWithoutAnActionDraftOfItsBillGetsNoActionRecordId()
     {
         var recordId = await ApprovedVoteAsync();

@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using CivicLens.Application.Publication;
 using CivicLens.Application.Relationships;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Relationships;
@@ -72,13 +73,10 @@ internal static class RelationshipCitedReader
     private static async Task<ImmutableArray<T>> ReadAsync<T>(CollectionAttemptDbContext db, RelationshipRecordKind kind,
         IEnumerable<RelationshipCitation> citations, CancellationToken cancellationToken)
     {
-        var wanted = citations.Where(citation => citation.Kind == kind).Distinct().ToArray();
-        if (wanted.Length == 0) return [];
-        var (table, _, idColumn) = ReviewTables.For(RelationshipRecordKinds.PublishedKindOf(kind));
-        var sql = $"SELECT r.revision_json AS \"Value\" FROM {table} r JOIN unnest({{0}}, {{1}}) AS k(id, number) ON r.{idColumn} = k.id AND r.revision_number = k.number";
-        var json = await db.Database.SqlQueryRaw<string>(sql, wanted.Select(citation => citation.RecordId).ToArray(),
-            wanted.Select(citation => citation.RevisionNumber).ToArray()).ToArrayAsync(cancellationToken);
-        if (json.Length != wanted.Length) throw new InvalidDataException($"A relationship cites a {kind} revision that is not stored.");
+        var publishedKind = RelationshipRecordKinds.PublishedKindOf(kind);
+        var named = citations.Where(citation => citation.Kind == kind)
+            .Select(citation => new PublishedRevisionBinding(publishedKind, citation.RecordId, citation.RevisionNumber));
+        var json = await CitedRevisions.ReadRevisionJsonAsync(db, publishedKind, named, cancellationToken);
         return [.. json.Select(item => ReviewJson.Deserialize<T>(item, "revision"))];
     }
 

@@ -25,10 +25,25 @@ internal static class CitedRevisions
         return notCurrent;
     }
 
+    public static async Task<string[]> ReadRevisionJsonAsync(CollectionAttemptDbContext db, PublishedRecordKind kind,
+        IEnumerable<PublishedRevisionBinding> named, CancellationToken cancellationToken)
+    {
+        var requested = named.Distinct().ToArray();
+        if (requested.Length == 0) return [];
+        RequireKind(kind, requested, nameof(named));
+        var (table, _, idColumn) = ReviewTables.For(kind);
+        var sql = $"SELECT r.revision_json AS \"Value\" FROM {table} r JOIN unnest({{0}}, {{1}}) AS k(id, number) ON r.{idColumn} = k.id AND r.revision_number = k.number";
+        var json = await db.Database.SqlQueryRaw<string>(sql, requested.Select(binding => binding.RecordId).ToArray(),
+            requested.Select(binding => binding.RevisionNumber).ToArray()).ToArrayAsync(cancellationToken);
+        if (json.Length != requested.Length) throw new InvalidDataException($"A named {kind} revision is not stored.");
+        return json;
+    }
+
     public static async Task<PublishedRevisionBinding[]> FindNotApprovedAsync(CollectionAttemptDbContext db, PublishedRecordKind kind,
         PublishedRevisionBinding[] requested, CancellationToken cancellationToken)
     {
         if (requested.Length == 0) return [];
+        RequireKind(kind, requested, nameof(requested));
         var (_, decisionTable, idColumn) = ReviewTables.For(kind);
         var sql = $$"""
             SELECT k.id AS "RecordId", k.number AS "RevisionNumber" FROM unnest({0}, {1}) AS k(id, number)
@@ -38,6 +53,12 @@ internal static class CitedRevisions
         var rows = await db.Database.SqlQueryRaw<NotApprovedRow>(sql, requested.Select(binding => binding.RecordId).ToArray(),
             requested.Select(binding => binding.RevisionNumber).ToArray()).ToArrayAsync(cancellationToken);
         return [.. rows.Select(row => new PublishedRevisionBinding(kind, row.RecordId, row.RevisionNumber))];
+    }
+
+    private static void RequireKind(PublishedRecordKind kind, PublishedRevisionBinding[] bindings, string parameterName)
+    {
+        if (bindings.Any(binding => binding.Kind != kind))
+            throw new ArgumentException($"Every named revision must be a {kind} revision.", parameterName);
     }
 
     private sealed class NotApprovedRow
