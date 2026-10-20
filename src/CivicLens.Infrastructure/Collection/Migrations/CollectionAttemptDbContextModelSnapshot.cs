@@ -1745,6 +1745,110 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Roster.Persistence.RosterMemberRow", b =>
+                {
+                    b.Property<string>("AttemptId")
+                        .HasColumnType("text")
+                        .HasColumnName("attempt_id");
+
+                    b.Property<string>("BioguideId")
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)")
+                        .HasColumnName("bioguide_id");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("full_name");
+
+                    b.Property<string>("LisId")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("lis_id");
+
+                    b.Property<string>("Office")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("office");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("phone");
+
+                    b.Property<string>("Url")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("url");
+
+                    b.HasKey("AttemptId", "BioguideId");
+
+                    b.ToTable("roster_members", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_roster_members_identity", "bioguide_id ~ '^[A-Z][0-9]{6}$' AND length(btrim(full_name)) > 0");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Roster.Persistence.RosterTermRow", b =>
+                {
+                    b.Property<string>("AttemptId")
+                        .HasColumnType("text")
+                        .HasColumnName("attempt_id");
+
+                    b.Property<string>("BioguideId")
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)")
+                        .HasColumnName("bioguide_id");
+
+                    b.Property<int>("TermIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("term_index");
+
+                    b.Property<string>("Chamber")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("chamber");
+
+                    b.Property<int?>("District")
+                        .HasColumnType("integer")
+                        .HasColumnName("district");
+
+                    b.Property<DateOnly>("EndsOn")
+                        .HasColumnType("date")
+                        .HasColumnName("ends_on");
+
+                    b.Property<string>("Party")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("party");
+
+                    b.Property<int?>("SenateClass")
+                        .HasColumnType("integer")
+                        .HasColumnName("senate_class");
+
+                    b.Property<DateOnly>("StartsOn")
+                        .HasColumnType("date")
+                        .HasColumnName("starts_on");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("state");
+
+                    b.HasKey("AttemptId", "BioguideId", "TermIndex");
+
+                    b.ToTable("roster_terms", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_roster_terms_chamber", "chamber IN ('sen', 'rep')");
+
+                            t.HasCheckConstraint("ck_roster_terms_dates", "term_index >= 0 AND ends_on >= starts_on");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.HouseVotes.HouseVoteRow", b =>
                 {
                     b.Property<string>("DetailJobId")
@@ -4393,6 +4497,24 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
                         .WithMany()
                         .HasForeignKey("ExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Roster.Persistence.RosterMemberRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Collection.Persistence.AttemptRow", null)
+                        .WithMany()
+                        .HasForeignKey("AttemptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Roster.Persistence.RosterTermRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Roster.Persistence.RosterMemberRow", null)
+                        .WithMany()
+                        .HasForeignKey("AttemptId", "BioguideId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

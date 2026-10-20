@@ -43,7 +43,7 @@ public sealed class ConfigurationTests
         configuration.Validate();
 
         Assert.Single(configuration.Sources);
-        Assert.Equal(500, configuration.GetCoveredPersonIds("shared", new DateOnly(2024, 1, 1)).Length);
+        Assert.Equal(500, CoveredOnShared(configuration, new DateOnly(2024, 1, 1)).Length);
         var request = new ConfiguredCollectionSource(configuration, "shared")
             .CreateRequest("job-1", Path.GetFullPath("artifacts"), new DateOnly(2024, 1, 1));
         Assert.Equal("shared", request.SourceId);
@@ -156,9 +156,9 @@ public sealed class ConfigurationTests
             }]
         };
 
-        Assert.Equal(["a", "z"], configuration.GetCoveredPersonIds("shared", new DateOnly(2024, 1, 31)));
-        Assert.Equal(["a"], configuration.GetCoveredPersonIds("shared", new DateOnly(2023, 12, 31)));
-        Assert.Empty(configuration.GetCoveredPersonIds("shared", new DateOnly(2024, 2, 1)));
+        Assert.Equal(["a", "z"], CoveredOnShared(configuration, new DateOnly(2024, 1, 31)));
+        Assert.Equal(["a"], CoveredOnShared(configuration, new DateOnly(2023, 12, 31)));
+        Assert.Empty(CoveredOnShared(configuration, new DateOnly(2024, 2, 1)));
         Assert.Throws<ArgumentException>(() => configuration.EligibleSource("shared", new DateOnly(2024, 2, 1)));
         Assert.Equal("shared", configuration.EligibleSource("shared", new DateOnly(2024, 1, 1)).Id);
     }
@@ -352,4 +352,7 @@ public sealed class ConfigurationTests
             new PersonConfiguration { Id = "two", Name = "Two" }],
             Sources = [ValidSource([]) with { Coverage = coverage }]
         };
+
+    private static string[] CoveredOnShared(CollectionConfiguration configuration, DateOnly day) =>
+        configuration.CoveredPersonIdsOf(configuration.Sources.Single(source => source.Id == "shared"), day);
 }

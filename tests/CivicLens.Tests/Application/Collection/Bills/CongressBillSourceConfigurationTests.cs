@@ -18,7 +18,7 @@ public sealed class CongressBillSourceConfigurationTests
         var source = configuration.Sources.Single();
 
         Assert.Equal(["with-id-a", "with-id-b"], configuration.CoveredPersonIdsOf(source, Backfill));
-        Assert.Equal(["with-id-a", "with-id-b"], configuration.GetCoveredPersonIds("congress-bills", new DateOnly(2030, 1, 1)));
+        Assert.Equal(["with-id-a", "with-id-b"], configuration.CoveredPersonIdsOf(source, new DateOnly(2030, 1, 1)));
         Assert.Empty(configuration.CoveredPersonIdsOf(source, Backfill.AddDays(-1)));
     }
 

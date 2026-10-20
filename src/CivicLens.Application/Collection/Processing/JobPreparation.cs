@@ -4,6 +4,7 @@ using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Issues;
+using CivicLens.Application.Roster;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
@@ -16,6 +17,7 @@ public sealed class JobPreparation(
     IDiscoveryAdmissionStore admissions,
     IBillStreamAdmissionStore billAdmissions,
     IHouseVoteAdmissionStore voteAdmissions,
+    IMemberRosterStore roster,
     ICaptureBodyReader bodies,
     IEvidenceProcessingStore processing,
     IDocumentExtractionStore extractions,
@@ -100,6 +102,7 @@ public sealed class JobPreparation(
             ApiResource.HouseVoteList => AdmitHouseVoteListAsync(job, artifactRoot, cancellationToken),
             ApiResource.HouseVoteDetail => AdmitHouseVoteDetailAsync(job, artifactRoot, cancellationToken),
             ApiResource.HouseVoteMembers => AdmitHouseVoteMembersAsync(job, artifactRoot, cancellationToken),
+            ApiResource.MemberRoster => AdmitMemberRosterAsync(job, artifactRoot, cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(job))
         };
 
@@ -202,6 +205,16 @@ public sealed class JobPreparation(
         var extractionId = await SaveExtractionAsync(response.Captured, HouseVoteMembersParser.Version,
             HouseVoteRenderer.NormalizationVersion, HouseVoteRenderer.RenderMembers(members), cancellationToken);
         return PreparedFrom(await voteAdmissions.AdmitMembersAsync(configured, job.JobId, members.Vote, extractionId, cancellationToken));
+    }
+
+    private async Task<JobPreparationResult> AdmitMemberRosterAsync(CollectionJobRecord job, string artifactRoot,
+        CancellationToken cancellationToken)
+    {
+        var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
+        var attemptId = response.Captured.AttemptId;
+        if (!await roster.HasSnapshotOfCaptureAsync(attemptId, cancellationToken))
+            await roster.AdmitAsync(attemptId, MemberRosterParser.Parse(response.Body), cancellationToken);
+        return JobPreparationResult.Prepared();
     }
 
     private static CongressBillListItem ReadPageBill(ConfiguredCollectionSource configured, CollectionJobRecord job,

@@ -17,7 +17,7 @@ Configuration defines the people, sources, coverage, profiles, and tracked issue
 - Registry data never enters collector requests.
 - An institutional account is not an alias of a person.
 - Issue definitions are the future classification rubric, so a wording change creates a new revision.
-- Offices and dated terms come from the R-14 member dataset, not from configuration.
+- Offices and dated terms come from the captured [roster](roster.md), not from configuration.
 
 ## Invariants
 
@@ -43,7 +43,7 @@ A person has a stable `id` and a current display `name`. Optional dated `names` 
 - Britt and Kim have no press source, because their press listings refuse our requests.
 - The House Drupal `rss.xml` feeds stay unused. A sample showed site-wide content, at most 10 items, and no overlap with the press-release listings.
 
-Two source types, the Congress.gov bill list and the Congress.gov House vote list, have no coverage list; see [bills](bills.md#source-configuration) and [votes](votes.md#source-configuration).
+Three source types have no coverage list: the Congress.gov bill list, the Congress.gov House vote list, and the member roster file. See [bills](bills.md#source-configuration), [votes](votes.md#source-configuration), and [roster](roster.md#source-configuration).
 
 ### Dates and intervals
 
@@ -59,7 +59,7 @@ A shared source is collected once.
 
 ### Eligibility
 
-`GetCoveredPersonIds` answers coverage on an explicit date. It includes configured relationships on disabled sources. Enabling a source is a separate execution gate. New collection or admission needs an enabled source with active coverage.
+`CoveredPersonIdsOf` answers coverage on an explicit date. It includes configured relationships on disabled sources. `IsActiveOn` adds one case: a [roster](roster.md) source covers no people and stays eligible. Enabling a source is a separate execution gate. New collection or admission needs an enabled source with active coverage.
 
 `--as-of yyyy-MM-dd` gives an explicit date. Direct collection sets an omitted date once to the current UTC date. Managed admission keeps an omitted date unresolved until the existing key is checked in its database transaction. Publisher, event, and observation times keep their separate meanings.
 
@@ -133,7 +133,7 @@ The file has a `version` (only 1 is supported), a list of `policyAreas` (`id`, `
 
 ## Limits and planned work
 
-- Offices and dated terms are facts, not our choices. They will come from a captured member dataset, parsed into tables whose rows cite the capture ([R-14](../roadmap.md#next)). The configuration keeps the tracked people and their bioguide IDs. Congress.gov member terms give years only, so choose the dataset when R-14 starts.
+- Offices and dated terms are facts, not our choices. The [roster](roster.md) captures them. The configuration keeps the tracked people and their bioguide IDs. `roster propose` lists members to add and people to review.
 - The configuration stays in version-controlled files until automatic source discovery ([R-27](../roadmap.md#later)) needs runtime writes. Then people, sources, and coverage move to tables, and immutable revisions keep binding jobs as they do now.
 - The roster lists current members only. A member who leaves stays covered until a person edits the configuration.
 - Agencies and committees will get an institution owner in the schema, not a synthetic person.

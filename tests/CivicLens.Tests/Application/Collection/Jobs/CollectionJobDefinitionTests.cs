@@ -45,7 +45,7 @@ public sealed class CollectionJobDefinitionTests
         restored.Validate();
         Assert.Equal(definition, restored);
         Assert.Equal(date, restored.CoverageAsOf);
-        Assert.Equal(["person"], restored.ConfigurationRevision!.ReadConfiguration().GetCoveredPersonIds("first", date));
+        Assert.Equal(["person"], restored.ConfigurationRevision!.Configuration.CoveredPersonIdsOf(restored.ConfigurationRevision.Configuration.Sources.Single(source => source.Id == "first"), date));
         Assert.Equal("Person", restored.ConfigurationRevision.ReadConfiguration().People[0].Name);
         Assert.Throws<ArgumentException>(() => CollectionJobDefinition.FromConfiguration(config, "first", date));
     }

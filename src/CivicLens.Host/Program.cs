@@ -23,6 +23,9 @@ using CivicLens.Host;
 using CivicLens.Host.Actions;
 using CivicLens.Host.Briefs;
 using CivicLens.Host.Relationships;
+using CivicLens.Host.Roster;
+using CivicLens.Application.Roster;
+using CivicLens.Infrastructure.Roster;
 using CivicLens.Host.Votes;
 using CivicLens.Application.Briefs;
 using CivicLens.Application.Relationships;
@@ -88,6 +91,7 @@ if (args is [] or ["--help"] or ["help"])
           relationships draft requeue <pair-id|--all>
           relationships draft refresh
           brief redraft --week <yyyy-MM-dd>
+          roster propose <config.json>
           releases publish <idempotency-key> <draft-id>...
           releases list [limit]
           releases activate <release-number>
@@ -154,7 +158,7 @@ if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _]
     or ["discovery", "get", _] or ["discovery", "admit", _, _, _, _]
     or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args) &&
     !CollectionWorkerCommand.Matches(args) && !DocumentCommand.Matches(args) && !ReleaseCommand.Matches(args) &&
-    !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args) && !ActionCommand.Matches(args) && !VoteCommand.Matches(args) && !RelationshipCommand.Matches(args) && !BriefCommand.Matches(args))
+    !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args) && !ActionCommand.Matches(args) && !VoteCommand.Matches(args) && !RelationshipCommand.Matches(args) && !BriefCommand.Matches(args) && !RosterCommand.Matches(args))
 {
     Console.Error.WriteLine("Unknown command. Use --help.");
     return 2;
@@ -215,7 +219,8 @@ try
         var comparisons = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
         var processingStore = PostgresEvidenceProcessingStore.FromConnectionString(connectionString);
         var processing = new EvidenceProcessingWorker(jobs,
-            new JobPreparation(jobs, attempts, jobs, jobs, jobs, new CaptureBodyReader(), processingStore, extractions, textExtractor, issues),
+            new JobPreparation(jobs, attempts, jobs, jobs, jobs, PostgresMemberRosterStore.FromConnectionString(connectionString),
+                new CaptureBodyReader(), processingStore, extractions, textExtractor, issues),
             processingStore,
             new ExtractDocument(attempts, textExtractor, extractions),
             new GetDocumentHistory(PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
@@ -303,6 +308,15 @@ try
         var brief = new BriefCommand(new RedraftBrief(new PostgresBriefDraftStore(AnalysisDbContextFactory.Create(connectionString))), owner);
         executing = true;
         return await brief.ExecuteAsync(args, cancellation.Token);
+    }
+
+    if (RosterCommand.Matches(args))
+    {
+        var rosterConfiguration = args is ["roster", "propose", var rosterConfigPath]
+            ? ConfigurationFile.ReadCollection(rosterConfigPath) : null;
+        var roster = PostgresMemberRosterStore.FromConnectionString(Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!);
+        executing = true;
+        return await RosterCommand.ExecuteAsync(args, rosterConfiguration, new ProposeRosterChanges(roster), cancellation.Token);
     }
 
     if (ReleaseCommand.Matches(args))

@@ -16,6 +16,7 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Collection.Processing;
 using CivicLens.Infrastructure.Documents;
+using CivicLens.Infrastructure.Roster;
 using CivicLens.Tests.Application.Collection.Bills;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
@@ -222,7 +223,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     public async Task PreparingABillDetailAgainKeepsTheOneExtractionEvenThoughTheGateIsADuplicate()
     {
         var detail = await RunBillJobAsync(ApiResource.Bill, BillSourceUrl + "/119/hr/1?format=json", BillDetail(sponsor: "A000001", cosponsors: 2));
-        var replay = new JobPreparation(jobs, attempts, jobs, jobs, jobs, new CaptureBodyReader(), processing, extractions, new CaptureDocumentTextExtractor(), issues);
+        var replay = new JobPreparation(jobs, attempts, jobs, jobs, jobs, PostgresMemberRosterStore.FromConnectionString(connectionString), new CaptureBodyReader(), processing, extractions, new CaptureDocumentTextExtractor(), issues);
 
         var result = await replay.PrepareAsync(detail.JobId, artifactRoot, default);
 
@@ -464,7 +465,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         Assert.Single(await processing.GetByJobIdsAsync([jobId], default), record => record.AttemptId == attemptId);
 
     private EvidenceProcessingWorker Worker(IEvidenceProcessingStore processingStore, IDocumentHistoryStore? historyStore = null) => new(jobs,
-        new JobPreparation(jobs, attempts, jobs, jobs, jobs, new CaptureBodyReader(), processingStore, extractions, new CaptureDocumentTextExtractor(), issues), processingStore, extract, new GetDocumentHistory(historyStore ?? PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
+        new JobPreparation(jobs, attempts, jobs, jobs, jobs, PostgresMemberRosterStore.FromConnectionString(connectionString), new CaptureBodyReader(), processingStore, extractions, new CaptureDocumentTextExtractor(), issues), processingStore, extract, new GetDocumentHistory(historyStore ?? PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
         new CompareDocuments(comparisons), 1);
 
     private CollectionJobDefinition ConfiguredDefinition(string? etag = null)
