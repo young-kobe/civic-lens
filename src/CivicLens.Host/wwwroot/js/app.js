@@ -160,7 +160,6 @@
         const submit = form.querySelector("[type=submit]");
         const show = (tone, message) => {
             result.className = `notice notice-${tone}`;
-            result.setAttribute("role", tone === "bad" ? "alert" : "status");
             result.textContent = message;
             result.focus();
         };
@@ -183,7 +182,7 @@
             submit.disabled = true;
             let outcome = ["bad", "The report did not reach the service. Check your connection and send the report again."];
             try {
-                const response = await fetch(`${form.dataset.reportApi}`, { method: "POST", body: new URLSearchParams(new FormData(form)) });
+                const response = await fetch(form.dataset.reportApi, { method: "POST", body: new URLSearchParams(new FormData(form)) });
                 outcome = reportMessages[response.status] ?? ["bad", `The service answered with the unexpected status ${response.status}. Try again later.`];
             } catch {}
             show(...outcome);

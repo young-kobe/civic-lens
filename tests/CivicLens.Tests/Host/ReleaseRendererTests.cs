@@ -199,6 +199,9 @@ public sealed class ReleaseRendererTests
         Assert.Equal(ReaderReportProtocol.TextField, document.QuerySelector("#report-text")!.GetAttribute("name"));
         Assert.Equal(ReaderReportProtocol.MaximumTextCharacters.ToString(), document.QuerySelector("#report-text")!.GetAttribute("maxlength"));
         Assert.True(form.Closest("section")!.HasAttribute("hidden"));
+        var result = document.QuerySelector("[data-report-result]")!;
+        Assert.Equal("status", result.GetAttribute("role"));
+        Assert.Equal("-1", result.GetAttribute("tabindex"));
     }
 
     [Fact]
