@@ -16,7 +16,7 @@ public sealed class IngestWorkerTests(PostgresCollection postgres)
         world.Site.Publish(1, PublishedSamples.Statement('a', "Rent cap"));
         world.Site.FailNextManifestRequest = new TaskCanceledException("The request timed out.");
         var logger = new ListLogger();
-        using var worker = new IngestWorker(world.Ingest, world.Options with { PollInterval = TimeSpan.FromMilliseconds(50) }, logger);
+        using var worker = new IngestWorker(world.Ingest, world.Reports, world.Options with { PollInterval = TimeSpan.FromMilliseconds(50) }, logger);
 
         await worker.StartAsync(CancellationToken.None);
         for (var attempt = 0; attempt < 100 && await world.Index.FindReleaseAsync(null, CancellationToken.None) is null; attempt++)

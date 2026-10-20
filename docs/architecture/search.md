@@ -19,11 +19,26 @@ The search service gives readers full-text search over every published record. I
 - The summary text stops at 50,000 characters, and the source text stops at `PublicationProtocol.SearchSourceTextCharacters`. A Postgres tsvector holds at most 1 MB, and these limits keep the worst case below it. The search page states the source limit.
 - Queries use `websearch_to_tsquery('english', q)` and `ts_rank_cd`. A snippet comes from `ts_headline` over the first 50,000 characters of the record body. The snippet marks each match between U+E000 and U+E001, so a reader script never needs HTML from the service.
 - Paging uses a keyset cursor, as the review UI does. The cursor carries its release, so all pages of one search read the same release. This service pages forward only, so the cursor has no direction.
-- The public address will be `api.civic-lens.info`. Every response allows any origin. The service sets no cookie and checks no credential.
+- The public address will be `api.civic-lens.info`. Every response allows any origin. The service sets no cookie. The search routes check no credential. The report pull route checks one shared bearer token.
 - The rate limiter is the ASP.NET built-in fixed window. It keys on `CF-Connecting-IP` only when the connection comes from a configured Cloudflare range. Otherwise it keys on the remote address. An IPv6 client counts as its /64 network.
 - A record file holds the full source text. The service indexes it and does not serve it. The API returns index rows and the paths of the record files.
 - Publish writes `search.html` in every release. The page fills its filters from the manifest. Issue and policy area names come from the publication catalog. A script calls the service at `CIVIC_LENS_PUBLIC_API_URL`. Without the variable, the page says that search is not available.
 - The facet pages are the path for readers without JavaScript.
+- Readers send a report with `POST /v1/reports`. The body is form-encoded, so the browser sends a CORS simple request and needs no preflight. The route keeps `Access-Control-Allow-Origin: *` and sets no cookie.
+- The service stores nothing about the reporter. It keeps no IP address, no hash of one, and no contact field. The client address only keys the in-memory rate limit. The service does not log it.
+- The checks run in this order: the shape of the form, the Turnstile check, then the database write. The route reads at most 32 KB of body. An unknown pair of record ID and revision answers 404.
+- A report binds to a record revision in the `records` table, in any release range. A report on a replaced revision is accepted, because a reader may hold an old page. The row stores the kind from that table and the active release number at receipt.
+- Cloudflare Turnstile checks each report in the service. `TurnstileVerifier` sends the token and the secret to the siteverify API and nothing else. It needs `success` and the configured hostname. A 5 second timeout, a failed call, an unreadable reply, or the code "internal-error" gives 503, so the check fails closed.
+- `TurnstileVerifier` is a concrete class at the Cloudflare boundary, as `ReleaseFeed` is at the release boundary. The service registers it only when a secret is set. Tests give `PublicApiApp.Build` a fake `HttpMessageHandler`, as they do for the release feed.
+- Without `CIVIC_LENS_TURNSTILE_SECRET` the report route answers 503 "reports are not available".
+- Three limits protect the route. The `reports` rate limit policy allows 5 reports each hour for each client, and the global limiter still applies. A durable cap allows 200 reports in 24 hours and is checked inside the insert transaction. A unique index on record ID, revision, and payload hash makes a duplicate a no-op with the same success answer.
+- The insert takes the advisory lock `civic-lens-search-reports` and holds it to the commit. Identity values then commit in order, so a pull never skips a late commit. No search transaction holds two keys.
+- The operational application pulls the reports with `GET /internal/v1/reports?after=<cursor>&limit=<n>`. The route needs `CIVIC_LENS_REPORT_PULL_TOKEN`, at least 32 characters. Without the variable the route does not exist. The token is compared with `CryptographicOperations.FixedTimeEquals`.
+- The cursor is `<epoch>.<sequence>` and moves forward only. The epoch is a uuid that the first migration creates once. A cursor of another epoch starts from the first report, so a reset or restore never skips reports. The puller dedupes by report ID.
+- The `after` value acknowledges every report at or below it. The acknowledged sequence in `report_pull_state` never moves back.
+- `IngestWorker` also purges reports. It deletes a report only when its sequence is at or below the acknowledged sequence and it is older than 7 days. This keeps one timer loop, so no new hosted service exists.
+- The wire types `PulledReport`, `PulledReportBatch`, and `ReaderReportProtocol` are in `CivicLens.Publication.Contracts`. They are not release files, so `PublicationProtocol.SchemaVersion` does not change. The cursor format is owned by `ReportCursor` in the service, because it is opaque to the puller.
+- The route `/internal/*` is not public. [R-24](../roadmap.md#later) must block it at the edge or use a private listener. This document does not build that.
 
 ## Invariants
 
@@ -57,6 +72,21 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A statement that runs over the timeout stops, and the service answers 503. Enforced by the statement timeout of the reader connection. Test: `SearchEndpointsTests.AStatementThatRunsLongerThanTheTimeoutIsStoppedAndAnswers503`.
 - The rate limiter trusts `CF-Connecting-IP` only from a configured range. Enforced by `ClientAddress`. Tests: `ClientAddressTests.AllAddressesOfOneIpv6Slash64AreOneClientBecauseAReaderHoldsTheWholeNetwork`, `ClientAddressTests.TheForwardedHeaderIsIgnoredWhenTheConnectionComesFromOutsideTheCloudflareRangesBecauseAnyCallerCanSendIt`, `RateLimitTests.TheRateLimitCountsEachForwardedClientSeparatelyWhenTheConnectionIsTrusted`, and `RateLimitTests.TheRateLimitIgnoresAForgedHeaderFromAnUntrustedConnectionSoRotatingItBuysNoMoreRequests`.
 - Every response allows any origin and sets no cookie. Enforced by `PublicApiApp`. Test: `SearchEndpointsTests.EveryResponseAllowsAnyOriginAndSetsNoCookie`.
+- A report is stored only for a record revision that the `records` table holds, with a valid record ID, category, and text. Enforced by `ReportSubmission.Parse`, `ReaderReportProtocol`, `PublicationProtocol.IsAnyRecordId`, and `ReportStore.StoreAsync`. The protocol owns the category and text rules, so the table has no CHECK for them. Tests: `PublicationProtocolTests.AnyRecordIdHasExactlyThe32Or64HexLengthsSoARouteCanRefuseAnIdBeforeTheLookup`, `ReportEndpointsTests.AnInvalidReportIsRefusedAndNoRowIsWrittenBecauseTheDatabaseHoldsOnlyReportsAboutRealRecordRevisions`, and `ReportEndpointsTests.AReportOnAReplacedRevisionIsAcceptedBecauseTheReaderMayHoldAnOldPage`.
+- A report is stored once. Enforced by the unique index and `ON CONFLICT DO NOTHING`. Test: `ReportEndpointsTests.ADuplicateReportGetsTheSameAnswerAsTheFirstAndIsNotStoredTwiceSoARetryCostsNothing`.
+- The database holds nothing about the reporter. Enforced by the table columns. Test: `ReportEndpointsTests.AValidReportIsStoredOnceWithTheKindAndTheActiveReleaseAndNothingAboutTheReader`.
+- No report is stored when the Turnstile check fails, times out, or is not configured. Enforced by `ReportEndpoints` and `TurnstileVerifier`. Tests: `ReportEndpointsTests.AFailedBotCheckIsRefusedWithNoRowBecauseTheCheckStandsBeforeTheWrite`, `ReportEndpointsTests.AReplyForAnotherHostnameIsRefusedBecauseAPassedTokenOfAnotherSiteProvesNothingHere`, `ReportEndpointsTests.ABotCheckTimeoutFailsClosedWith503AndNoRow`, `ReportEndpointsTests.AnInternalErrorOfTheBotCheckIsUnavailableNotRejectedBecauseTheReaderDidNothingWrong`, `ReportEndpointsTests.ABotCheckReplyWithAnErrorStatusFailsClosedWith503AndNoRow`, `ReportEndpointsTests.ANullBotCheckReplyFailsClosedWith503AndNoRow`, and `ReportEndpointsTests.WithoutATurnstileSecretTheReportRouteAnswers503AndStoresNothing`.
+- The report text never reaches Cloudflare. Enforced by `TurnstileVerifier`. Test: `ReportEndpointsTests.OnlyTheSecretAndTheTokenReachTheBotCheckBecauseTheReportTextIsNotCloudflaresBusiness`.
+- The report route reads at most 32 KB and accepts form bodies only. The cap counts bytes, so 2,000 characters of 3-byte text fit. Enforced by `ReportEndpoints`. Tests: `ReportEndpointsTests.TextOfMultiByteCharactersUpToTheMaximumLengthIsAcceptedBecauseTheBodyCapCountsBytesNotCharacters`, `ReportEndpointsTests.ABodyOverTheRouteCapIsRefusedBeforeAnyCheckBecauseTheRouteIsOpenToAnyone`, and `ReportEndpointsTests.AJsonBodyIsRefusedBecauseOnlyTheFormEncodingNeedsNoPreflight`.
+- Each client sends at most the configured number of reports each hour. Enforced by the `reports` rate limit policy. Test: `ReportEndpointsTests.EachClientMayReportOnlyTheConfiguredCountEachHourAndTheNextReportGets429`.
+- The service stores at most the configured number of reports in 24 hours. Enforced by `ReportStore.StoreAsync` under the reports lock. Test: `ReportEndpointsTests.AtTheDailyCapReportsAreClosedWith503AndNothingMoreIsStored`.
+- Reports commit in sequence order, so a pull never skips a late commit. Enforced by the reports lock in `ReportStore.StoreAsync`. Tests: `ReportStoreTests.AStoreWaitsForTheReportsLockBecauseTheSequenceOrderAndTheDailyCapDependOnIt` and `ReportStoreTests.TwoConcurrentStoresAtADailyCapOfOneStoreExactlyOneBecauseTheCountAndTheInsertShareTheLock`.
+- The pull route needs the bearer token and does not exist without one. Enforced by `ReportEndpoints`. Tests: `ReportEndpointsTests.ThePullRefusesAMissingOrWrongTokenWith401` and `ReportEndpointsTests.WithoutAPullTokenThePullRouteDoesNotExist`.
+- A token under 32 characters stops the service at startup. Enforced by `PublicApiOptions.ParsePullToken`. Test: `PublicApiOptionsTests.APullTokenUnder32CharactersIsRefusedAtStartupBecauseItGuardsEveryReport`.
+- Pages come in sequence order and no report is skipped. Enforced by `ReportStore.PullAsync`. Test: `ReportStoreTests.PagesComeInSequenceOrderAndEachReportComesOnceSoThePullerMissesNothing`.
+- A cursor of another epoch starts from the first report and acknowledges nothing. Enforced by `ReportStore.PullAsync`. Test: `ReportStoreTests.ACursorOfAnotherEpochStartsFromTheFirstReportAndAcknowledgesNothingSoAResetNeverSkipsReports`.
+- The acknowledged sequence never moves back. Enforced by `ReportStore.PullAsync`. Test: `ReportStoreTests.TheAcknowledgementMovesForwardOnlySoAnOldCursorCannotMakeAPulledReportUnpurgeable`.
+- The purge deletes only acknowledged reports older than 7 days. Enforced by `ReportStore.PurgeAsync`. Test: `ReportStoreTests.ThePurgeDeletesOnlyReportsThatAreAcknowledgedAndOlderThanSevenDays`.
 - Each schema file runs once, even when two services start together. Enforced by `SchemaMigrator`. Test: `SchemaMigratorTests.TwoServicesThatStartTogetherApplyEachFileOnceAndRecordItInSchemaMigrations`.
 - Every release holds `search.html`, written before the manifest. Enforced by `PublishRelease`. Test: `PublishReleaseTests.EveryReleaseHoldsASearchPageThatIsWrittenBeforeTheManifestAndListsTheReleaseRecords`.
 - The search page states the source text limit, and it says when search is not available. Enforced by `PublishedSearchPage`. Tests: `ReleaseRendererTests.SearchPageStatesTheSourceTextLimitSoReadersKnowWhatSearchReads` and `ReleaseRendererTests.SearchPageWithoutAServiceAddressSaysThatSearchIsNotAvailableAndShowsNoForm`.
@@ -85,22 +115,26 @@ Only a search with text returns a snippet. A search without text returns none.
 
 ### API
 
-All routes are GET and read-only. Errors use problem JSON.
+The search routes are GET and read-only. The report routes are the only writes. Errors use problem JSON.
 
 | Route | Answer |
 |---|---|
 | `/v1/release` | The active release number and its publication time. 503 before the first ingest. |
 | `/v1/search` | A page of results with `release`, `hits`, and `nextCursor`. Parameters: `q`, `kind`, `official`, `issue`, `policyArea`, `source`, `from`, `to`, `release`, `cursor`, and `limit`. |
 | `/v1/records/{id}` | The index row of one record in the active release, or in the release of `release=N`. 404 when the release does not hold the record. |
+| `POST /v1/reports` | Stores one reader report. Form fields: `recordId`, `revision`, `category`, `text` (optional), and `cf-turnstile-response`. Categories: `wrong-quote`, `wrong-date`, `wrong-attribution`, `missing-context`, `broken-source-link`, and `other`. Text holds at most 2,000 characters and is required for `other`. Answer: 202, also for a duplicate. |
+| `GET /internal/v1/reports` | Internal. Bearer token. Parameters: `after` (the cursor) and `limit` (default 100, at most 200). Answer: `reports` and `nextCursor`. |
 
 A result has the manifest entry fields, `firstRelease`, `lastRelease`, `pagePath`, `dataPath`, and the snippet. The paths are relative to the release root. The API does not serve record bodies.
 
 | Status | Cause |
 |---|---|
-| 400 | A parameter is not valid or exceeds its bound. |
-| 404 | The release is not indexed, or the release does not hold the record. |
+| 400 | A parameter or form field is not valid or exceeds its bound, or the Turnstile check failed. |
+| 401 | The pull token is missing or wrong. |
+| 404 | The release is not indexed, the release does not hold the record, or no table row holds the reported record revision. |
+| 413 | The report body is over 32 KB. |
 | 429 | The client passed the rate limit. |
-| 503 | No release is indexed yet, or the search ran over the timeout. |
+| 503 | One of these cases. No release is indexed yet. The search ran over the timeout. Reports are not available. The Turnstile check is not available. The daily report cap is reached. |
 
 ### Configuration
 
@@ -110,6 +144,11 @@ A result has the manifest entry fields, `firstRelease`, `lastRelease`, `pagePath
 | `CIVIC_LENS_SEARCH_DATABASE` | Required. The Npgsql connection string of the search database. |
 | `CIVIC_LENS_TRUSTED_PROXY_RANGES` | Optional. Comma-separated CIDR ranges of Cloudflare. Empty means that the remote address names the client. |
 | `CIVIC_LENS_REQUESTS_PER_MINUTE` | Optional. The rate limit for each client, 1 or more. The default is 60. A lower value stops the service at startup. |
+| `CIVIC_LENS_REPORTS_PER_HOUR` | Optional. The report limit for each client, 1 or more. The default is 5. The state is in memory, so a restart resets it. |
+| `CIVIC_LENS_REPORTS_PER_DAY` | Optional. The cap of reports in 24 hours, 1 or more. The default is 200. |
+| `CIVIC_LENS_TURNSTILE_SECRET` | Optional. The Turnstile secret. Without it, the report route answers 503. |
+| `CIVIC_LENS_TURNSTILE_HOSTNAME` | Required when the secret is set. The hostname that siteverify must report. |
+| `CIVIC_LENS_REPORT_PULL_TOKEN` | Optional. The bearer token of the pull route, 32 characters or more. Without it, the route does not exist. |
 | `CIVIC_LENS_PUBLIC_API_URL` | Read by publish, not by the service. The address that `search.html` calls. |
 
 The poll interval is 2 minutes and the statement timeout is 2 seconds. Both are options of `PublicApiOptions`.
@@ -120,9 +159,12 @@ The poll interval is 2 minutes and the statement timeout is 2 seconds. Both are 
 
 ## Storage and contracts
 
-- The generated schema reference does not cover this database. The tables are `releases`, `records`, and `schema_migrations`, in `src/CivicLens.PublicApi/Schema/001_search_index.sql`.
+- The generated schema reference does not cover this database. The tables are `releases`, `records`, and `schema_migrations`, in `src/CivicLens.PublicApi/Schema/001_search_index.sql`. The tables `reader_reports` and `report_pull_state` are in `002_reader_reports.sql`.
 - `releases` holds each ingested release number and its publication time.
 - `records` holds one row for each record revision: the manifest entry fields, the body text, the weighted `search` vector, `first_release`, and `last_release`. GIN indexes cover the vector and the three ID arrays.
+- `reader_reports` holds `sequence` (identity), `report_id`, `record_id`, `revision_number`, `kind`, `release_number`, `category`, `body`, `payload_hash`, and `received_at`. CHECK constraints bound the numbers. A unique index covers record ID, revision, and payload hash.
+- `report_pull_state` holds one row: the `epoch` uuid, created once, and the `acked_sequence`.
+- `PulledReport`, `PulledReportBatch`, and `ReaderReportProtocol` define the pull wire format.
 - The service reads the same contract types as the static site: `PublicationRelease` and the six record types. `PublicationProtocol.SearchSourceTextCharacters` and `PublicationProtocol.SearchPagePath` are shared with the page.
 
 ## Code map
@@ -134,6 +176,9 @@ The poll interval is 2 minutes and the statement timeout is 2 seconds. Both are 
 | Ingest | `src/CivicLens.PublicApi/Ingest/IngestWorker.cs`, `src/CivicLens.PublicApi/Ingest/ReleaseIngest.cs`, `src/CivicLens.PublicApi/Ingest/ReleaseFeed.cs`, `src/CivicLens.PublicApi/Ingest/RecordReader.cs`, `src/CivicLens.PublicApi/Ingest/IndexedRecord.cs`, `src/CivicLens.PublicApi/Ingest/IndexTransaction.cs`, `src/CivicLens.PublicApi/Ingest/IngestResult.cs` |
 | Search and API | `src/CivicLens.PublicApi/Search/SearchEndpoints.cs`, `src/CivicLens.PublicApi/Search/SearchRequest.cs`, `src/CivicLens.PublicApi/Search/SearchIndex.cs`, `src/CivicLens.PublicApi/Search/SearchCursor.cs`, `src/CivicLens.PublicApi/Search/RecordHit.cs`, `src/CivicLens.PublicApi/Search/SearchPage.cs`, `src/CivicLens.PublicApi/Search/ReleaseInfo.cs` |
 | Rate limit | `src/CivicLens.PublicApi/Http/ClientAddress.cs` |
+| HTTP helpers | `src/CivicLens.PublicApi/Http/ApiResults.cs`, `src/CivicLens.PublicApi/Http/QueryValues.cs` |
+| Reader reports | `src/CivicLens.PublicApi/Reports/ReportEndpoints.cs`, `src/CivicLens.PublicApi/Reports/ReportSubmission.cs`, `src/CivicLens.PublicApi/Reports/ReportStore.cs`, `src/CivicLens.PublicApi/Reports/ReportCursor.cs`, `src/CivicLens.PublicApi/Reports/ReportReceipt.cs`, `src/CivicLens.PublicApi/Reports/TurnstileVerifier.cs`, `src/CivicLens.PublicApi/Reports/TurnstileSettings.cs`, `src/CivicLens.PublicApi/Schema/002_reader_reports.sql` |
+| Report wire types | `src/CivicLens.Publication.Contracts/ReaderReportProtocol.cs`, `src/CivicLens.Publication.Contracts/PulledReport.cs`, `src/CivicLens.Publication.Contracts/PulledReportBatch.cs` |
 | Search page | `src/CivicLens.Host/Publication/PublishedSearchPage.razor`, `src/CivicLens.Host/Publication/ReleaseRenderer.cs`, `src/CivicLens.Host/wwwroot/js/app.js` |
 | Tests | `tests/CivicLens.Tests/PublicApi/` |
 
@@ -141,7 +186,13 @@ Run commands are in [operations](../operations.md#run-the-search-service).
 
 ## Limits and planned work
 
-- Reader reports on a published record are planned in [R-40](../roadmap.md#next) as the second part. They are not built.
+- The report page on each record and the operational queue that pulls reports are planned in [R-40](../roadmap.md#next). They are not built. Until then nothing sends or pulls reports.
+- The per-client report limit lives in memory and resets when the service restarts.
+- There is no reporter identity. Abuse handling relies on Turnstile and the caps. A flood can fill the daily cap and close reports for the day.
+- A duplicate sent at the daily cap gets 503 like any other report.
+- The pull trusts the cursor of the token holder. A cursor above the highest sequence acknowledges reports that the puller never saw.
+- A search database restored from a backup keeps its epoch. Reports made after the backup are lost, and the puller can skip new reports that reuse the lost sequences.
+- Edge blocking of `/internal/*` is deferred to [R-24](../roadmap.md#later).
 - Only the first full ingest is long, because it fetches every record inside one transaction. Later ingests fetch only new revisions. Readers are not blocked, because they read committed rows.
 - A release that was never stored and is older than the newest stored release is refused and logged. The service keeps serving the active release. This happens only if the service missed a release and the site rolls back to it.
 - One service runs per search database. Two replicas could move the active release back and forth when they read different copies of the site.

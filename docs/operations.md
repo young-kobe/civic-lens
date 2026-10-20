@@ -721,6 +721,22 @@ dotnet run --project src/CivicLens.PublicApi
 
 Check it with `curl 'http://127.0.0.1:8100/v1/release'` and `curl 'http://127.0.0.1:8100/v1/search?q=housing'`. A 503 reply means that the first ingest is not done. Stop the service with Ctrl+C. Remove the database with `docker rm -f civic-lens-search-db`.
 
+Reader reports need three more variables. Without the Turnstile secret, `POST /v1/reports` answers 503. Without the pull token, `/internal/v1/reports` does not exist.
+
+```sh
+export CIVIC_LENS_TURNSTILE_SECRET=1x0000000000000000000000000000000AA
+export CIVIC_LENS_TURNSTILE_HOSTNAME=localhost
+export CIVIC_LENS_REPORT_PULL_TOKEN="$(openssl rand -hex 24)"
+```
+
+The secret above is the always-pass test secret of Cloudflare, with the dummy token `XXXX.DUMMY.TOKEN.XXXX`. The secret `2x0000000000000000000000000000000AA` always fails. The hostname that siteverify returns for test keys needs a check against a live reply. The Cloudflare page shows `localhost` only as an example. Set `CIVIC_LENS_TURNSTILE_HOSTNAME` to the site hostname in production. Optional limits: `CIVIC_LENS_REPORTS_PER_HOUR` (default 5 for each client) and `CIVIC_LENS_REPORTS_PER_DAY` (default 200).
+
+To keep the variables between runs, put them in `.runtime/search/api.env` as `NAME=value` lines and load them with `set -a; . .runtime/search/api.env; set +a`. The `.runtime` folder is ignored by Git. Never commit a real secret or token.
+
+Test a report with `curl -d recordId=<64 hex characters> -d revision=1 -d category=wrong-date -d cf-turnstile-response=XXXX.DUMMY.TOKEN.XXXX http://127.0.0.1:8100/v1/reports`. Pull with `curl -H "Authorization: Bearer $CIVIC_LENS_REPORT_PULL_TOKEN" 'http://127.0.0.1:8100/internal/v1/reports'`.
+
+The `/internal/*` route is not public. R-24 must block it at the edge or use a private listener before the service is exposed.
+
 To use the search page, set `CIVIC_LENS_PUBLIC_API_URL=http://127.0.0.1:8100` in the environment of the process that publishes (the `releases publish` command or the review workspace), and serve the release root from a server that sends no cross-origin limit. The service allows any origin. Without the variable, `search.html` says that search is not available.
 
 Optional variables: `CIVIC_LENS_TRUSTED_PROXY_RANGES` (the Cloudflare ranges, empty in development) and `CIVIC_LENS_REQUESTS_PER_MINUTE` (default 60). There is no Dockerfile yet. R-24 adds it.
