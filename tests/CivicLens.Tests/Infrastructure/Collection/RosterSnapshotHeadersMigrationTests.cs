@@ -43,7 +43,14 @@ public sealed class RosterSnapshotHeadersMigrationTests(PostgresCollection postg
         await db.GetService<IMigrator>().MigrateAsync(PreviousMigration);
 
         Assert.Equal(2L, await CountAsync("SELECT count(*) FROM roster_members"));
-        Assert.Equal(0L, await CountAsync("SELECT count(*) FROM information_schema.tables WHERE table_name = 'roster_snapshots'"));
+        Assert.Equal(0L, await CountAsync("""
+            SELECT count(*) FROM information_schema.tables
+            WHERE table_name IN ('roster_snapshots', 'executive_officials', 'executive_terms')
+            """));
+        Assert.Equal(1L, await CountAsync("""
+            SELECT count(*) FROM pg_constraint
+            WHERE conname = 'FK_roster_members_collection_attempts_attempt_id' AND confrelid = 'collection_attempts'::regclass
+            """));
     }
 
     private static string Attempt(string attemptId, string sourceId) => $$"""

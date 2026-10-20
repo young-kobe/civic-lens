@@ -20,7 +20,7 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(attemptId);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await RosterSnapshots.HasSnapshotOfCaptureAsync(db, attemptId, cancellationToken);
+        return await RosterSnapshotRules.HasSnapshotOfCaptureAsync(db, attemptId, cancellationToken);
     }
 
     public async Task AdmitAsync(string attemptId, IReadOnlyList<RosterMember> members, CancellationToken cancellationToken)
@@ -28,7 +28,7 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
         ArgumentException.ThrowIfNullOrWhiteSpace(attemptId);
         ArgumentNullException.ThrowIfNull(members);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        RosterSnapshots.AddHeader(db, attemptId);
+        RosterSnapshotRules.AddHeader(db, attemptId);
         foreach (var member in members)
         {
             db.Add(ToRow(attemptId, member));
@@ -40,7 +40,7 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
     public async Task<IReadOnlyList<RosterMember>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        if (await RosterSnapshots.ReadLatestSnapshotAttemptIdAsync(db, sourceId, cancellationToken) is not { } snapshotAttemptId)
+        if (await RosterSnapshotRules.ReadLatestSnapshotAttemptIdAsync(db, sourceId, cancellationToken) is not { } snapshotAttemptId)
             return [];
         var members = await db.Set<RosterMemberRow>().AsNoTracking().Where(row => row.AttemptId == snapshotAttemptId)
             .OrderBy(row => row.BioguideId).ToListAsync(cancellationToken);

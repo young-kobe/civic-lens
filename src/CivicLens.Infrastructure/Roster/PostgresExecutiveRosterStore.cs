@@ -20,7 +20,7 @@ public sealed class PostgresExecutiveRosterStore(IDbContextFactory<CollectionAtt
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(attemptId);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await RosterSnapshots.HasSnapshotOfCaptureAsync(db, attemptId, cancellationToken);
+        return await RosterSnapshotRules.HasSnapshotOfCaptureAsync(db, attemptId, cancellationToken);
     }
 
     public async Task AdmitAsync(string attemptId, IReadOnlyList<ExecutiveOfficial> officials, CancellationToken cancellationToken)
@@ -28,7 +28,7 @@ public sealed class PostgresExecutiveRosterStore(IDbContextFactory<CollectionAtt
         ArgumentException.ThrowIfNullOrWhiteSpace(attemptId);
         ArgumentNullException.ThrowIfNull(officials);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        RosterSnapshots.AddHeader(db, attemptId);
+        RosterSnapshotRules.AddHeader(db, attemptId);
         foreach (var official in officials)
         {
             db.Add(ToRow(attemptId, official));

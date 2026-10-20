@@ -75,7 +75,8 @@ public sealed class PostgresExecutiveRosterStoreTests(PostgresCollection postgre
         var officials = ExecutiveFixtures.Officials();
         var broken = officials[1] with { Terms = [officials[1].Terms[0] with { Office = "king" }] };
 
-        await Assert.ThrowsAsync<DbUpdateException>(() => executives.AdmitAsync(attemptId, [officials[0], broken], default));
+        var failure = await Assert.ThrowsAsync<DbUpdateException>(() => executives.AdmitAsync(attemptId, [officials[0], broken], default));
+        Assert.Equal("ck_executive_terms_office", Assert.IsType<PostgresException>(failure.InnerException).ConstraintName);
 
         Assert.Equal((0L, 0L, 0L), (await CountAsync("roster_snapshots", attemptId), await CountAsync("executive_officials", attemptId),
             await CountAsync("executive_terms", attemptId)));

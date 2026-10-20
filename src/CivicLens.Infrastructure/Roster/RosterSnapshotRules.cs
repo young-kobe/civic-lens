@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 namespace CivicLens.Infrastructure.Roster;
 
 /// <summary>Owns the snapshot rules that every roster source shares. A snapshot is a header row in roster_snapshots.</summary>
-internal static class RosterSnapshots
+internal static class RosterSnapshotRules
 {
     public static async Task<bool> HasSnapshotOfCaptureAsync(CollectionAttemptDbContext db, string attemptId,
         CancellationToken cancellationToken)
