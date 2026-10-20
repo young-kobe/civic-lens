@@ -45,7 +45,7 @@ public sealed class FileReleaseDirectoryTests : IDisposable
     }
 
     [Fact]
-    public async Task SwappingTheActiveReleaseNeverLeavesReadersWithoutACurrentRelease()
+    public async Task SwappingTheActiveReleaseAlwaysLeavesCurrentNamingACompleteRelease()
     {
         var first = await BuildReleaseAsync(1, "one");
         var second = await BuildReleaseAsync(2, "two");
@@ -57,8 +57,14 @@ public sealed class FileReleaseDirectoryTests : IDisposable
         {
             while (!stop.IsCancellationRequested)
             {
-                try { _ = File.ReadAllText(Path.Combine(root, "current", "release.json")); }
-                catch (IOException exception) { failures.Enqueue($"{exception.GetType().Name}: {exception.Message}"); }
+                try
+                {
+                    var target = new FileInfo(Path.Combine(root, "current")).LinkTarget
+                        ?? throw new InvalidOperationException("current is not a symbolic link.");
+                    if (!File.Exists(Path.Combine(root, target, PublicationProtocol.ManifestPath)))
+                        throw new InvalidOperationException($"{target} holds no manifest.");
+                }
+                catch (Exception exception) { failures.Enqueue($"{exception.GetType().Name}: {exception.Message}"); }
                 reading.TrySetResult();
             }
         });
