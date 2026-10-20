@@ -38,11 +38,32 @@ public sealed class IndexTransaction : IAsyncDisposable
     /// <summary>Every stored revision. The value tells whether the revision is still current.</summary>
     public async Task<Dictionary<(string RecordId, int Revision), bool>> StoredRevisionsAsync(CancellationToken cancellationToken)
     {
-        await using var command = Command("SELECT record_id, revision_number, last_release IS NULL FROM records");
+        await using var command = Command("SELECT record_id, revision_number, bool_or(last_release IS NULL) FROM records GROUP BY record_id, revision_number");
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var stored = new Dictionary<(string, int), bool>();
         while (await reader.ReadAsync(cancellationToken)) stored[(reader.GetString(0), reader.GetInt32(1))] = reader.GetBoolean(2);
         return stored;
+    }
+
+    public async Task<bool> HasReleaseAsync(int releaseNumber, CancellationToken cancellationToken)
+    {
+        await using var command = Command("SELECT EXISTS (SELECT 1 FROM releases WHERE release_number = @number)", ("number", releaseNumber));
+        return (bool)(await command.ExecuteScalarAsync(cancellationToken))!;
+    }
+
+    public async Task<int?> ActiveReleaseAsync(CancellationToken cancellationToken)
+    {
+        await using var command = Command("SELECT release_number FROM active_release");
+        return await command.ExecuteScalarAsync(cancellationToken) is int active ? active : null;
+    }
+
+    public async Task SetActiveReleaseAsync(int releaseNumber, CancellationToken cancellationToken)
+    {
+        await using var command = Command("""
+            INSERT INTO active_release (singleton, release_number) VALUES (true, @number)
+            ON CONFLICT (singleton) DO UPDATE SET release_number = excluded.release_number
+            """, ("number", releaseNumber));
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task AddReleaseAsync(PublicationRelease release, CancellationToken cancellationToken)
@@ -77,13 +98,35 @@ public sealed class IndexTransaction : IAsyncDisposable
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    /// <summary>Ends the range of each revision after the given last release.</summary>
-    public Task CloseAsync(IReadOnlyCollection<(string RecordId, int Revision)> revisions, int lastRelease, CancellationToken cancellationToken) =>
-        SetLastReleaseAsync(revisions, lastRelease, cancellationToken);
+    /// <summary>Ends the open range of each revision after the given last release.</summary>
+    public async Task CloseAsync(IReadOnlyCollection<(string RecordId, int Revision)> revisions, int lastRelease, CancellationToken cancellationToken)
+    {
+        if (revisions.Count == 0) return;
+        await using var command = Command("""
+            UPDATE records SET last_release = @last
+            WHERE last_release IS NULL AND (record_id, revision_number) IN (SELECT * FROM unnest(@ids, @revisions))
+            """,
+            ("last", lastRelease), ("ids", revisions.Select(revision => revision.RecordId).ToArray()),
+            ("revisions", revisions.Select(revision => revision.Revision).ToArray()));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
 
-    /// <summary>Makes each revision current again, because a release holds it after a release dropped it.</summary>
-    public Task ReopenAsync(IReadOnlyCollection<(string RecordId, int Revision)> revisions, CancellationToken cancellationToken) =>
-        SetLastReleaseAsync(revisions, null, cancellationToken);
+    /// <summary>Opens a new range for each revision that a release holds again after a release dropped it. The new row copies the stored text.</summary>
+    public async Task ReturnAsync(IReadOnlyCollection<(string RecordId, int Revision)> revisions, int firstRelease, CancellationToken cancellationToken)
+    {
+        if (revisions.Count == 0) return;
+        await using var command = Command("""
+            INSERT INTO records (record_id, revision_number, kind, headline, first_published_at_utc, officials, official_ids,
+                issue_ids, policy_area_ids, source_host, event_date, body, search, first_release)
+            SELECT DISTINCT ON (record_id, revision_number) record_id, revision_number, kind, headline, first_published_at_utc, officials,
+                official_ids, issue_ids, policy_area_ids, source_host, event_date, body, search, @release
+            FROM records WHERE (record_id, revision_number) IN (SELECT * FROM unnest(@ids, @revisions))
+            ORDER BY record_id, revision_number, first_release DESC
+            """,
+            ("release", firstRelease), ("ids", revisions.Select(revision => revision.RecordId).ToArray()),
+            ("revisions", revisions.Select(revision => revision.Revision).ToArray()));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
 
     public Task CommitAsync(CancellationToken cancellationToken) => transaction.CommitAsync(cancellationToken);
 
@@ -91,20 +134,6 @@ public sealed class IndexTransaction : IAsyncDisposable
     {
         await transaction.DisposeAsync();
         await connection.DisposeAsync();
-    }
-
-    private async Task SetLastReleaseAsync(IReadOnlyCollection<(string RecordId, int Revision)> revisions, int? lastRelease,
-        CancellationToken cancellationToken)
-    {
-        if (revisions.Count == 0) return;
-        await using var command = Command("""
-            UPDATE records SET last_release = @last
-            WHERE (record_id, revision_number) IN (SELECT * FROM unnest(@ids, @revisions))
-            """,
-            ("ids", revisions.Select(revision => revision.RecordId).ToArray()),
-            ("revisions", revisions.Select(revision => revision.Revision).ToArray()));
-        command.Parameters.Add(new NpgsqlParameter("last", NpgsqlDbType.Integer) { Value = (object?)lastRelease ?? DBNull.Value });
-        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private NpgsqlCommand Command(string sql, params (string Name, object Value)[] parameters)

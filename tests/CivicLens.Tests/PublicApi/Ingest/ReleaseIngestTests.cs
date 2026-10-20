@@ -23,7 +23,7 @@ public sealed class ReleaseIngestTests(PostgresCollection postgres) : IAsyncLife
             .RunAsync(CancellationToken.None);
 
         Assert.Equal((IngestOutcome.Ingested, 2), (first.Outcome, first.Indexed));
-        Assert.Equal((IngestOutcome.NotNewer, 0), (again.Outcome, again.Indexed));
+        Assert.Equal((IngestOutcome.AlreadyActive, 0), (again.Outcome, again.Indexed));
         Assert.Equal(2L, await CountAsync("SELECT count(*) FROM records"));
         Assert.Equal(1L, await CountAsync("SELECT count(*) FROM releases"));
     }
@@ -72,19 +72,67 @@ public sealed class ReleaseIngestTests(PostgresCollection postgres) : IAsyncLife
     }
 
     [Fact]
-    public async Task ADroppedRevisionClosesItsRangeAndAReturningRevisionIsOpenAgain()
+    public async Task ADroppedRevisionClosesItsRangeAndAReturningRevisionGetsANewRangeWithoutAFetch()
     {
         var record = PublishedSamples.Statement('a', "Rent cap");
-        world.Site.Publish(1, record);
+        world.Site.Publish(5, record);
         await world.IngestAsync();
-        world.Site.Publish(2, PublishedSamples.Statement('b', "Zoning"));
+        world.Site.Publish(6, PublishedSamples.Statement('b', "Zoning"));
         await world.IngestAsync();
-        Assert.Equal((1, 1), await RangeAsync(1));
+        Assert.Equal((5, 5), await RangeAsync(1));
+        world.Site.RecordRequests.Clear();
 
-        world.Site.Publish(3, record, PublishedSamples.Statement('b', "Zoning"));
-        await world.IngestAsync();
+        world.Site.Publish(7, record, PublishedSamples.Statement('b', "Zoning"));
+        var result = await world.IngestAsync();
 
-        Assert.Equal((1, null), await RangeAsync(1));
+        Assert.Equal(0, result.Indexed);
+        Assert.Empty(world.Site.RecordRequests);
+        Assert.Equal([(5, (int?)5), (7, null)], await RangesAsync(1));
+    }
+
+    [Fact]
+    public async Task ARevisionThatIsInReleaseFiveGoneInSixAndBackInSevenIsInvisibleToASearchPinnedToSix()
+    {
+        var record = PublishedSamples.Statement('a', "Rent cap");
+        await world.PublishAndIngestAsync(5, record);
+        await world.PublishAndIngestAsync(6, PublishedSamples.Statement('b', "Zoning"));
+        await world.PublishAndIngestAsync(7, record);
+
+        Assert.Single((await world.SearchAsync(release: 5)).Hits, hit => hit.RecordId == record.Entry.RecordId);
+        Assert.DoesNotContain((await world.SearchAsync(release: 6)).Hits, hit => hit.RecordId == record.Entry.RecordId);
+        Assert.Single((await world.SearchAsync(release: 7)).Hits, hit => hit.RecordId == record.Entry.RecordId);
+    }
+
+    [Fact]
+    public async Task AManifestThatGoesBackToAStoredReleaseOnlyMovesTheActivePointerAndFetchesNothing()
+    {
+        var first = PublishedSamples.Statement('a', "Rent cap");
+        await world.PublishAndIngestAsync(5, first);
+        await world.PublishAndIngestAsync(6, PublishedSamples.Statement('b', "Zoning"));
+        world.Site.RecordRequests.Clear();
+
+        var back = await world.PublishAndIngestAsync(5, first);
+
+        Assert.Equal(IngestOutcome.Activated, back.Outcome);
+        Assert.Empty(world.Site.RecordRequests);
+        Assert.Equal(5, (await world.Index.FindReleaseAsync(null, CancellationToken.None))!.ReleaseNumber);
+        Assert.Equal(["a"], (await world.SearchAsync(release: 5)).Hits.Select(hit => hit.RecordId[..1]));
+        Assert.Equal(["b"], (await world.SearchAsync(release: 6)).Hits.Select(hit => hit.RecordId[..1]));
+    }
+
+    [Fact]
+    public async Task ARollbackThenANewerReleaseMakesTheNewerReleaseActive()
+    {
+        var first = PublishedSamples.Statement('a', "Rent cap");
+        await world.PublishAndIngestAsync(5, first);
+        await world.PublishAndIngestAsync(6, PublishedSamples.Statement('b', "Zoning"));
+        await world.PublishAndIngestAsync(5, first);
+
+        var result = await world.PublishAndIngestAsync(7, first, PublishedSamples.Statement('c', "Transit"));
+
+        Assert.Equal(IngestOutcome.Ingested, result.Outcome);
+        Assert.Equal(7, (await world.Index.FindReleaseAsync(null, CancellationToken.None))!.ReleaseNumber);
+        Assert.Equal(["a", "c"], (await world.SearchAsync()).Hits.Select(hit => hit.RecordId[..1]).Order());
     }
 
     [Fact]
@@ -133,16 +181,12 @@ public sealed class ReleaseIngestTests(PostgresCollection postgres) : IAsyncLife
     }
 
     [Fact]
-    public async Task AnOlderReleaseNumberIsNotIngestedSoARollbackOfTheStaticSiteDoesNotMoveTheActiveRelease()
+    public async Task AnOlderReleaseThatWasNeverStoredIsRefusedBecauseItsRangesCannotBeOrdered()
     {
-        world.Site.Publish(2, PublishedSamples.Statement('a', "Rent cap"));
-        await world.IngestAsync();
-        world.Site.Publish(1, PublishedSamples.Statement('b', "Zoning"));
+        await world.PublishAndIngestAsync(5, PublishedSamples.Statement('a', "Rent cap"));
+        await world.PublishAndIngestAsync(7, PublishedSamples.Statement('b', "Zoning"));
 
-        var result = await world.IngestAsync();
-
-        Assert.Equal(IngestOutcome.NotNewer, result.Outcome);
-        Assert.Equal(1L, await CountAsync("SELECT count(*) FROM records"));
+        await Assert.ThrowsAsync<InvalidDataException>(() => world.PublishAndIngestAsync(6, PublishedSamples.Statement('a', "Rent cap")));
     }
 
     private async Task<long> CountAsync(string sql)
@@ -151,12 +195,15 @@ public sealed class ReleaseIngestTests(PostgresCollection postgres) : IAsyncLife
         return (long)(await command.ExecuteScalarAsync())!;
     }
 
-    private async Task<(int First, int? Last)> RangeAsync(int revision)
+    private async Task<(int First, int? Last)> RangeAsync(int revision) => (await RangesAsync(revision))[0];
+
+    private async Task<List<(int First, int? Last)>> RangesAsync(int revision)
     {
         await using var command = world.Database.CreateCommand(
-            $"SELECT first_release, last_release FROM records WHERE record_id = '{new string('a', 64)}' AND revision_number = {revision}");
+            $"SELECT first_release, last_release FROM records WHERE record_id = '{new string('a', 64)}' AND revision_number = {revision} ORDER BY first_release");
         await using var reader = await command.ExecuteReaderAsync();
-        Assert.True(await reader.ReadAsync());
-        return (reader.GetInt32(0), reader.IsDBNull(1) ? null : reader.GetInt32(1));
+        var ranges = new List<(int, int?)>();
+        while (await reader.ReadAsync()) ranges.Add((reader.GetInt32(0), reader.IsDBNull(1) ? null : reader.GetInt32(1)));
+        return ranges;
     }
 }

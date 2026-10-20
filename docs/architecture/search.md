@@ -12,8 +12,8 @@ The search service gives readers full-text search over every published record. I
 - The ingest polls `release.json` every 2 minutes with a conditional GET. It sends the ETag and the Last-Modified time that the server gave. An unchanged manifest costs one empty reply.
 - The ingest reuses the contract rules. `PublicationRelease.Validate` checks the manifest, and the `Validate` method of each record type checks the record. Search copies no contract rule.
 - One release is ingested in one transaction. A release that the service already stored, or an older one, changes nothing.
-- Each record revision row stores its first release and its last release. The last release is null while the revision is current. A release that drops or replaces a revision closes its range.
-- A query reads the newest ingested release by default. A query can pin another ingested release with `release=N`.
+- Each row stores a range of a record revision: its first release and its last release. The last release is null while the range is open. A release that drops or replaces a revision closes its range. A revision that returns later gets a new row, so a pinned search in the gap never sees it.
+- A query reads the active release by default. The active release is the number in `release.json`, so the service follows a rollback of the static site. A query can pin another ingested release with `release=N`.
 - The schema is a set of numbered SQL files built into the project as embedded resources. The service applies them in order at startup under a Postgres advisory lock. A `schema_migrations` table records them. This departs from the EF migrations of the operational database. The service uses plain Npgsql, so it has no model to migrate.
 - Search weighs the text of a record in three levels. The headline has weight A. The summary, the quoted text, the bill title, the relationship reason and quote, and the brief paragraphs have weight B. The first 200,000 characters of the source text have weight C.
 - The summary text stops at 50,000 characters, and the source text stops at `PublicationProtocol.SearchSourceTextCharacters`. A Postgres tsvector holds at most 1 MB, and these limits keep the worst case below it. The search page states the source limit.
@@ -34,10 +34,11 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A record file matches its manifest entry by ID and revision. Enforced by `RecordReader.Read`. Test: `ReleaseIngestTests.ARecordFileThatDoesNotMatchItsManifestEntryIsNotIndexed`.
 - A record with a NUL character is refused, because Postgres cannot store it. Enforced by `RecordReader.Read`. Test: `RecordReaderTests.ARecordWithANulCharacterIsRefusedBecausePostgresCannotStoreIt`.
 - A fetch failure stores nothing from the release, and the next run tries again. Enforced by `ReleaseIngest` and `IndexTransaction`. Test: `ReleaseIngestTests.AFetchFailureRollsBackTheWholeReleaseAndTheNextRunTriesAgain`.
-- An ingest of a stored release changes nothing. Enforced by `ReleaseIngest`. Tests: `ReleaseIngestTests.IngestingTheSameReleaseAgainChangesNothingSoARetryAfterACrashIsSafe` and `ReleaseIngestTests.AnOlderReleaseNumberIsNotIngestedSoARollbackOfTheStaticSiteDoesNotMoveTheActiveRelease`.
+- An ingest of a stored release fetches nothing and only sets the active pointer. Enforced by `ReleaseIngest`. Tests: `ReleaseIngestTests.IngestingTheSameReleaseAgainChangesNothingSoARetryAfterACrashIsSafe`, `ReleaseIngestTests.AManifestThatGoesBackToAStoredReleaseOnlyMovesTheActivePointerAndFetchesNothing`, `ReleaseIngestTests.ARollbackThenANewerReleaseMakesTheNewerReleaseActive`, and `SearchEndpointsTests.WhenTheSiteGoesBackToAnEarlierReleaseTheReleaseEndpointAndAnUnpinnedSearchFollowAndAPinToTheLaterReleaseStillWorks`.
+- A release older than the newest stored release, and never stored, is refused. Enforced by `ReleaseIngest`. Test: `ReleaseIngestTests.AnOlderReleaseThatWasNeverStoredIsRefusedBecauseItsRangesCannotBeOrdered`.
 - An unchanged manifest causes no record request. Enforced by `ReleaseFeed`. Test: `ReleaseIngestTests.AnUnchangedManifestAnswers304AndTheIngestFetchesNoRecord`.
 - A stored revision is not fetched again. Enforced by `ReleaseIngest`. Test: `ReleaseIngestTests.ARecordRevisionThatIsAlreadyStoredIsNotFetchedAgainSoACarriedRecordCostsNoRequest`.
-- A release that replaces or drops a revision closes its range at the last release that held it. Enforced by `ReleaseIngest` and `IndexTransaction.CloseAsync`. Tests: `ReleaseIngestTests.AReplacedRevisionClosesItsRangeAtTheLastReleaseThatHeldItAndTheNewRevisionOpensAtTheNewRelease` and `ReleaseIngestTests.ADroppedRevisionClosesItsRangeAndAReturningRevisionIsOpenAgain`.
+- A release that replaces or drops a revision closes its range at the last release that held it. Enforced by `ReleaseIngest` and `IndexTransaction.CloseAsync`. Tests: `ReleaseIngestTests.AReplacedRevisionClosesItsRangeAtTheLastReleaseThatHeldItAndTheNewRevisionOpensAtTheNewRelease`, `ReleaseIngestTests.ADroppedRevisionClosesItsRangeAndAReturningRevisionGetsANewRangeWithoutAFetch`, and `ReleaseIngestTests.ARevisionThatIsInReleaseFiveGoneInSixAndBackInSevenIsInvisibleToASearchPinnedToSix`.
 - A pinned query sees the revisions that its release held. Enforced by the release range in `SearchIndex`. Tests: `SearchIndexTests.APinnedReleaseSeesTheRevisionThatReleaseHeldAndTheActiveReleaseSeesTheNewOne` and `SearchIndexTests.ARecordDroppedByALaterReleaseIsGoneFromTheActiveReleaseButStaysInThePinnedOne`.
 - A release that the service never ingested answers 404 with "release not indexed". Enforced by `SearchEndpoints`. Test: `SearchEndpointsTests.APinnedReleaseThatWasNeverIngestedAnswers404WithTheReasonReleaseNotIndexed`.
 - Text beyond the source limit is not searchable, and the vector stays under the Postgres limit. Enforced by `RecordReader` and `IndexedRecord`. Tests: `SearchIndexTests.TextBeyondTheSourceLimitIsNotSearchableAndTextBeforeItIs` and `SearchIndexTests.ASourceTextOfManyDistinctWordsStaysUnderThePostgresVectorLimit`.
@@ -66,9 +67,9 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 
 1. `ReleaseFeed` sends a conditional GET for `release.json`. A 304 reply ends the run.
 2. It checks the size against `PublicationProtocol.MaximumManifestBytes`. It reads the manifest under `PublicationProtocol.JsonOptions` and calls `PublicationRelease.Validate`.
-3. `ReleaseIngest` opens one transaction and takes an advisory lock. It reads the newest stored release number. A manifest that is not newer ends the run.
-4. It stores the release row. It reads the stored revisions. A revision that the manifest lists and the table holds as closed is opened again. An open revision that the manifest lacks is closed at the newest stored release.
-5. For each listed revision that the table lacks, it fetches `records/{id}.json`. `RecordReader` reads the file as the type of its kind and calls its `Validate` method. It builds the weighted texts and the service inserts the row.
+3. `ReleaseIngest` opens one transaction and takes an advisory lock. If the manifest release is stored already, it only sets the active release and ends the run.
+4. It stores the release row. It reads the stored revisions. A revision that the manifest lists and the table holds only as closed gets a new row that copies the stored text. An open revision that the manifest lacks is closed at the newest stored release.
+5. For each listed revision that the table lacks, it fetches `records/{id}.json`. `RecordReader` reads the file as the type of its kind and calls its `Validate` method. It builds the weighted texts and the service inserts the row. It then sets the active release.
 6. A record that fails validation is skipped and reported in the result. The worker logs it. A failed fetch rolls the transaction back.
 7. The feed keeps the ETag and Last-Modified values after the release is stored, so a failed run reads the manifest again.
 
@@ -86,7 +87,7 @@ All routes are GET and read-only. Errors use problem JSON.
 
 | Route | Answer |
 |---|---|
-| `/v1/release` | The newest ingested release number and its publication time. 503 before the first ingest. |
+| `/v1/release` | The active release number and its publication time. 503 before the first ingest. |
 | `/v1/search` | A page of results with `release`, `hits`, and `nextCursor`. Parameters: `q`, `kind`, `official`, `issue`, `policyArea`, `source`, `from`, `to`, `release`, `cursor`, and `limit`. |
 | `/v1/records/{id}` | The index row of one record in the active release, or in the release of `release=N`. 404 when the release does not hold the record. |
 
@@ -139,9 +140,8 @@ Run commands are in [operations](../operations.md#run-the-search-service).
 ## Limits and planned work
 
 - Reader reports on a published record are planned in [R-40](../roadmap.md#next) as the second part. They are not built.
-- A rollback of the static site is not followed. The service ignores a manifest with an older release number, so the newest ingested release stays active.
-- A revision that leaves a release and returns later is opened again. The range keeps no gap.
-- The ingest holds one transaction for a whole release. The first ingest of a large corpus fetches every record inside it. A later ingest fetches only new revisions.
+- Only the first full ingest is long, because it fetches every record inside one transaction. Later ingests fetch only new revisions. Readers are not blocked, because they read committed rows.
+- A release that was never stored and is older than the newest stored release is refused. This happens only if the service missed a release and the site then rolls back to it.
 - A record that fails validation stays out of the index. Later releases try it again, because it is not stored.
 - The index keeps every revision of every release. Storage grows with published revisions. Review this with the retention rule of [publication](publication.md#limits-and-planned-work).
 - A search without text returns no snippet.

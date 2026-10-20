@@ -131,6 +131,27 @@ public sealed class SearchEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task WhenTheSiteGoesBackToAnEarlierReleaseTheReleaseEndpointAndAnUnpinnedSearchFollowAndAPinToTheLaterReleaseStillWorks()
+    {
+        var five = PublishedSamples.Statement('a', "Rent five");
+        var site = new FakeReleaseSite();
+        site.Publish(5, five);
+        await using var host = await ApiHost.StartAsync(postgres, site, options => options with { PollInterval = TimeSpan.FromMilliseconds(100) });
+        await host.WaitForReleaseAsync(5);
+        site.Publish(6, PublishedSamples.Statement('b', "Rent six"));
+        await host.WaitForReleaseAsync(6);
+
+        site.Publish(5, five);
+        await host.WaitForReleaseAsync(5);
+
+        using var active = JsonDocument.Parse(await host.Client.GetStringAsync("/v1/search?q=rent"));
+        using var pinned = JsonDocument.Parse(await host.Client.GetStringAsync("/v1/search?q=rent&release=6"));
+        Assert.Equal("Rent five", Assert.Single(active.RootElement.GetProperty("hits").EnumerateArray()).GetProperty("headline").GetString());
+        Assert.Equal(5, active.RootElement.GetProperty("release").GetInt32());
+        Assert.Equal("Rent six", Assert.Single(pinned.RootElement.GetProperty("hits").EnumerateArray()).GetProperty("headline").GetString());
+    }
+
+    [Fact]
     public async Task ARecordLookupReturnsTheIndexRowAndAnUnknownRecordAnswers404()
     {
         await using var host = await StartWithReleasesAsync();

@@ -1,6 +1,6 @@
 namespace CivicLens.PublicApi.Ingest;
 
-public enum IngestOutcome { NotModified, NotNewer, Ingested }
+public enum IngestOutcome { NotModified, AlreadyActive, Activated, Ingested }
 
 public sealed record RecordFailure(string RecordId, string Reason);
 

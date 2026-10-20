@@ -3,6 +3,11 @@ CREATE TABLE releases (
     published_at_utc timestamptz NOT NULL
 );
 
+CREATE TABLE active_release (
+    singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+    release_number integer NOT NULL REFERENCES releases (release_number)
+);
+
 CREATE TABLE records (
     record_id text NOT NULL,
     revision_number integer NOT NULL CHECK (revision_number >= 1),
@@ -19,7 +24,7 @@ CREATE TABLE records (
     search tsvector NOT NULL,
     first_release integer NOT NULL REFERENCES releases (release_number),
     last_release integer REFERENCES releases (release_number),
-    PRIMARY KEY (record_id, revision_number),
+    PRIMARY KEY (record_id, revision_number, first_release),
     CHECK (last_release IS NULL OR last_release >= first_release)
 );
 

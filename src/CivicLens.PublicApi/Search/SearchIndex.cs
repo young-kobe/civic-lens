@@ -25,11 +25,11 @@ public sealed class SearchIndex(NpgsqlDataSource database)
         r.source_host, r.event_date, r.first_release, r.last_release
         """;
 
-    /// <summary>Finds the release with the given number, or the newest one when the number is null. Null means that none is indexed.</summary>
+    /// <summary>Finds the release with the given number, or the active one when the number is null. Null means that none is indexed.</summary>
     public async Task<ReleaseInfo?> FindReleaseAsync(int? number, CancellationToken cancellationToken)
     {
         await using var command = database.CreateCommand(
-            "SELECT release_number, published_at_utc FROM releases WHERE release_number = COALESCE(@number, (SELECT max(release_number) FROM releases))");
+            "SELECT release_number, published_at_utc FROM releases WHERE release_number = COALESCE(@number, (SELECT release_number FROM active_release))");
         command.Parameters.Add(new NpgsqlParameter("number", NpgsqlDbType.Integer) { Value = (object?)number ?? DBNull.Value });
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? new(reader.GetInt32(0), reader.GetFieldValue<DateTimeOffset>(1)) : null;
