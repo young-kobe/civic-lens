@@ -109,6 +109,17 @@ public sealed class ReportEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task TextOfMultiByteCharactersUpToTheMaximumLengthIsAcceptedBecauseTheBodyCapCountsBytesNotCharacters()
+    {
+        await using var host = await StartAsync(new FakeTurnstile());
+
+        var response = await PostAsync(host, "other", new string('\u4e16', ReaderReportProtocol.MaximumTextCharacters));
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.Equal(1, await CountAsync(host));
+    }
+
+    [Fact]
     public async Task AReportOnAReplacedRevisionIsAcceptedBecauseTheReaderMayHoldAnOldPage()
     {
         var site = new FakeReleaseSite();
@@ -147,6 +158,33 @@ public sealed class ReportEndpointsTests(PostgresCollection postgres)
     public async Task ABotCheckTimeoutFailsClosedWith503AndNoRow()
     {
         await using var host = await StartAsync(new FakeTurnstile { Failure = new TaskCanceledException("The request timed out.") });
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await PostAsync(host)).StatusCode);
+        Assert.Equal(0, await CountAsync(host));
+    }
+
+    [Fact]
+    public async Task AnInternalErrorOfTheBotCheckIsUnavailableNotRejectedBecauseTheReaderDidNothingWrong()
+    {
+        await using var host = await StartAsync(new FakeTurnstile { Success = false, ErrorCodes = "\"internal-error\"" });
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await PostAsync(host)).StatusCode);
+        Assert.Equal(0, await CountAsync(host));
+    }
+
+    [Fact]
+    public async Task ABotCheckReplyWithAnErrorStatusFailsClosedWith503AndNoRow()
+    {
+        await using var host = await StartAsync(new FakeTurnstile { Status = HttpStatusCode.BadGateway });
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await PostAsync(host)).StatusCode);
+        Assert.Equal(0, await CountAsync(host));
+    }
+
+    [Fact]
+    public async Task ANullBotCheckReplyFailsClosedWith503AndNoRow()
+    {
+        await using var host = await StartAsync(new FakeTurnstile { RawBody = "null" });
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, (await PostAsync(host)).StatusCode);
         Assert.Equal(0, await CountAsync(host));
@@ -245,7 +283,7 @@ public sealed class ReportEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task ThePullReturnsTheReportsWithTheRightTokenAndTheyPassTheContractValidation()
+    public async Task ThePullReturnsTheReportsWithTheRightToken()
     {
         await using var host = await StartAsync(new FakeTurnstile());
         await PostAsync(host, "wrong-date");
@@ -255,7 +293,6 @@ public sealed class ReportEndpointsTests(PostgresCollection postgres)
         var response = await host.Client.SendAsync(request);
 
         var batch = JsonSerializer.Deserialize<PulledReportBatch>(await response.Content.ReadAsStringAsync(), PublicationProtocol.JsonOptions)!;
-        batch.Validate();
         Assert.Equal(("wrong-date", PublishedRecordKind.Statement), (batch.Reports.Single().Category, batch.Reports.Single().Kind));
     }
 

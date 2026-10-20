@@ -14,7 +14,7 @@ public static class ReaderReportProtocol
     public const string LimitParameter = "limit";
     public const string OtherCategory = "other";
     public const int MaximumTextCharacters = 2000;
-    public const int MaximumRequestBytes = 8 * 1024;
+    public const int MaximumRequestBytes = 32 * 1024;
     public const int DefaultBatchSize = 100;
     public const int MaximumBatchSize = 200;
     public const int MaximumCursorLength = 100;

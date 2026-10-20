@@ -1,5 +1,7 @@
+using CivicLens.PublicApi;
 using CivicLens.PublicApi.Reports;
 using CivicLens.Tests.Infrastructure.Collection;
+using CivicLens.Tests.Fixtures;
 using Npgsql;
 
 namespace CivicLens.Tests.PublicApi.Reports;
@@ -98,5 +100,44 @@ public sealed class ReportStoreTests(PostgresCollection postgres)
         Assert.Equal(1, purged);
         var remaining = (await world.Reports.PullAsync(new ReportCursor(Guid.NewGuid(), 0), 10, CancellationToken.None)).Reports.Select(report => report.Text);
         Assert.Equal(["report 1", "report 2", "report 3"], remaining);
+    }
+
+    private static async Task<long> CountAsync(SearchWorld world)
+    {
+        await using var command = world.Database.CreateCommand("SELECT count(*) FROM reader_reports");
+        return (long)(await command.ExecuteScalarAsync())!;
+    }
+
+    [Fact]
+    public async Task AStoreWaitsForTheReportsLockBecauseTheSequenceOrderAndTheDailyCapDependOnIt()
+    {
+        await using var world = await SearchWorld.CreateAsync(postgres);
+        await world.PublishAndIngestAsync(1, PublishedSamples.Statement('a', "Rent cap"));
+        var connectionString = world.Options.Database;
+        await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, SearchLocks.Reports);
+
+        var storing = world.Reports.StoreAsync(new(RecordId, 1, "other", "report", "token"), CancellationToken.None);
+        await HeldAdvisoryLock.WaitForWaiterAsync(connectionString, SearchLocks.Reports);
+        Assert.Equal(0, await CountAsync(world));
+        await holder.DisposeAsync();
+
+        Assert.Equal(ReportReceipt.Stored, await storing);
+        Assert.Equal(1, await CountAsync(world));
+    }
+
+    [Fact]
+    public async Task TwoConcurrentStoresAtADailyCapOfOneStoreExactlyOneBecauseTheCountAndTheInsertShareTheLock()
+    {
+        await using var world = await SearchWorld.CreateAsync(postgres);
+        await world.PublishAndIngestAsync(1, PublishedSamples.Statement('a', "Rent cap"));
+
+        var capped = new ReportStore(world.Database, world.Options with { ReportsPerDay = 1 });
+
+        var receipts = await Task.WhenAll(
+            capped.StoreAsync(new(RecordId, 1, "other", "first", "token"), CancellationToken.None),
+            capped.StoreAsync(new(RecordId, 1, "other", "second", "token"), CancellationToken.None));
+
+        Assert.Equal([ReportReceipt.Stored, ReportReceipt.Closed], receipts.Order());
+        Assert.Equal(1, await CountAsync(world));
     }
 }

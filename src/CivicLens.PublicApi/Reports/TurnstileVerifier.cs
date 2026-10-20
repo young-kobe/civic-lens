@@ -1,13 +1,16 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace CivicLens.PublicApi.Reports;
 
+public enum TurnstileOutcome { Passed, Rejected, Unavailable }
+
 /// <summary>
 /// Checks a token with the Cloudflare siteverify API. It sends the token and the secret and nothing else.
-/// Any failure to get a clear answer is <see cref="TurnstileOutcome.Unavailable"/>, so the check fails closed.
+/// Any failure to get a clear answer, including the reply code "internal-error", is <see cref="TurnstileOutcome.Unavailable"/>, so the check fails closed.
 /// </summary>
-public sealed class TurnstileVerifier(HttpClient http, TurnstileSettings settings) : ITurnstileVerifier
+public sealed class TurnstileVerifier(HttpClient http, TurnstileSettings settings)
 {
     public static readonly Uri SiteVerifyUrl = new("https://challenges.cloudflare.com/turnstile/v0/siteverify");
     public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
@@ -23,9 +26,10 @@ public sealed class TurnstileVerifier(HttpClient http, TurnstileSettings setting
             using var response = await http.SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode) return TurnstileOutcome.Unavailable;
             var reply = await response.Content.ReadFromJsonAsync<SiteVerifyReply>(cancellationToken);
-            return reply is { Success: true } && string.Equals(reply.Hostname, settings.Hostname, StringComparison.OrdinalIgnoreCase)
+            if (reply is null || reply.HasInternalError) return TurnstileOutcome.Unavailable;
+            return reply.Success && string.Equals(reply.Hostname, settings.Hostname, StringComparison.OrdinalIgnoreCase)
                 ? TurnstileOutcome.Passed
-                : reply is null ? TurnstileOutcome.Unavailable : TurnstileOutcome.Rejected;
+                : TurnstileOutcome.Rejected;
         }
         catch (Exception exception) when (exception is (HttpRequestException or JsonException or TaskCanceledException) && !cancellationToken.IsCancellationRequested)
         {
@@ -33,5 +37,8 @@ public sealed class TurnstileVerifier(HttpClient http, TurnstileSettings setting
         }
     }
 
-    private sealed record SiteVerifyReply(bool Success, string? Hostname);
+    private sealed record SiteVerifyReply(bool Success, string? Hostname, [property: JsonPropertyName("error-codes")] string[]? ErrorCodes)
+    {
+        public bool HasInternalError => ErrorCodes?.Contains("internal-error") == true;
+    }
 }

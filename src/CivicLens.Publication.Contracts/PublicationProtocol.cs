@@ -70,6 +70,9 @@ public static class PublicationProtocol
         _ => false
     };
 
+    /// <summary>A record ID of any kind: 32 or 64 lower hex characters.</summary>
+    public static bool IsAnyRecordId(string? value) => IsLowerHex(value, 32) || IsLowerHex(value, 64);
+
     internal static bool IsSha256(string? value) => IsLowerHex(value, 64);
 
     private static bool IsLowerHex(string? value, int length) =>

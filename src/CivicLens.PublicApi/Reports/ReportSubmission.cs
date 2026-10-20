@@ -9,7 +9,6 @@ namespace CivicLens.PublicApi.Reports;
 /// <summary>One report as a reader sent it, checked for shape. The record is not looked up yet.</summary>
 public sealed record ReportSubmission(string RecordId, int Revision, string Category, string Text, string TurnstileToken)
 {
-    private const int MaximumRecordIdLength = 64;
     private const int MaximumTokenLength = 2048;
 
     /// <summary>Two reports with the same record, revision, category, and text have the same hash.</summary>
@@ -20,7 +19,7 @@ public sealed record ReportSubmission(string RecordId, int Revision, string Cate
     public static ReportSubmission Parse(IFormCollection form)
     {
         var recordId = Required(form, ReaderReportProtocol.RecordIdField);
-        if (recordId.Length > MaximumRecordIdLength || !recordId.All(char.IsAsciiHexDigitLower))
+        if (!PublicationProtocol.IsAnyRecordId(recordId))
             throw new ArgumentException("The record ID is not valid.", ReaderReportProtocol.RecordIdField);
         if (!int.TryParse(Required(form, ReaderReportProtocol.RevisionField), NumberStyles.None, CultureInfo.InvariantCulture, out var revision) || revision < 1)
             throw new ArgumentException("The revision must be a whole number of 1 or more.", ReaderReportProtocol.RevisionField);

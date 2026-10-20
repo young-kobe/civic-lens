@@ -2,7 +2,6 @@ using System.Security.Cryptography;
 using System.Text;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Http;
-using CivicLens.PublicApi.Search;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
@@ -24,14 +23,14 @@ public static class ReportEndpoints
             routes.MapGet(ReaderReportProtocol.PullPath, (HttpContext http, ReportStore store, CancellationToken cancellationToken) =>
                 ApiResults.GuardAsync(async () => IsAuthorized(http, token)
                     ? ApiResults.Json(await store.PullAsync(
-                        ReportCursor.Parse(SearchRequest.Value(http.Request.Query, ReaderReportProtocol.AfterParameter)),
-                        SearchRequest.Number(http.Request.Query, ReaderReportProtocol.LimitParameter, 1, ReaderReportProtocol.MaximumBatchSize)
+                        ReportCursor.Parse(QueryValues.Value(http.Request.Query, ReaderReportProtocol.AfterParameter)),
+                        QueryValues.Number(http.Request.Query, ReaderReportProtocol.LimitParameter, 1, ReaderReportProtocol.MaximumBatchSize)
                             ?? ReaderReportProtocol.DefaultBatchSize,
                         cancellationToken))
                     : Unauthorized(http)));
     }
 
-    private static Task<IResult> SubmitAsync(HttpContext http, [FromServices] ITurnstileVerifier? verifier, ReportStore store, CancellationToken cancellationToken) =>
+    private static Task<IResult> SubmitAsync(HttpContext http, [FromServices] TurnstileVerifier? verifier, ReportStore store, CancellationToken cancellationToken) =>
         ApiResults.GuardAsync(async () =>
         {
             if (verifier is null) return Problem(StatusCodes.Status503ServiceUnavailable, "reports are not available");

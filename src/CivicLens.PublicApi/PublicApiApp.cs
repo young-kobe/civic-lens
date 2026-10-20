@@ -35,7 +35,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new SearchIndex(reader));
         builder.Services.AddSingleton(new ReportStore(writer, options));
         if (options.Turnstile is { } turnstile)
-            builder.Services.AddSingleton<ITurnstileVerifier>(new TurnstileVerifier(
+            builder.Services.AddSingleton(new TurnstileVerifier(
                 new HttpClient(turnstileHandler ?? new SocketsHttpHandler()) { Timeout = TurnstileVerifier.Timeout }, turnstile));
         builder.Services.AddHostedService<SchemaStartup>();
         builder.Services.AddHostedService<IngestWorker>();

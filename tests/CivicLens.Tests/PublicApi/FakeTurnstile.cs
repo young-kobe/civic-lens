@@ -10,6 +10,9 @@ internal sealed class FakeTurnstile : HttpMessageHandler
 
     public bool Success { get; set; } = true;
     public string ReplyHostname { get; set; } = Hostname;
+    public HttpStatusCode Status { get; set; } = HttpStatusCode.OK;
+    public string ErrorCodes { get; set; } = "";
+    public string? RawBody { get; set; }
     public Exception? Failure { get; set; }
     public List<string> Bodies { get; } = [];
 
@@ -17,9 +20,11 @@ internal sealed class FakeTurnstile : HttpMessageHandler
     {
         Bodies.Add(await request.Content!.ReadAsStringAsync(cancellationToken));
         if (Failure is { } failure) throw failure;
-        return new HttpResponseMessage(HttpStatusCode.OK)
+        return new HttpResponseMessage(Status)
         {
-            Content = new StringContent($$"""{"success":{{(Success ? "true" : "false")}},"hostname":"{{ReplyHostname}}","error-codes":[]}""", Encoding.UTF8, "application/json")
+            Content = new StringContent(
+                RawBody ?? $$"""{"success":{{(Success ? "true" : "false")}},"hostname":"{{ReplyHostname}}","error-codes":[{{ErrorCodes}}]}""",
+                Encoding.UTF8, "application/json")
         };
     }
 }

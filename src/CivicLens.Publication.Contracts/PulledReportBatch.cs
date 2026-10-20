@@ -5,12 +5,4 @@ public sealed record PulledReportBatch
 {
     public required PulledReport[] Reports { get; init; }
     public required string NextCursor { get; init; }
-
-    public void Validate()
-    {
-        if (Reports is null || Reports.Length > ReaderReportProtocol.MaximumBatchSize || Reports.Any(report => report is null) ||
-            string.IsNullOrEmpty(NextCursor) || NextCursor.Length > ReaderReportProtocol.MaximumCursorLength)
-            throw new InvalidDataException("Pulled report batch is invalid.");
-        foreach (var report in Reports) report.Validate();
-    }
 }

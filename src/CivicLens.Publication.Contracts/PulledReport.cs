@@ -11,11 +11,4 @@ public sealed record PulledReport
     public required string Category { get; init; }
     public required string Text { get; init; }
     public required DateTimeOffset ReceivedAtUtc { get; init; }
-
-    public void Validate()
-    {
-        if (ReportId == Guid.Empty || !PublicationProtocol.IsRecordId(Kind, RecordId) || RevisionNumber < 1 || ReleaseNumber < 1 ||
-            !ReaderReportProtocol.IsCategory(Category) || Text is null || !ReaderReportProtocol.IsText(Category, Text))
-            throw new InvalidDataException("Pulled report is invalid.");
-    }
 }

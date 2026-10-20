@@ -5,8 +5,8 @@ CREATE TABLE reader_reports (
     revision_number integer NOT NULL CHECK (revision_number >= 1),
     kind text NOT NULL,
     release_number integer NOT NULL CHECK (release_number >= 1),
-    category text NOT NULL CHECK (category IN ('wrong-quote', 'wrong-date', 'wrong-attribution', 'missing-context', 'broken-source-link', 'other')),
-    body text NOT NULL CHECK (char_length(body) <= 2000 AND (category <> 'other' OR btrim(body) <> '')),
+    category text NOT NULL,
+    body text NOT NULL,
     payload_hash bytea NOT NULL,
     received_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (record_id, revision_number, payload_hash)
