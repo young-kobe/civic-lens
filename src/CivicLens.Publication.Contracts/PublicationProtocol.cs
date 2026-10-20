@@ -22,13 +22,17 @@ public static class PublicationProtocol
     public const string SearchPagePath = "search.html";
     public const string OfficialsPath = "officials.json";
     public const string CatalogPath = "catalog.json";
+    public const string OfficialsPagePath = "officials.html";
 
     public static string AllRecordsPagePath(int page) => page == 1 ? "all.html" : $"all-{page}.html";
     public static string IssuePagePath(string issueId, int page) => FacetPagePath("issues", issueId, page);
     public static string PolicyAreaPagePath(string policyAreaId, int page) => FacetPagePath("policy-areas", policyAreaId, page);
     public static int PageCount(int recordCount) => Math.Max(1, (recordCount + PageSize - 1) / PageSize);
-    public static bool HasFacetPages(string facetId) =>
-        facetId.Length is > 0 and <= MaximumFacetIdLength && facetId.All(c => c is (>= '0' and <= '9') or (>= 'a' and <= 'z') or '-');
+    public static bool IsPathSegment(string id) =>
+        id.Length is > 0 and <= MaximumFacetIdLength && id.All(c => c is (>= '0' and <= '9') or (>= 'a' and <= 'z') or '-');
+    public static string OfficialPagePath(string officialId) => $"officials/{officialId}.html";
+    public static string OfficialVotesPath(string officialId, int congress) => $"officials/{officialId}/votes-{congress}.json";
+    public static string OfficialVotesFolder(string officialId) => $"officials/{officialId}";
     public static string RecordDataPath(string recordId) => $"records/{recordId}.json";
     public static string RecordPagePath(string recordId) => $"records/{recordId}.html";
 
