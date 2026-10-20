@@ -131,8 +131,8 @@ public sealed class PublishReleaseTests
         var order = scenario.Releases.WriteOrder;
         Assert.Equal(
             [PublicationProtocol.AllRecordsPagePath(1), "all-2.html", "all-3.html", PublicationProtocol.IssuePagePath("housing", 1),
-                PublicationProtocol.FacetsPath, PublicationProtocol.HomePath, PublicationProtocol.ManifestPath],
-            order.TakeLast(7));
+                PublicationProtocol.FacetsPath, PublicationProtocol.SearchPagePath, PublicationProtocol.HomePath, PublicationProtocol.ManifestPath],
+            order.TakeLast(8));
         Assert.Equal("all.html", PublicationProtocol.AllRecordsPagePath(1));
         Assert.DoesNotContain("all-4.html", order);
         Assert.Contains("<html>index 3 120</html>", System.Text.Encoding.UTF8.GetString(
