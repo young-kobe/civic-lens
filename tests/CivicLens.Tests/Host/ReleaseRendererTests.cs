@@ -1,3 +1,4 @@
+using CivicLens.Application.Issues;
 using System.Text.RegularExpressions;
 using AngleSharp.Html.Parser;
 using CivicLens.Application.Publication;
@@ -103,7 +104,7 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task IndexPageSearchReadsTheReleaseManifestAndStaysHiddenUntilScriptRuns()
+    public async Task AllRecordsPageSearchReadsTheReleaseManifestAndStaysHiddenUntilScriptRuns()
     {
         var html = await new ReleaseRenderer().RenderAllRecordsAsync(ReleaseOf(1), 1, CancellationToken.None);
         var document = new HtmlParser().ParseDocument(html);
@@ -119,7 +120,7 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task IndexPageListsRecordsWithRelativeLinks()
+    public async Task AllRecordsPageListsRecordsWithRelativeLinks()
     {
         var release = new PublicationRelease
         {
@@ -447,7 +448,7 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task IndexPageLabelsEachEntryWithItsKindSoReadersKnowWhatTheyOpen()
+    public async Task AllRecordsPageLabelsEachEntryWithItsKindSoReadersKnowWhatTheyOpen()
     {
         var release = ReleaseOf(2);
         release = release with
@@ -468,7 +469,7 @@ public sealed class ReleaseRendererTests
     [InlineData(1, 50, 0, "Page 1 of 3", false, "all-2.html")]
     [InlineData(2, 50, 50, "Page 2 of 3", true, "all-3.html")]
     [InlineData(3, 20, 100, "Page 3 of 3", true, null)]
-    public async Task IndexPageShowsOnlyItsSliceInManifestOrderWithPagerLinksWhereTheyApply(
+    public async Task AllRecordsPageShowsOnlyItsSliceInManifestOrderWithPagerLinksWhereTheyApply(
         int page, int expectedCount, int firstIndex, string label, bool hasPrevious, string? next)
     {
         var release = ReleaseOf(120);
@@ -489,7 +490,7 @@ public sealed class ReleaseRendererTests
     [Theory]
     [InlineData(0)]
     [InlineData(4)]
-    public async Task IndexPageRejectsAPageOutsideTheRelease(int page)
+    public async Task AllRecordsPageRejectsAPageOutsideTheRelease(int page)
     {
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
             new ReleaseRenderer().RenderAllRecordsAsync(ReleaseOf(120), page, CancellationToken.None));
@@ -547,7 +548,7 @@ public sealed class ReleaseRendererTests
     public async Task FacetPageLinksResolveFromItsSubfolderAndPageThroughItsRecordsNewestFirst()
     {
         var release = ReleaseOf(120) with { Records = [.. ReleaseOf(120).Records.Select(entry => entry with { PolicyAreaIds = ["land-use"] })] };
-        var facet = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), null)).PolicyAreas.Single();
+        var facet = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None)).PolicyAreas.Single();
 
         var html = await new ReleaseRenderer().RenderFacetPageAsync(facet, 2, CancellationToken.None);
 
@@ -566,7 +567,7 @@ public sealed class ReleaseRendererTests
     public async Task FacetPageRejectsAPageOutsideTheFacet()
     {
         var release = ReleaseOf(3) with { Records = [.. ReleaseOf(3).Records.Select(entry => entry with { IssueIds = ["housing"] })] };
-        var facet = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>())).Issues.Single();
+        var facet = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None)).Issues.Single();
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => new ReleaseRenderer().RenderFacetPageAsync(facet, 2, CancellationToken.None));
     }
@@ -583,7 +584,7 @@ public sealed class ReleaseRendererTests
 
     private static readonly ReleaseFacets NoFacets = new([], []);
 
-    private static CivicLens.Application.Issues.IssueConfiguration IssuesNamed(string id, string name) => new()
+    private static IssueConfiguration IssuesNamed(string id, string name) => new()
     {
         PolicyAreas = [new() { Id = "land-use", Name = "Land use" }],
         Issues = [new() { Id = id, Name = name, Definition = "d", PolicyAreaIds = ["land-use"] }]

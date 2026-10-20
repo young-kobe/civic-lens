@@ -83,21 +83,23 @@ public sealed class PublishIndexPagesTests
     }
 
     [Fact]
-    public async Task HomeShowsTheLatestBriefByWeekAndKeepsItAfterAPublishThatCarriesTheBrief()
+    public async Task HomeShowsTheBriefOfTheNewestWeekEvenWhenAnOlderWeekIsPublishedLater()
     {
         var scenario = new PublicationScenario();
         var statement = scenario.AddStatement('c');
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Statement, statement)));
-        var older = scenario.AddBrief(new DateOnly(2026, 5, 4), [new(PublishedRecordKind.Statement, statement, 1)]);
         var newer = scenario.AddBrief(new DateOnly(2026, 5, 11), [new(PublishedRecordKind.Statement, statement, 1)]);
-        var withBriefs = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
-            new PublishedRecordReference(PublishedRecordKind.Brief, older), new PublishedRecordReference(PublishedRecordKind.Brief, newer)));
-
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
+            new PublishedRecordReference(PublishedRecordKind.Brief, newer)));
+        scenario.Clock.Now = scenario.Clock.Now.AddDays(1);
+        var older = scenario.AddBrief(new DateOnly(2026, 5, 4), [new(PublishedRecordKind.Statement, statement, 1)]);
+        var withOlder = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3",
+            new PublishedRecordReference(PublishedRecordKind.Brief, older)));
         var carried = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-            PublicationScenario.Request("k3", scenario.AddDraft('a')));
+            PublicationScenario.Request("k4", scenario.AddDraft('a')));
 
-        Assert.Contains($"brief {newer}", PageText(scenario, withBriefs.DirectoryName, PublicationProtocol.HomePath));
+        Assert.Contains($"brief {newer}", PageText(scenario, withOlder.DirectoryName, PublicationProtocol.HomePath));
         Assert.Contains($"brief {newer}", PageText(scenario, carried.DirectoryName, PublicationProtocol.HomePath));
     }
 

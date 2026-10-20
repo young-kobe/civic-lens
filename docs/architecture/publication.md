@@ -97,7 +97,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - An issue or policy area page lists only the manifest entries that hold its ID. Enforced by `ReleaseFacets`. Test: `PublishIndexPagesTests.AnIssuePageListsOnlyTheRecordsThatHoldItsIdSoReadersDoNotSeeOtherTopics`.
 - A facet has one page for each 50 entries. A facet ID that cannot be a path segment gets no page, and the publish still succeeds. Enforced by `ReleaseFacet` and `PublicationProtocol.HasFacetPages`. Tests: `PublishIndexPagesTests.AFacetPageSetStaysAtOnePagePerFiftyRecordsSoThePageCountIsBounded` and `PublishIndexPagesTests.AFacetIdThatCannotBeAPathSegmentGetsNoPageAndDoesNotFailThePublish`.
 - A facet page shows the configured name, or the ID when the catalog has no name for it. Enforced by `PublicationCatalog`. Test: `PublishIndexPagesTests.AnIssuePageShowsTheConfiguredNameAndAnUnconfiguredIdShowsItselfSoACarriedRecordNeverBlocksAPublish`.
-- Each publish rebuilds the facet pages and the home page, and the home page shows the latest brief, also when the publish only carries it. Enforced by `ReleaseIndexPages`. Tests: `PublishIndexPagesTests.EveryPublishRebuildsTheFacetPagesSoTheyListTheCarriedRecordsAndTheNewOne` and `PublishIndexPagesTests.HomeShowsTheLatestBriefByWeekAndKeepsItAfterAPublishThatCarriesTheBrief`.
+- Each publish rebuilds the facet pages and the home page, and the home page shows the latest brief, also when the publish only carries it. Enforced by `ReleaseIndexPages`. Tests: `PublishIndexPagesTests.EveryPublishRebuildsTheFacetPagesSoTheyListTheCarriedRecordsAndTheNewOne` and `PublishIndexPagesTests.HomeShowsTheBriefOfTheNewestWeekEvenWhenAnOlderWeekIsPublishedLater`.
 - A page in a subfolder links to assets, records, and pager targets through a `../` prefix. Enforced by `PublishedFacetPage`. Test: `ReleaseRendererTests.FacetPageLinksResolveFromItsSubfolderAndPageThroughItsRecordsNewestFirst`.
 
 ## Behavior
@@ -112,11 +112,11 @@ A document-change record shows both versions, and observation history where need
 
 - Each document-change record carries the full extracted text of both versions, their source URLs, and their observation times. Changed regions are offsets into those texts.
 - A citation holds an extraction ID, UTF-16 offsets, and the quoted text. The contract rejects a quote that does not match its offsets.
-- Records show the approval date and the first-publication date. The release index shows the release date.
+- Records show the approval date and the first-publication date. The home and all-records pages show the release date.
 - `index.html` is the home page. It shows the latest brief, the 20 newest records, and links to the issue and policy area pages. The latest brief is the one with the newest week. It shows the headline and the paragraphs with their citation links, which lead to the brief page. The home page has no search panel.
 - `all.html`, then `all-2.html` and so on, list every record 50 to a page, newest first, with relative previous and next links. They hold the search panel.
 - `issues.html` lists each issue and each policy area with its name and record count.
-- Each issue has `issues/{id}.html`, then `issues/{id}.page-2.html` and so on. Each policy area has `policy-areas/{id}.html` with the same page suffix. A page lists the manifest entries that hold the ID in `issueIds` or `policyAreaIds`, 50 to a page, newest first. A facet has pages when its manifest entries hold it. `PublicationProtocol` owns every page path.
+- Each issue has `issues/{id}.html`, then `issues/{id}.page-2.html` and so on. Each policy area has `policy-areas/{id}.html` with the same page suffix. A page lists the manifest entries that hold the ID in `issueIds` or `policyAreaIds`, 50 to a page, newest first. A facet has pages only when its ID is a valid path segment. See Limits. `PublicationProtocol` owns every page path.
 - A page outside the root folder builds each link from a `../` prefix, as a record page does.
 - Officials, issues, and policy areas appear by their configured name. An ID with no configured name appears as the ID.
 - Only the release manifest shows the schema version.
@@ -285,14 +285,14 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - A relationship waits in the owner publish list until both cited records are in the active release. This follows the rule for briefs. The owner publishes the cited records first, and then the relationship.
 - Timelines, expandable evidence, and shareable records are planned against published releases.
 - Public filter pages are an MVP requirement. The issue and policy area pages are built. The R-36 official pages will complete them.
-- Planned, not built: a source filter and filters that are easy to clear, in R-36. The manifest already holds `sourceHost` for the source filter.
+- Planned, not built: a source filter and filters that are easy to clear, in R-40. The manifest already holds `sourceHost` for the source filter.
 - A facet page lists the kind, headline, and first publication date of each record. Officials, issues, and event dates are not on it yet.
 - Planned in [R-40](../roadmap.md#next), before the first cloud deployment: a public search service with its own Postgres database, fed from releases. It gives full-text search over the whole processed corpus.
 - Reader reports on a published record go through the R-40 service. The operational application pulls each report into the review queue, and a person handles it. The report names the record ID and the release ID.
 - Split the manifest by kind when it grows over 4 MB.
 - At 20,000 entries the worst realistic manifest is about 14.6 MB, under three quarters of the 32 MB cap. `PublishRelease` refuses a manifest over the cap.
-- The search panel filters show raw issue and policy area IDs, because the manifest has no names for them. The R-40 search service replaces the client search and adds the names. The facet pages show names from `config/issues.json` through `PublicationCatalog`, as official names do.
-- A facet ID that the catalog does not name still gets pages, and they show the ID. This keeps a carried record from blocking a later publish after an issue leaves the configuration. A facet ID that is not 1 to `PublicationProtocol.MaximumFacetIdLength` lowercase letters, digits, or hyphens gets no pages. The facet list shows its ID with no link.
+- The search panel filters show raw issue and policy area IDs, because the manifest has no names for them. The R-40 search service replaces the client search. It adds the names and the source filter. The facet pages show names from `config/issues.json` through `PublicationCatalog`, as official names do.
+- A facet ID that the catalog does not name still gets pages, and they show the ID. This keeps a carried record from blocking a later publish after an issue leaves the configuration. `PublicationProtocol.MaximumFacetIdLength` is the one length limit. `IssueConfiguration` applies it to configured issue and policy area IDs, so the configuration fails to load on a longer ID. A carried manifest ID can still be longer or can hold other characters. Such a facet ID gets no pages. The facet list shows its ID with no link.
 - When the R-40 search service replaces the client search, delete the schema 3 filter fields.
 - Each release row stores `records_json`, about 2 MB at 20,000 records. Review queries expand the active one.
 - Rolling back the `DropReleaseCountCheck` migration fails while any release holds more than 2000 records.

@@ -48,7 +48,7 @@ internal sealed class PublicationScenario
 
     public PublishedRecordLoaders Loaders() => new(Reviews, Statements, Actions, Votes, Relationships, Briefs);
 
-    public IssueConfiguration? Issues { get; set; }
+    public IssueConfiguration Issues { get; set; } = IssueConfiguration.None;
 
     public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events }, Loaders(),
         new PublicationCatalog(OfficialNames, Issues), Clock);

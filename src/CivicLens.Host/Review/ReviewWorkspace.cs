@@ -210,7 +210,8 @@ internal static class ReviewWorkspace
         services.AddScoped<GetDocumentHistory>();
         services.AddScoped<GetDocumentComparison>();
         services.AddScoped<GetDocumentCitation>();
-        var issues = ConfigurationFile.ReadIssuesFromEnvironment() ?? new IssueConfiguration { PolicyAreas = [], Issues = [] };
+        var configuredIssues = ConfigurationFile.ReadIssuesFromEnvironment();
+        var issues = configuredIssues ?? IssueConfiguration.None;
         services.AddSingleton<IDocumentChangeReviewStore>(PostgresDocumentChangeReviewStore.FromConnectionString(connectionString));
         services.AddSingleton<IDocumentChangeAnalysisStore>(PostgresDocumentChangeAnalysisStore.FromConnectionString(connectionString));
         services.AddScoped<ListDocumentChangeAnalyses>();
@@ -249,7 +250,7 @@ internal static class ReviewWorkspace
                 PostgresCollectionJobStore.FromConnectionString(connectionString),
                 PostgresCollectionAttemptStore.FromConnectionString(connectionString),
                 CivicLens.Infrastructure.Collection.Processing.PostgresEvidenceProcessingStore.FromConnectionString(connectionString)));
-            ConfigurePublication(services, connectionString, officials, issues);
+            if (configuredIssues is not null) ConfigurePublication(services, connectionString, officials, configuredIssues);
         }
     }
 

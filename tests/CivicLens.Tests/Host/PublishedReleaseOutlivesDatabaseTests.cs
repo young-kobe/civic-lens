@@ -1,3 +1,4 @@
+using CivicLens.Application.Issues;
 using CivicLens.Infrastructure.Relationships;
 using CivicLens.Infrastructure.Votes;
 using System.Text.Json;
@@ -97,7 +98,7 @@ public sealed class PublishedReleaseOutlivesDatabaseTests : IAsyncLifetime
             new PublishedRecordLoaders(reviews, new PostgresStatementReviewStore(factory), new PostgresActionReviewStore(factory),
                 new PostgresVoteReviewStore(factory), new PostgresRelationshipReviewStore(factory),
                 new PostgresBriefReviewStore(factory)),
-            new PublicationCatalog(new Dictionary<string, string> { ["mayor"] = "Mayor Example" }), TimeProvider.System);
+            new PublicationCatalog(new Dictionary<string, string> { ["mayor"] = "Mayor Example" }, IssueConfiguration.None), TimeProvider.System);
         return await publish.ExecuteAsync(Owner, new PublishReleaseRequest([new(PublishedRecordKind.DocumentChange, saved.DraftId)], "publish"));
     }
 

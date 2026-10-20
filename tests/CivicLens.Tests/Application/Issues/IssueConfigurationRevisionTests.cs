@@ -22,6 +22,17 @@ public sealed class IssueConfigurationRevisionTests
         Assert.Matches("^[0-9a-f]{64}$", IssueConfigurationRevision.Create(configuration).Id);
     }
 
+    [Theory]
+    [InlineData(60, true)]
+    [InlineData(61, false)]
+    public void IssueAndPolicyAreaIdsShareTheFacetPageLengthLimitSoEveryConfiguredIdGetsAPage(int length, bool valid)
+    {
+        var id = new string('a', length);
+
+        Assert.Equal(valid, IsValid(Configuration(Issue() with { Id = id })));
+        Assert.Equal(valid, IsValid(Configuration(Issue() with { PolicyAreaIds = [id] }) with { PolicyAreas = [new() { Id = id, Name = "Area" }] }));
+    }
+
     [Fact]
     public void RevisionJsonAndIdMatchThePinnedConfigurationVersion()
     {
@@ -134,6 +145,19 @@ public sealed class IssueConfigurationRevisionTests
         Definition = "Statements about rent costs.",
         PolicyAreaIds = ["housing"]
     };
+
+    private static bool IsValid(IssueConfiguration configuration)
+    {
+        try
+        {
+            configuration.Validate();
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
 
     private static IssueConfiguration Configuration(params TrackedIssueConfiguration[] issues) =>
         new() { PolicyAreas = [Area()], Issues = issues.Length == 0 ? [Issue()] : issues };

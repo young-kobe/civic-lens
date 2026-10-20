@@ -31,8 +31,7 @@ internal sealed class ReleaseIndexPages(IReleaseDirectory releases, IReleaseRend
         PreviousRelease previous, CancellationToken cancellationToken)
     {
         var latest = manifest.Records.Where(entry => entry.Kind == PublishedRecordKind.Brief)
-            .OrderByDescending(entry => entry.EventDate).ThenByDescending(entry => entry.FirstPublishedAtUtc)
-            .ThenBy(entry => entry.RecordId, StringComparer.Ordinal).FirstOrDefault();
+            .MaxBy(entry => entry.EventDate);
         if (latest is null) return null;
         var json = additions.FirstOrDefault(addition => addition.Entry.Kind == latest.Kind && addition.RecordId == latest.RecordId)?.Json
             ?? await releases.ReadFileAsync(previous.DirectoryName!, PublicationProtocol.RecordDataPath(latest.RecordId),
