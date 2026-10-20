@@ -62,6 +62,36 @@ public sealed class RelationshipDraftStepTests
     }
 
     [Fact]
+    public async Task ANewTargetRevisionWithTheSameFingerprintCopiesTheRevisionToTheNewCitationWithoutAModelCall()
+    {
+        var pair = ActionPair();
+        var current = RelationshipDraftResolver.Resolve(Output(), Context(pair), Created).Accepted!;
+        var evidence = Evidence(pair, current, RelationshipFingerprint.Compute(pair)) with { Action = Action(revision: 2) };
+
+        var (store, model) = await RunAsync(evidence, new FakeRelationshipDraftModel());
+
+        Assert.Empty(model.Requests);
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal((2, 2, 1, ReviewAuthor.AnalysisSubject), (revision.RevisionNumber, revision.Target.RevisionNumber, revision.Statement.RevisionNumber, revision.AuthorSubject));
+        Assert.Equal((current.Type, current.Reason, current.StatementQuote, current.TargetFactId), (revision.Type, revision.Reason, revision.StatementQuote, revision.TargetFactId));
+        Assert.Equal((State.Succeeded, null), (store.Entries[0].Status, store.Entries[0].ErrorCode));
+        Assert.Equal((AnalysisRunOutcome.Bypassed, RelationshipDraftErrorCodes.Unchanged), (Assert.Single(store.Runs).Run.Outcome, store.Runs[0].Reason));
+    }
+
+    [Fact]
+    public async Task APersonRevisionThatCitesAnOlderTargetRevisionDraftsAgainSoItsCitationDoesNotStayStale()
+    {
+        var pair = ActionPair();
+        var person = Revision(pair) with { RevisionNumber = 2, AuthorSubject = "auth0|reviewer" };
+        var evidence = Evidence(pair, person, RelationshipFingerprint.Compute(pair)) with { Action = Action(revision: 2) };
+
+        var (store, model) = await RunAsync(evidence, new FakeRelationshipDraftModel().Draft(Output()));
+
+        Assert.Single(model.Requests);
+        Assert.Equal(2, Assert.Single(store.Revisions).Target.RevisionNumber);
+    }
+
+    [Fact]
     public async Task ADifferentFingerprintDraftsAgainAndAppendsTheNextRevision()
     {
         var pair = ActionPair();

@@ -9,10 +9,11 @@ public static class RelationshipFingerprint
     public static string Compute(RelationshipPair pair)
     {
         var span = pair.Match.Span;
-        var text = string.Join('|', "relationship-fingerprint-v1", pair.PairId,
-            pair.Statement.Revision.RevisionNumber.ToString(CultureInfo.InvariantCulture),
-            pair.Target.RevisionNumber.ToString(CultureInfo.InvariantCulture), pair.Match.Basis, span.Start.ToString(CultureInfo.InvariantCulture),
-            span.Length.ToString(CultureInfo.InvariantCulture), RelationshipDraftTask.TaskVersion, RelationshipDraftTask.PromptVersion);
+        var facts = pair.Target.Facts.Select(fact => $"{fact.Id}={fact.Text}");
+        var text = string.Join('|', "relationship-fingerprint-v2", pair.PairId,
+            pair.Statement.Revision.RevisionNumber.ToString(CultureInfo.InvariantCulture), pair.OfficialRole, string.Join('\n', facts),
+            pair.Match.Basis, span.Start.ToString(CultureInfo.InvariantCulture), span.Length.ToString(CultureInfo.InvariantCulture),
+            RelationshipDraftTask.TaskVersion, RelationshipDraftTask.PromptVersion);
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
     }
 }

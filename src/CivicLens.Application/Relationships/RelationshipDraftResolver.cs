@@ -35,6 +35,20 @@ public static class RelationshipDraftResolver
         return AnalysisResolution<RelationshipRevision?>.Accept(revision);
     }
 
+    public static RelationshipRevision Recite(RelationshipDraftContext context, DateTimeOffset createdAtUtc)
+    {
+        var current = context.Evidence.Current ?? throw new ArgumentException("A new citation needs a current revision.", nameof(context));
+        var revision = current with
+        {
+            RevisionNumber = current.RevisionNumber + 1,
+            AuthorSubject = ReviewAuthor.AnalysisSubject,
+            CreatedAtUtc = createdAtUtc,
+            Target = context.Pair.Target.Citation
+        };
+        revision.ValidateAsAnalysisRevision(current);
+        return revision;
+    }
+
     private static void CheckReason(string reason, RelationshipDraftContext context, List<string> errors)
     {
         CheckText(reason, RelationshipRevision.MaximumReasonLength, "reason", required: true, errors);

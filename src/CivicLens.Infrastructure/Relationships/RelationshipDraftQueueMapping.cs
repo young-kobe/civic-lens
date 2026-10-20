@@ -43,11 +43,12 @@ internal sealed class RelationshipDraftQueueMapping : IAnalysisQueueMapping<Rela
             throw new ArgumentException("A settlement without a revision needs its run.", nameof(settlement));
         if (settlement.Checkpoint is not RelationshipDraftCheckpoint { Revision: { } revision } checkpoint || settlement.Run is not { } run)
             return settlement;
-        if (run.Run.Outcome != AnalysisRunOutcome.Drafted)
-            throw new ArgumentException("A revision needs its drafted run.", nameof(settlement));
+        if (run.Run.Outcome is not (AnalysisRunOutcome.Drafted or AnalysisRunOutcome.Bypassed))
+            throw new ArgumentException("A revision needs its drafted or bypassed run.", nameof(settlement));
         var refusal = await RelationshipDraftRows.AppendAnalysisRevisionAsync(db, revision, run.Run.RunId, cancellationToken);
         if (refusal is null) return settlement;
-        var discarded = run with { Run = run.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded } };
+        var discarded = run.Run.Outcome == AnalysisRunOutcome.Drafted
+            ? run with { Run = run.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded } } : run;
         if (refusal is RelationshipDraftErrorCodes.AlreadyApproved or RelationshipDraftErrorCodes.PersonEditKept)
             return new(checkpoint with { ErrorCode = RelationshipDraftErrorCodes.Unchanged, Revision = null }, discarded);
         row.RetryOfRunId = null;

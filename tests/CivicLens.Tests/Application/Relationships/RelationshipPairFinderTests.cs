@@ -159,17 +159,26 @@ public sealed class RelationshipPairFinderTests
             RelationshipPair.IdOf(StatementId, RelationshipRecordKind.Vote, ActionId));
 
     [Fact]
-    public void TheFingerprintChangesWithEachCitedRevisionAndWithTheMatchedWordsButNotWithOtherRevisionText()
+    public void TheFingerprintChangesWithTheStatementRevisionTheMatchedWordsTheFactsAndTheRoleOfThePairedOfficial()
     {
         var baseline = RelationshipFingerprint.Compute(ActionPair());
 
         Assert.NotEqual(baseline, RelationshipFingerprint.Compute(ActionPair(Statement(revision: 2))));
-        Assert.NotEqual(baseline, RelationshipFingerprint.Compute(ActionPair(action: Action(revision: 2))));
         Assert.NotEqual(baseline, RelationshipFingerprint.Compute(ActionPair(Statement(dated: false))));
+        Assert.NotEqual(baseline, RelationshipFingerprint.Compute(ActionPair(action: Action(title: "Lower Rent Act"))));
+        Assert.NotEqual(baseline, RelationshipFingerprint.Compute(ActionPair(action: Action(withdrawnOn: new DateOnly(2025, 2, 1)))));
         Assert.Equal(baseline, RelationshipFingerprint.Compute(ActionPair()));
     }
 
     [Fact]
+    public void TheFingerprintIgnoresTheTargetRevisionNumberAndTheCastsOfOtherMembers()
+    {
+        Assert.Equal(RelationshipFingerprint.Compute(ActionPair()), RelationshipFingerprint.Compute(ActionPair(action: Action(revision: 2))));
+        Assert.NotEqual(RelationshipFingerprint.Compute(VotePair()), RelationshipFingerprint.Compute(VotePair(vote: Vote(cast: "Nay"))));
+        Assert.Equal(RelationshipFingerprint.Compute(VotePair()), RelationshipFingerprint.Compute(VotePair(vote: Vote(revision: 2))));
+    }
+
+    [Fact]
     public void TheFingerprintIsPinnedSoAStoredSettledInputKeepsItsMeaningUntilTheVersionIsBumped() =>
-        Assert.Equal("1abfb412157a8f44eadd1b3132c0ca46117025d3eeee2654e73293a0bcc71362", RelationshipFingerprint.Compute(ActionPair()));
+        Assert.Equal("f0bc7bb8b5326d1e96bd3b615db6f461b541406632ea09d67bcc8bbfbe6e5344", RelationshipFingerprint.Compute(ActionPair()));
 }
