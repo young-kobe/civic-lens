@@ -105,13 +105,14 @@ public sealed partial class PostgresHouseVoteTests
         await SettleForReviewAsync(first, await RevisionAsync(first, 1));
         var recordId = await RecordIdAsync(first);
         var second = await PendingCandidateAsync(Updated.AddDays(1));
-        await SettleForReviewAsync(second, await RevisionAsync(second, 2));
-        var stored = await VoteReviews().GetRevisionAsync(recordId, 1, default);
+        var newer = await RevisionAsync(second, 2);
+        await SettleForReviewAsync(second, newer with { Members = [newer.Members[0] with { PersonId = "other-member" }] });
 
         var ids = await VoteReviews().ReadMemberPersonIdsAsync([new(PublishedRecordKind.Vote, recordId, 1)], default);
 
-        Assert.NotNull(await VoteReviews().GetRevisionAsync(recordId, 2, default));
-        Assert.Equal(stored!.OfficialIds().Order(), ids.Order());
+        Assert.Equal(["other-member"], [.. (await VoteReviews().GetRevisionAsync(recordId, 2, default))!.OfficialIds()]);
+        Assert.Equal([.. (await VoteReviews().GetRevisionAsync(recordId, 1, default))!.OfficialIds()], ids);
+        Assert.DoesNotContain("other-member", ids);
     }
 
     [Fact]

@@ -7,10 +7,6 @@ using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Review;
-using CivicLens.Infrastructure.Review.Persistence;
-using CivicLens.Infrastructure.Statements.Persistence;
-using CivicLens.Infrastructure.Actions.Persistence;
-using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Briefs;
 
