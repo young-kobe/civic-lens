@@ -90,12 +90,12 @@ public sealed partial class PostgresHouseVoteTests
         var recordId = await ApprovedVoteAsync();
         var stored = await VoteReviews().GetRevisionAsync(recordId, 1, default);
 
-        var ids = await VoteReviews().ReadMemberPersonIdsAsync([(recordId, 1)], default);
+        var ids = await VoteReviews().ReadMemberPersonIdsAsync([new(PublishedRecordKind.Vote, recordId, 1)], default);
 
         Assert.NotEmpty(stored!.OfficialIds());
         Assert.Equal(stored.OfficialIds().Order(), ids.Order());
         Assert.Empty(await VoteReviews().ReadMemberPersonIdsAsync([], default));
-        await Assert.ThrowsAsync<InvalidDataException>(() => VoteReviews().ReadMemberPersonIdsAsync([(recordId, 2)], default));
+        await Assert.ThrowsAsync<InvalidDataException>(() => VoteReviews().ReadMemberPersonIdsAsync([new(PublishedRecordKind.Vote, recordId, 2)], default));
     }
 
     [Fact]

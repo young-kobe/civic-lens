@@ -671,10 +671,11 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 
 The first publish of schema version 5 needs a clean development reset. The publisher reads the active release and refuses a release of an older schema. Do these steps once, in order. Production has no older release.
 
-1. Stop the static server, the review workspace, and the worker.
+1. Stop the static server, the review workspace, the worker, and the search service.
 2. Delete the contents of `CIVIC_LENS_RELEASE_DIRECTORY`.
 3. Run `DELETE FROM publication_releases;` in the development database.
 4. Run `DELETE FROM document_change_review_idempotency WHERE operation = 'publish-release';`. A replayed key would otherwise return a release that no longer exists.
+5. If you ran the search service, remove its database with `docker rm -f civic-lens-search-db`. Then create a new empty database with the `docker run` command in [Run the search service](#run-the-search-service). Start the service again only after the first publish. Release numbers restart at 1, and a search database that holds an old release 1 would activate the old records and skip the new release.
 
 The dates of the first publication of briefs start again after this reset. This is acceptable in development.
 

@@ -150,7 +150,7 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
             .OrderBy(row => row.RecordId).Select(row => row.RecordId).FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<string>> ReadMemberPersonIdsAsync(ImmutableArray<(string RecordId, int RevisionNumber)> revisions,
+    public async Task<IReadOnlyList<string>> ReadMemberPersonIdsAsync(ImmutableArray<PublishedRevisionBinding> revisions,
         CancellationToken cancellationToken)
     {
         if (revisions.IsEmpty) return [];

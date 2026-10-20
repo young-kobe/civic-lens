@@ -34,7 +34,7 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
     }
 
     public Task<IReadOnlyList<string>> MemberPersonIdsAsync(IEnumerable<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
-        votes.ReadMemberPersonIdsAsync([.. entries.Where(entry => entry.Kind == Kind).Select(entry => (entry.RecordId, entry.RevisionNumber))],
+        votes.ReadMemberPersonIdsAsync([.. entries.Where(entry => entry.Kind == Kind).Select(PublishedRevisionBinding.Of)],
             cancellationToken);
 
     public async Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
