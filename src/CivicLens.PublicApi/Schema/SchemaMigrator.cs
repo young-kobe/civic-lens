@@ -7,13 +7,12 @@ namespace CivicLens.PublicApi.Schema;
 /// <summary>Applies the numbered SQL files in this folder in order, once each, under one advisory lock.</summary>
 public sealed class SchemaMigrator(NpgsqlDataSource database)
 {
-    private const long LockKey = 7_302_001;
     private const string ResourcePrefix = "schema/";
 
     public async Task ApplyAsync(CancellationToken cancellationToken)
     {
         await using var connection = await database.OpenConnectionAsync(cancellationToken);
-        await ExecuteAsync(connection, null, "SELECT pg_advisory_lock(@key)", cancellationToken, ("key", LockKey));
+        await ExecuteAsync(connection, null, "SELECT pg_advisory_lock(hashtextextended(@key, 0))", cancellationToken, ("key", SearchLocks.Schema));
         try
         {
             await ExecuteAsync(connection, null,
@@ -25,7 +24,7 @@ public sealed class SchemaMigrator(NpgsqlDataSource database)
         }
         finally
         {
-            await ExecuteAsync(connection, null, "SELECT pg_advisory_unlock(@key)", CancellationToken.None, ("key", LockKey));
+            await ExecuteAsync(connection, null, "SELECT pg_advisory_unlock(hashtextextended(@key, 0))", CancellationToken.None, ("key", SearchLocks.Schema));
         }
     }
 

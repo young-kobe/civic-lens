@@ -1,4 +1,3 @@
-using System.Text.Json;
 using CivicLens.Publication.Contracts;
 using Npgsql;
 
@@ -8,8 +7,10 @@ namespace CivicLens.PublicApi.Ingest;
 /// Makes the release of the manifest the active release, in one transaction.
 /// A release that is stored already only becomes active again. That is how the service follows a rollback of the static site.
 /// </summary>
-public sealed class ReleaseIngest(ReleaseFeed feed, NpgsqlDataSource database)
+public sealed class ReleaseIngest(ReleaseFeed feed, NpgsqlDataSource database, Func<PublishedRecordEntry, byte[], IndexedRecord>? read = null)
 {
+    private readonly Func<PublishedRecordEntry, byte[], IndexedRecord> read = read ?? ((entry, json) => RecordReader.Read(entry, json));
+
     public async Task<IngestResult> RunAsync(CancellationToken cancellationToken)
     {
         var release = await feed.ReadChangedManifestAsync(cancellationToken);
@@ -64,9 +65,9 @@ public sealed class ReleaseIngest(ReleaseFeed feed, NpgsqlDataSource database)
         var json = await feed.ReadRecordAsync(entry.RecordId, cancellationToken);
         try
         {
-            return RecordReader.Read(entry, json);
+            return read(entry, json);
         }
-        catch (Exception exception) when (exception is InvalidDataException or JsonException)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
             failures.Add(new(entry.RecordId, exception.Message));
             return null;

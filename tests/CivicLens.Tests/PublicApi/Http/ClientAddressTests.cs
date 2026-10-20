@@ -44,6 +44,15 @@ public sealed class ClientAddressTests
     }
 
     [Fact]
+    public void AllAddressesOfOneIpv6Slash64AreOneClientBecauseAReaderHoldsTheWholeNetwork()
+    {
+        var clients = new ClientAddress([]);
+
+        Assert.Equal(clients.Of(Request("2001:db8:1:2::1", null)), clients.Of(Request("2001:db8:1:2:ffff::9", null)));
+        Assert.NotEqual(clients.Of(Request("2001:db8:1:2::1", null)), clients.Of(Request("2001:db8:1:3::1", null)));
+    }
+
+    [Fact]
     public void AnIpv4AddressInIpv6FormIsTheSameClientAsItsIpv4Form()
     {
         Assert.Equal("173.245.48.5", new ClientAddress(Cloudflare).Of(Request("::ffff:173.245.48.5", null)));

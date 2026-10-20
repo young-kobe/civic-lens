@@ -152,6 +152,21 @@ public sealed class ReleaseIngestTests(PostgresCollection postgres) : IAsyncLife
     }
 
     [Fact]
+    public async Task ARecordThatMakesTheReaderThrowAnyOtherErrorIsSkippedAndReportedAndTheReleaseStillCommits()
+    {
+        var bad = PublishedSamples.Statement('a', "Rent cap");
+        world.Site.Publish(1, bad, PublishedSamples.Statement('b', "Zoning"));
+        var ingest = new ReleaseIngest(new ReleaseFeed(new HttpClient(world.Site) { BaseAddress = world.Options.ReleaseBaseUrl }), world.Database,
+            (entry, json) => entry.RecordId == bad.Entry.RecordId ? throw new NullReferenceException("A null collection.") : RecordReader.Read(entry, json));
+
+        var result = await ingest.RunAsync(CancellationToken.None);
+
+        Assert.Equal((IngestOutcome.Ingested, 1), (result.Outcome, result.Indexed));
+        Assert.Equal(bad.Entry.RecordId, Assert.Single(result.Failures).RecordId);
+        Assert.Equal(1L, await CountAsync("SELECT count(*) FROM releases"));
+    }
+
+    [Fact]
     public async Task ARecordFileThatDoesNotMatchItsManifestEntryIsNotIndexed()
     {
         var first = PublishedSamples.Statement('a', "Rent cap");

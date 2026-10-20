@@ -8,8 +8,6 @@ namespace CivicLens.PublicApi.Ingest;
 /// <summary>The writes of one release ingest. One transaction holds them all, and an advisory lock keeps a second ingest out.</summary>
 public sealed class IndexTransaction : IAsyncDisposable
 {
-    private const long LockKey = 7_302_002;
-
     private readonly NpgsqlConnection connection;
     private readonly NpgsqlTransaction transaction;
 
@@ -24,7 +22,7 @@ public sealed class IndexTransaction : IAsyncDisposable
         var connection = await database.OpenConnectionAsync(cancellationToken);
         var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var index = new IndexTransaction(connection, transaction);
-        await using var command = index.Command("SELECT pg_advisory_xact_lock(@key)", ("key", LockKey));
+        await using var command = index.Command("SELECT pg_advisory_xact_lock(hashtextextended(@key, 0))", ("key", SearchLocks.Ingest));
         await command.ExecuteNonQueryAsync(cancellationToken);
         return index;
     }

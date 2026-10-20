@@ -11,6 +11,7 @@ internal sealed class FakeReleaseSite : HttpMessageHandler
     private readonly Dictionary<string, byte[]> removed = [];
     private string entityTag = "\"none\"";
 
+    public Exception? FailNextManifestRequest { get; set; }
     public int ManifestRequests { get; private set; }
     public int NotModifiedReplies { get; private set; }
     public List<string> RecordRequests { get; } = [];
@@ -52,6 +53,11 @@ internal sealed class FakeReleaseSite : HttpMessageHandler
         if (path == PublicationProtocol.ManifestPath)
         {
             ManifestRequests++;
+            if (FailNextManifestRequest is { } failure)
+            {
+                FailNextManifestRequest = null;
+                throw failure;
+            }
             if (request.Headers.IfNoneMatch.Any(tag => tag.Tag == entityTag))
             {
                 NotModifiedReplies++;

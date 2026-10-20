@@ -26,7 +26,7 @@ public sealed class IngestWorker(ReleaseIngest ingest, PublicApiOptions options,
             foreach (var failure in result.Failures)
                 logger.LogError("Record {RecordId} is not indexed: {Reason}", failure.RecordId, failure.Reason);
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
             logger.LogError(exception, "The release ingest failed. It runs again at the next interval.");
         }

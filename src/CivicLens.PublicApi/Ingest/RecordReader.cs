@@ -9,7 +9,6 @@ public static class RecordReader
 {
     public static IndexedRecord Read(PublishedRecordEntry listed, ReadOnlySpan<byte> json)
     {
-        if (json.IndexOf("\\u0000"u8) >= 0) throw new InvalidDataException("A record text holds a NUL character.");
         var indexed = listed.Kind switch
         {
             PublishedRecordKind.DocumentChange => Index(Parse<PublishedDocumentChange>(json)),
@@ -22,7 +21,19 @@ public static class RecordReader
         };
         if (indexed.Entry.RecordId != listed.RecordId || indexed.Entry.RevisionNumber != listed.RevisionNumber)
             throw new InvalidDataException("The record file does not match its manifest entry.");
+        RequireNoNul(indexed);
         return indexed;
+    }
+
+    // Postgres cannot store a NUL character in text or jsonb.
+    private static void RequireNoNul(IndexedRecord record)
+    {
+        var entry = record.Entry;
+        IEnumerable<string?> texts =
+            [entry.Headline, entry.SourceHost, record.Summary, record.Source, .. entry.Officials.SelectMany(official => new[] { official.Id, official.Name }),
+                .. entry.IssueIds, .. entry.PolicyAreaIds];
+        if (texts.Any(text => text?.Contains('\0', StringComparison.Ordinal) == true))
+            throw new InvalidDataException("A record text holds a NUL character.");
     }
 
     private static T Parse<T>(ReadOnlySpan<byte> json) where T : class =>

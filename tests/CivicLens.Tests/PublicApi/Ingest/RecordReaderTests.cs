@@ -94,6 +94,14 @@ public sealed class RecordReaderTests
     }
 
     [Fact]
+    public void AnEscapedBackslashBeforeU0000IsPlainTextAndNotANulCharacter()
+    {
+        var read = Read(PublishedSamples.Statement('a', "Rent cap", summary: "A literal \\u0000 in text."));
+
+        Assert.StartsWith("A literal \\u0000 in text.", read.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ARecordThatBreaksItsContractIsRefusedByTheContractValidation()
     {
         var sample = PublishedSamples.Statement('a', "Rent cap");

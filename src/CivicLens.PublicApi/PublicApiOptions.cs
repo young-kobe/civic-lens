@@ -30,10 +30,14 @@ public sealed record PublicApiOptions
         Database = Required(DatabaseVariable),
         TrustedProxyRanges = [.. (Environment.GetEnvironmentVariable(TrustedProxyRangesVariable) ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(IPNetwork.Parse)],
-        RequestsPerMinute = Environment.GetEnvironmentVariable(RequestsPerMinuteVariable) is { Length: > 0 } text
-            ? int.Parse(text, NumberStyles.None, CultureInfo.InvariantCulture)
-            : 60
+        RequestsPerMinute = ParseRequestsPerMinute(Environment.GetEnvironmentVariable(RequestsPerMinuteVariable))
     };
+
+    public static int ParseRequestsPerMinute(string? text) => string.IsNullOrEmpty(text)
+        ? 60
+        : int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var limit) && limit >= 1
+            ? limit
+            : throw new ArgumentException($"{RequestsPerMinuteVariable} must be a whole number of 1 or more.");
 
     /// <summary>Gives a base address that ends with a slash, so relative release paths resolve under it.</summary>
     public static Uri Directory(string url) => new(url.EndsWith('/') ? url : url + "/", UriKind.Absolute);

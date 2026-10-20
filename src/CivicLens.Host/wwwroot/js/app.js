@@ -137,6 +137,7 @@
         };
         form.closest("section").hidden = false;
         form.addEventListener("submit", event => { event.preventDefault(); run(false); });
+        form.addEventListener("input", () => { nextCursor = null; more.hidden = true; });
         more.addEventListener("click", () => run(true));
     };
 
