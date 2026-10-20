@@ -7,10 +7,8 @@ namespace CivicLens.PublicApi.Ingest;
 /// Makes the release of the manifest the active release, in one transaction.
 /// A release that is stored already only becomes active again. That is how the service follows a rollback of the static site.
 /// </summary>
-public sealed class ReleaseIngest(ReleaseFeed feed, NpgsqlDataSource database, Func<PublishedRecordEntry, byte[], IndexedRecord>? read = null)
+public sealed class ReleaseIngest(ReleaseFeed feed, NpgsqlDataSource database)
 {
-    private readonly Func<PublishedRecordEntry, byte[], IndexedRecord> read = read ?? ((entry, json) => RecordReader.Read(entry, json));
-
     public async Task<IngestResult> RunAsync(CancellationToken cancellationToken)
     {
         var release = await feed.ReadChangedManifestAsync(cancellationToken);
@@ -65,7 +63,7 @@ public sealed class ReleaseIngest(ReleaseFeed feed, NpgsqlDataSource database, F
         var json = await feed.ReadRecordAsync(entry.RecordId, cancellationToken);
         try
         {
-            return read(entry, json);
+            return RecordReader.Read(entry, json);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
