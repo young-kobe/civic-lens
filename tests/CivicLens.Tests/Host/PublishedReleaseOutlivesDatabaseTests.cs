@@ -65,7 +65,7 @@ public sealed class PublishedReleaseOutlivesDatabaseTests : IAsyncLifetime
 
         var recordPage = Path.Combine(current, PublicationProtocol.RecordPagePath(entry.RecordId));
         foreach (var page in new[] { PublicationProtocol.HomePath, PublicationProtocol.AllRecordsPagePath(1), PublicationProtocol.FacetsPath,
-                     PublicationProtocol.IssuePagePath("housing", 1) })
+                     PublicationProtocol.IssuePagePath("housing", 1), PublicationProtocol.OfficialsPagePath, PublicationProtocol.OfficialPagePath("mayor") })
             AssertLocalLinksResolve(current, Path.Combine(current, page));
         AssertLocalLinksResolve(current, recordPage);
         AssertRecordPageCarriesTheEvidence(recordPage, record);
@@ -98,7 +98,7 @@ public sealed class PublishedReleaseOutlivesDatabaseTests : IAsyncLifetime
             new PublishedRecordLoaders(reviews, new PostgresStatementReviewStore(factory), new PostgresActionReviewStore(factory),
                 new PostgresVoteReviewStore(factory), new PostgresRelationshipReviewStore(factory),
                 new PostgresBriefReviewStore(factory)),
-            new PublicationCatalog(new Dictionary<string, string> { ["mayor"] = "Mayor Example" }, IssueConfiguration.None), FixedRosters.NoOfficials(), TimeProvider.System);
+            new PublicationCatalog(new Dictionary<string, string> { ["mayor"] = "Mayor Example" }, IssueConfiguration.None), FixedRosters.NamedOnly(["mayor"]), TimeProvider.System);
         return await publish.ExecuteAsync(Owner, new PublishReleaseRequest([new(PublishedRecordKind.DocumentChange, saved.DraftId)], "publish"));
     }
 

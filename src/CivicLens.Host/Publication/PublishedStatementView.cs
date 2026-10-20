@@ -12,7 +12,7 @@ internal static class PublishedStatementView
     {
         var facts = new List<Fact>
         {
-            Fact.List("Speakers", statement.Speakers.Select(official => official.Name)),
+            PublishedRecordView.Officials("Speakers", statement.Speakers),
             Fact.List("Other speakers", statement.OtherSpeakers)
         };
         if (statement.StatementDate is { } date) facts.Add(new("Statement date", Moment.Iso(date)));

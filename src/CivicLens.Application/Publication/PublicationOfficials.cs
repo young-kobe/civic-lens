@@ -4,21 +4,30 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
-/// <summary>Joins configured people to roster terms. A person matches by bioguide ID, else by Wikidata ID, else has no terms.</summary>
+/// <summary>
+/// Builds the profile of each official that a record names. A configured person matches roster terms by bioguide ID, else by
+/// Wikidata ID, else gets the configured offices. A person who left the configuration keeps the name that the records hold, and has no terms.
+/// </summary>
 public sealed class PublicationOfficials(CollectionConfiguration configuration, IMemberRosterStore members, IExecutiveRosterStore executives)
 {
     private static readonly PublishedOfficeTerm[] NoTerms = [];
 
-    public async Task<PublishedOfficials> ResolveAsync(IReadOnlySet<string> officialIds, CancellationToken cancellationToken)
+    private readonly HashSet<string> configuredIds = [.. configuration.People.Select(person => person.Id)];
+
+    public bool IsConfigured(string officialId) => configuredIds.Contains(officialId);
+
+    public async Task<PublishedOfficials> ResolveAsync(IReadOnlySet<string> officialIds,
+        IReadOnlyDictionary<string, string> recordNames, CancellationToken cancellationToken)
     {
-        var people = configuration.People.Where(person => officialIds.Contains(person.Id))
-            .OrderBy(person => person.Name, StringComparer.Ordinal).ThenBy(person => person.Id, StringComparer.Ordinal).ToArray();
+        var people = configuration.People.Where(person => officialIds.Contains(person.Id)).ToArray();
         var memberTerms = await ReadMemberTermsAsync(people.Any(person => person.BioguideId is not null), cancellationToken);
         var needsExecutives = people.Any(person => person.WikidataId is not null && MemberTermsOf(person, memberTerms).Length == 0);
         var executiveTerms = await ReadExecutiveTermsAsync(needsExecutives, cancellationToken);
         var published = new PublishedOfficials
         {
-            Officials = [.. people.Select(person => ToProfile(person, memberTerms, executiveTerms))]
+            Officials = [.. people.Select(person => ToProfile(person, memberTerms, executiveTerms))
+                .Concat(officialIds.Except(people.Select(person => person.Id)).Select(id => Unconfigured(id, recordNames)))
+                .OrderBy(profile => profile.Name, StringComparer.Ordinal).ThenBy(profile => profile.Id, StringComparer.Ordinal)]
         };
         published.Validate();
         return published;
@@ -57,6 +66,11 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
         End = term.End
     };
 
+    private static PublishedOfficialProfile Unconfigured(string id, IReadOnlyDictionary<string, string> recordNames) =>
+        recordNames.TryGetValue(id, out var name)
+            ? new() { Id = id, Name = name }
+            : throw new InvalidDataException($"Official {id} is named by a record but no record holds a name for the official.");
+
     private static PublishedOfficialProfile ToProfile(PersonConfiguration person, Dictionary<string, PublishedOfficeTerm[]> memberTerms,
         Dictionary<string, PublishedOfficeTerm[]> executiveTerms) => new()
         {
@@ -70,9 +84,17 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
         Dictionary<string, PublishedOfficeTerm[]> executiveTerms)
     {
         var terms = MemberTermsOf(person, memberTerms);
-        if (terms.Length > 0 || person.WikidataId is null) return terms;
-        return executiveTerms.GetValueOrDefault(person.WikidataId, NoTerms);
+        if (terms.Length == 0 && person.WikidataId is not null) terms = executiveTerms.GetValueOrDefault(person.WikidataId, NoTerms);
+        return terms.Length > 0 ? terms : [.. (person.Offices ?? []).Select(ToTerm)];
     }
+
+    private static PublishedOfficeTerm ToTerm(OfficeConfiguration office) => new()
+    {
+        Office = office.Title,
+        Party = office.Party,
+        Start = office.StartsOn,
+        End = office.EndsOn
+    };
 
     private static PublishedOfficeTerm[] MemberTermsOf(PersonConfiguration person, Dictionary<string, PublishedOfficeTerm[]> memberTerms) =>
         person.BioguideId is null ? NoTerms : memberTerms.GetValueOrDefault(person.BioguideId, NoTerms);

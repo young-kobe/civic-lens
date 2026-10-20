@@ -228,7 +228,7 @@ public sealed class PublishRelationshipTests
 
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", draft));
 
-        Assert.Equal([PublicationProtocol.ManifestPath], scenario.Releases.ReadPaths);
+        Assert.Equal([PublicationProtocol.ManifestPath, PublicationProtocol.OfficialsPath], scenario.Releases.ReadPaths);
     }
 
     [Fact]
@@ -249,7 +249,7 @@ public sealed class PublishRelationshipTests
         var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("k3", Reference(PublishedRecordKind.Statement, statement)));
 
-        Assert.Equal([PublicationProtocol.ManifestPath, PublicationProtocol.RecordDataPath(citing)], scenario.Releases.ReadPaths);
+        Assert.Equal([PublicationProtocol.ManifestPath, PublicationProtocol.OfficialsPath, PublicationProtocol.RecordDataPath(citing)], scenario.Releases.ReadPaths);
         Assert.Equal($"<html>statement {statement} related e</html>", PageOf(scenario, third.DirectoryName, statement));
     }
 

@@ -12,7 +12,7 @@ public enum FacetKind
 /// <summary>The manifest entries that hold one issue or policy area ID, newest first.</summary>
 public sealed record ReleaseFacet(FacetKind Kind, string Id, string Name, ImmutableArray<PublishedRecordEntry> Records)
 {
-    public bool HasPages => PublicationProtocol.HasFacetPages(Id);
+    public bool HasPages => PublicationProtocol.IsPathSegment(Id);
 
     public int PageCount => PublicationProtocol.PageCount(Records.Length);
 

@@ -1,0 +1,15 @@
+@using CivicLens.Publication.Contracts
+
+@if (Linked)
+{
+    <a href="@PublishedRecordView.OfficialLink(Official.Id)">@Official.Name</a>
+}
+else
+{
+    @Official.Name
+}
+
+@code {
+    [Parameter, EditorRequired] public PublishedOfficial Official { get; set; } = default!;
+    [Parameter] public bool Linked { get; set; } = true;
+}

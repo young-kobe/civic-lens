@@ -131,6 +131,25 @@ public sealed class ReleaseRenderer(string? publicApiUrl = null) : IReleaseRende
         });
     }
 
+    public Task<string> RenderOfficialAsync(ReleaseOfficialPage page, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        page.Profile.Validate();
+        return RenderAsync<PublishedOfficialPage>(new Dictionary<string, object?>
+        {
+            [nameof(PublishedOfficialPage.Page)] = page
+        });
+    }
+
+    public Task<string> RenderOfficialsAsync(IReadOnlyList<OfficialListing> officials, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(officials);
+        return RenderAsync<PublishedOfficialsPage>(new Dictionary<string, object?>
+        {
+            [nameof(PublishedOfficialsPage.Officials)] = officials
+        });
+    }
+
     public static ReleaseRenderer FromEnvironment() => new(Environment.GetEnvironmentVariable(PublicApiUrlVariable)?.TrimEnd('/') is { Length: > 0 } url ? url : null);
 
     public Task<string> RenderSearchAsync(PublicationRelease release, ReleaseFacets facets, CancellationToken cancellationToken)

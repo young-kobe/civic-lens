@@ -14,4 +14,5 @@ public sealed record PublishedOfficialProfile
             throw new InvalidDataException("Published official is invalid.");
         foreach (var term in Terms) term.Validate();
     }
+
 }

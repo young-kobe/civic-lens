@@ -12,7 +12,7 @@ internal static class PublishedRelationshipView
         var facts = new List<Fact>
         {
             new("Type", PublishedRecordLabels.RelationshipType(relationship.Type)),
-            Fact.List("Speakers", relationship.Officials.Select(official => official.Name))
+            PublishedRecordView.Officials("Speakers", relationship.Officials)
         };
         if (relationship.StatementDate is { } date) facts.Add(new("Statement date", Moment.Iso(date)));
         facts.Add(Fact.List("Issues", relationship.IssueIds));

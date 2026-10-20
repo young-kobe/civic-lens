@@ -2,8 +2,10 @@ using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Documents;
+using CivicLens.Application.Issues;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Registry;
+using CivicLens.Publication.Contracts;
 using System.Text.Json.Serialization;
 
 namespace CivicLens.Application.Collection;
@@ -41,7 +43,9 @@ public sealed record CollectionConfiguration
         {
             if (person is null || string.IsNullOrWhiteSpace(person.Id) || string.IsNullOrWhiteSpace(person.Name))
                 throw new ArgumentException("Every person must have a nonblank ID and name.");
+            IssueConfiguration.ValidateId(person.Id, "Person");
             ValidateNames(person);
+            ValidateOffices(person);
             ValidateExternalId(person, person.BioguideId, "bioguide", BioguideId.IsValid, bioguideIds);
             ValidateExternalId(person, person.WikidataId, "Wikidata", WikidataId.IsValid, wikidataIds);
             if (!peopleById.TryAdd(person.Id, person))
@@ -257,6 +261,25 @@ public sealed record CollectionConfiguration
             if (ranges.Any(existing => existing.Overlaps(range)))
                 throw new ArgumentException($"Person '{person.Id}' has overlapping intervals for name '{item.Name}'.");
             ranges.Add(range);
+        }
+    }
+
+    private static void ValidateOffices(PersonConfiguration person)
+    {
+        if (person.Offices is null)
+            return;
+        if (person.BioguideId is not null)
+            throw new ArgumentException($"Person '{person.Id}' has a bioguide ID, so the roster gives the offices.");
+        if (person.Offices.Length > OfficeConfiguration.MaximumPerPerson)
+            throw new ArgumentException($"Person '{person.Id}' has more than {OfficeConfiguration.MaximumPerPerson} offices.");
+        foreach (var office in person.Offices)
+        {
+            if (office is null || string.IsNullOrWhiteSpace(office.Title) || office.Party is not null && string.IsNullOrWhiteSpace(office.Party) ||
+                office.EndsOn < office.StartsOn)
+                throw new ArgumentException($"Person '{person.Id}' has an invalid office.");
+            IssueConfiguration.ValidateNameLength(office.Title, $"Person '{person.Id}' office title");
+            if (office.Party is not null)
+                IssueConfiguration.ValidateNameLength(office.Party, $"Person '{person.Id}' office party");
         }
     }
 

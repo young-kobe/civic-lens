@@ -41,6 +41,26 @@ public sealed class FileReleaseDirectory : IReleaseDirectory
         return buffer;
     }
 
+    public Task<IReadOnlyList<string>> ListFilesAsync(string directoryName, string folder, int maximumFiles,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        string path;
+        try
+        {
+            path = ReleasePaths.ResolveWithoutLinks(rootPath, directoryName, folder);
+        }
+        catch (FileNotFoundException)
+        {
+            return Task.FromResult<IReadOnlyList<string>>([]);
+        }
+
+        IReadOnlyList<string> files = [.. Directory.EnumerateFiles(path).Take(maximumFiles + 1)
+            .Select(file => $"{folder}/{Path.GetFileName(file)}").Order(StringComparer.Ordinal)];
+        if (files.Count > maximumFiles) throw new InvalidDataException("Release folder holds more files than allowed.");
+        return Task.FromResult(files);
+    }
+
     public Task DeleteAsync(string directoryName, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();

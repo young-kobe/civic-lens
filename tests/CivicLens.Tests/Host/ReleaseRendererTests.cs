@@ -223,6 +223,42 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task RecordPagesLinkEachSpeakerToTheOfficialPageBecauseEverySpeakerOfAPublishedRecordHasOne()
+    {
+        var statement = Statement() with
+        {
+            Speakers = [new() { Id = "o1", Name = "Jane Doe" }, new() { Id = "o2", Name = "Ann Roe" }]
+        };
+
+        var html = await new ReleaseRenderer().RenderStatementAsync(statement, [], CancellationToken.None);
+
+        var speakers = new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts dd").First(dd => dd.TextContent.Contains("Jane Doe", StringComparison.Ordinal));
+        Assert.Equal(["../officials/o1.html", "../officials/o2.html"], speakers.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
+        Assert.Equal("Jane Doe, Ann Roe", speakers.TextContent);
+    }
+
+    [Fact]
+    public async Task ActionPageLinksTheSponsorButNotACosponsorBecauseOnlyTheSponsorOwnsTheAction()
+    {
+        var html = await new ReleaseRenderer().RenderActionAsync(Action(), [], CancellationToken.None);
+
+        var rows = new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='sponsorships-title'] tbody tr").ToList();
+        Assert.Equal("../officials/o1.html", rows.Single(row => row.QuerySelector("td")!.TextContent == "Jane <Doe>")
+            .QuerySelector("td a")!.GetAttribute("href"));
+        Assert.Null(rows.Single(row => row.QuerySelector("td")!.TextContent == "Ann Roe").QuerySelector("td a[href^='../officials/']"));
+    }
+
+    [Fact]
+    public async Task VotePageLinksEachTrackedMemberToTheOfficialPage()
+    {
+        var html = await new ReleaseRenderer().RenderVoteAsync(Vote(), null, [], CancellationToken.None);
+
+        var link = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='members-title'] tbody td a")!;
+        Assert.Equal("../officials/o1.html", link.GetAttribute("href"));
+        Assert.Equal("Jane <Doe>", link.TextContent);
+    }
+
+    [Fact]
     public async Task StatementPageOmitsTheDateFactAndItsEvidenceWhenTheStatementHasNoEstablishedDate()
     {
         var html = await new ReleaseRenderer().RenderStatementAsync(

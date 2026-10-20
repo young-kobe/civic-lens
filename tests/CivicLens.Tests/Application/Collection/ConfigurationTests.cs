@@ -258,6 +258,51 @@ public sealed class ConfigurationTests
         DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }], person).Validate();
     }
 
+    [Theory]
+    [InlineData("Upper")]
+    [InlineData("has space")]
+    [InlineData("a/b")]
+    [InlineData("-lead")]
+    public void APersonIdMustBeAPathSegmentBecauseTheOfficialPageUsesItAsAnAddress(string id)
+    {
+        var person = new PersonConfiguration { Id = id, Name = "One" };
+
+        Assert.Throws<ArgumentException>(() => DatedConfiguration([new SourceCoverageConfiguration { PersonId = id }], person).Validate());
+    }
+
+    [Fact]
+    public void AnOfficeNeedsATitleADateAndAnEndThatDoesNotPrecedeItsStart()
+    {
+        var valid = new OfficeConfiguration { Title = "Secretary of State", StartsOn = new(2025, 1, 21), Party = "Republican" };
+        var persons = new[]
+        {
+            new PersonConfiguration { Id = "one", Name = "One", Offices = [valid with { Title = " " }] },
+            new PersonConfiguration { Id = "one", Name = "One", Offices = [valid with { Title = new string('t', 257) }] },
+            new PersonConfiguration { Id = "one", Name = "One", Offices = [valid with { Party = new string('p', 257) }] },
+            new PersonConfiguration { Id = "one", Name = "One", Offices = [valid with { EndsOn = new DateOnly(2025, 1, 20) }] },
+            new PersonConfiguration { Id = "one", Name = "One", Offices = [.. Enumerable.Repeat(valid, OfficeConfiguration.MaximumPerPerson + 1)] }
+        };
+
+        foreach (var person in persons)
+            Assert.Throws<ArgumentException>(() => DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }], person).Validate());
+        DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }],
+            new PersonConfiguration { Id = "one", Name = "One", Offices = [valid, valid with { EndsOn = valid.StartsOn }] }).Validate();
+    }
+
+    [Fact]
+    public void AnOfficeIsRefusedForAPersonWithABioguideIdBecauseTheRosterGivesTheirTerms()
+    {
+        var person = new PersonConfiguration
+        {
+            Id = "one",
+            Name = "One",
+            BioguideId = "W000817",
+            Offices = [new() { Title = "Senator", StartsOn = new(2025, 1, 3) }]
+        };
+
+        Assert.Throws<ArgumentException>(() => DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }], person).Validate());
+    }
+
     [Fact]
     public void TwoPeopleCannotShareOneWikidataIdBecauseItNamesOnePerson()
     {

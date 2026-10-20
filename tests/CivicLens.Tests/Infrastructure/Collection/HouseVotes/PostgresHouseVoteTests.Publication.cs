@@ -85,17 +85,18 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
-    public async Task ReadMemberPersonIdsReturnsTheMembersOfTheNamedRevisionsInOneQueryAndRefusesARevisionThatIsNotStored()
+    public async Task ReadMembersReturnsTheRecordAndPersonOfEachMemberOfTheNamedRevisionsInOneQueryAndRefusesARevisionThatIsNotStored()
     {
         var recordId = await ApprovedVoteAsync();
         var stored = await VoteReviews().GetRevisionAsync(recordId, 1, default);
 
-        var ids = await VoteReviews().ReadMemberPersonIdsAsync([new(PublishedRecordKind.Vote, recordId, 1)], default);
+        var members = await VoteReviews().ReadMembersAsync([new(PublishedRecordKind.Vote, recordId, 1)], default);
 
         Assert.NotEmpty(stored!.OfficialIds());
-        Assert.Equal(stored.OfficialIds().Order(), ids.Order());
-        Assert.Empty(await VoteReviews().ReadMemberPersonIdsAsync([], default));
-        await Assert.ThrowsAsync<InvalidDataException>(() => VoteReviews().ReadMemberPersonIdsAsync([new(PublishedRecordKind.Vote, recordId, 2)], default));
+        Assert.Equal(stored.OfficialIds().Order(), members.Select(member => member.PersonId).Order());
+        Assert.All(members, member => Assert.Equal(recordId, member.RecordId));
+        Assert.Empty(await VoteReviews().ReadMembersAsync([], default));
+        await Assert.ThrowsAsync<InvalidDataException>(() => VoteReviews().ReadMembersAsync([new(PublishedRecordKind.Vote, recordId, 2)], default));
     }
 
     [Fact]
@@ -108,7 +109,8 @@ public sealed partial class PostgresHouseVoteTests
         var newer = await RevisionAsync(second, 2);
         await SettleForReviewAsync(second, newer with { Members = [newer.Members[0] with { PersonId = "other-member" }] });
 
-        var ids = await VoteReviews().ReadMemberPersonIdsAsync([new(PublishedRecordKind.Vote, recordId, 1)], default);
+        var ids = (await VoteReviews().ReadMembersAsync([new(PublishedRecordKind.Vote, recordId, 1)], default))
+            .Select(member => member.PersonId).ToArray();
 
         Assert.Equal(["other-member"], [.. (await VoteReviews().GetRevisionAsync(recordId, 2, default))!.OfficialIds()]);
         Assert.Equal([.. (await VoteReviews().GetRevisionAsync(recordId, 1, default))!.OfficialIds()], ids);
@@ -120,7 +122,7 @@ public sealed partial class PostgresHouseVoteTests
     {
         var recordId = await ApprovedVoteAsync();
 
-        await Assert.ThrowsAsync<ArgumentException>(() => VoteReviews().ReadMemberPersonIdsAsync(
+        await Assert.ThrowsAsync<ArgumentException>(() => VoteReviews().ReadMembersAsync(
             [new(PublishedRecordKind.Vote, recordId, 1), new(PublishedRecordKind.Statement, recordId, 1)], default));
     }
 

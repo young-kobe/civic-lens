@@ -7,4 +7,5 @@ public sealed record PersonConfiguration
     public DatedNameConfiguration[]? Names { get; init; }
     public string? BioguideId { get; init; }
     public string? WikidataId { get; init; }
+    public OfficeConfiguration[]? Offices { get; init; }
 }

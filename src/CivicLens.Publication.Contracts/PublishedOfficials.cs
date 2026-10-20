@@ -5,6 +5,7 @@ public sealed record PublishedOfficials
 {
     public const int MaximumOfficials = 2000;
     public const int MaximumTerms = 64;
+    public const int MaximumBytes = 32 * 1024 * 1024;
 
     public required PublishedOfficialProfile[] Officials { get; init; }
 
