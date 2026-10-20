@@ -6,6 +6,7 @@
     <Project Path="src/CivicLens.Core/CivicLens.Core.csproj" />
     <Project Path="src/CivicLens.Host/CivicLens.Host.csproj" />
     <Project Path="src/CivicLens.Infrastructure/CivicLens.Infrastructure.csproj" />
+    <Project Path="src/CivicLens.PublicApi/CivicLens.PublicApi.csproj" />
     <Project Path="src/CivicLens.Publication.Contracts/CivicLens.Publication.Contracts.csproj" />
   </Folder>
   <Folder Name="/tests/">
