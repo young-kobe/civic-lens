@@ -18,11 +18,11 @@ public static class PublishedRecordLabels
 
     public static string ReportCategory(string category) => category switch
     {
-        "wrong-quote" => "The quoted text is wrong",
-        "wrong-date" => "A date is wrong",
-        "wrong-attribution" => "The wrong person or source is named",
-        "missing-context" => "Context is missing",
-        "broken-source-link" => "A source link is broken",
+        ReaderReportProtocol.WrongQuoteCategory => "The quoted text is wrong",
+        ReaderReportProtocol.WrongDateCategory => "A date is wrong",
+        ReaderReportProtocol.WrongAttributionCategory => "The wrong person or source is named",
+        ReaderReportProtocol.MissingContextCategory => "Context is missing",
+        ReaderReportProtocol.BrokenSourceLinkCategory => "A source link is broken",
         ReaderReportProtocol.OtherCategory => "Something else",
         _ => throw new ArgumentOutOfRangeException(nameof(category), category, "Report category has no label.")
     };
