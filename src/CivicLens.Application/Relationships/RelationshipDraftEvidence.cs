@@ -5,7 +5,8 @@ using CivicLens.Core.Votes;
 namespace CivicLens.Application.Relationships;
 
 public sealed record RelationshipDraftEvidence(string PairId, RelationshipRecordKind TargetKind, ApprovedStatement? Statement,
-    ActionDraftRevision? Action, VoteDraftRevision? Vote, string? SettledFingerprint, RelationshipRevision? Current)
+    ActionDraftRevision? Action, VoteDraftRevision? Vote, string? SettledFingerprint, RelationshipRevision? Current,
+    bool SettledAsNone)
 {
     public bool SidesAreApproved => Statement is not null && (TargetKind == RelationshipRecordKind.Action ? Action is not null : Vote is not null);
 

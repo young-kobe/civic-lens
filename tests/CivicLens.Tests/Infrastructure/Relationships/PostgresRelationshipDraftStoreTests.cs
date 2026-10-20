@@ -1,4 +1,6 @@
+using CivicLens.Application.Analysis;
 using CivicLens.Application.Relationships;
+using CivicLens.Core.Analysis;
 using CivicLens.Core.Relationships;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Analysis;
@@ -125,7 +127,7 @@ public sealed class PostgresRelationshipDraftStoreTests(PostgresCollection postg
     }
 
     [Fact]
-    public async Task ANoneAnswerIsNotAskedAgainWhileTheInputIsTheSameAndIsAskedAgainWhenACitedRevisionChanges()
+    public async Task ANoneAnswerIsNotAskedAgainWhileTheInputIsTheSameAndIsAskedAgainWhenTheTargetFactsChange()
     {
         var pair = await SeedApprovedPairAsync();
         await store.RefreshPairsAsync(default);
@@ -142,6 +144,10 @@ public sealed class PostgresRelationshipDraftStoreTests(PostgresCollection postg
         Assert.Equal([["Succeeded"]], await seeder.ReadAsync("SELECT status FROM relationship_analysis"));
 
         await seeder.ActionAsync(Action(revision: 2));
+        await store.RefreshPairsAsync(default);
+        Assert.Equal([["Succeeded"]], await seeder.ReadAsync("SELECT status FROM relationship_analysis"));
+
+        await seeder.ActionAsync(Action(revision: 3) with { Summary = "A new summary of the bill." });
         await store.RefreshPairsAsync(default);
         Assert.Equal([["Pending"]], await seeder.ReadAsync("SELECT status FROM relationship_analysis"));
     }
@@ -222,6 +228,155 @@ public sealed class PostgresRelationshipDraftStoreTests(PostgresCollection postg
         Assert.Single(second.Requests);
         Assert.Empty(third.Requests);
         Assert.Equal([["2"]], await seeder.ReadAsync("SELECT current_revision_number FROM relationship_drafts"));
+    }
+
+    [Fact]
+    public async Task AnotherMembersCosponsorshipMakesNoModelCallAndMovesTheCitationSoTheDraftStaysApprovable()
+    {
+        var pair = await SeedApprovedPairAsync();
+        await RunWorkerAsync(new FakeRelationshipDraftModel().Draft(Output()));
+        var action = Action(revision: 2);
+        await seeder.ActionAsync(action with { Sponsorships = [.. action.Sponsorships, action.Sponsorships[0] with { PersonId = "markey" }] });
+        await store.RefreshPairsAsync(default);
+        Assert.Equal([["Pending"]], await seeder.ReadAsync("SELECT status FROM relationship_analysis"));
+        var model = new FakeRelationshipDraftModel();
+
+        await RunWorkerAsync(model);
+
+        Assert.Empty(model.Requests);
+        Assert.Equal([["2"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions"));
+        Assert.Equal([["Succeeded", "null"]], await seeder.ReadAsync("SELECT status, error_code FROM relationship_analysis"));
+        Assert.Equal([["1"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_analysis_runs WHERE outcome = 'Bypassed' AND reason = 'targetRecited'"));
+        var read = (await new PostgresRelationshipReviewStore(factory).GetAsync(pair.PairId, default))!;
+        Assert.Equal(2, read.Review.CurrentRevision.Target.RevisionNumber);
+        Assert.False(read.CitedRecordsChanged);
+    }
+
+    [Fact]
+    public async Task ABypassedRunStaysBypassedWhenItsReciteConflictsWithTheCurrentRevisionSoTheEntryRetries()
+    {
+        var pair = await SeedApprovedPairAsync();
+        await RunWorkerAsync(new FakeRelationshipDraftModel().Draft(Output()));
+        await seeder.ActionAsync(Action(revision: 2));
+        await store.RefreshPairsAsync(default);
+        var claim = (await store.TryClaimAsync(pair.PairId, TimeSpan.FromSeconds(30), default))!;
+        var identity = RelationshipDraftTask.Identity;
+        var started = DateTimeOffset.UtcNow;
+        var run = new AnalysisRun(Guid.NewGuid().ToString("N"), pair.PairId, identity.Task, identity.TaskVersion, RelationshipDraftTask.Model,
+            identity.PromptVersion, identity.SchemaVersion, new string('a', 64), null, AnalysisRunOutcome.Bypassed, AnalysisTokenUsage.None, 0, null,
+            null, null, [], "{}", started, started);
+        var conflicting = Revision(pair) with { RevisionNumber = 3 };
+
+        Assert.True(await store.CheckpointAsync(RelationshipDraftCheckpoint.From(claim, conflicting),
+            new RelationshipDraftRun(run, RelationshipDraftErrorCodes.TargetRecited), default));
+
+        Assert.Equal([["RetryWaiting", "revisionConflict"]], await seeder.ReadAsync("SELECT status, error_code FROM relationship_analysis"));
+        Assert.Equal([["Bypassed", "targetRecited"]], await seeder.ReadAsync($"SELECT outcome, reason FROM relationship_analysis_runs WHERE run_id = '{run.RunId}'"));
+        Assert.Equal([["1"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions"));
+    }
+
+    [Fact]
+    public async Task ANoneAnswerAfterAnAiRevisionLeavesItUncopiedAndNotApprovableWhenTheTargetRevisionChangesAgain()
+    {
+        var pair = await SeedApprovedPairAsync();
+        await DraftNoneAfterASummaryChangeAsync();
+        await seeder.ActionAsync(Action(revision: 3) with { Summary = "A new summary of the bill." });
+        var model = new FakeRelationshipDraftModel();
+
+        await RunWorkerAsync(model);
+        await RunWorkerAsync(model);
+
+        Assert.Empty(model.Requests);
+        Assert.Equal([["1"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions"));
+        Assert.Equal([["Succeeded", "noRelationship"]], await seeder.ReadAsync("SELECT status, error_code FROM relationship_analysis"));
+        Assert.True((await new PostgresRelationshipReviewStore(factory).GetAsync(pair.PairId, default))!.CitedRecordsChanged);
+    }
+
+    [Fact]
+    public async Task ANoCallPassAfterANoneAnswerKeepsTheNoneReasonSoALaterTargetChangeNeverCopiesTheOldRevision()
+    {
+        await SeedApprovedPairAsync();
+        await DraftNoneAfterASummaryChangeAsync();
+        await seeder.ExecuteAsync("UPDATE relationship_analysis SET status = 'Pending', error_code = NULL");
+        var noCall = new FakeRelationshipDraftModel();
+        await RunWorkerAsync(noCall);
+        Assert.Empty(noCall.Requests);
+        await seeder.ActionAsync(Action(revision: 3) with { Summary = "A new summary of the bill." });
+        var model = new FakeRelationshipDraftModel();
+
+        await RunWorkerAsync(model);
+
+        Assert.Empty(model.Requests);
+        Assert.Equal([["1"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions"));
+        Assert.Equal([["Succeeded", "noRelationship"]], await seeder.ReadAsync("SELECT status, error_code FROM relationship_analysis"));
+    }
+
+    [Fact]
+    public async Task ANoneAnswerAfterAPersonRevisionStartsNoFurtherModelCallOnLaterRefreshes()
+    {
+        await SeedPersonRevisionAsync();
+        await DraftNoneAfterASummaryChangeAsync();
+        await seeder.ActionAsync(Action(revision: 3) with { Summary = "A new summary of the bill." });
+        var model = new FakeRelationshipDraftModel();
+
+        await RunWorkerAsync(model);
+        await RunWorkerAsync(model);
+
+        Assert.Empty(model.Requests);
+        Assert.Equal([["2"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions"));
+    }
+
+    [Fact]
+    public async Task ALaterFingerprintChangeAfterANoneAnswerDraftsAgain()
+    {
+        await SeedApprovedPairAsync();
+        await RunWorkerAsync(new FakeRelationshipDraftModel().Draft(Output()));
+        await DraftNoneAfterASummaryChangeAsync();
+        await seeder.ActionAsync(Action(revision: 3) with { Summary = "Another summary of the bill." });
+        var model = new FakeRelationshipDraftModel().Draft(Output());
+
+        await RunWorkerAsync(model);
+
+        Assert.Single(model.Requests);
+        Assert.Equal([["2"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions"));
+    }
+
+    private async Task DraftNoneAfterASummaryChangeAsync()
+    {
+        if (await seeder.ReadAsync("SELECT 1 FROM relationship_drafts") is [])
+            await RunWorkerAsync(new FakeRelationshipDraftModel().Draft(Output()));
+        await seeder.ActionAsync(Action(revision: 2) with { Summary = "A new summary of the bill." });
+        await RunWorkerAsync(new FakeRelationshipDraftModel().Draft(None()));
+        Assert.Equal([["Succeeded", "noRelationship"]], await seeder.ReadAsync("SELECT status, error_code FROM relationship_analysis"));
+    }
+
+    [Fact]
+    public async Task ASummaryChangeOfTheTargetDraftsAgainBecauseThePromptReadsTheSummary()
+    {
+        await SeedApprovedPairAsync();
+        await RunWorkerAsync(new FakeRelationshipDraftModel().Draft(Output()));
+        await seeder.ActionAsync(Action(revision: 2) with { Summary = "A new summary of the bill." });
+        await store.RefreshPairsAsync(default);
+        var model = new FakeRelationshipDraftModel().Draft(Output());
+
+        await RunWorkerAsync(model);
+
+        Assert.Single(model.Requests);
+    }
+
+    [Fact]
+    public async Task TheWithdrawalOfThePairedOfficialDraftsAgainBecauseThePromptReadsTheRole()
+    {
+        await SeedApprovedPairAsync();
+        await RunWorkerAsync(new FakeRelationshipDraftModel().Draft(Output()));
+        await seeder.ActionAsync(Action(revision: 2, role: CivicLens.Core.Actions.ActionSponsorshipRole.Cosponsor, original: false,
+            withdrawnOn: new DateOnly(2025, 2, 1)));
+        await store.RefreshPairsAsync(default);
+        var model = new FakeRelationshipDraftModel().Draft(Output());
+
+        await RunWorkerAsync(model);
+
+        Assert.Single(model.Requests);
     }
 
     [Fact]

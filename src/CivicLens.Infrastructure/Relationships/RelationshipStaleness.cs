@@ -25,11 +25,14 @@ internal static class RelationshipStaleness
 
     private static readonly string ReadStalePairIdsSql = $$"""
         SELECT a.pair_id AS "Value" FROM {{PostgresRelationshipDraftStore.Table}} a
-        JOIN unnest({1}, {2}) AS f(pair_id, fingerprint) ON f.pair_id = a.pair_id
+        JOIN unnest({1}, {2}, {3}) AS f(pair_id, fingerprint, target_revision) ON f.pair_id = a.pair_id
         WHERE a.task = {0}
           AND (a.status = 'Succeeded' OR a.status = 'Blocked' AND a.error_code = '{{RelationshipDraftErrorCodes.SideNotApproved}}')
           AND NOT EXISTS (SELECT 1 FROM relationship_drafts d WHERE d.record_id = a.pair_id AND d.review_status = 'Approved')
-          AND f.fingerprint IS DISTINCT FROM {{SettledFingerprint("a.pair_id")}}
+          AND (f.fingerprint IS DISTINCT FROM {{SettledFingerprint("a.pair_id")}}
+               OR {{SettledReason("a.pair_id")}} IS DISTINCT FROM '{{RelationshipDraftErrorCodes.NoRelationship}}' AND EXISTS (SELECT 1 FROM relationship_drafts d JOIN relationship_revisions r
+                            ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
+                          WHERE d.record_id = a.pair_id AND (r.revision_json::jsonb -> 'target' ->> 'revisionNumber')::int <> f.target_revision))
         """;
 
     // The shape of PostgresAnalysisQueue.lockSubjectsSql (task filter, key order, FOR UPDATE), narrowed to the pairs of one record.
@@ -52,8 +55,12 @@ internal static class RelationshipStaleness
           AND d.no_longer_matches <> NOT (d.record_id = ANY({3}))
         """;
 
-    public static string SettledFingerprint(string pairId) => $"""
-        (SELECT r.context_json::jsonb ->> 'fingerprint' FROM relationship_analysis_runs r
+    public static string SettledFingerprint(string pairId) => LatestSettledRun(pairId, "r.context_json::jsonb ->> 'fingerprint'");
+
+    public static string SettledReason(string pairId) => LatestSettledRun(pairId, "r.reason");
+
+    private static string LatestSettledRun(string pairId, string column) => $"""
+        (SELECT {column} FROM relationship_analysis_runs r
           WHERE r.pair_id = {pairId} AND r.task = '{RelationshipDraftTask.Task}' AND r.outcome IN ('Drafted','Bypassed')
             AND r.context_json::jsonb ->> 'fingerprint' IS NOT NULL
           ORDER BY r.finished_at_utc_ticks DESC, r.run_id DESC LIMIT 1)
@@ -87,7 +94,7 @@ internal static class RelationshipStaleness
             found.Select(pair => pair.Statement.RecordId).ToArray(), found.Select(pair => pair.Target.Kind.ToString()).ToArray(),
             found.Select(pair => pair.Target.RecordId).ToArray()], cancellationToken);
         var stale = await db.Database.SqlQueryRaw<string>(ReadStalePairIdsSql, RelationshipDraftTask.Task, ids,
-            found.Select(RelationshipFingerprint.Compute).ToArray()).ToArrayAsync(cancellationToken);
+            found.Select(RelationshipFingerprint.Compute).ToArray(), found.Select(pair => pair.Target.RevisionNumber).ToArray()).ToArrayAsync(cancellationToken);
         if (stale.Length > 0) _ = await queue.RequeueInAsync(db, RequeuedStates, stale, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         _ = await db.Database.ExecuteSqlRawAsync(FlagPairsSql, [RelationshipDraftTask.Task, scope.StatementId!,

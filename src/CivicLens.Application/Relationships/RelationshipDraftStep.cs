@@ -1,6 +1,7 @@
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Relationships;
+using CivicLens.Core.Review;
 using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Application.Relationships;
@@ -28,14 +29,38 @@ public sealed class RelationshipDraftStep(IRelationshipDraftStore store, IRelati
         }
         var context = RelationshipDraftContext.Create(evidence, pair, officialNames);
         attempt.ContextJson = RelationshipDraftPrompt.SerializeContext(context);
-        return evidence.SettledFingerprint == context.Fingerprint || KeepsPersonRevision(evidence, pair)
-            ? await SettleWithoutCallAsync(attempt, context.Fingerprint, RelationshipDraftErrorCodes.Unchanged, cancellationToken)
-            : await DraftAsync(attempt, context, cancellationToken);
+        if (KeepsPersonRevision(evidence, pair)) return await SettleUnchangedAsync(attempt, context, cancellationToken);
+        if (evidence.SettledFingerprint != context.Fingerprint) return await DraftAsync(attempt, context, cancellationToken);
+        if (evidence.SettledAsNone)
+            return await SettleWithoutCallAsync(attempt, context.Fingerprint, RelationshipDraftErrorCodes.NoRelationship, cancellationToken);
+        return evidence.Current switch
+        {
+            null => await SettleUnchangedAsync(attempt, context, cancellationToken),
+            { } current when current.Target == pair.Target.Citation => await SettleUnchangedAsync(attempt, context, cancellationToken),
+            { } current when CanRecite(current, pair) => await ReciteAsync(attempt, context, cancellationToken),
+            _ => await DraftAsync(attempt, context, cancellationToken)
+        };
+    }
+
+    private static Task<bool> SettleUnchangedAsync(IAnalysisAttempt<RelationshipDraftRun> attempt, RelationshipDraftContext context,
+        CancellationToken cancellationToken) =>
+        SettleWithoutCallAsync(attempt, context.Fingerprint, RelationshipDraftErrorCodes.Unchanged, cancellationToken);
+
+    private static Task<bool> ReciteAsync(IAnalysisAttempt<RelationshipDraftRun> attempt, RelationshipDraftContext context,
+        CancellationToken cancellationToken)
+    {
+        var run = attempt.BypassRun(RelationshipDraftTask.Model, context.Fingerprint, null);
+        var revision = RelationshipDraftResolver.Recite(context, run.FinishedAtUtc);
+        return attempt.SettleAsync(new RelationshipDraftRun(run, RelationshipDraftErrorCodes.TargetRecited),
+            RelationshipDraftCheckpoint.From(attempt.Claim, revision), cancellationToken);
     }
 
     private static bool KeepsPersonRevision(RelationshipDraftEvidence evidence, RelationshipPair pair) =>
-        evidence.Current?.IsPersonRevisionCiting(
-            new(RelationshipRecordKind.Statement, pair.Statement.RecordId, pair.Statement.Revision.RevisionNumber), pair.Target.Citation) == true;
+        evidence.Current?.IsPersonRevisionCiting(pair.StatementCitation, pair.Target.Citation) == true;
+
+    private static bool CanRecite(RelationshipRevision current, RelationshipPair pair) =>
+        ReviewAuthor.KindOf(current.AuthorSubject) == ReviewAuthorKind.Analysis && current.Statement == pair.StatementCitation &&
+        current.Match == pair.Match;
 
     private async Task<bool> DraftAsync(IAnalysisAttempt<RelationshipDraftRun> attempt, RelationshipDraftContext context,
         CancellationToken cancellationToken)

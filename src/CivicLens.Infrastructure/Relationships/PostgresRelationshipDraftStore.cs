@@ -14,7 +14,8 @@ public sealed class PostgresRelationshipDraftStore : PostgresAnalysisStore<Relat
 {
     public const string Table = "relationship_analysis";
 
-    private static readonly string ReadSettledFingerprintSql = $"SELECT {RelationshipStaleness.SettledFingerprint("{0}")} AS \"Value\"";
+    private static readonly string ReadSettledRunSql =
+        $"SELECT {RelationshipStaleness.SettledFingerprint("{0}")} AS \"Fingerprint\", {RelationshipStaleness.SettledReason("{0}")} AS \"Reason\"";
 
     private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
     private readonly PostgresAnalysisQueue<RelationshipAnalysisRow, RelationshipAnalysisBudgetRow, RelationshipDraftRun> queue;
@@ -46,12 +47,13 @@ public sealed class PostgresRelationshipDraftStore : PostgresAnalysisStore<Relat
             .SingleOrDefaultAsync(entry => entry.PairId == pairId && entry.Task == RelationshipDraftTask.Task, cancellationToken);
         if (row is null) return null;
         var isAction = row.TargetKind == RelationshipRecordKind.Action;
-        var settled = await db.Database.SqlQueryRaw<string>(ReadSettledFingerprintSql, pairId).SingleOrDefaultAsync(cancellationToken);
+        var settled = await db.Database.SqlQueryRaw<SettledRun>(ReadSettledRunSql, pairId).SingleAsync(cancellationToken);
         return new(pairId, row.TargetKind,
             (await RelationshipEvidenceReader.ReadStatementsAsync(db, [row.StatementCandidateId], RelationshipRevisionScope.Approved, cancellationToken)).SingleOrDefault(),
             isAction ? await RelationshipEvidenceReader.ReadActionAsync(db, row.TargetRecordId, RelationshipRevisionScope.Approved, cancellationToken) : null,
             isAction ? null : await RelationshipEvidenceReader.ReadVoteAsync(db, row.TargetRecordId, RelationshipRevisionScope.Approved, cancellationToken),
-            settled, await RelationshipDraftRows.ReadCurrentAsync(db, pairId, cancellationToken));
+            settled.Fingerprint, await RelationshipDraftRows.ReadCurrentAsync(db, pairId, cancellationToken),
+            settled.Reason == RelationshipDraftErrorCodes.NoRelationship);
     }
 
     public async Task<int> RefreshPairsAsync(CancellationToken cancellationToken)
@@ -115,4 +117,10 @@ public sealed class PostgresRelationshipDraftStore : PostgresAnalysisStore<Relat
         var failed when AnalysisQueueStates.IsFailed(failed) => RelationshipDraftView.Failed,
         _ => RelationshipDraftView.Pending
     };
+
+    private sealed class SettledRun
+    {
+        public string? Fingerprint { get; set; }
+        public string? Reason { get; set; }
+    }
 }
