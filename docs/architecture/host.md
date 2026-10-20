@@ -118,7 +118,7 @@ Production hosting is agreed but not implemented. The [roadmap](../roadmap.md) h
 - Terraform rebuilds infrastructure. Restoring persisted data needs backups.
 - Application boundaries isolate storage, execution, and model adapters from domain rules.
 - No production availability or recovery guarantee has been demonstrated yet.
-- For the MVP, a dynamic SVG view shows collection and AI processing from the retained process state. It shows waiting, failure, recovery, and budget-limit states, and supports reduced motion. AI stages stay marked unavailable until they exist.
+- A dynamic SVG view, planned after the first deploy (R-21), shows collection and AI processing from the retained process state. It shows waiting, failure, recovery, and budget-limit states, and supports reduced motion. AI stages stay marked unavailable until they exist.
 
 Before the shared workspace opens, verify:
 
