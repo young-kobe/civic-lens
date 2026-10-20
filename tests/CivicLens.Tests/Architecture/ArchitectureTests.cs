@@ -17,7 +17,8 @@ public sealed class ArchitectureTests
         ["CivicLens.Application"] = ["CivicLens.Core", "CivicLens.Collection.Contracts", "CivicLens.Publication.Contracts"],
         ["CivicLens.Infrastructure"] = ["CivicLens.Application"],
         ["CivicLens.Host"] = ["CivicLens.Application", "CivicLens.Infrastructure"],
-        ["CivicLens.Collector"] = ["CivicLens.Collection.Contracts"]
+        ["CivicLens.Collector"] = ["CivicLens.Collection.Contracts"],
+        ["CivicLens.PublicApi"] = ["CivicLens.Publication.Contracts"]
     };
 
     [Fact]
@@ -30,9 +31,9 @@ public sealed class ArchitectureTests
         {
             var name = Path.GetFileNameWithoutExtension(path);
             var xml = XDocument.Load(path);
-            Assert.Equal(name == "CivicLens.Host" ? "Microsoft.NET.Sdk.Web" : "Microsoft.NET.Sdk",
+            Assert.Equal(name is "CivicLens.Host" or "CivicLens.PublicApi" ? "Microsoft.NET.Sdk.Web" : "Microsoft.NET.Sdk",
                 xml.Root!.Attribute("Sdk")!.Value);
-            Assert.Empty(xml.Descendants("FrameworkReference")); // Host alone receives ASP.NET through the Web SDK.
+            Assert.Empty(xml.Descendants("FrameworkReference")); // Host and PublicApi alone receive ASP.NET through the Web SDK.
             var references = xml.Descendants("ProjectReference")
                 .Select(element => Path.GetFileNameWithoutExtension(element.Attribute("Include")!.Value));
             Assert.Equal(Allowed[name].Order(), references.Order());
@@ -41,7 +42,8 @@ public sealed class ArchitectureTests
             string[] allowedPackages = name == "CivicLens.Infrastructure"
                 ? ["AngleSharp", "Anthropic", "Microsoft.EntityFrameworkCore", "Microsoft.EntityFrameworkCore.Design", "Microsoft.EntityFrameworkCore.Relational", "Npgsql.EntityFrameworkCore.PostgreSQL"]
                 : name == "CivicLens.Collector" ? ["AngleSharp"]
-                : name == "CivicLens.Host" ? ["Microsoft.AspNetCore.Authentication.OpenIdConnect"] : [];
+                : name == "CivicLens.Host" ? ["Microsoft.AspNetCore.Authentication.OpenIdConnect"]
+                : name == "CivicLens.PublicApi" ? ["Npgsql"] : [];
             Assert.Equal(allowedPackages.Order(), xml.Descendants("PackageReference")
                 .Select(element => element.Attribute("Include")!.Value).Order());
         }
@@ -56,6 +58,15 @@ public sealed class ArchitectureTests
             .Select(path => Path.GetFileNameWithoutExtension(path)!).ToArray();
 
         Assert.Equal(["CivicLens.Infrastructure"], referencing);
+    }
+
+    [Fact]
+    public void ThePublicApiReadsReleasesOnlyAndReferencesNoOperationalAssembly()
+    {
+        var references = ReferencedAssemblies(Path.Combine(AppContext.BaseDirectory, "CivicLens.PublicApi.dll"));
+
+        Assert.Equal(["CivicLens.Publication.Contracts"], references.Where(name => name.StartsWith("CivicLens.", StringComparison.Ordinal)));
+        Assert.DoesNotContain(references, name => name.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.Ordinal));
     }
 
     private static HashSet<string> ReferencedAssemblies(string path)

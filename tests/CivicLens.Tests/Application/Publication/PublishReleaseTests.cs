@@ -88,6 +88,21 @@ public sealed class PublishReleaseTests
     }
 
     [Fact]
+    public async Task EveryReleaseHoldsASearchPageThatIsWrittenBeforeTheManifestAndListsTheReleaseRecords()
+    {
+        var scenario = new PublicationScenario();
+        scenario.SeedRelease(2, withFiles: true);
+        var draft = scenario.AddDraft('a');
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft));
+
+        var order = scenario.Releases.WriteOrder;
+        Assert.InRange(order.IndexOf(PublicationProtocol.SearchPagePath), 0, order.IndexOf(PublicationProtocol.ManifestPath) - 1);
+        Assert.Contains("<html>search 3 1</html>", System.Text.Encoding.UTF8.GetString(
+            scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.SearchPagePath]));
+    }
+
+    [Fact]
     public async Task PrecompressedManifestsHoldExactlyTheManifestBytesSoTheServerNeverSendsADifferentRelease()
     {
         var scenario = new PublicationScenario();
@@ -116,8 +131,8 @@ public sealed class PublishReleaseTests
         var order = scenario.Releases.WriteOrder;
         Assert.Equal(
             [PublicationProtocol.AllRecordsPagePath(1), "all-2.html", "all-3.html", PublicationProtocol.IssuePagePath("housing", 1),
-                PublicationProtocol.FacetsPath, PublicationProtocol.HomePath, PublicationProtocol.ManifestPath],
-            order.TakeLast(7));
+                PublicationProtocol.FacetsPath, PublicationProtocol.SearchPagePath, PublicationProtocol.HomePath, PublicationProtocol.ManifestPath],
+            order.TakeLast(8));
         Assert.Equal("all.html", PublicationProtocol.AllRecordsPagePath(1));
         Assert.DoesNotContain("all-4.html", order);
         Assert.Contains("<html>index 3 120</html>", System.Text.Encoding.UTF8.GetString(

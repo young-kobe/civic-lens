@@ -337,7 +337,7 @@ try
             : IssueConfiguration.None;
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
         var releases = new FileReleaseDirectory(releaseRoot);
-        var publish = new PublishRelease(publications, releases, new ReleaseRenderer(), new PublishedRecordLoaders(
+        var publish = new PublishRelease(publications, releases, ReleaseRenderer.FromEnvironment(), new PublishedRecordLoaders(
                 PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
                 PostgresStatementReviewStore.FromConnectionString(connectionString),
                 PostgresActionReviewStore.FromConnectionString(connectionString),

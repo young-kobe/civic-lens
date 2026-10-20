@@ -1,0 +1,97 @@
+@using System.Globalization
+@using System.Text.Json
+@using CivicLens.Application.Publication
+@using CivicLens.Publication.Contracts
+
+<PublicPage Title="Search records">
+    <PageHeader Title="Search records" Lede="@($"Release {Release.ReleaseNumber}, published {Moment.Full(Release.PublishedAtUtc)}.")" />
+    @if (PublicApiUrl is null)
+    {
+        <Panel Label="Search" Padded="true">
+            <EmptyState Title="Search is not available"
+                        Text="This release has no search service. Browse all published records instead.">
+                <Action><Button Href="@PublicationProtocol.FacetsPath">Issues and policy areas</Button></Action>
+            </EmptyState>
+        </Panel>
+    }
+    else
+    {
+        <Panel Title="Search records" Padded="true" hidden>
+            <form class="release-search" data-search-api="@PublicApiUrl">
+                <input class="search" type="search" name="q" aria-label="Search records" placeholder="Search records" maxlength="200" />
+                <div class="search-filters">
+                    <Field Label="Kind" For="search-kind">
+                        <select id="search-kind" name="kind">
+                            <option value="">Any</option>
+                            @foreach (var kind in Enum.GetValues<PublishedRecordKind>())
+                            {
+                                <option value="@KindValue(kind)">@PublishedRecordLabels.Kind(kind)</option>
+                            }
+                        </select>
+                    </Field>
+                    <Field Label="Official" For="search-official">
+                        <select id="search-official" name="official">
+                            <option value="">Any</option>
+                            @foreach (var official in Officials)
+                            {
+                                <option value="@official.Id">@official.Name</option>
+                            }
+                        </select>
+                    </Field>
+                    <Field Label="Issue" For="search-issue">
+                        <select id="search-issue" name="issue">
+                            <option value="">Any</option>
+                            @foreach (var issue in Facets.Issues)
+                            {
+                                <option value="@issue.Id">@issue.Name</option>
+                            }
+                        </select>
+                    </Field>
+                    <Field Label="Policy area" For="search-policy-area">
+                        <select id="search-policy-area" name="policyArea">
+                            <option value="">Any</option>
+                            @foreach (var area in Facets.PolicyAreas)
+                            {
+                                <option value="@area.Id">@area.Name</option>
+                            }
+                        </select>
+                    </Field>
+                    <Field Label="Source" For="search-source">
+                        <select id="search-source" name="source">
+                            <option value="">Any</option>
+                            @foreach (var host in Release.Records.Select(entry => entry.SourceHost).OfType<string>().Distinct().Order(StringComparer.Ordinal))
+                            {
+                                <option value="@host">@host</option>
+                            }
+                        </select>
+                    </Field>
+                    <Field Label="From" For="search-from"><input id="search-from" name="from" type="date" /></Field>
+                    <Field Label="To" For="search-to"><input id="search-to" name="to" type="date" /></Field>
+                </div>
+                <div class="row"><Button Type="submit" Variant="ButtonVariant.Primary">Search</Button></div>
+                <p class="field-hint" role="status" data-search-status></p>
+                <ol class="search-results" data-search-results></ol>
+                <Button data-search-more hidden="hidden">More results</Button>
+            </form>
+        </Panel>
+        <Panel Title="How search works" Padded="true">
+            <p>Search reads the headline, the summary, the quoted text, and the first @SourceTextLimit characters of each source text. A word in the headline ranks above the same word in the source text. Longer source texts are cut off at that limit.</p>
+            <p>A date filter matches the date of the event. Records without one do not match.</p>
+            <p>Search needs JavaScript. Without it, browse by <a href="@PublicationProtocol.FacetsPath">issue or policy area</a>, or see <a href="@PublicationProtocol.AllRecordsPagePath(1)">all records</a>.</p>
+        </Panel>
+    }
+</PublicPage>
+
+@code {
+    [Parameter, EditorRequired] public PublicationRelease Release { get; set; } = default!;
+    [Parameter, EditorRequired] public ReleaseFacets Facets { get; set; } = default!;
+    [Parameter] public string? PublicApiUrl { get; set; }
+
+    private static string KindValue(PublishedRecordKind kind) =>
+        JsonSerializer.Serialize(kind, PublicationProtocol.JsonOptions).Trim('"');
+
+    private static string SourceTextLimit => PublicationProtocol.SearchSourceTextCharacters.ToString("N0", CultureInfo.InvariantCulture);
+
+    private IEnumerable<PublishedOfficial> Officials => Release.Records.SelectMany(entry => entry.Officials)
+        .DistinctBy(official => official.Id).OrderBy(official => official.Name, StringComparer.Ordinal);
+}

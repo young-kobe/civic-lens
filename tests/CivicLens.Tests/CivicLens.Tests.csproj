@@ -8,6 +8,7 @@
     <ProjectReference Include="../../src/CivicLens.Application/CivicLens.Application.csproj" />
     <ProjectReference Include="../../src/CivicLens.Infrastructure/CivicLens.Infrastructure.csproj" />
     <ProjectReference Include="../../src/CivicLens.Collector/CivicLens.Collector.csproj" />
+    <ProjectReference Include="../../src/CivicLens.PublicApi/CivicLens.PublicApi.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.15.0" />
     <PackageReference Include="xunit" Version="2.9.3" />

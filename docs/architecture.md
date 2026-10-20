@@ -49,12 +49,13 @@ Implemented:
 - the authenticated review workspace
 - static release publication of document changes, statements, actions, votes, weekly briefs, and relationships
 - related records on the statement, action, and vote pages
+- the public search service with its own Postgres database, fed from published releases, and the search page of each release
 
 Pending: live Auth0 tenant verification, production deployment, AI classification, correction and withdrawal releases, and MCP. The [roadmap](roadmap.md) holds the order.
 
 ## Layers and dependency rules
 
-Core holds domain invariants. Application holds use cases and the interfaces of external boundaries. Infrastructure implements external adapters. Host wires the application. Collection.Contracts and Publication.Contracts have no dependencies. The collector references Collection.Contracts only. Public MCP will read the publication contract, never local application internals. Architecture tests enforce these references.
+Core holds domain invariants. Application holds use cases and the interfaces of external boundaries. Infrastructure implements external adapters. Host wires the application. Collection.Contracts and Publication.Contracts have no dependencies. The collector references Collection.Contracts only. The search service, `CivicLens.PublicApi`, references Publication.Contracts only. Public MCP will read the publication contract, never local application internals. Architecture tests enforce these references.
 
 | Layer | Owns | Must not own |
 |---|---|---|
@@ -64,6 +65,7 @@ Core holds domain invariants. Application holds use cases and the interfaces of 
 | Infrastructure | Process lifecycle, protocol decoding, actual capture verification, Postgres persistence | Independent definitions of contract or editorial validity |
 | Collector | Bounded source interaction and complete raw capture production | Durable scheduling, imports, officials registry or publication |
 | Host | Command parsing, composition, and web presentation | Collection algorithms or evidence invariants |
+| PublicApi | Release ingest, the search index, and the public read API | Operational storage, credentials, job handlers, or unpublished evidence |
 
 `tools/render-architecture.py` generates the diagrams below. Run `python3 tools/render-architecture.py`, then open `artifacts/architecture.html` for the explorer. Planned components are labeled there; a diagram is not a claim that the pipeline exists.
 
@@ -103,6 +105,7 @@ flowchart LR
     core["Core"]
     cc["Collection.Contracts"]
     pc["Publication.Contracts"]
+    api["PublicApi"]
     collector["Collector"]
     host --> app
     host --> infra
@@ -111,6 +114,7 @@ flowchart LR
     app --> cc
     app --> pc
     collector --> cc
+    api --> pc
 ```
 
 <!-- diagrams:end -->
@@ -141,7 +145,8 @@ flowchart LR
 | Captures | Compressed content-addressed files; immutable source and extraction versions |
 | Classification (planned) | Rules from measured change history first. A model tier only if the R-13 measurement shows a need (D-05) |
 | Drafting | Claude models through the official `Anthropic` C# SDK in Infrastructure; model extraction is planned; the model for each task can change after evaluation |
-| Public website | C# release builder renders shared Razor components to static HTML; small JS modules add the theme toggle and comparison control |
+| Public website | C# release builder renders shared Razor components to static HTML; small JS modules add the theme toggle, the comparison control, and the search page |
+| Public search and read API | `CivicLens.PublicApi`, a Web SDK project over its own Postgres database through plain Npgsql, fed from published releases |
 | Local MCP (planned) | Official C# SDK; separate local development and review registration |
 | Public MCP (planned) | Separate deployment over published artifacts and index; Cloudflare Worker is a candidate |
 | Production hosting (planned) | Hetzner CPX21 containers and separately served static releases; Terraform and CI deployment |
@@ -156,6 +161,7 @@ Package rules:
 - In Collector, `CaptureDecoder` owns capture decoding, and `DiscoveryCandidates` owns candidate admission. The feed and HTML parsers share both.
 - EF Core Design is private tooling in Infrastructure. Other production projects must not reference database packages.
 - Infrastructure pins the official `Anthropic` C# SDK 12.50.0 for the model adapters only. An architecture test checks that no other project references its assembly.
+- `CivicLens.PublicApi` pins Npgsql 10.0.3 and references `Publication.Contracts` only. It has no EF Core, no Application, and no operational storage. Only Host and PublicApi use the Web SDK. An architecture test checks the references.
 - No Rust, Go, Python analysis service, or React application is planned. Python's standard library serves only the development tools in `tools/`.
 
 ### Legacy reuse
@@ -196,6 +202,13 @@ A transaction that takes a brief queue row lock takes it before `civic-lens-brie
 Extraction and comparison saves take no advisory lock. Each uses `INSERT ... ON CONFLICT DO NOTHING` in one ReadCommitted transaction. See [documents](architecture/documents.md#invariants).
 
 No transaction holds a review key with a collection key.
+
+The search service has its own database and its own two locks, owned by `SearchLocks` in `CivicLens.PublicApi`. The service does not reference Infrastructure and the databases are separate, so these locks cannot join the order above. Postgres hashes each text key with `hashtextextended(key, 0)`.
+
+- `civic-lens-search-schema`: `SchemaMigrator` takes it as a session lock. The migrator runs several statements and one transaction for each file. A transaction lock would end at the first commit. The session lock covers the whole run, and the migrator releases it at the end.
+- `civic-lens-search-ingest`: `IndexTransaction` takes it as a transaction lock at the start of each ingest. It keeps a second service from writing a release at the same time.
+
+No transaction holds both search keys.
 
 An analysis settlement can add a draft row or append a revision. It then takes its queue row lock (`FOR UPDATE` in `PostgresAnalysisQueue`) before the review key of its record kind. Review and publication writes take review keys only and never lock queue rows, so no lock cycle exists. An action or vote settlement that code approves then runs the same hooks as a person decision. It locks the relationship queue rows, takes the relationship key, locks the brief queue rows, and takes the brief key, in that order.
 
@@ -394,6 +407,9 @@ This is the only navigation index.
 | Web host, security headers, components | [Host](architecture/host.md#behavior) | `src/CivicLens.Host/Program.cs` |
 | Production hosting plan | [Host](architecture/host.md#limits-and-planned-work) | none |
 | MCP plans | [Review](architecture/review.md#limits-and-planned-work), [Publication](architecture/publication.md#limits-and-planned-work) | none |
-| Public search and filters (planned) | [Publication](architecture/publication.md#limits-and-planned-work), [roadmap R-36](roadmap.md#next) | none |
+| Public search service: ingest, index, read API, rate limit | [Search](architecture/search.md#decisions) | `src/CivicLens.PublicApi/PublicApiApp.cs` |
+| Search ingest of a release | [Search](architecture/search.md#ingest) | `src/CivicLens.PublicApi/Ingest/ReleaseIngest.cs` |
+| Search API routes and errors | [Search](architecture/search.md#api) | `src/CivicLens.PublicApi/Search/SearchEndpoints.cs` |
+| Public filter pages (planned) | [Publication](architecture/publication.md#limits-and-planned-work), [roadmap R-36](roadmap.md#next) | none |
 | Pending work, decisions, MVP criteria | [Roadmap](roadmap.md) | none |
 | Commands and procedures | [Operations](operations.md) | `src/CivicLens.Host/Program.cs` |

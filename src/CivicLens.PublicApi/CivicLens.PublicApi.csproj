@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Schema/*.sql" LogicalName="schema/%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Npgsql" Version="10.0.3" />
+    <ProjectReference Include="../CivicLens.Publication.Contracts/CivicLens.Publication.Contracts.csproj" />
+  </ItemGroup>
+</Project>

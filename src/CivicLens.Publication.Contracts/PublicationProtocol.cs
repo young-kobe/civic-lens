@@ -18,6 +18,8 @@ public static class PublicationProtocol
     public const string HomePath = "index.html";
     public const string FacetsPath = "issues.html";
     public const int MaximumManifestBytes = 32 * 1024 * 1024;
+    public const int SearchSourceTextCharacters = 200_000;
+    public const string SearchPagePath = "search.html";
 
     public static string AllRecordsPagePath(int page) => page == 1 ? "all.html" : $"all-{page}.html";
     public static string IssuePagePath(string issueId, int page) => FacetPagePath("issues", issueId, page);

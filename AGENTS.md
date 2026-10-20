@@ -18,6 +18,7 @@ Keep these dependencies acyclic and exact (enforced by tests):
 - Infrastructure: Application (other dependencies only through an explicitly reviewed boundary change).
 - Host: Application, Infrastructure.
 - Collector: Collection.Contracts only. No database, AI, editorial, or publishing dependencies.
+- PublicApi: Publication.Contracts and Npgsql only. It reads published releases and its own search database, never operational storage.
 
 Local CLI, review UI, and local MCP will call shared application handlers. Public MCP must live in a separate deployment and consume published contracts only. It must never reach operational storage, credentials, job handlers, or unpublished evidence.
 

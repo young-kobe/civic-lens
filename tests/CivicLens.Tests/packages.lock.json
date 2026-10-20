@@ -445,6 +445,13 @@
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )"
         }
       },
+      "civiclens.publicapi": {
+        "type": "Project",
+        "dependencies": {
+          "CivicLens.Publication.Contracts": "[1.0.0, )",
+          "Npgsql": "[10.0.3, )"
+        }
+      },
       "civiclens.publication.contracts": {
         "type": "Project"
       }

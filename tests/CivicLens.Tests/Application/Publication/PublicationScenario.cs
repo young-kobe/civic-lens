@@ -317,6 +317,8 @@ internal sealed class FakeRenderer : IReleaseRenderer
         Task.FromResult($"<html>facet {facet.Name} {page} {string.Join(',', facet.Records.Select(entry => entry.RecordId))}</html>");
     public Task<string> RenderFacetsAsync(ReleaseFacets facets, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>facets {facets.Issues.Length} {facets.PolicyAreas.Length}</html>");
+    public Task<string> RenderSearchAsync(PublicationRelease release, ReleaseFacets facets, CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>search {release.Records.Length} {facets.Issues.Length}</html>");
 
     private Task<string> Logged(string entry, string page)
     {
