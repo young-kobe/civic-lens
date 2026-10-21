@@ -34,6 +34,7 @@ public sealed class PulledReportTests
     [InlineData("nul")]
     [InlineData("longText")]
     [InlineData("kind")]
+    [InlineData("release")]
     [InlineData("emptyId")]
     public void AReportThatBreaksAWireRuleIsRefusedBecauseTheServiceIsAnOutsideBoundary(string rule)
     {
@@ -46,6 +47,7 @@ public sealed class PulledReportTests
             "nul" => Report() with { Text = "a\0b" },
             "longText" => Report() with { Text = new string('x', ReaderReportProtocol.MaximumTextCharacters + 1) },
             "kind" => Report() with { Kind = (PublishedRecordKind)99 },
+            "release" => Report() with { ReleaseNumber = 0 },
             _ => Report() with { ReportId = Guid.Empty }
         };
 
@@ -62,6 +64,9 @@ public sealed class PulledReportTests
         Assert.Throws<InvalidDataException>(() => (Batch(Report()) with { NextCursor = "" }).Validate());
         Assert.Throws<InvalidDataException>(() =>
             (Batch(Report()) with { NextCursor = new string('x', ReaderReportProtocol.MaximumCursorLength + 1) }).Validate());
+        Assert.Throws<InvalidDataException>(() =>
+            Batch([.. Enumerable.Range(0, ReaderReportProtocol.MaximumBatchSize + 1).Select(_ => Report())]).Validate());
+        Assert.Throws<InvalidDataException>(() => (Batch() with { Reports = null! }).Validate());
         Batch(Report(), Report()).Validate();
     }
 }

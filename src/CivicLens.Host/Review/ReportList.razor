@@ -48,7 +48,7 @@
                         <EmptyState Title="@ReportsEmpty.Title" Text="@ReportsEmpty.Text" />
                     </Empty>
                 </DataTable>
-                <Pager Label="Reader report pages" NewerHref="@ReportsHref(reports.NewerCursor)" OlderHref="@ReportsHref(reports.OlderCursor)" />
+                <Pager Label="Reader report pages" NewerText="Previous" OlderText="Next" NewerHref="@ReportsHref(reports.NewerCursor)" OlderHref="@ReportsHref(reports.OlderCursor)" />
             </ChildContent>
         </Panel>
     }

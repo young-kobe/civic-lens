@@ -28,6 +28,8 @@ public static class ReaderReportProtocol
     public static IReadOnlyList<string> Categories { get; } =
         [WrongQuoteCategory, WrongDateCategory, WrongAttributionCategory, MissingContextCategory, BrokenSourceLinkCategory, OtherCategory];
 
+    public static bool IsPullToken(string? token) => token is not null && token.Length >= MinimumPullTokenCharacters;
+
     public static bool IsCategory(string? category) => category is not null && Categories.Contains(category);
 
     /// <summary>The text is optional, except for the category "other". It holds no NUL character, which Postgres cannot store.</summary>

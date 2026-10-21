@@ -28,6 +28,19 @@ public sealed class HttpReportPullerTests
         Assert.Equal(("epoch.7", report.ReportId), (batch.NextCursor, Assert.Single(batch.Reports).ReportId));
     }
 
+    [Theory]
+    [InlineData("http://search.example.test/api", "http://search.example.test/api/internal/v1/reports")]
+    [InlineData("http://search.example.test/api/", "http://search.example.test/api/internal/v1/reports?after=c1")]
+    public async Task AServiceAddressKeepsItsPathPrefixWithOrWithoutATrailingSlash(string address, string expected)
+    {
+        Uri? asked = null;
+        var puller = new HttpReportPuller(new(new Reply(request => { asked = request.RequestUri; return Json(Batch()); })), new(address), Token);
+
+        await puller.PullAsync(expected.EndsWith("c1", StringComparison.Ordinal) ? "c1" : null, default);
+
+        Assert.Equal(expected, asked!.AbsoluteUri);
+    }
+
     [Fact]
     public async Task TheFirstPullHasNoCursorParameterSoTheServiceStartsFromTheFirstReport()
     {

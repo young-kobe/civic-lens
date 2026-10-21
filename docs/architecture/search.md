@@ -95,6 +95,9 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - Each pull asks with the cursor that the store saved. Enforced by `PullReaderReports`. Test: `ReaderReportPullTests.AllPagesAreStoredAndEachPullAsksWithTheCursorThatTheStoreSavedNeverOneThatTheApplicationMadeUp`.
 - A service that is down counts one failure, keeps the cursor, and is asked again on the next tick. Enforced by `StageWorker`. Test: `ReaderReportPullTests.WhenTheServiceIsDownTheStageCountsAFailureKeepsTheCursorAndPullsAgainOnTheNextTick`.
 - The pull sends the bearer token and never puts it in an error. Enforced by `HttpReportPuller`. Tests: `HttpReportPullerTests.ThePullSendsTheBearerTokenAndTheOpaqueCursorToThePullRouteAndReadsTheBatch` and `HttpReportPullerTests.AFailedCallThrowsWithoutTheTokenSoTheStageCountsItAndNeverLogsTheSecret`.
+- The deadline of the stage is the next 5 minute mark of the database clock. Enforced by `PostgresIntervalWakeup`. Test: `PostgresIntervalWakeupTests.TheWakeupSleepsUntilTheNextFiveMinuteMarkOfTheDatabaseClockBecauseNothingNotifiesIt`.
+- A service address keeps its path prefix. Enforced by `HttpReportPuller`. Test: `HttpReportPullerTests.AServiceAddressKeepsItsPathPrefixWithOrWithoutATrailingSlash`.
+- The token length rule has one owner, `ReaderReportProtocol.IsPullToken`. The service and the stage both call it. Tests: `PublicApiOptionsTests.APullTokenUnder32CharactersIsRefusedAtStartupBecauseItGuardsEveryReport` and `ReportPullConfigurationTests.TheWorkerStopsAtStartupWhenTheReportPullIsSwitchedOnWithoutAUsableAddressAndTokenAndNeverPrintsTheToken`.
 - The stage stops the worker at startup when its address or token is missing or invalid. Enforced by `ReportPullComposition`. Test: `ReportPullConfigurationTests.TheWorkerStopsAtStartupWhenTheReportPullIsSwitchedOnWithoutAUsableAddressAndTokenAndNeverPrintsTheToken`.
 - Each schema file runs once, even when two services start together. Enforced by `SchemaMigrator`. Test: `SchemaMigratorTests.TwoServicesThatStartTogetherApplyEachFileOnceAndRecordItInSchemaMigrations`.
 - Every release holds `search.html`, written before the manifest. Enforced by `PublishRelease`. Test: `PublishReleaseTests.EveryReleaseHoldsASearchPageThatIsWrittenBeforeTheManifestAndListsTheReleaseRecords`.
@@ -169,9 +172,9 @@ The poll interval is 2 minutes and the statement timeout is 2 seconds. Both are 
 
 ### Operational pull
 
-- The worker runs the stage `reportPull` when `CIVIC_LENS_REPORT_PULL=1`. It ticks at start and then every 5 minutes by the database clock. The settings are in [operations](../operations.md#reader-report-queue).
+- The worker runs the stage `reportPull` when `CIVIC_LENS_REPORT_PULL=1`. It ticks at start and then every 5 minutes by the database clock, from `PostgresIntervalWakeup`. The fact publishing stage uses the same class with a one hour interval. The settings are in [operations](../operations.md#reader-report-queue).
 - `StageWorker` runs `PullReaderReports` for each tick. The handler asks for a page with the saved cursor, checks the page, and stores it. It repeats until a page is empty. The queue is in [review](review.md#reader-reports).
-- `HttpReportPuller` is a concrete class at the service boundary, like `TurnstileVerifier`. It sends the bearer token and the opaque cursor. A call has a hard limit of 30 seconds. A failed status, an unreadable reply, or a timeout throws, and the stage counts one failure. The token is in no message.
+- `HttpReportPuller` is a concrete class at the service boundary, like `TurnstileVerifier`. It sends the bearer token and the opaque cursor. The service address may hold a path prefix, with or without a trailing slash. A call has a hard limit of 30 seconds. The client reads at most 4 MB of reply, as the release feed of the service caps its reads. A failed status, an unreadable reply, or a timeout throws, and the stage counts one failure. The token is in no message.
 - The application never parses or builds the cursor. It saves `NextCursor` as the service sent it and sends it back as the next `after` value.
 - `PulledReportBatch.Validate` runs at the pull, because the service is an outside boundary. It checks the report rules of `ReaderReportProtocol`, the record ID rule of `PublicationProtocol.IsAnyRecordId`, the batch size, and the cursor length. A bad batch is refused as a whole. Its reports and its cursor are not stored.
 - `PostgresReaderReportStore.SavePulledAsync` inserts the new reports with `ON CONFLICT (report_id) DO NOTHING` and saves the cursor in the same transaction. A replay after a change of epoch adds no second row and does not change a report that is resolved.
@@ -199,9 +202,9 @@ The poll interval is 2 minutes and the statement timeout is 2 seconds. Both are 
 | HTTP helpers | `src/CivicLens.PublicApi/Http/ApiResults.cs`, `src/CivicLens.PublicApi/Http/QueryValues.cs` |
 | Reader reports | `src/CivicLens.PublicApi/Reports/ReportEndpoints.cs`, `src/CivicLens.PublicApi/Reports/ReportSubmission.cs`, `src/CivicLens.PublicApi/Reports/ReportStore.cs`, `src/CivicLens.PublicApi/Reports/ReportCursor.cs`, `src/CivicLens.PublicApi/Reports/ReportReceipt.cs`, `src/CivicLens.PublicApi/Reports/TurnstileVerifier.cs`, `src/CivicLens.PublicApi/Reports/TurnstileSettings.cs`, `src/CivicLens.PublicApi/Schema/002_reader_reports.sql` |
 | Report wire types | `src/CivicLens.Publication.Contracts/ReaderReportProtocol.cs`, `src/CivicLens.Publication.Contracts/PulledReport.cs`, `src/CivicLens.Publication.Contracts/PulledReportBatch.cs` |
-| Operational pull | `src/CivicLens.Application/Reports/PullReaderReports.cs`, `src/CivicLens.Application/Reports/IReaderReportSource.cs`, `src/CivicLens.Application/StageWorker.cs`, `src/CivicLens.Infrastructure/Reports/HttpReportPuller.cs`, `src/CivicLens.Infrastructure/Reports/PostgresReportPullWakeup.cs`, `src/CivicLens.Host/Reports/ReportPullComposition.cs` |
+| Operational pull | `src/CivicLens.Application/Reports/PullReaderReports.cs`, `src/CivicLens.Application/Reports/IReaderReportSource.cs`, `src/CivicLens.Application/StageWorker.cs`, `src/CivicLens.Infrastructure/Reports/HttpReportPuller.cs`, `src/CivicLens.Infrastructure/PostgresIntervalWakeup.cs`, `src/CivicLens.Host/Reports/ReportPullComposition.cs` |
 | Search page | `src/CivicLens.Host/Publication/PublishedSearchPage.razor`, `src/CivicLens.Host/Publication/ReleaseRenderer.cs`, `src/CivicLens.Host/wwwroot/js/app.js` |
-| Tests | `tests/CivicLens.Tests/PublicApi/`, `tests/CivicLens.Tests/Infrastructure/Reports/` |
+| Tests | `tests/CivicLens.Tests/PublicApi/`, `tests/CivicLens.Tests/Infrastructure/Reports/`, `tests/CivicLens.Tests/Application/Reports/` |
 
 Run commands are in [operations](../operations.md#run-the-search-service).
 

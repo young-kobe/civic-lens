@@ -14,6 +14,7 @@ public sealed class ReportPullConfigurationTests
     [InlineData("1", "http://search.example.test", null, 2)]
     [InlineData("1", "http://search.example.test", ShortToken, 2)]
     [InlineData("1", "http://search.example.test", GoodToken, 1)]
+    [InlineData("1", "http://search.example.test/api", GoodToken, 1)]
     public async Task TheWorkerStopsAtStartupWhenTheReportPullIsSwitchedOnWithoutAUsableAddressAndTokenAndNeverPrintsTheToken(
         string enabled, string? url, string? token, int exitCode)
     {
@@ -40,6 +41,7 @@ public sealed class ReportPullConfigurationTests
 
             Assert.Equal(exitCode, result.ExitCode);
             Assert.DoesNotContain(ShortToken, result.Error + result.Output, StringComparison.Ordinal);
+            Assert.DoesNotContain(GoodToken, result.Error + result.Output, StringComparison.Ordinal);
         }
         finally
         {

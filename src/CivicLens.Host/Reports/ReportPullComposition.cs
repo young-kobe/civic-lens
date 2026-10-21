@@ -1,6 +1,7 @@
 using CivicLens.Application;
 using CivicLens.Application.Reports;
 using CivicLens.Host.Collection;
+using CivicLens.Infrastructure;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Reports;
 using CivicLens.Publication.Contracts;
@@ -19,8 +20,13 @@ internal sealed record ReportPullComposition(AnalysisStage Stage, IWorkerWakeup 
         var setting = Environment.GetEnvironmentVariable(EnabledVariable);
         if (string.IsNullOrWhiteSpace(setting)) return null;
         if (setting != "1") throw new ArgumentException($"{EnabledVariable} must be 1 or unset.");
-        var puller = new HttpReportPuller(new HttpClient { Timeout = Timeout.InfiniteTimeSpan }, ReadAddress(), ReadToken());
-        var wakeup = PostgresReportPullWakeup.FromConnectionString(connectionString);
+        var client = new HttpClient
+        {
+            MaxResponseContentBufferSize = HttpReportPuller.MaximumReplyBytes,
+            Timeout = Timeout.InfiniteTimeSpan
+        };
+        var puller = new HttpReportPuller(client, ReadAddress(), ReadToken());
+        var wakeup = PostgresIntervalWakeup.FromConnectionString(connectionString, "civic_lens_report_pull", TimeSpan.FromMinutes(5));
         Action<Exception> report = exception => Console.Error.WriteLine($"reportPull failed: {exception.GetType().Name}: {exception.Message}");
         var worker = new StageWorker(new PullReaderReports(puller, new PostgresReaderReportStore(contexts)).ExecuteAsync, wakeup, report);
         return new(new AnalysisStage("reportPull", worker.ExecuteAsync), wakeup);
@@ -33,7 +39,7 @@ internal sealed record ReportPullComposition(AnalysisStage Stage, IWorkerWakeup 
             : throw new ArgumentException($"Report pull needs {UrlVariable} as an http or https address.");
 
     private static string ReadToken() =>
-        Environment.GetEnvironmentVariable(TokenVariable) is { } token && token.Length >= ReaderReportProtocol.MinimumPullTokenCharacters
+        Environment.GetEnvironmentVariable(TokenVariable) is { } token && ReaderReportProtocol.IsPullToken(token)
             ? token
             : throw new ArgumentException($"Report pull needs {TokenVariable} with at least {ReaderReportProtocol.MinimumPullTokenCharacters} characters.");
 }

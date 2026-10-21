@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Reports;
 using CivicLens.Application.Review;
@@ -12,12 +11,6 @@ namespace CivicLens.Infrastructure.Reports;
 
 public sealed class PostgresReaderReportStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) : IReaderReportStore
 {
-    private const long MaximumTicks = 3155378975999999999;
-
-    // The queue lists the oldest report first. The keyset pages newest first, so it pages on the distance from the last tick.
-    private static readonly Expression<Func<ReaderReportRow, long>> OldestFirst = row => MaximumTicks - row.ReceivedAtUtcTicks;
-    private static readonly Func<ReaderReportRow, long> OldestFirstKey = OldestFirst.Compile();
-
     private const string InsertReports = """
         INSERT INTO reader_reports (report_id, record_id, kind, revision_number, category, body, received_at_utc_ticks, status, version)
         SELECT r.report_id, r.record_id, r.kind, r.revision_number, r.category, r.body, r.received_at_utc_ticks, 'Open', 0
@@ -32,13 +25,13 @@ public sealed class PostgresReaderReportStore(IDbContextFactory<CollectionAttemp
         """;
 
     private const string CurrentRevisions = """
-        SELECT id AS "RecordId", current_revision_number AS "RevisionNumber" FROM (
-            SELECT draft_id AS id, current_revision_number FROM document_change_drafts
-            UNION ALL SELECT candidate_id, current_revision_number FROM statement_drafts
-            UNION ALL SELECT record_id, current_revision_number FROM action_drafts
-            UNION ALL SELECT record_id, current_revision_number FROM vote_drafts
-            UNION ALL SELECT record_id, current_revision_number FROM brief_drafts
-            UNION ALL SELECT record_id, current_revision_number FROM relationship_drafts) drafts
+        SELECT kind AS "Kind", id AS "RecordId", current_revision_number AS "RevisionNumber" FROM (
+            SELECT 'DocumentChange' AS kind, draft_id AS id, current_revision_number FROM document_change_drafts
+            UNION ALL SELECT 'Statement', candidate_id, current_revision_number FROM statement_drafts
+            UNION ALL SELECT 'Action', record_id, current_revision_number FROM action_drafts
+            UNION ALL SELECT 'Vote', record_id, current_revision_number FROM vote_drafts
+            UNION ALL SELECT 'Brief', record_id, current_revision_number FROM brief_drafts
+            UNION ALL SELECT 'Relationship', record_id, current_revision_number FROM relationship_drafts) drafts
         WHERE id = ANY({0}) AND current_revision_number >= 1
         """;
 
@@ -68,15 +61,13 @@ public sealed class PostgresReaderReportStore(IDbContextFactory<CollectionAttemp
     {
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var rows = db.Set<ReaderReportRow>().AsNoTracking();
-        rows = filter == ReaderReportFilter.Open
-            ? rows.Where(row => row.Status == ReaderReportStatus.Open)
-            : rows.Where(row => row.Status != ReaderReportStatus.Open);
-        var fetched = await ReviewKeyset.Page(rows, cursor, OldestFirst, row => row.ReportId.ToString())
+        var open = filter == ReaderReportFilter.Open;
+        var rows = db.Set<ReaderReportRow>().AsNoTracking().Where(row => (row.Status == ReaderReportStatus.Open) == open);
+        var fetched = await ReviewKeyset.Page(rows, cursor, row => row.ReceivedAtUtcTicks, row => row.ReportId.ToString(), ascending: open)
             .Take(limit + 1).ToArrayAsync(cancellationToken);
-        var slice = KeysetSlice<ReaderReportRow>.Create(fetched, limit, cursor, row => (OldestFirstKey(row), row.ReportId.ToString()));
+        var slice = KeysetSlice<ReaderReportRow>.Create(fetched, limit, cursor, row => (row.ReceivedAtUtcTicks, row.ReportId.ToString()));
         var revisions = await ReadCurrentRevisionsAsync(db, slice.Items, cancellationToken);
-        return new([.. slice.Items.Select(row => new ReaderReportListItem(ToReport(row), revisions.GetValueOrDefault(row.RecordId)))],
+        return new([.. slice.Items.Select(row => new ReaderReportListItem(ToReport(row), CurrentOf(revisions, row)))],
             slice.NewerCursor, slice.OlderCursor);
     }
 
@@ -92,7 +83,7 @@ public sealed class PostgresReaderReportStore(IDbContextFactory<CollectionAttemp
         var row = await db.Set<ReaderReportRow>().AsNoTracking().SingleOrDefaultAsync(report => report.ReportId == reportId, cancellationToken);
         if (row is null) return null;
         var revisions = await ReadCurrentRevisionsAsync(db, [row], cancellationToken);
-        return new(ToReport(row), revisions.GetValueOrDefault(row.RecordId));
+        return new(ToReport(row), CurrentOf(revisions, row));
     }
 
     public async Task ResolveAsync(string actorSubject, Guid reportId, int expectedVersion, ReaderReportStatus status, string? note,
@@ -111,7 +102,7 @@ public sealed class PostgresReaderReportStore(IDbContextFactory<CollectionAttemp
         if (resolved == 1) return;
         if (!await db.Set<ReaderReportRow>().AnyAsync(row => row.ReportId == reportId, cancellationToken))
             throw new ArgumentException("The report does not exist.", nameof(reportId));
-        throw new ReviewConflictException("The report is already resolved or changed. Refresh before resolving.");
+        throw new ReviewConflictException("This report is already resolved.");
     }
 
     public async Task<IReadOnlyList<ReaderReport>> ListUnansweredCorrectionsAsync(PublishedRecordKind kind, string recordId,
@@ -126,13 +117,16 @@ public sealed class PostgresReaderReportStore(IDbContextFactory<CollectionAttemp
         return [.. rows.Where(row => published is null || published <= row.RevisionNumber).Select(ToReport)];
     }
 
-    private static async Task<Dictionary<string, int?>> ReadCurrentRevisionsAsync(CollectionAttemptDbContext db,
-        IEnumerable<ReaderReportRow> rows, CancellationToken cancellationToken)
+    private static async Task<Dictionary<(PublishedRecordKind Kind, string RecordId), int>> ReadCurrentRevisionsAsync(
+        CollectionAttemptDbContext db, IEnumerable<ReaderReportRow> rows, CancellationToken cancellationToken)
     {
         var recordIds = rows.Select(row => row.RecordId).Distinct().ToArray();
         var current = await db.Database.SqlQueryRaw<CurrentRevisionRow>(CurrentRevisions, (object)recordIds).ToArrayAsync(cancellationToken);
-        return current.ToDictionary(item => item.RecordId, item => (int?)item.RevisionNumber);
+        return current.ToDictionary(item => (Enum.Parse<PublishedRecordKind>(item.Kind), item.RecordId), item => item.RevisionNumber);
     }
+
+    private static int? CurrentOf(Dictionary<(PublishedRecordKind Kind, string RecordId), int> revisions, ReaderReportRow row) =>
+        revisions.TryGetValue((row.Kind, row.RecordId), out var revision) ? revision : null;
 
     private static ReaderReport ToReport(ReaderReportRow row) =>
         new(row.ReportId, row.RecordId, row.Kind, row.RevisionNumber, row.Category, row.Text, new DateTimeOffset(row.ReceivedAtUtcTicks, TimeSpan.Zero),
@@ -140,6 +134,7 @@ public sealed class PostgresReaderReportStore(IDbContextFactory<CollectionAttemp
 
     private sealed class CurrentRevisionRow
     {
+        public string Kind { get; set; } = "";
         public string RecordId { get; set; } = "";
         public int RevisionNumber { get; set; }
     }

@@ -3,6 +3,7 @@ using CivicLens.Application.Collection;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Publication;
 using CivicLens.Host.Collection;
+using CivicLens.Infrastructure;
 using CivicLens.Infrastructure.Publication;
 
 namespace CivicLens.Host.Publication;
@@ -22,7 +23,7 @@ internal sealed record FactPublishingComposition(AnalysisStage Stage, IWorkerWak
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
         var (publish, loaders) = PublicationComposition.Create(connectionString, publications, new FileReleaseDirectory(releaseRoot),
             collection, PublicationComposition.RequireIssues(issues));
-        var wakeup = PostgresFactPublishingWakeup.FromConnectionString(connectionString);
+        var wakeup = PostgresIntervalWakeup.FromConnectionString(connectionString, "civic_lens_fact_publishing", TimeSpan.FromHours(1));
         Action<Exception> report = exception => Console.Error.WriteLine($"factPublishing failed: {exception.GetType().Name}: {exception.Message}");
         var worker = new StageWorker(new PublishCodeApprovedFacts(publish, publications, loaders, report).ExecuteAsync, wakeup, report);
         return new(new AnalysisStage("factPublishing", worker.ExecuteAsync), wakeup);

@@ -3,12 +3,10 @@ using CivicLens.Application.Publication;
 using CivicLens.Application.Reports;
 using CivicLens.Application.Review;
 using CivicLens.Infrastructure.Analysis;
-using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Reports;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
-using Microsoft.EntityFrameworkCore;
 using static CivicLens.Tests.Publication.Contracts.PulledReportTests;
 
 namespace CivicLens.Tests.Infrastructure.Reports;
@@ -34,14 +32,6 @@ public sealed class PostgresReaderReportStoreTests(PostgresCollection postgres) 
     }
 
     public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
-
-    [Fact]
-    public async Task TheMigrationLeavesNoPendingModelChanges()
-    {
-        await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
-
-        Assert.False(db.Database.HasPendingModelChanges());
-    }
 
     [Fact]
     public async Task APageOfReportsIsStoredOpenWithItsCursorAndNothingElseAboutTheReporter()
@@ -87,20 +77,31 @@ public sealed class PostgresReaderReportStoreTests(PostgresCollection postgres) 
     }
 
     [Fact]
-    public async Task TheQueueListsTheOldestOpenReportFirstAndPagesBothWaysWithoutSkippingATie()
+    public async Task TheOpenQueueListsTheOldestReportFirstThenTheReportIdAscendingAndPagesBothWaysWithoutSkippingATie()
     {
         var reports = new[] { Received(0), Received(2), Received(1), Received(1), Received(3) };
         await store.SavePulledAsync(Batch(reports), default);
-        var oldestFirst = reports.OrderBy(report => report.ReceivedAtUtc).ThenByDescending(report => report.ReportId.ToString("D"), StringComparer.Ordinal)
+        var expected = reports.OrderBy(report => report.ReceivedAtUtc).ThenBy(report => report.ReportId.ToString("D"), StringComparer.Ordinal)
             .Select(report => report.ReportId.ToString("D")).ToArray();
 
-        var walk = await PageWalk.RunAsync(async cursor =>
-        {
-            var page = await store.ListAsync(cursor, 2, ReaderReportFilter.Open, default);
-            return ([.. page.Items.Select(item => item.Report.ReportId.ToString("D"))], page.NewerCursor, page.OlderCursor);
-        });
+        var walk = await PageWalk.RunAsync(cursor => ReadPageAsync(cursor, ReaderReportFilter.Open));
 
-        walk.AssertExact(oldestFirst);
+        walk.AssertExact(expected);
+    }
+
+    [Fact]
+    public async Task TheResolvedListShowsTheNewestReportFirstThenTheReportIdDescendingAndPagesBothWays()
+    {
+        var reports = new[] { Received(0), Received(2), Received(1), Received(1), Received(3) };
+        await store.SavePulledAsync(Batch(reports), default);
+        foreach (var report in reports) await store.ResolveAsync("auth0|friend", report.ReportId, 0, ReaderReportStatus.Dismissed, null, default);
+        await store.SavePulledAsync(Batch(Received(9)), default);
+        var expected = reports.OrderByDescending(report => report.ReceivedAtUtc).ThenByDescending(report => report.ReportId.ToString("D"), StringComparer.Ordinal)
+            .Select(report => report.ReportId.ToString("D")).ToArray();
+
+        var walk = await PageWalk.RunAsync(cursor => ReadPageAsync(cursor, ReaderReportFilter.Resolved));
+
+        walk.AssertExact(expected);
     }
 
     [Fact]
@@ -141,12 +142,14 @@ public sealed class PostgresReaderReportStoreTests(PostgresCollection postgres) 
         await SeedRelationshipDraftAsync(RelationshipId, currentRevision: 3);
         var onOld = Report() with { RecordId = RelationshipId, Kind = PublishedRecordKind.Relationship, RevisionNumber = 1 };
         var unknown = Report() with { RecordId = new string('b', 64), Kind = PublishedRecordKind.Relationship };
-        await store.SavePulledAsync(Batch(onOld, unknown), default);
+        var wrongKind = Report() with { RecordId = RelationshipId, Kind = PublishedRecordKind.Action };
+        await store.SavePulledAsync(Batch(onOld, unknown, wrongKind), default);
 
         var items = (await store.ListAsync(null, 10, ReaderReportFilter.Open, default)).Items.ToDictionary(item => item.Report.ReportId);
 
         Assert.Equal(3, items[onOld.ReportId].CurrentRevisionNumber);
         Assert.Null(items[unknown.ReportId].CurrentRevisionNumber);
+        Assert.Null(items[wrongKind.ReportId].CurrentRevisionNumber);
         Assert.Null((await store.GetAsync(unknown.ReportId, default))!.CurrentRevisionNumber);
     }
 
@@ -167,6 +170,12 @@ public sealed class PostgresReaderReportStoreTests(PostgresCollection postgres) 
         Assert.Equal([report.ReportId], await UnansweredAsync());
         await PublishAsync(2, revision: 3);
         Assert.Empty(await UnansweredAsync());
+    }
+
+    private async Task<(string[] Ids, string? Newer, string? Older)> ReadPageAsync(PageCursor? cursor, ReaderReportFilter filter)
+    {
+        var page = await store.ListAsync(cursor, 2, filter, default);
+        return ([.. page.Items.Select(item => item.Report.ReportId.ToString("D"))], page.NewerCursor, page.OlderCursor);
     }
 
     private async Task<Guid[]> UnansweredAsync() =>

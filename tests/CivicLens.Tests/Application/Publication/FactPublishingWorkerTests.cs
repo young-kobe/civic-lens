@@ -1,6 +1,7 @@
 using CivicLens.Application;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
+using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Publication;
 
@@ -32,18 +33,6 @@ public sealed class FactPublishingWorkerTests
         Assert.Empty(reported);
     }
 
-    [Fact]
-    public async Task ARunThatIsNotOnceSleepsUntilTheWakeupAndThenTicksAgain()
-    {
-        var scenario = ScenarioWithOneReadyAction();
-        using var stop = new CancellationTokenSource();
-        var wakeup = new CountingWakeup(() => { if (scenario.Publications.Committed.Count > 0) stop.Cancel(); });
-
-        var result = await new StageWorker(Facts(scenario).ExecuteAsync, wakeup, _ => { }).ExecuteAsync(once: false, stop.Token);
-
-        Assert.Equal((1, 1, 1), (result.Passes, result.ProgressCount, wakeup.WaitCount));
-    }
-
     private static PublicationScenario ScenarioWithOneReadyAction()
     {
         var scenario = new PublicationScenario();
@@ -58,17 +47,4 @@ public sealed class FactPublishingWorkerTests
 
     private static StageWorker Worker(PublicationScenario scenario, Action<Exception> report) =>
         new(Facts(scenario).ExecuteAsync, new CountingWakeup(() => { }), report);
-
-    private sealed class CountingWakeup(Action onWait) : IWorkerWakeup
-    {
-        public int WaitCount { get; private set; }
-        public Task ConnectAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task WaitAsync(CancellationToken cancellationToken)
-        {
-            WaitCount++;
-            onWait();
-            return Task.CompletedTask;
-        }
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-    }
 }

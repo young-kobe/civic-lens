@@ -64,7 +64,7 @@ public sealed record PublicApiOptions
 
     public static string? ParsePullToken(string? token) => string.IsNullOrEmpty(token)
         ? null
-        : token.Length >= ReaderReportProtocol.MinimumPullTokenCharacters
+        : ReaderReportProtocol.IsPullToken(token)
             ? token
             : throw new ArgumentException($"{ReportPullTokenVariable} must hold at least {ReaderReportProtocol.MinimumPullTokenCharacters} characters.");
 
