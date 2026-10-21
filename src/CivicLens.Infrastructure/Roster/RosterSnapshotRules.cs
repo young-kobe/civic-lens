@@ -36,7 +36,7 @@ internal static class RosterSnapshotRules
             .Select(candidate => candidate.AttemptId).FirstAsync(cancellationToken);
     }
 
-    private static IQueryable<AttemptRow> SnapshotAttempts(CollectionAttemptDbContext db, string sourceId) =>
+    public static IQueryable<AttemptRow> SnapshotAttempts(CollectionAttemptDbContext db, string sourceId) =>
         from attempt in db.Attempts.AsNoTracking()
         where attempt.SourceId == sourceId
         join snapshot in db.Set<RosterSnapshotRow>().AsNoTracking() on attempt.AttemptId equals snapshot.AttemptId

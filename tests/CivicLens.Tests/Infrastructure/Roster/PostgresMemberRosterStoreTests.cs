@@ -158,6 +158,53 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
     }
 
     [Fact]
+    public async Task SenatorLisIdsListOnlySenatorsFromEverySnapshotSoASenatorWhoLeftStillMatchesHisOldVotes()
+    {
+        var first = await ImportAsync('a', 0);
+        var later = await ImportAsync('b', 1);
+        await roster.AdmitAsync(first, RosterFixtures.Members(), default);
+        await roster.AdmitAsync(later, [.. RosterFixtures.Members().Skip(1)], default);
+
+        var senators = await roster.ReadSenatorLisIdsAsync(RosterFixtures.SourceId, default);
+
+        Assert.Equal([new SenatorLisId("C000127", "S275")], senators);
+        Assert.DoesNotContain(await roster.ReadLatestAsync(RosterFixtures.SourceId, default), member => member.BioguideId == "C000127");
+    }
+
+    [Fact]
+    public async Task ASenatorWithTwoLisIdsInTwoSnapshotsListsBothSoTheCallerCanRefuseTheConflict()
+    {
+        var first = await ImportAsync('a', 0);
+        var later = await ImportAsync('b', 1);
+        var members = RosterFixtures.Members();
+        await roster.AdmitAsync(first, members, default);
+        await roster.AdmitAsync(later, [members[0] with { LisId = "S999" }], default);
+
+        var senators = await roster.ReadSenatorLisIdsAsync(RosterFixtures.SourceId, default);
+
+        Assert.Equal([new SenatorLisId("C000127", "S275"), new SenatorLisId("C000127", "S999")], senators);
+    }
+
+    [Fact]
+    public async Task ASenatorWithoutALisIdListsWithANullIdSoTheCallerCanBlockInsteadOfSkippingHim()
+    {
+        var attemptId = await ImportAsync('a', 0);
+        var members = RosterFixtures.Members();
+        await roster.AdmitAsync(attemptId, [members[0] with { LisId = null }], default);
+
+        Assert.Equal([new SenatorLisId("C000127", null)], await roster.ReadSenatorLisIdsAsync(RosterFixtures.SourceId, default));
+    }
+
+    [Fact]
+    public async Task SenatorLisIdsOfOneSourceExcludeTheSnapshotsOfAnotherSource()
+    {
+        var attemptId = await ImportAsync('a', 0);
+        await roster.AdmitAsync(attemptId, RosterFixtures.Members(), default);
+
+        Assert.Empty(await roster.ReadSenatorLisIdsAsync("other-members", default));
+    }
+
+    [Fact]
     public async Task NoSnapshotReadsAsEmpty()
     {
         Assert.Empty(await roster.ReadLatestAsync(RosterFixtures.SourceId, default));
