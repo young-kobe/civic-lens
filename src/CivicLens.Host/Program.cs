@@ -334,8 +334,7 @@ try
                 ?? throw new ArgumentException("Publishing requires CIVIC_LENS_COLLECTION_CONFIG.")
             : new CollectionConfiguration { People = [], Sources = [] };
         var issueConfiguration = args is ["releases", "publish", ..]
-            ? ConfigurationFile.ReadIssuesFromEnvironment()
-                ?? throw new ArgumentException("Publishing requires CIVIC_LENS_ISSUES_CONFIG.")
+            ? PublicationComposition.RequireIssues(ConfigurationFile.ReadIssuesFromEnvironment())
             : IssueConfiguration.None;
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
         var releases = new FileReleaseDirectory(releaseRoot);

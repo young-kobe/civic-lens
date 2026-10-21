@@ -113,12 +113,19 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
         return new(needsAction, approved);
     }
 
-    public async Task<IReadOnlyList<UnpublishedApprovedVote>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<UnpublishedApprovedVote>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken) =>
+        ListUnpublishedAsync(VoteReviewQueries.UnpublishedApproved, limit, cancellationToken);
+
+    public Task<IReadOnlyList<UnpublishedApprovedVote>> ListCodeApprovedUnpublishedAsync(int limit, CancellationToken cancellationToken) =>
+        ListUnpublishedAsync(VoteReviewQueries.CodeApprovedUnpublished, limit, cancellationToken);
+
+    private async Task<IReadOnlyList<UnpublishedApprovedVote>> ListUnpublishedAsync(string sql, int limit,
+        CancellationToken cancellationToken)
     {
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var records = await Records.ReadUnpublishedApprovedAsync(db, VoteReviewQueries.UnpublishedApproved, limit, cancellationToken);
+        var records = await Records.ReadUnpublishedApprovedAsync(db, sql, limit, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return [.. records.Select(record => new UnpublishedApprovedVote(ToReview(record.Draft, record.History), record.PublishedRevisionNumber))];
     }

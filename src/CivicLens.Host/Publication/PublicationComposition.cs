@@ -17,6 +17,9 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublicationComposition
 {
+    public static IssueConfiguration RequireIssues(IssueConfiguration? issues) =>
+        issues ?? throw new ArgumentException("Publishing requires CIVIC_LENS_ISSUES_CONFIG.");
+
     public static (PublishRelease Publish, PublishedRecordLoaders Loaders) Create(string connectionString,
         PostgresPublicationStore publications, FileReleaseDirectory releases, CollectionConfiguration collection, IssueConfiguration issues)
     {

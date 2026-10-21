@@ -25,6 +25,8 @@ public interface IVoteReviewStore
 
     Task<IReadOnlyList<UnpublishedApprovedVote>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<UnpublishedApprovedVote>> ListCodeApprovedUnpublishedAsync(int limit, CancellationToken cancellationToken);
+
     Task<IReadOnlyDictionary<string, PublishableVote>> GetForPublicationAsync(ImmutableArray<string> recordIds,
         CancellationToken cancellationToken);
 

@@ -51,6 +51,19 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task TheCodeApprovedListFiltersInSqlSoAPersonApprovalNeverFillsItsLimit()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+        Assert.Equal(RecordId, Assert.Single(await ActionReviews().ListCodeApprovedUnpublishedAsync(1, default)).Action.RecordId);
+
+        await ReopenAsync();
+        await DecideAsync(1, 0, ReviewDecisionKind.Approve);
+
+        Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(1, default));
+        Assert.Empty(await ActionReviews().ListCodeApprovedUnpublishedAsync(1, default));
+    }
+
+    [Fact]
     public async Task PublicationReadReturnsTheApprovedActionWithEachCitedExtractionAndOmitsUnknownIds()
     {
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);

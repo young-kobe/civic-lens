@@ -251,7 +251,7 @@ internal static class ReviewWorkspace
                 PostgresCollectionJobStore.FromConnectionString(connectionString),
                 PostgresCollectionAttemptStore.FromConnectionString(connectionString),
                 CivicLens.Infrastructure.Collection.Processing.PostgresEvidenceProcessingStore.FromConnectionString(connectionString)));
-            if (configuredIssues is not null) ConfigurePublication(services, connectionString, collection, officials, configuredIssues);
+            if (configuredIssues is not null) ConfigurePublication(services, connectionString, collection, configuredIssues);
         }
     }
 
@@ -319,21 +319,16 @@ internal static class ReviewWorkspace
 
     // The owner publish section needs a release directory and the configured official, issue, and policy area names.
     private static void ConfigurePublication(IServiceCollection services, string connectionString, CollectionConfiguration collection,
-        ReviewOfficials officials, IssueConfiguration issues)
+        IssueConfiguration issues)
     {
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
         if (releaseRoot is null) return;
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
         var releases = new FileReleaseDirectory(releaseRoot);
         services.AddScoped(_ => new ListPublicationReleases(publications, releases));
-        services.AddSingleton(provider => new PublishedRecordLoaders(provider.GetRequiredService<IDocumentChangeReviewStore>(),
-            provider.GetRequiredService<IStatementReviewStore>(), provider.GetRequiredService<IActionReviewStore>(),
-            provider.GetRequiredService<IVoteReviewStore>(), provider.GetRequiredService<IRelationshipReviewStore>(),
-            provider.GetRequiredService<IBriefReviewStore>()));
-        services.AddScoped(provider => new PublishRelease(publications, releases, ReleaseRenderer.FromEnvironment(),
-            provider.GetRequiredService<PublishedRecordLoaders>(), new PublicationCatalog(officials.Names, issues),
-            new PublicationOfficials(collection, PostgresMemberRosterStore.FromConnectionString(connectionString),
-                PostgresExecutiveRosterStore.FromConnectionString(connectionString)), TimeProvider.System));
+        var (publish, loaders) = PublicationComposition.Create(connectionString, publications, releases, collection, issues);
+        services.AddSingleton(loaders);
+        services.AddSingleton(publish);
         services.AddScoped<ListPublishable>();
     }
 

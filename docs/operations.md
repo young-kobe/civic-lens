@@ -665,9 +665,9 @@ The `worker` command can publish code-approved actions and votes. [Publication](
 |---|---|
 | `CIVIC_LENS_FACT_PUBLISHING` | Set to `1` to run the stage. Unset means off |
 | `CIVIC_LENS_RELEASE_DIRECTORY` | The release root, shared with the review workspace and the `releases` commands. Required when the stage runs |
-| `CIVIC_LENS_ISSUES_CONFIG` | The issue file. Required when the stage runs |
+| `CIVIC_LENS_ISSUES_CONFIG` | The issue file. Required when the stage runs, as for `releases publish` |
 
-The worker also needs `CIVIC_LENS_COLLECTION_CONFIG`, as always. The stage ticks when the worker starts and then at each full hour by the database clock. A tick publishes batches of up to 64 records until no code-approved record is ready. A failure prints `factPublishing failed: <error type>` on stderr and counts in the stage result. Each release is about 29 MB in development. Releases stay until [R-24](roadmap.md#later) adds retention.
+The worker also needs `CIVIC_LENS_COLLECTION_CONFIG`, as always. The stage ticks when the worker starts and then at each full hour by the database clock. A tick publishes batches of up to 64 records until no code-approved record is ready. A failure prints `factPublishing failed: <error type>: <message>` on stderr. A failure of the tick counts in the stage result. A record that cannot build is reported and left out, and it does not count. The stage waits after a rollback with `releases activate`. It resumes when you activate the latest release or publish with the CLI. Each release is about 29 MB in development. Releases stay until [R-24](roadmap.md#later) adds retention.
 
 ## Publish a static release
 

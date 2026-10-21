@@ -53,7 +53,8 @@ public sealed class FactPublishingWorkerTests
         return scenario;
     }
 
-    private static PublishCodeApprovedFacts Facts(PublicationScenario scenario) => new(scenario.Publisher(), scenario.Loaders());
+    private static PublishCodeApprovedFacts Facts(PublicationScenario scenario) =>
+        new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), _ => { });
 
     private static FactPublishingWorker Worker(PublicationScenario scenario, Action<Exception> report) =>
         new(Facts(scenario), new CountingWakeup(() => { }), report);

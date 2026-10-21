@@ -14,17 +14,17 @@ internal sealed record FactPublishingComposition(AnalysisStage Stage, IWorkerWak
     public static FactPublishingComposition? Create(string connectionString, CollectionConfiguration collection, IssueConfiguration? issues)
     {
         var setting = Environment.GetEnvironmentVariable(EnabledVariable);
-        if (string.IsNullOrEmpty(setting)) return null;
+        if (string.IsNullOrWhiteSpace(setting)) return null;
         if (setting != "1") throw new ArgumentException($"{EnabledVariable} must be 1 or unset.");
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
         if (string.IsNullOrWhiteSpace(releaseRoot))
             throw new ArgumentException("Fact publishing needs CIVIC_LENS_RELEASE_DIRECTORY.");
-        if (issues is null) throw new ArgumentException("Fact publishing needs CIVIC_LENS_ISSUES_CONFIG.");
-        var (publish, loaders) = PublicationComposition.Create(connectionString,
-            PostgresPublicationStore.FromConnectionString(connectionString), new FileReleaseDirectory(releaseRoot), collection, issues);
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString);
+        var (publish, loaders) = PublicationComposition.Create(connectionString, publications, new FileReleaseDirectory(releaseRoot),
+            collection, PublicationComposition.RequireIssues(issues));
         var wakeup = PostgresFactPublishingWakeup.FromConnectionString(connectionString);
-        var worker = new FactPublishingWorker(new PublishCodeApprovedFacts(publish, loaders), wakeup,
-            exception => Console.Error.WriteLine($"factPublishing failed: {WorkerLoop.ErrorCode(exception)}"));
+        Action<Exception> report = exception => Console.Error.WriteLine($"factPublishing failed: {exception.GetType().Name}: {exception.Message}");
+        var worker = new FactPublishingWorker(new PublishCodeApprovedFacts(publish, publications, loaders, report), wakeup, report);
         return new(new AnalysisStage("factPublishing", worker.ExecuteAsync), wakeup);
     }
 }

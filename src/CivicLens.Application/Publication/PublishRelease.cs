@@ -81,7 +81,7 @@ public sealed class PublishRelease
             ?? throw new InvalidDataException("A release was committed but none is active.");
     }
 
-    // Judgment records need a person, so the code subject may publish only the records that code approves.
+    // Judgment records need a person, so the code subject may publish only actions and votes.
     private static bool IsOnlyFactRecords(PublishReleaseRequest request) =>
         request is { Records.IsDefaultOrEmpty: false } &&
         request.Records.All(record => record.Kind is PublishedRecordKind.Action or PublishedRecordKind.Vote);

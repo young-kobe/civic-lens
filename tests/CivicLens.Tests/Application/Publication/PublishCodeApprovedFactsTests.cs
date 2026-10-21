@@ -96,13 +96,38 @@ public sealed class PublishCodeApprovedFactsTests
     }
 
     [Fact]
-    public async Task ARecordThatACodeApprovalReplacedWithAPersonApprovalWaitsForThePerson()
+    public async Task AfterARollbackATickMakesNoReleaseSoTheOwnerChoiceStands()
     {
         var scenario = new PublicationScenario();
-        var action = scenario.AddAction('a', [ApprovedByCode('a')[0], PublicationScenario.Decision(new string('a', 64), 2, ReviewDecisionKind.Approve)]);
-        AddUnpublished(scenario, action);
+        scenario.Publications.Committed.Add(new(1, "000001", DateTimeOffset.UnixEpoch, 0));
+        scenario.Publications.Committed.Add(new(2, "000002", DateTimeOffset.UnixEpoch, 0));
+        scenario.Publications.ActiveReleaseNumber = 1;
+        AddReadyActions(scenario, 1);
 
         Assert.Equal(0, await Facts(scenario).ExecuteAsync(default));
+
+        Assert.Equal(2, scenario.Publications.Committed.Count);
+    }
+
+    [Fact]
+    public async Task ARecordThatCannotBuildIsLeftOutAndReportedWhileTheOthersPublishInOneRelease()
+    {
+        var scenario = new PublicationScenario();
+        var good = scenario.AddAction('a', ApprovedByCode('a'));
+        var bad = scenario.AddAction('b', ApprovedByCode('b'), sponsorId: "nobody");
+        var other = scenario.AddAction('c', ApprovedByCode('c'));
+        AddUnpublished(scenario, good, bad, other);
+        ListedUntilPublished(scenario);
+        var reported = new List<Exception>();
+
+        var published = await Facts(scenario, reported).ExecuteAsync(default);
+
+        Assert.Equal(2, published);
+        Assert.Equal([good, other], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId));
+        Assert.Single(scenario.Publications.Committed);
+        var failure = Assert.Single(reported);
+        Assert.Contains($"action:{bad}", failure.Message);
+        Assert.Contains("no configured public name", failure.Message);
     }
 
     [Fact]
@@ -125,9 +150,10 @@ public sealed class PublishCodeApprovedFactsTests
         AddReadyActions(scenario, 2);
         var facts = Facts(scenario);
 
-        await facts.ExecuteAsync(default);
-        await facts.ExecuteAsync(default);
+        var first = await facts.ExecuteAsync(default);
+        var retry = await facts.ExecuteAsync(default);
 
+        Assert.Equal((2, 0), (first, retry));
         Assert.Single(scenario.Publications.Committed);
     }
 
@@ -141,7 +167,8 @@ public sealed class PublishCodeApprovedFactsTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => Facts(scenario).ExecuteAsync(default));
     }
 
-    private static PublishCodeApprovedFacts Facts(PublicationScenario scenario) => new(scenario.Publisher(), scenario.Loaders());
+    private static PublishCodeApprovedFacts Facts(PublicationScenario scenario, List<Exception>? reported = null) =>
+        new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), (reported ?? []).Add);
 
     private static ImmutableArray<ReviewDecision> ApprovedByCode(char id) =>
         [PublicationScenario.Decision(new string(id, 64), 1, ReviewDecisionKind.Approve) with { ActorSubject = ReviewAuthor.CodeSubject }];

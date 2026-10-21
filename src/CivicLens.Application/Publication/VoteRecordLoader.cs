@@ -14,9 +14,12 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
     protected override Task<IReadOnlyList<UnpublishedApprovedVote>> ListCandidatesAsync(int limit,
         CancellationToken cancellationToken) => votes.ListUnpublishedApprovedAsync(limit, cancellationToken);
 
+    public async Task<IReadOnlyList<ReadyToPublishRecord>> ListCodeApprovedReadyAsync(int limit, CancellationToken cancellationToken) =>
+        ReadyOf(await votes.ListCodeApprovedUnpublishedAsync(limit, cancellationToken));
+
     protected override ReadyToPublishRecord? ToReady(UnpublishedApprovedVote candidate) =>
         Ready(candidate.Vote.CurrentStatus, candidate.Vote.UnresolvedConcerns.Length, candidate.Vote.RecordId,
-            candidate.Vote.CurrentRevision.Headline, candidate.Vote.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber, candidate.Vote.Decisions);
+            candidate.Vote.CurrentRevision.Headline, candidate.Vote.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber);
 
     protected override Task<IReadOnlyDictionary<string, PublishableVote>> GetForPublicationAsync(
         ImmutableArray<string> recordIds, PublicationBuild build, CancellationToken cancellationToken) =>

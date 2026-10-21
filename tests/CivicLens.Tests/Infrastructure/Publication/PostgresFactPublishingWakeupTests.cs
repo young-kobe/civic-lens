@@ -1,5 +1,6 @@
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Tests.Infrastructure.Collection;
+using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.Publication;
 
@@ -14,12 +15,17 @@ public sealed class PostgresFactPublishingWakeupTests(PostgresCollection postgre
     public async Task DisposeAsync() => await postgres.DropDatabaseAsync(connectionString);
 
     [Fact]
-    public async Task TheWakeupSleepsUntilTheNextHourBecauseNothingNotifiesIt()
+    public async Task TheDeadlineIsTheNextFullHourOfTheDatabaseClockNotOfTheApplicationClock()
     {
-        await using var wakeup = PostgresFactPublishingWakeup.FromConnectionString(connectionString);
-        await wakeup.ConnectAsync(default);
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1.5));
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand($"""
+            SELECT {PostgresFactPublishingWakeup.NextHourTicks},
+                   (EXTRACT(EPOCH FROM date_trunc('hour', now()) + interval '1 hour')::numeric * 10000000 + 621355968000000000)::bigint
+            """, connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        await reader.ReadAsync();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => wakeup.WaitAsync(timeout.Token));
+        Assert.Equal(reader.GetInt64(1), reader.GetInt64(0));
     }
 }

@@ -12,4 +12,6 @@ internal static class VoteReviewQueries
         LEFT JOIN active a ON a.kind = 'vote' AND a.record_id = d.record_id
         WHERE d.review_status = 'Approved'
         """;
+
+    public static readonly string CodeApprovedUnpublished = ReviewQueries.CodeApprovedOnly(UnpublishedApproved, "vote_review_decisions");
 }
