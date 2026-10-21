@@ -61,6 +61,12 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A bill without a Congress means the current Congress, and a roll call means the current Congress and session. Enforced by `LookupDraft` and `CongressCalendar`. Tests: `LookupDraftTests.ABillWithoutACongressMeansTheCurrentCongressAndEveryCitationSpellingFindsTheSameActionDraft`, `LookupDraftTests.ARollCallMeansTheCurrentCongressAndSessionBecauseRollNumbersRestartEachSession`, and `CongressCalendarTests.ASessionIsTheFirstOrSecondYearOfTheCongressAndTheTermYearRuleMatchesCongressOn`.
 - A lookup opens the draft of exactly the named bill or roll call, and a name with no draft opens nothing. Enforced by `FindRecordIdByBillAsync` and `FindRecordIdByRollAsync`. Tests: `BillLinksWorkspaceTests.TheLookupBoxOpensTheActionDraftOfABillAndTheVoteDraftOfARollCall` and `PostgresActionLookupTests.ABillFindsOnlyTheActionDraftOfItsCongressTypeAndNumber` and `PostgresRollLookupTests.ARollCallFindsOnlyTheVoteDraftOfItsCongressSessionAndNumber`.
 - Each append replaces the listed columns of the draft row with those of the current revision. Enforced by the `revised` delegates `ActionDraftRows.Revised` and `VoteDraftRows.Revised`. Statements call `StatementDraftRows.SetListing` from three places: create, save, and the AI draft. Tests: `PostgresBillStreamTests.EachWorkerRevisionReplacesTheListedColumnsWithThoseOfTheCurrentRevision`, `PostgresHouseVoteTests.EachWorkerRevisionReplacesTheListedColumnsWithThoseOfTheCurrentRevision`, and `PostgresStatementReviewStoreTests.EachWritePathSetsTheListedColumnsFromTheRevisionAndTheEventDateFallsBackToTheCaptureDate`.
+- A reader report resolves once. Enforced by the conditional update in `PostgresReaderReportStore.ResolveAsync`, which needs the status Open and the expected version. Tests: `PostgresReaderReportStoreTests.AReportThatIsResolvedOrChangedCannotBeResolvedAgainAndAMissingOneIsNotFound` and `ReaderReportWorkspaceTests.ACorrectionNeedsANoteAndAResolvedReportCannotBeResolvedAgain`.
+- A report that needs a correction has a note. Enforced by `ResolveReaderReport` and the check constraint `ck_reader_reports_resolution`. Test: `ResolveReaderReportTests.ACorrectionNeedsANoteSoTheRecordPageCanTellTheEditorWhatToFix`.
+- Only a reviewer or the owner resolves a report. The code subject cannot. Enforced by `ReviewAuthorization` in each report handler. Test: `ResolveReaderReportTests.OnlyAReviewerOrTheOwnerResolvesAndTheCodeSubjectCannotSoNoMachineClosesAReaderReport`.
+- The Open list shows the oldest report first, then the report ID ascending. The Resolved list shows the newest first, then the report ID descending. Neither skips or repeats a row at a page edge. Enforced by `ReviewKeyset.Page` in `PostgresReaderReportStore.ListAsync`. Tests: `PostgresReaderReportStoreTests.TheOpenQueueListsTheOldestReportFirstThenTheReportIdAscendingAndPagesBothWaysWithoutSkippingATie` and `PostgresReaderReportStoreTests.TheResolvedListShowsTheNewestReportFirstThenTheReportIdDescendingAndPagesBothWays`.
+- A record page shows the banner of a correction until the active release holds a newer revision than the revision of the report. A dismissed or open report shows no banner. Enforced by `PostgresReaderReportStore.ListUnansweredCorrectionsAsync`. Tests: `PostgresReaderReportStoreTests.ACorrectionStaysUnansweredUntilThePublishedRevisionPassesTheRevisionOfTheReport` and `ReaderReportWorkspaceTests.TheRecordPageShowsTheCorrectionBannerUntilANewerRevisionIsPublishedAndAnOpenOrDismissedReportShowsNone`.
+- Reader text shows as plain text. Enforced by Razor encoding in `ReportList`, `ReportDetail`, and `ReaderReportBanner`. Test: `ReaderReportWorkspaceTests.TheQueueShowsReaderTextAsPlainTextTheReplacedRevisionAndNoEditorLinkForARecordThatIsNotInReview`.
 
 ## Behavior
 
@@ -212,6 +218,16 @@ The New changes list is the one read that does not verify full evidence. One que
 
 Saving a comparison, the single review read, starting a draft, approval, and publication all verify the full evidence. A read verifies each comparison and its two extractions once and reuses them for every revision.
 
+### Reader reports
+
+The queue at `/Review/Reports` holds the reports that readers sent about published records. The worker pulls them from the search service; see [search](search.md#operational-pull). A report stores the record ID and kind, the revision, the category, the reader text, and the received time. It stores nothing about the reporter.
+
+A reviewer or the owner opens a report and resolves it as Dismissed or CorrectionNeeded. A correction needs a note. A dismissal may have one. A resolved report cannot be resolved again. The resolve command checks the expected version, as a review decision does, and a second command gets a conflict. The queue keeps every report, resolved or not, and never purges one.
+
+The list has two tabs, Open and Resolved. The Open tab lists the oldest report first, then the report ID ascending. The Resolved tab lists the newest report first by received time, then the report ID descending. Both use `ReviewKeyset.Page`, which has an ascending option for the Open tab. The pager links read Previous and Next. A row shows the category, the start of the text, the kind, and the revision. A report on a replaced revision shows "Revision N, current is M". M comes from one query for the page over the six draft tables. The query matches the kind and the record ID. A report on a record that review storage does not hold shows "Not in review" and no editor link. The Review home page counts the open reports.
+
+A record page shows a banner for each report that was resolved as CorrectionNeeded. The banner shows the category, the reader text, the note of the reviewer, and a link to the report. The report page links to the editor. The banner shows while the active release holds no newer revision of the record than the revision of the report. A fix that is saved but not published keeps the banner. The review state of the record does not change.
+
 ### Authentication
 
 The Host uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.12 for the Auth0 authorization-code flow with PKCE. The CLI acts as the configured owner subject. The authenticated `review` command binds to loopback and expects an HTTPS reverse proxy; see [host](host.md).
@@ -219,6 +235,7 @@ The Host uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.12 for th
 ## Storage and contracts
 
 - The generated [review schema](schema/review.md) lists every table, column, key, check, index, and trigger.
+- The tables `reader_reports` and `reader_report_cursor` belong to the report queue; see the generated [reports schema](schema/reports.md). A report row holds these values: the report ID, the record ID, the kind, the revision, the category, and the text. It also holds the received time, the status, the note, the resolver, the resolved time, and a version. The version starts at 0 and rises by 1 when the report is resolved. The cursor table holds one row with the opaque cursor of the search service.
 - Core/Review owns decision semantics. Application/Review owns authenticated commands and configured selection validation. Infrastructure/Review implements the store boundary with Postgres.
 - `ReviewPolicy` holds the status rule, the open-concern rule, and the decision checks. It works on a record ID, the current revision number, the review state version, and the decisions. It knows no record type.
 - Review writes take the review keys from `PostgresAdvisoryLock`. The keys and their order are in [advisory locks](../architecture.md#advisory-locks).
@@ -256,6 +273,7 @@ The Host uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.12 for th
 | Draft lookup | `src/CivicLens.Application/Review/LookupDraft.cs`, `src/CivicLens.Application/Review/DraftLookupHit.cs`, `src/CivicLens.Application/Review/DraftLookupFormatException.cs`, `src/CivicLens.Host/Review/ReviewHome.razor` |
 | Brief review | `src/CivicLens.Host/Review/BriefList.razor`, `src/CivicLens.Host/Review/BriefEditor.razor`, `src/CivicLens.Infrastructure/Briefs/PostgresBriefReviewStore.cs`; see [briefs](briefs.md#code-map) |
 | Relationship review | `src/CivicLens.Host/Review/RelationshipList.razor`, `src/CivicLens.Host/Review/RelationshipEditor.razor`, `src/CivicLens.Infrastructure/Relationships/PostgresRelationshipReviewStore.cs`; see [statements](statements.md#relationship-review) |
+| Reader report queue | `src/CivicLens.Application/Reports/`, `src/CivicLens.Infrastructure/Reports/PostgresReaderReportStore.cs`, `src/CivicLens.Infrastructure/Reports/Persistence/`, `src/CivicLens.Host/Review/ReportList.razor`, `src/CivicLens.Host/Review/ReportDetail.razor`, `src/CivicLens.Host/Review/ReaderReportBanner.razor`, `src/CivicLens.Host/Review/ReportRoutes.cs`, `src/CivicLens.Host/Review/ReportLabels.cs`; the pull is in [search](search.md#operational-pull) |
 | Workspace settings | `src/CivicLens.Host/Review/ReviewWorkspace.cs`, `src/CivicLens.Host/Review/ReviewWorkspaceSettings.cs` |
 
 ## Limits and planned work

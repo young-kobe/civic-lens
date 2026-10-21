@@ -13,14 +13,18 @@ internal static class ReviewKeyset
     private static DateOnly DateOfTicks(long ticks) => DateOnly.FromDateTime(new DateTime(ticks));
 
     public static IQueryable<T> Page<T>(IQueryable<T> rows, PageCursor? cursor, Expression<Func<T, long>> ticksOf,
-        Expression<Func<T, string>> idOf)
+        Expression<Func<T, string>> idOf, bool ascending = false)
     {
         PageCursor.RequireRank(cursor, ranked: false);
-        if (cursor is null) return rows.OrderByDescending(ticksOf).ThenByDescending(idOf);
+        if (cursor is null) return Ordered(rows, ticksOf, idOf, ascending);
         var older = cursor.Direction == PageDirection.Older;
-        var window = rows.Where(Beyond<T>(older, Key(ticksOf, cursor.Ticks, true), Key(idOf, cursor.Id, true)));
-        return older ? window.OrderByDescending(ticksOf).ThenByDescending(idOf) : window.OrderBy(ticksOf).ThenBy(idOf);
+        var window = rows.Where(Beyond<T>(older, Key(ticksOf, cursor.Ticks, !ascending), Key(idOf, cursor.Id, !ascending)));
+        return Ordered(window, ticksOf, idOf, ascending == older);
     }
+
+    private static IQueryable<T> Ordered<T>(IQueryable<T> rows, Expression<Func<T, long>> ticksOf, Expression<Func<T, string>> idOf,
+        bool ascending) =>
+        ascending ? rows.OrderBy(ticksOf).ThenBy(idOf) : rows.OrderByDescending(ticksOf).ThenByDescending(idOf);
 
     public static IQueryable<T> Page<T>(IQueryable<T> rows, PageCursor? cursor, Expression<Func<T, int>> rankOf,
         Expression<Func<T, DateOnly>> dateOf, Expression<Func<T, string>> idOf)

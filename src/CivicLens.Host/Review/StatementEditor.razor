@@ -45,6 +45,7 @@ else
         {
             <Notice Tone="@(isConflict ? Tone.Warn : Tone.Ok)" Dismissible="@(!isConflict)">@statusMessage</Notice>
         }
+        <ReaderReportBanner Actor="actor" Kind="PublishedRecordKind.Statement" RecordId="@CandidateId" />
         @if (IsAiRevision)
         {
             <Notice Tone="Tone.Warn">The AI drafter wrote this revision@(detail.AnalysisRunId is null ? "" : $" in analysis run {detail.AnalysisRunId}"). It is not a human decision. Check every sentence, date, speaker, and quotation against the article before you approve it.</Notice>

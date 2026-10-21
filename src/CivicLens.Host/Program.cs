@@ -35,6 +35,7 @@ using CivicLens.Infrastructure.Actions;
 using CivicLens.Host.Collection;
 using CivicLens.Host.Documents;
 using CivicLens.Host.Publication;
+using CivicLens.Host.Reports;
 using CivicLens.Host.Review;
 using CivicLens.Host.Statements;
 using CivicLens.Application.Statements;
@@ -208,6 +209,8 @@ try
         await using var briefDraftingWakeup = briefDrafting.Wakeup;
         var factPublishing = FactPublishingComposition.Create(connectionString, workerConfiguration, issueConfiguration);
         await using var factPublishingWakeup = factPublishing?.Wakeup;
+        var reportPull = ReportPullComposition.Create(analysisContexts, connectionString);
+        await using var reportPullWakeup = reportPull?.Wakeup;
         executing = true;
         await jobs.SynchronizeAsync(workerConfiguration, cancellation.Token);
         await analysis.RecordStartAsync(cancellation.Token);
@@ -240,7 +243,8 @@ try
                 AnalysisStage.For("voteDrafting", voteDrafting.Worker),
                 AnalysisStage.For("relationshipDrafting", relationshipDrafting.Worker),
                 AnalysisStage.For("briefDrafting", briefDrafting.Worker),
-                factPublishing?.Stage
+                factPublishing?.Stage,
+                reportPull?.Stage
             }.OfType<AnalysisStage>()]);
     }
 

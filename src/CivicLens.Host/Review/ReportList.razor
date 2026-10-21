@@ -1,0 +1,55 @@
+@page "/Review/Reports"
+@using CivicLens.Application.Reports
+
+<TopBarTitle Crumbs="Crumbs" />
+
+<div class="content">
+    <PageHeader Title="Reader reports" Lede="Problems that readers report on published records. The oldest report shows first. A report text comes from the public and shows as plain text." />
+    @if (error is not null)
+    {
+        <Notice Tone="Tone.Bad">@error</Notice>
+    }
+
+    @if (reports is not null)
+    {
+        <Panel Title="Reader reports" Id="reports">
+            <Aside><FilterTabs Label="Filter reader reports" Tabs="ReportTabs" /></Aside>
+            <ChildContent>
+                <DataTable Items="reports.Items" Caption="Reader reports">
+                    <Head>
+                        <th>Report</th>
+                        <th>Record</th>
+                        <th>Received</th>
+                        <th>Status</th>
+                        <th class="act"><span class="visually-hidden">Open</span></th>
+                    </Head>
+                    <Row Context="item">
+                        <td>
+                            <a class="cell-title" href="@ReportRoutes.Detail(item.Report.ReportId)">@ReportLabels.Category(item.Report.Category)</a>
+                            <span class="cell-sub">@ReportLabels.Excerpt(item.Report.Text)</span>
+                        </td>
+                        <td>
+                            @if (ReportLabels.EditorOf(item) is { } editor)
+                            {
+                                <a href="@editor">@ReportLabels.Kind(item.Report.Kind)</a>
+                            }
+                            else
+                            {
+                                <span>@ReportLabels.Kind(item.Report.Kind)</span>
+                                <StatusBadge Tone="Tone.Warn" Text="Not in review" />
+                            }
+                            <span class="cell-sub">@ReportLabels.Revision(item)</span>
+                        </td>
+                        <td><Timestamp Value="item.Report.ReceivedAtUtc" /></td>
+                        <td><StatusBadge Tone="@(item.Report.Status == ReaderReportStatus.Open ? Tone.Warn : Tone.Neutral)" Text="@ReportLabels.Status(item.Report.Status)" /></td>
+                        <td class="act"><Button Small="true" Href="@ReportRoutes.Detail(item.Report.ReportId)">Open</Button></td>
+                    </Row>
+                    <Empty>
+                        <EmptyState Title="@ReportsEmpty.Title" Text="@ReportsEmpty.Text" />
+                    </Empty>
+                </DataTable>
+                <Pager Label="Reader report pages" NewerText="Previous" OlderText="Next" NewerHref="@ReportsHref(reports.NewerCursor)" OlderHref="@ReportsHref(reports.OlderCursor)" />
+            </ChildContent>
+        </Panel>
+    }
+</div>

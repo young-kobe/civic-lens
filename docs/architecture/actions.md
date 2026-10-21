@@ -29,7 +29,7 @@ The actions feature drafts one record for each bill that has an [action candidat
 - The event date of an action is the newest sponsored or withdrawn date of its sponsorships. Enforced by `ActionDraftRevision.EventOn`. Test: `ActionDraftRevisionTests.TheEventDateIsTheNewestSponsoredOrWithdrawnDateAmongTheSponsorships`.
 - A suggestion shows beside the text of a person, with "Use suggestion" and "Dismiss". A person's save may keep or clear the suggestion, but never change it.
 - D-15 (accepted on 2026-10-19): code approves the worker revisions of an action. Code checks every citation, and the model writes only the headline and the summary. Public pages label that text as an AI summary of the official record when the origin of the published text is Model. They add no label when a person wrote the text.
-- A worker revision of a newer candidate gets a new code approval if three rules hold. No concern is open. The revision holds no text that a person wrote. The approval checks pass. A person edit stays with a person even after a person approved it. The release keeps the earlier approved revision until the owner publishes the new one. Reader reports on a published record wait for the R-40 service.
+- A worker revision of a newer candidate gets a new code approval if three rules hold. No concern is open. The revision holds no text that a person wrote. The approval checks pass. A person edit stays with a person even after a person approved it. The release keeps the earlier approved revision until the owner publishes the new one. A reader report on a published action goes to the [review queue](review.md#reader-reports), and a correction shows as a banner on the action page.
 
 ## Invariants
 

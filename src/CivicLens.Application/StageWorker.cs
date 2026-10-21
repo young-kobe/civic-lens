@@ -1,14 +1,15 @@
 using CivicLens.Application.Analysis;
 
-namespace CivicLens.Application.Publication;
+namespace CivicLens.Application;
 
-public sealed class FactPublishingWorker(PublishCodeApprovedFacts publish, IWorkerWakeup wakeup, Action<Exception> reportFailure)
+/// <summary>Runs one pass, then sleeps until the wakeup. A pass returns its progress count. A failed pass is reported and counted.</summary>
+public sealed class StageWorker(Func<CancellationToken, Task<int>> pass, IWorkerWakeup wakeup, Action<Exception> reportFailure)
 {
     public async Task<AnalysisWorkerResult> ExecuteAsync(bool once, CancellationToken cancellationToken = default)
     {
         var failures = once ? 0 : await WorkerLoop.ConnectUntilAvailableAsync(wakeup, cancellationToken);
         var passes = 0;
-        var published = 0;
+        var progress = 0;
         try
         {
             while (!cancellationToken.IsCancellationRequested)
@@ -16,7 +17,7 @@ public sealed class FactPublishingWorker(PublishCodeApprovedFacts publish, IWork
                 passes++;
                 try
                 {
-                    published += await publish.ExecuteAsync(cancellationToken);
+                    progress += await pass(cancellationToken);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
                 catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
@@ -29,6 +30,6 @@ public sealed class FactPublishingWorker(PublishCodeApprovedFacts publish, IWork
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
-        return new(passes, published, failures);
+        return new(passes, progress, failures);
     }
 }

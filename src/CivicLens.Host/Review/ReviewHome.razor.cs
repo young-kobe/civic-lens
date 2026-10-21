@@ -5,6 +5,7 @@ using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Health;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Relationships;
+using CivicLens.Application.Reports;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
 using CivicLens.Core.Review;
@@ -34,6 +35,7 @@ public sealed partial class ReviewHome
     private StatementReviewCounts? statementCounts;
     private BriefReviewCounts? briefCounts;
     private RelationshipReviewCounts? relationshipCounts;
+    private int openReports;
     private IReadOnlyList<FeedItem> activity = [];
     private string? error;
     private string? lookupMessage;
@@ -48,6 +50,7 @@ public sealed partial class ReviewHome
     [Inject] private GetStatementReviewCounts GetStatementCounts { get; set; } = default!;
     [Inject] private GetBriefReviewCounts GetBriefCounts { get; set; } = default!;
     [Inject] private GetRelationshipReviewCounts GetRelationshipCounts { get; set; } = default!;
+    [Inject] private CountOpenReaderReports CountReports { get; set; } = default!;
     [Inject] private GetRecentActivity GetActivity { get; set; } = default!;
     [Inject] private LookupDraft Lookup { get; set; } = default!;
     [Inject] private CreateDocumentChangeDraft CreateDraft { get; set; } = default!;
@@ -101,6 +104,7 @@ public sealed partial class ReviewHome
             statementCounts = await GetStatementCounts.ExecuteAsync(actor, cancellationToken);
             briefCounts = await GetBriefCounts.ExecuteAsync(actor, cancellationToken);
             relationshipCounts = await GetRelationshipCounts.ExecuteAsync(actor, cancellationToken);
+            openReports = await CountReports.ExecuteAsync(actor, cancellationToken);
             if (collection is not null)
             {
                 configuration = collection.GetConfiguration(actor);

@@ -1,0 +1,43 @@
+@using CivicLens.Application.Reports
+@using CivicLens.Core.Review
+@using CivicLens.Publication.Contracts
+
+@if (failed)
+{
+    <Notice Tone="Tone.Warn">Reader reports could not load for this record. Refresh the page to try again.</Notice>
+}
+@foreach (var report in reports)
+{
+    <Notice Tone="Tone.Warn" Title="A reader report needs a correction" id="@($"reader-report-{report.ReportId:D}")">
+        @ReportLabels.Category(report.Category)@(string.IsNullOrWhiteSpace(report.Text) ? "." : ": " + report.Text)
+        Reviewer note: @report.Note
+        <a href="@ReportRoutes.Detail(report.ReportId)">Open the report</a>
+    </Notice>
+}
+
+@code {
+    private IReadOnlyList<ReaderReport> reports = [];
+    private bool failed;
+
+    [Inject] private ListUnansweredCorrections ListCorrections { get; set; } = default!;
+
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    [Parameter, EditorRequired] public ReviewActor Actor { get; set; } = default!;
+    [Parameter, EditorRequired] public PublishedRecordKind Kind { get; set; }
+    [Parameter, EditorRequired] public string RecordId { get; set; } = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var cancellationToken = HttpContext.RequestAborted;
+        try
+        {
+            reports = await ListCorrections.ExecuteAsync(Actor, Kind, RecordId, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception)
+        {
+            failed = true;
+        }
+    }
+}

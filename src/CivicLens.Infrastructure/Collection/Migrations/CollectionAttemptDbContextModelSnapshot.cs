@@ -3138,6 +3138,112 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Reports.Persistence.ReaderReportCursorRow", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Cursor")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("cursor");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("reader_report_cursor", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_reader_report_cursor_id", "id = 1");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Reports.Persistence.ReaderReportRow", b =>
+                {
+                    b.Property<Guid>("ReportId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("report_id");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("category");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("note");
+
+                    b.Property<long>("ReceivedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("received_at_utc_ticks");
+
+                    b.Property<string>("RecordId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<string>("ResolvedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("resolved_by");
+
+                    b.Property<long?>("ResolvedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("resolved_at_utc_ticks");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("body");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("ReportId");
+
+                    b.HasIndex("RecordId")
+                        .HasDatabaseName("ix_reader_reports_record");
+
+                    b.HasIndex("Status", "ReceivedAtUtcTicks")
+                        .HasDatabaseName("ix_reader_reports_status_received");
+
+                    b.ToTable("reader_reports", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_reader_reports_received", "received_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_reader_reports_record_id", "record_id ~ '^([0-9a-f]{32}|[0-9a-f]{64})$'");
+
+                            t.HasCheckConstraint("ck_reader_reports_resolution", "(status = 'Open') = (resolved_by IS NULL AND resolved_at_utc_ticks IS NULL) AND (status <> 'CorrectionNeeded' OR note IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_reader_reports_revision", "revision_number >= 1");
+
+                            t.HasCheckConstraint("ck_reader_reports_status", "status IN ('Open','Dismissed','CorrectionNeeded')");
+
+                            t.HasCheckConstraint("ck_reader_reports_version", "version >= 0");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.DocumentChangeDraftRow", b =>
                 {
                     b.Property<string>("DraftId")

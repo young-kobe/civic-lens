@@ -7,6 +7,7 @@ using CivicLens.Application.Collection;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Relationships;
+using CivicLens.Application.Reports;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
@@ -19,6 +20,7 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Infrastructure.Relationships;
+using CivicLens.Infrastructure.Reports;
 using CivicLens.Infrastructure.Roster;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Statements;
@@ -232,6 +234,7 @@ internal static class ReviewWorkspace
         ConfigureVoteReview(services, contexts);
         ConfigureRelationshipReview(services, contexts);
         ConfigureBriefReview(services, contexts);
+        ConfigureReportReview(services, contexts);
         services.AddScoped(provider => new LookupDraft(provider.GetRequiredService<IActionReviewStore>(),
             provider.GetRequiredService<IVoteReviewStore>(), TimeProvider.System));
         var collection = ConfigurationFile.ReadCollectionFromEnvironment();
@@ -305,6 +308,16 @@ internal static class ReviewWorkspace
         services.AddScoped<GetRelationshipReview>();
         services.AddScoped<ListRelationshipReviews>();
         services.AddScoped<GetRelationshipReviewCounts>();
+    }
+
+    private static void ConfigureReportReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)
+    {
+        services.AddSingleton<IReaderReportStore>(new PostgresReaderReportStore(contexts));
+        services.AddScoped<ResolveReaderReport>();
+        services.AddScoped<GetReaderReport>();
+        services.AddScoped<ListReaderReports>();
+        services.AddScoped<CountOpenReaderReports>();
+        services.AddScoped<ListUnansweredCorrections>();
     }
 
     private static void ConfigureBriefReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)

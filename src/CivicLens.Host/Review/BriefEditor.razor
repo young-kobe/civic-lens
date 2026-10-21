@@ -43,6 +43,7 @@ else
         {
             <Notice Tone="@(isConflict ? Tone.Warn : Tone.Ok)" Dismissible="@(!isConflict)">@statusMessage</Notice>
         }
+        <ReaderReportBanner Actor="actor" Kind="PublishedRecordKind.Brief" RecordId="@RecordId" />
         @if (revision.AuthorKind == ReviewAuthorKind.Analysis)
         {
             <Notice Tone="Tone.Warn">The AI drafter wrote this revision. It is not a human decision. Check each paragraph against the records it cites before you approve.</Notice>
