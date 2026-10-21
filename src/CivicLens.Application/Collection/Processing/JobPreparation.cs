@@ -40,18 +40,7 @@ public sealed class JobPreparation(
         if (job is null || job.State != CollectionJobState.Succeeded) return null;
         if (job.Definition.Mode == CollectionMode.Api)
             return await PrepareApiAsync(job, artifactRoot, cancellationToken);
-        if (job.Definition.ConfigurationRevision is null || job.Definition.CoverageAsOf is null)
-            return await BlockWithoutConfigurationAsync(job, cancellationToken);
         return await PrepareConfiguredAsync(job, cancellationToken);
-    }
-
-    private async Task<JobPreparationResult> BlockWithoutConfigurationAsync(CollectionJobRecord job,
-        CancellationToken cancellationToken)
-    {
-        foreach (var captured in await ReadCapturedAttemptsAsync(job, cancellationToken))
-            _ = await processing.EnsureAsync(job.JobId, captured.AttemptId, captured.SourceId,
-                captured.RequestedUrl, cancellationToken);
-        return JobPreparationResult.Blocked("configurationUnavailable");
     }
 
     private async Task<JobPreparationResult> PrepareConfiguredAsync(CollectionJobRecord job,
@@ -272,17 +261,5 @@ public sealed class JobPreparation(
         string normalizationVersion, string text, CancellationToken cancellationToken) =>
         (await extractions.SaveAsync(new DocumentExtraction(captured, parserVersion, normalizationVersion, text),
             cancellationToken)).ExtractionId;
-
-    private async Task<IReadOnlyList<CapturedAttemptResult>> ReadCapturedAttemptsAsync(CollectionJobRecord job,
-        CancellationToken cancellationToken)
-    {
-        var captured = new List<CapturedAttemptResult>();
-        foreach (var jobAttempt in job.Attempts.Where(item => item.Resolution?.Outcome == CollectionJobAttemptOutcome.Succeeded))
-        {
-            var stored = await attempts.GetAsync(jobAttempt.AttemptId, cancellationToken);
-            if (stored?.AttemptResult is CapturedAttemptResult result) captured.Add(result);
-        }
-        return captured;
-    }
 
 }

@@ -124,13 +124,7 @@ public sealed class EvidenceProcessingWorker(
         }
         var job = await jobs.GetAsync(record.JobId, cancellationToken)
             ?? throw new InvalidOperationException("Processing job disappeared.");
-        if (job.Definition.ConfigurationRevision is null)
-        {
-            await CompleteAsync(claim, EvidenceProcessingStage.Complete, EvidenceProcessingStatus.Blocked,
-                EvidenceProcessingOutcome.Blocked, "configurationUnavailable", cancellationToken);
-            return;
-        }
-        var configuration = job.Definition.ConfigurationRevision.Configuration;
+        var configuration = job.Definition.ConfigurationRevision!.Configuration;
         var source = configuration.Sources.SingleOrDefault(candidate => candidate.Id == record.SourceId);
         if (source?.DocumentProfileId is null || configuration.DocumentProfiles is null)
         {

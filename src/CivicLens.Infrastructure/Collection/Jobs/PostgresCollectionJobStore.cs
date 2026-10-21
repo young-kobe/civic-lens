@@ -79,7 +79,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
             var definition = prepareDefinition(savedDefinition, DateOnly.FromDateTime(now.UtcDateTime));
             if (existing is not null)
             {
-                if (!definition.MatchesReplayOf(savedDefinition!))
+                if (definition != savedDefinition)
                     throw new ArgumentException("The idempotency key belongs to a different job definition.");
                 return await ToRecordAsync(db, existing, savedDefinition!, cancellationToken);
             }

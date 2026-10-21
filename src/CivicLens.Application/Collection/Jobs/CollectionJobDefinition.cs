@@ -85,10 +85,8 @@ public sealed record CollectionJobDefinition
 
     private void ValidateConfigurationBinding()
     {
-        if (ConfigurationRevision is null && CoverageAsOf is null && ApiResource is null)
-            return; // Legacy or explicitly supplied standalone definitions have no registry provenance.
         if (ConfigurationRevision is null || CoverageAsOf is null)
-            throw new ArgumentException("A configuration revision and coverage date must be supplied together.");
+            throw new ArgumentException("A job definition needs a configuration revision and a coverage date.");
 
         var source = ConfigurationRevision.Configuration.EligibleSource(SourceId, CoverageAsOf.Value);
         var expected = FromSource(source);
@@ -142,15 +140,6 @@ public sealed record CollectionJobDefinition
             Collection.ApiResource.SenateVote => SenateVoteUrl.TryReadVote(sourceUrl, url) is not null,
             _ => false
         };
-
-    public bool MatchesReplayOf(CollectionJobDefinition existing)
-    {
-        ArgumentNullException.ThrowIfNull(existing);
-        // Old jobs cannot gain historical provenance from a later configuration.
-        return existing.ConfigurationRevision is null && existing.CoverageAsOf is null
-            ? existing == this with { ConfigurationRevision = null, CoverageAsOf = null }
-            : existing == this;
-    }
 
     public CollectionRequest CreateRequest(string jobId, string artifactDirectory) => new()
     {
