@@ -128,14 +128,15 @@ public sealed class SearchIndexTests(PostgresCollection postgres) : IAsyncLifeti
             PublishedSamples.Statement('a', "Dated late", date: new DateOnly(2026, 5, 4), published: new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero)),
             PublishedSamples.Statement('b', "Dated early, late publish", date: new DateOnly(2026, 5, 2), published: new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero)),
             PublishedSamples.Statement('c', "Undated near UTC midnight", date: null, published: new DateTimeOffset(2026, 5, 2, 21, 0, 0, TimeSpan.FromHours(-5))),
-            PublishedSamples.Statement('d', "Undated, old publish", date: null, published: new DateTimeOffset(2026, 1, 10, 8, 0, 0, TimeSpan.Zero))
+            PublishedSamples.Statement('d', "Undated, old publish", date: null, published: new DateTimeOffset(2026, 1, 10, 8, 0, 0, TimeSpan.Zero)),
+            PublishedSamples.Statement('e', "Same day, later publish, later ID", date: new DateOnly(2026, 5, 4), published: new DateTimeOffset(2026, 5, 12, 8, 0, 0, TimeSpan.Zero))
         };
         await world.PublishAndIngestAsync(1, records);
 
         var page = await world.SearchAsync();
 
-        var facetOrder = ReleaseRecordOrder.NewestFirst(records.Select(record => record.Entry), ReleaseRecordOrder.Day, entry => entry.RecordId);
-        Assert.Equal(["a", "c", "b", "d"], facetOrder.Select(entry => entry.RecordId[..1]));
+        var facetOrder = ReleaseRecordOrder.NewestFirst(records.Select(record => record.Entry), ReleaseRecordOrder.Day, entry => entry.FirstPublishedAtUtc, entry => entry.RecordId);
+        Assert.Equal(["e", "a", "c", "b", "d"], facetOrder.Select(entry => entry.RecordId[..1]));
         Assert.Equal(facetOrder.Select(entry => entry.RecordId), page.Hits.Select(hit => hit.RecordId));
         Assert.All(page.Hits, hit => Assert.Null(hit.Snippet));
     }

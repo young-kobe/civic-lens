@@ -719,7 +719,7 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task FacetPageShowsTheEventDateAndOfficialsOfEachEntryAndFallsBackToTheFirstPublicationDayWhenThereIsNoEventDate()
+    public async Task FacetPageShowsTheEventDateAndOfficialsOfEachEntryAndFallsBackToTheFirstPublicationDayWhenThereIsNoEventDateAndSameDayEntriesFollowTheLaterPublicationFirst()
     {
         PublishedRecordEntry Entry(char id, DateTimeOffset published, DateOnly? eventDate, params string[] officials) => new()
         {
@@ -747,8 +747,8 @@ public sealed class ReleaseRendererTests
 
         var rows = new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody tr")
             .Select(row => string.Join("|", row.QuerySelectorAll("td").Select(cell => cell.TextContent.Trim())));
-        Assert.Equal(["Headline c Document change||2026-05-12", "Headline b Document change|Jane Doe|2026-05-10",
-            "Headline d Document change|Ann Roe|2026-05-10", "Headline a Document change|Jane Doe, Ann Roe|2026-01-02"], rows);
+        Assert.Equal(["Headline c Document change||2026-05-12", "Headline d Document change|Ann Roe|2026-05-10",
+            "Headline b Document change|Jane Doe|2026-05-10", "Headline a Document change|Jane Doe, Ann Roe|2026-01-02"], rows);
     }
 
     [Fact]

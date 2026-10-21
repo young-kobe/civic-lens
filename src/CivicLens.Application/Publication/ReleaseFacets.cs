@@ -16,6 +16,6 @@ public sealed record ReleaseFacets(ImmutableArray<ReleaseFacet> Issues, Immutabl
         [.. release.Records.SelectMany(entry => idsOf(entry).Select(id => (Id: id, Entry: entry)))
             .GroupBy(pair => pair.Id, StringComparer.Ordinal)
             .Select(group => new ReleaseFacet(kind, group.Key, nameOf(group.Key),
-                [.. ReleaseRecordOrder.NewestFirst(group.Select(pair => pair.Entry), ReleaseRecordOrder.Day, entry => entry.RecordId)]))
+                [.. ReleaseRecordOrder.NewestFirst(group.Select(pair => pair.Entry), ReleaseRecordOrder.Day, entry => entry.FirstPublishedAtUtc, entry => entry.RecordId)]))
             .OrderBy(facet => facet.Name, StringComparer.Ordinal).ThenBy(facet => facet.Id, StringComparer.Ordinal)];
 }
