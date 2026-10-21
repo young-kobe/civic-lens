@@ -12,8 +12,8 @@ public sealed class PullReaderReports(IReaderReportSource source, IReaderReportS
             var batch = await source.PullAsync(cursor, cancellationToken);
             batch.Validate();
             await store.SavePulledAsync(batch, cancellationToken);
-            if (batch.Reports.Length == 0 || batch.NextCursor == cursor) return pulled;
             pulled += batch.Reports.Length;
+            if (batch.Reports.Length == 0 || batch.NextCursor == cursor) return pulled;
             cursor = batch.NextCursor;
         }
     }

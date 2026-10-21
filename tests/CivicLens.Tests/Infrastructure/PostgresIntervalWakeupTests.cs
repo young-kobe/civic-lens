@@ -16,11 +16,11 @@ public sealed class PostgresIntervalWakeupTests(PostgresCollection postgres) : I
     public async Task DisposeAsync() => await postgres.DropDatabaseAsync(connectionString);
 
     [Fact]
-    public async Task TheWakeupSleepsUntilTheNextHourOfTheDatabaseClockBecauseNothingNotifiesIt() =>
+    public async Task TheHourlyWakeupDoesNotReturnBeforeItsDeadlineBecauseNothingNotifiesIt() =>
         await AssertSleepsAsync(TimeSpan.FromHours(1));
 
     [Fact]
-    public async Task TheWakeupSleepsUntilTheNextFiveMinuteMarkOfTheDatabaseClockBecauseNothingNotifiesIt() =>
+    public async Task TheFiveMinuteWakeupDoesNotReturnBeforeItsDeadlineBecauseNothingNotifiesIt() =>
         await AssertSleepsAsync(TimeSpan.FromMinutes(5));
 
     private async Task AssertSleepsAsync(TimeSpan interval)

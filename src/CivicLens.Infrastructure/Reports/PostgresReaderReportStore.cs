@@ -62,7 +62,8 @@ public sealed class PostgresReaderReportStore(IDbContextFactory<CollectionAttemp
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var open = filter == ReaderReportFilter.Open;
-        var rows = db.Set<ReaderReportRow>().AsNoTracking().Where(row => (row.Status == ReaderReportStatus.Open) == open);
+        var rows = db.Set<ReaderReportRow>().AsNoTracking();
+        rows = open ? rows.Where(row => row.Status == ReaderReportStatus.Open) : rows.Where(row => row.Status != ReaderReportStatus.Open);
         var fetched = await ReviewKeyset.Page(rows, cursor, row => row.ReceivedAtUtcTicks, row => row.ReportId.ToString(), ascending: open)
             .Take(limit + 1).ToArrayAsync(cancellationToken);
         var slice = KeysetSlice<ReaderReportRow>.Create(fetched, limit, cursor, row => (row.ReceivedAtUtcTicks, row.ReportId.ToString()));

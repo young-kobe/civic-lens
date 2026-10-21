@@ -44,7 +44,7 @@ public sealed class ReaderReportPullTests
 
         var pulled = await new PullReaderReports(source, store).ExecuteAsync(default);
 
-        Assert.Equal(1, pulled);
+        Assert.Equal((2, 2), (pulled, store.Stored.Count));
     }
 
     [Fact]
