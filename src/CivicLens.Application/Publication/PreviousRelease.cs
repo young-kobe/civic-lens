@@ -28,12 +28,24 @@ internal sealed class PreviousRelease
         if (active is null) return new(null, [], [], new Dictionary<string, PublishedOfficialProfile>());
         var bytes = await releases.ReadFileAsync(active.DirectoryName, PublicationProtocol.ManifestPath,
             PublicationProtocol.MaximumManifestBytes, cancellationToken);
-        var manifest = JsonSerializer.Deserialize<PublicationRelease>(bytes, PublicationProtocol.JsonOptions)
-            ?? throw new InvalidDataException("Release manifest is empty.");
+        var manifest = ReadManifest(bytes);
         manifest.Validate();
         if (manifest.ReleaseNumber != active.ReleaseNumber)
             throw new InvalidDataException("Release manifest does not match the active release.");
         return new(active.DirectoryName, manifest.Records, manifest.Withdrawals, await ReadOfficialsAsync(releases, active.DirectoryName, cancellationToken));
+    }
+
+    private static PublicationRelease ReadManifest(byte[] bytes)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<PublicationRelease>(bytes, PublicationProtocol.JsonOptions)
+                ?? throw new InvalidDataException("Release manifest is empty.");
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException("Release manifest does not match the readable schema.", exception);
+        }
     }
 
     private static async Task<Dictionary<string, PublishedOfficialProfile>> ReadOfficialsAsync(IReleaseDirectory releases,
