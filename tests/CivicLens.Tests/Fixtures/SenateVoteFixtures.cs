@@ -8,7 +8,7 @@ using CivicLens.Collection.Contracts;
 
 namespace CivicLens.Tests.Fixtures;
 
-/// <summary>Trimmed copies of senate.gov roll call files for the 119th Congress, session 1, fetched 2026-10-21. The tie-break fixture is trimmed from vote 372.</summary>
+/// <summary>Trimmed copies of senate.gov roll call files for the 119th Congress, session 1, fetched 2026-10-21. The tie-break fixture has the shape of vote 372.</summary>
 internal static class SenateVoteFixtures
 {
     public const string SourceId = "senate-votes";

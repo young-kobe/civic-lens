@@ -34,6 +34,6 @@ public static class SenateVoteMenuParser
         var day = SenateXml.ReadDay(text, year, Name);
         var endsNextYear = day is { Month: 1, Day: <= 2 };
         return new(SenateXml.ReadRoll(session, SenateXml.Required(item, "vote_number", Name), Name),
-            endsNextYear ? SenateXml.ReadDay(text, year + 1, Name) : day);
+            endsNextYear ? day.AddYears(1) : day);
     }
 }
