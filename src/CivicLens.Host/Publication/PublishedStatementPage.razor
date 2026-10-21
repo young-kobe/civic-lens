@@ -1,7 +1,7 @@
 @using System.Collections.Immutable
 @using CivicLens.Publication.Contracts
 
-<PublishedRecordFrame Headline="@Record.Headline" Summary="@Record.Summary" Facts="PublishedStatementView.Facts(Record)"
+<PublishedRecordFrame RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="@Record.Summary" Facts="PublishedStatementView.Facts(Record)"
                       Caveat="The observation time shows when the source was captured. It does not show when the statement was first made.">
     <PublishedRelatedPanel Related="Related" Kind="PublishedRecordKind.Statement" RecordId="@Record.RecordId" />
 

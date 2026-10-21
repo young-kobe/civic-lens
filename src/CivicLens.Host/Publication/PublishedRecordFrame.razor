@@ -6,9 +6,12 @@
                 Limits="@Limits" Facts="Facts" />
     @ChildContent
     <Caveat>@Caveat</Caveat>
+    <p class="muted small"><a href="@("../" + PublicationProtocol.ReportPageLink(RecordId, RevisionNumber))">Report a problem with this record</a></p>
 </PublicPage>
 
 @code {
+    [Parameter, EditorRequired] public string RecordId { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public int RevisionNumber { get; set; }
     [Parameter, EditorRequired] public string Headline { get; set; } = string.Empty;
     [Parameter, EditorRequired] public string Summary { get; set; } = string.Empty;
     [Parameter] public string? Significance { get; set; }

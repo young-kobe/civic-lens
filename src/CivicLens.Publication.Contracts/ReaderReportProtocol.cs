@@ -12,6 +12,11 @@ public static class ReaderReportProtocol
     public const string TurnstileField = "cf-turnstile-response";
     public const string AfterParameter = "after";
     public const string LimitParameter = "limit";
+    public const string WrongQuoteCategory = "wrong-quote";
+    public const string WrongDateCategory = "wrong-date";
+    public const string WrongAttributionCategory = "wrong-attribution";
+    public const string MissingContextCategory = "missing-context";
+    public const string BrokenSourceLinkCategory = "broken-source-link";
     public const string OtherCategory = "other";
     public const int MaximumTextCharacters = 2000;
     public const int MaximumRequestBytes = 32 * 1024;
@@ -21,7 +26,7 @@ public static class ReaderReportProtocol
     public const int MinimumPullTokenCharacters = 32;
 
     public static IReadOnlyList<string> Categories { get; } =
-        ["wrong-quote", "wrong-date", "wrong-attribution", "missing-context", "broken-source-link", OtherCategory];
+        [WrongQuoteCategory, WrongDateCategory, WrongAttributionCategory, MissingContextCategory, BrokenSourceLinkCategory, OtherCategory];
 
     public static bool IsCategory(string? category) => category is not null && Categories.Contains(category);
 

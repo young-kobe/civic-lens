@@ -739,6 +739,8 @@ The `/internal/*` route is not public. R-24 must block it at the edge or use a p
 
 To use the search page, set `CIVIC_LENS_PUBLIC_API_URL=http://127.0.0.1:8100` in the environment of the process that publishes (the `releases publish` command or the review workspace), and serve the release root from a server that sends no cross-origin limit. The service allows any origin. Without the variable, `search.html` says that search is not available.
 
+To use the report page, also set `CIVIC_LENS_TURNSTILE_SITE_KEY` in the environment of the process that publishes. For a local trial use the Cloudflare test site key `1x00000000000000000000AA`, which always passes. Publish, serve the release root, and open a record page. Use its link "Report a problem with this record". Send the report, then run the pull command above to see it. Without the API address or the site key, `report.html` says that reporting is not available.
+
 Optional variables: `CIVIC_LENS_TRUSTED_PROXY_RANGES` (the Cloudflare ranges, empty in development) and `CIVIC_LENS_REQUESTS_PER_MINUTE` (default 60). There is no Dockerfile yet. R-24 adds it.
 
 ## Runtime data

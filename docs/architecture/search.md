@@ -31,6 +31,7 @@ The search service gives readers full-text search over every published record. I
 - Cloudflare Turnstile checks each report in the service. `TurnstileVerifier` sends the token and the secret to the siteverify API and nothing else. It needs `success` and the configured hostname. A 5 second timeout, a failed call, an unreadable reply, or the code "internal-error" gives 503, so the check fails closed.
 - `TurnstileVerifier` is a concrete class at the Cloudflare boundary, as `ReleaseFeed` is at the release boundary. The service registers it only when a secret is set. Tests give `PublicApiApp.Build` a fake `HttpMessageHandler`, as they do for the release feed.
 - Without `CIVIC_LENS_TURNSTILE_SECRET` the report route answers 503 "reports are not available".
+- Publish writes `report.html` in every release, and every record page links to it; see [publication](publication.md#report-a-problem). The page needs `CIVIC_LENS_PUBLIC_API_URL` and `CIVIC_LENS_TURNSTILE_SITE_KEY`. Without them, it says that reporting is not available.
 - Three limits protect the route. The `reports` rate limit policy allows 5 reports each hour for each client, and the global limiter still applies. A durable cap allows 200 reports in 24 hours and is checked inside the insert transaction. A unique index on record ID, revision, and payload hash makes a duplicate a no-op with the same success answer.
 - The insert takes the advisory lock `civic-lens-search-reports` and holds it to the commit. Identity values then commit in order, so a pull never skips a late commit. No search transaction holds two keys.
 - The operational application pulls the reports with `GET /internal/v1/reports?after=<cursor>&limit=<n>`. The route needs `CIVIC_LENS_REPORT_PULL_TOKEN`, at least 32 characters. Without the variable the route does not exist. The token is compared with `CryptographicOperations.FixedTimeEquals`.
@@ -149,7 +150,8 @@ A result has the manifest entry fields, `firstRelease`, `lastRelease`, `pagePath
 | `CIVIC_LENS_TURNSTILE_SECRET` | Optional. The Turnstile secret. Without it, the report route answers 503. |
 | `CIVIC_LENS_TURNSTILE_HOSTNAME` | Required when the secret is set. The hostname that siteverify must report. |
 | `CIVIC_LENS_REPORT_PULL_TOKEN` | Optional. The bearer token of the pull route, 32 characters or more. Without it, the route does not exist. |
-| `CIVIC_LENS_PUBLIC_API_URL` | Read by publish, not by the service. The address that `search.html` calls. |
+| `CIVIC_LENS_PUBLIC_API_URL` | Read by publish, not by the service. The address that `search.html` and `report.html` call. |
+| `CIVIC_LENS_TURNSTILE_SITE_KEY` | Read by publish, not by the service. The public Turnstile site key of `report.html`. |
 
 The poll interval is 2 minutes and the statement timeout is 2 seconds. Both are options of `PublicApiOptions`.
 
@@ -186,7 +188,7 @@ Run commands are in [operations](../operations.md#run-the-search-service).
 
 ## Limits and planned work
 
-- The report page on each record and the operational queue that pulls reports are planned in [R-40](../roadmap.md#next). They are not built. Until then nothing sends or pulls reports.
+- The operational queue that pulls reports is planned in [R-40](../roadmap.md#next). It is not built. Until then nothing pulls reports.
 - The per-client report limit lives in memory and resets when the service restarts.
 - There is no reporter identity. Abuse handling relies on Turnstile and the caps. A flood can fill the daily cap and close reports for the day.
 - A duplicate sent at the daily cap gets 503 like any other report.

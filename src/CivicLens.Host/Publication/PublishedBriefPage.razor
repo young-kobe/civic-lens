@@ -1,6 +1,6 @@
 @using CivicLens.Publication.Contracts
 
-<PublishedRecordFrame Headline="@Record.Headline" Summary="" Facts="PublishedBriefView.Facts(Record)"
+<PublishedRecordFrame RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="" Facts="PublishedBriefView.Facts(Record)"
                       Caveat="@PublishedBriefView.Sample(Record)">
     <Panel Title="Brief" Id="brief-title" Padded="true">
         <PublishedBriefText Record="Record" />
