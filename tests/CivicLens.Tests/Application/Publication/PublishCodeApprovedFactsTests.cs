@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text.Json;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
@@ -185,6 +186,54 @@ public sealed class PublishCodeApprovedFactsTests
         scenario.Publications.FailOnCommit = new InvalidOperationException("disk full");
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => Facts(scenario).ExecuteAsync(default));
+    }
+
+    [Fact]
+    public async Task ATickThatReplacesAPublishedRecordWritesAnUpdatedFromTheSourceEntryWithoutANote()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('a', ApprovedByCode('a'));
+        AddUnpublished(scenario, action);
+        ListedUntilPublished(scenario);
+        await Facts(scenario).ExecuteAsync(default);
+        scenario.ReviseAction(action, 2);
+        scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[action].Review, 1));
+        var releases = scenario.Publications.Committed.Count;
+        var reported = new List<Exception>();
+
+        await Facts(scenario, reported).ExecuteAsync(default);
+
+        Assert.Empty(reported);
+
+        var directory = scenario.Publications.Committed[releases].DirectoryName;
+        var record = JsonSerializer.Deserialize<PublishedAction>(
+            scenario.Releases.Directories[directory][PublicationProtocol.RecordDataPath(action)], PublicationProtocol.JsonOptions)!;
+        var entry = Assert.Single(record.Corrections);
+        Assert.Equal((1, null), (entry.ReplacedRevisionNumber, entry.Note));
+    }
+
+    [Fact]
+    public async Task ATickPublishesAnUpdateOfARecordThatHasTheMostPersonCorrectionsInsteadOfSkippingIt()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('a');
+        var reference = new PublishedRecordReference(PublishedRecordKind.Action, action);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([reference], "k1"));
+        for (var revision = 2; revision <= PublishedCorrection.MaximumNotedEntries + 1; revision++)
+        {
+            scenario.ReviseAction(action, revision);
+            await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+                new PublishReleaseRequest([reference], $"k{revision}") { Notes = [new(reference.Kind, action, "Fix.")] });
+        }
+        scenario.ReviseAction(action, PublishedCorrection.MaximumNotedEntries + 2, ReviewAuthor.CodeSubject);
+        scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[action].Review, PublishedCorrection.MaximumNotedEntries + 1));
+        ListedUntilPublished(scenario);
+        var reported = new List<Exception>();
+
+        var published = await Facts(scenario, reported).ExecuteAsync(default);
+
+        Assert.Equal(1, published);
+        Assert.Empty(reported);
     }
 
     private static PublishCodeApprovedFacts Facts(PublicationScenario scenario, List<Exception>? reported = null) =>

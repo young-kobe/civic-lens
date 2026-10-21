@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CivicLens.Application.Publication;
 using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
@@ -20,6 +21,7 @@ public sealed partial class ReviewHome
     [SupplyParameterFromQuery(Name = "release")] private int? ReleaseNumber { get; set; }
 
     [SupplyParameterFromForm(FormName = "publish-confirm", Name = "records")] private string[]? ConfirmIds { get; set; }
+    [SupplyParameterFromForm(FormName = "publish-confirm", Name = "notes")] private Dictionary<string, string>? ConfirmNotes { get; set; }
     [SupplyParameterFromForm(FormName = "publish-confirm", Name = "idempotencyKey")] private string? PublishKey { get; set; }
 
     private async Task LoadPublicationAsync(CancellationToken cancellationToken)
@@ -52,14 +54,24 @@ public sealed partial class ReviewHome
             if (ConfirmIds is not { Length: > 0 } || string.IsNullOrWhiteSpace(PublishKey))
                 throw new ArgumentException("Select records to publish.");
             var release = await publish.ExecuteAsync(actor!, new PublishReleaseRequest(
-                [.. ConfirmIds.Select(PublishedRecordReference.Parse)], PublishKey),
+                [.. ConfirmIds.Select(PublishedRecordReference.Parse)], PublishKey)
+            { Notes = ConfirmedNotes() },
                 cancellationToken);
             return $"/Review?status=published&release={release.ReleaseNumber}#releases";
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (PublicationConflictException) { return "/Review?status=publish-conflict#publish"; }
+        catch (MissingCorrectionNoteException) { return "/Review?status=publish-note-required#publish"; }
+        catch (CorrectionLimitException) { return "/Review?status=publish-correction-limit#publish"; }
         catch (ArgumentException) { return "/Review?status=publish-invalid#publish"; }
         catch (UnauthorizedAccessException) { return "/Review?status=publish-forbidden#publish"; }
         catch (Exception) { return "/Review?status=publish-unavailable#publish"; }
     }
+
+    private ImmutableArray<RecordNote> ConfirmedNotes() =>
+        [.. (ConfirmNotes ?? []).Where(note => !string.IsNullOrWhiteSpace(note.Value)).Select(note =>
+        {
+            var reference = PublishedRecordReference.Parse(note.Key);
+            return new RecordNote(reference.Kind, reference.RecordId, note.Value);
+        })];
 }

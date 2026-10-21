@@ -402,6 +402,18 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         var replacement = await host.GetDocumentAsync($"/Review?publish=documentChange:{draftId}");
         Assert.Equal("Replacement", replacement.QuerySelector("[aria-labelledby='publish'] tbody .badge")!.TextContent);
         Assert.Contains("Confirm release 2", replacement.QuerySelector("[aria-labelledby='publish']")!.TextContent, StringComparison.Ordinal);
+
+        // Each replacement row holds a note box that posts with the confirm form. A first publication holds none.
+        var noteBox = replacement.QuerySelector($"textarea[name='notes[documentChange:{draftId}]']")!;
+        Assert.Equal(("publish-confirm", "500"), (noteBox.GetAttribute("form"), noteBox.GetAttribute("maxlength")));
+        Assert.Null(summary.QuerySelector("textarea[name^='notes[']"));
+        var replaceFields = Fields(replacement.QuerySelector("#publish-confirm")!);
+        using var noNote = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(replaceFields));
+        Assert.Equal("/Review?status=publish-note-required", PathOf(noNote).Split('#')[0]);
+        Assert.Equal(1, (await publications.GetStateAsync(default)).LatestReleaseNumber);
+        replaceFields.Add(new($"notes[documentChange:{draftId}]", "Clarified the effective date."));
+        using var corrected = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(replaceFields));
+        Assert.Equal("/Review?status=published&release=2", PathOf(corrected).Split('#')[0]);
     }
 
     [Fact]

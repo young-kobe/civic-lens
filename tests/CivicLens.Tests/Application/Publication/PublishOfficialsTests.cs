@@ -79,8 +79,9 @@ public sealed class PublishOfficialsTests
             }
         };
 
+        var reference = new PublishedRecordReference(PublishedRecordKind.Vote, vote);
         var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-            PublicationScenario.Request("k2", new PublishedRecordReference(PublishedRecordKind.Vote, vote)));
+            PublicationScenario.WithNotesFor(PublicationScenario.Request("k2", reference), reference));
 
         Assert.Equal(["chair"], OfficialsOf(scenario, second.DirectoryName).Officials.Select(official => official.Id));
     }

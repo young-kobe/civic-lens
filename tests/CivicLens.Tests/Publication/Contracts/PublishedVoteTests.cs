@@ -38,7 +38,7 @@ public sealed class PublishedVoteTests
 
         Assert.Equal(["recordId", "revisionNumber", "headline", "summary", "textOrigin", "congress", "session", "rollCallNumber", "kind", "kindCitation",
             "votedOn", "votedOnCitation", "facts", "members", "billType", "billNumber", "trackedIssueIds", "sources", "approvedAtUtc",
-            "firstPublishedAtUtc"], JsonDocument.Parse(json).RootElement.EnumerateObject().Select(property => property.Name));
+            "firstPublishedAtUtc", "corrections"], JsonDocument.Parse(json).RootElement.EnumerateObject().Select(property => property.Name));
         Assert.Contains("\"kind\":\"passage\"", json, StringComparison.Ordinal);
         Assert.Contains("\"votedOn\":\"2025-04-10\"", json, StringComparison.Ordinal);
         JsonSerializer.Deserialize<PublishedVote>(json, PublicationProtocol.JsonOptions)!.Validate();
@@ -221,6 +221,7 @@ public sealed class PublishedVoteTests
 
     private static PublishedVote Vote() => new()
     {
+        Corrections = [],
         RecordId = new string('5', 64),
         RevisionNumber = 1,
         Headline = "Headline",

@@ -69,7 +69,9 @@ public sealed class PublishBriefTests
         var brief = scenario.AddBrief(Week, [Cite(statement, 1)]);
 
         await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-            PublicationScenario.Request("k2", Reference(PublishedRecordKind.Statement, statement), Reference(PublishedRecordKind.Brief, brief))));
+            PublicationScenario.WithNotesFor(
+                PublicationScenario.Request("k2", Reference(PublishedRecordKind.Statement, statement), Reference(PublishedRecordKind.Brief, brief)),
+                Reference(PublishedRecordKind.Statement, statement))));
 
         Assert.Equal(1, scenario.Releases.BeginCount);
     }
@@ -96,8 +98,9 @@ public sealed class PublishBriefTests
         scenario.AddStatement('c', revisionNumber: 2);
         var brief = scenario.AddBrief(Week, [Cite(statement, 2)]);
 
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-            PublicationScenario.Request("k2", Reference(PublishedRecordKind.Statement, statement), Reference(PublishedRecordKind.Brief, brief)));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.WithNotesFor(
+            PublicationScenario.Request("k2", Reference(PublishedRecordKind.Statement, statement), Reference(PublishedRecordKind.Brief, brief)),
+            Reference(PublishedRecordKind.Statement, statement)));
 
         Assert.Equal([new PublishedRevisionBinding(PublishedRecordKind.Statement, statement, 2)],
             scenario.Briefs.ReleaseRecordsAtLastRead.Where(binding => binding.Kind == PublishedRecordKind.Statement));

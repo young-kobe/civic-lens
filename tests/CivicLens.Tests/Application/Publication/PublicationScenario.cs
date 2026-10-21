@@ -165,6 +165,9 @@ internal sealed class PublicationScenario
 
     public static PublishReleaseRequest Request(string key, params PublishedRecordReference[] records) => new([.. records], key);
 
+    public static PublishReleaseRequest WithNotesFor(PublishReleaseRequest request, params PublishedRecordReference[] replaced) =>
+        request with { Notes = [.. replaced.Select(record => new RecordNote(record.Kind, record.RecordId, "Fixed."))] };
+
     public string AddDraft(char id, ImmutableArray<ReviewDecision>? decisions = null, string[]? officialIds = null,
         int citationStart = 6)
     {
@@ -229,6 +232,27 @@ internal sealed class PublicationScenario
         Actions.Publishable[recordId] = new(review, ImmutableDictionary.CreateRange(StringComparer.Ordinal,
             [KeyValuePair.Create(detail.ExtractionId, detail), KeyValuePair.Create(cosponsors.ExtractionId, cosponsors)]));
         return recordId;
+    }
+
+    public void ReviseAction(string recordId, int revisionNumber, string? approverSubject = null)
+    {
+        var publishable = Actions.Publishable[recordId];
+        var review = publishable.Review;
+        var revised = review.CurrentRevision with { RevisionNumber = revisionNumber, TrackedIssueIds = [$"issue-{revisionNumber}"] };
+        Actions.Publishable[recordId] = publishable with
+        {
+            Review = review with
+            {
+                CurrentRevision = revised,
+                Revisions = review.Revisions.Add(revised),
+                Decisions = review.Decisions.Add(Decision(recordId, revisionNumber, ReviewDecisionKind.Approve) with
+                {
+                    RevisionNumber = revisionNumber,
+                    ActorSubject = approverSubject ?? review.Decisions[^1].ActorSubject
+                }),
+                ReviewStateVersion = revisionNumber
+            }
+        };
     }
 
     public const string VoteDetail = "Started: 2025-04-10T11:08:00-04:00\nQuestion: On Passage\nResult: Passed\nLegislation: HR 7\n";
@@ -325,7 +349,7 @@ internal sealed class FakeRenderer : IReleaseRenderer
         Logged($"render {record.RecordId[..1]}", $"<html>statement {record.RecordId}{Related(related)}</html>");
     public Task<string> RenderActionAsync(PublishedAction record, ImmutableArray<PublishedRelationship> related,
         CancellationToken cancellationToken) =>
-        Logged($"render {record.RecordId[..1]}", $"<html>action {record.RecordId}{Related(related)}</html>");
+        Logged($"render {record.RecordId[..1]}", $"<html>action {record.RecordId}{Related(related)}{Corrections(record.Corrections)}</html>");
     public Task<string> RenderVoteAsync(PublishedVote record, string? billActionRecordId, ImmutableArray<PublishedRelationship> related,
         CancellationToken cancellationToken) =>
         Task.FromResult($"<html>vote {record.RecordId} bill {billActionRecordId}{Related(related)}</html>");
@@ -356,6 +380,8 @@ internal sealed class FakeRenderer : IReleaseRenderer
         Events?.Add(entry);
         return Task.FromResult(page);
     }
+
+    private static string Corrections(PublishedCorrection[] corrections) => corrections.Length == 0 ? "" : $" corrections {corrections.Length}";
 
     private static string Related(ImmutableArray<PublishedRelationship> related) =>
         related.IsEmpty ? "" : " related " + string.Join(' ', related.Select(link => link.RecordId[..1]));

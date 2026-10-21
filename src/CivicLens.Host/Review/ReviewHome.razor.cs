@@ -76,6 +76,8 @@ public sealed partial class ReviewHome
         "unavailable" => "The draft could not be started. Refresh the page and try again.",
         "published" => ReleaseNumber is { } number ? $"Release {number} is published." : "The release is published.",
         "publish-invalid" => "The selection could not be published. Choose drafts again.",
+        "publish-note-required" => "Each replacement needs a correction note. Choose the records again and write a note for each replacement.",
+        "publish-correction-limit" => "A record in the selection has reached the most corrections with a note. Remove it from the selection.",
         "publish-conflict" => "Drafts or releases changed while you reviewed them. Check the list and try again.",
         "publish-forbidden" => "Only the owner can publish.",
         "publish-unavailable" => "The release could not be published. Refresh the page and try again.",

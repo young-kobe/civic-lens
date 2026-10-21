@@ -130,7 +130,7 @@ public sealed class PublishOfficialPagesTests
             }
         };
 
-        var second = await PublishAsync(scenario, "k2", PublishedRecordKind.Vote, newer);
+        var second = await ReplaceAsync(scenario, "k2", PublishedRecordKind.Vote, newer);
 
         var files = scenario.Releases.Directories[second.DirectoryName];
         Assert.Equal($"<html>official mayor tracked current 118 past [] records [] votes [{older}]</html>", Page(files, MayorPage));
@@ -215,7 +215,7 @@ public sealed class PublishOfficialPagesTests
             }
         };
 
-        await PublishAsync(scenario, "k2", PublishedRecordKind.Statement, statement);
+        await ReplaceAsync(scenario, "k2", PublishedRecordKind.Statement, statement);
 
         Assert.Contains(MayorPage, scenario.Releases.WriteOrder);
         Assert.Contains(ChairPage, scenario.Releases.WriteOrder);
@@ -337,6 +337,10 @@ public sealed class PublishOfficialPagesTests
 
     private static Task<PublicationReleaseSummary> PublishAsync(PublicationScenario scenario, string key, PublishedRecordKind kind, string recordId) =>
         scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request(key, new PublishedRecordReference(kind, recordId)));
+
+    private static Task<PublicationReleaseSummary> ReplaceAsync(PublicationScenario scenario, string key, PublishedRecordKind kind, string recordId) =>
+        scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.WithNotesFor(
+            PublicationScenario.Request(key, new PublishedRecordReference(kind, recordId)), new PublishedRecordReference(kind, recordId)));
 
     private static string Page(Dictionary<string, byte[]> files, string path) => Encoding.UTF8.GetString(files[path]);
 

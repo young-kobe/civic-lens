@@ -19,6 +19,7 @@ public sealed partial record PublishedBrief
     public required PublishedBriefCitation[] Citations { get; init; }
     public required DateTimeOffset ApprovedAtUtc { get; init; }
     public required DateTimeOffset FirstPublishedAtUtc { get; init; }
+    public required PublishedCorrection[] Corrections { get; init; }
 
     public PublishedRecordEntry ToEntry() => new()
     {
@@ -32,6 +33,7 @@ public sealed partial record PublishedBrief
 
     public void Validate()
     {
+        PublishedCorrection.ValidateAll(Corrections, RevisionNumber);
         if (!PublicationProtocol.IsRecordId(PublishedRecordKind.Brief, RecordId) || RevisionNumber < 1 ||
             WeekStart.DayOfWeek != DayOfWeek.Monday || CutoffReleaseNumber < 1)
             throw new InvalidDataException("Published brief identity or week is invalid.");

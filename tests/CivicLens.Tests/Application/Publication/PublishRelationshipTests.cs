@@ -82,8 +82,8 @@ public sealed class PublishRelationshipTests
         scenario.AddStatement('c', revisionNumber: 2);
 
         await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-            PublicationScenario.Request("k2", Reference(PublishedRecordKind.Statement, statement),
-                Reference(PublishedRecordKind.Relationship, relationship))));
+            PublicationScenario.WithNotesFor(PublicationScenario.Request("k2", Reference(PublishedRecordKind.Statement, statement),
+                Reference(PublishedRecordKind.Relationship, relationship)), Reference(PublishedRecordKind.Statement, statement))));
 
         Assert.Equal(1, scenario.Releases.BeginCount);
     }
@@ -152,8 +152,8 @@ public sealed class PublishRelationshipTests
         scenario.AddStatement('c', revisionNumber: 2, statementDate: StatementDate);
         scenario.Releases.Links.Clear();
 
-        var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-            PublicationScenario.Request("k3", Reference(PublishedRecordKind.Statement, statement)));
+        var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.WithNotesFor(
+            PublicationScenario.Request("k3", Reference(PublishedRecordKind.Statement, statement)), Reference(PublishedRecordKind.Statement, statement)));
 
         Assert.Equal($"<html>statement {statement} related e</html>", PageOf(scenario, third.DirectoryName, statement));
         Assert.Contains((second.DirectoryName, PublicationProtocol.RecordDataPath(relationship)), scenario.Releases.Links);
@@ -171,7 +171,8 @@ public sealed class PublishRelationshipTests
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", relationship));
         scenario.AddRelationship('e', statement, action, revisionNumber: 2);
 
-        var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k3", relationship));
+        var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.WithNotesFor(Request("k3", relationship), Reference(PublishedRecordKind.Relationship, relationship)));
 
         Assert.Equal($"<html>statement {statement} related e</html>", PageOf(scenario, third.DirectoryName, statement));
         Assert.Equal(2, ReadRecord<PublishedRelationship>(scenario, third.DirectoryName, relationship).RevisionNumber);
@@ -246,10 +247,10 @@ public sealed class PublishRelationshipTests
         scenario.AddStatement('c', revisionNumber: 2, statementDate: StatementDate);
         scenario.Releases.ReadPaths.Clear();
 
-        var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-            PublicationScenario.Request("k3", Reference(PublishedRecordKind.Statement, statement)));
+        var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.WithNotesFor(
+            PublicationScenario.Request("k3", Reference(PublishedRecordKind.Statement, statement)), Reference(PublishedRecordKind.Statement, statement)));
 
-        Assert.Equal([PublicationProtocol.ManifestPath, PublicationProtocol.OfficialsPath, PublicationProtocol.RecordDataPath(citing)], scenario.Releases.ReadPaths);
+        Assert.Equal([PublicationProtocol.ManifestPath, PublicationProtocol.OfficialsPath, PublicationProtocol.RecordDataPath(statement), PublicationProtocol.RecordDataPath(citing)], scenario.Releases.ReadPaths);
         Assert.Equal($"<html>statement {statement} related e</html>", PageOf(scenario, third.DirectoryName, statement));
     }
 

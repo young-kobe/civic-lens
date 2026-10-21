@@ -5,6 +5,7 @@
 @using CivicLens.Core.Review
 @using CivicLens.Host.Collection
 @using CivicLens.Host.Publication
+@using CivicLens.Publication.Contracts
 
 <TopBarTitle Crumbs="Crumbs" />
 
@@ -166,6 +167,7 @@
                                         <th>Kind</th>
                                         <th>Status</th>
                                         <th class="num hide-narrow">Revision</th>
+                                        <th>Correction note</th>
                                     </Head>
                                     <Row Context="item">
                                         <td><a class="cell-title" href="@RecordRoutes.Editor(item.Kind, item.RecordId)">@DraftStatusDisplay.DraftName(item.Headline)</a></td>
@@ -178,6 +180,12 @@
                                             }
                                         </td>
                                         <td class="num hide-narrow">@item.RevisionNumber</td>
+                                        <td>
+                                            @if (item.IsReplacement)
+                                            {
+                                                <textarea class="plain" form="publish-confirm" name="@($"notes[{item.Reference}]")" maxlength="@PublishedCorrection.MaximumNoteLength" rows="2" aria-label="@($"Correction note for {DraftStatusDisplay.DraftName(item.Headline)}")"></textarea>
+                                            }
+                                        </td>
                                     </Row>
                                 </DataTable>
                                 <Toolbar>

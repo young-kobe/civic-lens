@@ -777,6 +777,39 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task AReplacedRecordShowsEachCorrectionWithItsNoteOrTheUpdatedFromTheSourceLabelAndAddsItToTheTimeline()
+    {
+        var corrections = new PublishedCorrection[]
+        {
+            new() { ReplacedRevisionNumber = 2, PublishedAtUtc = new DateTimeOffset(2026, 2, 4, 9, 0, 0, TimeSpan.Zero), Note = "Fixed the <sponsor> date." },
+            new() { ReplacedRevisionNumber = 1, PublishedAtUtc = new DateTimeOffset(2026, 2, 2, 9, 0, 0, TimeSpan.Zero) }
+        };
+        var action = Action() with { RevisionNumber = 3, Corrections = corrections };
+        var statement = Statement() with { RevisionNumber = 3, Corrections = corrections };
+        var renderer = new ReleaseRenderer();
+
+        foreach (var html in new[] { await renderer.RenderActionAsync(action, [], CancellationToken.None),
+                     await renderer.RenderStatementAsync(statement, [], CancellationToken.None) })
+        {
+            var entries = new HtmlParser().ParseDocument(html).QuerySelectorAll("ul.corrections > li")
+                .Select(item => (item.QuerySelector("strong")!.TextContent, item.QuerySelector("p")?.TextContent)).ToArray();
+            Assert.Equal(("Correction, 2026-02-04. Replaces revision 2.", "Fixed the <sponsor> date."), entries[0]);
+            Assert.Equal(("Updated from the source, 2026-02-02. Replaces revision 1.", null), entries[1]);
+        }
+        var timeline = await TimelineOf(renderer => renderer.RenderActionAsync(action, [], CancellationToken.None));
+        Assert.Contains("2026-02-04|Correction, replaces revision 2, 2026-02-04 09:00 UTC", timeline);
+        Assert.Contains("2026-02-02|Updated from the source, replaces revision 1, 2026-02-02 09:00 UTC", timeline);
+    }
+
+    [Fact]
+    public async Task ARecordWithNoCorrectionsShowsNoCorrectionList()
+    {
+        var html = await new ReleaseRenderer().RenderActionAsync(Action(), [], CancellationToken.None);
+
+        Assert.Empty(new HtmlParser().ParseDocument(html).QuerySelectorAll("ul.corrections"));
+    }
+
+    [Fact]
     public async Task TimesOnOneDayKeepTheirClockOrderSoTheShownTimesNeverContradictTheOrder()
     {
         var vote = Vote() with
@@ -879,6 +912,7 @@ public sealed class ReleaseRendererTests
 
     private static PublishedRelationship Relationship(PublishedRecordKind targetKind, string targetId, char id) => new()
     {
+        Corrections = [],
         RecordId = new string(id, 64),
         RevisionNumber = 1,
         Headline = "Doe backs a rent cap and Housing bill funds rent aid",
@@ -898,6 +932,7 @@ public sealed class ReleaseRendererTests
 
     private static PublishedBrief Brief() => new()
     {
+        Corrections = [],
         RecordId = CivicLens.Core.Briefs.BriefWeek.RecordIdOf(new DateOnly(2026, 10, 5)),
         RevisionNumber = 1,
         Headline = "A week of <housing> news",
@@ -930,6 +965,7 @@ public sealed class ReleaseRendererTests
             new() { ExtractionId = id, Url = url, ObservedAtUtc = new DateTimeOffset(2026, 1, 21, 9, 0, 0, TimeSpan.Zero), Text = text };
         return new PublishedAction
         {
+            Corrections = [],
             RecordId = new string('f', 64),
             RevisionNumber = 1,
             Headline = "Doe sponsors a housing bill",
@@ -985,6 +1021,7 @@ public sealed class ReleaseRendererTests
             new() { ExtractionId = id, Url = url, ObservedAtUtc = new DateTimeOffset(2026, 1, 21, 9, 0, 0, TimeSpan.Zero), Text = text };
         return new PublishedVote
         {
+            Corrections = [],
             RecordId = new string('f', 64),
             RevisionNumber = 1,
             Headline = "House passes a housing bill",
@@ -1032,6 +1069,7 @@ public sealed class ReleaseRendererTests
         var signed = text.IndexOf("Signed 2026-05-01.", StringComparison.Ordinal);
         return new PublishedStatement
         {
+            Corrections = [],
             RecordId = new string('e', 64),
             RevisionNumber = 1,
             Headline = "Doe backs a rent cap",
@@ -1066,6 +1104,7 @@ public sealed class ReleaseRendererTests
         var newRule = afterText.IndexOf("rule & scope", StringComparison.Ordinal);
         return new PublishedDocumentChange
         {
+            Corrections = [],
             RecordId = new string('c', 32),
             RevisionNumber = 2,
             Headline = "Rule <script>alert(1)</script> changed",

@@ -201,7 +201,7 @@ public sealed class PublishStatementTests
             }
         };
 
-        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", reference));
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", reference) with { Notes = [new(PublishedRecordKind.Statement, statement, "Fixed the issue.")] });
 
         var entry = Assert.Single(ReadManifest(scenario, second.DirectoryName).Records);
         Assert.Equal(2, entry.RevisionNumber);

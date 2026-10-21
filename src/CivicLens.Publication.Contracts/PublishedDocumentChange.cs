@@ -19,6 +19,7 @@ public sealed record PublishedDocumentChange
     public required PublishedCitation[] Citations { get; init; }
     public required DateTimeOffset ApprovedAtUtc { get; init; }
     public required DateTimeOffset FirstPublishedAtUtc { get; init; }
+    public required PublishedCorrection[] Corrections { get; init; }
 
     public PublishedRecordEntry ToEntry() => new()
     {
@@ -35,6 +36,7 @@ public sealed record PublishedDocumentChange
 
     public void Validate()
     {
+        PublishedCorrection.ValidateAll(Corrections, RevisionNumber);
         if (!PublicationProtocol.IsRecordId(PublishedRecordKind.DocumentChange, RecordId) || RevisionNumber < 1 || string.IsNullOrWhiteSpace(Headline) ||
             string.IsNullOrWhiteSpace(Summary) || string.IsNullOrWhiteSpace(Institution))
             throw new InvalidDataException("Published record identity or wording is invalid.");
