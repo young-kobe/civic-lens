@@ -1,0 +1,15 @@
+@using CivicLens.Host.Components.Ui
+
+<Panel Title="Timeline" Id="timeline-title" Padded="true">
+    <DataTable Items="Events" Caption="Dated events of this record">
+        <Head><th class="fit num">Date</th><th>Event</th></Head>
+        <Row Context="item">
+            <td class="fit num">@Moment.Iso(item.Day)</td>
+            <td>@item.Text</td>
+        </Row>
+    </DataTable>
+</Panel>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<TimelineEvent> Events { get; set; } = [];
+}

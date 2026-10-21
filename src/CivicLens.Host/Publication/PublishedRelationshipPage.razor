@@ -3,6 +3,8 @@
 
 <PublishedRecordFrame RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="@Record.Reason" Facts="PublishedRelationshipView.Facts(Record)"
                       Caveat="A person approved this link between a statement and a record. It states no verdict. It does not say that the statement is true or that it agrees with the record.">
+    <PublishedTimeline Events="PublishedTimelineView.For(Record)" />
+
     <Panel Title="Linked records" Id="linked-title" Padded="true">
         <p class="muted small">Each row names the revision that was approved with this link. Its page shows the revision that the release holds.</p>
         <ul class="choices">

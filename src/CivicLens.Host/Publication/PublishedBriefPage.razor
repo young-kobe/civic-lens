@@ -2,6 +2,8 @@
 
 <PublishedRecordFrame RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="" Facts="PublishedBriefView.Facts(Record)"
                       Caveat="@PublishedBriefView.Sample(Record)">
+    <PublishedTimeline Events="PublishedTimelineView.For(Record)" />
+
     <Panel Title="Brief" Id="brief-title" Padded="true">
         <PublishedBriefText Record="Record" />
     </Panel>

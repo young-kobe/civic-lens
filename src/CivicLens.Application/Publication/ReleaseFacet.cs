@@ -9,7 +9,7 @@ public enum FacetKind
     PolicyArea
 }
 
-/// <summary>The manifest entries that hold one issue or policy area ID, newest first.</summary>
+/// <summary>The manifest entries that hold one issue or policy area ID, in the order of <see cref="ReleaseRecordOrder"/>.</summary>
 public sealed record ReleaseFacet(FacetKind Kind, string Id, string Name, ImmutableArray<PublishedRecordEntry> Records)
 {
     public bool HasPages => PublicationProtocol.IsPathSegment(Id);

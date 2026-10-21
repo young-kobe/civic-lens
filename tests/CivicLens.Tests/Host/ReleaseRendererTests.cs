@@ -692,15 +692,23 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task FacetPageLinksResolveFromItsSubfolderAndPageThroughItsRecordsNewestFirst()
+    public async Task FacetPageLinksResolveFromItsSubfolderAndPageThroughItsRecordsNewestEventDateFirst()
     {
-        var release = ReleaseOf(120) with { Records = [.. ReleaseOf(120).Records.Select(entry => entry with { PolicyAreaIds = ["land-use"] })] };
+        var release = ReleaseOf(120) with
+        {
+            Records = [.. ReleaseOf(120).Records.Select((entry, index) => entry with
+        {
+            PolicyAreaIds = ["land-use"],
+            FirstPublishedAtUtc = new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero),
+            EventDate = new DateOnly(2026, 1, 1).AddDays(index)
+        })]
+        };
         var facet = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None)).PolicyAreas.Single();
 
         var html = await new ReleaseRenderer().RenderFacetPageAsync(facet, 2, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
-        Assert.Equal(release.Records.Skip(50).Take(50).Select(entry => $"../records/{entry.RecordId}.html"),
+        Assert.Equal(release.Records.Reverse().Skip(50).Take(50).Select(entry => $"../records/{entry.RecordId}.html"),
             document.QuerySelectorAll("tbody a.cell-title").Select(link => link.GetAttribute("href")));
         Assert.Equal("../policy-areas/land-use.html", document.QuerySelector("a[rel='prev']")!.GetAttribute("href"));
         Assert.Equal("../policy-areas/land-use.page-3.html", document.QuerySelector("a[rel='next']")!.GetAttribute("href"));
@@ -708,6 +716,71 @@ public sealed class ReleaseRendererTests
         Assert.Contains("href=\"../index.html\"", html, StringComparison.Ordinal);
         Assert.Contains("href=\"../issues.html\"", html, StringComparison.Ordinal);
         Assert.DoesNotMatch(new Regex("(?:href|src)=\"(?:/|//|https?:)"), html);
+    }
+
+    [Fact]
+    public async Task FacetPageShowsTheEventDateAndOfficialsOfEachEntryAndFallsBackToTheFirstPublicationDayWhenThereIsNoEventDate()
+    {
+        PublishedRecordEntry Entry(char id, DateTimeOffset published, DateOnly? eventDate, params string[] officials) => new()
+        {
+            RecordId = new string(id, 32),
+            RevisionNumber = 1,
+            Headline = $"Headline {id}",
+            FirstPublishedAtUtc = published,
+            EventDate = eventDate,
+            IssueIds = ["housing"],
+            Officials = [.. officials.Select(name => new PublishedOfficial { Id = name.ToLowerInvariant(), Name = name })]
+        };
+        var release = ReleaseOf(0) with
+        {
+            Records =
+        [
+            Entry('a', new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero), new DateOnly(2026, 1, 2), "Jane Doe", "Ann Roe"),
+            Entry('b', new DateTimeOffset(2026, 5, 10, 8, 0, 0, TimeSpan.Zero), null, "Jane Doe"),
+            Entry('c', new DateTimeOffset(2026, 5, 12, 8, 0, 0, TimeSpan.Zero), null),
+            Entry('d', new DateTimeOffset(2026, 5, 10, 20, 0, 0, TimeSpan.Zero), null, "Ann Roe")
+        ]
+        };
+        var facet = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None)).Issues.Single();
+
+        var html = await new ReleaseRenderer().RenderFacetPageAsync(facet, 1, CancellationToken.None);
+
+        var rows = new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody tr")
+            .Select(row => string.Join("|", row.QuerySelectorAll("td").Select(cell => cell.TextContent.Trim())));
+        Assert.Equal(["Headline c Document change||2026-05-12", "Headline b Document change|Jane Doe|2026-05-10",
+            "Headline d Document change|Ann Roe|2026-05-10", "Headline a Document change|Jane Doe, Ann Roe|2026-01-02"], rows);
+    }
+
+    [Fact]
+    public async Task EveryRecordKindListsItsDatedEventsInDateOrderOnATimeline()
+    {
+        var statement = await TimelineOf(renderer => renderer.RenderStatementAsync(Statement(), [], CancellationToken.None));
+        var change = await TimelineOf(renderer => renderer.RenderRecordAsync(Record(), CancellationToken.None));
+        var action = await TimelineOf(renderer => renderer.RenderActionAsync(Action(), [], CancellationToken.None));
+        var vote = await TimelineOf(renderer => renderer.RenderVoteAsync(Vote(), null, [], CancellationToken.None));
+        var relationship = await TimelineOf(renderer => renderer.RenderRelationshipAsync(
+            Relationship(PublishedRecordKind.Action, new string('a', 64), '7') with { StatementDate = new DateOnly(2026, 2, 3) }, CancellationToken.None));
+        var brief = await TimelineOf(renderer => renderer.RenderBriefAsync(Brief(), CancellationToken.None));
+
+        Assert.Equal(["2026-05-01|Statement made", "2026-05-03|Source observed, 2026-05-03 10:45 UTC",
+            "2026-05-10|Approved, 2026-05-10 12:00 UTC", "2026-05-11|First published, 2026-05-11 08:00 UTC"], statement);
+        Assert.Equal(["2026-03-01|The source changed", "2026-04-02|Earlier version observed, 2026-04-02 09:30 UTC",
+            "2026-05-03|Later version observed, 2026-05-03 10:45 UTC", "2026-05-10|Approved, 2026-05-10 12:00 UTC",
+            "2026-05-11|First published, 2026-05-11 08:00 UTC"], change);
+        Assert.Equal(["2026-01-03|Sponsored by Jane <Doe> (sponsor)", "2026-01-05|Sponsored by Ann Roe (cosponsor)",
+            "2026-01-20|Withdrawn by Ann Roe (cosponsor)", "2026-01-22|Approved, 2026-01-22 12:00 UTC",
+            "2026-01-23|First published, 2026-01-23 08:00 UTC"], action);
+        Assert.Equal(["2025-04-10|Vote held", "2026-01-22|Approved, 2026-01-22 12:00 UTC", "2026-01-23|First published, 2026-01-23 08:00 UTC"], vote);
+        Assert.Equal(["1970-01-01|Approved, 1970-01-01 00:00 UTC", "1970-01-01|First published, 1970-01-01 00:00 UTC", "2026-02-03|Statement made"],
+            relationship);
+        Assert.Equal(["1970-01-01|Approved, 1970-01-01 00:00 UTC", "1970-01-01|First published, 1970-01-01 00:00 UTC", "2026-10-05|Week starts"], brief);
+    }
+
+    private static async Task<string[]> TimelineOf(Func<ReleaseRenderer, Task<string>> render)
+    {
+        var html = await render(new ReleaseRenderer());
+        return [.. new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='timeline-title'] tbody tr")
+            .Select(row => string.Join("|", row.QuerySelectorAll("td").Select(cell => cell.TextContent.Trim())))];
     }
 
     [Fact]

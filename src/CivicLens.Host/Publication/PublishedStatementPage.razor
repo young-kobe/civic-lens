@@ -4,6 +4,7 @@
 <PublishedRecordFrame RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="@Record.Summary" Facts="PublishedStatementView.Facts(Record)"
                       Caveat="The observation time shows when the source was captured. It does not show when the statement was first made.">
     <PublishedRelatedPanel Related="Related" Kind="PublishedRecordKind.Statement" RecordId="@Record.RecordId" />
+    <PublishedTimeline Events="PublishedTimelineView.For(Record)" />
 
     <Panel Title="Quotations" Id="quotations-title" Padded="true">
         <p class="muted small">Each quote is the exact text of the source. Follow its link to see it marked in the full source text.</p>
