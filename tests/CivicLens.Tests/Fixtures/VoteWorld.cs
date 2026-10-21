@@ -90,7 +90,7 @@ internal sealed class VoteWorld
 
     public ActionBillWorld.FixtureStores Stores { get; private set; } = null!;
 
-    public VoteReader Reader() => new(Stores, new ApiResponseReader(Stores, Stores), "artifacts");
+    public VoteReader Reader() => new(Stores, new FixedMemberRoster([]), new ApiResponseReader(Stores, Stores), "artifacts");
 
     public VoteDraftEvidence Evidence(VoteDraftRevision? current = null, DateTimeOffset? updatedAt = null, bool hasNewerCandidate = false) =>
         new(new VoteDraftCandidate(CandidateId, RecordId, SourceId, Chamber.House, 119, 1, 100, "hconres", 14, updatedAt ?? UpdatedAt), Revision,

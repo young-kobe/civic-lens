@@ -6,6 +6,7 @@ using CivicLens.Application.Votes;
 using CivicLens.Host.Analysis;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Roster;
 using CivicLens.Infrastructure.Votes;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,7 +22,7 @@ internal static class VoteDraftComposition
         if (configuration is null) return AnalysisComposition<VoteDraftRun>.Disabled(status);
         if (issues is null) throw new ArgumentException("Vote drafting needs CIVIC_LENS_ISSUES_CONFIG.");
         var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresVoteDraftStore.Table, VoteDraftTask.Task);
-        var step = new VoteDraftStep(new PostgresVoteDraftStore(contexts), new VoteReader(jobs, responses, artifactRoot),
+        var step = new VoteDraftStep(new PostgresVoteDraftStore(contexts), new VoteReader(jobs, new PostgresMemberRosterStore(contexts), responses, artifactRoot),
             new AnthropicVoteDraftModel(configuration.ApiKey), configuration.Settings, issues);
         return new(status, configuration.Settings.DailyTokenLimit, new AnalysisWorker<VoteDraftRun>(step, status, TimeProvider.System, wakeup), wakeup);
     }

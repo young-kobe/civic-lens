@@ -138,11 +138,22 @@ public sealed class PostgresSenateVoteTests(PostgresCollection postgres) : IAsyn
     }
 
     [Fact]
-    public async Task ASenateCandidateGetsNoDraftQueueRowBecauseTheSenateReaderComesLater()
+    public async Task ASenateCandidateWithoutABillIsQueuedAtOnceBecauseANominationHasNoBillTitleToWaitFor()
     {
         var job = await EnqueueVoteAsync("vote", 1);
 
         await store.AdmitSenateVoteAsync(Source(), job, Vote(1, null, null), await ExtractionAsync(job), default);
+
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_candidates"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_analysis WHERE status = 'Pending'"));
+    }
+
+    [Fact]
+    public async Task ASenateCandidateWhoseBillHasNoSavedDetailGetsNoQueueRowBecauseTheDraftNeedsTheBillTitle()
+    {
+        var job = await EnqueueVoteAsync("vote", 1);
+
+        await store.AdmitSenateVoteAsync(Source(), job, Vote(1, "s", 5), await ExtractionAsync(job), default);
 
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_candidates"));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM vote_analysis"));

@@ -69,8 +69,7 @@ public sealed partial class PostgresCollectionJobStore : IVoteAdmissionStore
             await EnsureExtractionIsOfJobAsync(db, membersJobId, extractionId, cancellationToken);
             var candidate = NewVoteCandidate(source, row, membersJobId, extractionId, now);
             db.Add(candidate);
-            if (await IsWaitingForBillDetailAsync(db, candidate, cancellationToken)) return NoAdmission;
-            VoteDraftQueueRows.Add(db, candidate.CandidateId, Ticks(now), await PriorityOfVoteAsync(db, candidate, cancellationToken));
+            await QueueCandidateAsync(db, candidate, now, cancellationToken);
             return NoAdmission;
         }, cancellationToken);
     }
@@ -106,9 +105,18 @@ public sealed partial class PostgresCollectionJobStore : IVoteAdmissionStore
             var row = NewVoteRow(source.SourceId, voteJobId, Chamber.Senate, session, vote.Roll.Number, vote.ModifyDate,
                 vote.BillType, vote.BillNumber, extractionId);
             db.Add(row);
-            db.Add(NewVoteCandidate(source, row, voteJobId, extractionId, now));
+            var candidate = NewVoteCandidate(source, row, voteJobId, extractionId, now);
+            db.Add(candidate);
+            await QueueCandidateAsync(db, candidate, now, cancellationToken);
             return NoAdmission;
         }, cancellationToken);
+    }
+
+    private static async Task QueueCandidateAsync(CollectionAttemptDbContext db, VoteCandidateRow candidate, DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (await IsWaitingForBillDetailAsync(db, candidate, cancellationToken)) return;
+        VoteDraftQueueRows.Add(db, candidate.CandidateId, Ticks(now), await PriorityOfVoteAsync(db, candidate, cancellationToken));
     }
 
     private static async Task<bool> IsWaitingForBillDetailAsync(CollectionAttemptDbContext db, VoteCandidateRow candidate,

@@ -40,7 +40,7 @@ public static class SenateVoteRenderer
     private static string CountsOf(SenateVoteCounts counts) =>
         $"Yea {Count(counts.Yeas ?? 0)}, Nay {Count(counts.Nays ?? 0)}, Present {Count(counts.Present ?? 0)}, Not voting {Count(counts.Absent ?? 0)}";
 
-    private static string MemberLine(SenateVoteMember member)
+    internal static string MemberLine(SenateVoteMember member)
     {
         var name = SingleLine($"{member.FirstName} {member.LastName}");
         var fields = new[] { member.LisId, name, member.Party, member.State, member.VoteCast };
