@@ -9,6 +9,11 @@ internal static partial class RenderedText
 
     public static string Line(string label, string value) => $"{label}: {SingleLine(value)}".TrimEnd();
 
+    public static void AddLine(List<string> lines, string label, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value)) lines.Add(Line(label, value));
+    }
+
     public static string SingleLine(string value) => LineBreaks().Replace(value, " ").Trim();
 
     public static string Count(int value) => value.ToString(CultureInfo.InvariantCulture);

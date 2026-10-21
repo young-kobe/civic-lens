@@ -36,11 +36,6 @@ public static class HouseVoteRenderer
 
     private static string UpdatedLine(HouseVote vote) => Line("Updated", ApiJobKeys.ExactTime(vote.UpdateDate));
 
-    private static void AddLine(List<string> lines, string label, string? value)
-    {
-        if (!string.IsNullOrWhiteSpace(value)) lines.Add(Line(label, value));
-    }
-
     private static string? LegislationOf(HouseVoteDetail detail) =>
         string.IsNullOrWhiteSpace(detail.LegislationType) ? null : $"{detail.LegislationType} {detail.LegislationNumber}";
 
