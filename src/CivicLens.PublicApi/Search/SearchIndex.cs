@@ -11,9 +11,7 @@ public sealed class SearchIndex(NpgsqlDataSource database)
 {
     private const int SnippetScanCharacters = 50_000;
     private const string SnippetOptions = "StartSel=, StopSel=, MaxFragments=1, MaxWords=25, MinWords=10";
-    // Npgsql sends DateOnly.MinValue as -infinity, so an undated record sorts at the day after it.
-    private static readonly DateOnly Undated = new(1, 1, 2);
-    private const string SortDate = "COALESCE(r.event_date, DATE '0001-01-02')";
+    private const string SortDate = "COALESCE(r.event_date, (r.first_published_at_utc AT TIME ZONE 'UTC')::date)";
     private const string InRelease = "r.first_release <= @release AND (r.last_release IS NULL OR r.last_release >= @release)";
     private const string RankedAfterCursor = "WHERE r.rank < @cursor_rank OR (r.rank = @cursor_rank AND r.record_id > @cursor_id)";
     private const string DatedAfterCursor = $"""
@@ -110,7 +108,7 @@ public sealed class SearchIndex(NpgsqlDataSource database)
 
     private static SearchCursor NextCursor(int release, SearchRequest request, (RecordHit Hit, float Rank) last) => request.IsRanked
         ? SearchCursor.Ranked(release, last.Hit.RecordId, last.Rank)
-        : SearchCursor.Dated(release, last.Hit.RecordId, last.Hit.EventDate ?? Undated, last.Hit.FirstPublishedAtUtc.UtcTicks);
+        : SearchCursor.Dated(release, last.Hit.RecordId, last.Hit.EventDate ?? DateOnly.FromDateTime(last.Hit.FirstPublishedAtUtc.UtcDateTime), last.Hit.FirstPublishedAtUtc.UtcTicks);
 
     private static RecordHit ReadHit(DbDataReader reader) => new()
     {

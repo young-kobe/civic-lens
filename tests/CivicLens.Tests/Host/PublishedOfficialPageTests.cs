@@ -1,3 +1,4 @@
+using CivicLens.Application.Issues;
 using AngleSharp.Html.Parser;
 using CivicLens.Application.Publication;
 using CivicLens.Host.Publication;
@@ -22,6 +23,46 @@ public sealed class PublishedOfficialPageTests
         Assert.Equal(["2026-05-01", "2026-04-01", "2026-03-01", "2025-12-01"], records.QuerySelectorAll("tbody td.num").Select(cell => cell.TextContent));
         Assert.Contains("Roll call 100, Congress 119, session 1, HR 7", records.TextContent, StringComparison.Ordinal);
         Assert.Contains("Yea", records.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnOfficialPageAndAFacetPageOrderTheSameEntriesTheSameWayBecauseOneRuleOwnsTheDateOrder()
+    {
+        var published = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero);
+        PublishedRecordEntry[] entries =
+        [
+            Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)),
+            Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1)) with { EventDate = null, FirstPublishedAtUtc = new DateTimeOffset(2026, 5, 2, 9, 0, 0, TimeSpan.Zero) },
+            Entry('3', PublishedRecordKind.Statement, new DateOnly(2026, 5, 2)) with { EventDate = null, FirstPublishedAtUtc = new DateTimeOffset(2026, 5, 2, 21, 0, 0, TimeSpan.FromHours(-5)) },
+            Entry('4', PublishedRecordKind.Action, new DateOnly(2026, 4, 1)),
+            Entry('0', PublishedRecordKind.Action, new DateOnly(2026, 5, 1)) with { EventDate = null, FirstPublishedAtUtc = new DateTimeOffset(2026, 5, 2, 15, 0, 0, TimeSpan.Zero) }
+        ];
+        var facet = ReleaseFacets.From(new PublicationRelease
+        {
+            SchemaVersion = PublicationProtocol.SchemaVersion,
+            ReleaseNumber = 1,
+            PublishedAtUtc = published,
+            Records = [.. entries.Select(entry => entry with { IssueIds = ["housing"] })]
+        }, new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None)).Issues.Single();
+
+        var official = await new ReleaseRenderer().RenderOfficialAsync(Current(entries, []), CancellationToken.None);
+        var facetHtml = await new ReleaseRenderer().RenderFacetPageAsync(facet, 1, CancellationToken.None);
+
+        string[] Order(string html) => [.. new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody a.cell-title")
+            .Select(link => link.GetAttribute("href")!.Replace("../records/", "").Replace(".html", ""))];
+        Assert.Equal(Order(official), Order(facetHtml));
+        Assert.Equal([new string('3', 64), new string('0', 64), new string('2', 64), new string('4', 64), new string('1', 64)], Order(official));
+    }
+
+    [Fact]
+    public async Task AVoteFollowsTheRecordsOfItsDayBecauseAVoteRowHasNoPublicationTime()
+    {
+        var page = Current([Entry('a', PublishedRecordKind.Action, new DateOnly(2026, 5, 2))], [Vote('0', new DateOnly(2026, 5, 2))]);
+
+        var html = await new ReleaseRenderer().RenderOfficialAsync(page, CancellationToken.None);
+
+        Assert.Equal([new string('a', 64), new string('0', 64)], new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody a.cell-title")
+            .Select(link => link.GetAttribute("href")!.Replace("../records/", "").Replace(".html", "")));
     }
 
     [Fact]

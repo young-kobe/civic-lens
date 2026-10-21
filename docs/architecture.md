@@ -414,6 +414,6 @@ This is the only navigation index.
 | Search API routes and errors | [Search](architecture/search.md#api) | `src/CivicLens.PublicApi/Search/SearchEndpoints.cs` |
 | Officials and catalog files of a release | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/PublicationOfficials.cs` |
 | Official pages, officials list, and vote files of an official | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/ReleaseOfficialPages.cs` |
-| Public filter pages (planned) | [Publication](architecture/publication.md#limits-and-planned-work), [roadmap R-36](roadmap.md#next) | none |
+| Public filter pages | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/ReleaseFacets.cs` |
 | Pending work, decisions, MVP criteria | [Roadmap](roadmap.md) | none |
 | Commands and procedures | [Operations](operations.md) | `src/CivicLens.Host/Program.cs` |

@@ -1,10 +1,30 @@
+@using CivicLens.Application.Publication
 @using CivicLens.Publication.Contracts
 
 <DataTable Items="Records" Caption="@Caption">
-    <Head><th>Record</th><th class="fit num hide-narrow">First published</th></Head>
+    <Head>
+        <th>Record</th>
+        @if (FacetColumns)
+        {
+            <th class="hide-narrow">Officials</th>
+            <th class="fit num">Date</th>
+        }
+        else
+        {
+            <th class="fit num hide-narrow">First published</th>
+        }
+    </Head>
     <Row Context="entry">
         <td><a class="cell-title" href="@(RootPath + PublicationProtocol.RecordPagePath(entry.RecordId))">@entry.Headline</a> <StatusBadge Text="@PublishedRecordLabels.Kind(entry.Kind)" /></td>
-        <td class="time fit num hide-narrow"><Timestamp Value="entry.FirstPublishedAtUtc" Format="TimestampFormat.Day" /></td>
+        @if (FacetColumns)
+        {
+            <td class="hide-narrow">@string.Join(", ", entry.Officials.Select(official => official.Name))</td>
+            <td class="fit num">@Moment.Iso(ReleaseRecordOrder.Day(entry))</td>
+        }
+        else
+        {
+            <td class="time fit num hide-narrow"><Timestamp Value="entry.FirstPublishedAtUtc" Format="TimestampFormat.Day" /></td>
+        }
     </Row>
     <Empty><EmptyState Title="No records yet" Text="There are no records here." /></Empty>
 </DataTable>
@@ -13,4 +33,5 @@
     [Parameter, EditorRequired] public IReadOnlyList<PublishedRecordEntry> Records { get; set; } = [];
     [Parameter, EditorRequired] public string Caption { get; set; } = string.Empty;
     [Parameter] public string RootPath { get; set; } = string.Empty;
+    [Parameter] public bool FacetColumns { get; set; }
 }

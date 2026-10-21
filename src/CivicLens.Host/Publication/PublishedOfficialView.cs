@@ -19,8 +19,8 @@ internal static class PublishedOfficialView
     };
 
     public static IReadOnlyList<PublishedOfficialRow> Rows(ReleaseOfficialPage page) =>
-    [.. page.Records.Select(PublishedOfficialRow.Of).Concat(page.Votes.Select(PublishedOfficialRow.Of))
-        .OrderByDescending(row => row.Date).ThenBy(row => row.RecordId, StringComparer.Ordinal)];
+    [.. ReleaseRecordOrder.NewestFirst(page.Records.Select(PublishedOfficialRow.Of).Concat(page.Votes.Select(PublishedOfficialRow.Of)),
+        row => row.Date, row => row.PublishedAtUtc, row => row.RecordId)];
 
     public static string RollCall(PublishedOfficialVote vote)
     {
@@ -29,11 +29,12 @@ internal static class PublishedOfficialView
     }
 }
 
-internal sealed record PublishedOfficialRow(DateOnly Date, string RecordId, string Headline, PublishedRecordKind Kind, string? Detail, string? Cast)
+internal sealed record PublishedOfficialRow(DateOnly Date, string RecordId, string Headline, PublishedRecordKind Kind, string? Detail, string? Cast,
+    DateTimeOffset PublishedAtUtc)
 {
     public static PublishedOfficialRow Of(PublishedRecordEntry entry) => new(
-        entry.EventDate ?? DateOnly.FromDateTime(entry.FirstPublishedAtUtc.UtcDateTime), entry.RecordId, entry.Headline, entry.Kind, null, null);
+        ReleaseRecordOrder.Day(entry), entry.RecordId, entry.Headline, entry.Kind, null, null, entry.FirstPublishedAtUtc);
 
     public static PublishedOfficialRow Of(PublishedOfficialVote vote) => new(
-        vote.VotedOn, vote.RecordId, vote.Headline, PublishedRecordKind.Vote, PublishedOfficialView.RollCall(vote), vote.Cast);
+        vote.VotedOn, vote.RecordId, vote.Headline, PublishedRecordKind.Vote, PublishedOfficialView.RollCall(vote), vote.Cast, DateTimeOffset.MinValue);
 }

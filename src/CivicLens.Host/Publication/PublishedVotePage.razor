@@ -5,6 +5,7 @@
 <PublishedRecordFrame RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="@Record.Summary" Facts="PublishedVoteView.Facts(Record)"
                       Caveat="This record lists only the officials that Civic Lens tracks. Each cast is the wording of the House Clerk roll call at the observation time of its source.">
     <PublishedRelatedPanel Related="Related" Kind="PublishedRecordKind.Vote" RecordId="@Record.RecordId" />
+    <PublishedTimeline Events="PublishedTimelineView.For(Record)" />
 
     @if (PublishedVoteView.Bill(Record) is { } bill)
     {
