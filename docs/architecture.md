@@ -34,7 +34,7 @@ Implemented:
 
 - configured collection with durable jobs, discovery, and admission
 - the Congress.gov bill stream with its relevance gate and action candidates
-- the Congress.gov House vote stream with its vote candidates
+- the Congress.gov House vote stream and the senate.gov Senate vote files, with their vote candidates
 - text extraction, history, and comparison
 - AI drafting of document-change accounts
 - the statement gate and statement drafting

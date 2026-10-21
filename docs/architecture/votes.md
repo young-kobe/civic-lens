@@ -73,8 +73,12 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - The shipped source budgets hold a full page and its next-page job. Enforced by `CollectionConfiguration.Validate`. Test: `PostgresHouseVoteTests.ShippedSourceBudgetsAdmitAFullPageAndItsNextPage`.
 - One vote record exists for each chamber, source, and roll call. Enforced by `ux_vote_drafts_roll` and `VoteDraftRows.AppendAnalysisRevisionAsync`. Tests: `PostgresHouseVoteTests.TheDatabaseAllowsOneDraftForEachRollCallAndRefusesABadRecordId`, `PostgresHouseVoteTests.ACollectedAgainVoteAppendsRevisionTwoToTheSameDraftBecauseTheRecordIsOnePerRollCall`, `VoteChamberMigrationTests.TheSameRollNumberCanExistInBothChambersButNotTwiceInOne`, and `PostgresRollLookupTests.ARollCallFindsOnlyTheVoteDraftOfItsChamberCongressSessionAndNumber`.
 - A newer candidate of another chamber never supersedes a vote. Enforced by the chamber filter of `VoteDraftRows.HasNewerCandidateAsync`. Test: `PostgresHouseVoteTests.ANewerSenateCandidateOfTheSameNumbersDoesNotSupersedeTheHouseVote`.
-- A record ID and a candidate ID differ between chambers for the same source, Congress, session, and roll. House IDs keep their old values. Enforced by `PostgresCollectionJobStore.HashVoteRecord` and `HashVoteCandidate`. Test for the record ID: `PostgresHouseVoteTests.HouseIdsKeepTheirOldValuesAndASenateVoteOfTheSameNumbersGetsOtherIds`. The Senate candidate ID gets its test in PR 2 of R-42, with Senate collection.
+- A record ID and a candidate ID differ between chambers for the same source, Congress, session, and roll. House IDs keep their old values. Enforced by `PostgresCollectionJobStore.HashVoteRecord` and `HashVoteCandidate`. Test for the record ID: `PostgresHouseVoteTests.HouseIdsKeepTheirOldValuesAndASenateVoteOfTheSameNumbersGetsOtherIds`. Test for the Senate candidate ID: `PostgresSenateVoteTests.SenateCandidateIdsAreTheHashOfTheirFramedTextSoTheyNeverChange`.
 - A candidate with a bill identity gets no queue row until a bill detail of that bill is saved. Enforced by `PostgresCollectionJobStore.AdmitMembersAsync`. Test: `PostgresHouseVoteTests.AVoteWhoseBillHasNoSavedDetailGetsNoQueueRowBecauseTheDraftNeedsTheBillTitle`.
+- A Senate vote file that did not change adds no version. The version key holds the file modify date. Enforced by `PostgresCollectionJobStore.AdmitSenateVoteAsync` through `FindVoteAsync`. Test: `PostgresSenateVoteTests.ASecondFetchOfAFileWithTheSameModifyDateRecordsNothingNew`.
+- A Senate candidate gets no draft queue row, also when its bill detail arrives. Enforced by `PostgresCollectionJobStore.AdmitSenateVoteAsync` and the House filter of `VoteDraftQueueRows.WaitingForBill`. Tests: `PostgresSenateVoteTests.ASenateCandidateGetsNoDraftQueueRowBecauseTheSenateReaderComesLater` and `PostgresHouseVoteTests.TheBillDetailQueuesNoSenateCandidateBecauseTheSenateReaderComesLater`.
+- A Senate vote file whose counts differ from its member list is invalid data. Enforced by `SenateVoteParser`. Test: `SenateVoteParserTests.CountsThatDifferFromTheMemberListAreInvalidBecauseOneOfThemIsWrong`.
+- A job URL of a Senate source has the exact form of its resource kind. Enforced by `CollectionJobDefinition.Validate` through `SenateVoteUrl`. Test: `SenateVoteSourceConfigurationTests.AJobUrlMustHaveTheExactFormOfItsResourceSoTheWorkerNeverReadsItAsAnotherKind`.
 - The bill detail admission queues the waiting candidates of that bill in its own transaction, once. Enforced by `PostgresCollectionJobStore.AdmitDetailAsync` (bill) and `VoteDraftQueueRows`. Tests: `PostgresHouseVoteTests.TheBillDetailQueuesTheWaitingVoteInTheSameTransactionThatRecordsTheBill` and `PostgresHouseVoteTests.ALaterVersionOfTheBillAddsNoSecondQueueRowBecauseALaterDetailDoesNotRedraftAVote`.
 - A candidate without a bill identity is queued at once. Enforced by `PostgresCollectionJobStore.AdmitMembersAsync`. Test: `PostgresHouseVoteTests.AVoteWithoutABillIdentityIsQueuedAtOnceBecauseItHasNoTitleToWaitFor`.
 - A vote and its bill cannot race, because both writes take the job coordination lock. Enforced by `PostgresCollectionJobStore.TransactionAsync`. Test: `PostgresHouseVoteTests.TheVoteWriteAndTheBillDetailWriteBothWaitForTheJobLockSoAVoteAndItsBillCannotRace`.
@@ -318,12 +322,38 @@ The executor is `AnalysisWorker<VoteDraftRun>` with `VoteDraftStep`. It runs in 
 
 Its variables are in [operations](../operations.md#vote-drafting). A daily limit without the key is a configuration error. The status row is in `document_change_analysis_status` under the task `vote-draft`.
 
+### Senate collection
+
+The Senate publishes one XML file for each roll call and one menu for each session. Both are public. The source needs no key and no robots check. senate.gov has no `robots.txt`.
+
+One `api` source with `apiParser` set to `senateVoteList` follows the Senate votes. It sets `minimumCongress` and `backfillFrom` like the House source. It refuses a `credential` and a `coverage` list. It covers every configured person with a `bioguideId`, as the House source does. The roster `lis` ID matches members in the drafting work.
+
+The source URL is `https://www.senate.gov/legislative/LIS`. The shipped source `senate-votes` sets `backfillFrom` 2025-01-03 and `minimumCongress` 119. It ships with `enabled: false`. The admission policy holds 1,000 jobs, because one menu lists up to 999 votes.
+
+The daily sweep is the House sweep. The due check creates one menu job for `VoteSession.FirstOfSweep`. A menu job admits one job for each vote and the menu of the following session. The next-menu key is `senate-vote/{source}/menu/{menu job ID}`.
+
+| Kind | URL (`SenateVoteUrl`) | Parser | Version |
+|---|---|---|---|
+| `senateVoteMenu` | `{source url}/roll_call_lists/vote_menu_{congress}_{session}.xml` | `SenateVoteMenuParser` | none, because a menu has no extraction |
+| `senateVote` | `{source url}/roll_call_votes/vote{congress}{session}/vote_{congress}_{session}_{roll, 5 digits}.xml` | `SenateVoteParser` | `senate-vote-v1` |
+
+A vote file holds the detail and the members, so one job gives one extraction. `SenateVoteRenderer` renders it with the normalization version `senate-vote-render-v1`. The first line is `Senate vote: {congress} {session} {roll}`. The `Updated` line holds the modify date in UTC. The `Started` line keeps the Eastern offset. A `Count` line and one `Member` line for each senator follow. A member line holds the `lis` ID, the name, the party, the state, and the cast.
+
+The files give times with no zone. The parser reads them as US Eastern, with `TimeZoneInfo` offset rules. This is a guess. For a time that occurs twice or never at a clock change, the standard offset applies.
+
+The parsers refuse unknown shapes and do not guess. A vote file needs a roll that matches its URL, a valid date and time, and at least one member. A member needs a `lis` ID, a last name, a party, a state, and a cast. The counts must equal the members by cast: `Yea`, `Nay`, `Present`, and `Not Voting`. Any other cast makes the file invalid. The Vice President is in neither the counts nor the member list, so a tie-break vote parses. A menu lists at most 999 votes, each once. A menu day of 1 or 2 January belongs to the year after `congress_year`, because a session can end then. The document of a vote gives a bill link only for a bill type. Other types, such as `PN`, need no number.
+
+The modify date is the version of a vote. The menu has no modify date, so a job key cannot hold it. A vote key holds the day of the sweep when the vote day is 30 days or less before today. Each daily sweep then fetches these votes again. An older vote has the key suffix `final`, so the first sweep after the window ends fetches it one last time. `SenateVoteJobKeys` owns these keys.
+
+Admission of a vote file finds the `vote_versions` row by source, chamber, roll call, and exact modify date. A found row is a duplicate and writes nothing. Otherwise the store checks the extraction against the job, then writes the version and the candidate in one transaction. It queues no draft and admits no further job.
+
 ## Storage and contracts
 
 - The generated [votes schema](schema/votes.md) lists every table, column, key, check, and index.
 - `vote_versions` holds one row for each vote version, keyed by its detail job. The row stores the chamber and the identity, the exact update time, and the nullable bill identity. It also names the extraction of the detail. The store reads it to find duplicates and to write the candidate.
 - `vote_candidates` holds one row for each vote version with both pages captured. It stores the chamber, and it names the detail job, the members job, both extractions, and the configuration revision. Drafting reads these rows.
 - The candidate ID is a SHA-256 hash of the source, the roll call, and the exact update time. `PostgresCollectionJobStore.HashVoteCandidate` builds it. It frames the text like the bill candidate ID, with the prefix `house-vote:` or `senate-vote:`.
+- A Senate vote has one job. The version row and the candidate row both name that job and its extraction, in `detail_job_id` and `members_job_id`, and in `detail_extraction_id` and `members_extraction_id`. The Senate reader must read the capture once and parse both parts from it. No migration is needed.
 - The store writes no page rows. The two extractions and the captures of the two jobs are the evidence of a candidate.
 - `ix_vote_candidates_roll` serves the newer-candidate check of a roll call.
 - `ix_vote_candidates_bill` on congress, bill type, and bill number serves the waiting-candidate query of the bill detail admission.
@@ -342,6 +372,7 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 | Resource kinds and parser list | `src/CivicLens.Application/Collection/ApiResource.cs`, `src/CivicLens.Application/Collection/ApiParser.cs` |
 | Configuration and job binding | `src/CivicLens.Application/Collection/CollectionConfiguration.cs`, `src/CivicLens.Application/Collection/ConfiguredCollectionSource.cs`, `src/CivicLens.Application/Collection/Jobs/CollectionJobDefinition.cs` |
 | Preparation | `src/CivicLens.Application/Collection/Processing/JobPreparation.cs` |
+| Senate parsers, URLs, keys, rendering | `src/CivicLens.Application/Collection/SenateVotes/` |
 | Admission port | `src/CivicLens.Application/Collection/Votes/IVoteAdmissionStore.cs` |
 | Postgres admission and candidates | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.Votes.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.Scheduling.cs` |
 | Table rows | `src/CivicLens.Infrastructure/Collection/Votes/` |
@@ -382,6 +413,9 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 - A members response that is newer than the recorded detail blocks its job until the next sweep admits the newer detail.
 - Rolling back the `VoteKindChangedReason` migration fails while any vote run has the `kindChanged` reason.
 - The session of today uses the UTC date. The new session therefore starts a few hours early on 1 January in US time zones. Its list is empty then.
-- Senate votes need senate.gov data and a `lis_member_id` crosswalk. They are planned in [R-42](../roadmap.md#next). See [actions](actions.md#limits-and-planned-work).
+- Senate votes are collected and stored as candidates. They get no draft queue row. PR 3 of [R-42](../roadmap.md#next) adds the Senate reader, the new vote kinds, and the roster `lis` ID match over all snapshots. It also adds a one-time enqueue of Senate candidates with no queue row. See [actions](actions.md#limits-and-planned-work).
+- The Senate time zone is a guess. The Senate files do not name it. Two file shapes have not been seen: en bloc and treaty votes. A new shape makes a parser raise invalid data, which blocks the job.
+- The casts `Guilty`, `Not Guilty` (impeachment trials), and `Present, Giving Live Pair` fail the file. Only `Yea`, `Nay`, `Present`, and `Not Voting` are counted.
+- PR 3 must remove the House filter in `VoteDraftQueueRows.WaitingForBill`. Senate candidates then join the queue.
 - Roll call lookup keys by chamber, Congress, session, and number. It ignores the source of a vote draft, because each chamber has one source and no code owns its ID. A second source for one chamber needs a source filter in `FindRecordIdByRollAsync`. The lookup text `Roll N` means a House roll. A Senate form of the text comes with the Senate drafting work.
 - The review page links a roll call to clerk.house.gov for every vote. A Senate vote needs its own link.

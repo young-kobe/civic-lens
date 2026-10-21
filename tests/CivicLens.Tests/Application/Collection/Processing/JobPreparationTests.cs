@@ -5,6 +5,7 @@ using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
+using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Application.Collection.Votes;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Issues;
@@ -26,6 +27,8 @@ public sealed class JobPreparationTests
     private const string SummariesUrl = SourceUrl + "/119/hr/1/summaries?format=json&limit=1";
     private const string VoteListUrl = HouseVoteFixtures.SourceUrl + "/119/1?format=json&limit=250";
     private const string VoteDetailUrl = HouseVoteFixtures.SourceUrl + "/119/1/100?format=json";
+    private const string SenateMenuUrl = SenateVoteFixtures.SourceUrl + "/roll_call_lists/vote_menu_119_1.xml";
+    private const string SenateVoteUrl = SenateVoteFixtures.SourceUrl + "/roll_call_votes/vote1191/vote_119_1_00001.xml";
     private const string VoteMembersUrl = HouseVoteFixtures.SourceUrl + "/119/1/100/members?format=json";
     private static readonly DateOnly Backfill = new(2025, 1, 3);
     private static readonly string ListUrl = new BillStreamWindow(Backfill, Backfill).RequestUrl(SourceUrl);
@@ -271,9 +274,43 @@ public sealed class JobPreparationTests
         { ApiResource.HouseVoteList, VoteListUrl, """{"houseRollCallVotes":[],"pagination":{}}""" },
         { ApiResource.HouseVoteDetail, VoteDetailUrl, HouseVoteFixtures.Detail() },
         { ApiResource.HouseVoteMembers, VoteMembersUrl, HouseVoteFixtures.Members() },
+        { ApiResource.SenateVoteMenu, SenateMenuUrl, Encoding.UTF8.GetString(SenateVoteFixtures.Menu()) },
+        { ApiResource.SenateVote, SenateVoteUrl, Encoding.UTF8.GetString(SenateVoteFixtures.Vote()) },
         { ApiResource.MemberRoster, RosterFixtures.SourceUrl, RosterFixtures.Json },
         { ApiResource.ExecutiveRoster, ExecutiveFixtures.SourceUrl, ExecutiveFixtures.Json }
     };
+
+    [Fact]
+    public async Task ASenateMenuIsParsedAgainstTheSessionOfItsUrlAndPassedToTheStoreWithItsJob()
+    {
+        var result = await Prepare(ApiResource.SenateVoteMenu, SenateMenuUrl, Encoding.UTF8.GetString(SenateVoteFixtures.Menu()), null);
+
+        Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
+        var call = Assert.Single(votes.SenateMenus);
+        Assert.Equal(("job", 2), (call.JobId, call.Menu.Votes.Count));
+        Assert.Empty(extractions.Saved);
+    }
+
+    [Fact]
+    public async Task ASenateVoteIsExtractedOnceAndTheStoreGetsThatExtractionSoTheCandidateBindsTheExactEvidence()
+    {
+        var result = await Prepare(ApiResource.SenateVote, SenateVoteUrl, Encoding.UTF8.GetString(SenateVoteFixtures.Vote()), null);
+
+        Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
+        var saved = Assert.Single(extractions.Saved);
+        Assert.Equal((SenateVoteParser.Version, SenateVoteRenderer.NormalizationVersion, "attempt"),
+            (saved.ParserVersion, saved.NormalizationVersion, saved.SourceAttempt.AttemptId));
+        Assert.Contains("\nMember: S428, Angela Alsobrooks, D, MD, Yea\n", saved.Text, StringComparison.Ordinal);
+        var call = Assert.Single(votes.SenateVotes);
+        Assert.Equal(("job", SenateVoteFixtures.Roll1, saved.ExtractionId), (call.JobId, call.Vote.Roll, call.ExtractionId));
+    }
+
+    [Fact]
+    public async Task ASenateVoteFileForAnotherRollThanItsUrlIsRefused()
+    {
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            Prepare(ApiResource.SenateVote, SenateVoteUrl, Encoding.UTF8.GetString(SenateVoteFixtures.Vote(voteNumber: "2")), null));
+    }
 
     [Fact]
     public async Task AVoteListPageIsParsedAgainstItsSessionAndPassedToTheStoreWithItsJob()
@@ -443,6 +480,8 @@ public sealed class JobPreparationTests
         {
             ApiResource.MemberRoster => new ConfiguredCollectionSource(RosterFixtures.Configuration(), RosterFixtures.SourceId, Backfill),
             ApiResource.ExecutiveRoster => new ConfiguredCollectionSource(ExecutiveFixtures.Configuration(), ExecutiveFixtures.SourceId, Backfill),
+            ApiResource.SenateVoteMenu or ApiResource.SenateVote =>
+                new ConfiguredCollectionSource(SenateVoteFixtures.Configuration(), SenateVoteFixtures.SourceId, Backfill),
             _ when IsHouseVote(resource) => new ConfiguredCollectionSource(HouseVoteFixtures.Configuration(), HouseVoteFixtures.SourceId, Backfill),
             _ => new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", Backfill)
         };
@@ -538,6 +577,22 @@ public sealed class JobPreparationTests
         public List<(string JobId, HouseVote Vote)> Details { get; } = [];
         public List<(string JobId, HouseVote Vote)> Members { get; } = [];
         public List<string> ExtractionIds { get; } = [];
+        public List<(string JobId, SenateVoteMenu Menu)> SenateMenus { get; } = [];
+        public List<(string JobId, SenateVote Vote, string ExtractionId)> SenateVotes { get; } = [];
+
+        public Task<DiscoveryAdmissionResult> AdmitSenateMenuAsync(ConfiguredCollectionSource source, string menuJobId,
+            SenateVoteMenu menu, CancellationToken cancellationToken)
+        {
+            SenateMenus.Add((menuJobId, menu));
+            return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
+        }
+
+        public Task<DiscoveryAdmissionResult> AdmitSenateVoteAsync(ConfiguredCollectionSource source, string voteJobId,
+            SenateVote vote, string extractionId, CancellationToken cancellationToken)
+        {
+            SenateVotes.Add((voteJobId, vote, extractionId));
+            return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
+        }
 
         public Task<DiscoveryAdmissionResult> AdmitListPageAsync(ConfiguredCollectionSource source, string listJobId,
             HouseVoteListPage page, CancellationToken cancellationToken)
