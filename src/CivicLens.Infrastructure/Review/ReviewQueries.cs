@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Publication;
+using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents.Persistence;
 using CivicLens.Infrastructure.Review.Persistence;
@@ -67,6 +68,14 @@ internal static class ReviewQueries
         FROM document_change_drafts d
         LEFT JOIN active a ON a.kind = 'documentChange' AND a.record_id = d.draft_id
         WHERE d.review_status = 'Approved'
+        """;
+
+    // The latest decision of a record in the Approved status is the approval of the current revision.
+    public static string CodeApprovedOnly(string unpublishedApprovedSql, string decisionTable) => $"""
+        {unpublishedApprovedSql}
+          AND EXISTS (SELECT 1 FROM {decisionTable} c
+                       WHERE c.record_id = d.record_id AND c.review_state_version = d.review_state_version
+                         AND c.decision_json::jsonb ->> 'actorSubject' = '{ReviewAuthor.CodeSubject}')
         """;
 
     private sealed class ReleaseRecordRow

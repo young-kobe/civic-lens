@@ -79,6 +79,16 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task TheModelAuthorCannotCommitARelease()
+    {
+        var draft = await CreateDraftAsync();
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            publications.CommitAsync(ReviewAuthor.AnalysisSubject, Commit(1, draft, 1, 0), "key", Hash(1), default));
+        Assert.Equal(new PublicationState(0, null), await publications.GetStateAsync(default));
+    }
+
+    [Fact]
     public async Task ASaveAfterTheBuildBlocksTheCommitBecauseTheServedRevisionWouldBeStale()
     {
         var draft = await CreateDraftAsync();

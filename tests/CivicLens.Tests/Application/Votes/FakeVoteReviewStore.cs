@@ -25,6 +25,11 @@ internal sealed class FakeVoteReviewStore : IVoteReviewStore
         return Task.FromResult(Rolls.GetValueOrDefault((congress, sessionNumber, rollCallNumber)));
     }
 
+    public Task<IReadOnlyList<UnpublishedApprovedVote>> ListCodeApprovedUnpublishedAsync(int limit, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<UnpublishedApprovedVote>>([.. Unpublished
+            .Where(item => item.Vote.Decisions.MaxBy(decision => decision.ReviewStateVersion) is { ActorSubject: ReviewAuthor.CodeSubject })
+            .Take(limit)]);
+
     public Task<IReadOnlyList<UnpublishedApprovedVote>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<UnpublishedApprovedVote>>([.. Unpublished.Take(limit)]);
 

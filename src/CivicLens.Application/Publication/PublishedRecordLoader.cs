@@ -31,7 +31,7 @@ internal abstract class PublishedRecordLoader<TCandidate, TAddition>(PublishedRe
         CancellationToken cancellationToken)
     {
         var candidates = await ListCandidatesAsync(limit + 1, cancellationToken);
-        return ([.. candidates.Select(ToReady).OfType<ReadyToPublishRecord>()], candidates.Count > limit);
+        return (ReadyOf(candidates), candidates.Count > limit);
     }
 
     public sealed override async Task<List<PendingRecord>> LoadAsync(ImmutableArray<string> recordIds, PublicationBuild build,
@@ -44,10 +44,21 @@ internal abstract class PublishedRecordLoader<TCandidate, TAddition>(PublishedRe
         {
             var addition = found.GetValueOrDefault(recordId)
                 ?? throw new ArgumentException($"{noun} {recordId} does not exist.", nameof(recordIds));
-            pending.Add(Build(recordId, addition, build));
+            try
+            {
+                pending.Add(Build(recordId, addition, build));
+            }
+            catch (ArgumentException exception) when (exception.GetType() == typeof(ArgumentException))
+            {
+                UnpublishableRecord.Tag(exception, new(Kind, recordId));
+                throw;
+            }
         }
         return pending;
     }
+
+    protected IReadOnlyList<ReadyToPublishRecord> ReadyOf(IEnumerable<TCandidate> candidates) =>
+        [.. candidates.Select(ToReady).OfType<ReadyToPublishRecord>()];
 
     protected abstract Task<IReadOnlyList<TCandidate>> ListCandidatesAsync(int limit, CancellationToken cancellationToken);
 

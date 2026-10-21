@@ -19,11 +19,11 @@ internal static class ReviewAuthorization
             throw new UnauthorizedAccessException("The authenticated subject is not authorized for editorial review.");
     }
 
-    public static void RequireOwner(ReviewActor actor)
+    public static void RequireOwner(ReviewActor actor, bool allowCode = false)
     {
         ArgumentNullException.ThrowIfNull(actor);
-        if (string.IsNullOrWhiteSpace(actor.Subject) || actor.Subject.Length > 256 || actor.Role != ReviewRole.Owner ||
-            ReviewAuthor.IsReserved(actor.Subject))
+        var reserved = ReviewAuthor.IsAnalysis(actor.Subject) || (ReviewAuthor.IsCode(actor.Subject) && !allowCode);
+        if (string.IsNullOrWhiteSpace(actor.Subject) || actor.Subject.Length > 256 || actor.Role != ReviewRole.Owner || reserved)
             throw new UnauthorizedAccessException("The authenticated subject is not authorized to publish.");
     }
 }

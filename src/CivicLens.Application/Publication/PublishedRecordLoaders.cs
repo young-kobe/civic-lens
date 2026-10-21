@@ -18,6 +18,8 @@ public sealed class PublishedRecordLoaders(IDocumentChangeReviewStore documentCh
 
     internal RelationshipRecordLoader Relationships => All.OfType<RelationshipRecordLoader>().Single();
 
+    internal ActionRecordLoader Actions => All.OfType<ActionRecordLoader>().Single();
+
     internal VoteRecordLoader Votes => All.OfType<VoteRecordLoader>().Single();
 
     internal ICarriedPageLoader Carried(PublishedRecordKind kind) =>

@@ -10,7 +10,7 @@ Claude drafts document-change accounts and statement records inside daily token 
 
 The worker drafts one action record for each tracked Congress.gov bill. Each record lists every tracked official's sponsorship and cosponsorship. Code approves each action record after it checks the citations. A person can edit or withdraw a record, and the owner publishes.
 
-The worker collects House roll-call votes and drafts one vote record for each roll call. Each record lists the vote of every tracked member. Code approves each vote record after it checks the citations. A person can edit or withdraw a record on the vote pages. The owner publishes an approved vote record in a static release.
+The worker collects House roll-call votes and drafts one vote record for each roll call. Each record lists the vote of every tracked member. Code approves each vote record after it checks the citations. A person can edit or withdraw a record on the vote pages. The owner publishes an approved vote record in a static release. When `CIVIC_LENS_FACT_PUBLISHING=1`, the worker publishes code-approved action and vote records each hour; see [publication](docs/architecture/publication.md#automatic-publication-of-facts).
 
 The worker can also capture the public member roster once a day. It keeps offices and dated terms as tables that cite the capture. The `roster propose` command lists members to add to the configuration and people to review.
 
