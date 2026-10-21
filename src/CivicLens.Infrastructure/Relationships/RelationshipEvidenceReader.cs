@@ -97,8 +97,9 @@ internal static class RelationshipEvidenceReader
                 .AnyAsync(draft => draft.CandidateId == recordId && draft.ReviewStatus == ReviewStatus.Approved, cancellationToken),
             RelationshipRecordKind.Action => db.Set<ActionDraftRow>().AsNoTracking()
                 .AnyAsync(draft => draft.RecordId == recordId && draft.ReviewStatus == ReviewStatus.Approved, cancellationToken),
-            _ => db.Set<VoteDraftRow>().AsNoTracking()
-                .AnyAsync(draft => draft.RecordId == recordId && draft.ReviewStatus == ReviewStatus.Approved, cancellationToken)
+            RelationshipRecordKind.Vote => db.Set<VoteDraftRow>().AsNoTracking()
+                .AnyAsync(draft => draft.RecordId == recordId && draft.ReviewStatus == ReviewStatus.Approved, cancellationToken),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Relationship record kind has no draft table.")
         };
 
     public static async Task<ImmutableArray<ActionDraftRevision>> ReadActionsSponsoredByAsync(CollectionAttemptDbContext db,

@@ -210,7 +210,9 @@ public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysis
             {
                 Failure.ConnectionFailed => ReservedTokens,
                 Failure.InvalidResponse => exception.Usage?.Total ?? ReservedTokens,
-                _ => 0
+                Failure.RateLimited or Failure.ProviderUnavailable or Failure.AuthenticationFailed or Failure.BillingFailed or
+                    Failure.ModelNotFound or Failure.ProviderRejected => 0,
+                _ => throw new ArgumentOutOfRangeException(nameof(exception), exception.Kind, "Model failure has no token charge.")
             };
             var run = worker.step.Wrap(Run(outcome, exception.Usage ?? AnalysisTokenUsage.None, charged, null, null, null));
             var code = Codes.ForOutcome(outcome);

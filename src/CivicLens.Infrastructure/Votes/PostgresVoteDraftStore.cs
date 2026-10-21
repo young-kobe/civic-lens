@@ -121,26 +121,22 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
         return new(jobId, extractionId, extraction.ParserVersion, extraction.NormalizationVersion, extraction.Text);
     }
 
+    private static readonly (VoteDraftView View, string? ErrorCode)[] SucceededViews =
+    [
+        (VoteDraftView.Drafted, null),
+        (VoteDraftView.Unchanged, VoteDraftErrorCodes.Unchanged),
+        (VoteDraftView.Superseded, VoteDraftErrorCodes.SupersededByNewerCandidate),
+        (VoteDraftView.NoTrackedMember, VoteDraftErrorCodes.NoTrackedMember),
+    ];
+
     private static Expression<Func<VoteAnalysisRow, bool>> InView(VoteDraftView view) => view switch
     {
         VoteDraftView.Pending => AnalysisQueueStates.IsPending<VoteAnalysisRow>(),
-        VoteDraftView.Drafted => row => row.Status == State.Succeeded && row.ErrorCode == null,
-        VoteDraftView.Unchanged => row => row.Status == State.Succeeded && row.ErrorCode == VoteDraftErrorCodes.Unchanged,
-        VoteDraftView.Superseded => row => row.Status == State.Succeeded && row.ErrorCode == VoteDraftErrorCodes.SupersededByNewerCandidate,
-        VoteDraftView.NoTrackedMember => row => row.Status == State.Succeeded && row.ErrorCode == VoteDraftErrorCodes.NoTrackedMember,
-        _ => AnalysisQueueStates.IsFailed<VoteAnalysisRow>()
+        VoteDraftView.Failed => AnalysisQueueStates.IsFailed<VoteAnalysisRow>(),
+        _ => AnalysisQueueStates.IsSucceeded<VoteAnalysisRow>(SucceededViews.Single(item => item.View == view).ErrorCode)
     };
 
-    private static VoteDraftView ViewOf(State status, string? errorCode) => status switch
-    {
-        State.Succeeded => errorCode switch
-        {
-            null => VoteDraftView.Drafted,
-            VoteDraftErrorCodes.Unchanged => VoteDraftView.Unchanged,
-            VoteDraftErrorCodes.NoTrackedMember => VoteDraftView.NoTrackedMember,
-            _ => VoteDraftView.Superseded
-        },
-        var failed when AnalysisQueueStates.IsFailed(failed) => VoteDraftView.Failed,
-        _ => VoteDraftView.Pending
-    };
+    private static VoteDraftView ViewOf(State status, string? errorCode) =>
+        status == State.Succeeded ? SucceededViews.Single(item => item.ErrorCode == errorCode).View
+            : AnalysisQueueStates.IsFailed(status) ? VoteDraftView.Failed : VoteDraftView.Pending;
 }

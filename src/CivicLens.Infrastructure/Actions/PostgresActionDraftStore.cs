@@ -100,29 +100,27 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
     {
         BillPageRole.Detail => ApiResource.Bill,
         BillPageRole.Cosponsors => ApiResource.BillCosponsors,
-        _ => ApiResource.BillSummaries
+        BillPageRole.Actions => ApiResource.BillActions,
+        BillPageRole.Summaries => ApiResource.BillSummaries,
+        _ => throw new ArgumentOutOfRangeException(nameof(role), role, "Bill page role has no API resource.")
     };
+
+    private static readonly (ActionDraftView View, string? ErrorCode)[] SucceededViews =
+    [
+        (ActionDraftView.Drafted, null),
+        (ActionDraftView.Unchanged, ActionDraftErrorCodes.Unchanged),
+        (ActionDraftView.Superseded, ActionDraftErrorCodes.SupersededByNewerCandidate),
+        (ActionDraftView.NoTrackedOfficial, ActionDraftErrorCodes.NoTrackedOfficial),
+    ];
 
     private static Expression<Func<ActionAnalysisRow, bool>> InView(ActionDraftView view) => view switch
     {
         ActionDraftView.Pending => AnalysisQueueStates.IsPending<ActionAnalysisRow>(),
-        ActionDraftView.Drafted => row => row.Status == State.Succeeded && row.ErrorCode == null,
-        ActionDraftView.Unchanged => row => row.Status == State.Succeeded && row.ErrorCode == ActionDraftErrorCodes.Unchanged,
-        ActionDraftView.Superseded => row => row.Status == State.Succeeded && row.ErrorCode == ActionDraftErrorCodes.SupersededByNewerCandidate,
-        ActionDraftView.NoTrackedOfficial => row => row.Status == State.Succeeded && row.ErrorCode == ActionDraftErrorCodes.NoTrackedOfficial,
-        _ => AnalysisQueueStates.IsFailed<ActionAnalysisRow>()
+        ActionDraftView.Failed => AnalysisQueueStates.IsFailed<ActionAnalysisRow>(),
+        _ => AnalysisQueueStates.IsSucceeded<ActionAnalysisRow>(SucceededViews.Single(item => item.View == view).ErrorCode)
     };
 
-    private static ActionDraftView ViewOf(State status, string? errorCode) => status switch
-    {
-        State.Succeeded => errorCode switch
-        {
-            null => ActionDraftView.Drafted,
-            ActionDraftErrorCodes.Unchanged => ActionDraftView.Unchanged,
-            ActionDraftErrorCodes.NoTrackedOfficial => ActionDraftView.NoTrackedOfficial,
-            _ => ActionDraftView.Superseded
-        },
-        var failed when AnalysisQueueStates.IsFailed(failed) => ActionDraftView.Failed,
-        _ => ActionDraftView.Pending
-    };
+    private static ActionDraftView ViewOf(State status, string? errorCode) =>
+        status == State.Succeeded ? SucceededViews.Single(item => item.ErrorCode == errorCode).View
+            : AnalysisQueueStates.IsFailed(status) ? ActionDraftView.Failed : ActionDraftView.Pending;
 }

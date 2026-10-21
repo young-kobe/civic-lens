@@ -13,7 +13,8 @@ internal static class RelationshipPairSource
             RelationshipRecordKind.Statement => await FindOfStatementsAsync(
                 await RelationshipEvidenceReader.ReadStatementsAsync(db, [recordId], scope, cancellationToken), db, scope, cancellationToken),
             RelationshipRecordKind.Action => await FindOfActionAsync(db, recordId, scope, cancellationToken),
-            _ => await FindOfVoteAsync(db, recordId, scope, cancellationToken)
+            RelationshipRecordKind.Vote => await FindOfVoteAsync(db, recordId, scope, cancellationToken),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Relationship record kind has no pair source.")
         };
 
     public static async Task<ImmutableArray<RelationshipPair>> FindAllAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken) =>
