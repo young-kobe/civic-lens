@@ -2,7 +2,9 @@
 @using System.Globalization
 @using CivicLens.Application.Documents
 @using CivicLens.Core.Documents
+@using Microsoft.Extensions.Logging
 @inject IDocumentExtractionStore Extractions
+@inject ILogger<CitationPage> Logger
 
 <TopBarTitle Crumbs="Crumbs" />
 
@@ -59,7 +61,11 @@
         }
         catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested) { throw; }
         catch (ArgumentException) { return EvidenceProblem.OutsideText; }
-        catch (Exception) { return EvidenceProblem.Unavailable; }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "A citation could not load.");
+            return EvidenceProblem.Unavailable;
+        }
     }
 
     private static bool TryParse(string? value, out int number) =>

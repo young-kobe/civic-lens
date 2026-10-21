@@ -49,10 +49,16 @@ Host uses the ASP.NET Core Web SDK and its shared framework. `review [port]` ser
 - Previously issued cookies are checked again against the server subject configuration, so an access change also applies to them.
 - Cookies are secure, HttpOnly, and non-sliding, and they expire after eight hours.
 - Data-protection keys persist across restarts in `CIVIC_LENS_REVIEW_KEY_DIRECTORY`. On Unix the application restricts that directory to its owner. The application does not encrypt the keys at rest.
-- Background workers and review pages log failures through `ILogger<T>` with the full exception. The worker and the CLI write logs to stderr, so JSON on stdout stays clean. The review workspace logs warnings and errors to stderr. CLI results and usage errors stay on the console.
 - Offline tests check subject authorization and HTTP workflows with isolated test signing keys. They do not exercise a live Auth0 tenant.
 
 Pages call Application handlers for editorial and collection actions. Evidence pages are described in [documents](documents.md#evidence-pages).
+
+### Logging
+
+- Workers and review pages log each caught failure through `ILogger<T>` with the full exception.
+- Among the CLI commands, only `worker` writes logs. It writes them to stderr, so JSON on stdout stays clean.
+- The review workspace builds its own console provider. It writes warnings and errors to stderr.
+- CLI results and usage errors stay on the console.
 
 ### Presentation
 

@@ -161,7 +161,6 @@ if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _]
 
 using var cancellation = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
-using var loggers = LoggerFactory.Create(logging => logging.AddConsole(console => console.LogToStandardErrorThreshold = LogLevel.Trace));
 var executing = false;
 var replaying = args is ["receipts", "replay", _, _];
 try
@@ -171,6 +170,7 @@ try
         using var terminate = OperatingSystem.IsWindows() ? null : PosixSignalRegistration.Create(PosixSignal.SIGTERM,
             context => { context.Cancel = true; cancellation.Cancel(); });
         CollectionWorkerCommand.ValidateArguments(args);
+        using var loggers = LoggerFactory.Create(logging => logging.AddConsole(console => console.LogToStandardErrorThreshold = LogLevel.Trace));
         var workerConfiguration = ConfigurationFile.ReadCollectionFromEnvironment()
             ?? throw new ArgumentException("Worker requires CIVIC_LENS_COLLECTION_CONFIG.");
         var issueConfiguration = ConfigurationFile.ReadIssuesFromEnvironment();

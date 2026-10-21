@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.Collections.Immutable;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Statements;
@@ -21,6 +22,7 @@ public sealed partial class GateLabelEditor
     private bool notFound;
 
     [Inject] private ReviewActorAccessor Actors { get; set; } = default!;
+    [Inject] private ILogger<GateLabelEditor> Logger { get; set; } = default!;
     [Inject] private GetGateLabelTask GetTask { get; set; } = default!;
     [Inject] private SaveGateLabel SaveLabel { get; set; } = default!;
     [Inject] private ListGateLabelQueue ListQueue { get; set; } = default!;
@@ -63,8 +65,9 @@ public sealed partial class GateLabelEditor
         }
         catch (OperationCanceledException) when (RequestAborted.IsCancellationRequested) { throw; }
         catch (ArgumentException) { }
-        catch (Exception)
+        catch (Exception exception)
         {
+            Logger.LogError(exception, "The gate label release could not load.");
             HttpContext.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             error = "The release could not load. Refresh the page to try again.";
             return;
@@ -99,8 +102,9 @@ public sealed partial class GateLabelEditor
             HttpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
             error = "Choose yes or no, and tick only listed issues, then save again.";
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            Logger.LogError(exception, "A gate label could not be saved.");
             HttpContext.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             error = "The label could not be saved. Your choices are kept. Try again.";
         }
@@ -123,7 +127,11 @@ public sealed partial class GateLabelEditor
             return next is null ? GateLabelRoutes.List + "?status=done" : GateLabelRoutes.Editor(next.CandidateId, "saved");
         }
         catch (OperationCanceledException) when (RequestAborted.IsCancellationRequested) { throw; }
-        catch (Exception) { return GateLabelRoutes.List; }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "The next gate label could not be found.");
+            return GateLabelRoutes.List;
+        }
     }
 
     public sealed class LabelInput

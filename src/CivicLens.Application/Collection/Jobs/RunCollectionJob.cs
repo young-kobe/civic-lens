@@ -82,6 +82,11 @@ public sealed class RunCollectionJob(
         {
             receipt = await collector.RunAsync(attempt.Request, lease.CollectorToken);
         }
+        catch (Exception exception) when (lease.CollectorToken.IsCancellationRequested)
+        {
+            logger.LogInformation(exception, "The collector stopped on request for attempt {AttemptId} of job {JobId}.", attempt.AttemptId, lease.JobId);
+            executionFailure = exception;
+        }
         catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
         {
             logger.LogError(exception, "The collector failed for attempt {AttemptId} of job {JobId}.", attempt.AttemptId, lease.JobId);
@@ -104,6 +109,7 @@ public sealed class RunCollectionJob(
             }
             catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
             {
+                logger.LogError(exception, "The receipt of attempt {AttemptId} of job {JobId} failed validation or verification.", attempt.AttemptId, lease.JobId);
                 executionFailure = exception;
                 receipt = null;
             }

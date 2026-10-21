@@ -186,7 +186,7 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
     }
 
     private static bool MatchesAdmission(DiscoveryAdmissionBatchRow batch, string inputJson, DiscoveryAdmissionRequest request) =>
-        batch.ConfigurationRevisionId == request.ArticleTemplate.ConfigurationRevision?.Id && SameJson(batch.InputJson, inputJson);
+        batch.ConfigurationRevisionId == request.ArticleTemplate.ConfigurationRevision!.Id && SameJson(batch.InputJson, inputJson);
 
     private static bool SameJson(string stored, string current) =>
         JsonNode.DeepEquals(JsonNode.Parse(stored), JsonNode.Parse(current));

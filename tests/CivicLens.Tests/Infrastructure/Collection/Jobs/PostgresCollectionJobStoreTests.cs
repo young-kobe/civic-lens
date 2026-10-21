@@ -673,7 +673,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         new FileCollectionReceiptHandoffStore(root), new CaptureArtifactVerifier(), collector, NullLogger<RunCollectionJob>.Instance);
 
     [Fact]
-    public async Task NewJobsRetainRevisionsAndRefuseAnotherRevisionOrAnUnboundDefinitionUnderTheSameKey()
+    public async Task NewJobsRetainRevisionsAndAnUnboundDefinitionIsRefusedAtEnqueue()
     {
         var configuration = new CollectionConfiguration
         {
@@ -792,6 +792,15 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
 
         Assert.Equal(PostgresErrorCodes.RestrictViolation, refused.SqlState);
         Assert.NotNull((await jobs.GetAsync(job.JobId, default))!.Definition.ConfigurationRevision);
+    }
+
+    [Fact]
+    public async Task AStoredJobRowWithoutARevisionCannotBeRead()
+    {
+        var job = await jobs.EnqueueAsync(Definition(), "unbound-row", default);
+        await SqlAsync($"UPDATE collection_jobs SET configuration_revision_id = NULL WHERE job_id = '{job.JobId}'");
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => jobs.GetAsync(job.JobId, default));
     }
 
     private static CollectionJobDefinition RevisionDefinition()

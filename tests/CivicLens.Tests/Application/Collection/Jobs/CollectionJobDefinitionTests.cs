@@ -85,7 +85,6 @@ public sealed class CollectionJobDefinitionTests
 
         Assert.True(definition.IsRoot());
         Assert.False((definition with { Url = "https://example.test/page/article" }).IsRoot());
-        Assert.False((definition with { ConfigurationRevision = null, CoverageAsOf = null }).IsRoot());
     }
 
     [Theory]
@@ -128,20 +127,7 @@ public sealed class CollectionJobDefinitionTests
             AllowedPathPrefix = "/"
         };
 
-        Assert.Equal(expected, (definition with { Url = url, ConfigurationRevision = null, CoverageAsOf = null }).IsListingPage());
-    }
-
-    [Fact]
-    public void WithoutAConfigurationRevisionOnlyThePrefixPathMakesAnIndexPage()
-    {
-        var definition = CollectionFixtures.Definition(Config(), "first", new DateOnly(2026, 7, 1)) with
-        {
-            ConfigurationRevision = null,
-            CoverageAsOf = null
-        };
-
-        Assert.True((definition with { Url = "https://example.test/page/" }).IsListingPage());
-        Assert.False((definition with { Url = "https://example.test/page/article" }).IsListingPage());
+        Assert.Equal(expected, (definition with { Url = url }).IsListingPage());
     }
 
     private static CollectionConfiguration DatedConfig(DateOnly startsOn)

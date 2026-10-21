@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using CivicLens.Application.Activity;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Briefs;
@@ -41,6 +42,7 @@ public sealed partial class ReviewHome
     private string? lookupMessage;
 
     [Inject] private ReviewActorAccessor Actors { get; set; } = default!;
+    [Inject] private ILogger<ReviewHome> Logger { get; set; } = default!;
     [Inject] private IServiceProvider Services { get; set; } = default!;
     [Inject] private GetReviewOverview GetOverview { get; set; } = default!;
     [Inject] private ListEligibleDocumentComparisons ListChanges { get; set; } = default!;
@@ -121,8 +123,9 @@ public sealed partial class ReviewHome
             overview = null;
             error = "This page link is no longer valid. Go back to the first page of the list.";
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            Logger.LogError(exception, "The review overview could not load.");
             overview = null;
             error = "The review workspace could not load its records. Refresh the page to try again.";
         }
@@ -134,7 +137,11 @@ public sealed partial class ReviewHome
         try { hit = await Lookup.ExecuteAsync(actor!, Find, cancellationToken); }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (DraftLookupFormatException invalid) { return invalid.Message; }
-        catch (Exception) { return "The lookup could not run. Refresh the page and try again."; }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "The draft lookup failed.");
+            return "The lookup could not run. Refresh the page and try again.";
+        }
         if (hit is null) return $"No draft for “{Find!.Trim()}”.";
         Navigation.NavigateTo(RecordRoutes.Editor(hit.Kind, hit.RecordId));
         return null;
@@ -160,7 +167,11 @@ public sealed partial class ReviewHome
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (DocumentChangeDraftExistsException existing) { return DocumentRoutes.Editor(existing.DraftId); }
         catch (ArgumentException) { return "/Review?status=invalid"; }
-        catch (Exception) { return "/Review?status=unavailable"; }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "A document change draft could not start.");
+            return "/Review?status=unavailable";
+        }
     }
 
     private FeedItem Describe(ActivityEvent item)

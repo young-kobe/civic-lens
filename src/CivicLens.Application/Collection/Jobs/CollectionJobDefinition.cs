@@ -32,10 +32,10 @@ public sealed record CollectionJobDefinition
     public DateOnly? CoverageAsOf { get; init; }
 
     public PacingGroupConfiguration? ResolvePacingGroup() =>
-        ConfigurationRevision?.Configuration.PacingGroupOf(AllowedOrigin);
+        ConfigurationRevision!.Configuration.PacingGroupOf(AllowedOrigin);
 
     private string? ConfiguredUrl =>
-        ConfigurationRevision?.Configuration.Sources.FirstOrDefault(source => source.Id == SourceId)?.Url;
+        ConfigurationRevision!.Configuration.Sources.FirstOrDefault(source => source.Id == SourceId)?.Url;
 
     public bool IsRoot() =>
         ApiResource is Collection.ApiResource.BillList or Collection.ApiResource.HouseVoteList or Collection.ApiResource.SenateVoteMenu || ConfiguredUrl == Url;

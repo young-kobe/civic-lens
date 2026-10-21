@@ -1,6 +1,8 @@
 @page "/Documents/History"
 @using CivicLens.Application.Documents
+@using Microsoft.Extensions.Logging
 @inject GetDocumentHistory Histories
+@inject ILogger<HistoryPage> Logger
 
 <TopBarTitle Crumbs="Crumbs" />
 
@@ -80,6 +82,10 @@
         }
         catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested) { throw; }
         catch (DocumentHistoryLimitException) { return EvidenceProblem.HistoryTooLarge; }
-        catch (Exception) { return EvidenceProblem.Unavailable; }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "A document history could not load.");
+            return EvidenceProblem.Unavailable;
+        }
     }
 }
