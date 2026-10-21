@@ -1,5 +1,6 @@
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.HouseVotes;
+using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Collection.Contracts;
 using System.Text.Json.Serialization;
 
@@ -37,7 +38,7 @@ public sealed record CollectionJobDefinition
         ConfigurationRevision?.Configuration.Sources.FirstOrDefault(source => source.Id == SourceId)?.Url;
 
     public bool IsRoot() =>
-        ApiResource is Collection.ApiResource.BillList or Collection.ApiResource.HouseVoteList || ConfiguredUrl == Url;
+        ApiResource is Collection.ApiResource.BillList or Collection.ApiResource.HouseVoteList or Collection.ApiResource.SenateVoteMenu || ConfiguredUrl == Url;
 
     public bool IsListingPage()
     {
@@ -122,6 +123,7 @@ public sealed record CollectionJobDefinition
         {
             ApiParser.CongressBillList => MatchesBillResource(resource, source.Url, url),
             ApiParser.CongressHouseVoteList => MatchesHouseVoteResource(resource, source.Url, url),
+            ApiParser.SenateVoteList => MatchesSenateVoteResource(resource, source.Url, url),
             ApiParser.CongressLegislators => resource == Collection.ApiResource.MemberRoster && url == source.Url,
             ApiParser.CongressLegislatorsExecutive => resource == Collection.ApiResource.ExecutiveRoster && url == source.Url,
             _ => false
@@ -144,6 +146,14 @@ public sealed record CollectionJobDefinition
             Collection.ApiResource.HouseVoteList => HouseVoteListUrl.TryRead(sourceUrl, url) is not null,
             Collection.ApiResource.HouseVoteDetail => HouseVoteRollUrl.TryReadDetail(sourceUrl, url) is not null,
             Collection.ApiResource.HouseVoteMembers => HouseVoteRollUrl.TryReadMembers(sourceUrl, url) is not null,
+            _ => false
+        };
+
+    private static bool MatchesSenateVoteResource(ApiResource resource, string sourceUrl, string url) =>
+        resource switch
+        {
+            Collection.ApiResource.SenateVoteMenu => SenateVoteUrl.TryReadMenu(sourceUrl, url) is not null,
+            Collection.ApiResource.SenateVote => SenateVoteUrl.TryReadVote(sourceUrl, url) is not null,
             _ => false
         };
 

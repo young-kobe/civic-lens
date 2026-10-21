@@ -14,6 +14,8 @@ public enum ApiResource
     HouseVoteList,
     HouseVoteDetail,
     HouseVoteMembers,
+    SenateVoteMenu,
+    SenateVote,
     MemberRoster,
     ExecutiveRoster
 }

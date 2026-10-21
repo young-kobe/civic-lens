@@ -7,6 +7,8 @@ public static class SenateVoteMenuParser
 {
     public const string Version = "senate-vote-menu-v1";
 
+    public const int MaximumVotes = 999;
+
     private const string Name = "Senate vote menu";
 
     public static SenateVoteMenu Parse(ReadOnlySpan<byte> xml, VoteSession expected)
@@ -17,6 +19,7 @@ public static class SenateVoteMenuParser
         var year = ReadYear(root, session);
         var list = root.Element("votes") ?? throw new InvalidDataException("Senate vote menu must contain votes.");
         var votes = list.Elements("vote").Select(item => ReadItem(item, session, year)).ToArray();
+        if (votes.Length > MaximumVotes) throw new InvalidDataException("Senate vote menu holds more votes than the admission limit.");
         if (votes.Select(vote => vote.Roll.Number).Distinct().Count() != votes.Length)
             throw new InvalidDataException("Senate vote menu lists a vote number twice.");
         return new SenateVoteMenu(session, votes);

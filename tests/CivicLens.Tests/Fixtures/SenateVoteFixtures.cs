@@ -1,12 +1,19 @@
 using System.Text;
+using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Discovery;
+using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Application.Collection.Votes;
+using CivicLens.Collection.Contracts;
 
 namespace CivicLens.Tests.Fixtures;
 
 /// <summary>Trimmed copies of senate.gov roll call files for the 119th Congress, session 1, fetched 2026-10-21.</summary>
 internal static class SenateVoteFixtures
 {
+    public const string SourceId = "senate-votes";
+    public const string SourceUrl = "https://www.senate.gov/legislative/LIS";
+    public static readonly DateOnly Backfill = new(2025, 1, 3);
     public static readonly VoteSession Session = new(119, 1);
     public static readonly SenateVoteRoll Roll1 = new(Session, 1);
 
@@ -77,7 +84,7 @@ internal static class SenateVoteFixtures
         </document>
         """;
 
-    public const string DefaultCount = "<count><yeas>84</yeas><nays>9</nays><present/><absent>6</absent></count>";
+    public const string DefaultCount = "<count><yeas>1</yeas><nays>0</nays><present/><absent>1</absent></count>";
 
     public const string DefaultMembers = """
         <member>
@@ -99,6 +106,37 @@ internal static class SenateVoteFixtures
           <lis_member_id>S429</lis_member_id>
         </member>
         """;
+
+    public static CollectionConfiguration Configuration(DiscoveryAdmissionPolicy? policy = null) => new()
+    {
+        Version = 2,
+        People = [new PersonConfiguration { Id = "with-id-a", Name = "A", BioguideId = "A000001" }],
+        Sources =
+        [
+            new WatchedSourceConfiguration
+            {
+                Id = SourceId,
+                Url = SourceUrl,
+                AllowedOrigin = "https://www.senate.gov",
+                AllowedPathPrefix = "/legislative/LIS",
+                Mode = CollectionMode.Api,
+                ApiParser = ApiParser.SenateVoteList,
+                MinimumCongress = 119,
+                BackfillFrom = Backfill,
+                AdmissionPolicy = policy ?? new DiscoveryAdmissionPolicy
+                {
+                    MaxJobs = 1000,
+                    MaxTotalRequests = 4000,
+                    MaxTotalBytes = 2_000_000_000,
+                    MaxTotalTimeoutSeconds = 20_000
+                },
+                JobPolicy = new CollectionJobPolicy { MaxAttempts = 2 },
+                MaxRequests = 2,
+                MaxBytes = 1_000_000,
+                TimeoutSeconds = 10
+            }
+        ]
+    };
 
     private static byte[] Bytes(string xml) => Encoding.UTF8.GetBytes(xml);
 }

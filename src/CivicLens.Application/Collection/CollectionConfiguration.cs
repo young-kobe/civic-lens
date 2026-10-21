@@ -1,6 +1,7 @@
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Issues;
 using CivicLens.Collection.Contracts;
@@ -96,7 +97,9 @@ public sealed record CollectionConfiguration
             source.JobPolicy?.Validate(request);
             source.AdmissionPolicy?.Validate();
             if (source.ApiParser is ApiParser.CongressBillList or ApiParser.CongressHouseVoteList)
-                ValidateListAdmissionCapacity(source);
+                ValidateListAdmissionCapacity(source, ApiPageQuery.PageLimit + 1);
+            if (source.ApiParser == ApiParser.SenateVoteList)
+                ValidateListAdmissionCapacity(source, SenateVoteMenuParser.MaximumVotes + 1);
             if (source.CheckIntervalSeconds is { } interval && interval is
                 < WatchedSourceConfiguration.MinimumCheckIntervalSeconds or
                 > WatchedSourceConfiguration.MaximumCheckIntervalSeconds)
@@ -124,7 +127,7 @@ public sealed record CollectionConfiguration
     {
         IEnumerable<string> ids = source.ApiParser switch
         {
-            ApiParser.CongressBillList or ApiParser.CongressHouseVoteList => asOf < source.BackfillFrom ? [] : BioguidePersonIds(),
+            ApiParser.CongressBillList or ApiParser.CongressHouseVoteList or ApiParser.SenateVoteList => asOf < source.BackfillFrom ? [] : BioguidePersonIds(),
             ApiParser.CongressLegislators or ApiParser.CongressLegislatorsExecutive => [],
             null => source.Coverage!.Where(coverage => new DateRange(coverage.StartsOn, coverage.EndsBefore).Contains(asOf))
                 .Select(coverage => coverage.PersonId),
@@ -168,6 +171,9 @@ public sealed record CollectionConfiguration
             case ApiParser.CongressHouseVoteList:
                 ValidateCongressApiSource(source);
                 break;
+            case ApiParser.SenateVoteList:
+                ValidateSenateVoteSource(source);
+                break;
             case ApiParser.CongressLegislators:
             case ApiParser.CongressLegislatorsExecutive:
                 ValidateRosterFileSource(source);
@@ -194,16 +200,28 @@ public sealed record CollectionConfiguration
     {
         if (source.Credential is null)
             throw new ArgumentException($"Source '{source.Id}' needs a credential for its API parser.");
+        ValidateSessionWindow(source);
+    }
+
+    private static void ValidateSenateVoteSource(WatchedSourceConfiguration source)
+    {
+        if (source.Credential is not null)
+            throw new ArgumentException($"Source '{source.Id}' reads public files and cannot set a credential.");
+        ValidateSessionWindow(source);
+    }
+
+    private static void ValidateSessionWindow(WatchedSourceConfiguration source)
+    {
         if (source.MinimumCongress is not >= 1 || source.BackfillFrom is null)
             throw new ArgumentException($"Source '{source.Id}' needs a minimum Congress of 1 or more and a backfill date.");
         if (source.Coverage is not null)
             throw new ArgumentException($"Source '{source.Id}' covers every person with a bioguide ID and cannot list people.");
     }
 
-    private static void ValidateListAdmissionCapacity(WatchedSourceConfiguration source)
+    private static void ValidateListAdmissionCapacity(WatchedSourceConfiguration source, int jobs)
     {
         var policy = source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy();
-        if (!policy.CanReserve(CollectionJobDefinition.FromSource(source), ApiPageQuery.PageLimit + 1))
+        if (!policy.CanReserve(CollectionJobDefinition.FromSource(source), jobs))
             throw new ArgumentException($"Source '{source.Id}' admission policy must hold a full list page and its next-page job.");
     }
 

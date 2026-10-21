@@ -19,12 +19,14 @@ public static class SenateVoteParser
         var billType = BillTypeOf(document);
         var vote = new SenateVote(expected, SenateXml.ReadDateTime(SenateXml.Required(root, "modify_date", Name), Name),
             billType, billType is null ? null : document!.Number);
+        var counts = ReadCounts(root);
+        var members = ReadMembers(root.Element("members"));
+        RequireCountsMatch(counts, members);
         return new SenateVoteDetail(vote, SenateXml.ReadDateTime(SenateXml.Required(root, "vote_date", Name), Name),
             SenateXml.Required(root, "question", Name), SenateXml.Required(root, "vote_question_text", Name),
             SenateXml.Required(root, "vote_title", Name), SenateXml.Required(root, "vote_result", Name),
             SenateXml.Optional(root, "vote_result_text", Name), SenateXml.Optional(root, "vote_document_text", Name),
-            SenateXml.Optional(root, "majority_requirement", Name), document, ReadCounts(root),
-            ReadMembers(root.Element("members")));
+            SenateXml.Optional(root, "majority_requirement", Name), document, counts, members);
     }
 
     private static SenateVoteDocument? ReadDocument(XElement? element)
@@ -47,6 +49,20 @@ public static class SenateVoteParser
         var count = root.Element("count") ?? throw new InvalidDataException("Senate vote must contain count.");
         return new SenateVoteCounts(SenateXml.OptionalCount(count, "yeas", Name), SenateXml.OptionalCount(count, "nays", Name),
             SenateXml.OptionalCount(count, "present", Name), SenateXml.OptionalCount(count, "absent", Name));
+    }
+
+    private static void RequireCountsMatch(SenateVoteCounts counts, SenateVoteMember[] members)
+    {
+        var expected = new Dictionary<string, int>
+        {
+            ["Yea"] = counts.Yeas ?? 0,
+            ["Nay"] = counts.Nays ?? 0,
+            ["Present"] = counts.Present ?? 0,
+            ["Not Voting"] = counts.Absent ?? 0
+        };
+        var actual = members.GroupBy(member => member.VoteCast).ToDictionary(group => group.Key, group => group.Count());
+        var matches = actual.Keys.All(expected.ContainsKey) && expected.All(item => actual.GetValueOrDefault(item.Key) == item.Value);
+        if (!matches) throw new InvalidDataException("Senate vote counts differ from its member list.");
     }
 
     private static SenateVoteMember[] ReadMembers(XElement? members)

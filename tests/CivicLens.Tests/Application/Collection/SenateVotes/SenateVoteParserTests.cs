@@ -77,7 +77,7 @@ public sealed class SenateVoteParserTests
     [Fact]
     public void CountsKeepEmptyFieldsAsAbsent()
     {
-        Assert.Equal(new SenateVoteCounts(84, 9, null, 6), Parse(SenateVoteFixtures.Vote()).Counts);
+        Assert.Equal(new SenateVoteCounts(1, 0, null, 1), Parse(SenateVoteFixtures.Vote()).Counts);
     }
 
     [Fact]
@@ -112,6 +112,23 @@ public sealed class SenateVoteParserTests
         };
 
         Assert.Throws<InvalidDataException>(() => Parse(xml));
+    }
+
+    [Theory]
+    [InlineData("<count><yeas>2</yeas><nays>0</nays><present/><absent>1</absent></count>")]
+    [InlineData("<count><yeas>1</yeas><nays>0</nays><present/><absent>0</absent></count>")]
+    [InlineData("<count><yeas>1</yeas><nays>0</nays><present>1</present><absent>1</absent></count>")]
+    public void CountsThatDifferFromTheMemberListAreInvalidBecauseOneOfThemIsWrong(string count)
+    {
+        Assert.Throws<InvalidDataException>(() => Parse(SenateVoteFixtures.Vote(count: count)));
+    }
+
+    [Fact]
+    public void ACastOutsideTheFourCountedKindsIsInvalidBecauseNoCountCoversIt()
+    {
+        var members = SenateVoteFixtures.DefaultMembers.Replace("<vote_cast>Not Voting</vote_cast>", "<vote_cast>Guilty</vote_cast>");
+
+        Assert.Throws<InvalidDataException>(() => Parse(SenateVoteFixtures.Vote(members: members)));
     }
 
     [Fact]

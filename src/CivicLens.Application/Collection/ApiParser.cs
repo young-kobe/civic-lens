@@ -4,6 +4,7 @@ public enum ApiParser
 {
     CongressBillList,
     CongressHouseVoteList,
+    SenateVoteList,
     CongressLegislators,
     CongressLegislatorsExecutive
 }

@@ -2,6 +2,7 @@ using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Application.Collection.Votes;
 using CivicLens.Collection.Contracts;
 
@@ -130,6 +131,22 @@ public sealed class ConfiguredCollectionSource
             CreateApiJobDefinition(ApiResource.HouseVoteMembers, HouseVoteRollUrl.Members(ReadHouseVoteSource().Url, vote.Roll),
                 currentDate));
 
+    public ApiJobBatch CreateSenateMenuBatch(string menuJobId, SenateVoteMenu menu, DateOnly currentDate)
+    {
+        var source = ReadSenateVoteSource();
+        var template = PrepareDefinition(source, currentDate, null, article: false);
+        var votes = menu.Votes
+            .Select(item => new ApiJob(SenateVoteJobKeys.Vote(SourceId, item, currentDate),
+                template with { ApiResource = ApiResource.SenateVote, Url = SenateVoteUrl.Vote(source.Url, item.Roll) }));
+        var nextUrl = menu.Session.Following(currentDate) is { } following ? SenateVoteUrl.Menu(source.Url, following) : null;
+        var nextMenu = nextUrl is null
+            ? null
+            : new ApiJob(SenateVoteJobKeys.NextMenu(SourceId, menuJobId),
+                CreateApiJobDefinition(ApiResource.SenateVoteMenu, nextUrl, currentDate));
+        return new ApiJobBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), template,
+            nextMenu is null ? [.. votes] : [.. votes, nextMenu]);
+    }
+
     public ApiJobBatch CreateApiBatch(IReadOnlyList<ApiJob> jobs, DateOnly currentDate)
     {
         var source = ReadApiSource();
@@ -189,6 +206,10 @@ public sealed class ConfiguredCollectionSource
                 return VoteSession.FirstOfSweep(source.BackfillFrom!.Value, today, source.MinimumCongress!.Value) is { } first
                     ? new ApiTarget(ApiResource.HouseVoteList, HouseVoteListUrl.FirstPage(source.Url, first))
                     : null;
+            case ApiParser.SenateVoteList:
+                return VoteSession.FirstOfSweep(source.BackfillFrom!.Value, today, source.MinimumCongress!.Value) is { } firstMenu
+                    ? new ApiTarget(ApiResource.SenateVoteMenu, SenateVoteUrl.Menu(source.Url, firstMenu))
+                    : null;
             case ApiParser.CongressLegislators:
                 return new ApiTarget(ApiResource.MemberRoster, source.Url);
             case ApiParser.CongressLegislatorsExecutive:
@@ -207,6 +228,11 @@ public sealed class ConfiguredCollectionSource
         ReadSource() is { ApiParser: ApiParser.CongressHouseVoteList } source
             ? source
             : throw new ArgumentException("House vote admission requires a configured Congress House vote source.");
+
+    private WatchedSourceConfiguration ReadSenateVoteSource() =>
+        ReadSource() is { ApiParser: ApiParser.SenateVoteList } source
+            ? source
+            : throw new ArgumentException("Senate vote admission requires a configured Senate vote source.");
 
     private WatchedSourceConfiguration ReadApiSource() =>
         ReadSource() is { ApiParser: not null } source

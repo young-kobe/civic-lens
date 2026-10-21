@@ -1,6 +1,7 @@
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
+using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Votes;
 using CivicLens.Application.Documents;
@@ -105,6 +106,8 @@ public sealed class JobPreparation(
             ApiResource.HouseVoteList => AdmitHouseVoteListAsync(job, artifactRoot, cancellationToken),
             ApiResource.HouseVoteDetail => AdmitHouseVoteDetailAsync(job, artifactRoot, cancellationToken),
             ApiResource.HouseVoteMembers => AdmitHouseVoteMembersAsync(job, artifactRoot, cancellationToken),
+            ApiResource.SenateVoteMenu => AdmitSenateVoteMenuAsync(job, artifactRoot, cancellationToken),
+            ApiResource.SenateVote => AdmitSenateVoteAsync(job, artifactRoot, cancellationToken),
             ApiResource.MemberRoster => AdmitMemberRosterAsync(job, artifactRoot, cancellationToken),
             ApiResource.ExecutiveRoster => AdmitExecutiveRosterAsync(job, artifactRoot, cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(job))
@@ -209,6 +212,28 @@ public sealed class JobPreparation(
         var extractionId = await SaveExtractionAsync(response.Captured, HouseVoteMembersParser.Version,
             HouseVoteRenderer.NormalizationVersion, HouseVoteRenderer.RenderMembers(members), cancellationToken);
         return PreparedFrom(await voteAdmissions.AdmitMembersAsync(configured, job.JobId, members.Vote, extractionId, cancellationToken));
+    }
+
+    private async Task<JobPreparationResult> AdmitSenateVoteMenuAsync(CollectionJobRecord job, string artifactRoot,
+        CancellationToken cancellationToken)
+    {
+        var configured = ConfiguredSourceOf(job);
+        var expected = SenateVoteUrl.ReadMenu(configured.SourceUrl, job.Definition.Url);
+        var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
+        var menu = SenateVoteMenuParser.Parse(response.Body, expected);
+        return PreparedFrom(await voteAdmissions.AdmitSenateMenuAsync(configured, job.JobId, menu, cancellationToken));
+    }
+
+    private async Task<JobPreparationResult> AdmitSenateVoteAsync(CollectionJobRecord job, string artifactRoot,
+        CancellationToken cancellationToken)
+    {
+        var configured = ConfiguredSourceOf(job);
+        var expected = SenateVoteUrl.ReadVote(configured.SourceUrl, job.Definition.Url);
+        var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
+        var detail = SenateVoteParser.Parse(response.Body, expected);
+        var extractionId = await SaveExtractionAsync(response.Captured, SenateVoteParser.Version,
+            SenateVoteRenderer.NormalizationVersion, SenateVoteRenderer.Render(detail), cancellationToken);
+        return PreparedFrom(await voteAdmissions.AdmitSenateVoteAsync(configured, job.JobId, detail.Vote, extractionId, cancellationToken));
     }
 
     private async Task<JobPreparationResult> AdmitMemberRosterAsync(CollectionJobRecord job, string artifactRoot,
