@@ -355,7 +355,7 @@ public sealed class PublishWithdrawalsTests
     }
 
     [Fact]
-    public async Task ANullNoteOrNullWithdrawalIsRefusedWithAnArgumentExceptionBeforeAnythingIsRead()
+    public async Task ANullNoteOrNullWithdrawalIsRefusedWithAnArgumentException()
     {
         var (scenario, action) = await PublishedActionAsync();
         var request = PublicationScenario.Request("k2", Reference(action));
