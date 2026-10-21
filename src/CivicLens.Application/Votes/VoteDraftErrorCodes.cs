@@ -8,6 +8,7 @@ public static class VoteDraftErrorCodes
     public const string OverByteCap = "overByteCap";
     public const string TooManyMembers = "tooManyMembers";
     public const string FactTooLong = "factTooLong";
+    public const string FieldTooLong = "fieldTooLong";
     public const string NoTrackedMember = "noTrackedMember";
     public const string Unchanged = "unchanged";
     public const string MemberVotesChanged = "memberVotesChanged";

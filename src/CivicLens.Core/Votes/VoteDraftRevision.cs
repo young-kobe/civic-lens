@@ -17,6 +17,8 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
     public const int MaximumFacts = 64;
     public const int MaximumFactLength = 2_000;
     public const int MaximumMembers = 600;
+    public const int MaximumBillTypeLength = 16;
+    public const int MaximumCastLength = 32;
 
     public ReviewAuthorKind AuthorKind => ReviewAuthor.KindOf(AuthorSubject);
 
@@ -31,8 +33,8 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
             throw new ArgumentException("A vote revision needs valid record, candidate, and issue revision IDs.");
         if (RevisionNumber < 1 || string.IsNullOrWhiteSpace(SourceId) || !Enum.IsDefined(Chamber) || Congress < 1 || SessionNumber is not (1 or 2) || RollCallNumber < 1)
             throw new ArgumentException("A vote revision needs a source and a roll call identity.");
-        if ((BillType is null) != (BillNumber is null) || BillType is not null && (string.IsNullOrWhiteSpace(BillType) || BillNumber < 1))
-            throw new ArgumentException("A bill type has a number, and a number has a type.");
+        if ((BillType is null) != (BillNumber is null) || BillType is not null && (string.IsNullOrWhiteSpace(BillType) || BillType.Length > MaximumBillTypeLength || BillNumber < 1))
+            throw new ArgumentException($"A bill type has at most {MaximumBillTypeLength} characters and a number, and a number has a type.");
         if (TrackedIssueIds.IsDefault || TrackedIssueIds.Length > StatementDraftRevision.MaximumSelections)
             throw new ArgumentException($"A vote revision needs at most {StatementDraftRevision.MaximumSelections} tracked issues.");
         ReviewTextRules.ValidateHeadlineAndSummary(this, MaximumHeadlineLength, MaximumSummaryLength);
@@ -46,8 +48,8 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
         if (Members.IsDefaultOrEmpty || Members.Length > MaximumMembers)
             throw new ArgumentException($"A vote revision needs 1 to {MaximumMembers} member votes.");
         if (Members.Any(member => string.IsNullOrWhiteSpace(member.PersonId) || string.IsNullOrWhiteSpace(member.BioguideId) ||
-                string.IsNullOrWhiteSpace(member.Cast) || !IsBounded(member.Citation)))
-            throw new ArgumentException("Each member vote needs a person, a bioguide ID, a cast, and a bounded citation.");
+                string.IsNullOrWhiteSpace(member.Cast) || member.Cast.Length > MaximumCastLength || !IsBounded(member.Citation)))
+            throw new ArgumentException($"Each member vote needs a person, a bioguide ID, a cast of at most {MaximumCastLength} characters, and a bounded citation.");
     }
 
     public void ValidateForApproval() => ValidateShape();

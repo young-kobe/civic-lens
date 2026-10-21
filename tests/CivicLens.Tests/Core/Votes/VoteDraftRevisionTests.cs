@@ -37,6 +37,13 @@ public sealed class VoteDraftRevisionTests
     }
 
     [Fact]
+    public void ACastOrBillTypeOverTheLimitIsRefusedBecauseThePublishedVoteRefusesItToo()
+    {
+        Assert.Throws<ArgumentException>(() => (Revision() with { Members = [Member() with { Cast = new string('y', VoteDraftRevision.MaximumCastLength + 1) }] }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (Revision() with { BillType = new string('H', VoteDraftRevision.MaximumBillTypeLength + 1), BillNumber = 1 }).ValidateShape());
+    }
+
+    [Fact]
     public void EveryCitationMustBeABoundedSpanOfAnExtractionSoTheReviewerCanOpenTheLine()
     {
         Assert.Throws<ArgumentException>(() => (Revision() with { Facts = [new("Result: Passed", new SourceSpan(ExtractionId, 0, 0))] }).ValidateShape());

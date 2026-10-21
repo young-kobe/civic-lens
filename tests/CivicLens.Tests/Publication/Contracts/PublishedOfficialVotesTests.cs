@@ -40,14 +40,14 @@ public sealed class PublishedOfficialVotesTests
     [Fact]
     public void AFullCongressOfMaximumLengthRowsStaysUnderTheByteCapSoTheFileCanAlwaysBeReadBack()
     {
-        var long8 = new string('é', PublishedOfficialVote.MaximumHeadlineLength);
+        var long8 = new string('é', PublishedVote.MaximumHeadlineLength);
         var rows = Enumerable.Range(0, PublishedOfficialVotes.MaximumVotes)
             .Select(index => Vote('a', new DateOnly(2026, 1, 1), index + 1) with
             {
                 RecordId = index.ToString("x64"),
                 Headline = long8,
-                Cast = new string('é', PublishedOfficialVote.MaximumCastLength),
-                BillType = new string('z', PublishedOfficialVote.MaximumBillTypeLength)
+                Cast = new string('é', PublishedVote.MaximumCastLength),
+                BillType = new string('z', PublishedVote.MaximumBillTypeLength)
             });
 
         var json = JsonSerializer.SerializeToUtf8Bytes(PublishedOfficialVotes.Of(rows), PublicationProtocol.JsonOptions);
