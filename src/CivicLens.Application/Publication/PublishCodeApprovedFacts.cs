@@ -11,14 +11,13 @@ public sealed class PublishCodeApprovedFacts(PublishRelease publish, IPublicatio
 
     public async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
-        // After a rollback the active release is not the latest. The tick waits until the owner activates the latest release.
-        var state = await publications.GetStateAsync(cancellationToken);
-        if (state.Active?.ReleaseNumber != state.LatestReleaseNumber && state.LatestReleaseNumber > 0) return 0;
-        var latest = state.LatestReleaseNumber;
         var published = 0;
         var skipped = new HashSet<PublishedRecordReference>();
         while (true)
         {
+            // After a rollback the active release is not the latest. The stage waits until the owner activates the latest release.
+            var state = await publications.GetStateAsync(cancellationToken);
+            if (state.Active?.ReleaseNumber != state.LatestReleaseNumber && state.LatestReleaseNumber > 0) return published;
             var ready = await ListReadyAsync(skipped, cancellationToken);
             if (ready.IsEmpty) return published;
             PublicationReleaseSummary summary;
@@ -37,8 +36,7 @@ public sealed class PublishCodeApprovedFacts(PublishRelease publish, IPublicatio
                 continue;
             }
             // A release that is not new replayed a stored one, and the same batch would list again.
-            if (summary.ReleaseNumber <= latest) return published;
-            latest = summary.ReleaseNumber;
+            if (summary.ReleaseNumber <= state.LatestReleaseNumber) return published;
             published += ready.Length;
         }
     }

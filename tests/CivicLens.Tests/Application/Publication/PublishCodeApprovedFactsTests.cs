@@ -110,6 +110,26 @@ public sealed class PublishCodeApprovedFactsTests
     }
 
     [Fact]
+    public async Task ARollbackBetweenBatchesStopsTheTickSoTheNextBatchDoesNotUndoIt()
+    {
+        var scenario = new PublicationScenario();
+        AddReadyActions(scenario, PublishRelease.MaximumRecords + 6);
+        ListedUntilPublished(scenario);
+        var removePublished = scenario.Publications.BeforeServe!;
+        scenario.Publications.BeforeServe = () =>
+        {
+            removePublished();
+            scenario.Publications.Committed.Add(new(2, "000002", DateTimeOffset.UnixEpoch, 0));
+        };
+
+        var published = await Facts(scenario).ExecuteAsync(default);
+
+        Assert.Equal(PublishRelease.MaximumRecords, published);
+        Assert.Equal([1, 2], scenario.Publications.Committed.Select(release => release.ReleaseNumber));
+        Assert.Equal(6, scenario.Actions.Unpublished.Count);
+    }
+
+    [Fact]
     public async Task ARecordThatCannotBuildIsLeftOutAndReportedWhileTheOthersPublishInOneRelease()
     {
         var scenario = new PublicationScenario();

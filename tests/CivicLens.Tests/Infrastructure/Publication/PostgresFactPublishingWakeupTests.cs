@@ -8,6 +8,7 @@ namespace CivicLens.Tests.Infrastructure.Publication;
 [Trait("Category", "Postgres")]
 public sealed class PostgresFactPublishingWakeupTests(PostgresCollection postgres) : IAsyncLifetime
 {
+    private const double SafeSecondsToTheHour = 10;
     private string connectionString = null!;
 
     public async Task InitializeAsync() => connectionString = await postgres.CreateMigratedDatabaseAsync();
@@ -15,17 +16,22 @@ public sealed class PostgresFactPublishingWakeupTests(PostgresCollection postgre
     public async Task DisposeAsync() => await postgres.DropDatabaseAsync(connectionString);
 
     [Fact]
-    public async Task TheDeadlineIsTheNextFullHourOfTheDatabaseClockNotOfTheApplicationClock()
+    public async Task TheWakeupSleepsUntilTheNextHourOfTheDatabaseClockBecauseNothingNotifiesIt()
+    {
+        if (await SecondsToTheNextHourAsync() < SafeSecondsToTheHour) return;
+        await using var wakeup = PostgresFactPublishingWakeup.FromConnectionString(connectionString);
+        await wakeup.ConnectAsync(default);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1.5));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => wakeup.WaitAsync(timeout.Token));
+    }
+
+    private async Task<double> SecondsToTheNextHourAsync()
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
-        await using var command = new NpgsqlCommand($"""
-            SELECT {PostgresFactPublishingWakeup.NextHourTicks},
-                   (EXTRACT(EPOCH FROM date_trunc('hour', now()) + interval '1 hour')::numeric * 10000000 + 621355968000000000)::bigint
-            """, connection);
-        await using var reader = await command.ExecuteReaderAsync();
-        await reader.ReadAsync();
-
-        Assert.Equal(reader.GetInt64(1), reader.GetInt64(0));
+        await using var command = new NpgsqlCommand(
+            "SELECT EXTRACT(EPOCH FROM date_trunc('hour', clock_timestamp()) + interval '1 hour' - clock_timestamp())::float8", connection);
+        return (double)(await command.ExecuteScalarAsync())!;
     }
 }

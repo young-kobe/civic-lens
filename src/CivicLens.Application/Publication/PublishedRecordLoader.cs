@@ -48,7 +48,7 @@ internal abstract class PublishedRecordLoader<TCandidate, TAddition>(PublishedRe
             {
                 pending.Add(Build(recordId, addition, build));
             }
-            catch (ArgumentException exception)
+            catch (ArgumentException exception) when (exception.GetType() == typeof(ArgumentException))
             {
                 UnpublishableRecord.Tag(exception, new(Kind, recordId));
                 throw;
