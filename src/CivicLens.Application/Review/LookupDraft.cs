@@ -19,7 +19,7 @@ public sealed partial class LookupDraft(IActionReviewStore actions, IVoteReviewS
         var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
         var congress = CongressCalendar.CongressOn(today) ?? throw new InvalidOperationException("The clock date has no Congress.");
         if (RollPattern().Match(text) is { Success: true } roll)
-            return await FindVoteAsync(Chamber.House, congress, CongressCalendar.SessionOn(today), Number(roll), cancellationToken);
+            return await FindVoteAsync(roll.Groups["senate"].Success ? Chamber.Senate : Chamber.House, congress, CongressCalendar.SessionOn(today), Number(roll), cancellationToken);
         if (BillPattern().Match(text) is not { Success: true } bill) throw new DraftLookupFormatException();
         var billCongress = bill.Groups["congress"].Success
             ? int.Parse(bill.Groups["congress"].Value, CultureInfo.InvariantCulture) : congress;
@@ -39,7 +39,7 @@ public sealed partial class LookupDraft(IActionReviewStore actions, IVoteReviewS
 
     private static int Number(Match match) => int.Parse(match.Groups["number"].Value, CultureInfo.InvariantCulture);
 
-    [GeneratedRegex(@"^roll\s*(?<number>[1-9]\d{0,4})$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^(?<senate>senate\s+)?roll\s*(?<number>[1-9]\d{0,4})$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex RollPattern();
 
     [GeneratedRegex(@"^(?:(?<congress>\d{1,3})\s+)?(?<type>[A-Za-z][A-Za-z. ]*?)\s*(?<number>[1-9]\d{0,4})$", RegexOptions.CultureInvariant)]

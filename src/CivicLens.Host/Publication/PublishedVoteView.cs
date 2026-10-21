@@ -20,6 +20,9 @@ internal static class PublishedVoteView
         new("Revision", vote.RevisionNumber.ToString(CultureInfo.InvariantCulture))
     ];
 
+    public static string Caveat(PublishedVote vote) =>
+        $"This record lists only the officials that Civic Lens tracks. Each cast is the wording of the {(vote.Chamber == PublishedChamber.Senate ? "Senate" : "House Clerk")} roll call at the observation time of its source.";
+
     public static string? Bill(PublishedVote vote) =>
         vote.BillType is null ? null : ActionLabels.Bill(vote.Congress, vote.BillType, vote.BillNumber!.Value);
 

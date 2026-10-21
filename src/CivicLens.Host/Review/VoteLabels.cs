@@ -10,6 +10,8 @@ internal static class VoteLabels
     public static string RollCall(Chamber chamber, int congress, int sessionNumber, int rollCallNumber) =>
         $"{chamber} roll call {rollCallNumber}, Congress {congress}, session {sessionNumber}";
 
+    public static string RollCallSite(Chamber chamber) => chamber == Chamber.Senate ? "senate.gov" : "clerk.house.gov";
+
     public static string Bill(VoteDraftRevision revision) =>
         revision.BillType is null ? "None" : ActionLabels.Bill(revision.Congress, revision.BillType, revision.BillNumber!.Value);
 

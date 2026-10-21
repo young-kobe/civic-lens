@@ -105,7 +105,23 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
             page.QuerySelector("[aria-labelledby='evidence'] a")!.GetAttribute("href"));
     }
 
-    private async Task<string> SeedVoteDraftAsync(int session = 1, int roll = 100, int? billNumber = null)
+    [Fact]
+    public async Task ASenateVotePageLinksTheSenateRollCallAndNamesTheSenateInItsHints()
+    {
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+        var recordId = await SeedVoteDraftAsync(roll: 5, chamber: Chamber.Senate, kind: VoteKind.MotionToProceed);
+
+        var page = await host.GetDocumentAsync($"/Review/Votes/{recordId}");
+
+        var link = page.QuerySelector("[aria-labelledby='evidence'] a")!;
+        Assert.Equal(("Roll call on senate.gov", "https://www.senate.gov/legislative/LIS/roll_call_votes/vote1191/vote_119_1_00005.htm"),
+            (link.TextContent, link.GetAttribute("href")));
+        Assert.Contains("Vote kind: Motion to proceed", page.QuerySelector("[aria-labelledby='evidence']")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("saved Senate vote text", page.QuerySelector("[aria-labelledby='evidence']")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Say what the Senate voted on.", page.Body!.InnerHtml, StringComparison.Ordinal);
+    }
+
+    private async Task<string> SeedVoteDraftAsync(int session = 1, int roll = 100, int? billNumber = null, Chamber chamber = Chamber.House, VoteKind kind = VoteKind.Passage)
     {
         const string question = "Question: On Passage";
         const string member = "Member: A000001, A, R, AL, Yea";
@@ -114,9 +130,9 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
         var recordId = new string('a', 64);
         var candidateId = new string('b', 64);
         var revision = new VoteDraftRevision(recordId, 1, "auth0|editor", DateTimeOffset.UtcNow, "The House passed a measure",
-            "The House voted on passage.", ReviewTextOrigin.Person, null, HouseVoteFixtures.SourceId, Chamber.House, 119, session, roll, billNumber is null ? null : "hr", billNumber, candidateId,
+            "The House voted on passage.", ReviewTextOrigin.Person, null, HouseVoteFixtures.SourceId, chamber, 119, session, roll, billNumber is null ? null : "hr", billNumber, candidateId,
             HouseVoteFixtures.Updated, [new(question, new SourceSpan(extraction.ExtractionId, 0, question.Length))],
-            new DateOnly(2025, 4, 10), new SourceSpan(extraction.ExtractionId, 0, question.Length), VoteKind.Passage,
+            new DateOnly(2025, 4, 10), new SourceSpan(extraction.ExtractionId, 0, question.Length), kind,
             new SourceSpan(extraction.ExtractionId, 0, question.Length),
             [new("with-id-a", "A000001", "Yea", new SourceSpan(extraction.ExtractionId, question.Length + 1, member.Length))], [], new string('e', 64));
         await using var connection = new NpgsqlConnection(host.ConnectionString);
@@ -126,11 +142,11 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
             INSERT INTO collection_configuration_revisions (revision_id, json, created_at) VALUES ('{configuration.Id}', @configuration, 1);
             INSERT INTO vote_candidates (candidate_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks,
                 detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
-            VALUES ('{candidateId}', '{HouseVoteFixtures.SourceId}', 'House', 119, {session}, {roll}, 1, 'detail', 'members', '{extraction.ExtractionId}',
+            VALUES ('{candidateId}', '{HouseVoteFixtures.SourceId}', '{chamber}', 119, {session}, {roll}, 1, 'detail', 'members', '{extraction.ExtractionId}',
                 '{extraction.ExtractionId}', '{configuration.Id}', 1);
             INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number,
                 review_state_version, review_status, created_at_utc_ticks)
-            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', 'House', 119, {session}, {roll}, 1, 0, 'AwaitingReview', 1);
+            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', '{chamber}', 119, {session}, {roll}, 1, 0, 'AwaitingReview', 1);
             INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
             VALUES ('{recordId}', 1, 'auth0|editor', 'Person', NULL, @revision, 1);
             """, connection);
