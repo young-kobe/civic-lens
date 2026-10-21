@@ -314,7 +314,7 @@ Imported evidence without a usable receipt can settle with conservative full acc
 
 A stale runner can save a late receipt after its attempt was already settled as interrupted. That handoff stays available to `receipts replay`. Later managed runs do not revisit settled attempts.
 
-If the store fails while the runner settles an interrupted attempt, the runner logs the exception. It reports `RecoveryBlocked` when it still owns the job and the follow-up job read works, and the next run recovers the attempt. If that read also fails, the exception reaches the worker, which logs it and counts a job failure. It reports `LostOwnership` only when the lease is gone.
+If the store fails while the runner settles an interrupted attempt, the runner logs the exception. It reports `RecoveryBlocked` when it still owns the job and the follow-up job read works, and the next run recovers the attempt. If that read times out, the result has no job record. If it fails another way, the exception reaches the worker, which logs it and counts a job failure. It reports `LostOwnership` only when the lease is gone.
 
 **Cancellation.** The CLI uses a 60-second renewable database-time lease. A persisted cancellation is seen on renewal, normally within 20 seconds. Job cancellation prevents future admission and signals an active collector. Complete receipts stay available for import. Ctrl+C interrupts only the runner. Ownership renews during collection and recovery.
 

@@ -56,7 +56,7 @@ Pages call Application handlers for editorial and collection actions. Evidence p
 ### Logging
 
 - Workers and review pages log each caught failure through `ILogger<T>` with the full exception.
-- Among the CLI commands, only `worker` writes logs. It writes them to stderr, so JSON on stdout stays clean.
+- Among the batch CLI commands, only `worker` writes logs. It writes them to stderr, so JSON on stdout stays clean.
 - The review workspace builds its own console provider. It writes warnings and errors to stderr.
 - CLI results and usage errors stay on the console.
 

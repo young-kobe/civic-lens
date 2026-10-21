@@ -82,9 +82,9 @@ public sealed class RunCollectionJob(
         {
             receipt = await collector.RunAsync(attempt.Request, lease.CollectorToken);
         }
-        catch (Exception exception) when (lease.CollectorToken.IsCancellationRequested)
+        catch (Exception exception) when (lease.CollectorToken.IsCancellationRequested && WorkerLoop.IsRecoverable(exception))
         {
-            logger.LogInformation(exception, "The collector stopped on request for attempt {AttemptId} of job {JobId}.", attempt.AttemptId, lease.JobId);
+            logger.LogInformation(exception, "The collector stopped because its work was cancelled or its lease was lost, for attempt {AttemptId} of job {JobId}.", attempt.AttemptId, lease.JobId);
             executionFailure = exception;
         }
         catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))

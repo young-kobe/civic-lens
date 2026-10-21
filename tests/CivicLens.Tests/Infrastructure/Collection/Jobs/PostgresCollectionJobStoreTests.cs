@@ -673,7 +673,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         new FileCollectionReceiptHandoffStore(root), new CaptureArtifactVerifier(), collector, NullLogger<RunCollectionJob>.Instance);
 
     [Fact]
-    public async Task NewJobsRetainRevisionsAndAnUnboundDefinitionIsRefusedAtEnqueue()
+    public async Task NewJobsRetainRevisionsAndRefuseAnotherRevisionOrAnUnboundDefinitionAtEnqueue()
     {
         var configuration = new CollectionConfiguration
         {
