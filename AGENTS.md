@@ -14,7 +14,7 @@ Keep these dependencies acyclic and exact (enforced by tests):
 
 - Core: no project or third-party package dependencies.
 - Collection.Contracts and Publication.Contracts: no project or third-party package dependencies.
-- Application: Core, Collection.Contracts, Publication.Contracts.
+- Application: Core, Collection.Contracts, Publication.Contracts, and the package Microsoft.Extensions.Logging.Abstractions only.
 - Infrastructure: Application (other dependencies only through an explicitly reviewed boundary change).
 - Host: Application, Infrastructure.
 - Collector: Collection.Contracts only. No database, AI, editorial, or publishing dependencies.

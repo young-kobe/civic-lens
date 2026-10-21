@@ -27,7 +27,7 @@ VIEWS = [
         "nodes": [
             ("host", "Host", "CLI, durable notification-driven collection-to-review pipeline with separate AI drafting and statement-gate executors, authenticated Blazor review workspace, and static release builder; MCP remains planned."),
             ("infra", "Infrastructure", "Collector process execution, capture verification, EF Core/Npgsql persistence, and the Claude API drafting and statement-gate adapters. References Application."),
-            ("app", "Application", "Use cases and external interfaces; no infrastructure reference."),
+            ("app", "Application", "Use cases and external interfaces; no infrastructure reference. Logs through Microsoft.Extensions.Logging.Abstractions, its only package."),
             ("core", "Core", "Domain invariants. No project or third-party dependencies."),
             ("cc", "Collection.Contracts", "Versioned page/feed/HTML requests, capture/response metadata, bounded discovery and receipt validation. No dependencies."),
             ("pc", "Publication.Contracts", "Public release contract, read by Application and PublicApi. No dependencies."),

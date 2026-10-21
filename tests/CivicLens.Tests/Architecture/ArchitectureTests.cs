@@ -41,6 +41,7 @@ public sealed class ArchitectureTests
 
             string[] allowedPackages = name == "CivicLens.Infrastructure"
                 ? ["AngleSharp", "Anthropic", "Microsoft.EntityFrameworkCore", "Microsoft.EntityFrameworkCore.Design", "Microsoft.EntityFrameworkCore.Relational", "Npgsql.EntityFrameworkCore.PostgreSQL"]
+                : name == "CivicLens.Application" ? ["Microsoft.Extensions.Logging.Abstractions"]
                 : name == "CivicLens.Collector" ? ["AngleSharp"]
                 : name == "CivicLens.Host" ? ["Microsoft.AspNetCore.Authentication.OpenIdConnect"]
                 : name == "CivicLens.PublicApi" ? ["Npgsql"] : [];

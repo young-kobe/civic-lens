@@ -161,6 +161,7 @@ Package rules:
 - In Collector, `CaptureDecoder` owns capture decoding, and `DiscoveryCandidates` owns candidate admission. The feed and HTML parsers share both.
 - EF Core Design is private tooling in Infrastructure. Other production projects must not reference database packages.
 - Infrastructure pins the official `Anthropic` C# SDK 12.50.0 for the model adapters only. An architecture test checks that no other project references its assembly.
+- Application pins one package, `Microsoft.Extensions.Logging.Abstractions` 10.0.12, so workers take `ILogger<T>`. The Host builds the console provider in `Program.cs` and writes logs to stderr. An architecture test allows no other Application package.
 - `CivicLens.PublicApi` pins Npgsql 10.0.3 and references `Publication.Contracts` only. It has no EF Core, no Application, and no operational storage. Only Host and PublicApi use the Web SDK. An architecture test checks the references.
 - No Rust, Go, Python analysis service, or React application is planned. Python's standard library serves only the development tools in `tools/`.
 
