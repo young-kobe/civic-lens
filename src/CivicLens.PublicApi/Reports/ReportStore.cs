@@ -17,7 +17,7 @@ public sealed class ReportStore(NpgsqlDataSource database, PublicApiOptions opti
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await ExecuteAsync(connection, transaction, SearchLocks.TakeTransactionLockSql, cancellationToken, ("key", SearchLocks.Reports));
 
-        if (await ScalarAsync(connection, transaction, "SELECT release_number FROM active_release", cancellationToken) is not int release)
+        if (await ScalarAsync(connection, transaction, "SELECT release_number FROM active_release", cancellationToken) is null)
             return ReportReceipt.NoRelease;
         if (await ScalarAsync(connection, transaction, "SELECT kind FROM records WHERE record_id = @id AND revision_number = @revision LIMIT 1",
                 cancellationToken, ("id", submission.RecordId), ("revision", submission.Revision)) is not string kind)
@@ -27,11 +27,11 @@ public sealed class ReportStore(NpgsqlDataSource database, PublicApiOptions opti
         if (today >= options.ReportsPerDay) return ReportReceipt.Closed;
 
         await ExecuteAsync(connection, transaction, """
-            INSERT INTO reader_reports (record_id, revision_number, kind, release_number, category, body, payload_hash)
-            VALUES (@id, @revision, @kind, @release, @category, @body, @hash)
+            INSERT INTO reader_reports (record_id, revision_number, kind, category, body, payload_hash)
+            VALUES (@id, @revision, @kind, @category, @body, @hash)
             ON CONFLICT (record_id, revision_number, payload_hash) DO NOTHING
             """,
-            cancellationToken, ("id", submission.RecordId), ("revision", submission.Revision), ("kind", kind), ("release", release),
+            cancellationToken, ("id", submission.RecordId), ("revision", submission.Revision), ("kind", kind),
             ("category", submission.Category), ("body", submission.Text), ("hash", submission.PayloadHash));
         await transaction.CommitAsync(cancellationToken);
         return ReportReceipt.Stored;
@@ -52,7 +52,7 @@ public sealed class ReportStore(NpgsqlDataSource database, PublicApiOptions opti
 
         var reports = new List<(long Sequence, PulledReport Report)>();
         await using (var command = Command(connection, null, """
-            SELECT sequence, report_id, record_id, revision_number, kind, release_number, category, body, received_at
+            SELECT sequence, report_id, record_id, revision_number, kind, category, body, received_at
             FROM reader_reports WHERE sequence > @start ORDER BY sequence LIMIT @limit
             """, ("start", start), ("limit", limit)))
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
@@ -63,10 +63,9 @@ public sealed class ReportStore(NpgsqlDataSource database, PublicApiOptions opti
                     RecordId = reader.GetString(2),
                     RevisionNumber = reader.GetInt32(3),
                     Kind = RecordKinds.TryParse(reader.GetString(4), out var kind) ? kind : throw new InvalidDataException("A stored report has an unknown kind."),
-                    ReleaseNumber = reader.GetInt32(5),
-                    Category = reader.GetString(6),
-                    Text = reader.GetString(7),
-                    ReceivedAtUtc = reader.GetFieldValue<DateTimeOffset>(8)
+                    Category = reader.GetString(5),
+                    Text = reader.GetString(6),
+                    ReceivedAtUtc = reader.GetFieldValue<DateTimeOffset>(7)
                 }));
         return new()
         {

@@ -10,7 +10,6 @@ public sealed class PulledReportTests
         RecordId = new string('a', 64),
         RevisionNumber = 1,
         Kind = PublishedRecordKind.Statement,
-        ReleaseNumber = 1,
         Category = ReaderReportProtocol.WrongQuoteCategory,
         Text = "The quote is cut short.",
         ReceivedAtUtc = new DateTimeOffset(2026, 10, 20, 12, 0, 0, TimeSpan.Zero)
@@ -34,7 +33,6 @@ public sealed class PulledReportTests
     [InlineData("nul")]
     [InlineData("longText")]
     [InlineData("kind")]
-    [InlineData("release")]
     [InlineData("emptyId")]
     public void AReportThatBreaksAWireRuleIsRefusedBecauseTheServiceIsAnOutsideBoundary(string rule)
     {
@@ -47,7 +45,6 @@ public sealed class PulledReportTests
             "nul" => Report() with { Text = "a\0b" },
             "longText" => Report() with { Text = new string('x', ReaderReportProtocol.MaximumTextCharacters + 1) },
             "kind" => Report() with { Kind = (PublishedRecordKind)99 },
-            "release" => Report() with { ReleaseNumber = 0 },
             _ => Report() with { ReportId = Guid.Empty }
         };
 
