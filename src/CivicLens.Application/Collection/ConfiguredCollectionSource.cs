@@ -27,12 +27,28 @@ public sealed class ConfiguredCollectionSource
     public DateOnly? AsOf { get; }
     public string SourceUrl => ReadSource().Url;
 
-    public CollectionJobDefinition CreateJobDefinition(DateOnly currentDate, CollectionJobDefinition? existing = null) =>
-        PrepareDefinition(ReadSource(), currentDate, existing, article: false);
+    public CollectionJobDefinition CreateJobDefinition(DateOnly currentDate, CollectionJobDefinition? existing = null)
+    {
+        var source = ReadSource();
+        if (source.ApiParser is null) return PrepareDefinition(source, currentDate, existing, article: false);
+        var target = FirstApiTarget(source, EndOfDay(currentDate), null)
+            ?? throw new ArgumentException("The API source has no work to collect now.");
+        return PrepareDefinition(source, currentDate, existing, article: false, target);
+    }
+
+    public CollectionJobDefinition? CreateScheduledJobDefinition(DateTimeOffset now, DateOnly? billCursor)
+    {
+        var currentDate = DateOnly.FromDateTime(now.UtcDateTime);
+        var source = ReadSource();
+        if (source.ApiParser is null) return CreateJobDefinition(currentDate);
+        return FirstApiTarget(source, now, billCursor) is { } target
+            ? PrepareDefinition(source, currentDate, null, article: false, target)
+            : null;
+    }
 
     public CollectionRequest CreateRequest(string jobId, string artifactDirectory, DateOnly currentDate)
     {
-        var request = CreateJobDefinition(currentDate).CreateRequest(jobId, artifactDirectory);
+        var request = PrepareDefinition(ReadSource(), currentDate, null, article: false).CreateRequest(jobId, artifactDirectory);
         request.Validate();
         return request;
     }
@@ -50,16 +66,8 @@ public sealed class ConfiguredCollectionSource
         return request;
     }
 
-    public CollectionJobDefinition CreateApiJobDefinition(ApiResource resource, string url, DateOnly currentDate)
-    {
-        var definition = PrepareDefinition(ReadSource(), currentDate, null, article: false) with
-        {
-            ApiResource = resource,
-            Url = url
-        };
-        definition.Validate();
-        return definition;
-    }
+    public CollectionJobDefinition CreateApiJobDefinition(ApiResource resource, string url, DateOnly currentDate) =>
+        PrepareDefinition(ReadSource(), currentDate, null, article: false, new ApiTarget(resource, url));
 
     public BillStreamAdmission CreateBillStreamAdmission(string listJobId, BillStreamWindow window,
         CongressBillListPage page, DateOnly currentDate)
@@ -120,10 +128,12 @@ public sealed class ConfiguredCollectionSource
     }
 
     private CollectionJobDefinition PrepareDefinition(WatchedSourceConfiguration source, DateOnly currentDate,
-        CollectionJobDefinition? existing, bool article)
+        CollectionJobDefinition? existing, bool article, ApiTarget? target = null)
     {
         existing?.Validate();
         var definition = CollectionJobDefinition.FromSource(source);
+        if (target is { } api)
+            definition = definition with { ApiResource = api.Resource, Url = api.Url };
         if (article)
             definition = definition with { Mode = CollectionMode.Page, ETag = null, LastModified = null };
 
@@ -148,6 +158,33 @@ public sealed class ConfiguredCollectionSource
         definition.Validate();
         return definition;
     }
+
+    private static ApiTarget? FirstApiTarget(WatchedSourceConfiguration source, DateTimeOffset now, DateOnly? billCursor)
+    {
+        switch (source.ApiParser)
+        {
+            case ApiParser.CongressBillList:
+                return BillStreamWindow.Next(billCursor, source.BackfillFrom!.Value, now) is { } window
+                    ? new ApiTarget(ApiResource.BillList, window.RequestUrl(source.Url))
+                    : null;
+            case ApiParser.CongressHouseVoteList:
+                var today = DateOnly.FromDateTime(now.UtcDateTime);
+                return HouseVoteSession.FirstOfSweep(source.BackfillFrom!.Value, today, source.MinimumCongress!.Value) is { } first
+                    ? new ApiTarget(ApiResource.HouseVoteList, HouseVoteListUrl.FirstPage(source.Url, first))
+                    : null;
+            case ApiParser.CongressLegislators:
+                return new ApiTarget(ApiResource.MemberRoster, source.Url);
+            case ApiParser.CongressLegislatorsExecutive:
+                return new ApiTarget(ApiResource.ExecutiveRoster, source.Url);
+            default:
+                throw new ArgumentOutOfRangeException(nameof(source));
+        }
+    }
+
+    private static DateTimeOffset EndOfDay(DateOnly day) =>
+        new(day.ToDateTime(TimeOnly.MaxValue), TimeSpan.Zero);
+
+    private readonly record struct ApiTarget(ApiResource Resource, string Url);
 
     private static string? FollowingSessionUrl(WatchedSourceConfiguration source, HouseVoteSession session, DateOnly today) =>
         session.Following(today) is { } following ? HouseVoteListUrl.FirstPage(source.Url, following) : null;

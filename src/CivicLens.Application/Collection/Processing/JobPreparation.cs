@@ -26,6 +26,7 @@ public sealed class JobPreparation(
     IssueConfigurationRevision? issues)
 {
     private const string NotModified = "notModified";
+    private const string ApiResourceMissing = "apiResourceMissing";
     private const string IssuesConfigurationUnavailable = "issuesConfigurationUnavailable";
     private readonly IssueConfiguration? issueConfiguration = issues?.ReadConfiguration();
     private readonly ApiResponseReader responses = new(attempts, bodies);
@@ -94,7 +95,7 @@ public sealed class JobPreparation(
     private Task<JobPreparationResult> PrepareApiAsync(CollectionJobRecord job, string artifactRoot,
         CancellationToken cancellationToken) => job.Definition.ApiResource switch
         {
-            null => Task.FromResult(JobPreparationResult.Prepared()),
+            null => Task.FromResult(JobPreparationResult.Blocked(ApiResourceMissing)),
             ApiResource.BillList => AdmitBillListAsync(job, artifactRoot, cancellationToken),
             ApiResource.Bill => AdmitBillDetailAsync(job, artifactRoot, cancellationToken),
             ApiResource.BillCosponsors => AdmitCosponsorPageAsync(job, artifactRoot, cancellationToken),

@@ -1,6 +1,4 @@
 using CivicLens.Application.Collection;
-using CivicLens.Application.Collection.Bills;
-using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection.Jobs.Persistence;
@@ -124,27 +122,10 @@ public sealed partial class PostgresCollectionJobStore
         ConfiguredCollectionSource configured, WatchedSourceConfiguration source, DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var currentDate = DateOnly.FromDateTime(now.UtcDateTime);
-        switch (source.ApiParser)
-        {
-            case null:
-                return configured.CreateJobDefinition(currentDate);
-            case ApiParser.CongressBillList:
-                var cursor = await ReadCursorAsync(db, source.Id, cancellationToken);
-                var window = BillStreamWindow.Next(cursor, source.BackfillFrom!.Value, now);
-                return window is null ? null : configured.CreateApiJobDefinition(
-                    ApiResource.BillList, window.Value.RequestUrl(source.Url), currentDate);
-            case ApiParser.CongressHouseVoteList:
-                var first = HouseVoteSession.FirstOfSweep(source.BackfillFrom!.Value, currentDate, source.MinimumCongress!.Value);
-                return first is null ? null : configured.CreateApiJobDefinition(
-                    ApiResource.HouseVoteList, HouseVoteListUrl.FirstPage(source.Url, first.Value), currentDate);
-            case ApiParser.CongressLegislators:
-                return configured.CreateApiJobDefinition(ApiResource.MemberRoster, source.Url, currentDate);
-            case ApiParser.CongressLegislatorsExecutive:
-                return configured.CreateApiJobDefinition(ApiResource.ExecutiveRoster, source.Url, currentDate);
-            default:
-                throw new ArgumentOutOfRangeException(nameof(source));
-        }
+        var billCursor = source.ApiParser == ApiParser.CongressBillList
+            ? await ReadCursorAsync(db, source.Id, cancellationToken)
+            : null;
+        return configured.CreateScheduledJobDefinition(now, billCursor);
     }
 
     private static async Task<HashSet<string>> ReadSourcesWithActiveRootAsync(CollectionAttemptDbContext db,

@@ -1,6 +1,8 @@
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
+using CivicLens.Tests.Application.Collection.Bills;
+using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Collection;
 
@@ -77,6 +79,36 @@ public sealed class ConfiguredCollectionSourceTests
         Assert.Throws<ArgumentException>(() => new ConfiguredCollectionSource(config, "source")
             .CreateJobDefinition(ExpiredOn, saved));
     }
+
+    [Fact]
+    public void HandEnqueuedAndScheduledRosterJobsCarryTheSameResource()
+    {
+        var source = new ConfiguredCollectionSource(RosterFixtures.Configuration(), RosterFixtures.SourceId, ExpiredOn);
+
+        var enqueued = source.CreateJobDefinition(ExpiredOn);
+        var scheduled = source.CreateScheduledJobDefinition(new DateTimeOffset(2021, 1, 1, 6, 0, 0, TimeSpan.Zero), null);
+
+        Assert.Equal((ApiResource.MemberRoster, RosterFixtures.SourceUrl), (enqueued.ApiResource, enqueued.Url));
+        Assert.Equal(scheduled, enqueued);
+        Assert.Same(enqueued, source.CreateJobDefinition(ExpiredOn, enqueued));
+    }
+
+    [Fact]
+    public void HandEnqueuedExecutiveVoteAndBillListJobsStartAtTheirFirstRequest()
+    {
+        var executive = new ConfiguredCollectionSource(ExecutiveFixtures.Configuration(), ExecutiveFixtures.SourceId, ExpiredOn)
+            .CreateJobDefinition(ExpiredOn);
+        var votes = new ConfiguredCollectionSource(HouseVoteFixtures.Configuration(), HouseVoteFixtures.SourceId, VoteDay)
+            .CreateJobDefinition(VoteDay);
+        var bills = new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", VoteDay)
+            .CreateJobDefinition(VoteDay);
+
+        Assert.Equal(ApiResource.ExecutiveRoster, executive.ApiResource);
+        Assert.Equal(ApiResource.HouseVoteList, votes.ApiResource);
+        Assert.Equal(ApiResource.BillList, bills.ApiResource);
+    }
+
+    private static readonly DateOnly VoteDay = new(2025, 6, 25);
 
     private static CollectionConfiguration Configuration(CollectionMode mode = CollectionMode.Page) => new()
     {
