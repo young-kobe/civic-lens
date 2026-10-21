@@ -181,6 +181,32 @@ WHERE c.detail_job_id IS NULL
 ORDER BY v.congress, v.session_number, v.roll_call_number;
 ```
 
+### Senate vote stream
+
+The source `senate-votes` in `config/federal-coverage.json` follows the Senate roll-call votes. It ships with `enabled: true`. It needs no key and no issue file for collection. Drafting needs the same settings as [vote drafting](#vote-drafting).
+
+Before Senate drafting, a roster snapshot with Senate `lis` IDs must exist. Set `enabled` to `true` for `congress-members` and let the worker collect one snapshot. Without a snapshot, each Senate draft blocks with `evidenceUnavailable`. A later snapshot requeues those drafts. To stop the source, set `enabled` to `false` for `senate-votes` and restart the worker. A restart reads the configuration again.
+
+The first run reads the menus of the 119th Congress, session 1 and session 2, from `backfillFrom` 2025-01-03. It admits one job for each vote file, about 659 files. The source paces requests at 3 seconds. Expect about 35 minutes of collection if no other job waits. Collection costs no money. Drafting costs about $0.00046 for each draft. Each day the sweep fetches the menu again and admits the votes of the last 30 days. [Votes](architecture/votes.md#senate-collection) holds the sweep rules.
+
+To check progress, run `jobs list` and `jobs get` as in [managed collection jobs](#managed-collection-jobs). Run `votes draft status` and `votes draft list pending 50` as in [vote drafting](#vote-drafting). To list the Senate drafts that wait for a roster snapshot, run this query:
+
+```sql
+SELECT v.congress, v.session_number, v.roll_call_number
+FROM vote_analysis e
+JOIN vote_candidates c ON c.candidate_id = e.candidate_id
+JOIN vote_versions v ON v.detail_job_id = c.detail_job_id
+WHERE c.chamber = 'Senate' AND e.task = 'vote-draft'
+  AND e.status = 'Blocked' AND e.error_code = 'evidenceUnavailable'
+ORDER BY v.congress, v.session_number, v.roll_call_number;
+```
+
+Known risks:
+
+- The Senate files give times with no zone. The parser assumes US Eastern time.
+- No en bloc or treaty vote file has been seen. A file that breaks a parser rule blocks its job.
+- A senator who left before the first roster snapshot has no `lis` ID in the roster. Early 119th Congress votes with such a senator stay blocked.
+
 ## Postgres adapter and migrations
 
 Set `CIVIC_LENS_DATABASE` in your local environment to a Postgres connection string with Host and Database, and with authentication for your local server. Runtime commands need this variable and have no default database. Keep credentials out of committed files, command arguments, and captured output. The commands need a reachable Postgres server and enough database permissions. They do not install or start Postgres.

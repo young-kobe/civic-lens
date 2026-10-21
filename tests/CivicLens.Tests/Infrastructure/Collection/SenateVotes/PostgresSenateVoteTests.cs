@@ -97,8 +97,8 @@ public sealed class PostgresSenateVoteTests(PostgresCollection postgres) : IAsyn
         var shipped = JsonSerializer.Deserialize<CollectionConfiguration>(
             File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "config", "federal-coverage.json")), ConfigurationJson.Options)!;
         var source = shipped.Sources.Single(candidate => candidate.Id == SenateVoteFixtures.SourceId);
-        Assert.False(source.Enabled);
-        shipped = shipped with { Sources = [source with { Enabled = true }] };
+        Assert.True(source.Enabled);
+        shipped = shipped with { Sources = [source] };
         var configured = new ConfiguredCollectionSource(shipped, SenateVoteFixtures.SourceId, Backfill.AddDays(400));
         var menu = Menu(Enumerable.Range(1, SenateVoteMenuParser.MaximumVotes).Select(roll => Item(roll, DaysAgo(200))).ToArray());
         var definition = configured.CreateApiJobDefinition(ApiResource.SenateVoteMenu, SenateVoteUrl.Menu(SourceUrl, menu.Session), Backfill);
