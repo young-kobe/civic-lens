@@ -357,7 +357,7 @@ Admission of a vote file finds the `vote_versions` row by source, chamber, roll 
 
 `VoteReader` dispatches on the chamber of the candidate. The Senate branch checks the parser and normalization versions of the one saved page, parses the capture, and compares the render with the saved text. It takes the vote day from the `Started` line, which keeps the Eastern offset. The facts are the lines that start with the prefixes of `VoteFactPrefixes.SenateDetail`: `Started`, `Question`, `Question text`, `Vote title`, `Result`, `Document`, and `Count`. A vote on a bill adds the bill facts as the House path does. A vote with no bill identity, such as a nomination, skips the bill detail.
 
-The reader takes the `lis` IDs of the senators from `IMemberRosterStore.ReadSenatorLisIdsAsync` for the roster source. The call returns each senator and each `lis` ID in any snapshot of that source, so a senator who left still matches his old votes. A person with no Senate term in any snapshot is no senator and is skipped. A `lis` ID in the vote file that no snapshot maps blocks the draft with `evidenceUnavailable`. The prompt says Senate and names senate.gov and Congress.gov as the sources. The task is `vote-draft-v5` with the prompt `vote-draft-prompt-v3`.
+The reader takes the `lis` IDs of the senators from `IMemberRosterStore.ReadSenatorLisIdsAsync` for the roster source. The call returns each senator and each `lis` ID in any snapshot of that source, so a senator who left still matches the old votes. A person with no Senate term in any snapshot is no senator and is skipped. A `lis` ID in the vote file that no snapshot maps blocks the draft with `evidenceUnavailable`. The prompt says Senate and names senate.gov and Congress.gov as the sources. The task is `vote-draft-v5` with the prompt `vote-draft-prompt-v3`.
 
 ## Storage and contracts
 
@@ -426,7 +426,7 @@ The reader takes the `lis` IDs of the senators from `IMemberRosterStore.ReadSena
 - Rolling back the `VoteKindChangedReason` migration fails while any vote run has the `kindChanged` reason.
 - The session of today uses the UTC date. The new session therefore starts a few hours early on 1 January in US time zones. Its list is empty then.
 - Senate drafting is built but the shipped `senate-votes` source is disabled. PR 4 of [R-42](../roadmap.md#next) adds the operations steps and the enable flag. See [actions](actions.md#limits-and-planned-work).
-- The Senate reader skips a tracked person who is not in the roster only if the vote file has no `lis` ID for him. A real senator missing from the roster blocks the draft.
+- The Senate reader skips a tracked person who is not in the roster only if the vote file has no `lis` ID for that person. A real senator missing from the roster blocks the draft.
 - The Senate time zone is a guess. The Senate files do not name it. No en bloc or treaty vote file has been seen. The parser has no rule for them. A file with a document type that is no bill type parses as a vote with no bill. A file that breaks a parser rule is invalid data, which blocks the job.
 - The parser ignores the `tie_breaker` element. A tie-break cast of the Vice President is not in the member list, so no record shows it.
 - A Senate vote file with a `lis` ID that no roster snapshot maps blocks the draft with `evidenceUnavailable`. A senator who left before the roster collection began, such as one who left in January 2025, has no snapshot row. Early 119th Congress votes with such senators stay blocked, because a tracked official could be missing from a published vote.
