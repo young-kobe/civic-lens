@@ -150,8 +150,11 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
         var attemptId = await ImportAsync('a', 0);
         var members = RosterFixtures.Members();
         var broken = members[1] with { Terms = [members[1].Terms[0] with { Chamber = "gov" }] };
+        await SeedBlockedVoteAsync('1', "Senate", "evidenceUnavailable");
 
         await Assert.ThrowsAsync<DbUpdateException>(() => roster.AdmitAsync(attemptId, [members[0], broken], default));
+
+        Assert.Equal(["Blocked"], await StatusesAsync());
 
         Assert.Equal((0L, 0L, 0L), (await CountAsync("roster_members", attemptId), await CountAsync("roster_terms", attemptId),
             await CountAsync("roster_snapshots", attemptId)));

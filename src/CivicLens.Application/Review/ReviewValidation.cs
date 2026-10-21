@@ -24,7 +24,7 @@ internal static class ReviewAuthorization
         ArgumentNullException.ThrowIfNull(actor);
         var reserved = ReviewAuthor.IsAnalysis(actor.Subject) || (ReviewAuthor.IsCode(actor.Subject) && !allowCode);
         if (!ReviewAuthor.IsValidSubject(actor.Subject) || actor.Role != ReviewRole.Owner || reserved)
-            throw new UnauthorizedAccessException("The authenticated subject is not authorized to publish.");
+            throw new UnauthorizedAccessException("The authenticated subject is not the owner.");
     }
 }
 

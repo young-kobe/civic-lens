@@ -1,8 +1,8 @@
-using CivicLens.Tests.Fixtures;
 using System.Text.Json;
 using CivicLens.Collection.Contracts;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Collection.Jobs;
 

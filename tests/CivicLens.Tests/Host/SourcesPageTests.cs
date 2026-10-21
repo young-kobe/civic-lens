@@ -1,4 +1,3 @@
-using CivicLens.Tests.Fixtures;
 using System.Net;
 using System.Net.WebSockets;
 using System.Text;
@@ -16,6 +15,7 @@ using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Collection.Processing;
 using CivicLens.Tests.Infrastructure.Collection;
 using Npgsql;
+using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Host;
 

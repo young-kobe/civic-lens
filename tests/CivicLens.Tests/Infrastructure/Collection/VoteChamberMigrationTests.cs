@@ -87,6 +87,14 @@ public sealed class VoteChamberMigrationTests(PostgresCollection postgres) : IAs
                 '{new string('c', 64)}', 1);
             INSERT INTO vote_analysis (candidate_id, task, status, fence, attempts, reserved_tokens, created_at_utc_ticks)
             VALUES ('{new string('f', 64)}', 'vote-draft', 'Pending', 0, 0, 0, 1);
+            INSERT INTO vote_analysis_runs (run_id, candidate_id, task, task_version, model, prompt_version, schema_version, input_hash, outcome,
+                input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, charged_tokens, started_at_utc_ticks, finished_at_utc_ticks, previous_run_id)
+            VALUES ('{new string('1', 32)}', '{new string('f', 64)}', 'vote-draft', 'v', 'm', 'p', 's', '{new string('9', 64)}', 'Drafted', 0, 0, 0, 0, 0, 1, 1, NULL),
+                   ('{new string('2', 32)}', '{new string('f', 64)}', 'vote-draft', 'v', 'm', 'p', 's', '{new string('9', 64)}', 'Drafted', 0, 0, 0, 0, 0, 1, 1, '{new string('1', 32)}');
+            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
+            VALUES ('{new string('b', 64)}', 1, 'civic-lens:analysis', 'Analysis', '{new string('2', 32)}', '[]', 1);
+            INSERT INTO vote_review_decisions (decision_id, record_id, revision_number, review_state_version, kind, decision_json, created_at_utc_ticks)
+            VALUES ('{new string('3', 32)}', '{new string('b', 64)}', 1, 1, 'Approve', '[]', 1);
             """);
 
         await db.GetService<IMigrator>().MigrateAsync(PreviousMigration);
@@ -98,6 +106,9 @@ public sealed class VoteChamberMigrationTests(PostgresCollection postgres) : IAs
         Assert.Empty(await ReadAsync("SELECT 1 FROM house_vote_candidates"));
         Assert.Empty(await ReadAsync("SELECT 1 FROM house_votes"));
         Assert.Empty(await ReadAsync("SELECT 1 FROM vote_analysis"));
+        Assert.Empty(await ReadAsync("SELECT 1 FROM vote_analysis_runs"));
+        Assert.Empty(await ReadAsync("SELECT 1 FROM vote_revisions"));
+        Assert.Empty(await ReadAsync("SELECT 1 FROM vote_review_decisions"));
     }
 
     private static string Draft(char id, string chamber) => $"""

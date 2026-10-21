@@ -1,4 +1,3 @@
-using CivicLens.Tests.Fixtures;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
@@ -7,6 +6,7 @@ using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
+using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Collection;
 
