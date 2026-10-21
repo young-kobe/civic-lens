@@ -19,6 +19,8 @@ public sealed class SenateVoteKindTableTests
     [InlineData("On the Joint Resolution", VoteKind.Passage)]
     [InlineData("On the Concurrent Resolution", VoteKind.Passage)]
     [InlineData("On the Resolution", VoteKind.Passage)]
+    [InlineData("On Overriding the Veto", VoteKind.VetoOverride)]
+    [InlineData("On the Resolution of Ratification", VoteKind.Other)]
     [InlineData("On the Motion to Table", VoteKind.Other)]
     [InlineData("On the Motion to Reconsider", VoteKind.Other)]
     [InlineData("On the Decision of the Chair", VoteKind.Other)]
@@ -31,11 +33,19 @@ public sealed class SenateVoteKindTableTests
     }
 
     [Fact]
-    public void ACloutureMotionOnANominationIsClotureBecauseTheVoteDecidesToEndDebateNotToConfirm()
+    public void AClotureMotionOnANominationIsClotureBecauseTheVoteDecidesToEndDebateNotToConfirm()
     {
         var (kind, _) = SenateVoteKindTable.Classify([Fact("Question: On the Cloture Motion"), Fact("Document: PN373")]);
 
         Assert.Equal(VoteKind.Cloture, kind);
+    }
+
+    [Fact]
+    public void ARatificationVoteIsNotPassageBecauseAgreeingToATreatyIsNotPassingALaw()
+    {
+        var (kind, _) = SenateVoteKindTable.Classify([Fact("Question: On the Resolution of Ratification")]);
+
+        Assert.NotEqual(VoteKind.Passage, kind);
     }
 
     [Fact]

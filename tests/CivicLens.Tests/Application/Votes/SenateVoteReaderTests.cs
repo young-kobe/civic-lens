@@ -41,7 +41,7 @@ public sealed class SenateVoteReaderTests
     {
         var world = Nomination();
 
-        var snapshot = (await world.Reader(new SenatorLisId(Alsobrooks, AlsobrooksLis)).ReadAsync(world.Evidence(), default)).Snapshot!;
+        var snapshot = (await world.Reader(new SenatorLisId(Alsobrooks, AlsobrooksLis), new SenatorLisId("X000001", BanksLis)).ReadAsync(world.Evidence(), default)).Snapshot!;
 
         Assert.Equal([Alsobrooks], snapshot.Members.Select(vote => vote.BioguideId));
     }
@@ -53,6 +53,16 @@ public sealed class SenateVoteReaderTests
 
         var read = await world.Reader(new SenatorLisId(Alsobrooks, AlsobrooksLis), new SenatorLisId(Alsobrooks, "S999"), new SenatorLisId(Banks, BanksLis))
             .ReadAsync(world.Evidence(), default);
+
+        Assert.Equal((null, VoteDraftErrorCodes.EvidenceUnavailable), (read.Snapshot, read.ErrorCode));
+    }
+
+    [Fact]
+    public async Task AVoteFileWithALisIdThatNoSnapshotMapsBlocksTheDraftBecauseATrackedOfficialCouldBeMissingFromAPublishedVote()
+    {
+        var world = Nomination();
+
+        var read = await world.Reader(new SenatorLisId(Alsobrooks, AlsobrooksLis)).ReadAsync(world.Evidence(), default);
 
         Assert.Equal((null, VoteDraftErrorCodes.EvidenceUnavailable), (read.Snapshot, read.ErrorCode));
     }

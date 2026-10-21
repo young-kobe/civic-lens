@@ -15,6 +15,8 @@ namespace CivicLens.Application.Votes;
 
 public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore roster, ApiResponseReader responses, string artifactRoot)
 {
+    private sealed record RosterLisIds(Dictionary<string, string> Tracked, HashSet<string> Known);
+
     private sealed record ChamberRead(DateOnly Day, string[] DetailPrefixes, ImmutableArray<MemberVote> Members);
 
     public async Task<VoteRead> ReadAsync(VoteDraftEvidence evidence, CancellationToken cancellationToken)
@@ -62,18 +64,19 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
         var day = DateOnly.FromDateTime(detail.VoteDate.DateTime);
         var tracked = TrackedOn(evidence, day);
         var lisIds = await LisIdsOfAsync(evidence, tracked, cancellationToken);
-        if (lisIds is null) return (null, VoteDraftErrorCodes.EvidenceUnavailable);
-        return (new(day, VoteFactPrefixes.SenateDetail, SenateMemberVotesOf(page, detail, tracked, lisIds)), null);
+        if (lisIds is null || detail.Members.Any(member => !lisIds.Known.Contains(member.LisId)))
+            return (null, VoteDraftErrorCodes.EvidenceUnavailable);
+        return (new(day, VoteFactPrefixes.SenateDetail, SenateMemberVotesOf(page, detail, tracked, lisIds.Tracked)), null);
     }
 
-    private async Task<Dictionary<string, string>?> LisIdsOfAsync(VoteDraftEvidence evidence, PersonConfiguration[] tracked,
+    private async Task<RosterLisIds?> LisIdsOfAsync(VoteDraftEvidence evidence, PersonConfiguration[] tracked,
         CancellationToken cancellationToken)
     {
         var rosterSource = evidence.ConfigurationRevision.Configuration.RosterSourceOf(ApiParser.CongressLegislators);
         if (rosterSource is null) return null;
         var trackedIds = tracked.Select(person => person.BioguideId!).ToHashSet(StringComparer.Ordinal);
-        var senators = (await roster.ReadSenatorLisIdsAsync(rosterSource.Id, cancellationToken))
-            .Where(item => trackedIds.Contains(item.BioguideId)).GroupBy(item => item.BioguideId);
+        var all = await roster.ReadSenatorLisIdsAsync(rosterSource.Id, cancellationToken);
+        var senators = all.Where(item => trackedIds.Contains(item.BioguideId)).GroupBy(item => item.BioguideId);
         var lisIds = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var senator in senators)
         {
@@ -81,7 +84,7 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
             if (ids.Length != 1) return null;
             lisIds[senator.Key] = ids[0]!;
         }
-        return lisIds;
+        return new(lisIds, [.. all.Select(item => item.LisId).OfType<string>()]);
     }
 
     private static PersonConfiguration[] TrackedOn(VoteDraftEvidence evidence, DateOnly day)

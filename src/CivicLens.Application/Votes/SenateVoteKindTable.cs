@@ -14,9 +14,11 @@ public static class SenateVoteKindTable
         ("On the Nomination", VoteKind.Nomination),
         ("On the Amendment", VoteKind.Amendment),
         ("On the Conference Report", VoteKind.ConferenceReport),
+        ("On Overriding the Veto", VoteKind.VetoOverride),
         ("On Passage of the", VoteKind.Passage),
         ("On the Joint Resolution", VoteKind.Passage),
         ("On the Concurrent Resolution", VoteKind.Passage),
+        ("On the Resolution of Ratification", VoteKind.Other),
         ("On the Resolution", VoteKind.Passage)
     ];
 
