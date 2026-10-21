@@ -1,9 +1,14 @@
+using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
 
 namespace CivicLens.Tests.Fixtures;
 
 internal static class CollectionFixtures
 {
+    internal static CollectionJobDefinition Definition(CollectionConfiguration configuration, string sourceId, DateOnly? asOf = null) =>
+        new ConfiguredCollectionSource(configuration, sourceId, asOf).CreateJobDefinition(asOf ?? DateOnly.FromDateTime(DateTime.UtcNow));
+
     internal static CollectionRequest Request() => new()
     {
         JobId = "job",

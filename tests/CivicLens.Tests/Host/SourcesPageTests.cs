@@ -1,3 +1,4 @@
+using CivicLens.Tests.Fixtures;
 using System.Net;
 using System.Net.WebSockets;
 using System.Text;
@@ -233,7 +234,7 @@ public sealed class SourcesPageTests(PostgresCollection postgres) : IAsyncLifeti
             Capture = null,
             FailureCode = CollectionFailureCode.HttpError
         };
-        var job = new CollectionJobRecord(new string('1', 32), CollectionJobDefinition.FromConfiguration(new CollectionConfiguration
+        var job = new CollectionJobRecord(new string('1', 32), CollectionFixtures.Definition(new CollectionConfiguration
         {
             Version = 2,
             People = [new PersonConfiguration { Id = "person", Name = "Official" }],

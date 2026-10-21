@@ -1,3 +1,4 @@
+using CivicLens.Tests.Fixtures;
 using System.Text.Json;
 using System.Text;
 using System.Security.Cryptography;
@@ -451,7 +452,7 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
                 JobPolicy = template.Policy
             }]
         };
-        var definition = CollectionJobDefinition.FromConfiguration(configuration, "source", new DateOnly(2026, 7, 1)) with
+        var definition = CollectionFixtures.Definition(configuration, "source", new DateOnly(2026, 7, 1)) with
         { Mode = CollectionMode.Page, ETag = null, LastModified = null };
         var nextAttempt = await SaveDiscoveryAsync(["https://example.test/articles/two"], mode);
         var request = new DiscoveryAdmissionRequest(nextAttempt, "new-revision", definition, new DiscoveryAdmissionPolicy(), mode);
@@ -461,7 +462,7 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         Assert.Equal(definition.CoverageAsOf, stored.Definition.CoverageAsOf);
         stored.Definition.Validate();
         configuration.People[0] = configuration.People[0] with { Name = "Correction" };
-        var corrected = CollectionJobDefinition.FromConfiguration(configuration, "source", definition.CoverageAsOf) with
+        var corrected = CollectionFixtures.Definition(configuration, "source", definition.CoverageAsOf) with
         { Mode = CollectionMode.Page, ETag = null, LastModified = null };
         await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(request with { ArticleTemplate = corrected }, default));
         Assert.Equal(admitted.Jobs, (await jobs.AdmitAsync(request, default)).Jobs);

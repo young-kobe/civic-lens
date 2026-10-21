@@ -51,20 +51,6 @@ public sealed record CollectionJobDefinition
 
     private static string ComparablePath(string path) => Uri.UnescapeDataString(path).TrimEnd('/');
 
-    public static CollectionJobDefinition FromConfiguration(CollectionConfiguration configuration, string sourceId,
-        DateOnly? asOf = null)
-    {
-        var revision = CollectionConfigurationRevision.Create(configuration);
-        var effectiveDate = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
-        var definition = FromSource(revision.Configuration.EligibleSource(sourceId, effectiveDate)) with
-        {
-            ConfigurationRevision = revision,
-            CoverageAsOf = effectiveDate
-        };
-        definition.Validate();
-        return definition;
-    }
-
     internal static CollectionJobDefinition FromSource(WatchedSourceConfiguration source)
     {
         var definition = new CollectionJobDefinition

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CivicLens.Application.Collection;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Application.Configuration;
 using CivicLens.Collection.Contracts;
 using CivicLens.Tests.Application.Collection.Bills;
@@ -14,8 +15,7 @@ public sealed class ConfigurationTests
         var configuration = ValidConfiguration([new PersonConfiguration { Id = "person", Name = "Official" }], ["person"]);
         configuration = configuration with { Sources = [configuration.Sources[0] with { Id = new string('s', 70_000) }] };
         Assert.Throws<ArgumentException>(configuration.Validate);
-        Assert.Throws<ArgumentException>(() => CivicLens.Application.Collection.Jobs.CollectionJobDefinition
-            .FromConfiguration(configuration, configuration.Sources[0].Id));
+        Assert.Throws<ArgumentException>(() => CollectionFixtures.Definition(configuration, configuration.Sources[0].Id));
     }
 
     [Fact]

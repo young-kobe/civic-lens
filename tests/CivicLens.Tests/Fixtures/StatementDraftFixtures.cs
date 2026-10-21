@@ -49,7 +49,7 @@ internal static class StatementDraftFixtures
     };
 
     public static CollectionJobDefinition AdmittedDefinition(CollectionConfiguration configuration) =>
-        CollectionJobDefinition.FromConfiguration(configuration, "source");
+        CollectionFixtures.Definition(configuration, "source");
 
     public static CollectionJobDefinition LegacyDefinition() =>
         AdmittedDefinition(Configuration()) with { ConfigurationRevision = null, CoverageAsOf = null };

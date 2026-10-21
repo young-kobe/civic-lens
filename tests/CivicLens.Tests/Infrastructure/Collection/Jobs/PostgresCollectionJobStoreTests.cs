@@ -415,7 +415,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
                 new PacingGroupConfiguration { HostSuffix = "senate.gov", MinDelayMilliseconds = 3000 }
             ]
         };
-        return CollectionJobDefinition.FromConfiguration(configuration, host, new DateOnly(2026, 7, 1));
+        return CollectionFixtures.Definition(configuration, host, new DateOnly(2026, 7, 1));
     }
 
     [Fact]
@@ -683,7 +683,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
                 AllowedOrigin = "https://example.test", AllowedPathPrefix = "/"
             }]
         };
-        var definition = CollectionJobDefinition.FromConfiguration(configuration, "source", new DateOnly(2026, 7, 1));
+        var definition = CollectionFixtures.Definition(configuration, "source", new DateOnly(2026, 7, 1));
         var legacy = await jobs.EnqueueAsync(definition with { ConfigurationRevision = null, CoverageAsOf = null }, "legacy", default);
         var replay = await jobs.EnqueueAsync(definition, "legacy", default);
         Assert.Equal(legacy.JobId, replay.JobId);
@@ -693,7 +693,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var stored = await reopened.GetAsync(current.JobId, default);
         Assert.Equal(definition, stored!.Definition);
         configuration.People[0] = configuration.People[0] with { Name = "Correction" };
-        var corrected = CollectionJobDefinition.FromConfiguration(configuration, "source", definition.CoverageAsOf);
+        var corrected = CollectionFixtures.Definition(configuration, "source", definition.CoverageAsOf);
         await Assert.ThrowsAsync<ArgumentException>(() => reopened.EnqueueAsync(corrected, "current", default));
         await Assert.ThrowsAsync<ArgumentException>(() => reopened.EnqueueAsync(definition with { ConfigurationRevision = null, CoverageAsOf = null }, "current", default));
 
@@ -734,7 +734,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
                 AllowedOrigin = "https://example.test", AllowedPathPrefix = "/"
             }]
         };
-        var definition = CollectionJobDefinition.FromConfiguration(configuration, "source", new DateOnly(2026, 7, 1));
+        var definition = CollectionFixtures.Definition(configuration, "source", new DateOnly(2026, 7, 1));
         var claim = await EnqueueClaimAsync("corrupt-binding", definition);
         var invalid = removeDate ? definition with { CoverageAsOf = null } : definition with { MaxBytes = 100 };
         await using var connection = new NpgsqlConnection(connectionString);
@@ -811,7 +811,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
                 AllowedOrigin = "https://example.test", AllowedPathPrefix = "/"
             }]
         };
-        return CollectionJobDefinition.FromConfiguration(configuration, "source", new DateOnly(2026, 7, 1));
+        return CollectionFixtures.Definition(configuration, "source", new DateOnly(2026, 7, 1));
     }
 
     private async Task<object?> ScalarAsync(string sql)
@@ -870,12 +870,12 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
                 Url = $"https://example.test/{id}", AllowedOrigin = "https://example.test", AllowedPathPrefix = "/"
             })]
         };
-        var a = CollectionJobDefinition.FromConfiguration(configuration, "a");
+        var a = CollectionFixtures.Definition(configuration, "a");
         var older = await jobs.EnqueueAsync(a, "a-old", default);
         var newer = await jobs.EnqueueAsync(a, "a-new", default);
         var article = await jobs.EnqueueAsync(a with { Mode = CollectionMode.Page, Url = "https://example.test/a/article" },
             "a-article", default);
-        var other = await jobs.EnqueueAsync(CollectionJobDefinition.FromConfiguration(configuration, "b"), "b-only", default);
+        var other = await jobs.EnqueueAsync(CollectionFixtures.Definition(configuration, "b"), "b-only", default);
         await SqlAsync($"UPDATE collection_jobs SET created_at = 100 WHERE job_id = '{older.JobId}'");
         await SqlAsync($"UPDATE collection_jobs SET created_at = 200 WHERE job_id = '{newer.JobId}'");
         await SqlAsync($"UPDATE collection_jobs SET created_at = 300 WHERE job_id = '{article.JobId}'");

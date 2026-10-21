@@ -1,3 +1,4 @@
+using CivicLens.Tests.Fixtures;
 using System.Text.Json;
 using CivicLens.Collection.Contracts;
 using CivicLens.Application.Collection;
@@ -11,7 +12,7 @@ public sealed class CollectionJobDefinitionTests
     public void DefinitionSnapshotsExecutionSettingsAndConfigurationRevision()
     {
         var config = Config();
-        var definition = CollectionJobDefinition.FromConfiguration(config, "first");
+        var definition = CollectionFixtures.Definition(config, "first");
         config.Sources[0] = config.Sources[0] with { Url = "https://changed.test/" };
 
         Assert.Equal("https://example.test/page", definition.Url);
@@ -23,7 +24,7 @@ public sealed class CollectionJobDefinitionTests
     [Fact]
     public void AggregateBudgetCannotBeSmallerThanOneAttempt()
     {
-        var definition = CollectionJobDefinition.FromConfiguration(Config(), "first") with
+        var definition = CollectionFixtures.Definition(Config(), "first") with
         {
             Policy = new CollectionJobPolicy { MaxTotalRequests = 4 }
         };
@@ -36,7 +37,7 @@ public sealed class CollectionJobDefinitionTests
     {
         var date = new DateOnly(2026, 7, 1);
         var config = DatedConfig(date);
-        var definition = CollectionJobDefinition.FromConfiguration(config, "first", date);
+        var definition = CollectionFixtures.Definition(config, "first", date);
         var json = JsonSerializer.Serialize(definition, CollectionProtocol.JsonOptions);
         var restored = JsonSerializer.Deserialize<CollectionJobDefinition>(json, CollectionProtocol.JsonOptions)!;
         config.Sources[0].Coverage![0] = config.Sources[0].Coverage![0] with { EndsBefore = date };
@@ -47,14 +48,14 @@ public sealed class CollectionJobDefinitionTests
         Assert.Equal(date, restored.CoverageAsOf);
         Assert.Equal(["person"], restored.ConfigurationRevision!.Configuration.CoveredPersonIdsOf(restored.ConfigurationRevision.Configuration.Sources.Single(source => source.Id == "first"), date));
         Assert.Equal("Person", restored.ConfigurationRevision.ReadConfiguration().People[0].Name);
-        Assert.Throws<ArgumentException>(() => CollectionJobDefinition.FromConfiguration(config, "first", date));
+        Assert.Throws<ArgumentException>(() => CollectionFixtures.Definition(config, "first", date));
     }
 
     [Fact]
     public void BindingRejectsMissingContextChangedSettingsAndInactiveCoverage()
     {
         var date = new DateOnly(2026, 7, 1);
-        var definition = CollectionJobDefinition.FromConfiguration(DatedConfig(date), "first", date);
+        var definition = CollectionFixtures.Definition(DatedConfig(date), "first", date);
         Assert.Throws<ArgumentException>(() => (definition with { CoverageAsOf = null }).Validate());
         Assert.Throws<ArgumentException>(() => (definition with { ConfigurationRevision = null }).Validate());
         Assert.Throws<ArgumentException>(() => (definition with { CoverageAsOf = date.AddDays(-1) }).Validate());
@@ -67,7 +68,7 @@ public sealed class CollectionJobDefinitionTests
     {
         var config = Config();
         config.Sources[0] = config.Sources[0] with { Mode = CollectionMode.Html, ETag = "\"etag\"" };
-        var definition = CollectionJobDefinition.FromConfiguration(config, "first", new DateOnly(2026, 7, 1));
+        var definition = CollectionFixtures.Definition(config, "first", new DateOnly(2026, 7, 1));
         var child = definition with { Mode = CollectionMode.Page, Url = "https://example.test/page/article", ETag = null };
         child.Validate();
         Assert.Equal(definition.ConfigurationRevision, child.ConfigurationRevision);
@@ -79,7 +80,7 @@ public sealed class CollectionJobDefinitionTests
     [Fact]
     public void OnlyTheConfiguredUrlOfItsOwnRevisionMakesAPageJobARoot()
     {
-        var definition = CollectionJobDefinition.FromConfiguration(Config(), "first", new DateOnly(2026, 7, 1));
+        var definition = CollectionFixtures.Definition(Config(), "first", new DateOnly(2026, 7, 1));
 
         Assert.True(definition.IsRoot());
         Assert.False((definition with { Url = "https://example.test/page/article" }).IsRoot());
@@ -110,7 +111,7 @@ public sealed class CollectionJobDefinitionTests
                 }
             ]
         };
-        var definition = CollectionJobDefinition.FromConfiguration(config, "first", new DateOnly(2026, 7, 1));
+        var definition = CollectionFixtures.Definition(config, "first", new DateOnly(2026, 7, 1));
 
         Assert.Equal(expected, (definition with { Url = url }).IsListingPage());
     }
@@ -121,7 +122,7 @@ public sealed class CollectionJobDefinitionTests
     [InlineData("https://example.test/story", false)]
     public void ASiteRootPrefixMakesOnlyTheSiteRootAnIndexPage(string url, bool expected)
     {
-        var definition = CollectionJobDefinition.FromConfiguration(Config(), "first", new DateOnly(2026, 7, 1)) with
+        var definition = CollectionFixtures.Definition(Config(), "first", new DateOnly(2026, 7, 1)) with
         {
             AllowedPathPrefix = "/"
         };
@@ -132,7 +133,7 @@ public sealed class CollectionJobDefinitionTests
     [Fact]
     public void WithoutAConfigurationRevisionOnlyThePrefixPathMakesAnIndexPage()
     {
-        var definition = CollectionJobDefinition.FromConfiguration(Config(), "first", new DateOnly(2026, 7, 1)) with
+        var definition = CollectionFixtures.Definition(Config(), "first", new DateOnly(2026, 7, 1)) with
         {
             ConfigurationRevision = null,
             CoverageAsOf = null
@@ -146,7 +147,7 @@ public sealed class CollectionJobDefinitionTests
     public void LegacyReplayMatchesExecutionSettingsWithoutInventingProvenance()
     {
         var config = Config();
-        var definition = CollectionJobDefinition.FromConfiguration(config, "first", new DateOnly(2026, 7, 1));
+        var definition = CollectionFixtures.Definition(config, "first", new DateOnly(2026, 7, 1));
         var legacy = definition with { ConfigurationRevision = null, CoverageAsOf = null };
         var legacyJson = JsonSerializer.Serialize(legacy, CollectionProtocol.JsonOptions);
         Assert.DoesNotContain("configurationRevision", legacyJson);
@@ -156,7 +157,7 @@ public sealed class CollectionJobDefinitionTests
         Assert.False(legacy.MatchesReplayOf(definition));
 
         config.People[0] = config.People[0] with { Name = "Corrected" };
-        var corrected = CollectionJobDefinition.FromConfiguration(config, "first", definition.CoverageAsOf);
+        var corrected = CollectionFixtures.Definition(config, "first", definition.CoverageAsOf);
         Assert.False(corrected.MatchesReplayOf(definition));
         Assert.False((definition with { CoverageAsOf = new DateOnly(2026, 7, 2) }).MatchesReplayOf(definition));
     }

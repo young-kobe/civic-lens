@@ -1,3 +1,4 @@
+using CivicLens.Tests.Fixtures;
 using System.Text.Json;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
@@ -38,8 +39,8 @@ public sealed class JobSourceColumnsMigrationTests(PostgresCollection postgres) 
         await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>()
             .UseNpgsql(connectionString).Options);
         await db.GetService<IMigrator>().MigrateAsync(PreviousMigration);
-        var page = CollectionJobDefinition.FromConfiguration(PageConfiguration(PageUrl), "page", Backfill);
-        var earlier = CollectionJobDefinition.FromConfiguration(PageConfiguration(EarlierPageUrl), "page", Backfill);
+        var page = CollectionFixtures.Definition(PageConfiguration(PageUrl), "page", Backfill);
+        var earlier = CollectionFixtures.Definition(PageConfiguration(EarlierPageUrl), "page", Backfill);
         var bills = new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", Backfill);
         var jobs = new Dictionary<string, CollectionJobDefinition>
         {

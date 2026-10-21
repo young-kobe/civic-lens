@@ -1,3 +1,4 @@
+using CivicLens.Tests.Fixtures;
 using System.Security.Cryptography;
 using System.Text;
 using CivicLens.Application.Collection;
@@ -201,7 +202,7 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
     {
         var configuration = Configuration(intervalSeconds: 60, mode: CollectionMode.Html);
         await SynchronizeDueAsync(configuration);
-        var source = CollectionJobDefinition.FromConfiguration(configuration, "senate");
+        var source = CollectionFixtures.Definition(configuration, "senate");
         await store.EnqueueAsync(source with { Mode = CollectionMode.Page, Url = "https://example.test/senate/article" },
             "article", default);
 

@@ -192,7 +192,7 @@ public sealed class SourceHealthTests
             null, comparisonId, outcome, null);
 
     private static CollectionJobRecord Job(string sourceId, CollectionJobState state) => new(
-        Guid.NewGuid().ToString("N"), CollectionJobDefinition.FromConfiguration(Configuration, sourceId), "key-" + sourceId,
+        Guid.NewGuid().ToString("N"), CollectionFixtures.Definition(Configuration, sourceId), "key-" + sourceId,
         state, Created, null, false, []);
 
     private static CollectionJobAttempt Attempt(DateTimeOffset completedAt) => new(Guid.NewGuid().ToString("N"),
