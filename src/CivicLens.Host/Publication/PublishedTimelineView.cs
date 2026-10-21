@@ -48,12 +48,12 @@ internal static class PublishedTimelineView
         WithPublication([new(record.WeekStart, "Week starts")], record.ApprovedAtUtc, record.FirstPublishedAtUtc);
 
     private static TimelineEvent At(DateTimeOffset at, string text) =>
-        new(DateOnly.FromDateTime(at.UtcDateTime), $"{text}, {Moment.Full(at)}");
+        new(DateOnly.FromDateTime(at.UtcDateTime), $"{text}, {Moment.Full(at)}", TimeOnly.FromDateTime(at.UtcDateTime));
 
     private static IReadOnlyList<TimelineEvent> WithPublication(List<TimelineEvent> events, DateTimeOffset approvedAtUtc, DateTimeOffset firstPublishedAtUtc)
     {
         events.Add(At(approvedAtUtc, "Approved"));
         events.Add(At(firstPublishedAtUtc, "First published"));
-        return [.. events.OrderBy(item => item.Day)];
+        return [.. events.OrderBy(item => item.Day).ThenBy(item => item.Time)];
     }
 }

@@ -67,7 +67,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - Every kind is found by the text of its source. Enforced by `RecordReader`. Test: `SearchIndexTests.EveryKindIsFoundByTheTextOfItsSource`.
 - A snippet is plain text with match markers, never HTML. Enforced by `SearchIndex` and the page script. Test: `SearchIndexTests.TheSnippetShowsTheMatchBetweenMarkersAndLeavesSourceMarkupAsPlainText`.
 - Filters narrow the result by the manifest entry fields, and a date filter never matches a record without an event date. Enforced by `SearchIndex.Filters`. Tests: `SearchIndexTests.FiltersNarrowTheResultAndEachOneUsesTheManifestEntryField` and `SearchIndexTests.AFilterThatNeedsAnEventDateNeverMatchesARecordWithoutOne`.
-- Without text, results follow the event date, then the first publication time, newest first, and undated records come last. Enforced by `SearchIndex`. Test: `SearchIndexTests.WithoutTextTheResultsFollowTheEventDateThenTheFirstPublicationTimeNewestFirstAndUndatedRecordsComeLast`.
+- Without text, results follow the event day, else the UTC day of the first publication, newest first. This is the facet rule of `ReleaseRecordOrder`. `SearchIndex.SortDate` is its SQL copy in this service, because the service cannot reference the Application project. Records of one day follow the first publication time, then the record ID. Enforced by `SearchIndex`. Test: `SearchIndexTests.WithoutTextTheResultsFollowTheFacetRuleOfEventDayElseTheUtcFirstPublicationDayNewestFirst`.
 - Cursor paging walks every record once, in order, with and without text. Enforced by `SearchCursor` and `SearchIndex`. Tests: `SearchIndexTests.CursorPagingWalksEveryRecordOnceInOrderWithNoRepeatAndNoGap` and `SearchRequestTests.TheCursorRoundTripsTheRankExactlyBecauseTheKeysetCompareUsesEquality`.
 - A cursor keeps its release, and a named release that differs is refused. Enforced by `SearchRequest.Parse`. Tests: `SearchRequestTests.ACursorPinsItsReleaseAndANamedReleaseThatDiffersIsRefused` and `SearchEndpointsTests.TheLimitIsHonoredUpToTheMaximumAndTheCursorContinuesInTheSameRelease`.
 - The query is at most 200 characters, a page holds at most 50 results, and each filter value is bounded. Enforced by `SearchRequest.Parse`. Tests: `SearchEndpointsTests.AQueryOfMoreThanTheMaximumLengthIsRefusedAndOneAtTheMaximumIsAccepted` and `SearchEndpointsTests.BadParametersAreRefusedWith400`.
@@ -120,7 +120,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 
 ### Search
 
-`SearchIndex` runs two kinds of query. With text, it matches `websearch_to_tsquery` and orders by `ts_rank_cd`, then by record ID. Without text, it orders by event date, then first publication time, then record ID. A record without an event date sorts last.
+`SearchIndex` runs two kinds of query. With text, it matches `websearch_to_tsquery` and orders by `ts_rank_cd`, then by record ID. Without text, it orders by event day, else the UTC day of the first publication, then first publication time, then record ID.
 
 Each filter is one value: `kind`, `official`, `issue`, `policyArea`, `source`, and a `from` and `to` date range on the event date. The filters combine with AND.
 

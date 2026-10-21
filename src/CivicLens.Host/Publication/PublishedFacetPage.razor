@@ -5,7 +5,7 @@
     <a class="back-link" href="@("../" + PublicationProtocol.FacetsPath)">Issues and policy areas</a>
     <PageHeader Title="@Facet.Name" Lede="@($"{KindLabel}. {Facet.Records.Length} published records, newest event date first. A record with no event date uses its first publication day.")" />
     <Panel Label="Records">
-        <PublishedRecordTable Records="Facet.RecordsOnPage(Page)" Caption="@Facet.Name" RootPath="../" ShowEventDate="true" />
+        <PublishedRecordTable Records="Facet.RecordsOnPage(Page)" Caption="@Facet.Name" RootPath="../" FacetColumns="true" />
         <Pager Label="Pages" Summary="@($"Page {Page} of {Facet.PageCount}")" NewerText="Previous" OlderText="Next"
                NewerHref="@(Page > 1 ? "../" + Facet.PagePath(Page - 1) : null)"
                OlderHref="@(Page < Facet.PageCount ? "../" + Facet.PagePath(Page + 1) : null)" />

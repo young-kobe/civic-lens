@@ -33,7 +33,7 @@ public sealed class PublishedOfficialPageTests
         [
             Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)),
             Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1)) with { EventDate = null, FirstPublishedAtUtc = new DateTimeOffset(2026, 5, 2, 9, 0, 0, TimeSpan.Zero) },
-            Entry('3', PublishedRecordKind.Statement, new DateOnly(2026, 5, 2)) with { EventDate = null, FirstPublishedAtUtc = new DateTimeOffset(2026, 5, 2, 20, 0, 0, TimeSpan.Zero) },
+            Entry('3', PublishedRecordKind.Statement, new DateOnly(2026, 5, 2)) with { EventDate = null, FirstPublishedAtUtc = new DateTimeOffset(2026, 5, 2, 21, 0, 0, TimeSpan.FromHours(-5)) },
             Entry('4', PublishedRecordKind.Action, new DateOnly(2026, 4, 1))
         ];
         var facet = ReleaseFacets.From(new PublicationRelease
@@ -50,7 +50,7 @@ public sealed class PublishedOfficialPageTests
         string[] Order(string html) => [.. new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody a.cell-title")
             .Select(link => link.GetAttribute("href")!.Replace("../records/", "").Replace(".html", ""))];
         Assert.Equal(Order(official), Order(facetHtml));
-        Assert.Equal([new string('2', 64), new string('3', 64), new string('4', 64), new string('1', 64)], Order(official));
+        Assert.Equal([new string('3', 64), new string('2', 64), new string('4', 64), new string('1', 64)], Order(official));
     }
 
     [Fact]

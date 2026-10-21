@@ -736,7 +736,7 @@ public sealed class ReleaseRendererTests
             Records =
         [
             Entry('a', new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero), new DateOnly(2026, 1, 2), "Jane Doe", "Ann Roe"),
-            Entry('b', new DateTimeOffset(2026, 5, 10, 8, 0, 0, TimeSpan.Zero), null, "Jane Doe"),
+            Entry('b', new DateTimeOffset(2026, 5, 9, 21, 0, 0, TimeSpan.FromHours(-5)), null, "Jane Doe"),
             Entry('c', new DateTimeOffset(2026, 5, 12, 8, 0, 0, TimeSpan.Zero), null),
             Entry('d', new DateTimeOffset(2026, 5, 10, 20, 0, 0, TimeSpan.Zero), null, "Ann Roe")
         ]
@@ -771,9 +771,23 @@ public sealed class ReleaseRendererTests
             "2026-01-20|Withdrawn by Ann Roe (cosponsor)", "2026-01-22|Approved, 2026-01-22 12:00 UTC",
             "2026-01-23|First published, 2026-01-23 08:00 UTC"], action);
         Assert.Equal(["2025-04-10|Vote held", "2026-01-22|Approved, 2026-01-22 12:00 UTC", "2026-01-23|First published, 2026-01-23 08:00 UTC"], vote);
-        Assert.Equal(["1970-01-01|Approved, 1970-01-01 00:00 UTC", "1970-01-01|First published, 1970-01-01 00:00 UTC", "2026-02-03|Statement made"],
+        Assert.Equal(["2026-02-03|Statement made", "2026-02-04|Approved, 2026-02-04 12:00 UTC", "2026-02-05|First published, 2026-02-05 08:00 UTC"],
             relationship);
-        Assert.Equal(["1970-01-01|Approved, 1970-01-01 00:00 UTC", "1970-01-01|First published, 1970-01-01 00:00 UTC", "2026-10-05|Week starts"], brief);
+        Assert.Equal(["2026-10-05|Week starts", "2026-10-06|Approved, 2026-10-06 12:00 UTC", "2026-10-07|First published, 2026-10-07 08:00 UTC"], brief);
+    }
+
+    [Fact]
+    public async Task TimesOnOneDayKeepTheirClockOrderSoTheShownTimesNeverContradictTheOrder()
+    {
+        var vote = Vote() with
+        {
+            ApprovedAtUtc = new DateTimeOffset(2026, 1, 22, 12, 0, 0, TimeSpan.Zero),
+            FirstPublishedAtUtc = new DateTimeOffset(2026, 1, 22, 8, 0, 0, TimeSpan.Zero)
+        };
+
+        var events = await TimelineOf(renderer => renderer.RenderVoteAsync(vote, null, [], CancellationToken.None));
+
+        Assert.Equal(["2025-04-10|Vote held", "2026-01-22|First published, 2026-01-22 08:00 UTC", "2026-01-22|Approved, 2026-01-22 12:00 UTC"], events);
     }
 
     private static async Task<string[]> TimelineOf(Func<ReleaseRenderer, Task<string>> render)
@@ -878,8 +892,8 @@ public sealed class ReleaseRendererTests
         Officials = [new PublishedOfficial { Id = "o1", Name = "Jane <Doe>" }],
         IssueIds = ["housing"],
         PolicyAreaIds = [],
-        ApprovedAtUtc = DateTimeOffset.UnixEpoch,
-        FirstPublishedAtUtc = DateTimeOffset.UnixEpoch
+        ApprovedAtUtc = new DateTimeOffset(2026, 2, 4, 12, 0, 0, TimeSpan.Zero),
+        FirstPublishedAtUtc = new DateTimeOffset(2026, 2, 5, 8, 0, 0, TimeSpan.Zero)
     };
 
     private static PublishedBrief Brief() => new()
@@ -900,8 +914,8 @@ public sealed class ReleaseRendererTests
             new() { Id = "R1", Kind = PublishedRecordKind.Statement, RecordId = new string('1', 64), RevisionNumber = 1, Headline = "Rent cap <statement>" },
             new() { Id = "R2", Kind = PublishedRecordKind.DocumentChange, RecordId = new string('2', 32), RevisionNumber = 3, Headline = "Zoning rule change" }
         ],
-        ApprovedAtUtc = DateTimeOffset.UnixEpoch,
-        FirstPublishedAtUtc = DateTimeOffset.UnixEpoch
+        ApprovedAtUtc = new DateTimeOffset(2026, 10, 6, 12, 0, 0, TimeSpan.Zero),
+        FirstPublishedAtUtc = new DateTimeOffset(2026, 10, 7, 8, 0, 0, TimeSpan.Zero)
     };
 
     private static PublishedAction Action()

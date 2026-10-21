@@ -101,7 +101,7 @@ The join of a configured person to roster terms is in [publication](publication.
 ## Limits and planned work
 
 - The roster lists current members only. A past member has no rows. The historical file is not read.
-- Publish reads the dated terms of configured people only. It matches a person by bioguide ID, then by Wikidata ID. The official profile pages come with [R-36](../roadmap.md#next).
+- Publish reads the dated terms of configured people only. It matches a person by bioguide ID, then by Wikidata ID. The official profile pages show them; see [publication](publication.md).
 - Senate votes ([R-42](../roadmap.md#next)) will match members through the `lis` ID.
 - Bill and vote coverage is not term aware. A member who leaves stays covered until a person edits the configuration.
 - Names are not dated. The command proposes the current official name only.

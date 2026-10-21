@@ -4,7 +4,7 @@
 <DataTable Items="Records" Caption="@Caption">
     <Head>
         <th>Record</th>
-        @if (ShowEventDate)
+        @if (FacetColumns)
         {
             <th class="hide-narrow">Officials</th>
             <th class="fit num">Date</th>
@@ -16,7 +16,7 @@
     </Head>
     <Row Context="entry">
         <td><a class="cell-title" href="@(RootPath + PublicationProtocol.RecordPagePath(entry.RecordId))">@entry.Headline</a> <StatusBadge Text="@PublishedRecordLabels.Kind(entry.Kind)" /></td>
-        @if (ShowEventDate)
+        @if (FacetColumns)
         {
             <td class="hide-narrow">@string.Join(", ", entry.Officials.Select(official => official.Name))</td>
             <td class="fit num">@Moment.Iso(ReleaseRecordOrder.Day(entry))</td>
@@ -33,5 +33,5 @@
     [Parameter, EditorRequired] public IReadOnlyList<PublishedRecordEntry> Records { get; set; } = [];
     [Parameter, EditorRequired] public string Caption { get; set; } = string.Empty;
     [Parameter] public string RootPath { get; set; } = string.Empty;
-    [Parameter] public bool ShowEventDate { get; set; }
+    [Parameter] public bool FacetColumns { get; set; }
 }
