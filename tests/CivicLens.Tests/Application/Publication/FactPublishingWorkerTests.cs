@@ -39,7 +39,7 @@ public sealed class FactPublishingWorkerTests
         using var stop = new CancellationTokenSource();
         var wakeup = new CountingWakeup(() => { if (scenario.Publications.Committed.Count > 0) stop.Cancel(); });
 
-        var result = await new FactPublishingWorker(Facts(scenario), wakeup, _ => { }).ExecuteAsync(once: false, stop.Token);
+        var result = await new StageWorker(Facts(scenario).ExecuteAsync, wakeup, _ => { }).ExecuteAsync(once: false, stop.Token);
 
         Assert.Equal((1, 1, 1), (result.Passes, result.ProgressCount, wakeup.WaitCount));
     }
@@ -56,8 +56,8 @@ public sealed class FactPublishingWorkerTests
     private static PublishCodeApprovedFacts Facts(PublicationScenario scenario) =>
         new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), _ => { });
 
-    private static FactPublishingWorker Worker(PublicationScenario scenario, Action<Exception> report) =>
-        new(Facts(scenario), new CountingWakeup(() => { }), report);
+    private static StageWorker Worker(PublicationScenario scenario, Action<Exception> report) =>
+        new(Facts(scenario).ExecuteAsync, new CountingWakeup(() => { }), report);
 
     private sealed class CountingWakeup(Action onWait) : IWorkerWakeup
     {

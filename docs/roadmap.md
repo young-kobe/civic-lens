@@ -30,13 +30,12 @@ After the first deploy:
 
 Each item gives its outcome, what it depends on, and where the design lives. Present the design choices before building R-22 only.
 
-The first deploy is a complete product within the product direction. Its path is R-36, R-40, R-32, R-42, and R-43, then R-23, then R-24. R-25, R-38, R-21, and R-18 come after R-24.
+The first deploy is a complete product within the product direction. Its path is R-36, R-32, R-42, and R-43, then R-23, then R-24. R-25, R-38, R-21, and R-18 come after R-24.
 
 ### Next
 
 - R-17: Congressional Record articles as a statement connector. Depends on: none stated. [Actions](architecture/actions.md#limits-and-planned-work)
 - R-36: Official pages and timelines for citizens. Each record shows its evidence and timeline. The official pages are also public filter pages, and they show offices and dated terms from the [roster](architecture/roster.md). Each record page links to the R-40 report path. The weekly briefing home page and the issue and policy area pages are built. Each release also holds `officials.json` with the offices and dated terms, and `catalog.json`. The official pages, the officials list, the vote index files, and the config `offices` array are built. Depends on: none stated. [Publication](architecture/publication.md#limits-and-planned-work)
-- R-40: Readers report a problem with a published record through the search service. The operational application pulls each report into the review queue, and a person handles it. The service side is built: the report intake, the Turnstile check, the caps, and the pull route; see [search](architecture/search.md). The report page and the record links are built. Left: the operational queue that pulls reports and the person handling (2c). It runs first as its own container and database on the CPX21, with no access to operational storage. It moves to its own server only when a measurement shows that the box is too small. Depends on: none stated. It must come before R-24. [Search](architecture/search.md#limits-and-planned-work)
 - R-32: Correction and withdrawal releases for all record kinds. No kind can publish one yet. Depends on: none stated. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-42: Senate votes from senate.gov data, as House votes come from the House Clerk. Members match through the Senate member IDs of the [roster](architecture/roster.md). Depends on: none stated. [Votes](architecture/votes.md#limits-and-planned-work)
 - R-43: The talk and action profile insight. For each official, code shows the share of statements on each issue next to the share of sponsorships and votes on it, and publishes a method note. It uses no model. Depends on: R-36. [Publication](architecture/publication.md#limits-and-planned-work)

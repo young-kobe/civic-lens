@@ -39,6 +39,7 @@ The search service gives readers full-text search over every published record. I
 - The `after` value acknowledges every report at or below it. The acknowledged sequence in `report_pull_state` never moves back.
 - `IngestWorker` also purges reports. It deletes a report only when its sequence is at or below the acknowledged sequence and it is older than 7 days. This keeps one timer loop, so no new hosted service exists.
 - The wire types `PulledReport`, `PulledReportBatch`, and `ReaderReportProtocol` are in `CivicLens.Publication.Contracts`. They are not release files, so `PublicationProtocol.SchemaVersion` does not change. The cursor format is owned by `ReportCursor` in the service, because it is opaque to the puller.
+- The operational application pulls the reports with the stage `reportPull`; see [operational pull](#operational-pull).
 - The route `/internal/*` is not public. [R-24](../roadmap.md#later) must block it at the edge or use a private listener. This document does not build that.
 
 ## Invariants
@@ -88,6 +89,13 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A cursor of another epoch starts from the first report and acknowledges nothing. Enforced by `ReportStore.PullAsync`. Test: `ReportStoreTests.ACursorOfAnotherEpochStartsFromTheFirstReportAndAcknowledgesNothingSoAResetNeverSkipsReports`.
 - The acknowledged sequence never moves back. Enforced by `ReportStore.PullAsync`. Test: `ReportStoreTests.TheAcknowledgementMovesForwardOnlySoAnOldCursorCannotMakeAPulledReportUnpurgeable`.
 - The purge deletes only acknowledged reports older than 7 days. Enforced by `ReportStore.PurgeAsync`. Test: `ReportStoreTests.ThePurgeDeletesOnlyReportsThatAreAcknowledgedAndOlderThanSevenDays`.
+- A pulled batch is validated before it is stored, and a bad batch keeps the cursor. Enforced by `PullReaderReports` and `PulledReportBatch.Validate`. Tests: `PulledReportTests.ABatchWithOneBadReportADuplicateIdOrABadCursorIsRefusedAsAWhole` and `ReaderReportPullTests.ABatchWithOneBadReportIsRefusedAsAWholeAndTheCursorStaysSoTheNextTickAsksForTheSameReports`.
+- The reports and the cursor of a page are stored in one transaction. Enforced by `PostgresReaderReportStore.SavePulledAsync`. Test: `PostgresReaderReportStoreTests.ACursorThatCannotBeSavedLeavesNoReportsBehindSoAReplayNeverSkipsAndNeverHalfStores`.
+- A report is stored once, whatever the epoch of the cursor. Enforced by the unique key on the report ID and `ON CONFLICT DO NOTHING`. Test: `PostgresReaderReportStoreTests.AReplayAfterAnEpochChangeStoresEachReportOnceAndKeepsTheResolutionOfOneThatIsAlreadyHandled`.
+- Each pull asks with the cursor that the store saved. Enforced by `PullReaderReports`. Test: `ReaderReportPullTests.AllPagesAreStoredAndEachPullAsksWithTheCursorThatTheStoreSavedNeverOneThatTheApplicationMadeUp`.
+- A service that is down counts one failure, keeps the cursor, and is asked again on the next tick. Enforced by `StageWorker`. Test: `ReaderReportPullTests.WhenTheServiceIsDownTheStageCountsAFailureKeepsTheCursorAndPullsAgainOnTheNextTick`.
+- The pull sends the bearer token and never puts it in an error. Enforced by `HttpReportPuller`. Tests: `HttpReportPullerTests.ThePullSendsTheBearerTokenAndTheOpaqueCursorToThePullRouteAndReadsTheBatch` and `HttpReportPullerTests.AFailedCallThrowsWithoutTheTokenSoTheStageCountsItAndNeverLogsTheSecret`.
+- The stage stops the worker at startup when its address or token is missing or invalid. Enforced by `ReportPullComposition`. Test: `ReportPullConfigurationTests.TheWorkerStopsAtStartupWhenTheReportPullIsSwitchedOnWithoutAUsableAddressAndTokenAndNeverPrintsTheToken`.
 - Each schema file runs once, even when two services start together. Enforced by `SchemaMigrator`. Test: `SchemaMigratorTests.TwoServicesThatStartTogetherApplyEachFileOnceAndRecordItInSchemaMigrations`.
 - Every release holds `search.html`, written before the manifest. Enforced by `PublishRelease`. Test: `PublishReleaseTests.EveryReleaseHoldsASearchPageThatIsWrittenBeforeTheManifestAndListsTheReleaseRecords`.
 - The search page states the source text limit, and it says when search is not available. Enforced by `PublishedSearchPage`. Tests: `ReleaseRendererTests.SearchPageStatesTheSourceTextLimitSoReadersKnowWhatSearchReads` and `ReleaseRendererTests.SearchPageWithoutAServiceAddressSaysThatSearchIsNotAvailableAndShowsNoForm`.
@@ -159,6 +167,16 @@ The poll interval is 2 minutes and the statement timeout is 2 seconds. Both are 
 
 `PublishedSearchPage` renders `search.html`. The form stays hidden until `app.js` runs. The kind filter lists the six kinds. The official and source filters list the distinct values of the release manifest. The issue and policy area filters show catalog names. The script calls `/v1/search`, shows each result with its snippet, and loads more results with the cursor. It builds the snippet with `mark` elements, never with HTML from the service.
 
+### Operational pull
+
+- The worker runs the stage `reportPull` when `CIVIC_LENS_REPORT_PULL=1`. It ticks at start and then every 5 minutes by the database clock. The settings are in [operations](../operations.md#reader-report-queue).
+- `StageWorker` runs `PullReaderReports` for each tick. The handler asks for a page with the saved cursor, checks the page, and stores it. It repeats until a page is empty. The queue is in [review](review.md#reader-reports).
+- `HttpReportPuller` is a concrete class at the service boundary, like `TurnstileVerifier`. It sends the bearer token and the opaque cursor. A call has a hard limit of 30 seconds. A failed status, an unreadable reply, or a timeout throws, and the stage counts one failure. The token is in no message.
+- The application never parses or builds the cursor. It saves `NextCursor` as the service sent it and sends it back as the next `after` value.
+- `PulledReportBatch.Validate` runs at the pull, because the service is an outside boundary. It checks the report rules of `ReaderReportProtocol`, the record ID rule of `PublicationProtocol.IsAnyRecordId`, the batch size, and the cursor length. A bad batch is refused as a whole. Its reports and its cursor are not stored.
+- `PostgresReaderReportStore.SavePulledAsync` inserts the new reports with `ON CONFLICT (report_id) DO NOTHING` and saves the cursor in the same transaction. A replay after a change of epoch adds no second row and does not change a report that is resolved.
+- Unlike the service, the operational application purges nothing. A resolved report stays in the queue.
+
 ## Storage and contracts
 
 - The generated schema reference does not cover this database. The tables are `releases`, `records`, and `schema_migrations`, in `src/CivicLens.PublicApi/Schema/001_search_index.sql`. The tables `reader_reports` and `report_pull_state` are in `002_reader_reports.sql`.
@@ -181,14 +199,17 @@ The poll interval is 2 minutes and the statement timeout is 2 seconds. Both are 
 | HTTP helpers | `src/CivicLens.PublicApi/Http/ApiResults.cs`, `src/CivicLens.PublicApi/Http/QueryValues.cs` |
 | Reader reports | `src/CivicLens.PublicApi/Reports/ReportEndpoints.cs`, `src/CivicLens.PublicApi/Reports/ReportSubmission.cs`, `src/CivicLens.PublicApi/Reports/ReportStore.cs`, `src/CivicLens.PublicApi/Reports/ReportCursor.cs`, `src/CivicLens.PublicApi/Reports/ReportReceipt.cs`, `src/CivicLens.PublicApi/Reports/TurnstileVerifier.cs`, `src/CivicLens.PublicApi/Reports/TurnstileSettings.cs`, `src/CivicLens.PublicApi/Schema/002_reader_reports.sql` |
 | Report wire types | `src/CivicLens.Publication.Contracts/ReaderReportProtocol.cs`, `src/CivicLens.Publication.Contracts/PulledReport.cs`, `src/CivicLens.Publication.Contracts/PulledReportBatch.cs` |
+| Operational pull | `src/CivicLens.Application/Reports/PullReaderReports.cs`, `src/CivicLens.Application/Reports/IReaderReportSource.cs`, `src/CivicLens.Application/StageWorker.cs`, `src/CivicLens.Infrastructure/Reports/HttpReportPuller.cs`, `src/CivicLens.Infrastructure/Reports/PostgresReportPullWakeup.cs`, `src/CivicLens.Host/Reports/ReportPullComposition.cs` |
 | Search page | `src/CivicLens.Host/Publication/PublishedSearchPage.razor`, `src/CivicLens.Host/Publication/ReleaseRenderer.cs`, `src/CivicLens.Host/wwwroot/js/app.js` |
-| Tests | `tests/CivicLens.Tests/PublicApi/` |
+| Tests | `tests/CivicLens.Tests/PublicApi/`, `tests/CivicLens.Tests/Infrastructure/Reports/` |
 
 Run commands are in [operations](../operations.md#run-the-search-service).
 
 ## Limits and planned work
 
-- The operational queue that pulls reports is planned in [R-40](../roadmap.md#next). It is not built. Until then nothing pulls reports.
+- One worker pulls. Two workers would pull the same pages. The unique report ID keeps the queue correct.
+- The pull address and token are set by hand in the worker environment. [R-24](../roadmap.md#later) sets them in the container configuration.
+- The queue has no rail link. The Review home page links it. The operational application sends no notice when a report arrives.
 - The per-client report limit lives in memory and resets when the service restarts.
 - There is no reporter identity. Abuse handling relies on Turnstile and the caps. A flood can fill the daily cap and close reports for the day.
 - A duplicate sent at the daily cap gets 503 like any other report.
