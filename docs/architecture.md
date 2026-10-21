@@ -271,8 +271,8 @@ Before the first production deploy ([R-23](roadmap.md#later)), reset the develop
 | Action draft task | `action-draft-v2` | `src/CivicLens.Application/Actions/ActionDraftTask.cs` | Action analysis runs | Task flow or output handling changes |
 | Action draft prompt | `action-draft-prompt-v3` | same file | Action analysis runs | Prompt text or input framing changes |
 | Action draft schema | `action-draft-schema-v1` | same file | Action analysis runs | The model output schema changes |
-| Vote draft task | `vote-draft-v4` | `src/CivicLens.Application/Votes/VoteDraftTask.cs` | Vote analysis runs | Task flow or output handling changes |
-| Vote draft prompt | `vote-draft-prompt-v2` | same file | Vote analysis runs | Prompt text or input framing changes |
+| Vote draft task | `vote-draft-v5` | `src/CivicLens.Application/Votes/VoteDraftTask.cs` | Vote analysis runs | Task flow or output handling changes |
+| Vote draft prompt | `vote-draft-prompt-v3` | same file | Vote analysis runs | Prompt text or input framing changes |
 | Vote draft schema | `vote-draft-schema-v1` | same file | Vote analysis runs | The model output schema changes |
 | Vote fingerprint | `vote-fingerprint-v1` | `src/CivicLens.Application/Votes/VoteFingerprint.cs` | The run input hash of a draft that makes no call | The canonical text of the fingerprint changes |
 | House vote render | `house-vote-render-v2` | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteRenderer.cs` | Vote extraction text and citations | The rendered text of a vote changes |

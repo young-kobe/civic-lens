@@ -716,6 +716,9 @@ public sealed class JobPreparationTests
 
         public Task<IReadOnlyList<CivicLens.Application.Roster.RosterMember>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
+
+        public Task<IReadOnlyList<CivicLens.Application.Roster.SenatorLisId>> ReadSenatorLisIdsAsync(string sourceId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class RecordingExecutive : CivicLens.Application.Roster.IExecutiveRosterStore

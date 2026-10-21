@@ -49,6 +49,18 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
         return [.. members.Select(member => ToMember(member, terms[member.BioguideId]))];
     }
 
+    public async Task<IReadOnlyList<SenatorLisId>> ReadSenatorLisIdsAsync(string sourceId, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var snapshotIds = RosterSnapshotRules.SnapshotAttempts(db, sourceId).Select(attempt => attempt.AttemptId);
+        var rows = await db.Set<RosterMemberRow>().AsNoTracking()
+            .Where(member => snapshotIds.Contains(member.AttemptId) && db.Set<RosterTermRow>().Any(term =>
+                term.AttemptId == member.AttemptId && term.BioguideId == member.BioguideId && term.Chamber == MemberRosterParser.Senate))
+            .Select(member => new { member.BioguideId, member.LisId }).Distinct()
+            .OrderBy(member => member.BioguideId).ThenBy(member => member.LisId).ToListAsync(cancellationToken);
+        return [.. rows.Select(row => new SenatorLisId(row.BioguideId, row.LisId))];
+    }
+
     private static RosterMemberRow ToRow(string attemptId, RosterMember member) => new()
     {
         AttemptId = attemptId,

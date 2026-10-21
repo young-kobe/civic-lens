@@ -1,6 +1,5 @@
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Votes;
-using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Votes;
 using CivicLens.Infrastructure.Votes.Persistence;
@@ -19,6 +18,6 @@ internal static class VoteDraftQueueRows
     });
 
     public static IQueryable<VoteCandidateRow> WaitingForBill(CollectionAttemptDbContext db) =>
-        db.Set<VoteCandidateRow>().Where(candidate => candidate.Chamber == Chamber.House && candidate.BillType != null &&
+        db.Set<VoteCandidateRow>().Where(candidate => candidate.BillType != null &&
             !db.Set<VoteAnalysisRow>().Any(entry => entry.CandidateId == candidate.CandidateId));
 }

@@ -59,6 +59,9 @@ public static class PublishedRecordLabels
         PublishedVoteKind.Passage => "Passage",
         PublishedVoteKind.ConferenceReport => "Conference report",
         PublishedVoteKind.VetoOverride => "Veto override",
+        PublishedVoteKind.Nomination => "Nomination",
+        PublishedVoteKind.Cloture => "Cloture",
+        PublishedVoteKind.MotionToProceed => "Motion to proceed",
         PublishedVoteKind.Other => "Other",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Vote kind has no label.")
     };

@@ -7,7 +7,7 @@ namespace CivicLens.Tests.Infrastructure.Collection.HouseVotes;
 public sealed partial class PostgresHouseVoteTests
 {
     [Fact]
-    public async Task TheBillDetailQueuesNoSenateCandidateBecauseTheSenateReaderComesLater()
+    public async Task TheBillDetailQueuesAWaitingSenateCandidateAsItQueuesAHouseCandidate()
     {
         var source = new ConfiguredCollectionSource(SenateVoteFixtures.Configuration(), SenateVoteFixtures.SourceId, Backfill.AddDays(400));
         var url = SenateVoteUrl.Vote(SenateVoteFixtures.SourceUrl, SenateVoteFixtures.Roll1);
@@ -16,9 +16,11 @@ public sealed partial class PostgresHouseVoteTests
         var vote = new SenateVote(SenateVoteFixtures.Roll1, Updated, "hconres", 14);
         await store.AdmitSenateVoteAsync(source, job.JobId, vote, await ExtractionAsync(job.JobId), default);
 
+        Assert.Empty(await QueueAsync());
+
         await AdmitBillDetailAsync();
 
-        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_candidates WHERE chamber = 'Senate'"));
-        Assert.Empty(await QueueAsync());
+        var candidate = (string)(await ScalarAsync("SELECT candidate_id FROM vote_candidates WHERE chamber = 'Senate'"))!;
+        Assert.Equal([(candidate, "vote-draft", "Pending", null)], await QueueAsync());
     }
 }

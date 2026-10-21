@@ -64,6 +64,9 @@ internal sealed class PublishedVoteBuilder(PublishedRecordRules rules)
         VoteKind.Passage => PublishedVoteKind.Passage,
         VoteKind.ConferenceReport => PublishedVoteKind.ConferenceReport,
         VoteKind.VetoOverride => PublishedVoteKind.VetoOverride,
+        VoteKind.Nomination => PublishedVoteKind.Nomination,
+        VoteKind.Cloture => PublishedVoteKind.Cloture,
+        VoteKind.MotionToProceed => PublishedVoteKind.MotionToProceed,
         VoteKind.Other => PublishedVoteKind.Other,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Vote kind has no published form.")
     };

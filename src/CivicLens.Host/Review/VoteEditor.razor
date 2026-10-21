@@ -96,7 +96,7 @@ else
                                 <Field Label="Headline" For="Input_Headline" Hint="@($"Up to {VoteDraftRevision.MaximumHeadlineLength} characters.")">
                                     <input id="Input_Headline" class="headline" name="Input.Headline" value="@Input.Headline" maxlength="@VoteDraftRevision.MaximumHeadlineLength" aria-describedby="Input_Headline-hint" />
                                 </Field>
-                                <Field Label="Plain-language summary" For="Input_Summary" Hint="Say what the House voted on. Name no member, because code lists the member votes.">
+                                <Field Label="Plain-language summary" For="Input_Summary" Hint="@($"Say what the {revision.Chamber} voted on. Name no member, because code lists the member votes.")">
                                     <textarea id="Input_Summary" name="Input.Summary" maxlength="@VoteDraftRevision.MaximumSummaryLength" aria-describedby="Input_Summary-hint" value="@Input.Summary"></textarea>
                                 </Field>
                                 @if (revision.Suggestion is { } suggestion)
@@ -122,9 +122,9 @@ else
             </Panel>
 
             <Panel Title="Evidence" Id="evidence" Padded="true" Raised="true" Class="split-sticky">
-                <p class="small muted">Code built each citation from the saved House vote text of @Moment.Day(revision.CandidateUpdateDate).</p>
+                <p class="small muted">Code built each citation from the saved @revision.Chamber vote text of @Moment.Day(revision.CandidateUpdateDate).</p>
                 <p class="small">
-                    <a href="@SourcePages.RollCall(revision.Congress, revision.SessionNumber, revision.RollCallNumber)" rel="noopener noreferrer">Roll call on clerk.house.gov</a>
+                    <a href="@SourcePages.RollCall(revision.Chamber, revision.Congress, revision.SessionNumber, revision.RollCallNumber)" rel="noopener noreferrer">Roll call on @VoteLabels.RollCallSite(revision.Chamber)</a>
                     @if (detail!.BillActionRecordIds.FirstOrDefault() is { } actionRecordId)
                     {
                         <text> | </text><a href="@ActionRoutes.Editor(actionRecordId)">Action draft of this bill</a>

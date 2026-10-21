@@ -211,8 +211,13 @@ internal sealed class ActionBillWorld
                 new CapturedAttemptResult(attemptId, SourceId, SourceUrl, SourceUrl, DateTimeOffset.UnixEpoch,
                     new CollectionResponse(200, null, null, "application/json", []), new CaptureIdentity(new string('a', 64), 1)), null, null));
 
-        public Task<byte[]> ReadAsync(CapturedAttemptResult attempt, string artifactRoot, CancellationToken cancellationToken) =>
-            Task.FromResult(Encoding.UTF8.GetBytes(bodies[attempt.AttemptId]));
+        public int BodyReads { get; private set; }
+
+        public Task<byte[]> ReadAsync(CapturedAttemptResult attempt, string artifactRoot, CancellationToken cancellationToken)
+        {
+            BodyReads++;
+            return Task.FromResult(Encoding.UTF8.GetBytes(bodies[attempt.AttemptId]));
+        }
 
         public Task<CollectionImportDecision> ImportAtomicallyAsync(CollectionAttemptImport attempt, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobRecord> EnqueueAsync(ConfiguredCollectionSource source, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();

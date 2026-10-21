@@ -451,6 +451,30 @@ public sealed class ReleaseRendererTests
         Assert.DoesNotContain("<b>", html, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(PublishedChamber.House, "House Clerk roll call")]
+    [InlineData(PublishedChamber.Senate, "Senate roll call")]
+    public async Task TheVoteCaveatNamesTheSourceOfTheChamberThatHeldTheVote(PublishedChamber chamber, string source)
+    {
+        var html = await new ReleaseRenderer().RenderVoteAsync(Vote() with { Chamber = chamber }, null, [], CancellationToken.None);
+
+        Assert.Contains(source, new HtmlParser().ParseDocument(html).QuerySelector(".caveat")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(PublishedVoteKind.Nomination, "Nomination")]
+    [InlineData(PublishedVoteKind.Cloture, "Cloture")]
+    [InlineData(PublishedVoteKind.MotionToProceed, "Motion to proceed")]
+    public async Task ASenateVoteKindHasItsPublicLabelOnThePage(PublishedVoteKind kind, string label)
+    {
+        var html = await new ReleaseRenderer().RenderVoteAsync(Vote() with { Kind = kind }, null, [], CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
+            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
+        Assert.Equal(label, facts["Kind"]);
+    }
+
     [Fact]
     public async Task EveryVoteQuoteLinksToTheMarkOfTheSameTextInTheSource()
     {

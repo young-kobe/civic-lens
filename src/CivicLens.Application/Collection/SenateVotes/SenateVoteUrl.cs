@@ -9,9 +9,13 @@ public static partial class SenateVoteUrl
     public static string Menu(string sourceUrl, VoteSession session) =>
         $"{sourceUrl}/roll_call_lists/vote_menu_{session.Congress}_{session.Number}.xml";
 
-    public static string Vote(string sourceUrl, SenateVoteRoll roll) =>
+    public static string Vote(string sourceUrl, SenateVoteRoll roll) => VoteStem(sourceUrl, roll) + ".xml";
+
+    public static string VotePage(string sourceUrl, SenateVoteRoll roll) => VoteStem(sourceUrl, roll) + ".htm";
+
+    private static string VoteStem(string sourceUrl, SenateVoteRoll roll) =>
         $"{sourceUrl}/roll_call_votes/vote{roll.Session.Congress}{roll.Session.Number}/" +
-        $"vote_{roll.Session.Congress}_{roll.Session.Number}_{roll.Number.ToString("00000", CultureInfo.InvariantCulture)}.xml";
+        $"vote_{roll.Session.Congress}_{roll.Session.Number}_{roll.Number.ToString("00000", CultureInfo.InvariantCulture)}";
 
     public static VoteSession? TryReadMenu(string sourceUrl, string url)
     {

@@ -54,6 +54,17 @@ public sealed class LookupDraftTests
         Assert.Null(await Lookup().ExecuteAsync(Reviewer, "roll 247"));
     }
 
+    [Theory]
+    [InlineData("Senate roll 247")]
+    [InlineData("senate Roll247")]
+    public async Task ASenateRollCallMeansASenateRollOfTheCurrentCongressAndSessionBecauseTheTwoChambersNumberTheirRollsApart(string query)
+    {
+        votes.Rolls[(Chamber.House, 119, 2, 247)] = "house-vote";
+        votes.Rolls[(Chamber.Senate, 119, 2, 247)] = "senate-vote";
+
+        Assert.Equal(new DraftLookupHit(PublishedRecordKind.Vote, "senate-vote"), await Lookup().ExecuteAsync(Reviewer, query));
+    }
+
     [Fact]
     public async Task ABillWithNoDraftIsNotAnError()
     {
@@ -71,6 +82,8 @@ public sealed class LookupDraftTests
     [InlineData("0 HR 12")]
     [InlineData("118 Roll 245")]
     [InlineData("Roll 0")]
+    [InlineData("Senate Roll 0")]
+    [InlineData("House roll 5")]
     [InlineData("HR 12; DROP TABLE")]
     public async Task AnInputThatNamesNoBillOrRollCallIsAUserErrorBeforeAnyRead(string? query)
     {

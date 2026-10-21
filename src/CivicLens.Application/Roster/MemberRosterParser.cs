@@ -4,7 +4,7 @@ namespace CivicLens.Application.Roster;
 
 public static class MemberRosterParser
 {
-    private const string Senate = "sen";
+    public const string Senate = "sen";
     private const string House = "rep";
 
     public static RosterMember[] Parse(ReadOnlySpan<byte> json)

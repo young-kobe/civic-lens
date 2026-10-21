@@ -7,7 +7,7 @@ public static class SenateVoteRenderer
 {
     private const string TimeFormat = "yyyy-MM-dd'T'HH:mm:sszzz";
 
-    public const string NormalizationVersion = "senate-vote-render-v1";
+    public const string NormalizationVersion = "senate-vote-render-v2";
 
     public static string Render(SenateVoteDetail detail)
     {
@@ -20,7 +20,7 @@ public static class SenateVoteRenderer
             Line("Started", detail.VoteDate.ToString(TimeFormat, CultureInfo.InvariantCulture)),
             Line("Question", detail.Question),
             Line("Question text", detail.QuestionText),
-            Line("Title", detail.Title),
+            Line("Vote title", detail.Title),
             Line("Result", detail.Result)
         };
         AddLine(lines, "Result text", detail.ResultText);
@@ -40,7 +40,7 @@ public static class SenateVoteRenderer
     private static string CountsOf(SenateVoteCounts counts) =>
         $"Yea {Count(counts.Yeas ?? 0)}, Nay {Count(counts.Nays ?? 0)}, Present {Count(counts.Present ?? 0)}, Not voting {Count(counts.Absent ?? 0)}";
 
-    private static string MemberLine(SenateVoteMember member)
+    public static string MemberLine(SenateVoteMember member)
     {
         var name = SingleLine($"{member.FirstName} {member.LastName}");
         var fields = new[] { member.LisId, name, member.Party, member.State, member.VoteCast };
