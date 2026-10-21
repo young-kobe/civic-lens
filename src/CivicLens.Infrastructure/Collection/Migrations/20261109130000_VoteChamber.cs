@@ -40,6 +40,7 @@ public partial class VoteChamber : Migration
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
+        DeleteSenateVotes(migrationBuilder);
         migrationBuilder.DropIndex(name: "ix_vote_candidates_roll", table: "vote_candidates");
         migrationBuilder.DropIndex(name: "ux_vote_versions_roll", table: "vote_versions");
         migrationBuilder.DropIndex(name: "ux_vote_drafts_roll", table: "vote_drafts");
@@ -58,6 +59,18 @@ public partial class VoteChamber : Migration
         migrationBuilder.CreateIndex(name: "ux_house_votes_version", table: "house_votes", columns: VersionColumns, unique: true);
         migrationBuilder.CreateIndex(name: "ux_vote_drafts_roll", table: "vote_drafts", columns: DraftIndexColumns, unique: true);
     }
+
+    // The House-only tables cannot hold a Senate row, so a revert deletes the Senate rows first, children before parents.
+    private static void DeleteSenateVotes(MigrationBuilder migrationBuilder) => migrationBuilder.Sql("""
+        DELETE FROM vote_review_decisions WHERE record_id IN (SELECT record_id FROM vote_drafts WHERE chamber = 'Senate');
+        DELETE FROM vote_revisions WHERE record_id IN (SELECT record_id FROM vote_drafts WHERE chamber = 'Senate');
+        DELETE FROM vote_drafts WHERE chamber = 'Senate';
+        UPDATE vote_analysis_runs SET previous_run_id = NULL WHERE candidate_id IN (SELECT candidate_id FROM vote_candidates WHERE chamber = 'Senate');
+        DELETE FROM vote_analysis_runs WHERE candidate_id IN (SELECT candidate_id FROM vote_candidates WHERE chamber = 'Senate');
+        DELETE FROM vote_analysis WHERE candidate_id IN (SELECT candidate_id FROM vote_candidates WHERE chamber = 'Senate');
+        DELETE FROM vote_candidates WHERE chamber = 'Senate';
+        DELETE FROM vote_versions WHERE chamber = 'Senate';
+        """);
 
     // RenameTable keeps the old constraint and index names, so this runs after it and renames them to match.
     private static void RenameVoteObjects(MigrationBuilder migrationBuilder, string versionsFrom, string versionsTo,
