@@ -7,6 +7,9 @@ public interface ICollectionJobStore
     /// <summary>Resolve a configured request after atomically reading its key; only new keys evaluate current eligibility.</summary>
     Task<CollectionJobRecord> EnqueueAsync(ConfiguredCollectionSource source, string idempotencyKey,
         CancellationToken cancellationToken);
+    /// <summary>Enqueue a check, or make the schedule of a bill list source due and return null because the scheduler admits that check.</summary>
+    Task<CollectionJobRecord?> RequestCheckAsync(ConfiguredCollectionSource source, string idempotencyKey,
+        CancellationToken cancellationToken);
     Task<CollectionJobRecord> EnqueueAsync(CollectionJobDefinition definition, string idempotencyKey,
         CancellationToken cancellationToken);
     Task<CollectionJobRecord?> GetAsync(string jobId, CancellationToken cancellationToken);

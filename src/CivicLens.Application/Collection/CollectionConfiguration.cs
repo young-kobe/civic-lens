@@ -154,6 +154,8 @@ public sealed record CollectionConfiguration
     {
         if (source.ApiParser is null)
         {
+            if (source.Mode == CollectionMode.Api)
+                throw new ArgumentException($"Source '{source.Id}' in API mode needs an API parser.");
             if (source.MinimumCongress is not null || source.BackfillFrom is not null)
                 throw new ArgumentException($"Source '{source.Id}' sets API parser options without an API parser.");
             return;

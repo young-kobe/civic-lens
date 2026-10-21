@@ -59,6 +59,8 @@ If that day is not closed, the due check creates no job and waits one interval. 
 
 `BillStreamWindow.RequestUrl` is the one place that builds the query. It adds `fromDateTime`, `toDateTime`, `sort=updateDate+asc`, `limit=250`, and `format=json` to the source URL. A URL without that sort has no window, so a `next` link that drops it is rejected. The root job URL holds the window.
 
+A hand check (`jobs enqueue` or Check now) of the source only makes its schedule due. The scheduler admits the check with the stored cursor, so a hand check cannot reset the pass counter.
+
 A scheduled check does not start while a list page job (`apiResource` `billList`) of the source is active. The source checks once a day.
 
 ### Cursor and passes

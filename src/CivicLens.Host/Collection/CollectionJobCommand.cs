@@ -24,7 +24,9 @@ internal static class CollectionJobCommand
     {
         try
         {
-            CollectionCommandOutput.Write(await jobs.EnqueueAsync(source, key, cancellationToken));
+            var job = await jobs.RequestCheckAsync(source, key, cancellationToken);
+            if (job is null) Console.WriteLine("Check scheduled. No job exists yet. The scheduler admits it at its next pass.");
+            else CollectionCommandOutput.Write(job);
             return 0;
         }
         catch (ArgumentException)

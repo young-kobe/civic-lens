@@ -41,6 +41,19 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
             idempotencyKey, cancellationToken);
     }
 
+    public async Task<CollectionJobRecord?> RequestCheckAsync(ConfiguredCollectionSource source, string idempotencyKey,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        if (!source.IsCollectedBySchedule) return await EnqueueAsync(source, idempotencyKey, cancellationToken);
+        return await TransactionAsync<CollectionJobRecord?>(async (db, now) =>
+        {
+            if (await MakeScheduleDueAsync(db, source.SourceId, now, cancellationToken) is not { Enabled: true })
+                throw new ArgumentException("The source has no active schedule.");
+            return null;
+        }, cancellationToken);
+    }
+
     public Task<CollectionJobRecord> EnqueueAsync(CollectionJobDefinition definition, string idempotencyKey,
         CancellationToken cancellationToken)
     {

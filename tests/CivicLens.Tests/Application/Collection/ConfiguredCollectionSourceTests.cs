@@ -88,24 +88,33 @@ public sealed class ConfiguredCollectionSourceTests
         var enqueued = source.CreateJobDefinition(ExpiredOn);
         var scheduled = source.CreateScheduledJobDefinition(new DateTimeOffset(2021, 1, 1, 6, 0, 0, TimeSpan.Zero), null);
 
+        Assert.False(source.IsCollectedBySchedule);
         Assert.Equal((ApiResource.MemberRoster, RosterFixtures.SourceUrl), (enqueued.ApiResource, enqueued.Url));
         Assert.Equal(scheduled, enqueued);
         Assert.Same(enqueued, source.CreateJobDefinition(ExpiredOn, enqueued));
     }
 
     [Fact]
-    public void HandEnqueuedExecutiveVoteAndBillListJobsStartAtTheirFirstRequest()
+    public void HandEnqueuedExecutiveAndVoteJobsEqualTheirScheduledJobs()
     {
-        var executive = new ConfiguredCollectionSource(ExecutiveFixtures.Configuration(), ExecutiveFixtures.SourceId, ExpiredOn)
-            .CreateJobDefinition(ExpiredOn);
-        var votes = new ConfiguredCollectionSource(HouseVoteFixtures.Configuration(), HouseVoteFixtures.SourceId, VoteDay)
-            .CreateJobDefinition(VoteDay);
-        var bills = new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", VoteDay)
-            .CreateJobDefinition(VoteDay);
+        var now = new DateTimeOffset(2025, 6, 25, 6, 0, 0, TimeSpan.Zero);
+        var executive = new ConfiguredCollectionSource(ExecutiveFixtures.Configuration(), ExecutiveFixtures.SourceId, VoteDay);
+        var votes = new ConfiguredCollectionSource(HouseVoteFixtures.Configuration(), HouseVoteFixtures.SourceId, VoteDay);
 
-        Assert.Equal(ApiResource.ExecutiveRoster, executive.ApiResource);
-        Assert.Equal(ApiResource.HouseVoteList, votes.ApiResource);
-        Assert.Equal(ApiResource.BillList, bills.ApiResource);
+        Assert.Equal(executive.CreateScheduledJobDefinition(now, null), executive.CreateJobDefinition(VoteDay));
+        Assert.Equal(votes.CreateScheduledJobDefinition(now, null), votes.CreateJobDefinition(VoteDay));
+    }
+
+    [Fact]
+    public void ABillListSourceIsCollectedOnlyBySchedule()
+    {
+        var bills = new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", VoteDay);
+        var scheduled = bills.CreateScheduledJobDefinition(new DateTimeOffset(2025, 6, 25, 6, 0, 0, TimeSpan.Zero), null);
+
+        Assert.True(bills.IsCollectedBySchedule);
+        Assert.Equal(ApiResource.BillList, scheduled!.ApiResource);
+        Assert.Throws<ArgumentException>(() => bills.CreateJobDefinition(VoteDay));
+        Assert.Same(scheduled, bills.CreateJobDefinition(VoteDay, scheduled));
     }
 
     private static readonly DateOnly VoteDay = new(2025, 6, 25);

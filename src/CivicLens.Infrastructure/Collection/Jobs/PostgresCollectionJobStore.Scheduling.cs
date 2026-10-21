@@ -118,6 +118,15 @@ public sealed partial class PostgresCollectionJobStore
         }, cancellationToken);
     }
 
+    private static async Task<CollectionScheduleRow?> MakeScheduleDueAsync(CollectionAttemptDbContext db,
+        string sourceId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var schedule = await db.Set<CollectionScheduleRow>().SingleOrDefaultAsync(
+            row => row.SourceId == sourceId, cancellationToken);
+        if (schedule is not null) schedule.NextDueUtcTicks = Math.Min(schedule.NextDueUtcTicks, Ticks(now));
+        return schedule;
+    }
+
     private static async Task<CollectionJobDefinition?> CreateScheduledDefinitionAsync(CollectionAttemptDbContext db,
         ConfiguredCollectionSource configured, WatchedSourceConfiguration source, DateTimeOffset now,
         CancellationToken cancellationToken)

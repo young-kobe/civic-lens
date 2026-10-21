@@ -50,9 +50,7 @@ public sealed partial class PostgresCollectionJobStore : IBillStreamAdmissionSto
         if (windowSettled && (cursor.LastProcessedDay is null || cursor.LastProcessedDay < admission.Window.LastDay))
             cursor.LastProcessedDay = admission.Window.LastDay;
         if (windowSettled && !admission.Window.IsBehind(now)) return;
-        var schedule = await db.Set<CollectionScheduleRow>().SingleOrDefaultAsync(
-            row => row.SourceId == admission.SourceId, cancellationToken);
-        if (schedule is not null) schedule.NextDueUtcTicks = Math.Min(schedule.NextDueUtcTicks, Ticks(now));
+        _ = await MakeScheduleDueAsync(db, admission.SourceId, now, cancellationToken);
     }
 
     private static Task<DateOnly?> ReadCursorAsync(CollectionAttemptDbContext db, string sourceId,

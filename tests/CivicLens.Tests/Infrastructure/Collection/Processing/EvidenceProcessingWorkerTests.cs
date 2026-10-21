@@ -137,19 +137,12 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     [Fact]
     public async Task ApiCaptureWithoutAResourceIsBlockedInsteadOfSilentlyPrepared()
     {
-        var configuration = Configuration();
-        var apiSource = configuration.Sources[0] with
-        {
-            Mode = CollectionMode.Api,
-            Credential = CollectionCredentials.CongressGov,
-            Url = "https://example.test/pages/v3/member",
-            DocumentProfileId = null
-        };
-        var definition = new ConfiguredCollectionSource(configuration with { Sources = [apiSource] }, "source")
+        var rosterJob = new ConfiguredCollectionSource(RosterFixtures.Configuration(), RosterFixtures.SourceId)
             .CreateJobDefinition(DateOnly.FromDateTime(ObservationEpoch.UtcDateTime));
+        var definition = rosterJob with { ApiResource = null };
         var job = await jobs.EnqueueAsync(definition, "api-once", default);
         var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
-            new CaptureArtifactVerifier(), new ApiFixtureCollector());
+            new CaptureArtifactVerifier(), new ApiFixtureCollector(RosterFixtures.Json));
         var pipeline = new CollectionJobWorker(PostgresCollectionWorkerQueue.FromConnectionString(connectionString),
             runner, Worker(processing));
 
@@ -180,6 +173,8 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         Assert.Equal(CollectionJobState.Succeeded, job.State);
         var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
         Assert.Equal(EvidenceProcessingStatus.Succeeded, record.Status);
+        Assert.Equal(EvidenceProcessingStage.Complete, record.Stage);
+        Assert.Null(record.ExtractionId);
         var members = await PostgresMemberRosterStore.FromConnectionString(connectionString)
             .ReadLatestAsync(RosterFixtures.SourceId, default);
         Assert.Equal(RosterFixtures.Members().Length, members.Count);

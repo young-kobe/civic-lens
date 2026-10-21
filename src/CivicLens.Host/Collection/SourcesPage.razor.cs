@@ -128,9 +128,11 @@ public sealed partial class SourcesPage : IAsyncDisposable
     private Task CheckNowAsync(SourceRow row) => RunAsync(async (service, owner) =>
     {
         var key = RequestKey("collect:" + row.SourceId);
-        await service.EnqueueAsync(owner, row.SourceId, key, disposal.Token);
+        var job = await service.EnqueueAsync(owner, row.SourceId, key, disposal.Token);
         requestKeys.Remove("collect:" + row.SourceId);
-        return "Check queued. Its result appears in Recent checks.";
+        return job is null
+            ? "Check scheduled. The scheduler starts it at its next pass, and its result appears in Recent checks."
+            : "Check queued. Its result appears in Recent checks.";
     });
 
     private Task StopAsync(string jobId) => RunAsync(async (service, owner) =>
