@@ -336,7 +336,7 @@ The Senate publishes one XML file for each roll call and one menu for each sessi
 
 One `api` source with `apiParser` set to `senateVoteList` follows the Senate votes. It sets `minimumCongress` and `backfillFrom` like the House source. It refuses a `credential` and a `coverage` list. It covers every configured person with a `bioguideId`, as the House source does. The roster `lis` ID matches members in the drafting work.
 
-The source URL is `https://www.senate.gov/legislative/LIS`. The shipped source `senate-votes` sets `backfillFrom` 2025-01-03 and `minimumCongress` 119. It ships with `enabled: true` in `config/federal-coverage.json`. The admission policy holds 1,000 jobs, because one menu lists up to 999 votes.
+The source URL is `https://www.senate.gov/legislative/LIS`. The shipped source `senate-votes` sets `backfillFrom` 2025-01-03 and `minimumCongress` 119. It ships with `enabled: false`, like the other `api` sources. The admission policy holds 1,000 jobs, because one menu lists up to 999 votes.
 
 The daily sweep is the House sweep. The due check creates one menu job for `VoteSession.FirstOfSweep`. A menu job admits one job for each vote and the menu of the following session. The next-menu key is `senate-vote/{source}/menu/{menu job ID}`.
 
