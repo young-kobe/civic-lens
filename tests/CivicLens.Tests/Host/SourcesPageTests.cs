@@ -141,8 +141,8 @@ public sealed class SourcesPageTests(PostgresCollection postgres) : IAsyncLifeti
         var workspace = await StartAsync("auth0|owner");
         var key = Guid.NewGuid().ToString("N");
 
-        var first = await workspace.EnqueueAsync(Owner, "source", key, default);
-        var repeated = await workspace.EnqueueAsync(Owner, "source", key, default);
+        var first = (await workspace.EnqueueAsync(Owner, "source", key, default))!;
+        var repeated = (await workspace.EnqueueAsync(Owner, "source", key, default))!;
 
         Assert.Equal(first.JobId, repeated.JobId);
         var job = Assert.Single(await Jobs.ListAsync(50, default));
@@ -152,12 +152,19 @@ public sealed class SourcesPageTests(PostgresCollection postgres) : IAsyncLifeti
         Assert.Single(await Jobs.ListAsync(50, default));
     }
 
+    // A bill list check creates no job, so the notice must say that the schedule is due, not that a check is queued.
+    [Fact]
+    public void ACheckThatOnlyMakesTheScheduleDueSaysSo()
+    {
+        Assert.Contains("schedule is due", SourceStatusDisplay.CheckNotice(null), StringComparison.Ordinal);
+    }
+
     // Stop must end a waiting check and the page must then report it as stopped, not as a failure.
     [Fact]
     public async Task StopCancelsAQueuedCheck()
     {
         var workspace = await StartAsync("auth0|owner");
-        var job = await workspace.EnqueueAsync(Owner, "source", Guid.NewGuid().ToString("N"), default);
+        var job = (await workspace.EnqueueAsync(Owner, "source", Guid.NewGuid().ToString("N"), default))!;
 
         var stopped = await workspace.CancelAsync(Owner, job.JobId, default);
 
@@ -173,7 +180,7 @@ public sealed class SourcesPageTests(PostgresCollection postgres) : IAsyncLifeti
     public async Task CheckAgainRecollectsTheSavedPageOnceAndKeptEvidenceIsShown()
     {
         var workspace = await StartAsync("auth0|owner");
-        var job = await workspace.EnqueueAsync(Owner, "source", Guid.NewGuid().ToString("N"), default);
+        var job = (await workspace.EnqueueAsync(Owner, "source", Guid.NewGuid().ToString("N"), default))!;
         const string attemptId = "aabbccddeeff00112233445566778899";
         await SettleWithoutReceiptAsync(job, attemptId);
 

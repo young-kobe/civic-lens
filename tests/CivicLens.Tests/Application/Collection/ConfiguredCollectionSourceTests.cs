@@ -1,6 +1,8 @@
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
+using CivicLens.Tests.Application.Collection.Bills;
+using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Collection;
 
@@ -77,6 +79,45 @@ public sealed class ConfiguredCollectionSourceTests
         Assert.Throws<ArgumentException>(() => new ConfiguredCollectionSource(config, "source")
             .CreateJobDefinition(ExpiredOn, saved));
     }
+
+    [Fact]
+    public void HandEnqueuedAndScheduledRosterJobsCarryTheSameResource()
+    {
+        var source = new ConfiguredCollectionSource(RosterFixtures.Configuration(), RosterFixtures.SourceId, ExpiredOn);
+
+        var enqueued = source.CreateJobDefinition(ExpiredOn);
+        var scheduled = source.CreateScheduledJobDefinition(new DateTimeOffset(2021, 1, 1, 6, 0, 0, TimeSpan.Zero), null);
+
+        Assert.False(source.IsCollectedBySchedule);
+        Assert.Equal((ApiResource.MemberRoster, RosterFixtures.SourceUrl), (enqueued.ApiResource, enqueued.Url));
+        Assert.Equal(scheduled, enqueued);
+        Assert.Same(enqueued, source.CreateJobDefinition(ExpiredOn, enqueued));
+    }
+
+    [Fact]
+    public void HandEnqueuedExecutiveAndVoteJobsEqualTheirScheduledJobs()
+    {
+        var now = new DateTimeOffset(2025, 6, 25, 6, 0, 0, TimeSpan.Zero);
+        var executive = new ConfiguredCollectionSource(ExecutiveFixtures.Configuration(), ExecutiveFixtures.SourceId, VoteDay);
+        var votes = new ConfiguredCollectionSource(HouseVoteFixtures.Configuration(), HouseVoteFixtures.SourceId, VoteDay);
+
+        Assert.Equal(executive.CreateScheduledJobDefinition(now, null), executive.CreateJobDefinition(VoteDay));
+        Assert.Equal(votes.CreateScheduledJobDefinition(now, null), votes.CreateJobDefinition(VoteDay));
+    }
+
+    [Fact]
+    public void ABillListSourceIsCollectedOnlyBySchedule()
+    {
+        var bills = new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", VoteDay);
+        var scheduled = bills.CreateScheduledJobDefinition(new DateTimeOffset(2025, 6, 25, 6, 0, 0, TimeSpan.Zero), null);
+
+        Assert.True(bills.IsCollectedBySchedule);
+        Assert.Equal(ApiResource.BillList, scheduled!.ApiResource);
+        Assert.Throws<ArgumentException>(() => bills.CreateJobDefinition(VoteDay));
+        Assert.Same(scheduled, bills.CreateJobDefinition(VoteDay, scheduled));
+    }
+
+    private static readonly DateOnly VoteDay = new(2025, 6, 25);
 
     private static CollectionConfiguration Configuration(CollectionMode mode = CollectionMode.Page) => new()
     {

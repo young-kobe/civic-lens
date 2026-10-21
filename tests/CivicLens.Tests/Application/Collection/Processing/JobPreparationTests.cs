@@ -262,7 +262,6 @@ public sealed class JobPreparationTests
 
     public static TheoryData<ApiResource?, string, string> EveryResource => new()
     {
-        { null, SourceUrl, "{}" },
         { ApiResource.BillList, ListUrl, """{"bills":[],"pagination":{}}""" },
         { ApiResource.Bill, DetailUrl, Detail("Z000009", BillGateFixtures.TrackedPolicyArea, 0) },
         { ApiResource.BillCosponsors, CosponsorUrl, Cosponsors("Z000009", next: null) },
@@ -415,6 +414,16 @@ public sealed class JobPreparationTests
         Assert.Equal(Enum.GetValues<ApiResource>().Order(), covered.Order());
     }
 
+    [Fact]
+    public async Task AnApiJobWithoutAResourceIsBlockedInsteadOfSilentlyPrepared()
+    {
+        var result = await Prepare(null, SourceUrl, "{}", BillGateFixtures.Revision());
+
+        Assert.Equal(EvidenceStatus.Blocked, result!.Status);
+        Assert.Equal("apiResourceMissing", result.ErrorCode);
+        Assert.Equal(0, processing.EnsureCalls);
+    }
+
     [Theory]
     [MemberData(nameof(EveryResource))]
     public async Task ApiJobsNeverGetAnExtractionStage(ApiResource? resource, string url, string body)
@@ -436,9 +445,8 @@ public sealed class JobPreparationTests
             _ when IsHouseVote(resource) => new ConfiguredCollectionSource(HouseVoteFixtures.Configuration(), HouseVoteFixtures.SourceId, Backfill),
             _ => new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", Backfill)
         };
-        var definition = resource is null
-            ? configured.CreateJobDefinition(Backfill)
-            : configured.CreateApiJobDefinition(resource.Value, url, Backfill);
+        var definition = configured.CreateApiJobDefinition(resource ?? ApiResource.BillList, resource is null ? ListUrl : url, Backfill);
+        if (resource is null) definition = definition with { ApiResource = null };
         var attempt = new CollectionJobAttempt("attempt", definition.CreateRequest("job", Path.GetFullPath("captures")),
             new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
         var job = new CollectionJobRecord("job", definition, "key", CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,
@@ -607,6 +615,7 @@ public sealed class JobPreparationTests
             Task.FromResult<CollectionJobRecord?>(job);
 
         public Task<CollectionJobRecord> EnqueueAsync(ConfiguredCollectionSource source, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<CollectionJobRecord?> RequestCheckAsync(ConfiguredCollectionSource source, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobRecord> EnqueueAsync(CollectionJobDefinition definition, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<CollectionJobRecord>> ListAsync(int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobPage> ListPageAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken) => throw new NotSupportedException();

@@ -135,21 +135,14 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     }
 
     [Fact]
-    public async Task ApiCaptureWithoutAParserCompletesItsJobWithoutAProcessingStage()
+    public async Task ApiCaptureWithoutAResourceIsBlockedInsteadOfSilentlyPrepared()
     {
-        var configuration = Configuration();
-        var apiSource = configuration.Sources[0] with
-        {
-            Mode = CollectionMode.Api,
-            Credential = CollectionCredentials.CongressGov,
-            Url = "https://example.test/pages/v3/member",
-            DocumentProfileId = null
-        };
-        var definition = new ConfiguredCollectionSource(configuration with { Sources = [apiSource] }, "source")
+        var rosterJob = new ConfiguredCollectionSource(RosterFixtures.Configuration(), RosterFixtures.SourceId)
             .CreateJobDefinition(DateOnly.FromDateTime(ObservationEpoch.UtcDateTime));
+        var definition = rosterJob with { ApiResource = null };
         var job = await jobs.EnqueueAsync(definition, "api-once", default);
         var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
-            new CaptureArtifactVerifier(), new ApiFixtureCollector());
+            new CaptureArtifactVerifier(), new ApiFixtureCollector(RosterFixtures.Json));
         var pipeline = new CollectionJobWorker(PostgresCollectionWorkerQueue.FromConnectionString(connectionString),
             runner, Worker(processing));
 
@@ -159,9 +152,40 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         Assert.Equal(CollectionJobState.Succeeded, completedJob!.State);
         var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
         Assert.Equal("prepare", record.AttemptId);
+        Assert.Equal(EvidenceProcessingStatus.Blocked, record.Status);
+        Assert.Equal("apiResourceMissing", record.ErrorCode);
+    }
+
+    [Fact]
+    public async Task AScheduledRosterJobRunsThroughTheWorkerAndWritesRosterRows()
+    {
+        await jobs.SynchronizeAsync(RosterFixtures.Configuration(), default);
+        await MakeEverySourceDueAsync();
+        Assert.Equal(1, await jobs.AdvanceDueAsync(10, default));
+        var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
+            new CaptureArtifactVerifier(), new ApiFixtureCollector(RosterFixtures.Json));
+        var pipeline = new CollectionJobWorker(PostgresCollectionWorkerQueue.FromConnectionString(connectionString),
+            runner, Worker(processing));
+
+        _ = await pipeline.ExecuteAsync(artifactRoot, once: true, batchSize: 20, leaseDuration: TimeSpan.FromSeconds(60));
+
+        var job = Assert.Single(await jobs.ListAsync(10, default));
+        Assert.Equal(CollectionJobState.Succeeded, job.State);
+        var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
         Assert.Equal(EvidenceProcessingStatus.Succeeded, record.Status);
         Assert.Equal(EvidenceProcessingStage.Complete, record.Stage);
         Assert.Null(record.ExtractionId);
+        var members = await PostgresMemberRosterStore.FromConnectionString(connectionString)
+            .ReadLatestAsync(RosterFixtures.SourceId, default);
+        Assert.Equal(RosterFixtures.Members().Length, members.Count);
+    }
+
+    private async Task MakeEverySourceDueAsync()
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("UPDATE collection_source_schedules SET next_due_utc_ticks = 0", connection);
+        await command.ExecuteNonQueryAsync();
     }
 
     [Fact]

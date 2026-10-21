@@ -260,6 +260,8 @@ public sealed class CongressBillSourceConfigurationTests
         {
             Sources = [Configuration().Sources.Single() with
             {
+                Mode = CollectionMode.Page,
+                Credential = null,
                 ApiParser = null,
                 MinimumCongress = null,
                 BackfillFrom = null,

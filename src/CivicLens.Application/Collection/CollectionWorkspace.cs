@@ -120,11 +120,11 @@ public sealed class CollectionWorkspace
         return await jobs.GetAsync(jobId, cancellationToken) ?? throw new ArgumentException("Collection job was not found.");
     }
 
-    public Task<CollectionJobRecord> EnqueueAsync(ReviewActor actor, string sourceId, string requestKey, CancellationToken cancellationToken)
+    public Task<CollectionJobRecord?> EnqueueAsync(ReviewActor actor, string sourceId, string requestKey, CancellationToken cancellationToken)
     {
         RequireOwner(actor);
         if (!revision.Configuration.Sources.Any(source => source.Id == sourceId)) throw new ArgumentException("Choose a configured source.");
-        return jobs.EnqueueAsync(new ConfiguredCollectionSource(revision, sourceId),
+        return jobs.RequestCheckAsync(new ConfiguredCollectionSource(revision, sourceId),
             RequestKey(actor, "collect", requestKey), cancellationToken);
     }
 

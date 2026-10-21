@@ -5,6 +5,7 @@ using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
+using CivicLens.Tests.Application.Collection.Bills;
 using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.Collection.Jobs;
@@ -129,6 +130,69 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
         Assert.Equal(1, await store.AdvanceDueAsync(10, default));
         Assert.Single(await store.ListAsync(10, default));
         Assert.True(await ReadNextDueAsync("senate") > DateTimeOffset.UtcNow.UtcTicks);
+    }
+
+    // A bill list check reads the cursor, so only the scheduler may admit it. A hand check just makes the schedule due.
+    [Fact]
+    public async Task ACheckRequestForABillListSourceMakesItsScheduleDueAndAdmitsNoJob()
+    {
+        var configuration = CongressBillSourceConfigurationTests.Configuration();
+        await store.SynchronizeAsync(configuration, default);
+        await SetDueAsync("congress-bills", DateTimeOffset.UtcNow.AddDays(3).UtcTicks);
+        var source = new ConfiguredCollectionSource(configuration, "congress-bills");
+
+        var job = await store.RequestCheckAsync(source, "hand-check", default);
+
+        Assert.Null(job);
+        Assert.Empty(await store.ListAsync(10, default));
+        Assert.True(await ReadNextDueAsync("congress-bills") <= DateTimeOffset.UtcNow.UtcTicks);
+        Assert.Equal(1, await store.AdvanceDueAsync(10, default));
+        var scheduled = Assert.Single(await store.ListAsync(10, default));
+        Assert.Equal(ApiResource.BillList, scheduled.Definition.ApiResource);
+    }
+
+    [Fact]
+    public async Task ACheckRequestForADisabledOrUnscheduledSourceFailsLoudly()
+    {
+        var configuration = CongressBillSourceConfigurationTests.Configuration();
+        var source = new ConfiguredCollectionSource(configuration, "congress-bills");
+        await Assert.ThrowsAsync<ArgumentException>(() => store.RequestCheckAsync(source, "no-schedule", default));
+
+        var disabled = configuration with { Sources = [configuration.Sources[0] with { Enabled = false }] };
+        await store.SynchronizeAsync(disabled, default);
+        await Assert.ThrowsAsync<ArgumentException>(() => store.RequestCheckAsync(source, "disabled", default));
+    }
+
+    [Fact]
+    public async Task ACheckRequestFailsWithoutActiveCoverageOrWithAnActiveRootJob()
+    {
+        var configuration = CongressBillSourceConfigurationTests.Configuration();
+        var future = configuration with
+        {
+            Sources = [configuration.Sources[0] with { BackfillFrom = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) }]
+        };
+        await store.SynchronizeAsync(future, default);
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.RequestCheckAsync(new ConfiguredCollectionSource(future, "congress-bills"), "no-coverage", default));
+
+        await store.SynchronizeAsync(configuration, default);
+        await SetDueAsync("congress-bills", 0);
+        Assert.Equal(1, await store.AdvanceDueAsync(10, default));
+        var source = new ConfiguredCollectionSource(configuration, "congress-bills");
+        await Assert.ThrowsAsync<ArgumentException>(() => store.RequestCheckAsync(source, "active-root", default));
+    }
+
+    [Fact]
+    public async Task ACheckRequestForAPageSourceEnqueuesAJobWithItsKey()
+    {
+        var configuration = Configuration();
+        await store.SynchronizeAsync(configuration, default);
+        var source = new ConfiguredCollectionSource(configuration, "senate");
+
+        var first = await store.RequestCheckAsync(source, "hand-check", default);
+        var repeated = await store.RequestCheckAsync(source, "hand-check", default);
+
+        Assert.Equal(first!.JobId, repeated!.JobId);
     }
 
     // An article found by discovery is not a check of its source, so it must not use the due slot of the source.

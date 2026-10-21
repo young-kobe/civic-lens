@@ -2,6 +2,7 @@ using System.Text.Json;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Configuration;
 using CivicLens.Collection.Contracts;
+using CivicLens.Tests.Application.Collection.Bills;
 
 namespace CivicLens.Tests.Application.Collection;
 
@@ -408,12 +409,25 @@ public sealed class ConfigurationTests
         }).Validate);
     }
 
+    [Fact]
+    public void ApiModeNeedsAnApiParser()
+    {
+        var configuration = ApiConfiguration(CollectionCredentials.CongressGov);
+
+        var failure = Assert.Throws<ArgumentException>((configuration with
+        {
+            Sources = [configuration.Sources[0] with { ApiParser = null, MinimumCongress = null, BackfillFrom = null }]
+        }).Validate);
+
+        Assert.Contains("needs an API parser", failure.Message, StringComparison.Ordinal);
+    }
+
     private static CollectionConfiguration ApiConfiguration(string credential)
     {
-        var configuration = DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }]);
+        var configuration = CongressBillSourceConfigurationTests.Configuration();
         return configuration with
         {
-            Sources = [configuration.Sources[0] with { Mode = CollectionMode.Api, Credential = credential }]
+            Sources = [configuration.Sources[0] with { Id = "shared", Credential = credential }]
         };
     }
 

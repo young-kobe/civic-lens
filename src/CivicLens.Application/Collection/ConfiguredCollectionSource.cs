@@ -27,12 +27,37 @@ public sealed class ConfiguredCollectionSource
     public DateOnly? AsOf { get; }
     public string SourceUrl => ReadSource().Url;
 
-    public CollectionJobDefinition CreateJobDefinition(DateOnly currentDate, CollectionJobDefinition? existing = null) =>
-        PrepareDefinition(ReadSource(), currentDate, existing, article: false);
+    public bool IsCollectedBySchedule => IsScheduleCollected(ReadSource());
+
+    public static bool IsScheduleCollected(WatchedSourceConfiguration source) =>
+        source.ApiParser == ApiParser.CongressBillList;
+
+    public bool IsActiveOn(DateOnly day) => Revision.Configuration.IsActiveOn(ReadSource(), day);
+
+    public CollectionJobDefinition CreateJobDefinition(DateOnly currentDate, CollectionJobDefinition? existing = null)
+    {
+        var source = ReadSource();
+        if (source.ApiParser is null) return PrepareDefinition(source, currentDate, existing, article: false);
+        var target = existing?.ApiResource is { } resource
+            ? new ApiTarget(resource, existing.Url)
+            : FirstEnqueuedApiTarget(source, currentDate);
+        return PrepareDefinition(source, currentDate, existing, article: false, target);
+    }
+
+    public CollectionJobDefinition? CreateScheduledJobDefinition(DateTimeOffset now, DateOnly? billCursor)
+    {
+        var currentDate = DateOnly.FromDateTime(now.UtcDateTime);
+        var source = ReadSource();
+        if (source.ApiParser is null) return CreateJobDefinition(currentDate);
+        var target = IsScheduleCollected(source)
+            ? NextBillWindowTarget(source, now, billCursor)
+            : FixedApiTarget(source, currentDate);
+        return target is { } found ? PrepareDefinition(source, currentDate, null, article: false, found) : null;
+    }
 
     public CollectionRequest CreateRequest(string jobId, string artifactDirectory, DateOnly currentDate)
     {
-        var request = CreateJobDefinition(currentDate).CreateRequest(jobId, artifactDirectory);
+        var request = PrepareDefinition(ReadSource(), currentDate, null, article: false).CreateRequest(jobId, artifactDirectory);
         request.Validate();
         return request;
     }
@@ -50,16 +75,8 @@ public sealed class ConfiguredCollectionSource
         return request;
     }
 
-    public CollectionJobDefinition CreateApiJobDefinition(ApiResource resource, string url, DateOnly currentDate)
-    {
-        var definition = PrepareDefinition(ReadSource(), currentDate, null, article: false) with
-        {
-            ApiResource = resource,
-            Url = url
-        };
-        definition.Validate();
-        return definition;
-    }
+    public CollectionJobDefinition CreateApiJobDefinition(ApiResource resource, string url, DateOnly currentDate) =>
+        PrepareDefinition(ReadSource(), currentDate, null, article: false, new ApiTarget(resource, url));
 
     public BillStreamAdmission CreateBillStreamAdmission(string listJobId, BillStreamWindow window,
         CongressBillListPage page, DateOnly currentDate)
@@ -120,10 +137,12 @@ public sealed class ConfiguredCollectionSource
     }
 
     private CollectionJobDefinition PrepareDefinition(WatchedSourceConfiguration source, DateOnly currentDate,
-        CollectionJobDefinition? existing, bool article)
+        CollectionJobDefinition? existing, bool article, ApiTarget? target = null)
     {
         existing?.Validate();
         var definition = CollectionJobDefinition.FromSource(source);
+        if (target is { } api)
+            definition = definition with { ApiResource = api.Resource, Url = api.Url };
         if (article)
             definition = definition with { Mode = CollectionMode.Page, ETag = null, LastModified = null };
 
@@ -148,6 +167,37 @@ public sealed class ConfiguredCollectionSource
         definition.Validate();
         return definition;
     }
+
+    private static ApiTarget FirstEnqueuedApiTarget(WatchedSourceConfiguration source, DateOnly currentDate) =>
+        IsScheduleCollected(source)
+            ? throw new ArgumentException("A bill list source is collected only by its schedule.")
+            : FixedApiTarget(source, currentDate)
+                ?? throw new ArgumentException("The API source has no work to collect now.");
+
+    private static ApiTarget? NextBillWindowTarget(WatchedSourceConfiguration source, DateTimeOffset now,
+        DateOnly? billCursor) =>
+        BillStreamWindow.Next(billCursor, source.BackfillFrom!.Value, now) is { } window
+            ? new ApiTarget(ApiResource.BillList, window.RequestUrl(source.Url))
+            : null;
+
+    private static ApiTarget? FixedApiTarget(WatchedSourceConfiguration source, DateOnly today)
+    {
+        switch (source.ApiParser)
+        {
+            case ApiParser.CongressHouseVoteList:
+                return HouseVoteSession.FirstOfSweep(source.BackfillFrom!.Value, today, source.MinimumCongress!.Value) is { } first
+                    ? new ApiTarget(ApiResource.HouseVoteList, HouseVoteListUrl.FirstPage(source.Url, first))
+                    : null;
+            case ApiParser.CongressLegislators:
+                return new ApiTarget(ApiResource.MemberRoster, source.Url);
+            case ApiParser.CongressLegislatorsExecutive:
+                return new ApiTarget(ApiResource.ExecutiveRoster, source.Url);
+            default:
+                throw new ArgumentOutOfRangeException(nameof(source));
+        }
+    }
+
+    private readonly record struct ApiTarget(ApiResource Resource, string Url);
 
     private static string? FollowingSessionUrl(WatchedSourceConfiguration source, HouseVoteSession session, DateOnly today) =>
         session.Following(today) is { } following ? HouseVoteListUrl.FirstPage(source.Url, following) : null;
