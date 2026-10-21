@@ -15,7 +15,7 @@ The review feature is the private editorial workspace. People draft, revise, and
 - Approval binds to the exact public wording and evidence versions reviewed. An edit to either needs a new review. Earlier approvals stay as history and do not authorize the new revision.
 - Approval and publication are separate actions.
 - Code approves a worker revision of an action or a House vote. Their facts come from Congress.gov and the Clerk XML, and code checks every citation. The actor of that decision is the reserved subject `civic-lens:code`. People approve statements, relationships, briefs, document changes, and every revision that a person writes.
-- Code approves a worker revision only if three rules hold. No concern is open. The revision holds no text that a person wrote. The approval checks pass. If one rule fails, the revision waits for a person. A person who withdraws an approval or requests changes therefore stays effective across worker redrafts.
+- Code approves a worker revision only if three rules hold. No concern is open. The revision holds no text that a person wrote. The approval checks pass. If one rule fails, the revision waits for a person. A person who withdraws an approval or requests changes therefore stays effective across worker redrafts. A record that review blocked in this way can be withdrawn from the release; see [publication](publication.md#corrections-and-withdrawal).
 - A person can still edit and withdraw a fact record. A person edit is a revision that waits for a person to approve it.
 - Writes use expected versions, not editing locks or last-write-wins. The UI never silently merges editorial wording.
 - Decisions are immutable. They cannot be edited or deleted.

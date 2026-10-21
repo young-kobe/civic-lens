@@ -133,11 +133,59 @@ public sealed class PublicationReleaseTests
             Entry(PublishedRecordKind.DocumentChange, ChangeId)).Validate);
     }
 
+    [Fact]
+    public void ARecordIdIsUniqueAcrossRecordsAndWithdrawalsBecauseOneNoticePageUsesTheRecordPagePath()
+    {
+        var withdrawal = Withdrawal(PublishedRecordKind.Action, new string('7', 64));
+        (Release(PublicationProtocol.SchemaVersion, Entry(PublishedRecordKind.Statement, StatementId)) with { Withdrawals = [withdrawal] }).Validate();
+        Assert.Throws<InvalidDataException>((Release(PublicationProtocol.SchemaVersion, Entry(PublishedRecordKind.Statement, StatementId))
+            with
+        { Withdrawals = [withdrawal with { Kind = PublishedRecordKind.Statement, RecordId = StatementId }] }).Validate);
+        Assert.Throws<InvalidDataException>((Release(PublicationProtocol.SchemaVersion) with { Withdrawals = [withdrawal, withdrawal] }).Validate);
+    }
+
+    [Fact]
+    public void RecordsAndWithdrawalsShareOneCap()
+    {
+        PublishedRecordEntry[] entries = [.. Enumerable.Range(0, PublicationProtocol.MaximumRecordsPerRelease - 1)
+            .Select(index => Entry(PublishedRecordKind.Statement, index.ToString("x64")))];
+        PublishedWithdrawal[] one = [Withdrawal(PublishedRecordKind.Action, new string('f', 64))];
+
+        (Release(PublicationProtocol.SchemaVersion, entries) with { Withdrawals = one }).Validate();
+        Assert.Throws<InvalidDataException>((Release(PublicationProtocol.SchemaVersion, entries)
+            with
+        { Withdrawals = [.. one, Withdrawal(PublishedRecordKind.Action, new string('e', 64))] }).Validate);
+    }
+
+    [Fact]
+    public void AManifestWithAnInvalidOrMissingWithdrawalListIsRefused()
+    {
+        var release = Release(PublicationProtocol.SchemaVersion, Entry(PublishedRecordKind.Statement, StatementId));
+
+        Assert.Throws<InvalidDataException>((release with { Withdrawals = null! }).Validate);
+        Assert.Throws<InvalidDataException>((release with { Withdrawals = [null!] }).Validate);
+        Assert.Throws<InvalidDataException>((release with { Withdrawals = [Withdrawal(PublishedRecordKind.Action, "short")] }).Validate);
+        Assert.ThrowsAny<JsonException>(() => JsonSerializer.Deserialize<PublicationRelease>(
+            """{"schemaVersion":6,"releaseNumber":1,"publishedAtUtc":"1970-01-01T00:00:00+00:00","records":[]}""", PublicationProtocol.JsonOptions));
+    }
+
+    private static PublishedWithdrawal Withdrawal(PublishedRecordKind kind, string id) => new()
+    {
+        Kind = kind,
+        RecordId = id,
+        WithdrawnRevisionNumber = 1,
+        FirstPublishedAtUtc = DateTimeOffset.UnixEpoch,
+        WithdrawnAtUtc = DateTimeOffset.UnixEpoch.AddDays(1),
+        Note = "Wrong.",
+        Corrections = []
+    };
+
     private static PublicationRelease Release(int version, params PublishedRecordEntry[] entries) => new()
     {
         SchemaVersion = version,
         ReleaseNumber = 1,
         PublishedAtUtc = DateTimeOffset.UnixEpoch,
+        Withdrawals = [],
         Records = entries
     };
 

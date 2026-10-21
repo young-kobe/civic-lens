@@ -475,6 +475,107 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         Assert.Single(await reviews.ListUnpublishedApprovedDraftsAsync(1, default));
     }
 
+    public static TheoryData<PublishedRecordKind> AllKinds => new(Enum.GetValues<PublishedRecordKind>());
+
+    [Theory]
+    [MemberData(nameof(AllKinds))]
+    public async Task OnlyARecordThatReviewBlockedCanLeaveTheReleaseForEveryKind(PublishedRecordKind kind)
+    {
+        var recordId = await SeedDraftAsync(kind);
+        var number = 0;
+        foreach (var status in new[] { ReviewStatus.AwaitingReview, ReviewStatus.Approved })
+        {
+            await SetReviewStatusAsync(kind, recordId, status);
+            var error = await Assert.ThrowsAsync<ArgumentException>(() =>
+                publications.CommitAsync(Owner.Subject, WithdrawalCommit(1, null, kind, recordId), "key", Hash(1), default));
+            Assert.Contains($"is {status} in review", error.Message, StringComparison.Ordinal);
+        }
+        foreach (var status in new[] { ReviewStatus.ApprovalWithdrawn, ReviewStatus.ChangesRequested, ReviewStatus.AwaitingReviewWithConcerns })
+        {
+            await SetReviewStatusAsync(kind, recordId, status);
+            number++;
+            var summary = await publications.CommitAsync(Owner.Subject,
+                WithdrawalCommit(number, number == 1 ? null : number - 1, kind, recordId), $"key-{number}", Hash(number), default);
+            Assert.Equal(number, summary.ReleaseNumber);
+        }
+    }
+
+    [Fact]
+    public async Task AWithdrawalOfARecordWithNoReviewRowIsRefused()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() => publications.CommitAsync(Owner.Subject,
+            WithdrawalCommit(1, null, PublishedRecordKind.Action, new string('9', 64)), "key", Hash(1), default));
+    }
+
+    private static PublicationCommit WithdrawalCommit(int number, int? baseNumber, PublishedRecordKind kind, string recordId) =>
+        new(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}", [], [])
+        {
+            WithdrawnRecords = [new(kind, recordId)]
+        };
+
+    private async Task<string> SeedDraftAsync(PublishedRecordKind kind)
+    {
+        var id = new string('a', 64);
+        switch (kind)
+        {
+            case PublishedRecordKind.DocumentChange:
+                return (await CreateApprovedDraftAsync("a")).DraftId;
+            case PublishedRecordKind.Statement:
+                return await CreateApprovedStatementAsync();
+            case PublishedRecordKind.Action:
+                await ExecuteAsync("""
+                    INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks, review_state_version, review_status)
+                    VALUES (@id, 'congress-bills', 119, 'hr', 7, 1, 0, 1, 'Approved')
+                    """, id);
+                break;
+            case PublishedRecordKind.Vote:
+                await ExecuteAsync("""
+                    INSERT INTO vote_drafts (record_id, source_id, congress, session_number, roll_call_number, current_revision_number, review_state_version, review_status, created_at_utc_ticks, chamber)
+                    VALUES (@id, 'congress-house-votes', 119, 1, 100, 1, 1, 'Approved', 0, 'House')
+                    """, id);
+                break;
+            case PublishedRecordKind.Relationship:
+                await ExecuteAsync("""
+                    INSERT INTO relationship_drafts (record_id, current_revision_number, review_state_version, review_status, no_longer_matches, created_at_utc_ticks, last_revised_at_utc_ticks)
+                    VALUES (@id, 1, 1, 'Approved', false, 0, 0)
+                    """, id);
+                break;
+            case PublishedRecordKind.Brief:
+                await ExecuteAsync("""
+                    INSERT INTO brief_drafts (record_id, week_start, current_revision_number, review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
+                    VALUES (@id, '2026-01-05', 1, 1, 'Approved', 0, 0)
+                    """, id);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown record kind.");
+        }
+        return id;
+    }
+
+    private Task SetReviewStatusAsync(PublishedRecordKind kind, string recordId, ReviewStatus status)
+    {
+        var (table, column) = kind switch
+        {
+            PublishedRecordKind.DocumentChange => ("document_change_drafts", "draft_id"),
+            PublishedRecordKind.Statement => ("statement_drafts", "candidate_id"),
+            PublishedRecordKind.Action => ("action_drafts", "record_id"),
+            PublishedRecordKind.Vote => ("vote_drafts", "record_id"),
+            PublishedRecordKind.Relationship => ("relationship_drafts", "record_id"),
+            PublishedRecordKind.Brief => ("brief_drafts", "record_id"),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown record kind.")
+        };
+        return ExecuteAsync($"UPDATE {table} SET review_status = '{status}' WHERE {column} = @id", recordId);
+    }
+
+    private async Task ExecuteAsync(string sql, string id)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("id", id);
+        await command.ExecuteNonQueryAsync();
+    }
+
     private static PublicationCommit StatementCommit(int number, string candidateId, int reviewStateVersion, int revision = 2) =>
         new(number, number == 1 ? null : number - 1, $"{number:D6}-{Guid.NewGuid():N}",
             [new(PublishedRecordKind.Statement, candidateId, revision)],

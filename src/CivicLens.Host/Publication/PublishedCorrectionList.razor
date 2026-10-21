@@ -1,0 +1,21 @@
+@using CivicLens.Publication.Contracts
+
+@if (Corrections.Length > 0)
+{
+    <ul class="choices corrections" aria-label="Corrections">
+        @foreach (var correction in Corrections)
+        {
+            <li>
+                <strong>@PublishedCorrectionView.Heading(correction)</strong>
+                @if (correction.Note is not null)
+                {
+                    <p>@correction.Note</p>
+                }
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    [Parameter, EditorRequired] public PublishedCorrection[] Corrections { get; set; } = [];
+}

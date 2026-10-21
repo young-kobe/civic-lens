@@ -94,6 +94,25 @@ public sealed class BriefStalenessTests(PostgresCollection postgres) : IAsyncLif
         Assert.Equal("Pending:0", await seeder.BriefQueueStatusAsync(Week));
     }
 
+    [Fact]
+    public async Task AWithdrawalRequeuesTheBriefOfTheWeekThatFirstPublishedTheWithdrawnRecord()
+    {
+        await seeder.BriefAsync(Week);
+        await seeder.BriefAsync(PriorWeek);
+        await seeder.ExecuteAsync($"""
+            INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks, review_state_version, review_status)
+            VALUES ('{A1}', 'congress-bills', 119, 'hr', 7, 1, 0, 1, 'ChangesRequested')
+            """);
+
+        _ = await publications.CommitAsync("auth0|owner", new(3, 2, $"000003-{Guid.NewGuid():N}",
+            [Binding(PublishedRecordKind.Statement, P1, 1), Binding(PublishedRecordKind.Statement, S1, 1),
+             Binding(PublishedRecordKind.Statement, S2, 1), Binding(PublishedRecordKind.DocumentChange, D1, 1)], [])
+        { WithdrawnRecords = [new(PublishedRecordKind.Action, A1)] }, "key-3",
+            Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("payload"))), default);
+
+        Assert.Equal(("Pending:0", "Succeeded:3"), (await seeder.BriefQueueStatusAsync(Week), await seeder.BriefQueueStatusAsync(PriorWeek)));
+    }
+
     [Theory]
     [InlineData(BriefDraftErrorCodes.NoCitableRecords, "Pending:0")]
     [InlineData(BriefDraftErrorCodes.OverByteCap, "Blocked:3")]

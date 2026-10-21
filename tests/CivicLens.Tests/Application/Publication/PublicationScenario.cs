@@ -115,6 +115,7 @@ internal sealed class PublicationScenario
             SchemaVersion = PublicationProtocol.SchemaVersion,
             ReleaseNumber = 1,
             PublishedAtUtc = ApprovedAt,
+            Withdrawals = [],
             Records = entries
         };
         var files = new Dictionary<string, byte[]>
@@ -357,6 +358,8 @@ internal sealed class FakeRenderer : IReleaseRenderer
         Task.FromResult($"<html>relationship {record.RecordId}</html>");
     public Task<string> RenderBriefAsync(PublishedBrief record, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>brief {record.RecordId}</html>");
+    public Task<string> RenderWithdrawalAsync(PublishedWithdrawal withdrawal, CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>withdrawn {withdrawal.RecordId} {withdrawal.Note}</html>");
     public Task<string> RenderHomeAsync(PublicationRelease release, PublishedBrief? brief, ReleaseFacets facets,
         CancellationToken cancellationToken) =>
         Task.FromResult($"<html>home {release.Records.Length} brief {brief?.RecordId}</html>");

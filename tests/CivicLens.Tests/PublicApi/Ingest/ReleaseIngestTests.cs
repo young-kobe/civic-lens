@@ -118,6 +118,38 @@ public sealed class ReleaseIngestTests(PostgresCollection postgres) : IAsyncLife
     }
 
     [Fact]
+    public async Task AWithdrawnRecordClosesItsRangeLikeADroppedOneAndAPinnedEarlierSearchStillFindsIt()
+    {
+        var withdrawn = PublishedSamples.Statement('a', "Rent cap");
+        var kept = PublishedSamples.Statement('b', "Zoning");
+        await world.PublishAndIngestAsync(5, withdrawn, kept);
+
+        world.Site.Publish(6, [Withdrawal(withdrawn)], kept);
+        var result = await world.IngestAsync();
+
+        Assert.Equal(1, result.Closed);
+        Assert.Equal((5, 5), await RangeAsync(1));
+        Assert.Equal(["b"], (await world.SearchAsync()).Hits.Select(hit => hit.RecordId[..1]));
+        Assert.Equal(["a", "b"], (await world.SearchAsync(release: 5)).Hits.Select(hit => hit.RecordId[..1]).Order());
+    }
+
+    [Fact]
+    public async Task ActivatingAReleaseBeforeTheWithdrawalFindsTheWithdrawnRecordAgainWithoutAFetch()
+    {
+        var withdrawn = PublishedSamples.Statement('a', "Rent cap");
+        await world.PublishAndIngestAsync(5, withdrawn);
+        world.Site.Publish(6, [Withdrawal(withdrawn)]);
+        await world.IngestAsync();
+        world.Site.RecordRequests.Clear();
+
+        var back = await world.PublishAndIngestAsync(5, withdrawn);
+
+        Assert.Equal(IngestOutcome.Activated, back.Outcome);
+        Assert.Empty(world.Site.RecordRequests);
+        Assert.Equal(["a"], (await world.SearchAsync()).Hits.Select(hit => hit.RecordId[..1]));
+    }
+
+    [Fact]
     public async Task AManifestThatGoesBackToAStoredReleaseOnlyMovesTheActivePointerAndFetchesNothing()
     {
         var first = PublishedSamples.Statement('a', "Rent cap");
@@ -208,6 +240,17 @@ public sealed class ReleaseIngestTests(PostgresCollection postgres) : IAsyncLife
         await using var command = world.Database.CreateCommand(sql);
         return (long)(await command.ExecuteScalarAsync())!;
     }
+
+    private static PublishedWithdrawal Withdrawal(SampleRecord record) => new()
+    {
+        Kind = record.Entry.Kind,
+        RecordId = record.Entry.RecordId,
+        WithdrawnRevisionNumber = record.Entry.RevisionNumber,
+        FirstPublishedAtUtc = record.Entry.FirstPublishedAtUtc,
+        WithdrawnAtUtc = record.Entry.FirstPublishedAtUtc.AddDays(1),
+        Note = "Wrong.",
+        Corrections = []
+    };
 
     private async Task<(int First, int? Last)> RangeAsync(int revision) => (await RangesAsync(revision))[0];
 

@@ -13,12 +13,13 @@ namespace CivicLens.Application.Publication;
 internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, PublicationOfficials officials, IReleaseRenderer renderer)
 {
     public async Task WriteAsync(IReleaseStaging staging, PublicationRelease manifest, PublishedOfficials published,
-        IReadOnlyList<PendingRecord> additions, PreviousRelease previous, CancellationToken cancellationToken)
+        IReadOnlyList<PendingRecord> additions, IReadOnlyList<PublishedRecordEntry> removed, PreviousRelease previous,
+        CancellationToken cancellationToken)
     {
-        var changes = await votes.ChangesAsync(additions, previous, cancellationToken);
+        var changes = await votes.ChangesAsync(additions, removed, previous, cancellationToken);
         var entriesByOfficial = manifest.Records.SelectMany(entry => entry.Officials.Select(official => (official.Id, Entry: entry)))
             .ToLookup(pair => pair.Id, pair => pair.Entry, StringComparer.Ordinal);
-        var namedByChange = OfficialsNamedByChanges(additions, previous);
+        var namedByChange = OfficialsNamedByChanges(additions, removed, previous);
         var listings = new List<OfficialListing>();
         foreach (var profile in published.Officials)
         {
@@ -39,11 +40,13 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
         earlier is not null && JsonSerializer.SerializeToUtf8Bytes(earlier, PublicationProtocol.JsonOptions)
             .AsSpan().SequenceEqual(JsonSerializer.SerializeToUtf8Bytes(profile, PublicationProtocol.JsonOptions));
 
-    private static HashSet<string> OfficialsNamedByChanges(IReadOnlyList<PendingRecord> additions, PreviousRelease previous)
+    private static HashSet<string> OfficialsNamedByChanges(IReadOnlyList<PendingRecord> additions, IReadOnlyList<PublishedRecordEntry> removed,
+        PreviousRelease previous)
     {
         var added = additions.Select(addition => (addition.Entry.Kind, addition.RecordId)).ToHashSet();
         return [.. additions.Select(addition => addition.Entry)
             .Concat(previous.Entries.Where(entry => added.Contains((entry.Kind, entry.RecordId))))
+            .Concat(removed)
             .SelectMany(entry => entry.Officials).Select(official => official.Id)];
     }
 

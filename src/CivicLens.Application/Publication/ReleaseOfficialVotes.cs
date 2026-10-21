@@ -3,11 +3,14 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
-/// <summary>Finds, reads, and rewrites the vote files of the officials. The rows of a publish come from the vote records that it holds.</summary>
+/// <summary>
+/// Finds, reads, and rewrites the vote files of the officials. The rows of a publish come from the vote records that it holds.
+/// A replaced or withdrawn vote leaves the files of its members, and a Congress with no rows leaves with it.
+/// </summary>
 internal sealed class ReleaseOfficialVotes(IReleaseDirectory releases, VoteRecordLoader votes)
 {
-    public async Task<OfficialVoteChanges> ChangesAsync(IReadOnlyList<PendingRecord> additions, PreviousRelease previous,
-        CancellationToken cancellationToken)
+    public async Task<OfficialVoteChanges> ChangesAsync(IReadOnlyList<PendingRecord> additions,
+        IReadOnlyList<PublishedRecordEntry> removed, PreviousRelease previous, CancellationToken cancellationToken)
     {
         var added = additions.OfType<PendingRecord<PublishedVote>>().Select(addition => addition.Record).ToArray();
         var changes = new Dictionary<string, Dictionary<int, List<PublishedOfficialVote>>>(StringComparer.Ordinal);
@@ -16,6 +19,8 @@ internal sealed class ReleaseOfficialVotes(IReleaseDirectory releases, VoteRecor
                 RowsOf(changes, member.Official.Id, vote.Congress).Add(PublishedOfficialVote.Of(vote, member));
 
         var congressOf = added.ToDictionary(vote => vote.RecordId, vote => vote.Congress, StringComparer.Ordinal);
+        foreach (var entry in removed.Where(entry => entry.Kind == PublishedRecordKind.Vote))
+            congressOf[entry.RecordId] = await ReadCongressAsync(previous, entry.RecordId, cancellationToken);
         var replaced = previous.Entries.Where(entry => entry.Kind == PublishedRecordKind.Vote && congressOf.ContainsKey(entry.RecordId)).ToArray();
         if (replaced.Length > 0)
         {
@@ -24,6 +29,14 @@ internal sealed class ReleaseOfficialVotes(IReleaseDirectory releases, VoteRecor
                 foreach (var congress in congresses) RowsOf(changes, officialId, congress);
         }
         return new(changes, [.. congressOf.Keys]);
+    }
+
+    private async Task<int> ReadCongressAsync(PreviousRelease previous, string recordId, CancellationToken cancellationToken)
+    {
+        var json = await releases.ReadFileAsync(previous.DirectoryName!, PublicationProtocol.RecordDataPath(recordId),
+            PublishedRecordFiles.MaximumCitedRecordBytes, cancellationToken);
+        return (JsonSerializer.Deserialize<VoteCongress>(json, PublishedRecordFiles.PartialReadOptions)
+            ?? throw new InvalidDataException("A carried vote file is empty.")).Congress;
     }
 
     public async Task<OfficialFiles> ListAsync(PreviousRelease previous, string officialId, CancellationToken cancellationToken)
@@ -57,6 +70,8 @@ internal sealed class ReleaseOfficialVotes(IReleaseDirectory releases, VoteRecor
             JsonSerializer.SerializeToUtf8Bytes(file, PublicationProtocol.JsonOptions), cancellationToken);
         return file.Votes;
     }
+
+    private sealed record VoteCongress(int Congress);
 
     private static List<PublishedOfficialVote> RowsOf(Dictionary<string, Dictionary<int, List<PublishedOfficialVote>>> changes,
         string officialId, int congress)

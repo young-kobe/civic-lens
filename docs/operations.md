@@ -690,7 +690,7 @@ The owner can publish from the Review home page. Select records in the Publish s
 The CLI is a local owner command. Set `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER` (the owner subject recorded on the release), and `CIVIC_LENS_RELEASE_DIRECTORY` (an absolute path, for example `$PWD/.runtime/releases`). Publishing also needs `CIVIC_LENS_COLLECTION_CONFIG`, an absolute configuration path that supplies the officials' display names, and `CIVIC_LENS_ISSUES_CONFIG`, an absolute path that supplies the issue and policy area names. The command trusts the local operator, who already holds database credentials.
 
 ```sh
-dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases publish <idempotency-key> <kind>:<id> [<kind>:<id>...] [--note <kind>:<id> <text>]...
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases publish <idempotency-key> [<kind>:<id>...] [--note <kind>:<id> <text>]... [--withdraw <kind>:<id> <text>]...
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases list [limit]
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases activate <release-number>
 ```
@@ -706,6 +706,16 @@ The first publish of schema version 6 needs a clean development reset. The publi
 The dates of the first publication of briefs start again after this reset. This is acceptable in development.
 
 Write each record as `<kind>:<id>`. The kind is `documentChange`, `statement`, `action`, `vote`, `brief`, or `relationship`. For example, use `documentChange:` and a 32-character draft ID, `statement:` and a 64-character candidate ID, or `action:` and a 64-character action record ID. The other three kinds take a 64-character record ID too. The command never guesses the kind from the ID. An unknown kind or a bad shape exits with code 2. The revision must be approved with no unresolved concerns. A record that replaces a record of the active release needs a note. Give it with `--note <kind>:<id> <text>`, and repeat the option for each replacement. A note has 1 to 500 characters. The note shows on the record page as a correction. A note for a new record, or for a record that you did not name, exits with code 2.
+
+To take a record out of the release, give `--withdraw <kind>:<id> <text>`. A request can have withdrawals and no records. The text has 1 to 500 characters and shows on the notice page. Review must have blocked the record: its status is Approval withdrawn, Changes requested, or Awaiting review with concerns. The publish exits with code 2 in three cases:
+
+- The record is not in the active release.
+- Review did not block the record.
+- A relationship or a brief that stays in the release cites the record. The message lists the citing records. Withdraw them in the same request.
+
+A withdrawn record cannot be published again yet.
+
+A schema 6 release with no `withdrawals` list cannot be read. Reset the development releases before the next publish.
 
 A concurrent review decision, draft save, other release, or rollback makes the commit fail with exit code 1. The built directory is deleted and nothing is activated. Invalid input or a non-owner actor exits with code 2 and prints the rule that failed. The publish rules are in [publication](architecture/publication.md#publish).
 

@@ -5,10 +5,13 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
-internal sealed class PublishedRecordRules(PublicationCatalog catalog)
+public sealed class PublishedRecordRules(PublicationCatalog catalog)
 {
     public static bool IsPublishable(ReviewStatus status, int unresolvedConcernCount) =>
         status == ReviewStatus.Approved && unresolvedConcernCount == 0;
+
+    public static bool IsWithdrawable(ReviewStatus status) =>
+        status is ReviewStatus.ApprovalWithdrawn or ReviewStatus.ChangesRequested or ReviewStatus.AwaitingReviewWithConcerns;
 
     public static DateTimeOffset GetApprovalTime(int revisionNumber, ImmutableArray<ReviewDecision> decisions) =>
         decisions

@@ -51,7 +51,7 @@ Implemented:
 - related records on the statement, action, and vote pages
 - the public search service with its own Postgres database, fed from published releases, and the search page of each release
 
-Pending: live Auth0 tenant verification, production deployment, AI classification, correction and withdrawal releases, and MCP. The [roadmap](roadmap.md) holds the order.
+Pending: live Auth0 tenant verification, production deployment, AI classification, the return of a withdrawn record, and MCP. The [roadmap](roadmap.md) holds the order.
 
 ## Layers and dependency rules
 
@@ -255,7 +255,7 @@ Before the first production deploy ([R-23](roadmap.md#later)), reset the develop
 | --- | --- | --- | --- | --- |
 | Collection protocol | `10` (`Version`; reads `OldestReadableVersion` 7 and `ApiVersion` 9) | `src/CivicLens.Collection.Contracts/CollectionProtocol.cs` | Collector requests, receipts, saved handoffs, job definitions | Collector fetch, parse, or receipt rules change |
 | Receipt handoff | `1` | `src/CivicLens.Application/Collection/PendingCollectionHandoff.cs` | Spool files of unimported receipts | The envelope shape changes |
-| Publication schema | `5` (reads `5`) | `src/CivicLens.Publication.Contracts/PublicationProtocol.cs` | Release manifests and record JSON | The published JSON shape changes |
+| Publication schema | `6` (reads `6`) | `src/CivicLens.Publication.Contracts/PublicationProtocol.cs` | Release manifests and record JSON | The published JSON shape changes |
 | Collection configuration | `2` | `src/CivicLens.Application/Collection/CollectionConfiguration.cs` | Configuration files and stored revision snapshots | Coverage or source fields change meaning |
 | Issue configuration | `1` | `src/CivicLens.Application/Issues/IssueConfiguration.cs` (revisions in `IssueConfigurationRevision.cs`) | `config/issues.json` and revision IDs | The snapshot format changes |
 | Parser | `capture-text-v2` | `src/CivicLens.Infrastructure/Documents/CaptureDocumentTextExtractor.cs` | Extraction IDs, text, and citations | HTML or text decoding output changes |

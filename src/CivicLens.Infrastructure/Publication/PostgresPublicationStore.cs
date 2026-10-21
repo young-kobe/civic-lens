@@ -128,7 +128,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         }
 
         await RequireUnchangedReleasesAsync(db, commit, cancellationToken);
-        await RequireUnchangedReviewStateAsync(db, commit.AddedRecords, cancellationToken);
+        await RequireUnchangedReviewStateAsync(db, commit, cancellationToken);
         await RequireCurrentCitationsAsync(db, commit, cancellationToken);
         await BriefStaleness.RequeueAfterPublicationAsync(briefQueue, db, commit, cancellationToken);
         await ClearActiveAsync(db, cancellationToken);
@@ -170,15 +170,25 @@ public sealed class PostgresPublicationStore : IPublicationStore
             throw new PublicationConflictException("The active release changed after the release was built. Rebuild it.");
     }
 
-    private static async Task RequireUnchangedReviewStateAsync(CollectionAttemptDbContext db,
-        ImmutableArray<ReviewStateExpectation> expectations, CancellationToken cancellationToken)
+    private static async Task RequireUnchangedReviewStateAsync(CollectionAttemptDbContext db, PublicationCommit commit,
+        CancellationToken cancellationToken)
     {
-        var current = await ReadCurrentReviewStatesAsync(db, expectations, cancellationToken);
-        foreach (var expectation in expectations)
+        var named = commit.AddedRecords.Select(expectation => (expectation.Kind, expectation.RecordId))
+            .Concat(commit.WithdrawnRecords.Select(record => (record.Kind, record.RecordId))).ToArray();
+        var current = await ReadCurrentReviewStatesAsync(db, named, cancellationToken);
+        foreach (var expectation in commit.AddedRecords)
         {
             if (!current.TryGetValue((expectation.Kind, expectation.RecordId), out var state) ||
                 state.RevisionNumber != expectation.RevisionNumber || state.ReviewStateVersion != expectation.ReviewStateVersion)
                 throw new PublicationConflictException("Review state changed after the release was built. Rebuild it.");
+        }
+        foreach (var reference in commit.WithdrawnRecords)
+        {
+            if (!current.TryGetValue((reference.Kind, reference.RecordId), out var state))
+                throw new ArgumentException($"{reference} has no review record, so it cannot be withdrawn.");
+            if (!PublishedRecordRules.IsWithdrawable(state.ReviewStatus))
+                throw new ArgumentException(
+                    $"{reference} is {state.ReviewStatus} in review. Only a record that review blocked can be withdrawn.");
         }
     }
 
@@ -218,82 +228,84 @@ public sealed class PostgresPublicationStore : IPublicationStore
             .SelectMany(revision => new[] { revision.Statement, revision.Target }).Select(RelationshipRecordKinds.BindingOf);
     }
 
-    private static async Task<Dictionary<(PublishedRecordKind Kind, string RecordId), (int RevisionNumber, int ReviewStateVersion)>>
-        ReadCurrentReviewStatesAsync(CollectionAttemptDbContext db, ImmutableArray<ReviewStateExpectation> expectations,
+    private static async Task<Dictionary<(PublishedRecordKind Kind, string RecordId), ReviewState>>
+        ReadCurrentReviewStatesAsync(CollectionAttemptDbContext db, (PublishedRecordKind Kind, string RecordId)[] named,
             CancellationToken cancellationToken)
     {
-        var current = new Dictionary<(PublishedRecordKind, string), (int, int)>();
-        await AddDocumentChangeStatesAsync(db, IdsOf(expectations, PublishedRecordKind.DocumentChange), current, cancellationToken);
-        await AddStatementStatesAsync(db, IdsOf(expectations, PublishedRecordKind.Statement), current, cancellationToken);
-        await AddActionStatesAsync(db, IdsOf(expectations, PublishedRecordKind.Action), current, cancellationToken);
-        await AddVoteStatesAsync(db, IdsOf(expectations, PublishedRecordKind.Vote), current, cancellationToken);
-        await AddRelationshipStatesAsync(db, IdsOf(expectations, PublishedRecordKind.Relationship), current, cancellationToken);
-        await AddBriefStatesAsync(db, IdsOf(expectations, PublishedRecordKind.Brief), current, cancellationToken);
+        var current = new Dictionary<(PublishedRecordKind, string), ReviewState>();
+        await AddDocumentChangeStatesAsync(db, IdsOf(named, PublishedRecordKind.DocumentChange), current, cancellationToken);
+        await AddStatementStatesAsync(db, IdsOf(named, PublishedRecordKind.Statement), current, cancellationToken);
+        await AddActionStatesAsync(db, IdsOf(named, PublishedRecordKind.Action), current, cancellationToken);
+        await AddVoteStatesAsync(db, IdsOf(named, PublishedRecordKind.Vote), current, cancellationToken);
+        await AddRelationshipStatesAsync(db, IdsOf(named, PublishedRecordKind.Relationship), current, cancellationToken);
+        await AddBriefStatesAsync(db, IdsOf(named, PublishedRecordKind.Brief), current, cancellationToken);
         return current;
     }
 
     private static async Task AddDocumentChangeStatesAsync(CollectionAttemptDbContext db, string[] draftIds,
-        Dictionary<(PublishedRecordKind, string), (int, int)> current, CancellationToken cancellationToken)
+        Dictionary<(PublishedRecordKind, string), ReviewState> current, CancellationToken cancellationToken)
     {
         if (draftIds.Length == 0) return;
         var changes = await db.Set<DocumentChangeDraftRow>().AsNoTracking()
             .Where(row => draftIds.Contains(row.DraftId)).ToArrayAsync(cancellationToken);
         foreach (var row in changes)
-            current[(PublishedRecordKind.DocumentChange, row.DraftId)] = (row.CurrentRevisionNumber, row.ReviewStateVersion);
+            current[(PublishedRecordKind.DocumentChange, row.DraftId)] = new(row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus);
     }
 
     private static async Task AddStatementStatesAsync(CollectionAttemptDbContext db, string[] candidateIds,
-        Dictionary<(PublishedRecordKind, string), (int, int)> current, CancellationToken cancellationToken)
+        Dictionary<(PublishedRecordKind, string), ReviewState> current, CancellationToken cancellationToken)
     {
         if (candidateIds.Length == 0) return;
         var statements = await db.Set<StatementDraftRow>().AsNoTracking()
             .Where(row => candidateIds.Contains(row.CandidateId)).ToArrayAsync(cancellationToken);
         foreach (var row in statements)
-            current[(PublishedRecordKind.Statement, row.CandidateId)] = (row.CurrentRevisionNumber, row.ReviewStateVersion);
+            current[(PublishedRecordKind.Statement, row.CandidateId)] = new(row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus);
     }
 
     private static async Task AddActionStatesAsync(CollectionAttemptDbContext db, string[] recordIds,
-        Dictionary<(PublishedRecordKind, string), (int, int)> current, CancellationToken cancellationToken)
+        Dictionary<(PublishedRecordKind, string), ReviewState> current, CancellationToken cancellationToken)
     {
         if (recordIds.Length == 0) return;
         var actions = await db.Set<ActionDraftRow>().AsNoTracking()
             .Where(row => recordIds.Contains(row.RecordId)).ToArrayAsync(cancellationToken);
         foreach (var row in actions)
-            current[(PublishedRecordKind.Action, row.RecordId)] = (row.CurrentRevisionNumber, row.ReviewStateVersion);
+            current[(PublishedRecordKind.Action, row.RecordId)] = new(row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus);
     }
 
     private static async Task AddVoteStatesAsync(CollectionAttemptDbContext db, string[] recordIds,
-        Dictionary<(PublishedRecordKind, string), (int, int)> current, CancellationToken cancellationToken)
+        Dictionary<(PublishedRecordKind, string), ReviewState> current, CancellationToken cancellationToken)
     {
         if (recordIds.Length == 0) return;
         var votes = await db.Set<VoteDraftRow>().AsNoTracking()
             .Where(row => recordIds.Contains(row.RecordId)).ToArrayAsync(cancellationToken);
         foreach (var row in votes)
-            current[(PublishedRecordKind.Vote, row.RecordId)] = (row.CurrentRevisionNumber, row.ReviewStateVersion);
+            current[(PublishedRecordKind.Vote, row.RecordId)] = new(row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus);
     }
 
     private static async Task AddRelationshipStatesAsync(CollectionAttemptDbContext db, string[] recordIds,
-        Dictionary<(PublishedRecordKind, string), (int, int)> current, CancellationToken cancellationToken)
+        Dictionary<(PublishedRecordKind, string), ReviewState> current, CancellationToken cancellationToken)
     {
         if (recordIds.Length == 0) return;
         var relationships = await db.Set<RelationshipDraftRow>().AsNoTracking()
             .Where(row => recordIds.Contains(row.RecordId)).ToArrayAsync(cancellationToken);
         foreach (var row in relationships)
-            current[(PublishedRecordKind.Relationship, row.RecordId)] = (row.CurrentRevisionNumber, row.ReviewStateVersion);
+            current[(PublishedRecordKind.Relationship, row.RecordId)] = new(row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus);
     }
 
     private static async Task AddBriefStatesAsync(CollectionAttemptDbContext db, string[] recordIds,
-        Dictionary<(PublishedRecordKind, string), (int, int)> current, CancellationToken cancellationToken)
+        Dictionary<(PublishedRecordKind, string), ReviewState> current, CancellationToken cancellationToken)
     {
         if (recordIds.Length == 0) return;
         var briefs = await db.Set<BriefDraftRow>().AsNoTracking()
             .Where(row => recordIds.Contains(row.RecordId)).ToArrayAsync(cancellationToken);
         foreach (var row in briefs)
-            current[(PublishedRecordKind.Brief, row.RecordId)] = (row.CurrentRevisionNumber, row.ReviewStateVersion);
+            current[(PublishedRecordKind.Brief, row.RecordId)] = new(row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus);
     }
 
-    private static string[] IdsOf(ImmutableArray<ReviewStateExpectation> expectations, PublishedRecordKind kind) =>
-        [.. expectations.Where(expectation => expectation.Kind == kind).Select(expectation => expectation.RecordId)];
+    private static string[] IdsOf((PublishedRecordKind Kind, string RecordId)[] named, PublishedRecordKind kind) =>
+        [.. named.Where(record => record.Kind == kind).Select(record => record.RecordId)];
+
+    private readonly record struct ReviewState(int RevisionNumber, int ReviewStateVersion, ReviewStatus ReviewStatus);
 
     private static PublicationReleaseRow ToRow(string actorSubject, PublicationCommit commit, DatabaseTime publishedAt) => new()
     {
@@ -319,7 +331,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         ReleasePaths.RequireDirectoryName(commit.DirectoryName);
         if (!commit.DirectoryName.StartsWith($"{commit.ReleaseNumber:D6}-", StringComparison.Ordinal))
             throw new ArgumentException("Release directory name does not match the release number.", nameof(commit));
-        if (commit.Records.IsDefault || commit.AddedRecords.IsDefault)
+        if (commit.Records.IsDefault || commit.AddedRecords.IsDefault || commit.WithdrawnRecords.IsDefault)
             throw new ArgumentException("Release records are required.", nameof(commit));
     }
 }

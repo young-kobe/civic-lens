@@ -38,4 +38,8 @@ public interface IVoteReviewStore
 
     Task<IReadOnlyDictionary<string, ImmutableArray<string>>> FindBillActionRecordIdsAsync(ImmutableArray<VoteBill> bills,
         CancellationToken cancellationToken);
+
+    /// <summary>The inverse of <see cref="FindBillActionRecordIdsAsync"/>: the vote records on the bill of each named action record.</summary>
+    Task<IReadOnlySet<string>> FindVoteRecordIdsOnBillsOfActionsAsync(ImmutableArray<string> actionRecordIds,
+        CancellationToken cancellationToken);
 }

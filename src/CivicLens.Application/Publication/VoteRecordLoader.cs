@@ -40,6 +40,12 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
         votes.ReadMembersAsync([.. entries.Where(entry => entry.Kind == Kind).Select(PublishedRevisionBinding.Of)],
             cancellationToken);
 
+    public async Task<IReadOnlySet<string>> FindOnBillsOfActionsAsync(IEnumerable<string> actionRecordIds, CancellationToken cancellationToken)
+    {
+        ImmutableArray<string> ids = [.. actionRecordIds];
+        return ids.IsEmpty ? new HashSet<string>() : await votes.FindVoteRecordIdsOnBillsOfActionsAsync(ids, cancellationToken);
+    }
+
     public async Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
         CancellationToken cancellationToken)
     {

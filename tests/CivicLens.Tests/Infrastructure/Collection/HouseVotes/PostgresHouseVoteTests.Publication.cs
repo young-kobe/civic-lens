@@ -100,6 +100,20 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
+    public async Task FindVoteRecordIdsOnBillsOfActionsReturnsTheVotesOnTheBillOfEachNamedActionOnly()
+    {
+        var recordId = await ApprovedVoteAsync();
+        var sameBill = new string('7', 64);
+        var otherBill = new string('9', 64);
+        await InsertActionDraftAsync(sameBill, "hconres", 14);
+        await InsertActionDraftAsync(otherBill, "hr", 14);
+
+        Assert.Equal([recordId], [.. await VoteReviews().FindVoteRecordIdsOnBillsOfActionsAsync([sameBill, otherBill], default)]);
+        Assert.Empty(await VoteReviews().FindVoteRecordIdsOnBillsOfActionsAsync([otherBill], default));
+        Assert.Empty(await VoteReviews().FindVoteRecordIdsOnBillsOfActionsAsync([], default));
+    }
+
+    [Fact]
     public async Task ReadMembersReturnsTheRecordAndPersonOfEachMemberOfTheNamedRevisionsInOneQueryAndRefusesARevisionThatIsNotStored()
     {
         var recordId = await ApprovedVoteAsync();

@@ -238,6 +238,7 @@ public sealed class ReleaseRendererTests
             SchemaVersion = PublicationProtocol.SchemaVersion,
             ReleaseNumber = 4,
             PublishedAtUtc = new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero),
+            Withdrawals = [],
             Records =
             [
                 new PublishedRecordEntry
@@ -734,6 +735,7 @@ public sealed class ReleaseRendererTests
         };
         var release = ReleaseOf(0) with
         {
+            Withdrawals = [],
             Records =
         [
             Entry('a', new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero), new DateOnly(2026, 1, 2), "Jane Doe", "Ann Roe"),
@@ -800,6 +802,45 @@ public sealed class ReleaseRendererTests
         var timeline = await TimelineOf(renderer => renderer.RenderActionAsync(action, [], CancellationToken.None));
         Assert.Contains("2026-02-04|Correction, replaces revision 2, 2026-02-04 09:00 UTC", timeline);
         Assert.Contains("2026-02-02|Updated from the source, replaces revision 1, 2026-02-02 09:00 UTC", timeline);
+    }
+
+    [Fact]
+    public async Task AWithdrawalNoticeShowsTheKindTheRevisionTheDatesTheEscapedNoteAndTheHistoryButNoRecordContent()
+    {
+        var withdrawal = new PublishedWithdrawal
+        {
+            Kind = PublishedRecordKind.Action,
+            RecordId = new string('c', 64),
+            WithdrawnRevisionNumber = 3,
+            FirstPublishedAtUtc = new DateTimeOffset(2026, 2, 1, 8, 0, 0, TimeSpan.Zero),
+            WithdrawnAtUtc = new DateTimeOffset(2026, 2, 9, 9, 30, 0, TimeSpan.Zero),
+            Note = "Wrong <bill>.",
+            Corrections = [new() { ReplacedRevisionNumber = 2, PublishedAtUtc = new DateTimeOffset(2026, 2, 4, 9, 0, 0, TimeSpan.Zero), Note = "Fixed a date." }]
+        };
+
+        var html = await new ReleaseRenderer().RenderWithdrawalAsync(withdrawal, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var text = document.QuerySelector("main")!.TextContent;
+        Assert.Equal("This record was withdrawn", document.QuerySelector("h1")!.TextContent);
+        foreach (var expected in new[] { "Action", new string('c', 64), "3", "2026-02-01 08:00 UTC", "2026-02-09 09:30 UTC", "Wrong <bill>." })
+            Assert.Contains(expected, text, StringComparison.Ordinal);
+        Assert.Contains("Wrong &lt;bill&gt;.", html, StringComparison.Ordinal);
+        Assert.Equal("Correction, 2026-02-04. Replaces revision 2.", document.QuerySelector("ul.corrections > li strong")!.TextContent);
+        Assert.Empty(document.QuerySelectorAll("a[href*='report.html']"));
+    }
+
+    [Fact]
+    public async Task AReleaseWithNoRecordLeftStillRendersItsIndexPagesSoAWithdrawalOfTheLastRecordPublishes()
+    {
+        var release = ReleaseOf(0);
+        var facets = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None));
+        var renderer = new ReleaseRenderer();
+
+        Assert.NotEmpty(await renderer.RenderHomeAsync(release, null, facets, CancellationToken.None));
+        Assert.NotEmpty(await renderer.RenderAllRecordsAsync(release, 1, CancellationToken.None));
+        Assert.NotEmpty(await renderer.RenderSearchAsync(release, facets, CancellationToken.None));
+        Assert.NotEmpty(await renderer.RenderFacetsAsync(facets, CancellationToken.None));
     }
 
     [Fact]
@@ -874,6 +915,7 @@ public sealed class ReleaseRendererTests
         SchemaVersion = PublicationProtocol.SchemaVersion,
         ReleaseNumber = 4,
         PublishedAtUtc = new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero),
+        Withdrawals = [],
         Records =
         [
             new PublishedRecordEntry
@@ -895,6 +937,7 @@ public sealed class ReleaseRendererTests
         SchemaVersion = PublicationProtocol.SchemaVersion,
         ReleaseNumber = 4,
         PublishedAtUtc = new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero),
+        Withdrawals = [],
         Records = [.. Enumerable.Range(0, count).Select(index => new PublishedRecordEntry
         {
             RecordId = index.ToString("x32"),
