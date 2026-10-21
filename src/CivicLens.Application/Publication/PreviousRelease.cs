@@ -26,13 +26,20 @@ internal sealed class PreviousRelease
         CancellationToken cancellationToken)
     {
         if (active is null) return new(null, [], [], new Dictionary<string, PublishedOfficialProfile>());
+        var manifest = await LoadManifestAsync(releases, active, cancellationToken);
+        return new(active.DirectoryName, manifest.Records, manifest.Withdrawals, await ReadOfficialsAsync(releases, active.DirectoryName, cancellationToken));
+    }
+
+    public static async Task<PublicationRelease> LoadManifestAsync(IReleaseDirectory releases, PublicationReleaseSummary active,
+        CancellationToken cancellationToken)
+    {
         var bytes = await releases.ReadFileAsync(active.DirectoryName, PublicationProtocol.ManifestPath,
             PublicationProtocol.MaximumManifestBytes, cancellationToken);
         var manifest = ReadManifest(bytes);
         manifest.Validate();
         if (manifest.ReleaseNumber != active.ReleaseNumber)
             throw new InvalidDataException("Release manifest does not match the active release.");
-        return new(active.DirectoryName, manifest.Records, manifest.Withdrawals, await ReadOfficialsAsync(releases, active.DirectoryName, cancellationToken));
+        return manifest;
     }
 
     private static PublicationRelease ReadManifest(byte[] bytes)

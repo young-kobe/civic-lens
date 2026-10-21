@@ -14,8 +14,9 @@ internal sealed class ActionRecordLoader(IActionReviewStore actions)
     protected override Task<IReadOnlyList<UnpublishedApprovedAction>> ListCandidatesAsync(int limit,
         CancellationToken cancellationToken) => actions.ListUnpublishedApprovedAsync(limit, cancellationToken);
 
-    public async Task<IReadOnlyList<ReadyToPublishRecord>> ListCodeApprovedReadyAsync(int limit, CancellationToken cancellationToken) =>
-        ReadyOf(await actions.ListCodeApprovedUnpublishedAsync(limit, cancellationToken));
+    public async Task<IReadOnlyList<ReadyToPublishRecord>> ListCodeApprovedReadyAsync(int limit, IReadOnlyCollection<string> excludedRecordIds,
+        CancellationToken cancellationToken) =>
+        ReadyOf(await actions.ListCodeApprovedUnpublishedAsync(limit, excludedRecordIds, cancellationToken));
 
     protected override ReadyToPublishRecord? ToReady(UnpublishedApprovedAction candidate) =>
         Ready(candidate.Action.CurrentStatus, candidate.Action.UnresolvedConcerns.Length, candidate.Action.RecordId,
@@ -28,7 +29,7 @@ internal sealed class ActionRecordLoader(IActionReviewStore actions)
     protected override PendingRecord Build(string recordId, PublishableAction addition, PublicationBuild build)
     {
         var review = addition.Review;
-        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build);
+        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
         var record = new PublishedActionBuilder(build.Rules).Build(addition, build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId), build.Now);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
             (related, cancellationToken) => build.Renderer.RenderActionAsync(record, related, cancellationToken));

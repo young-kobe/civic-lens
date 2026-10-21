@@ -26,7 +26,7 @@ internal sealed class BriefRecordLoader(IBriefReviewStore briefs)
     protected override PendingRecord Build(string recordId, PublishableBrief addition, PublicationBuild build)
     {
         var review = addition.Review;
-        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build);
+        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
         if (addition.CitedRecordsChanged)
             throw new ArgumentException(
                 $"Brief {recordId} cites a record that the new release does not hold at the cited revision, or that is not approved.");

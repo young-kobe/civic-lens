@@ -52,9 +52,9 @@ public sealed class PublishCodeApprovedFacts(PublishRelease publish, IPublicatio
         CancellationToken cancellationToken)
     {
         var limit = PublishRelease.MaximumRecords;
-        var fetch = limit + skipped.Count;
-        var actions = await loaders.Actions.ListCodeApprovedReadyAsync(fetch, cancellationToken);
-        var votes = await loaders.Votes.ListCodeApprovedReadyAsync(fetch, cancellationToken);
+        string[] excluded = [.. skipped.Select(record => record.RecordId)];
+        var actions = await loaders.Actions.ListCodeApprovedReadyAsync(limit, excluded, cancellationToken);
+        var votes = await loaders.Votes.ListCodeApprovedReadyAsync(limit, excluded, cancellationToken);
         return [.. actions.Concat(votes).Where(record => !skipped.Contains(record.Reference)).Take(limit)];
     }
 

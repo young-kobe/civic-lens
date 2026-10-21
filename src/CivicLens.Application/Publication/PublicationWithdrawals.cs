@@ -3,13 +3,20 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
-/// <summary>Owns who may withdraw a record, and the manifest entries that a withdrawal writes.</summary>
+/// <summary>Owns who may withdraw or return a record, and the manifest entries that a withdrawal writes.</summary>
 internal static class PublicationWithdrawals
 {
     public static Dictionary<PublishedRecordReference, string> ValidateNotes(ImmutableArray<RecordNote> withdrawals, bool byCode)
     {
         if (byCode && !withdrawals.IsEmpty) throw new ArgumentException("The code subject withdraws no records.", nameof(withdrawals));
         return withdrawals.ToDictionary(withdrawal => withdrawal.Reference, withdrawal => withdrawal.ValidText(nameof(withdrawals)));
+    }
+
+    public static void RequireNoReturnByCode(PreviousRelease previous, ImmutableArray<PublishedRecordReference> records, bool byCode)
+    {
+        if (!byCode) return;
+        foreach (var record in records.Where(record => previous.IsWithdrawn(record.RecordId)))
+            throw new WithdrawnFactException(record);
     }
 
     public static List<PublishedWithdrawal> Create(PreviousRelease previous, PublicationCorrections corrections, DateTimeOffset now,

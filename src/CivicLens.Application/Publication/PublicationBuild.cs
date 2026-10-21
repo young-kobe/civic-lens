@@ -10,6 +10,10 @@ internal sealed record PublicationBuild(PreviousRelease Previous, DateTimeOffset
 
     public ImmutableArray<PublishedRecordReference> Removed { get; private init; } = [];
 
+    public ImmutableArray<PublishedRecordReference> Returned { get; private init; } = [];
+
+    public PublicationBuild WithReturned(ImmutableArray<PublishedRecordReference> returned) => this with { Returned = returned };
+
     public PublicationBuild WithAdded(IEnumerable<PendingRecord> added)
     {
         var replacements = added.Select(record => PublishedRevisionBinding.Of(record.Entry)).ToArray();

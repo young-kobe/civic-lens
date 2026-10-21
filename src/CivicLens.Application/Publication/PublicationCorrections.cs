@@ -56,11 +56,6 @@ internal sealed class PublicationCorrections
         return new(previous, now, byCode, notes, earlier);
     }
 
-    public void RequireNotWithdrawnByCode(PublishedRecordReference record)
-    {
-        if (byCode && previous.IsWithdrawn(record.RecordId)) throw new WithdrawnFactException(record);
-    }
-
     public PublishedCorrection[] For(PublishedRecordKind kind, string recordId)
     {
         var reference = new PublishedRecordReference(kind, recordId);

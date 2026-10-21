@@ -27,8 +27,7 @@ internal sealed class ReleasePages(IReleaseDirectory releases, PublishedRecordLo
     {
         var skipped = additions.Select(addition => (addition.Entry.Kind, addition.RecordId))
             .Concat(build.Removed.Select(record => (record.Kind, record.RecordId))).ToHashSet();
-        var returnedActions = additions.Where(addition => addition.Entry.Kind == PublishedRecordKind.Action && build.Previous.IsWithdrawn(addition.RecordId))
-            .Select(addition => addition.RecordId);
+        var returnedActions = build.Returned.Where(record => record.Kind == PublishedRecordKind.Action).Select(record => record.RecordId);
         var votesOnChangedBills = await loaders.Votes.FindOnBillsOfActionsAsync(
             build.Removed.Where(record => record.Kind == PublishedRecordKind.Action).Select(record => record.RecordId).Concat(returnedActions),
             cancellationToken);

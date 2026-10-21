@@ -14,8 +14,9 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
     protected override Task<IReadOnlyList<UnpublishedApprovedVote>> ListCandidatesAsync(int limit,
         CancellationToken cancellationToken) => votes.ListUnpublishedApprovedAsync(limit, cancellationToken);
 
-    public async Task<IReadOnlyList<ReadyToPublishRecord>> ListCodeApprovedReadyAsync(int limit, CancellationToken cancellationToken) =>
-        ReadyOf(await votes.ListCodeApprovedUnpublishedAsync(limit, cancellationToken));
+    public async Task<IReadOnlyList<ReadyToPublishRecord>> ListCodeApprovedReadyAsync(int limit, IReadOnlyCollection<string> excludedRecordIds,
+        CancellationToken cancellationToken) =>
+        ReadyOf(await votes.ListCodeApprovedUnpublishedAsync(limit, excludedRecordIds, cancellationToken));
 
     protected override ReadyToPublishRecord? ToReady(UnpublishedApprovedVote candidate) =>
         Ready(candidate.Vote.CurrentStatus, candidate.Vote.UnresolvedConcerns.Length, candidate.Vote.RecordId,
@@ -28,7 +29,7 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
     protected override PendingRecord Build(string recordId, PublishableVote addition, PublicationBuild build)
     {
         var review = addition.Review;
-        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build);
+        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
         var record = new PublishedVoteBuilder(build.Rules).Build(review.CurrentRevision, review.Decisions, addition.Extractions,
             build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId), build.Now);
         var billActionRecordId = BillActionRecordIn(addition.BillActionRecordIds, build);

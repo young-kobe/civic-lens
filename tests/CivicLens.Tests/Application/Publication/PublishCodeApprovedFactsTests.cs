@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Text.Json;
 using CivicLens.Application.Actions;
+using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
@@ -179,7 +180,7 @@ public sealed class PublishCodeApprovedFactsTests
     public async Task AWithdrawnBacklogLargerThanTheBatchLimitDoesNotStarveTheOtherFactRecords()
     {
         var scenario = new PublicationScenario();
-        AddReadyActions(scenario, PublishRelease.MaximumRecords + 1);
+        AddReadyActions(scenario, PageLimit.Maximum + 1);
         var backlog = scenario.Actions.Publishable.Keys.Order(StringComparer.Ordinal).ToArray();
         foreach (var batch in backlog.Chunk(PublishRelease.MaximumRecords).Select((ids, index) => (ids, index)))
             await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([.. batch.ids.Select(id => new PublishedRecordReference(PublishedRecordKind.Action, id))], $"p{batch.index}"));

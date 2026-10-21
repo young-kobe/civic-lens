@@ -38,7 +38,7 @@ public sealed partial class ReviewHome
     {
         if (PublishSelection is not { Length: > 0 }) return;
         var requested = PublishSelection.ToHashSet(StringComparer.Ordinal);
-        var chosen = ready!.Items.Where(item => requested.Contains(item.Reference.ToString())).ToArray();
+        var chosen = ready!.Items.Where(item => !item.IsWithdrawn && requested.Contains(item.Reference.ToString())).ToArray();
         if (chosen.Length == requested.Count) selection = chosen;
         else selectionStale = true;
     }
