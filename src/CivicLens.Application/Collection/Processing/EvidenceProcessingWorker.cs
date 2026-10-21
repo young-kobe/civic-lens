@@ -74,7 +74,7 @@ public sealed class EvidenceProcessingWorker(
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             using var release = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            try { _ = await processing.ReleaseAsync(claim, release.Token); } catch { }
+            try { _ = await processing.ReleaseAsync(claim, release.Token); } catch (Exception releaseFailure) when (WorkerLoop.IsRecoverable(releaseFailure)) { }
             throw;
         }
         catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
