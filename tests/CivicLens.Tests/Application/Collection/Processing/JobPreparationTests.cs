@@ -1,3 +1,4 @@
+using CivicLens.Application.Collection.Votes;
 using System.Text;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
@@ -531,7 +532,7 @@ public sealed class JobPreparationTests
         }
     }
 
-    private sealed class RecordingVoteAdmissions : IHouseVoteAdmissionStore
+    private sealed class RecordingVoteAdmissions : IVoteAdmissionStore
     {
         public List<(string JobId, HouseVoteListPage Page)> ListPages { get; } = [];
         public List<(string JobId, HouseVote Vote)> Details { get; } = [];

@@ -33,7 +33,8 @@ public interface IVoteReviewStore
     Task<IReadOnlyList<VoteMembership>> ReadMembersAsync(ImmutableArray<PublishedRevisionBinding> revisions,
         CancellationToken cancellationToken);
 
-    Task<string?> FindRecordIdByRollAsync(int congress, int sessionNumber, int rollCallNumber, CancellationToken cancellationToken);
+    Task<string?> FindRecordIdByRollAsync(Chamber chamber, int congress, int sessionNumber, int rollCallNumber,
+        CancellationToken cancellationToken);
 
     Task<IReadOnlyDictionary<string, ImmutableArray<string>>> FindBillActionRecordIdsAsync(ImmutableArray<VoteBill> bills,
         CancellationToken cancellationToken);

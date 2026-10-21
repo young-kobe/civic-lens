@@ -435,6 +435,7 @@ public sealed class ReleaseRendererTests
             .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
         Assert.Equal("2025-04-10", facts["Voted on"]);
         Assert.Equal("Passage", facts["Kind"]);
+        Assert.Equal("House", facts["Chamber"]);
         Assert.Equal("100, Congress 119, session 1", facts["Roll call"]);
         Assert.Equal("housing", facts["Tracked issues"]);
         var result = document.QuerySelector("[aria-labelledby='result-title']")!;
@@ -1027,6 +1028,7 @@ public sealed class ReleaseRendererTests
             Headline = "House passes a housing bill",
             Summary = "The House voted.",
             TextOrigin = PublishedTextOrigin.Model,
+            Chamber = PublishedChamber.House,
             Congress = 119,
             Session = 1,
             RollCallNumber = 100,

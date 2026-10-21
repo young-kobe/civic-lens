@@ -154,7 +154,7 @@ else
                     @foreach (var vote in detail.BillVotes)
                     {
                         <li>
-                            <a href="@VoteRoutes.Editor(vote.RecordId)">@VoteLabels.RollCall(revision.Congress, vote.SessionNumber, vote.RollCallNumber)</a>
+                            <a href="@VoteRoutes.Editor(vote.RecordId)">@VoteLabels.RollCall(vote.Chamber, revision.Congress, vote.SessionNumber, vote.RollCallNumber)</a>
                             <span class="muted small">@VoteLabels.Kind(vote.Kind), @Moment.Iso(vote.VotedOn)</span>
                             <StatusBadge Tone="DraftStatusDisplay.Tone(vote.Status)" Text="@DraftStatusDisplay.LabelWithoutCount(vote.Status)" />
                         </li>

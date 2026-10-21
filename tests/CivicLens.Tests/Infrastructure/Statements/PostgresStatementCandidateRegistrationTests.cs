@@ -193,9 +193,9 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
 
     private Task SeedVoteRowAsync(string candidateId, int roll, int congress, int billNumber) => ExecuteAsync(connectionString, $"""
         SET session_replication_role = replica;
-        INSERT INTO house_vote_candidates (candidate_id, source_id, congress, session_number, roll_call_number, update_date_utc_ticks, bill_type,
+        INSERT INTO vote_candidates (candidate_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks, bill_type,
             bill_number, detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
-        VALUES ('{candidateId}', 'house', {congress}, 1, {roll}, 1, 'hconres', {billNumber}, 'detail-{roll}', 'members-{roll}',
+        VALUES ('{candidateId}', 'house', 'House', {congress}, 1, {roll}, 1, 'hconres', {billNumber}, 'detail-{roll}', 'members-{roll}',
                 '{new string('c', 64)}', '{new string('c', 64)}', '{new string('c', 64)}', 1);
         INSERT INTO vote_analysis (candidate_id, task, status, fence, attempts, reserved_tokens, created_at_utc_ticks)
         VALUES ('{candidateId}', 'vote-draft', 'Pending', 0, 0, 0, 1)

@@ -19,7 +19,7 @@ public sealed partial class PostgresHouseVoteTests
 
         await AdmitMembersAsync(members, vote);
 
-        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM house_vote_candidates"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_candidates"));
         Assert.Empty(await QueueAsync());
     }
 
@@ -66,7 +66,7 @@ public sealed partial class PostgresHouseVoteTests
 
         var queued = await QueueAsync();
         Assert.Equal(2, queued.Count);
-        var olderId = (string)(await ScalarAsync($"SELECT candidate_id FROM house_vote_candidates WHERE update_date_utc_ticks = {older.UpdateDate.UtcTicks}"))!;
+        var olderId = (string)(await ScalarAsync($"SELECT candidate_id FROM vote_candidates WHERE update_date_utc_ticks = {older.UpdateDate.UtcTicks}"))!;
         Assert.True((await VoteStore().ReadEvidenceAsync(olderId, default))!.HasNewerCandidate);
     }
 
@@ -117,7 +117,7 @@ public sealed partial class PostgresHouseVoteTests
         var noBill = HouseVoteFixtures.Vote(101, Updated, billType: null, billNumber: null);
         var (_, members) = await DetailWithMembersJobAsync(noBill);
         await AdmitMembersAsync(members, noBill);
-        var noBillCandidate = (string)(await ScalarAsync("SELECT candidate_id FROM house_vote_candidates WHERE bill_type IS NULL"))!;
+        var noBillCandidate = (string)(await ScalarAsync("SELECT candidate_id FROM vote_candidates WHERE bill_type IS NULL"))!;
 
         var evidence = (await VoteStore().ReadEvidenceAsync(withBill, default))!;
 
@@ -163,7 +163,7 @@ public sealed partial class PostgresHouseVoteTests
             await AdmitMembersAsync(members, vote);
         }
 
-        await ExecuteAsync("DELETE FROM vote_analysis WHERE candidate_id IN (SELECT candidate_id FROM house_vote_candidates WHERE bill_type IS NULL)");
+        await ExecuteAsync("DELETE FROM vote_analysis WHERE candidate_id IN (SELECT candidate_id FROM vote_candidates WHERE bill_type IS NULL)");
 
         var before = await VoteStore().CountWaitingForBillAsync(default);
         await AdmitBillDetailAsync();

@@ -10,7 +10,7 @@ public sealed class PublishedOfficialVotesTests
     {
         var file = PublishedOfficialVotes.Of([Vote('b', new DateOnly(2026, 2, 1), 9)]);
 
-        Assert.Equal("""{"votes":[{"recordId":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","votedOn":"2026-02-01","congress":119,"session":1,"rollCallNumber":9,"billType":"hr","billNumber":7,"cast":"Yea","headline":"Vote b"}]}""",
+        Assert.Equal("""{"votes":[{"recordId":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","votedOn":"2026-02-01","chamber":"house","congress":119,"session":1,"rollCallNumber":9,"billType":"hr","billNumber":7,"cast":"Yea","headline":"Vote b"}]}""",
             JsonSerializer.Serialize(file, PublicationProtocol.JsonOptions));
     }
 
@@ -20,6 +20,21 @@ public sealed class PublishedOfficialVotesTests
         var file = PublishedOfficialVotes.Of([Vote('a', new DateOnly(2026, 1, 1), 5), Vote('b', new DateOnly(2026, 2, 1), 9)]);
 
         Assert.Equal([new string('b', 64), new string('a', 64)], file.Votes.Select(vote => vote.RecordId));
+    }
+
+    [Fact]
+    public void ARollNumberOfOneChamberNeverOrdersAmongTheRollNumbersOfTheOtherOnTheSameDay()
+    {
+        var day = new DateOnly(2026, 1, 1);
+        var file = PublishedOfficialVotes.Of([Vote('a', day, 50) with { Chamber = PublishedChamber.Senate }, Vote('b', day, 10), Vote('c', day, 20)]);
+
+        Assert.Equal([new string('c', 64), new string('b', 64), new string('a', 64)], file.Votes.Select(vote => vote.RecordId));
+    }
+
+    [Fact]
+    public void AnUndefinedChamberIsRefused()
+    {
+        Assert.Throws<InvalidDataException>(() => PublishedOfficialVotes.Of([Vote('a', new DateOnly(2026, 1, 1), 1) with { Chamber = (PublishedChamber)9 }]));
     }
 
     [Fact]
@@ -71,6 +86,7 @@ public sealed class PublishedOfficialVotesTests
     {
         RecordId = new string(id, 64),
         VotedOn = date,
+        Chamber = PublishedChamber.House,
         Congress = 119,
         Session = 1,
         RollCallNumber = roll,

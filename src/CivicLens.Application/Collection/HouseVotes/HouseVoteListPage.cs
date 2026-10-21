@@ -1,3 +1,5 @@
+using CivicLens.Application.Collection.Votes;
+
 namespace CivicLens.Application.Collection.HouseVotes;
 
-public sealed record HouseVoteListPage(HouseVoteSession Session, IReadOnlyList<HouseVoteListItem> Votes, string? Next);
+public sealed record HouseVoteListPage(VoteSession Session, IReadOnlyList<HouseVoteListItem> Votes, string? Next);

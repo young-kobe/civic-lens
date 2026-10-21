@@ -11,7 +11,7 @@ using CivicLens.Infrastructure.Actions.Persistence;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Core.Relationships;
 using CivicLens.Infrastructure.Collection;
-using CivicLens.Infrastructure.Collection.HouseVotes;
+using CivicLens.Infrastructure.Collection.Votes;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Votes.Persistence;
@@ -149,11 +149,13 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
                 billActions.GetValueOrDefault(draft.RecordId, [])), StringComparer.Ordinal);
     }
 
-    public async Task<string?> FindRecordIdByRollAsync(int congress, int sessionNumber, int rollCallNumber, CancellationToken cancellationToken)
+    public async Task<string?> FindRecordIdByRollAsync(Chamber chamber, int congress, int sessionNumber, int rollCallNumber,
+        CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         return await db.Set<VoteDraftRow>().AsNoTracking()
-            .Where(row => row.Congress == congress && row.SessionNumber == sessionNumber && row.RollCallNumber == rollCallNumber)
+            .Where(row => row.Chamber == chamber && row.Congress == congress && row.SessionNumber == sessionNumber &&
+                row.RollCallNumber == rollCallNumber)
             .OrderBy(row => row.RecordId).Select(row => row.RecordId).FirstOrDefaultAsync(cancellationToken);
     }
 
@@ -209,7 +211,7 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
         IEnumerable<VoteDraftRevision> revisions, CancellationToken cancellationToken)
     {
         var candidateIds = revisions.Select(revision => revision.CandidateId).Distinct(StringComparer.Ordinal).ToArray();
-        var revisionIds = await db.Set<HouseVoteCandidateRow>().AsNoTracking().Where(row => candidateIds.Contains(row.CandidateId))
+        var revisionIds = await db.Set<VoteCandidateRow>().AsNoTracking().Where(row => candidateIds.Contains(row.CandidateId))
             .ToDictionaryAsync(row => row.CandidateId, row => row.ConfigurationRevisionId, StringComparer.Ordinal, cancellationToken);
         return await ConfiguredPersonNames.ReadAsync(db, candidateIds, revisionIds, cancellationToken);
     }

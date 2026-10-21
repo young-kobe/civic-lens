@@ -1,3 +1,4 @@
+using CivicLens.Application.Collection.Votes;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
@@ -11,7 +12,7 @@ internal static class HouseVoteFixtures
     public const string SourceUrl = "https://api.congress.gov/v3/house-vote";
     public const string Legislation = "\"legislationNumber\":\"14\",\"legislationType\":\"HCONRES\",";
     public static readonly DateOnly Backfill = new(2025, 1, 3);
-    public static readonly HouseVoteSession FirstSession = new(119, 1);
+    public static readonly VoteSession FirstSession = new(119, 1);
     public static readonly HouseVoteRoll Roll100 = new(FirstSession, 100);
     public static readonly DateTimeOffset Updated = new(2025, 6, 24, 12, 34, 41, TimeSpan.Zero);
 

@@ -1,9 +1,12 @@
-namespace CivicLens.Infrastructure.Collection.HouseVotes;
+using CivicLens.Core.Votes;
 
-internal sealed class HouseVoteCandidateRow
+namespace CivicLens.Infrastructure.Collection.Votes;
+
+internal sealed class VoteCandidateRow
 {
     public string CandidateId { get; set; } = "";
     public string SourceId { get; set; } = "";
+    public Chamber Chamber { get; set; }
     public int Congress { get; set; }
     public int SessionNumber { get; set; }
     public int RollCallNumber { get; set; }

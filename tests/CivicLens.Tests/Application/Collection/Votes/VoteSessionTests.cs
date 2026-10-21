@@ -1,8 +1,8 @@
-using CivicLens.Application.Collection.HouseVotes;
+using CivicLens.Application.Collection.Votes;
 
-namespace CivicLens.Tests.Application.Collection.HouseVotes;
+namespace CivicLens.Tests.Application.Collection.Votes;
 
-public sealed class HouseVoteSessionTests
+public sealed class VoteSessionTests
 {
     [Theory]
     [InlineData(2025, 119, 1)]
@@ -11,7 +11,7 @@ public sealed class HouseVoteSessionTests
     [InlineData(2024, 118, 2)]
     public void ASessionIsTheCalendarYearBecauseTheApiNumbersVotesBySessionOfThePair(int year, int congress, int number)
     {
-        var session = HouseVoteSession.ForYear(year);
+        var session = VoteSession.ForYear(year);
 
         Assert.Equal((congress, number), (session.Congress, session.Number));
         Assert.Equal(year, session.Year);
@@ -20,28 +20,28 @@ public sealed class HouseVoteSessionTests
     [Fact]
     public void TheSweepStartsAtTheSessionOfTheBackfillDate()
     {
-        Assert.Equal(new HouseVoteSession(119, 1),
-            HouseVoteSession.FirstOfSweep(new DateOnly(2025, 1, 3), new DateOnly(2026, 10, 16), 119));
+        Assert.Equal(new VoteSession(119, 1),
+            VoteSession.FirstOfSweep(new DateOnly(2025, 1, 3), new DateOnly(2026, 10, 16), 119));
     }
 
     [Fact]
     public void TheSweepStartsAtTheMinimumCongressWhenTheBackfillDateIsEarlier()
     {
-        Assert.Equal(new HouseVoteSession(119, 1),
-            HouseVoteSession.FirstOfSweep(new DateOnly(2023, 1, 3), new DateOnly(2026, 10, 16), 119));
+        Assert.Equal(new VoteSession(119, 1),
+            VoteSession.FirstOfSweep(new DateOnly(2023, 1, 3), new DateOnly(2026, 10, 16), 119));
     }
 
     [Fact]
     public void NoSweepExistsBeforeTheSessionOfTheBackfillDateBegins()
     {
-        Assert.Null(HouseVoteSession.FirstOfSweep(new DateOnly(2027, 1, 3), new DateOnly(2026, 12, 31), 119));
+        Assert.Null(VoteSession.FirstOfSweep(new DateOnly(2027, 1, 3), new DateOnly(2026, 12, 31), 119));
     }
 
     [Fact]
     public void TheSweepIncludesTheSessionOfTheBackfillYearOnTheFirstDay()
     {
-        Assert.Equal(new HouseVoteSession(119, 1),
-            HouseVoteSession.FirstOfSweep(new DateOnly(2025, 1, 3), new DateOnly(2025, 1, 3), 119));
+        Assert.Equal(new VoteSession(119, 1),
+            VoteSession.FirstOfSweep(new DateOnly(2025, 1, 3), new DateOnly(2025, 1, 3), 119));
     }
 
     [Theory]
@@ -53,9 +53,9 @@ public sealed class HouseVoteSessionTests
     public void TheSweepFollowsSessionByStepUntilTheSessionOfToday(int year, int month, int day, int congress, int number,
         int? nextCongress, int? nextNumber)
     {
-        var following = new HouseVoteSession(congress, number).Following(new DateOnly(year, month, day));
+        var following = new VoteSession(congress, number).Following(new DateOnly(year, month, day));
 
-        Assert.Equal(nextCongress is null ? null : new HouseVoteSession(nextCongress.Value, nextNumber!.Value), following);
+        Assert.Equal(nextCongress is null ? null : new VoteSession(nextCongress.Value, nextNumber!.Value), following);
     }
 
     [Theory]
@@ -64,6 +64,6 @@ public sealed class HouseVoteSessionTests
     [InlineData(119, 3)]
     public void ASessionNeedsACongressAndSessionNumberOneOrTwo(int congress, int number)
     {
-        Assert.Null(HouseVoteSession.TryCreate(congress, number));
+        Assert.Null(VoteSession.TryCreate(congress, number));
     }
 }

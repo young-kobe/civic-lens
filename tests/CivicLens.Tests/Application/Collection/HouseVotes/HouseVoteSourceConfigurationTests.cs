@@ -1,3 +1,4 @@
+using CivicLens.Application.Collection.Votes;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Collection.Contracts;
@@ -160,7 +161,7 @@ public sealed class HouseVoteSourceConfigurationTests
     [Fact]
     public void TheLastPageOfTheCurrentSessionEndsTheSweep()
     {
-        var page = new HouseVoteListPage(new HouseVoteSession(119, 2), [Item(1, session: 2)], Next: null);
+        var page = new HouseVoteListPage(new VoteSession(119, 2), [Item(1, session: 2)], Next: null);
 
         var batch = Configured().CreateHouseVoteListBatch("list-job", page, Today);
 
@@ -188,7 +189,7 @@ public sealed class HouseVoteSourceConfigurationTests
     }
 
     private static HouseVoteListItem Item(int roll, int session = 1) =>
-        new(new HouseVoteRoll(new HouseVoteSession(119, session), roll), HouseVoteFixtures.Updated);
+        new(new HouseVoteRoll(new VoteSession(119, session), roll), HouseVoteFixtures.Updated);
 
     private static ConfiguredCollectionSource Configured() =>
         new(HouseVoteFixtures.Configuration(), HouseVoteFixtures.SourceId, HouseVoteFixtures.Backfill);

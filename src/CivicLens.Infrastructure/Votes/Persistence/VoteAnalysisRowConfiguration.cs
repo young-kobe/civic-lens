@@ -1,5 +1,5 @@
 using CivicLens.Infrastructure.Analysis.Persistence;
-using CivicLens.Infrastructure.Collection.HouseVotes;
+using CivicLens.Infrastructure.Collection.Votes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -10,7 +10,7 @@ internal sealed class VoteAnalysisRowConfiguration : IEntityTypeConfiguration<Vo
     public void Configure(EntityTypeBuilder<VoteAnalysisRow> builder)
     {
         AnalysisTableConfiguration.ConfigureQueue(builder, "vote_analysis", nameof(VoteAnalysisRow.CandidateId), "candidate_id");
-        builder.HasOne<HouseVoteCandidateRow>().WithMany()
+        builder.HasOne<VoteCandidateRow>().WithMany()
             .HasForeignKey(row => row.CandidateId).OnDelete(DeleteBehavior.Restrict);
     }
 }

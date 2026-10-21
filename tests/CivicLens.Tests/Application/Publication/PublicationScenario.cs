@@ -271,7 +271,7 @@ internal sealed class PublicationScenario
             new(extraction.ExtractionId, text.IndexOf(line, StringComparison.Ordinal), line.Length);
         VoteFact Fact(string line) => new(line, Line(detail, VoteDetail, line));
         var revision = new VoteDraftRevision(recordId, 1, origin == ReviewTextOrigin.Model ? "civic-lens:analysis" : "auth0|editor", ApprovedAt,
-            $"Vote {id}", "The House voted on passage.", origin, null, "congress-house-votes", congress, 1, 100, billType, billType is null ? null : 7,
+            $"Vote {id}", "The House voted on passage.", origin, null, "congress-house-votes", Chamber.House, congress, 1, 100, billType, billType is null ? null : 7,
             new string('b', 64), ApprovedAt,
             [Fact("Started: 2025-04-10T11:08:00-04:00"), Fact("Question: On Passage"), Fact("Result: Passed"), Fact("Legislation: HR 7")],
             new DateOnly(2025, 4, 10), Line(detail, VoteDetail, "Started: 2025-04-10T11:08:00-04:00"), VoteKind.Passage,

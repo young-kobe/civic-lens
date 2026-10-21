@@ -1,3 +1,4 @@
+using CivicLens.Application.Collection.Votes;
 using CivicLens.Application.Collection.Bills;
 
 namespace CivicLens.Application.Collection.HouseVotes;
@@ -21,7 +22,7 @@ internal record HouseVoteWire
 
     internal HouseVoteRoll? ReadRoll() =>
         Congress is { } congress && SessionNumber is { } session && RollCallNumber is >= 1 and var number &&
-        HouseVoteSession.TryCreate(congress, session) is { } voteSession
+        VoteSession.TryCreate(congress, session) is { } voteSession
             ? new HouseVoteRoll(voteSession, number)
             : null;
 

@@ -1,3 +1,5 @@
+using CivicLens.Application.Collection.Votes;
+
 namespace CivicLens.Application.Collection.HouseVotes;
 
 public static class HouseVoteRollUrl
@@ -28,7 +30,7 @@ public static class HouseVoteRollUrl
         if (!url.StartsWith(prefix, StringComparison.Ordinal) || !url.EndsWith(suffix, StringComparison.Ordinal))
             return null;
         var parts = url[prefix.Length..^suffix.Length].Split('/');
-        if (parts.Length != 3 || HouseVoteSession.TryRead(parts[0], parts[1]) is not { } session) return null;
+        if (parts.Length != 3 || VoteSession.TryRead(parts[0], parts[1]) is not { } session) return null;
         return ApiPageQuery.TryReadNumber(parts[2]) is >= 1 and var number ? new HouseVoteRoll(session, number) : null;
     }
 }

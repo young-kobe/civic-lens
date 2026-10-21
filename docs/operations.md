@@ -175,8 +175,8 @@ To list vote versions that have a detail but no candidate yet, run this query. A
 
 ```sql
 SELECT v.detail_job_id, v.congress, v.session_number, v.roll_call_number
-FROM house_votes v
-LEFT JOIN house_vote_candidates c ON c.detail_job_id = v.detail_job_id
+FROM vote_versions v
+LEFT JOIN vote_candidates c ON c.detail_job_id = v.detail_job_id
 WHERE c.detail_job_id IS NULL
 ORDER BY v.congress, v.session_number, v.roll_call_number;
 ```

@@ -114,7 +114,7 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
         var recordId = new string('a', 64);
         var candidateId = new string('b', 64);
         var revision = new VoteDraftRevision(recordId, 1, "auth0|editor", DateTimeOffset.UtcNow, "The House passed a measure",
-            "The House voted on passage.", ReviewTextOrigin.Person, null, HouseVoteFixtures.SourceId, 119, session, roll, billNumber is null ? null : "hr", billNumber, candidateId,
+            "The House voted on passage.", ReviewTextOrigin.Person, null, HouseVoteFixtures.SourceId, Chamber.House, 119, session, roll, billNumber is null ? null : "hr", billNumber, candidateId,
             HouseVoteFixtures.Updated, [new(question, new SourceSpan(extraction.ExtractionId, 0, question.Length))],
             new DateOnly(2025, 4, 10), new SourceSpan(extraction.ExtractionId, 0, question.Length), VoteKind.Passage,
             new SourceSpan(extraction.ExtractionId, 0, question.Length),
@@ -124,13 +124,13 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
         await using var command = new NpgsqlCommand($"""
             SET session_replication_role = replica;
             INSERT INTO collection_configuration_revisions (revision_id, json, created_at) VALUES ('{configuration.Id}', @configuration, 1);
-            INSERT INTO house_vote_candidates (candidate_id, source_id, congress, session_number, roll_call_number, update_date_utc_ticks,
+            INSERT INTO vote_candidates (candidate_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks,
                 detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
-            VALUES ('{candidateId}', '{HouseVoteFixtures.SourceId}', 119, {session}, {roll}, 1, 'detail', 'members', '{extraction.ExtractionId}',
+            VALUES ('{candidateId}', '{HouseVoteFixtures.SourceId}', 'House', 119, {session}, {roll}, 1, 'detail', 'members', '{extraction.ExtractionId}',
                 '{extraction.ExtractionId}', '{configuration.Id}', 1);
-            INSERT INTO vote_drafts (record_id, source_id, congress, session_number, roll_call_number, current_revision_number,
+            INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number,
                 review_state_version, review_status, created_at_utc_ticks)
-            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', 119, {session}, {roll}, 1, 0, 'AwaitingReview', 1);
+            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', 'House', 119, {session}, {roll}, 1, 0, 'AwaitingReview', 1);
             INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
             VALUES ('{recordId}', 1, 'auth0|editor', 'Person', NULL, @revision, 1);
             """, connection);
