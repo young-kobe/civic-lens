@@ -4,7 +4,7 @@ using CivicLens.Core.Review;
 
 namespace CivicLens.Application.Publication;
 
-public sealed class ListPublishable(PublishedRecordLoaders loaders)
+public sealed class ListPublishable(PublishedRecordLoaders loaders, IPublicationStore publications, IReleaseDirectory releases)
 {
     public async Task<ReadyToPublishList> ExecuteAsync(ReviewActor actor, CancellationToken cancellationToken = default)
     {
@@ -13,7 +13,16 @@ public sealed class ListPublishable(PublishedRecordLoaders loaders)
         var reads = await Task.WhenAll(loaders.All.Select(loader => loader.ListReadyAsync(limit, cancellationToken)));
         var ready = reads.Select(read => read.Ready).ToArray();
         var hasMore = reads.Any(read => read.HasMore) || ready.Sum(kind => kind.Count) > limit;
-        return new(ShareLimitBetweenKinds(ready, limit), hasMore);
+        var withdrawn = await WithdrawnIdsAsync(cancellationToken);
+        return new([.. ShareLimitBetweenKinds(ready, limit).Select(item => item with { IsWithdrawn = withdrawn.Contains(item.RecordId) })], hasMore);
+    }
+
+    private async Task<HashSet<string>> WithdrawnIdsAsync(CancellationToken cancellationToken)
+    {
+        var active = (await publications.GetStateAsync(cancellationToken)).Active;
+        if (active is null) return [];
+        var manifest = await PreviousRelease.LoadManifestAsync(releases, active, cancellationToken);
+        return [.. manifest.Withdrawals.Select(withdrawal => withdrawal.RecordId)];
     }
 
     // Each kind gets an equal share of the limit. A kind with fewer ready records gives its unused share to the others.

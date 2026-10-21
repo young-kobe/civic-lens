@@ -342,7 +342,7 @@ internal static class ReviewWorkspace
         var (publish, loaders) = PublicationComposition.Create(connectionString, publications, releases, collection, issues);
         services.AddSingleton(loaders);
         services.AddSingleton(publish);
-        services.AddScoped<ListPublishable>();
+        services.AddScoped(_ => new ListPublishable(loaders, publications, releases));
     }
 
     private static void SetHeaders(HttpResponse response)

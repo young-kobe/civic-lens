@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Text.Json;
 using CivicLens.Application.Actions;
+using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
@@ -152,7 +153,7 @@ public sealed class PublishCodeApprovedFactsTests
     }
 
     [Fact]
-    public async Task AWithdrawnRecordIsLeftOutAndReportedSoATickNeverPublishesItAgain()
+    public async Task AWithdrawnRecordIsLeftOutWithALogAndNoFailureSoATickNeverPublishesItAgainAndNobodyIsPaged()
     {
         var scenario = new PublicationScenario();
         var withdrawn = scenario.AddAction('a', ApprovedByCode('a'));
@@ -163,14 +164,42 @@ public sealed class PublishCodeApprovedFactsTests
         AddUnpublished(scenario, withdrawn, other);
         ListedUntilPublished(scenario);
         var reported = new List<Exception>();
+        var logged = new List<string>();
+
+        var published = await Facts(scenario, reported, logged).ExecuteAsync(default);
+
+        Assert.Equal(1, published);
+        Assert.Equal([other], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId));
+        Assert.Empty(reported);
+        var line = Assert.Single(logged);
+        Assert.Contains($"action:{withdrawn}", line);
+        Assert.Contains("withdrawn", line);
+    }
+
+    [Fact]
+    public async Task AWithdrawnBacklogLargerThanTheBatchLimitDoesNotStarveTheOtherFactRecords()
+    {
+        var scenario = new PublicationScenario();
+        AddReadyActions(scenario, PageLimit.Maximum + 1);
+        var backlog = scenario.Actions.Publishable.Keys.Order(StringComparer.Ordinal).ToArray();
+        foreach (var batch in backlog.Chunk(PublishRelease.MaximumRecords).Select((ids, index) => (ids, index)))
+            await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([.. batch.ids.Select(id => new PublishedRecordReference(PublishedRecordKind.Action, id))], $"p{batch.index}"));
+        foreach (var batch in backlog.Chunk(PublishRelease.MaximumRecords).Select((ids, index) => (ids, index)))
+            await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], $"w{batch.index}")
+            {
+                Withdrawals = [.. batch.ids.Select(id => new RecordNote(PublishedRecordKind.Action, id, "Wrong."))]
+            });
+        var other = scenario.AddAction('b', ApprovedByCode('b'));
+        scenario.Actions.Unpublished.Clear();
+        AddUnpublished(scenario, [.. backlog, other]);
+        ListedUntilPublished(scenario);
+        var reported = new List<Exception>();
 
         var published = await Facts(scenario, reported).ExecuteAsync(default);
 
         Assert.Equal(1, published);
         Assert.Equal([other], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId));
-        var failure = Assert.Single(reported);
-        Assert.Contains($"action:{withdrawn}", failure.Message);
-        Assert.Contains("withdrawn", failure.Message);
+        Assert.Empty(reported);
     }
 
     [Fact]
@@ -258,8 +287,8 @@ public sealed class PublishCodeApprovedFactsTests
         Assert.Empty(reported);
     }
 
-    private static PublishCodeApprovedFacts Facts(PublicationScenario scenario, List<Exception>? reported = null) =>
-        new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), (reported ?? []).Add);
+    private static PublishCodeApprovedFacts Facts(PublicationScenario scenario, List<Exception>? reported = null, List<string>? logged = null) =>
+        new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), (reported ?? []).Add, (logged ?? []).Add);
 
     private static ImmutableArray<ReviewDecision> ApprovedByCode(char id) =>
         [PublicationScenario.Decision(new string(id, 64), 1, ReviewDecisionKind.Approve) with { ActorSubject = ReviewAuthor.CodeSubject }];

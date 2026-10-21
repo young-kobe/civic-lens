@@ -59,13 +59,13 @@ public sealed partial class PostgresBillStreamTests
     public async Task TheCodeApprovedListFiltersInSqlSoAPersonApprovalNeverFillsItsLimit()
     {
         await DraftAsync(UpdatedAt, DraftableOutput);
-        Assert.Equal(RecordId, Assert.Single(await ActionReviews().ListCodeApprovedUnpublishedAsync(1, default)).Action.RecordId);
+        Assert.Equal(RecordId, Assert.Single(await ActionReviews().ListCodeApprovedUnpublishedAsync(1, [], default)).Action.RecordId);
 
         await ReopenAsync();
         await DecideAsync(1, 0, ReviewDecisionKind.Approve);
 
         Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(1, default));
-        Assert.Empty(await ActionReviews().ListCodeApprovedUnpublishedAsync(1, default));
+        Assert.Empty(await ActionReviews().ListCodeApprovedUnpublishedAsync(1, [], default));
     }
 
     // The statistics describe one draft, as they do after a bulk load. Postgres then counts one release entry
@@ -96,11 +96,20 @@ public sealed partial class PostgresBillStreamTests
             """);
 
         var clock = Stopwatch.StartNew();
-        var ready = Assert.Single(await ActionReviews().ListCodeApprovedUnpublishedAsync(10, default));
+        var ready = Assert.Single(await ActionReviews().ListCodeApprovedUnpublishedAsync(10, [], default));
         clock.Stop();
 
         Assert.Equal(RecordId, ready.Action.RecordId);
         Assert.True(clock.Elapsed < TimeSpan.FromSeconds(5), $"The ready list took {clock.Elapsed}.");
+    }
+
+    [Fact]
+    public async Task TheCodeApprovedListLeavesOutTheExcludedIdsInSqlSoSkippedRecordsNeverFillItsLimit()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+
+        Assert.Empty(await ActionReviews().ListCodeApprovedUnpublishedAsync(1, [RecordId], default));
+        Assert.Single(await ActionReviews().ListCodeApprovedUnpublishedAsync(1, [new string('0', 64)], default));
     }
 
     [Fact]

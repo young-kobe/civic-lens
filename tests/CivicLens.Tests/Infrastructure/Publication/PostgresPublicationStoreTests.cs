@@ -501,11 +501,33 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task AReviewChangeBetweenTheBuildAndTheCommitOfAReturnFailsTheCommit()
+    {
+        var draft = await CreateApprovedDraftAsync("r");
+        await CommitAsync(1, null, draft);
+        await Decide(draft, 1, ReviewDecisionKind.WithdrawApproval, "Wrong source.");
+        await publications.CommitAsync(Owner.Subject, WithdrawalCommit(2, 1, PublishedRecordKind.DocumentChange, draft.DraftId), "withdraw", Hash(2), default);
+        var revised = await SaveRevisionAsync(draft, "r2");
+        var builtBeforeTheChange = ReturnCommit(3, revised, 2);
+        await Decide(revised, 2, ReviewDecisionKind.RequestChanges, "Please explain the context.");
+
+        await Assert.ThrowsAsync<PublicationConflictException>(() =>
+            publications.CommitAsync(Owner.Subject, builtBeforeTheChange, "return", Hash(3), default));
+        var committed = await publications.CommitAsync(Owner.Subject, ReturnCommit(3, revised, 3), "return-2", Hash(4), default);
+        Assert.Equal(3, committed.ReleaseNumber);
+    }
+
+    [Fact]
     public async Task AWithdrawalOfARecordWithNoReviewRowIsRefused()
     {
         await Assert.ThrowsAsync<ArgumentException>(() => publications.CommitAsync(Owner.Subject,
             WithdrawalCommit(1, null, PublishedRecordKind.Action, new string('9', 64)), "key", Hash(1), default));
     }
+
+    private static PublicationCommit ReturnCommit(int number, DocumentChangeDraftRevision draft, int reviewStateVersion) =>
+        new(number, number - 1, $"{number:D6}-{Guid.NewGuid():N}",
+            [new(PublishedRecordKind.DocumentChange, draft.DraftId, draft.RevisionNumber)],
+            [new(PublishedRecordKind.DocumentChange, draft.DraftId, draft.RevisionNumber, reviewStateVersion)]);
 
     private static PublicationCommit WithdrawalCommit(int number, int? baseNumber, PublishedRecordKind kind, string recordId) =>
         new(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}", [], [])

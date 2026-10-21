@@ -713,7 +713,11 @@ To take a record out of the release, give `--withdraw <kind>:<id> <text>`. A req
 - Review did not block the record.
 - A relationship or a brief that stays in the release cites the record. The message lists the citing records. Withdraw them in the same request.
 
-A withdrawn record cannot be published again yet.
+### Return a record
+
+To bring a withdrawn record back, first revise it in review and approve the new revision. The revision number must be higher than the withdrawn revision. Then publish the withdrawn ID with a note: `releases publish <idempotency-key> <kind>:<id> --note <kind>:<id> <text>`. The note shows on the record page as a correction. The publish exits with code 2 if the note is missing or the revision is not higher. The code subject cannot return a record. The worker only logs the withdrawn record and skips it.
+
+A relationship or a brief that cited the record stays withdrawn. Publish it again, in the same request or later.
 
 A schema 6 release with no `withdrawals` list cannot be read. Reset the development releases before the next publish.
 

@@ -5,7 +5,7 @@ using CivicLens.Core.Review;
 namespace CivicLens.Application.Publication;
 
 public sealed class PublishCodeApprovedFacts(PublishRelease publish, IPublicationStore publications, PublishedRecordLoaders loaders,
-    Action<Exception> reportFailure)
+    Action<Exception> reportFailure, Action<string> log)
 {
     private static readonly ReviewActor Actor = new(ReviewAuthor.CodeSubject, ReviewRole.Owner);
 
@@ -29,6 +29,13 @@ public sealed class PublishCodeApprovedFacts(PublishRelease publish, IPublicatio
             {
                 return published;
             }
+            catch (WithdrawnFactException exception)
+            {
+                var record = UnpublishableRecord.Of(exception)!;
+                skipped.Add(record);
+                log($"{record} left out of the release: {exception.Message}");
+                continue;
+            }
             catch (ArgumentException exception) when (UnpublishableRecord.Of(exception) is { } record)
             {
                 skipped.Add(record);
@@ -45,9 +52,10 @@ public sealed class PublishCodeApprovedFacts(PublishRelease publish, IPublicatio
         CancellationToken cancellationToken)
     {
         var limit = PublishRelease.MaximumRecords;
-        var actions = await loaders.Actions.ListCodeApprovedReadyAsync(limit, cancellationToken);
-        var votes = await loaders.Votes.ListCodeApprovedReadyAsync(limit, cancellationToken);
-        return [.. actions.Concat(votes).Where(record => !skipped.Contains(record.Reference)).Take(limit)];
+        string[] excluded = [.. skipped.Select(record => record.RecordId)];
+        var actions = await loaders.Actions.ListCodeApprovedReadyAsync(limit, excluded, cancellationToken);
+        var votes = await loaders.Votes.ListCodeApprovedReadyAsync(limit, excluded, cancellationToken);
+        return [.. actions.Concat(votes).Take(limit)];
     }
 
     // The key names each record and revision, so a retry after a crash replays the stored release.

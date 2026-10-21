@@ -7,7 +7,7 @@ namespace CivicLens.Application.Publication;
 
 internal sealed class PublishedStatementBuilder(PublishedRecordRules rules)
 {
-    public PublishedStatement Build(PublishableStatement statement, PublishedRecordEntry? previous, PublishedCorrection[] corrections, DateTimeOffset now)
+    public PublishedStatement Build(PublishableStatement statement, DateTimeOffset? firstPublishedAtUtc, PublishedCorrection[] corrections, DateTimeOffset now)
     {
         var (review, url, extraction) = statement;
         var revision = review.CurrentRevision!;
@@ -33,7 +33,7 @@ internal sealed class PublishedStatementBuilder(PublishedRecordRules rules)
                 Text = extraction.Text
             },
             ApprovedAtUtc = PublishedRecordRules.GetApprovalTime(revision.RevisionNumber, review.Decisions),
-            FirstPublishedAtUtc = previous?.FirstPublishedAtUtc ?? now,
+            FirstPublishedAtUtc = firstPublishedAtUtc ?? now,
             Corrections = corrections
         };
         record.Validate();

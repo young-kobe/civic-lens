@@ -26,7 +26,8 @@ public interface IActionReviewStore
 
     Task<IReadOnlyList<UnpublishedApprovedAction>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<UnpublishedApprovedAction>> ListCodeApprovedUnpublishedAsync(int limit, CancellationToken cancellationToken);
+    Task<IReadOnlyList<UnpublishedApprovedAction>> ListCodeApprovedUnpublishedAsync(int limit, IReadOnlyCollection<string> excludedRecordIds,
+        CancellationToken cancellationToken);
 
     Task<IReadOnlyDictionary<string, PublishableAction>> GetForPublicationAsync(ImmutableArray<string> recordIds,
         CancellationToken cancellationToken);

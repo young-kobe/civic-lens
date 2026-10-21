@@ -20,7 +20,7 @@ public sealed class ListPublishableTests
         scenario.Reviews.Unpublished.Add(Candidate(scenario.AddDraft('a')));
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Reviewer));
+            new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Reviewer));
 
         Assert.Equal(0, scenario.Reviews.UnpublishedReadCount);
     }
@@ -32,7 +32,7 @@ public sealed class ListPublishableTests
         scenario.Reviews.Unpublished.Add(Candidate(scenario.AddDraft('a')));
         scenario.Reviews.Unpublished.Add(Candidate(scenario.AddDraft('b'), publishedRevision: 1));
 
-        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
         var (added, replaced) = (list.Items[0], list.Items[1]);
         Assert.False(added.IsReplacement);
@@ -40,6 +40,24 @@ public sealed class ListPublishableTests
         Assert.True(replaced.IsReplacement);
         Assert.Equal(1, replaced.PublishedRevisionNumber);
         Assert.False(list.HasMore);
+    }
+
+    [Fact]
+    public async Task AWithdrawnRecordThatReviewApprovedAgainIsMarkedWithdrawnSoTheOwnerDoesNotSelectItAsNew()
+    {
+        var scenario = new PublicationScenario();
+        var withdrawn = scenario.AddAction('a');
+        var fresh = scenario.AddAction('b');
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, withdrawn)], "k1"));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            new PublishReleaseRequest([], "k2") { Withdrawals = [new(PublishedRecordKind.Action, withdrawn, "Wrong.")] });
+        scenario.ReviseAction(withdrawn, 2);
+        scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[withdrawn].Review, null));
+        scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[fresh].Review, null));
+
+        var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
+
+        Assert.Equal([(withdrawn, true), (fresh, false)], list.Items.Select(item => (item.RecordId, item.IsWithdrawn)));
     }
 
     [Fact]
@@ -54,7 +72,7 @@ public sealed class ListPublishableTests
             Draft = Candidate(blocked).Draft with { UnresolvedConcernCount = 1 }
         });
 
-        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
         Assert.Equal([clean], list.Items.Select(item => item.RecordId));
     }
@@ -65,7 +83,7 @@ public sealed class ListPublishableTests
         var scenario = new PublicationScenario();
         scenario.Reviews.Unpublished.Add(Candidate(scenario.AddDraft('a'), status: ReviewStatus.AwaitingReview));
 
-        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
         Assert.Empty(list.Items);
     }
@@ -77,7 +95,7 @@ public sealed class ListPublishableTests
         for (var index = 0; index <= PublishRelease.MaximumRecords; index++)
             scenario.Reviews.Unpublished.Add(Candidate(index.ToString("x32")));
 
-        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
         Assert.Equal(PublishRelease.MaximumRecords, list.Items.Length);
         Assert.True(list.HasMore);
@@ -102,7 +120,7 @@ public sealed class ListPublishableTests
         scenario.Reviews.Unpublished.Add(new(new(draftId, review.CurrentRevision, review.ReviewStateVersion, status,
             review.UnresolvedConcerns.Length), null));
 
-        var listed = (await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner)).Items.Length == 1;
+        var listed = (await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner)).Items.Length == 1;
         var published = await Record.ExceptionAsync(() =>
             scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draftId))) is null;
 
@@ -117,7 +135,7 @@ public sealed class ListPublishableTests
         scenario.Reviews.Unpublished.Add(Candidate(scenario.AddDraft('a')));
         scenario.Statements.Unpublished.Add(StatementCandidate(scenario.AddStatement('b'), publishedRevision: 1));
 
-        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
         Assert.Equal([PublishedRecordKind.DocumentChange, PublishedRecordKind.Statement], list.Items.Select(item => item.Kind));
         Assert.Equal([false, true], list.Items.Select(item => item.IsReplacement));
@@ -131,7 +149,7 @@ public sealed class ListPublishableTests
         var blocked = StatementCandidate(scenario.AddStatement('b'));
         scenario.Statements.Unpublished.Add(blocked with { Statement = blocked.Statement with { UnresolvedConcernCount = 1 } });
 
-        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
         Assert.Empty(list.Items);
     }
@@ -146,7 +164,7 @@ public sealed class ListPublishableTests
             scenario.Statements.Unpublished.Add(StatementCandidate(index.ToString("x64")));
         }
 
-        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
         Assert.Equal(PublishRelease.MaximumRecords, list.Items.Length);
         Assert.True(list.HasMore);
@@ -161,7 +179,7 @@ public sealed class ListPublishableTests
         var statementId = scenario.AddStatement('b');
         scenario.Statements.Unpublished.Add(StatementCandidate(statementId));
 
-        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
         Assert.Equal(PublishRelease.MaximumRecords, list.Items.Length);
         Assert.Contains(list.Items, item => item.Kind == PublishedRecordKind.Statement && item.RecordId == statementId);
@@ -177,7 +195,7 @@ public sealed class ListPublishableTests
         for (var index = 0; index < 10; index++)
             scenario.Statements.Unpublished.Add(StatementCandidate(index.ToString("x64")));
 
-        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
         Assert.Equal(54, list.Items.Count(item => item.Kind == PublishedRecordKind.DocumentChange));
         Assert.Equal(10, list.Items.Count(item => item.Kind == PublishedRecordKind.Statement));
@@ -199,7 +217,7 @@ public sealed class ListPublishableTests
             scenario.Briefs.Unpublished.Add(new(brief with { RecordId = (index + 200).ToString("x64") }, null, false));
         }
 
-        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
         Assert.Equal([16, 16, 16, 16, 0, 0], KindCounts(list));
         Assert.True(list.HasMore);
@@ -220,7 +238,7 @@ public sealed class ListPublishableTests
         for (var index = 0; index < 5; index++)
             scenario.Statements.Unpublished.Add(StatementCandidate(index.ToString("x64")));
 
-        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
         Assert.Equal([29, 5, 30, 0, 0, 0], KindCounts(list));
         Assert.True(list.HasMore);
@@ -234,7 +252,7 @@ public sealed class ListPublishableTests
         var concern = scenario.Votes.Publishable[scenario.AddVote('e', decisions: [PublicationScenario.Decision(new string('e', 64), 1, ReviewDecisionKind.RequestChanges)])].Review;
         scenario.Votes.Unpublished.AddRange([new(approved, null), new(concern, null)]);
 
-        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
         var item = Assert.Single(list.Items);
         Assert.Equal((PublishedRecordKind.Vote, approved.RecordId), (item.Kind, item.RecordId));
@@ -252,7 +270,7 @@ public sealed class ListPublishableTests
             UnresolvedConcerns = [PublicationScenario.Decision(new string('e', 64), 2, ReviewDecisionKind.RequestChanges)]
         }, null));
 
-        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
         var item = Assert.Single(list.Items);
         Assert.Equal((PublishedRecordKind.Action, action.RecordId, true), (item.Kind, item.RecordId, item.IsReplacement));
@@ -266,7 +284,7 @@ public sealed class ListPublishableTests
         scenario.Briefs.Unpublished.Add(new(brief, 1, false));
         scenario.Briefs.Unpublished.Add(new(brief with { RecordId = new string('e', 64) }, null, true));
 
-        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
         var item = Assert.Single(list.Items);
         Assert.Equal((PublishedRecordKind.Brief, brief.RecordId, true), (item.Kind, item.RecordId, item.IsReplacement));
@@ -282,7 +300,7 @@ public sealed class ListPublishableTests
         scenario.Relationships.Unpublished.Add(new(relationship, "Statement c", "Action d", 1, false));
         scenario.Relationships.Unpublished.Add(new(relationship with { RecordId = new string('f', 64) }, "Statement c", "Action d", null, true));
 
-        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
         var item = Assert.Single(list.Items);
         Assert.Equal((PublishedRecordKind.Relationship, relationship.RecordId, "Statement c and Action d", true),
@@ -297,7 +315,7 @@ public sealed class ListPublishableTests
         scenario.Relationships.Unpublished.Add(new(relationship with { NoLongerMatches = true }, "Statement c", "Action d", null, false));
         scenario.Relationships.Unpublished.Add(new(relationship with { RecordId = new string('f', 64) }, "Statement c", "Action d", null, false));
 
-        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
         Assert.Equal([(relationship.RecordId, true), (new string('f', 64), false)], list.Items.Select(item => (item.RecordId, item.NoLongerMatches)));
     }
@@ -312,7 +330,7 @@ public sealed class ListPublishableTests
             UnresolvedConcerns = [PublicationScenario.Decision(brief.RecordId, 2, ReviewDecisionKind.RequestChanges)]
         }, null, false));
 
-        var list = await new ListPublishable(scenario.Loaders()).ExecuteAsync(PublicationScenario.Owner);
+        var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
         Assert.Empty(list.Items);
     }

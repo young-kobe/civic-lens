@@ -5,7 +5,7 @@ namespace CivicLens.Application.Publication;
 
 internal static class PublishedBriefBuilder
 {
-    public static PublishedBrief Build(PublishableBrief brief, PublishedRecordEntry? previous, PublishedCorrection[] corrections, DateTimeOffset now)
+    public static PublishedBrief Build(PublishableBrief brief, DateTimeOffset? firstPublishedAtUtc, PublishedCorrection[] corrections, DateTimeOffset now)
     {
         var review = brief.Review;
         var revision = review.CurrentRevision;
@@ -36,7 +36,7 @@ internal static class PublishedBriefBuilder
                 Headline = brief.Cited[citation.Id].Headline
             })],
             ApprovedAtUtc = PublishedRecordRules.GetApprovalTime(revision.RevisionNumber, review.Decisions),
-            FirstPublishedAtUtc = previous?.FirstPublishedAtUtc ?? now,
+            FirstPublishedAtUtc = firstPublishedAtUtc ?? now,
             Corrections = corrections
         };
         record.Validate();

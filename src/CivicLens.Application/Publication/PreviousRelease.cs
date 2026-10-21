@@ -26,13 +26,20 @@ internal sealed class PreviousRelease
         CancellationToken cancellationToken)
     {
         if (active is null) return new(null, [], [], new Dictionary<string, PublishedOfficialProfile>());
+        var manifest = await LoadManifestAsync(releases, active, cancellationToken);
+        return new(active.DirectoryName, manifest.Records, manifest.Withdrawals, await ReadOfficialsAsync(releases, active.DirectoryName, cancellationToken));
+    }
+
+    public static async Task<PublicationRelease> LoadManifestAsync(IReleaseDirectory releases, PublicationReleaseSummary active,
+        CancellationToken cancellationToken)
+    {
         var bytes = await releases.ReadFileAsync(active.DirectoryName, PublicationProtocol.ManifestPath,
             PublicationProtocol.MaximumManifestBytes, cancellationToken);
         var manifest = ReadManifest(bytes);
         manifest.Validate();
         if (manifest.ReleaseNumber != active.ReleaseNumber)
             throw new InvalidDataException("Release manifest does not match the active release.");
-        return new(active.DirectoryName, manifest.Records, manifest.Withdrawals, await ReadOfficialsAsync(releases, active.DirectoryName, cancellationToken));
+        return manifest;
     }
 
     private static PublicationRelease ReadManifest(byte[] bytes)
@@ -59,7 +66,13 @@ internal sealed class PreviousRelease
         return officials.Officials.ToDictionary(official => official.Id, StringComparer.Ordinal);
     }
 
-    public bool IsWithdrawn(string recordId) => Withdrawals.Any(withdrawal => withdrawal.RecordId == recordId);
+    public bool IsWithdrawn(string recordId) => FindWithdrawal(recordId) is not null;
+
+    public PublishedWithdrawal? FindWithdrawal(string recordId) =>
+        Withdrawals.FirstOrDefault(withdrawal => withdrawal.RecordId == recordId);
+
+    public DateTimeOffset? FirstPublishedAt(PublishedRecordKind kind, string recordId) =>
+        Find(kind, recordId)?.FirstPublishedAtUtc ?? FindWithdrawal(recordId)?.FirstPublishedAtUtc;
 
     public PublishedRecordEntry? Find(PublishedRecordKind kind, string recordId) =>
         Entries.FirstOrDefault(entry => entry.Kind == kind && entry.RecordId == recordId);

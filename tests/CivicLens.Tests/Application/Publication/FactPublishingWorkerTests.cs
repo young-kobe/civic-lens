@@ -43,7 +43,7 @@ public sealed class FactPublishingWorkerTests
     }
 
     private static PublishCodeApprovedFacts Facts(PublicationScenario scenario) =>
-        new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), _ => { });
+        new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), _ => { }, _ => { });
 
     private static StageWorker Worker(PublicationScenario scenario, Action<Exception> report) =>
         new(Facts(scenario).ExecuteAsync, new CountingWakeup(() => { }), report);

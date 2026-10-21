@@ -42,13 +42,13 @@ public sealed partial class PostgresHouseVoteTests
         var candidate = await PendingCandidateAsync();
         await SettleAsync(candidate, await RevisionAsync(candidate, 1));
         var recordId = await RecordIdAsync(candidate);
-        Assert.Equal(recordId, Assert.Single(await VoteReviews().ListCodeApprovedUnpublishedAsync(1, default)).Vote.RecordId);
+        Assert.Equal(recordId, Assert.Single(await VoteReviews().ListCodeApprovedUnpublishedAsync(1, [], default)).Vote.RecordId);
 
         await ReopenAsync(recordId);
         await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Approve);
 
         Assert.Single(await VoteReviews().ListUnpublishedApprovedAsync(1, default));
-        Assert.Empty(await VoteReviews().ListCodeApprovedUnpublishedAsync(1, default));
+        Assert.Empty(await VoteReviews().ListCodeApprovedUnpublishedAsync(1, [], default));
     }
 
     [Fact]

@@ -126,16 +126,17 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
     public Task<IReadOnlyList<UnpublishedApprovedAction>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken) =>
         ListUnpublishedAsync(ActionReviewQueries.UnpublishedApproved, limit, cancellationToken);
 
-    public Task<IReadOnlyList<UnpublishedApprovedAction>> ListCodeApprovedUnpublishedAsync(int limit, CancellationToken cancellationToken) =>
-        ListUnpublishedAsync(ActionReviewQueries.CodeApprovedUnpublished, limit, cancellationToken);
+    public Task<IReadOnlyList<UnpublishedApprovedAction>> ListCodeApprovedUnpublishedAsync(int limit,
+        IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken) =>
+        ListUnpublishedAsync(ActionReviewQueries.CodeApprovedUnpublished, limit, cancellationToken, [.. excludedRecordIds]);
 
     private async Task<IReadOnlyList<UnpublishedApprovedAction>> ListUnpublishedAsync(string sql, int limit,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, string[]? excludedRecordIds = null)
     {
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var records = await Records.ReadUnpublishedApprovedAsync(db, sql, limit, cancellationToken);
+        var records = await Records.ReadUnpublishedApprovedAsync(db, sql, limit, cancellationToken, excludedRecordIds);
         await transaction.CommitAsync(cancellationToken);
         return [.. records.Select(record => new UnpublishedApprovedAction(ToReview(record.Draft, record.History), record.PublishedRevisionNumber))];
     }

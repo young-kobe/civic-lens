@@ -23,10 +23,15 @@ internal sealed class FakeActionReviewStore : IActionReviewStore
     public int PublicationReadCount { get; private set; }
     public int UnpublishedLimit { get; private set; }
 
-    public Task<IReadOnlyList<UnpublishedApprovedAction>> ListCodeApprovedUnpublishedAsync(int limit, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<UnpublishedApprovedAction>>([.. Unpublished
+    public Task<IReadOnlyList<UnpublishedApprovedAction>> ListCodeApprovedUnpublishedAsync(int limit, IReadOnlyCollection<string> excludedRecordIds,
+        CancellationToken cancellationToken)
+    {
+        PageLimit.Validate(limit);
+        return Task.FromResult<IReadOnlyList<UnpublishedApprovedAction>>([.. Unpublished
+            .Where(item => !excludedRecordIds.Contains(item.Action.RecordId))
             .Where(item => item.Action.Decisions.MaxBy(decision => decision.ReviewStateVersion) is { ActorSubject: ReviewAuthor.CodeSubject })
             .Take(limit)]);
+    }
 
     public Task<IReadOnlyList<UnpublishedApprovedAction>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken)
     {

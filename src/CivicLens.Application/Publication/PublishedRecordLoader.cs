@@ -83,5 +83,8 @@ internal abstract class PublishedRecordLoader<TCandidate, TAddition>(PublishedRe
             throw new ArgumentException($"{noun} {recordId} is not approved or has unresolved concerns.");
         if (previous.Find(Kind, recordId)?.RevisionNumber == revisionNumber)
             throw new ArgumentException($"{noun} {recordId} is already published at its current revision.");
+        if (previous.FindWithdrawal(recordId) is { } withdrawal && revisionNumber <= withdrawal.WithdrawnRevisionNumber)
+            throw new ArgumentException(
+                $"{noun} {recordId} is at revision {revisionNumber}, but it was withdrawn at revision {withdrawal.WithdrawnRevisionNumber}. Revise it before it returns.");
     }
 }
