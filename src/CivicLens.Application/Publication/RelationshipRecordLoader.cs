@@ -32,11 +32,11 @@ internal sealed class RelationshipRecordLoader(IRelationshipReviewStore relation
     protected override PendingRecord Build(string recordId, PublishableRelationship addition, PublicationBuild build)
     {
         var review = addition.Review;
-        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
+        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build);
         if (addition.CitedRecordsChanged)
             throw new ArgumentException(
                 $"Relationship {recordId} cites a record that the new release does not hold at the cited revision, or that is not approved.");
-        var record = new PublishedRelationshipBuilder(build.Rules).Build(addition, build.Previous.Find(Kind, recordId), build.Corrections.For(Kind, recordId), build.Now);
+        var record = new PublishedRelationshipBuilder(build.Rules).Build(addition, build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId), build.Now);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
             (_, cancellationToken) => build.Renderer.RenderRelationshipAsync(record, cancellationToken));
     }

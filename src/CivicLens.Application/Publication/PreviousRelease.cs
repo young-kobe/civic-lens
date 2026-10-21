@@ -59,7 +59,13 @@ internal sealed class PreviousRelease
         return officials.Officials.ToDictionary(official => official.Id, StringComparer.Ordinal);
     }
 
-    public bool IsWithdrawn(string recordId) => Withdrawals.Any(withdrawal => withdrawal.RecordId == recordId);
+    public bool IsWithdrawn(string recordId) => FindWithdrawal(recordId) is not null;
+
+    public PublishedWithdrawal? FindWithdrawal(string recordId) =>
+        Withdrawals.FirstOrDefault(withdrawal => withdrawal.RecordId == recordId);
+
+    public DateTimeOffset? FirstPublishedAt(PublishedRecordKind kind, string recordId) =>
+        Find(kind, recordId)?.FirstPublishedAtUtc ?? FindWithdrawal(recordId)?.FirstPublishedAtUtc;
 
     public PublishedRecordEntry? Find(PublishedRecordKind kind, string recordId) =>
         Entries.FirstOrDefault(entry => entry.Kind == kind && entry.RecordId == recordId);

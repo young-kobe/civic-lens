@@ -28,9 +28,9 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
     protected override PendingRecord Build(string recordId, PublishableVote addition, PublicationBuild build)
     {
         var review = addition.Review;
-        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
+        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build);
         var record = new PublishedVoteBuilder(build.Rules).Build(review.CurrentRevision, review.Decisions, addition.Extractions,
-            build.Previous.Find(Kind, recordId), build.Corrections.For(Kind, recordId), build.Now);
+            build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId), build.Now);
         var billActionRecordId = BillActionRecordIn(addition.BillActionRecordIds, build);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
             (related, cancellationToken) => build.Renderer.RenderVoteAsync(record, billActionRecordId, related, cancellationToken));

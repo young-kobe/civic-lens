@@ -47,24 +47,33 @@ internal sealed class PublicationCorrections
         CancellationToken cancellationToken)
     {
         var earlier = new Dictionary<PublishedRecordReference, PublishedCorrection[]>();
-        foreach (var record in records.Where(record => previous.Find(record.Kind, record.RecordId) is not null))
-            earlier[record] = await ReadAsync(releases, previous.DirectoryName!, record, cancellationToken);
+        foreach (var record in records)
+        {
+            if (previous.FindWithdrawal(record.RecordId) is { } withdrawal) earlier[record] = withdrawal.Corrections;
+            else if (previous.Find(record.Kind, record.RecordId) is not null)
+                earlier[record] = await ReadAsync(releases, previous.DirectoryName!, record, cancellationToken);
+        }
         return new(previous, now, byCode, notes, earlier);
+    }
+
+    public void RequireNotWithdrawnByCode(PublishedRecordReference record)
+    {
+        if (byCode && previous.IsWithdrawn(record.RecordId)) throw new WithdrawnFactException(record);
     }
 
     public PublishedCorrection[] For(PublishedRecordKind kind, string recordId)
     {
         var reference = new PublishedRecordReference(kind, recordId);
-        if (previous.IsWithdrawn(recordId)) throw new WithdrawnRecordException(reference);
         var note = notes.GetValueOrDefault(reference);
-        if (previous.Find(kind, recordId) is not { } replaced)
+        var replacedRevision = previous.Find(kind, recordId)?.RevisionNumber ?? previous.FindWithdrawal(recordId)?.WithdrawnRevisionNumber;
+        if (replacedRevision is not { } replaced)
             return note is null ? [] : throw new ArgumentException($"{reference} is not in the active release, so it takes no note.");
         if (note is null && !byCode)
             throw new MissingCorrectionNoteException(reference);
         var kept = earlier[reference];
         if (note is not null && PublishedCorrection.NotedCount(kept) >= PublishedCorrection.MaximumNotedEntries)
             throw new CorrectionLimitException(reference);
-        return PublishedCorrection.Prepend(kept, new() { ReplacedRevisionNumber = replaced.RevisionNumber, PublishedAtUtc = now, Note = note });
+        return PublishedCorrection.Prepend(kept, new() { ReplacedRevisionNumber = replaced, PublishedAtUtc = now, Note = note });
     }
 
     public PublishedCorrection[] Earlier(PublishedRecordReference record) => earlier[record];

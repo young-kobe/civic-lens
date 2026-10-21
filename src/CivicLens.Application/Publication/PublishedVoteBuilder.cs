@@ -9,7 +9,7 @@ namespace CivicLens.Application.Publication;
 internal sealed class PublishedVoteBuilder(PublishedRecordRules rules)
 {
     public PublishedVote Build(VoteDraftRevision revision, ImmutableArray<ReviewDecision> decisions,
-        IReadOnlyDictionary<string, DocumentExtraction> extractions, PublishedRecordEntry? previous, PublishedCorrection[] corrections, DateTimeOffset now)
+        IReadOnlyDictionary<string, DocumentExtraction> extractions, DateTimeOffset? firstPublishedAtUtc, PublishedCorrection[] corrections, DateTimeOffset now)
     {
         PublishedCitation Cite(SourceSpan span) => PublishedRecordRules.Cite(span, extractions[span.ExtractionId]);
 
@@ -40,7 +40,7 @@ internal sealed class PublishedVoteBuilder(PublishedRecordRules rules)
             TrackedIssueIds = [.. revision.TrackedIssueIds],
             Sources = PublishedRecordRules.Sources(revision.Citations, extractions),
             ApprovedAtUtc = PublishedRecordRules.GetApprovalTime(revision.RevisionNumber, decisions),
-            FirstPublishedAtUtc = previous?.FirstPublishedAtUtc ?? now,
+            FirstPublishedAtUtc = firstPublishedAtUtc ?? now,
             Corrections = corrections
         };
         record.Validate();

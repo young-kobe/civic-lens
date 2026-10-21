@@ -25,7 +25,7 @@ internal sealed record FactPublishingComposition(AnalysisStage Stage, IWorkerWak
             collection, PublicationComposition.RequireIssues(issues));
         var wakeup = PostgresIntervalWakeup.FromConnectionString(connectionString, "civic_lens_fact_publishing", TimeSpan.FromHours(1));
         Action<Exception> report = exception => Console.Error.WriteLine($"factPublishing failed: {exception.GetType().Name}: {exception.Message}");
-        var worker = new StageWorker(new PublishCodeApprovedFacts(publish, publications, loaders, report).ExecuteAsync, wakeup, report);
+        var worker = new StageWorker(new PublishCodeApprovedFacts(publish, publications, loaders, report, Console.Error.WriteLine).ExecuteAsync, wakeup, report);
         return new(new AnalysisStage("factPublishing", worker.ExecuteAsync), wakeup);
     }
 }

@@ -8,7 +8,7 @@ internal sealed class PublishedRelationshipBuilder(PublishedRecordRules rules)
 {
     public static string HeadlineOf(string statementHeadline, string targetHeadline) => $"{statementHeadline} and {targetHeadline}";
 
-    public PublishedRelationship Build(PublishableRelationship relationship, PublishedRecordEntry? previous, PublishedCorrection[] corrections, DateTimeOffset now)
+    public PublishedRelationship Build(PublishableRelationship relationship, DateTimeOffset? firstPublishedAtUtc, PublishedCorrection[] corrections, DateTimeOffset now)
     {
         var review = relationship.Review;
         var revision = review.CurrentRevision;
@@ -31,7 +31,7 @@ internal sealed class PublishedRelationshipBuilder(PublishedRecordRules rules)
             IssueIds = [.. statement.IssueIds.Union(target.IssueIds, StringComparer.Ordinal)],
             PolicyAreaIds = [.. statement.PolicyAreaIds.Union(target.PolicyAreaIds, StringComparer.Ordinal)],
             ApprovedAtUtc = PublishedRecordRules.GetApprovalTime(revision.RevisionNumber, review.Decisions),
-            FirstPublishedAtUtc = previous?.FirstPublishedAtUtc ?? now,
+            FirstPublishedAtUtc = firstPublishedAtUtc ?? now,
             Corrections = corrections
         };
         record.Validate();

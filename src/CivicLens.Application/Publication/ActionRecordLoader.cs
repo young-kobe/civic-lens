@@ -28,8 +28,8 @@ internal sealed class ActionRecordLoader(IActionReviewStore actions)
     protected override PendingRecord Build(string recordId, PublishableAction addition, PublicationBuild build)
     {
         var review = addition.Review;
-        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
-        var record = new PublishedActionBuilder(build.Rules).Build(addition, build.Previous.Find(Kind, recordId), build.Corrections.For(Kind, recordId), build.Now);
+        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build);
+        var record = new PublishedActionBuilder(build.Rules).Build(addition, build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId), build.Now);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
             (related, cancellationToken) => build.Renderer.RenderActionAsync(record, related, cancellationToken));
     }

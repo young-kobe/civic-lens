@@ -256,6 +256,23 @@ internal sealed class PublicationScenario
         };
     }
 
+    public void ReviseVote(string recordId, int revisionNumber)
+    {
+        var publishable = Votes.Publishable[recordId];
+        var review = publishable.Review;
+        var revised = review.CurrentRevision with { RevisionNumber = revisionNumber, TrackedIssueIds = [$"issue-{revisionNumber}"] };
+        Votes.Publishable[recordId] = publishable with
+        {
+            Review = review with
+            {
+                CurrentRevision = revised,
+                Revisions = review.Revisions.Add(revised),
+                Decisions = review.Decisions.Add(Decision(recordId, revisionNumber, ReviewDecisionKind.Approve) with { RevisionNumber = revisionNumber }),
+                ReviewStateVersion = revisionNumber
+            }
+        };
+    }
+
     public const string VoteDetail = "Started: 2025-04-10T11:08:00-04:00\nQuestion: On Passage\nResult: Passed\nLegislation: HR 7\n";
     public const string VoteMembers = "Member: M000001, Mayor Example, D, MA, Yea\n";
 

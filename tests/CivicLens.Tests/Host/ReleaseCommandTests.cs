@@ -133,6 +133,31 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
+    public async Task NoteOptionOnAWithdrawnRecordBringsItBackAndNoNoteExitsWithTwo()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('a');
+        var reference = $"action:{action}";
+        await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", reference], scenario.Publisher(), null!, null!,
+            PublicationScenario.Owner, CancellationToken.None);
+        await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", "--withdraw", reference, "Wrong bill."], scenario.Publisher(), null!, null!,
+            PublicationScenario.Owner, CancellationToken.None);
+        scenario.ReviseAction(action, 2);
+
+        var missing = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k3", reference], scenario.Publisher(), null!, null!,
+            PublicationScenario.Owner, CancellationToken.None);
+        var returned = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k3", reference, "--note", reference, "Bill fixed."],
+            scenario.Publisher(), null!, null!, PublicationScenario.Owner, CancellationToken.None);
+
+        Assert.Equal((2, 0), (missing, returned));
+        var manifest = JsonSerializer.Deserialize<PublicationRelease>(
+            scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName][PublicationProtocol.ManifestPath],
+            PublicationProtocol.JsonOptions)!;
+        Assert.Equal(action, Assert.Single(manifest.Records).RecordId);
+        Assert.Empty(manifest.Withdrawals);
+    }
+
+    [Fact]
     public async Task APublishConflictExitsWithOneSoTheOwnerRebuildsInsteadOfFixingInput()
     {
         var scenario = new PublicationScenario();

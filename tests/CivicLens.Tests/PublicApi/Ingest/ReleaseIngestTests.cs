@@ -134,6 +134,24 @@ public sealed class ReleaseIngestTests(PostgresCollection postgres) : IAsyncLife
     }
 
     [Fact]
+    public async Task ARecordWithdrawnInSixAndReturnedInSevenInsertsTheNewRevisionWhileTheOldRangeStaysClosed()
+    {
+        var withdrawn = PublishedSamples.Statement('a', "Rent cap");
+        var returned = PublishedSamples.Statement('a', "Rent cap fixed", revision: 2);
+        await world.PublishAndIngestAsync(5, withdrawn);
+        world.Site.Publish(6, [Withdrawal(withdrawn)]);
+        await world.IngestAsync();
+
+        await world.PublishAndIngestAsync(7, returned);
+
+        Assert.Equal((5, 5), await RangeAsync(1));
+        Assert.Equal((7, (int?)null), await RangeAsync(2));
+        Assert.Empty((await world.SearchAsync(release: 6)).Hits);
+        Assert.Equal(["Rent cap"], (await world.SearchAsync(release: 5)).Hits.Select(hit => hit.Headline));
+        Assert.Equal(["Rent cap fixed"], (await world.SearchAsync()).Hits.Select(hit => hit.Headline));
+    }
+
+    [Fact]
     public async Task ActivatingAReleaseBeforeTheWithdrawalFindsTheWithdrawnRecordAgainWithoutAFetch()
     {
         var withdrawn = PublishedSamples.Statement('a', "Rent cap");

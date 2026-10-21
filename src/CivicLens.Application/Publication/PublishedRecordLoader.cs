@@ -76,12 +76,16 @@ internal abstract class PublishedRecordLoader<TCandidate, TAddition>(PublishedRe
             : null;
 
     protected void RequirePublishable(string recordId, int revisionNumber, ImmutableArray<ReviewDecision> decisions,
-        ImmutableArray<ReviewDecision> unresolvedConcerns, PreviousRelease previous)
+        ImmutableArray<ReviewDecision> unresolvedConcerns, PublicationBuild build)
     {
+        build.Corrections.RequireNotWithdrawnByCode(new(Kind, recordId));
         var status = ReviewPolicy.GetCurrentStatus(revisionNumber, decisions, unresolvedConcerns);
         if (!PublishedRecordRules.IsPublishable(status, unresolvedConcerns.Length))
             throw new ArgumentException($"{noun} {recordId} is not approved or has unresolved concerns.");
-        if (previous.Find(Kind, recordId)?.RevisionNumber == revisionNumber)
+        if (build.Previous.Find(Kind, recordId)?.RevisionNumber == revisionNumber)
             throw new ArgumentException($"{noun} {recordId} is already published at its current revision.");
+        if (build.Previous.FindWithdrawal(recordId) is { } withdrawal && revisionNumber <= withdrawal.WithdrawnRevisionNumber)
+            throw new ArgumentException(
+                $"{noun} {recordId} is at revision {revisionNumber}, but it was withdrawn at revision {withdrawal.WithdrawnRevisionNumber}. Revise it before it returns.");
     }
 }

@@ -21,16 +21,19 @@ internal sealed class ReleasePages(IReleaseDirectory releases, PublishedRecordLo
         return pages;
     }
 
-    // A carried page changes when a link of its related panel changes, or when its bill link points at a withdrawn action.
+    // A carried page changes when a link of its related panel changes, or when its bill link points at an action that this publish withdraws or returns.
     private async Task<IEnumerable<PublishedRecordReference>> CarriedToRenderAsync(ReleaseLinks links, PublicationBuild build,
         IReadOnlyList<PendingRecord> additions, CancellationToken cancellationToken)
     {
         var skipped = additions.Select(addition => (addition.Entry.Kind, addition.RecordId))
             .Concat(build.Removed.Select(record => (record.Kind, record.RecordId))).ToHashSet();
-        var votesOnWithdrawnBills = await loaders.Votes.FindOnBillsOfActionsAsync(
-            build.Removed.Where(record => record.Kind == PublishedRecordKind.Action).Select(record => record.RecordId), cancellationToken);
+        var returnedActions = additions.Where(addition => addition.Entry.Kind == PublishedRecordKind.Action && build.Previous.IsWithdrawn(addition.RecordId))
+            .Select(addition => addition.RecordId);
+        var votesOnChangedBills = await loaders.Votes.FindOnBillsOfActionsAsync(
+            build.Removed.Where(record => record.Kind == PublishedRecordKind.Action).Select(record => record.RecordId).Concat(returnedActions),
+            cancellationToken);
         return links.ChangedCitations.Select(cited => new PublishedRecordReference(cited.Kind, cited.RecordId))
-            .Concat(build.ReleaseRecords.Where(record => record.Kind == PublishedRecordKind.Vote && votesOnWithdrawnBills.Contains(record.RecordId))
+            .Concat(build.ReleaseRecords.Where(record => record.Kind == PublishedRecordKind.Vote && votesOnChangedBills.Contains(record.RecordId))
                 .Select(record => new PublishedRecordReference(record.Kind, record.RecordId)))
             .Where(record => !skipped.Contains((record.Kind, record.RecordId))).Distinct();
     }

@@ -67,11 +67,12 @@ public sealed class PublishRelease
         var additions = await LoadAdditionsAsync(references, build, cancellationToken);
         var released = build.WithAdded(additions);
         await WithdrawalCascade.RequireNoCitersAsync(releases, loaders, released, additions, cancellationToken);
+        var returned = references.Where(reference => previous.IsWithdrawn(reference.RecordId)).Select(reference => reference.RecordId).ToHashSet();
         var pages = await releasePages.RenderAsync(released, additions, cancellationToken);
         var replaced = references.Concat(withdrawn).ToHashSet();
         var carried = previous.Entries.Where(entry => !replaced.Contains(new(entry.Kind, entry.RecordId))).ToList();
         var removed = previous.Entries.Where(entry => withdrawalNotes.ContainsKey(new(entry.Kind, entry.RecordId))).ToList();
-        List<PublishedWithdrawal> withdrawals = [.. previous.Withdrawals, .. newWithdrawals];
+        List<PublishedWithdrawal> withdrawals = [.. previous.Withdrawals.Where(withdrawal => !returned.Contains(withdrawal.RecordId)), .. newWithdrawals];
         if (carried.Count + additions.Count + withdrawals.Count > PublicationProtocol.MaximumRecordsPerRelease)
             throw new ArgumentException("The release would exceed the maximum record count.", nameof(request));
 
