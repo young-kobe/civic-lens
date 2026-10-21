@@ -7,7 +7,7 @@ public static class SenateVoteRenderer
 {
     private const string TimeFormat = "yyyy-MM-dd'T'HH:mm:sszzz";
 
-    public const string NormalizationVersion = "senate-vote-render-v1";
+    public const string NormalizationVersion = "senate-vote-render-v2";
 
     public static string Render(SenateVoteDetail detail)
     {
@@ -20,7 +20,7 @@ public static class SenateVoteRenderer
             Line("Started", detail.VoteDate.ToString(TimeFormat, CultureInfo.InvariantCulture)),
             Line("Question", detail.Question),
             Line("Question text", detail.QuestionText),
-            Line("Title", detail.Title),
+            Line("Vote title", detail.Title),
             Line("Result", detail.Result)
         };
         AddLine(lines, "Result text", detail.ResultText);

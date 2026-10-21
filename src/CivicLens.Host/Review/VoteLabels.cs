@@ -23,6 +23,9 @@ internal static class VoteLabels
         VoteKind.Passage => "Passage",
         VoteKind.ConferenceReport => "Conference report",
         VoteKind.VetoOverride => "Veto override",
+        VoteKind.Nomination => "Nomination",
+        VoteKind.Cloture => "Cloture",
+        VoteKind.MotionToProceed => "Motion to proceed",
         _ => "Other"
     };
 }

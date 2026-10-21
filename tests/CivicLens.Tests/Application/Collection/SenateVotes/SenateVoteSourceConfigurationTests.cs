@@ -175,6 +175,17 @@ public sealed class SenateVoteSourceConfigurationTests
         Assert.EndsWith("Member: S428, Angela Alsobrooks, D, MD, Yea\nMember: S429, Jim Banks, R, IN, Not Voting", text, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void TheVoteTitleLineIsNotCalledTitleBecauseTheBillFactOfThatNameWouldCollideWithIt()
+    {
+        var detail = SenateVoteParser.Parse(SenateVoteFixtures.Vote(), SenateVoteFixtures.Roll1);
+
+        var text = SenateVoteRenderer.Render(detail);
+
+        Assert.Contains("\nVote title: ", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("\nTitle: ", text, StringComparison.Ordinal);
+    }
+
     private static ConfiguredCollectionSource Configured() =>
         new(SenateVoteFixtures.Configuration(), SenateVoteFixtures.SourceId, SenateVoteFixtures.Backfill);
 }
