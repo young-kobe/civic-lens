@@ -344,6 +344,7 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - An official who is configured again keeps the "no longer tracked" notice until a publish touches the official. The profile does not record the notice.
 - A release that an earlier build of schema version 5 made has no vote files or official pages. Do the dev reset before the next publish, as for any earlier release.
 - A record page that a release carries as a hard link from an earlier release has no Timeline panel. Do the dev reset before the next publish, as at the line above.
+- Votes of one day on an official page follow the record ID, not the roll call number.
 - Official pages stay unpaged. Add year paging only if a measured official page grows too large.
 - A related list orders links by the statement date. On a statement page every link has the same date, so the order there falls back to the link ID. Dates of the target records are not in the relationship file.
 - A publish that adds or replaces a statement, action, vote, or relationship reads the carried relationship files that cite those records. It also sends the IDs of all relationships in the release to one database query. The cost of the query grows with the number of published relationships.

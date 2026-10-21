@@ -120,7 +120,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 
 ### Search
 
-`SearchIndex` runs two kinds of query. With text, it matches `websearch_to_tsquery` and orders by `ts_rank_cd`, then by record ID. Without text, it orders by event day, else the UTC day of the first publication, then first publication time, then record ID.
+`SearchIndex` runs two kinds of query. With text, it matches `websearch_to_tsquery` and orders by `ts_rank_cd`, then by record ID. Without text, it orders by event day, else the UTC day of the first publication, then first publication time newest first, then record ID.
 
 Each filter is one value: `kind`, `official`, `issue`, `policyArea`, `source`, and a `from` and `to` date range on the event date. The filters combine with AND.
 
