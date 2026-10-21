@@ -23,7 +23,7 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
     private readonly PostgresAnalysisQueue<VoteAnalysisRow, VoteAnalysisBudgetRow, VoteDraftRun> queue;
 
     public PostgresVoteDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
-        : this(contextFactory, new(contextFactory, new VoteDraftQueueMapping(AfterDecisionHooks.ForRecordKind(contextFactory, RelationshipRecordKind.Vote, PublishedRecordKind.Vote)))) { }
+        : this(contextFactory, VoteDraftStaleness.NewQueue(contextFactory)) { }
 
     private PostgresVoteDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
         PostgresAnalysisQueue<VoteAnalysisRow, VoteAnalysisBudgetRow, VoteDraftRun> queue) : base(queue)
