@@ -3,6 +3,7 @@ using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
+using CivicLens.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -31,11 +32,14 @@ public sealed class JobPacingKeysMigrationTests(PostgresCollection postgres) : I
         await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>()
             .UseNpgsql(connectionString).Options);
         await db.GetService<IMigrator>().MigrateAsync(PreviousMigration);
+        var definition = CollectionFixtures.PageDefinition();
         await ExecuteAsync(connectionString, $"""
-            INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, state, created_at,
+            INSERT INTO collection_configuration_revisions (revision_id, json, created_at)
+            VALUES ('{definition.ConfigurationRevision!.Id}', '{definition.ConfigurationRevision.Json}', 1);
+            INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, configuration_revision_id, state, created_at,
                 cancellation_requested, charged_requests, charged_bytes, charged_seconds, lease_fence)
-            VALUES ('older-job', 'older-key', '{JsonSerializer.Serialize(Definition(), CollectionProtocol.JsonOptions)}',
-                'Pending', 1, false, 0, 0, 0, 0);
+            VALUES ('older-job', 'older-key', '{JsonSerializer.Serialize(definition with { ConfigurationRevision = null }, CollectionProtocol.JsonOptions)}',
+                '{definition.ConfigurationRevision.Id}', 'Pending', 1, false, 0, 0, 0, 0);
             """);
 
         await db.Database.MigrateAsync();
@@ -56,19 +60,6 @@ public sealed class JobPacingKeysMigrationTests(PostgresCollection postgres) : I
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
         Assert.Equal(CollectionJobBlockReason.OriginBackoff, start.BlockReason);
     }
-
-    private static CollectionJobDefinition Definition() => new()
-    {
-        SourceId = "source",
-        Url = "https://example.test/page",
-        AllowedOrigin = "https://example.test",
-        AllowedPathPrefix = "/page",
-        MaxRequests = 5,
-        MaxBytes = 100,
-        TimeoutSeconds = 10,
-        MinDelayMilliseconds = 0,
-        Policy = new CollectionJobPolicy()
-    };
 
     private static async Task ExecuteAsync(string connectionString, string sql)
     {

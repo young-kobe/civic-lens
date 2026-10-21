@@ -390,7 +390,7 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 
 - Release directories grow until [R-24](../roadmap.md#later) adds keep-last-N retention. Each release is about 29 MB in development. A backlog makes several releases in one tick.
 - A record that cannot build still takes a place in the 64 records that the tick lists. More than 63 such records in one kind can hide other records until a person fixes them.
-- A ready record that cannot build is reported on stderr at every tick until a person fixes it. A store read that fails, for example on a changed citation, fails the tick.
+- A ready record that cannot build is logged at error level at every tick until a person fixes it. A store read that fails, for example on a changed citation, fails the tick.
 - After a rollback and a CLI publish, the rolled-back records list again with the same key. The stage replays the stored release each tick and publishes nothing until new records change the batch. Publish those records with the CLI.
 - The stage has no heartbeat or status row yet. [R-21](../roadmap.md#later) adds the process view.
 - A vote record embeds at most `PublishedVote.MaximumSources` sources: the detail, the members, and the bill detail.

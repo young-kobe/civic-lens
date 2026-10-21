@@ -2,6 +2,7 @@ using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Host.Review;
 
@@ -31,6 +32,7 @@ public abstract class ReviewRecordPage : ComponentBase
 
     [Inject] protected ReviewActorAccessor Actors { get; set; } = default!;
     [Inject] protected NavigationManager Navigation { get; set; } = default!;
+    [Inject] protected ILogger<ReviewRecordPage> Logger { get; set; } = default!;
 
     [CascadingParameter] protected HttpContext HttpContext { get; set; } = default!;
     [CascadingParameter] protected Task<AuthenticationState> AuthenticationState { get; set; } = default!;
@@ -82,8 +84,9 @@ public abstract class ReviewRecordPage : ComponentBase
         catch (OperationCanceledException) when (RequestAborted.IsCancellationRequested) { throw; }
         catch (UnauthorizedAccessException) { Navigation.NavigateTo(ReviewCommand.AccessDenied); }
         catch (ArgumentException) { ShowNotFound(); }
-        catch (Exception)
+        catch (Exception exception)
         {
+            Logger.LogError(exception, "The review workspace could not load a record.");
             HttpContext.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             error ??= "The review workspace could not load this record. Refresh the page to try again.";
         }
@@ -92,7 +95,7 @@ public abstract class ReviewRecordPage : ComponentBase
     protected async Task<string?> RunCommandAsync(Func<Task<string>> command, ReviewFailureMessages messages,
         Func<Task> reloadAfterConflict)
     {
-        var (target, failure) = await ReviewCommand.RunAsync(command, HttpContext.Response, RequestAborted);
+        var (target, failure) = await ReviewCommand.RunAsync(command, HttpContext.Response, Logger, RequestAborted);
         switch (failure)
         {
             case ReviewCommandFailure.AccessDenied:

@@ -505,16 +505,17 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
             }]
         }, "source", new DateOnly(2026, 10, 8));
 
-    private static CollectionJobDefinition Template(string path = "/") => new()
-    {
-        SourceId = "source",
-        Url = "https://example.test/articles/template",
-        AllowedOrigin = "https://example.test",
-        AllowedPathPrefix = path,
-        MaxRequests = 2,
-        MaxBytes = 10,
-        TimeoutSeconds = 4,
-        MinDelayMilliseconds = 0,
-        Policy = new CollectionJobPolicy { MaxAttempts = 2, InitialRetryDelaySeconds = 0, MaximumRetryDelaySeconds = 0 }
-    };
+    private static CollectionJobDefinition Template(string path = "/") =>
+        CollectionFixtures.Definition(new CollectionConfiguration
+        {
+            People = [new PersonConfiguration { Id = "person", Name = "Official" }],
+            Sources = [new WatchedSourceConfiguration
+            {
+                Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }],
+                Url = "https://example.test/articles/template", AllowedOrigin = "https://example.test", AllowedPathPrefix = path,
+                Mode = CollectionMode.Feed, MaxRequests = 2, MaxBytes = 10, TimeoutSeconds = 4, MinDelayMilliseconds = 0,
+                JobPolicy = new CollectionJobPolicy { MaxAttempts = 2, InitialRetryDelaySeconds = 0, MaximumRetryDelaySeconds = 0 }
+            }]
+        }, "source", new DateOnly(2026, 7, 1)) with
+        { Mode = CollectionMode.Page, ETag = null, LastModified = null };
 }

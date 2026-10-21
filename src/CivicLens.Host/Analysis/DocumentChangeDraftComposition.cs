@@ -3,13 +3,14 @@ using CivicLens.Core.Analysis;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Host.Analysis;
 
 internal static class DocumentChangeDraftComposition
 {
     public static AnalysisComposition<AnalysisRun> Create(IDbContextFactory<CollectionAttemptDbContext> contexts,
-        string connectionString, IEnumerable<string> issueIds)
+        string connectionString, IEnumerable<string> issueIds, ILoggerFactory loggers)
     {
         var status = new PostgresAnalysisStatusStore(contexts);
         var configuration = DocumentChangeDraftConfiguration.FromEnvironment();
@@ -18,7 +19,7 @@ internal static class DocumentChangeDraftComposition
             DocumentChangeDraftTask.Task);
         var step = new DocumentChangeDraftStep(new PostgresDocumentChangeAnalysisStore(contexts),
             new AnthropicDocumentChangeDraftModel(configuration.ApiKey), configuration.Settings, [.. issueIds.Order(StringComparer.Ordinal)]);
-        var worker = new AnalysisWorker<AnalysisRun>(step, status, TimeProvider.System, wakeup);
+        var worker = new AnalysisWorker<AnalysisRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<AnalysisRun>>(), wakeup);
         return new(status, configuration.Settings.DailyTokenLimit, worker, wakeup);
     }
 }

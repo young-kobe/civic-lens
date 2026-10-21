@@ -5,6 +5,8 @@ using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Tests.Application.Publication;
 
@@ -140,16 +142,16 @@ public sealed class PublishCodeApprovedFactsTests
         var other = scenario.AddAction('c', ApprovedByCode('c'));
         AddUnpublished(scenario, good, bad, other);
         ListedUntilPublished(scenario);
-        var reported = new List<Exception>();
+        var logger = new CapturingLogger<PublishCodeApprovedFacts>();
 
-        var published = await Facts(scenario, reported).ExecuteAsync(default);
+        var published = await Facts(scenario, logger).ExecuteAsync(default);
 
         Assert.Equal(2, published);
         Assert.Equal([good, other], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId));
         Assert.Single(scenario.Publications.Committed);
-        var failure = Assert.Single(reported);
+        var failure = Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
         Assert.Contains($"action:{bad}", failure.Message);
-        Assert.Contains("no configured public name", failure.Message);
+        Assert.Contains("no configured public name", failure.Exception!.Message);
     }
 
     [Fact]
@@ -163,15 +165,14 @@ public sealed class PublishCodeApprovedFactsTests
             new PublishReleaseRequest([], "k2") { Withdrawals = [new(PublishedRecordKind.Action, withdrawn, "Wrong.")] });
         AddUnpublished(scenario, withdrawn, other);
         ListedUntilPublished(scenario);
-        var reported = new List<Exception>();
-        var logged = new List<string>();
+        var logger = new CapturingLogger<PublishCodeApprovedFacts>();
 
-        var published = await Facts(scenario, reported, logged).ExecuteAsync(default);
+        var published = await Facts(scenario, logger).ExecuteAsync(default);
 
         Assert.Equal(1, published);
         Assert.Equal([other], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId));
-        Assert.Empty(reported);
-        var line = Assert.Single(logged);
+        Assert.DoesNotContain(logger.Entries, entry => entry.Level == LogLevel.Error);
+        var line = Assert.Single(logger.Entries).Message;
         Assert.Contains($"action:{withdrawn}", line);
         Assert.Contains("withdrawn", line);
     }
@@ -193,13 +194,13 @@ public sealed class PublishCodeApprovedFactsTests
         scenario.Actions.Unpublished.Clear();
         AddUnpublished(scenario, [.. backlog, other]);
         ListedUntilPublished(scenario);
-        var reported = new List<Exception>();
+        var logger = new CapturingLogger<PublishCodeApprovedFacts>();
 
-        var published = await Facts(scenario, reported).ExecuteAsync(default);
+        var published = await Facts(scenario, logger).ExecuteAsync(default);
 
         Assert.Equal(1, published);
         Assert.Equal([other], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId));
-        Assert.Empty(reported);
+        Assert.DoesNotContain(logger.Entries, entry => entry.Level == LogLevel.Error);
     }
 
     [Fact]
@@ -250,11 +251,11 @@ public sealed class PublishCodeApprovedFactsTests
         scenario.ReviseAction(action, 2);
         scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[action].Review, 1));
         var releases = scenario.Publications.Committed.Count;
-        var reported = new List<Exception>();
+        var logger = new CapturingLogger<PublishCodeApprovedFacts>();
 
-        await Facts(scenario, reported).ExecuteAsync(default);
+        await Facts(scenario, logger).ExecuteAsync(default);
 
-        Assert.Empty(reported);
+        Assert.DoesNotContain(logger.Entries, entry => entry.Level == LogLevel.Error);
 
         var directory = scenario.Publications.Committed[releases].DirectoryName;
         var record = JsonSerializer.Deserialize<PublishedAction>(
@@ -279,16 +280,16 @@ public sealed class PublishCodeApprovedFactsTests
         scenario.ReviseAction(action, PublishedCorrection.MaximumNotedEntries + 2, ReviewAuthor.CodeSubject);
         scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[action].Review, PublishedCorrection.MaximumNotedEntries + 1));
         ListedUntilPublished(scenario);
-        var reported = new List<Exception>();
+        var logger = new CapturingLogger<PublishCodeApprovedFacts>();
 
-        var published = await Facts(scenario, reported).ExecuteAsync(default);
+        var published = await Facts(scenario, logger).ExecuteAsync(default);
 
         Assert.Equal(1, published);
-        Assert.Empty(reported);
+        Assert.DoesNotContain(logger.Entries, entry => entry.Level == LogLevel.Error);
     }
 
-    private static PublishCodeApprovedFacts Facts(PublicationScenario scenario, List<Exception>? reported = null, List<string>? logged = null) =>
-        new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), (reported ?? []).Add, (logged ?? []).Add);
+    private static PublishCodeApprovedFacts Facts(PublicationScenario scenario, CapturingLogger<PublishCodeApprovedFacts>? logger = null) =>
+        new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), logger ?? new CapturingLogger<PublishCodeApprovedFacts>());
 
     private static ImmutableArray<ReviewDecision> ApprovedByCode(char id) =>
         [PublicationScenario.Decision(new string(id, 64), 1, ReviewDecisionKind.Approve) with { ActorSubject = ReviewAuthor.CodeSubject }];

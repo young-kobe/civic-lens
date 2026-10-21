@@ -1,3 +1,4 @@
+using CivicLens.Tests.Fixtures;
 using System.Diagnostics;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Infrastructure.Collection;
@@ -152,18 +153,8 @@ public sealed class PostgresCollectionPipelineWakeupTests(PostgresCollection pos
         await wakeup.WaitAsync(releaseTimeout.Token);
     }
 
-    private static CollectionJobDefinition Definition() => new()
-    {
-        SourceId = "source",
-        Url = "https://example.test/page",
-        AllowedOrigin = "https://example.test",
-        AllowedPathPrefix = "/",
-        MaxRequests = 5,
-        MaxBytes = 100,
-        TimeoutSeconds = 10,
-        MinDelayMilliseconds = 0,
-        Policy = new CollectionJobPolicy()
-    };
+    private static CollectionJobDefinition Definition() =>
+        CollectionFixtures.PageDefinition(pathPrefix: "/", policy: new CollectionJobPolicy());
 
     private async Task InsertJobAsync(string id, long createdAt, long? retryAt)
     {

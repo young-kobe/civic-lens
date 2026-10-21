@@ -9,6 +9,7 @@ using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Host.Actions;
 
@@ -16,7 +17,7 @@ internal static class ActionDraftComposition
 {
     public static AnalysisComposition<ActionDraftRun> Create(IDbContextFactory<CollectionAttemptDbContext> contexts, string connectionString,
         ICollectionJobStore jobs, ApiResponseReader responses, IDocumentTextExtractor textExtractor, IssueConfigurationRevision? issues,
-        string artifactRoot)
+        string artifactRoot, ILoggerFactory loggers)
     {
         var status = new PostgresAnalysisStatusStore(contexts, ActionDraftTask.Task);
         var configuration = ActionDraftConfiguration.FromEnvironment();
@@ -26,6 +27,6 @@ internal static class ActionDraftComposition
         var reader = new ActionBillReader(jobs, responses, textExtractor, artifactRoot);
         var step = new ActionDraftStep(new PostgresActionDraftStore(contexts), reader,
             new AnthropicActionDraftModel(configuration.ApiKey), configuration.Settings, issues);
-        return new(status, configuration.Settings.DailyTokenLimit, new AnalysisWorker<ActionDraftRun>(step, status, TimeProvider.System, wakeup), wakeup);
+        return new(status, configuration.Settings.DailyTokenLimit, new AnalysisWorker<ActionDraftRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<ActionDraftRun>>(), wakeup), wakeup);
     }
 }

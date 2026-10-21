@@ -4,6 +4,7 @@ using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
 using CivicLens.Infrastructure.Collection;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Host.Collection;
 
@@ -24,7 +25,7 @@ internal static class CollectionWorkerCommand
     public static string ArtifactRootOf(string[] arguments) => Path.GetFullPath(arguments[2]);
 
     public static async Task<int> ExecuteAsync(string[] arguments, ICollectionWorkerQueue queue,
-        ICollectionJobStore jobs, ICollectionAttemptStore evidence, CancellationToken cancellationToken,
+        ICollectionJobStore jobs, ICollectionAttemptStore evidence, ILoggerFactory loggers, CancellationToken cancellationToken,
         EvidenceProcessingWorker? evidenceProcessor = null, IWorkerWakeup? wakeup = null,
         ICollectionScheduleStore? schedules = null, IReadOnlyList<AnalysisStage>? analysis = null)
     {
@@ -33,9 +34,10 @@ internal static class CollectionWorkerCommand
         var artifactRoot = ArtifactRootOf(arguments);
         var runner = new RunCollectionJob(jobs, evidence, new FileCollectionReceiptHandoffStore(artifactRoot),
             new CaptureArtifactVerifier(), new CollectorProcess(collectorPath,
-                Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet"));
+                Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet"),
+            loggers.CreateLogger<RunCollectionJob>());
         var once = arguments.Length == 4;
-        var collection = new CollectionJobWorker(queue, runner, evidenceProcessor, wakeup, schedules);
+        var collection = new CollectionJobWorker(queue, runner, loggers.CreateLogger<CollectionJobWorker>(), evidenceProcessor, wakeup, schedules);
         var (result, analysisResults) = await RunAsync(collection, analysis ?? [], artifactRoot, once, cancellationToken);
         CollectionCommandOutput.Write(result);
         foreach (var (name, analysisResult) in analysisResults)

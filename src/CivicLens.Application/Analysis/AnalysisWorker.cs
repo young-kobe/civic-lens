@@ -1,4 +1,5 @@
 using CivicLens.Core.Analysis;
+using Microsoft.Extensions.Logging;
 using Codes = CivicLens.Application.Analysis.AnalysisErrorCodes;
 using Failure = CivicLens.Application.Analysis.AnalysisModelFailure;
 using State = CivicLens.Application.Analysis.AnalysisState;
@@ -6,6 +7,7 @@ using State = CivicLens.Application.Analysis.AnalysisState;
 namespace CivicLens.Application.Analysis;
 
 public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysisStatusStore status, TimeProvider clock,
+    ILogger<AnalysisWorker<TRun>> logger,
     IWorkerWakeup? wakeup = null, Func<CancellationToken, Task>? beforeEachPass = null) where TRun : class
 {
     private static readonly TimeSpan ReleaseTimeout = TimeSpan.FromSeconds(5);
@@ -64,7 +66,11 @@ public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysis
                 eligible = await queue.GetEligibleAsync(settings.Concurrency * 4, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
-            catch (Exception exception) when (WorkerLoop.IsRecoverable(exception)) { return new(passes, total, failures + 1); }
+            catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
+            {
+                logger.LogError(exception, "Analysis {Task} could not list eligible work.", step.Identity.Task);
+                return new(passes, total, failures + 1);
+            }
             if (eligible.Count == 0) break;
             var progress = 0;
             try
@@ -81,7 +87,11 @@ public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysis
                         if (await ProcessAsync(record, token)) Interlocked.Increment(ref progress);
                     }
                     catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-                    catch (Exception exception) when (WorkerLoop.IsRecoverable(exception)) { Interlocked.Increment(ref failures); }
+                    catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
+                    {
+                        logger.LogError(exception, "Analysis {Task} failed for subject {SubjectId}.", step.Identity.Task, record.SubjectId);
+                        Interlocked.Increment(ref failures);
+                    }
                 });
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
@@ -116,6 +126,7 @@ public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysis
         }
         catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
         {
+            logger.LogError(exception, "Analysis {Task} hit an unexpected failure for subject {SubjectId}.", step.Identity.Task, record.SubjectId);
             using var timeout = new CancellationTokenSource(ReleaseTimeout);
             return await attempt.FailUnexpectedAsync(exception, timeout.Token);
         }

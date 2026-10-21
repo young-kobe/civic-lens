@@ -1,9 +1,10 @@
 using CivicLens.Application.Collection.Processing;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Application.Collection.Jobs;
 
 /// <summary>Drains durable collection and evidence work, then waits for a database wakeup.</summary>
-public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollectionJob runner,
+public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollectionJob runner, ILogger<CollectionJobWorker> logger,
     EvidenceProcessingWorker? evidenceProcessor = null, IWorkerWakeup? wakeup = null,
     ICollectionScheduleStore? schedules = null)
 {
@@ -74,6 +75,7 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
                 catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
                 {
+                    logger.LogError(exception, "The collection schedule could not advance.");
                     failures++;
                     scheduleFailed = true;
                 }
@@ -90,6 +92,7 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
                 catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
                 {
+                    logger.LogError(exception, "The collection queue could not list eligible jobs.");
                     queueFailures++;
                     queueFailed = true;
                     break;
@@ -107,7 +110,11 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
                         if (IsFailure(result)) failures++;
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
-                    catch (Exception exception) when (WorkerLoop.IsRecoverable(exception)) { failures++; }
+                    catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
+                    {
+                        logger.LogError(exception, "Collection job {JobId} failed.", jobId);
+                        failures++;
+                    }
                 }
 
                 if (evidenceProcessor is not null && !cancellationToken.IsCancellationRequested)
@@ -142,7 +149,11 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
             return await evidenceProcessor!.ExecuteAsync(artifactDirectory, batchSize, lease, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return new(0, 0); }
-        catch (Exception exception) when (WorkerLoop.IsRecoverable(exception)) { return new(0, 1); }
+        catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
+        {
+            logger.LogError(exception, "Evidence processing failed.");
+            return new(0, 1);
+        }
     }
 
     private static bool IsFailure(CollectionJobRunResult result) =>

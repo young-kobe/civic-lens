@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using CivicLens.Application.Paging;
 using System.Data.Common;
 using System.Text.Json;
@@ -106,7 +107,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var listed = await reader.ListAsync(100, timeout.Token);
         var fetched = await reader.GetAsync(first.Job.JobId, timeout.Token);
 
-        Assert.Equal(4, counter.Count);
+        Assert.Equal(6, counter.Count);
         Assert.Equal(new[] { empty.JobId, first.Job.JobId }, listed.Select(job => job.JobId));
         Assert.Empty(listed[0].Attempts);
         Assert.Equal(new[] { initial.Attempt.AttemptId, retry.Attempt!.AttemptId },
@@ -496,7 +497,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task UnknownUsageCannotResetAggregateBudgetAndCancellationPreventsAdmission()
     {
-        var definition = Definition() with { Policy = new CollectionJobPolicy { MaxAttempts = 3, MaxTotalRequests = 5, InitialRetryDelaySeconds = 0 } };
+        var definition = Definition(policy: new CollectionJobPolicy { MaxAttempts = 3, MaxTotalRequests = 5, InitialRetryDelaySeconds = 0 });
         var claim = await EnqueueClaimAsync("budget", definition);
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
         await jobs.ReleaseCollectorAsync(claim.Lease, start.CollectorLease!, default);
@@ -669,10 +670,10 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     }
 
     private RunCollectionJob Runner(ICollectorProcess collector) => new(jobs, evidence,
-        new FileCollectionReceiptHandoffStore(root), new CaptureArtifactVerifier(), collector);
+        new FileCollectionReceiptHandoffStore(root), new CaptureArtifactVerifier(), collector, NullLogger<RunCollectionJob>.Instance);
 
     [Fact]
-    public async Task LegacyEnqueueReplayRetainsUnknownProvenanceAndNewJobsRetainRevisions()
+    public async Task NewJobsRetainRevisionsAndRefuseAnotherRevisionOrAnUnboundDefinitionUnderTheSameKey()
     {
         var configuration = new CollectionConfiguration
         {
@@ -684,10 +685,6 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
             }]
         };
         var definition = CollectionFixtures.Definition(configuration, "source", new DateOnly(2026, 7, 1));
-        var legacy = await jobs.EnqueueAsync(definition with { ConfigurationRevision = null, CoverageAsOf = null }, "legacy", default);
-        var replay = await jobs.EnqueueAsync(definition, "legacy", default);
-        Assert.Equal(legacy.JobId, replay.JobId);
-        Assert.Null(replay.Definition.ConfigurationRevision);
         var current = await jobs.EnqueueAsync(definition, "current", default);
         var reopened = PostgresCollectionJobStore.FromConnectionString(connectionString);
         var stored = await reopened.GetAsync(current.JobId, default);
@@ -714,9 +711,6 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
             }]
         };
         var expired = new ConfiguredCollectionSource(expiredConfiguration, "source");
-        var legacyReplay = await reopened.EnqueueAsync(expired, "legacy", default);
-        Assert.Equal(legacy.JobId, legacyReplay.JobId);
-        Assert.Null(legacyReplay.Definition.ConfigurationRevision);
         await Assert.ThrowsAsync<ArgumentException>(() => reopened.EnqueueAsync(expired, "new-expired", default));
     }
 
@@ -908,9 +902,9 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task ActivityListsNewestStartsAndFailuresByFailureTime()
     {
-        var oldFailure = await jobs.EnqueueAsync(Definition() with { SourceId = "old-failure" }, "old-failure", default);
-        var lateFailure = await jobs.EnqueueAsync(Definition() with { SourceId = "late-failure" }, "late-failure", default);
-        var running = await jobs.EnqueueAsync(Definition() with { SourceId = "fine" }, "fine", default);
+        var oldFailure = await jobs.EnqueueAsync(Definition(sourceId: "old-failure"), "old-failure", default);
+        var lateFailure = await jobs.EnqueueAsync(Definition(sourceId: "late-failure"), "late-failure", default);
+        var running = await jobs.EnqueueAsync(Definition(sourceId: "fine"), "fine", default);
         await SqlAsync($"UPDATE collection_jobs SET created_at = 100, state = 'Failed' WHERE job_id = '{oldFailure.JobId}'");
         await SqlAsync($"UPDATE collection_jobs SET created_at = 50, state = 'Failed' WHERE job_id = '{lateFailure.JobId}'");
         await SqlAsync($"UPDATE collection_jobs SET created_at = 200 WHERE job_id = '{running.JobId}'");
@@ -953,18 +947,9 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         await command.ExecuteNonQueryAsync();
     }
 
-    private static CollectionJobDefinition Definition(string origin = "https://example.test") => new()
-    {
-        SourceId = "source",
-        Url = origin + "/page",
-        AllowedOrigin = origin,
-        AllowedPathPrefix = "/page",
-        MaxRequests = 5,
-        MaxBytes = 100,
-        TimeoutSeconds = 10,
-        MinDelayMilliseconds = 0,
-        Policy = new CollectionJobPolicy { InitialRetryDelaySeconds = 0 }
-    };
+    private static CollectionJobDefinition Definition(string origin = "https://example.test",
+        CollectionJobPolicy? policy = null, string sourceId = "source") =>
+        CollectionFixtures.PageDefinition(origin, policy: policy, sourceId: sourceId);
 
     private sealed class RejectCollector : ICollectorProcess
     {

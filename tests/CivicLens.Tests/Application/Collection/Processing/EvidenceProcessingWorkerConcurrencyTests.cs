@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
 using CivicLens.Application.Documents;
@@ -64,7 +65,8 @@ public sealed class EvidenceProcessingWorkerConcurrencyTests
         {
             var jobs = new FixedJobStore { Get = AwaitGateAsync };
             var preparation = new JobPreparation(jobs, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null);
-            return new(jobs, preparation, new Store(records, Released), null!, null!, null!, degree);
+            return new(jobs, preparation, new Store(records, Released), null!, null!, null!, degree,
+                NullLogger<EvidenceProcessingWorker>.Instance);
         }
 
         public async Task WaitForRunningAsync(int count)

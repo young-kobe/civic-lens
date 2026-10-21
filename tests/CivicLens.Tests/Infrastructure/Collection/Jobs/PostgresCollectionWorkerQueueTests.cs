@@ -1,3 +1,4 @@
+using CivicLens.Tests.Fixtures;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
@@ -76,18 +77,8 @@ public sealed class PostgresCollectionWorkerQueueTests(PostgresCollection postgr
         Assert.DoesNotContain(selected, id => id.StartsWith("terminal-", StringComparison.Ordinal));
     }
 
-    private Task<CollectionJobRecord> EnqueueAsync(string key) => jobs.EnqueueAsync(new CollectionJobDefinition
-    {
-        SourceId = "source",
-        Url = "https://example.test/page",
-        AllowedOrigin = "https://example.test",
-        AllowedPathPrefix = "/page",
-        MaxRequests = 5,
-        MaxBytes = 100,
-        TimeoutSeconds = 10,
-        MinDelayMilliseconds = 0,
-        Policy = new CollectionJobPolicy { InitialRetryDelaySeconds = 0 }
-    }, key, CancellationToken.None);
+    private Task<CollectionJobRecord> EnqueueAsync(string key) =>
+        jobs.EnqueueAsync(CollectionFixtures.PageDefinition(), key, CancellationToken.None);
 
     private async Task ExecuteAsync(string sql, params NpgsqlParameter[] parameters)
     {

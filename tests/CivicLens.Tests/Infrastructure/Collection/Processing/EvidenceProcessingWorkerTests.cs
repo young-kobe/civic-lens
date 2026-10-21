@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
@@ -68,10 +69,12 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         await db.GetService<IMigrator>().MigrateAsync("20261008190000_DurableEvidenceProcessing");
         await db.Database.ExecuteSqlRawAsync("ALTER TABLE collection_jobs ADD COLUMN configuration_revision_id text, ADD COLUMN pacing_key text, " +
             "ADD COLUMN source_id text, ADD COLUMN is_root boolean");
+        await db.Database.ExecuteSqlRawAsync("CREATE TABLE collection_configuration_revisions (revision_id text PRIMARY KEY, json text NOT NULL, created_at bigint NOT NULL)");
         var beforeJob = await CollectAsync("earlier", "Earlier wording.", legacySchema: true);
         var afterJob = await CollectAsync("later", "Later wording.", legacySchema: true);
         await db.Database.ExecuteSqlRawAsync("ALTER TABLE collection_jobs DROP COLUMN configuration_revision_id, DROP COLUMN pacing_key, " +
             "DROP COLUMN source_id, DROP COLUMN is_root");
+        await db.Database.ExecuteSqlRawAsync("DROP TABLE collection_configuration_revisions");
         var beforeAttempt = Assert.Single(beforeJob.Attempts).AttemptId;
         var afterAttempt = Assert.Single(afterJob.Attempts).AttemptId;
 
@@ -117,9 +120,9 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var job = await jobs.EnqueueAsync(definition, "pipeline-once", default);
         var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
             new CaptureArtifactVerifier(), new FixtureCollector("Pipeline wording.", fail: false,
-                Interlocked.Increment(ref observationTick)));
+                Interlocked.Increment(ref observationTick)), NullLogger<RunCollectionJob>.Instance);
         var pipeline = new CollectionJobWorker(PostgresCollectionWorkerQueue.FromConnectionString(connectionString),
-            runner, Worker(processing));
+            runner, NullLogger<CollectionJobWorker>.Instance, Worker(processing));
 
         var result = await pipeline.ExecuteAsync(artifactRoot, once: true, batchSize: 20,
             leaseDuration: TimeSpan.FromSeconds(60));
@@ -142,9 +145,9 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var definition = rosterJob with { ApiResource = null };
         var job = await jobs.EnqueueAsync(definition, "api-once", default);
         var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
-            new CaptureArtifactVerifier(), new ApiFixtureCollector(RosterFixtures.Json));
+            new CaptureArtifactVerifier(), new ApiFixtureCollector(RosterFixtures.Json), NullLogger<RunCollectionJob>.Instance);
         var pipeline = new CollectionJobWorker(PostgresCollectionWorkerQueue.FromConnectionString(connectionString),
-            runner, Worker(processing));
+            runner, NullLogger<CollectionJobWorker>.Instance, Worker(processing));
 
         _ = await pipeline.ExecuteAsync(artifactRoot, once: true, batchSize: 20, leaseDuration: TimeSpan.FromSeconds(60));
 
@@ -163,9 +166,9 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         await MakeEverySourceDueAsync();
         Assert.Equal(1, await jobs.AdvanceDueAsync(10, default));
         var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
-            new CaptureArtifactVerifier(), new ApiFixtureCollector(RosterFixtures.Json));
+            new CaptureArtifactVerifier(), new ApiFixtureCollector(RosterFixtures.Json), NullLogger<RunCollectionJob>.Instance);
         var pipeline = new CollectionJobWorker(PostgresCollectionWorkerQueue.FromConnectionString(connectionString),
-            runner, Worker(processing));
+            runner, NullLogger<CollectionJobWorker>.Instance, Worker(processing));
 
         _ = await pipeline.ExecuteAsync(artifactRoot, once: true, batchSize: 20, leaseDuration: TimeSpan.FromSeconds(60));
 
@@ -445,11 +448,10 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         bool legacySchema = false)
     {
         var configured = ConfiguredDefinition(etag);
-        var definition = legacySchema ? configured with { ConfigurationRevision = null, CoverageAsOf = null } : configured;
-        var job = await jobs.EnqueueAsync(definition, key, default);
+        var job = await jobs.EnqueueAsync(configured, key, default);
         var collector = new FixtureCollector(body, fail, Interlocked.Increment(ref observationTick));
         var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
-            new CaptureArtifactVerifier(), collector);
+            new CaptureArtifactVerifier(), collector, NullLogger<RunCollectionJob>.Instance);
         var result = await runner.ExecuteAsync(job.JobId, artifactRoot, TimeSpan.FromSeconds(60), default);
         Assert.True(result.Status is CollectionJobRunStatus.Completed or CollectionJobRunStatus.AttemptFailed,
             $"Collection returned {result.Status}: {result.BlockReason}, retry {result.RetryAt:O}.");
@@ -490,7 +492,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
 
     private EvidenceProcessingWorker Worker(IEvidenceProcessingStore processingStore, IDocumentHistoryStore? historyStore = null) => new(jobs,
         new JobPreparation(jobs, attempts, jobs, jobs, jobs, PostgresMemberRosterStore.FromConnectionString(connectionString), PostgresExecutiveRosterStore.FromConnectionString(connectionString), new CaptureBodyReader(), processingStore, extractions, new CaptureDocumentTextExtractor(), issues), processingStore, extract, new GetDocumentHistory(historyStore ?? PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
-        new CompareDocuments(comparisons), 1);
+        new CompareDocuments(comparisons), 1, NullLogger<EvidenceProcessingWorker>.Instance);
 
     private CollectionJobDefinition ConfiguredDefinition(string? etag = null)
     {
@@ -578,9 +580,9 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
             .CreateApiJobDefinition(resource, url, today);
         var job = await jobs.EnqueueAsync(definition, "bill-list-once", default);
         var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
-            new CaptureArtifactVerifier(), new ApiFixtureCollector(json));
+            new CaptureArtifactVerifier(), new ApiFixtureCollector(json), NullLogger<RunCollectionJob>.Instance);
         var pipeline = new CollectionJobWorker(PostgresCollectionWorkerQueue.FromConnectionString(connectionString),
-            runner, Worker(processing));
+            runner, NullLogger<CollectionJobWorker>.Instance, Worker(processing));
         _ = await pipeline.ExecuteAsync(artifactRoot, once: true, batchSize: 20, leaseDuration: TimeSpan.FromSeconds(60));
         return (await jobs.GetAsync(job.JobId, default))!;
     }

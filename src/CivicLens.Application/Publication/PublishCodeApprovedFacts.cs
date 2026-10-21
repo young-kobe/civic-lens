@@ -1,11 +1,12 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Application.Publication;
 
 public sealed class PublishCodeApprovedFacts(PublishRelease publish, IPublicationStore publications, PublishedRecordLoaders loaders,
-    Action<Exception> reportFailure, Action<string> log)
+    ILogger<PublishCodeApprovedFacts> logger)
 {
     private static readonly ReviewActor Actor = new(ReviewAuthor.CodeSubject, ReviewRole.Owner);
 
@@ -33,13 +34,13 @@ public sealed class PublishCodeApprovedFacts(PublishRelease publish, IPublicatio
             {
                 var record = UnpublishableRecord.Of(exception)!;
                 skipped.Add(record);
-                log($"{record} left out of the release: {exception.Message}");
+                logger.LogInformation("{Record} left out of the release: {Reason}", record, exception.Message);
                 continue;
             }
             catch (ArgumentException exception) when (UnpublishableRecord.Of(exception) is { } record)
             {
                 skipped.Add(record);
-                reportFailure(new InvalidDataException($"{record} left out of the release: {exception.Message}", exception));
+                logger.LogError(exception, "{Record} left out of the release.", record);
                 continue;
             }
             // A release that is not new replayed a stored one, and the same batch would list again.

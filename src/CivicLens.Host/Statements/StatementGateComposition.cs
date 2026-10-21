@@ -6,6 +6,7 @@ using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Statements;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Host.Statements;
 
@@ -14,7 +15,7 @@ internal static class StatementGateComposition
     public const string IssuesUnsetReason = "issuesConfigurationUnset";
 
     public static AnalysisComposition<StatementGateRun> Create(IDbContextFactory<CollectionAttemptDbContext> contexts, string connectionString,
-        IssueConfigurationRevision? rubric)
+        IssueConfigurationRevision? rubric, ILoggerFactory loggers)
     {
         var status = new PostgresAnalysisStatusStore(contexts, StatementGateTask.Task);
         var configuration = StatementGateConfiguration.FromEnvironment();
@@ -24,7 +25,7 @@ internal static class StatementGateComposition
             StatementGateTask.Task);
         var step = new StatementGateStep(new PostgresStatementGateStore(contexts),
             new AnthropicStatementGateModel(configuration.ApiKey), configuration.Settings, rubric);
-        var worker = new AnalysisWorker<StatementGateRun>(step, status, TimeProvider.System, wakeup);
+        var worker = new AnalysisWorker<StatementGateRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<StatementGateRun>>(), wakeup);
         return new(status, configuration.Settings.DailyTokenLimit, worker, wakeup);
     }
 }

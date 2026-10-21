@@ -8,6 +8,7 @@ using CivicLens.Host.Components.Ui;
 using CivicLens.Host.Review;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Host.Collection;
 
@@ -36,6 +37,7 @@ public sealed partial class SourcesPage : IAsyncDisposable
 
     [Inject] private ReviewActorAccessor Actors { get; set; } = default!;
     [Inject] private IServiceProvider Services { get; set; } = default!;
+    [Inject] private ILogger<SourcesPage> Logger { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
     [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = default!;
     [SupplyParameterFromQuery(Name = "jobs")] private string? JobsCursor { get; set; }
@@ -112,8 +114,9 @@ public sealed partial class SourcesPage : IAsyncDisposable
             selectedJobId = null;
             notice = new("This link no longer matches a saved check. Open Sources again to see the newest checks.", Tone.Warn);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            Logger.LogError(exception, "Sources could not be loaded.");
             notice = new("Sources could not be loaded. The page tries again on its own.", Tone.Bad);
         }
     }
@@ -168,8 +171,9 @@ public sealed partial class SourcesPage : IAsyncDisposable
         {
             notice = new("This change can no longer start a draft. Open Review to choose another change.", Tone.Warn);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            Logger.LogError(exception, "A document change draft could not be created.");
             notice = new("The draft could not be created. Try again.", Tone.Bad);
         }
         finally { busy = false; }
@@ -202,8 +206,9 @@ public sealed partial class SourcesPage : IAsyncDisposable
             notice = new("That action no longer applies to this source. The list is up to date now.", Tone.Warn);
             await LoadAsync();
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            Logger.LogError(exception, "A source action could not be confirmed.");
             notice = new("The action could not be confirmed. Check the list before you try again.", Tone.Bad);
         }
         finally { busy = false; }

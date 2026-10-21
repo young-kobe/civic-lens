@@ -1,3 +1,6 @@
+using CivicLens.Tests.Fixtures;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
@@ -14,7 +17,7 @@ public sealed class RunCollectionJobTests
         var request = Request();
         var jobs = new FakeJobs(PendingJob(request)) { StartRequest = request };
         var runner = new RunCollectionJob(jobs, new InMemoryAttemptStore(), new TrackingHandoffs(),
-            new NoopVerifier(), new DeadlineCollector());
+            new NoopVerifier(), new DeadlineCollector(), NullLogger<RunCollectionJob>.Instance);
 
         var result = await runner.ExecuteAsync("job-1", Path.GetTempPath(), TimeSpan.FromSeconds(5));
 
@@ -30,7 +33,7 @@ public sealed class RunCollectionJobTests
         var jobs = new FakeJobs(PendingJob(request)) { StartRequest = request };
         var handoffs = new TrackingHandoffs { RecoveryLeaseUnavailable = true };
         var runner = new RunCollectionJob(jobs, new InMemoryAttemptStore(), handoffs,
-            new NoopVerifier(), new ReturnReceiptCollector());
+            new NoopVerifier(), new ReturnReceiptCollector(), NullLogger<RunCollectionJob>.Instance);
 
         await Assert.ThrowsAsync<IOException>(() => runner.ExecuteAsync("job-1", Path.GetTempPath(), TimeSpan.FromSeconds(5)));
 
@@ -38,6 +41,21 @@ public sealed class RunCollectionJobTests
         Assert.False(handoffs.Deleted);
         Assert.Equal("attempt-new", Assert.Single(await handoffs.ListAsync(default)));
         Assert.Equal(0, jobs.SettleCalls);
+    }
+
+    [Fact]
+    public async Task AFailureToSettleAnInterruptedAttemptIsLoggedAndLeavesTheAttemptForRecoveryNotLostOwnership()
+    {
+        var request = Request();
+        var jobs = new FakeJobs(PendingJob(request)) { StartRequest = request, SettlementFailure = new InvalidOperationException("store down") };
+        var logger = new CapturingLogger<RunCollectionJob>();
+        var runner = new RunCollectionJob(jobs, new InMemoryAttemptStore(), new TrackingHandoffs(),
+            new NoopVerifier(), new DeadlineCollector(), logger);
+
+        var result = await runner.ExecuteAsync("job-1", Path.GetTempPath(), TimeSpan.FromSeconds(5));
+
+        Assert.Equal(CollectionJobRunStatus.RecoveryBlocked, result.Status);
+        Assert.Contains(logger.Entries, entry => entry.Level == LogLevel.Error && entry.Exception!.Message == "store down");
     }
 
     private sealed class DeadlineCollector : ICollectorProcess
@@ -53,7 +71,7 @@ public sealed class RunCollectionJobTests
         var pending = new CollectionJobAttempt("attempt-1", request, null, DateTimeOffset.UtcNow, null);
         var jobs = new FakeJobs(Job(pending)) { FailRenewals = true };
         var attempts = new BlockingAttemptStore();
-        var runner = new RunCollectionJob(jobs, attempts, new EmptyHandoffs(), new NoopVerifier(), new CountingCollector());
+        var runner = new RunCollectionJob(jobs, attempts, new EmptyHandoffs(), new NoopVerifier(), new CountingCollector(), NullLogger<RunCollectionJob>.Instance);
 
         var result = await runner.ExecuteAsync("job-1", Path.GetTempPath(), TimeSpan.FromMilliseconds(300));
 
@@ -68,7 +86,7 @@ public sealed class RunCollectionJobTests
         var request = Request();
         var jobs = new FakeJobs(PendingJob(request)) { FailRenewals = true, StartRequest = request };
         var collector = new BlockingCollector();
-        var runner = new RunCollectionJob(jobs, new BlockingAttemptStore(), new EmptyHandoffs(), new NoopVerifier(), collector);
+        var runner = new RunCollectionJob(jobs, new BlockingAttemptStore(), new EmptyHandoffs(), new NoopVerifier(), collector, NullLogger<RunCollectionJob>.Instance);
 
         var result = await runner.ExecuteAsync("job-1", Path.GetTempPath(), TimeSpan.FromMilliseconds(300));
 
@@ -84,7 +102,7 @@ public sealed class RunCollectionJobTests
         var jobs = new FakeJobs(PendingJob(request)) { CancelOnRenewal = true, StartRequest = request };
         var handoffs = new TrackingHandoffs();
         var runner = new RunCollectionJob(jobs, new InMemoryAttemptStore(), handoffs,
-            new NoopVerifier(), new ReturnReceiptOnCancelCollector());
+            new NoopVerifier(), new ReturnReceiptOnCancelCollector(), NullLogger<RunCollectionJob>.Instance);
 
         var result = await runner.ExecuteAsync("job-1", Path.GetTempPath(), TimeSpan.FromMilliseconds(300));
 
@@ -100,7 +118,7 @@ public sealed class RunCollectionJobTests
         var request = Request();
         var jobs = new FakeJobs(PendingJob(request)) { CancelOnRenewal = true, StartRequest = request };
         var runner = new RunCollectionJob(jobs, new BlockingAttemptStore(), new EmptyHandoffs(),
-            new NoopVerifier(), new BlockingCollector());
+            new NoopVerifier(), new BlockingCollector(), NullLogger<RunCollectionJob>.Instance);
 
         var result = await runner.ExecuteAsync("job-1", Path.GetTempPath(), TimeSpan.FromMilliseconds(300));
 
@@ -117,7 +135,7 @@ public sealed class RunCollectionJobTests
         var jobs = new FakeJobs(PendingJob(request)) { ReturnFalseOnSettlement = true, StartRequest = request };
         var handoffs = new TrackingHandoffs();
         var runner = new RunCollectionJob(jobs, new InMemoryAttemptStore(), handoffs,
-            new NoopVerifier(), new ReturnReceiptCollector());
+            new NoopVerifier(), new ReturnReceiptCollector(), NullLogger<RunCollectionJob>.Instance);
 
         var result = await runner.ExecuteAsync("job-1", Path.GetTempPath(), TimeSpan.FromSeconds(5));
 
@@ -138,7 +156,7 @@ public sealed class RunCollectionJobTests
             new CaptureIdentity(new string('a', 64), 4)), null, null);
         var attempts = new ExistingAttemptStore(retained);
         var collector = new CountingCollector();
-        var runner = new RunCollectionJob(jobs, attempts, new EmptyHandoffs(), new NoopVerifier(), collector);
+        var runner = new RunCollectionJob(jobs, attempts, new EmptyHandoffs(), new NoopVerifier(), collector, NullLogger<RunCollectionJob>.Instance);
 
         var result = await runner.ExecuteAsync("job-1", Path.GetTempPath(), TimeSpan.FromSeconds(30));
 
@@ -230,6 +248,7 @@ public sealed class RunCollectionJobTests
         public List<CollectionCollectorLease?> RenewedCollectors { get; } = [];
         public bool CancelOnRenewal { get; init; }
         public bool ReturnFalseOnSettlement { get; init; }
+        public Exception? SettlementFailure { get; init; }
         public CollectionRequest? StartRequest { get; init; }
         public Task<CollectionJobRecord> EnqueueAsync(CollectionJobDefinition definition, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobRecord> EnqueueAsync(ConfiguredCollectionSource source, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -271,6 +290,7 @@ public sealed class RunCollectionJobTests
         public Task<bool> SettleAttemptAsync(CollectionJobLease jobLease, string attemptId, CollectionAttemptResolution resolution, CancellationToken cancellationToken)
         {
             SettleCalls++;
+            if (SettlementFailure is not null) throw SettlementFailure;
             if (ReturnFalseOnSettlement) return Task.FromResult(false);
             var settled = current.Attempts.Select(attempt => attempt.AttemptId == attemptId
                 ? attempt with { Resolution = resolution, CompletedAt = DateTimeOffset.UtcNow } : attempt).ToList();

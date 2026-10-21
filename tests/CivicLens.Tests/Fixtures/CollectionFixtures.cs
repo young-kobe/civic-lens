@@ -9,6 +9,19 @@ internal static class CollectionFixtures
     internal static CollectionJobDefinition Definition(CollectionConfiguration configuration, string sourceId, DateOnly? asOf = null) =>
         new ConfiguredCollectionSource(configuration, sourceId, asOf).CreateJobDefinition(asOf ?? DateOnly.FromDateTime(DateTime.UtcNow));
 
+    internal static CollectionJobDefinition PageDefinition(string origin = "https://example.test", string pathPrefix = "/page",
+        CollectionJobPolicy? policy = null, string sourceId = "source") =>
+        Definition(new CollectionConfiguration
+        {
+            People = [new PersonConfiguration { Id = "person", Name = "Person" }],
+            Sources = [new WatchedSourceConfiguration
+            {
+                Id = sourceId, Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = origin + "/page",
+                AllowedOrigin = origin, AllowedPathPrefix = pathPrefix, MaxRequests = 5, MaxBytes = 100, TimeoutSeconds = 10,
+                MinDelayMilliseconds = 0, JobPolicy = policy ?? new CollectionJobPolicy { InitialRetryDelaySeconds = 0 }
+            }]
+        }, sourceId, new DateOnly(2026, 7, 1));
+
     internal static CollectionRequest Request() => new()
     {
         JobId = "job",

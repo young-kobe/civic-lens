@@ -5,6 +5,7 @@ using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Host.Review;
 
@@ -17,6 +18,7 @@ public abstract class DraftListPage : ComponentBase
 
     [Inject] protected ReviewActorAccessor Actors { get; set; } = default!;
     [Inject] protected IssueConfiguration Issues { get; set; } = default!;
+    [Inject] protected ILogger<DraftListPage> Logger { get; set; } = default!;
     [Inject] private ReviewOfficials Officials { get; set; } = default!;
 
     [CascadingParameter] protected HttpContext HttpContext { get; set; } = default!;
@@ -51,8 +53,9 @@ public abstract class DraftListPage : ComponentBase
         {
             error = "This page link is no longer valid. Go back to the first page of the list.";
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            Logger.LogError(exception, "A review list could not load.");
             error = unavailableMessage;
         }
     }
