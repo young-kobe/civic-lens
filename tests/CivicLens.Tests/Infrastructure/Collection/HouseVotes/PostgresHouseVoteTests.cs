@@ -1,10 +1,10 @@
 using System.Text.Json;
 using CivicLens.Application.Collection;
-using CivicLens.Application.Collection.Votes;
-using CivicLens.Application.Configuration;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Application.Collection.Votes;
+using CivicLens.Application.Configuration;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;

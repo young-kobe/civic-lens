@@ -1,7 +1,7 @@
 using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
-using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Votes;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection.BillStream;
@@ -98,7 +98,7 @@ public sealed partial class PostgresCollectionJobStore : IVoteAdmissionStore
         foreach (var candidateId in waiting) VoteDraftQueueRows.Add(db, candidateId, Ticks(now), priority);
     }
 
-    internal static string HashVoteCandidate(Chamber chamber, string sourceId, int congress, int sessionNumber, int rollCallNumber,
+    private static string HashVoteCandidate(Chamber chamber, string sourceId, int congress, int sessionNumber, int rollCallNumber,
         long updateDateUtcTicks) =>
         HashIdentity($"{IdentityPrefix(chamber)}:{sourceId.Length}:{sourceId}{congress}:{sessionNumber}:{rollCallNumber}:{updateDateUtcTicks}");
 

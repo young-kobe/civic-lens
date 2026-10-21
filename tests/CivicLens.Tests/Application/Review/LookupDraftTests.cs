@@ -1,8 +1,8 @@
 using CivicLens.Application.Review;
-using CivicLens.Core.Votes;
-using CivicLens.Tests.Application.Actions;
 using CivicLens.Core.Review;
+using CivicLens.Core.Votes;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Application.Actions;
 using CivicLens.Tests.Application.Votes;
 using CivicLens.Tests.Fixtures;
 
