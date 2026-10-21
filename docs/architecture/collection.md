@@ -107,7 +107,7 @@ A 429 returns `deferred`, with Retry-After when the server supplies it. Host can
 
 **Scheme upgrade.** The collector can fetch a discovered `http` link over `https`. This happens when the allowed origin is `https` and the link has the same host and the default port. `CollectionRequest.ResolveCandidate` owns this rule.
 
-**API mode.** The collector fetches one JSON resource with HTTP GET and sends `Accept: application/json`. It returns a capture with no discovery result. It knows nothing about any specific API; an Application parser reads the capture later. API mode makes no robots request, so `robotsRequestCount` is 0 and no crawl delay is declared.
+**API mode.** The collector fetches one JSON or XML resource with HTTP GET. It sends `Accept: application/json, application/xml;q=0.9, text/xml;q=0.9`. `HttpCollector` owns this value. It returns a capture with no discovery result. It knows nothing about any specific API. An Application parser reads the capture later. The Senate vote files are XML and need no credential. API mode makes no robots request, so `robotsRequestCount` is 0 and no crawl delay is declared.
 
 API mode still honors 429 with Retry-After, `minDelayMilliseconds` pacing, the budgets, scope checks on redirects, and conditional validators. Its receipt limit is the page receipt limit. Configuration requires an `apiParser` in API mode.
 
