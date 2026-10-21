@@ -5,8 +5,6 @@ namespace CivicLens.Application.Collection.SenateVotes;
 
 public static class SenateVoteMenuParser
 {
-    public const string Version = "senate-vote-menu-v1";
-
     public const int MaximumVotes = 999;
 
     private const string Name = "Senate vote menu";
@@ -30,7 +28,12 @@ public static class SenateVoteMenuParser
             ? year
             : throw new InvalidDataException("Senate vote menu year does not match its session.");
 
-    private static SenateVoteMenuItem ReadItem(XElement item, VoteSession session, int year) =>
-        new(SenateXml.ReadRoll(session, SenateXml.Required(item, "vote_number", Name), Name),
-            SenateXml.ReadDay(SenateXml.Required(item, "vote_date", Name), year, Name));
+    private static SenateVoteMenuItem ReadItem(XElement item, VoteSession session, int year)
+    {
+        var text = SenateXml.Required(item, "vote_date", Name);
+        var day = SenateXml.ReadDay(text, year, Name);
+        var endsNextYear = day is { Month: 1, Day: <= 2 };
+        return new(SenateXml.ReadRoll(session, SenateXml.Required(item, "vote_number", Name), Name),
+            endsNextYear ? SenateXml.ReadDay(text, year + 1, Name) : day);
+    }
 }

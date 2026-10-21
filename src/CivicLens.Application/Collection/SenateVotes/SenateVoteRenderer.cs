@@ -25,7 +25,7 @@ public static class SenateVoteRenderer
         };
         AddLine(lines, "Result text", detail.ResultText);
         AddLine(lines, "Majority required", detail.MajorityRequirement);
-        AddLine(lines, "Document", detail.Document?.Name);
+        AddLine(lines, "Document", detail.DocumentName);
         AddLine(lines, "Document text", detail.DocumentText);
         lines.Add(Line("Count", CountsOf(detail.Counts)));
         lines.AddRange(detail.Members.Select(MemberLine).Order(StringComparer.Ordinal));

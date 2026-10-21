@@ -8,7 +8,7 @@ using CivicLens.Collection.Contracts;
 
 namespace CivicLens.Tests.Fixtures;
 
-/// <summary>Trimmed copies of senate.gov roll call files for the 119th Congress, session 1, fetched 2026-10-21.</summary>
+/// <summary>Trimmed copies of senate.gov roll call files for the 119th Congress, session 1, fetched 2026-10-21. The tie-break fixture is trimmed from vote 372.</summary>
 internal static class SenateVoteFixtures
 {
     public const string SourceId = "senate-votes";
@@ -50,7 +50,8 @@ internal static class SenateVoteFixtures
 
     public static byte[] Vote(string voteNumber = "1", string modifyDate = "January 10, 2025,  02:57 PM",
         string voteDate = "January 9, 2025,  02:54 PM", string document = DefaultDocument, string count = DefaultCount,
-        string members = DefaultMembers, string question = "On Cloture on the Motion to Proceed") => Bytes($"""
+        string members = DefaultMembers, string question = "On Cloture on the Motion to Proceed",
+        string tieBreaker = "<tie_breaker><by_whom/><tie_breaker_vote/></tie_breaker>") => Bytes($"""
         <?xml version="1.0" encoding="UTF-8"?><roll_call_vote>
           <congress>119</congress>
           <session>1</session>
@@ -68,7 +69,7 @@ internal static class SenateVoteFixtures
           {document}
           <amendment><amendment_number/><amendment_purpose>No Statement of Purpose on File.</amendment_purpose></amendment>
           {count}
-          <tie_breaker><by_whom/><tie_breaker_vote/></tie_breaker>
+          {tieBreaker}
           <members>{members}</members>
         </roll_call_vote>
         """);

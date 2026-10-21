@@ -1302,7 +1302,7 @@ public sealed class CollectorTests
 
         Assert.Equal(CollectionOutcome.Captured, result.Outcome);
         Assert.Equal(ApiKey, key);
-        Assert.Equal("application/json, application/xml; q=0.9, text/xml; q=0.9", accept);
+        Assert.Equal("application/json", accept);
         Assert.Null(result.Discovery);
     }
 

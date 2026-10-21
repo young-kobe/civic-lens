@@ -44,14 +44,61 @@ public sealed class SenateVoteParserTests
     [Theory]
     [InlineData("PN")]
     [InlineData("S.Amdt.")]
-    public void ADocumentThatIsNotABillGivesNoBillLinkButKeepsTheDocument(string type)
+    public void ADocumentThatIsNotABillGivesNoBillLinkButKeepsItsName(string type)
     {
         var document = SenateVoteFixtures.DefaultDocument.Replace("<document_type>S.</document_type>", $"<document_type>{type}</document_type>");
 
         var detail = Parse(SenateVoteFixtures.Vote(document: document));
 
         Assert.Equal((null, null), (detail.Vote.BillType, detail.Vote.BillNumber));
-        Assert.Equal(type, detail.Document!.Type);
+        Assert.Equal("S. 5", detail.DocumentName);
+    }
+
+    [Fact]
+    public void ANominationWithAnIdThatIsNotAWholeNumberStillParsesBecauseOnlyABillNeedsANumber()
+    {
+        var document = SenateVoteFixtures.DefaultDocument
+            .Replace("<document_type>S.</document_type>", "<document_type>PN</document_type>")
+            .Replace("<document_number>5</document_number>", "<document_number>12-3</document_number>")
+            .Replace("<document_name>S. 5</document_name>", "<document_name>PN12-3</document_name>");
+
+        var detail = Parse(SenateVoteFixtures.Vote(document: document));
+
+        Assert.Equal((null, null, "PN12-3"), (detail.Vote.BillType, detail.Vote.BillNumber, detail.DocumentName));
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("5-1")]
+    public void ABillWithoutAWholeNumberIsInvalidBecauseTheBillLinkMustBeExact(string number)
+    {
+        var document = SenateVoteFixtures.DefaultDocument.Replace("<document_number>5</document_number>", $"<document_number>{number}</document_number>");
+
+        Assert.Throws<InvalidDataException>(() => Parse(SenateVoteFixtures.Vote(document: document)));
+    }
+
+    [Fact]
+    public void ATieBreakVoteParsesBecauseTheVicePresidentIsInNeitherTheCountsNorTheMembers()
+    {
+        var tieBreaker = "<tie_breaker><by_whom>Vice President of the United States</by_whom><tie_breaker_vote>Yea</tie_breaker_vote></tie_breaker>";
+        var members = SenateVoteFixtures.DefaultMembers.Replace("<vote_cast>Not Voting</vote_cast>", "<vote_cast>Nay</vote_cast>");
+        var count = "<count><yeas>1</yeas><nays>1</nays><present/><absent/></count>";
+
+        var detail = Parse(SenateVoteFixtures.Vote(tieBreaker: tieBreaker, members: members, count: count));
+
+        Assert.Equal(new SenateVoteCounts(1, 1, null, null), detail.Counts);
+        Assert.Equal(2, detail.Members.Count);
+    }
+
+    [Theory]
+    [InlineData("Guilty")]
+    [InlineData("Not Guilty")]
+    [InlineData("Present, Giving Live Pair")]
+    public void ACastOutsideTheFourCountedKindsFailsTheFileBecauseNoCountCoversIt(string cast)
+    {
+        var members = SenateVoteFixtures.DefaultMembers.Replace("<vote_cast>Not Voting</vote_cast>", $"<vote_cast>{cast}</vote_cast>");
+
+        Assert.Throws<InvalidDataException>(() => Parse(SenateVoteFixtures.Vote(members: members)));
     }
 
     [Fact]
@@ -59,7 +106,7 @@ public sealed class SenateVoteParserTests
     {
         var detail = Parse(SenateVoteFixtures.Vote(document: "<document><document_type/><document_number/></document>"));
 
-        Assert.Null(detail.Document);
+        Assert.Null(detail.DocumentName);
         Assert.Null(detail.Vote.BillType);
     }
 
@@ -121,14 +168,6 @@ public sealed class SenateVoteParserTests
     public void CountsThatDifferFromTheMemberListAreInvalidBecauseOneOfThemIsWrong(string count)
     {
         Assert.Throws<InvalidDataException>(() => Parse(SenateVoteFixtures.Vote(count: count)));
-    }
-
-    [Fact]
-    public void ACastOutsideTheFourCountedKindsIsInvalidBecauseNoCountCoversIt()
-    {
-        var members = SenateVoteFixtures.DefaultMembers.Replace("<vote_cast>Not Voting</vote_cast>", "<vote_cast>Guilty</vote_cast>");
-
-        Assert.Throws<InvalidDataException>(() => Parse(SenateVoteFixtures.Vote(members: members)));
     }
 
     [Fact]

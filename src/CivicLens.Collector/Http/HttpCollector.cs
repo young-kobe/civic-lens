@@ -12,7 +12,6 @@ public sealed class HttpCollector : IDisposable
 {
     private const int MaximumRobotsDecodedStageBytes = 10_000_000;
     private const int MaximumRobotsContentEncodings = 16;
-    private const string ApiAccept = "application/json, application/xml;q=0.9, text/xml;q=0.9";
     private readonly HttpClient client;
     private readonly Func<string, string?> readVariable;
     private readonly TimeProvider clock;
@@ -67,7 +66,7 @@ public sealed class HttpCollector : IDisposable
                 if (!request.Allows(target)) return Result(CollectionOutcome.Failed, CollectionFailureCode.OutOfScope);
                 using var message = new HttpRequestMessage(HttpMethod.Get, target);
                 message.Headers.UserAgent.ParseAdd("CivicLens/0.1");
-                if (request.Mode == CollectionMode.Api) message.Headers.Accept.ParseAdd(ApiAccept);
+                if (request.Mode == CollectionMode.Api) message.Headers.Accept.ParseAdd("application/json");
                 if (apiKey is not null && SameOrigin(new Uri(request.AllowedOrigin), target)) message.Headers.Add("X-Api-Key", apiKey);
                 if (target == requestedUri)
                 {

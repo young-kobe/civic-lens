@@ -153,7 +153,7 @@ public sealed class SenateVoteSourceConfigurationTests
     }
 
     [Fact]
-    public void AVoteOfTheLast30DaysGetsANewKeyOnEachDayAndAnOlderVoteGetsOneFinalKeySoTheSweepRefetchesOnlyRecentVotes()
+    public void AVoteOfTheLast30DaysHasAKeyThatChangesEachDayAndAnOlderVoteHasOneFinalKeySoOnlyRecentVotesAreFetchedAgain()
     {
         var recent = new SenateVoteMenuItem(new SenateVoteRoll(SenateVoteFixtures.Session, 5), Today.AddDays(-30));
         var old = new SenateVoteMenuItem(new SenateVoteRoll(SenateVoteFixtures.Session, 5), Today.AddDays(-31));

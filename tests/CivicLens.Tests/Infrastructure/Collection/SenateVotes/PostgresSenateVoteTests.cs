@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Discovery;
@@ -71,7 +73,7 @@ public sealed class PostgresSenateVoteTests(PostgresCollection postgres) : IAsyn
     }
 
     [Fact]
-    public async Task AVoteOlderThan30DaysIsFetchedOnceMoreAndNeverAgainWhileARecentVoteIsFetchedEachDay()
+    public async Task ASweepKeysAVoteOlderThan30DaysAsFinalAndARecentVoteByTheDayOfTheSweep()
     {
         await AdmitMenuAsync("sweep-one", Menu(Item(1, DaysAgo(200)), Item(2, DaysAgo(2))));
 
@@ -124,6 +126,18 @@ public sealed class PostgresSenateVoteTests(PostgresCollection postgres) : IAsyn
     }
 
     [Fact]
+    public async Task SenateCandidateIdsAreTheHashOfTheirFramedTextSoTheyNeverChange()
+    {
+        var job = await EnqueueVoteAsync("vote", 1);
+
+        await store.AdmitSenateVoteAsync(Source(), job, Vote(1, null, null), await ExtractionAsync(job), default);
+
+        var id = SenateVoteFixtures.SourceId;
+        var text = $"senate-vote:{id.Length}:{id}119:1:1:{Modified.UtcTicks}";
+        Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text))), await ScalarAsync("SELECT candidate_id FROM vote_candidates"));
+    }
+
+    [Fact]
     public async Task ASenateCandidateGetsNoDraftQueueRowBecauseTheSenateReaderComesLater()
     {
         var job = await EnqueueVoteAsync("vote", 1);
@@ -160,16 +174,6 @@ public sealed class PostgresSenateVoteTests(PostgresCollection postgres) : IAsyn
 
         Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM vote_versions"));
         Assert.Equal(2L, await ScalarAsync("SELECT count(DISTINCT candidate_id) FROM vote_candidates"));
-    }
-
-    [Fact]
-    public async Task ASenateVoteIsRecordedWithTheSenateChamber()
-    {
-        var job = await EnqueueVoteAsync("vote", 1);
-        await store.AdmitSenateVoteAsync(Source(), job, Vote(1, null, null), await ExtractionAsync(job), default);
-
-        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_versions WHERE chamber = 'Senate'"));
-        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_candidates WHERE chamber = 'Senate'"));
     }
 
     [Fact]

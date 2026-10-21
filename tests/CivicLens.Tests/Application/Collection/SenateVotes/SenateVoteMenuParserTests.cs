@@ -18,6 +18,20 @@ public sealed class SenateVoteMenuParserTests
             menu.Votes);
     }
 
+    [Theory]
+    [InlineData("01-Jan", 2026, 1, 1)]
+    [InlineData("02-Jan", 2026, 1, 2)]
+    [InlineData("03-Jan", 2025, 1, 3)]
+    [InlineData("31-Dec", 2025, 12, 31)]
+    public void AJanuaryDayBefore3JanuaryBelongsToTheYearAfterTheSessionYearBecauseASessionCanEndThen(string day, int year, int month, int dayOfMonth)
+    {
+        var votes = $"<vote><vote_number>00001</vote_number><vote_date>{day}</vote_date></vote>";
+
+        var menu = SenateVoteMenuParser.Parse(SenateVoteFixtures.Menu(votes), SenateVoteFixtures.Session);
+
+        Assert.Equal(new DateOnly(year, month, dayOfMonth), Assert.Single(menu.Votes).Day);
+    }
+
     [Fact]
     public void MenuOfAnotherSessionThanRequestedIsInvalidBecauseItsVotesWouldBelongToTheWrongRolls()
     {

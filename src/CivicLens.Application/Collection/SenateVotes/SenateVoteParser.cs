@@ -15,10 +15,10 @@ public static class SenateVoteParser
         var session = SenateXml.ReadSession(root, Name);
         if (SenateXml.ReadRoll(session, SenateXml.Required(root, "vote_number", Name), Name) != expected)
             throw new InvalidDataException("Senate vote is for another roll call than requested.");
-        var document = ReadDocument(root.Element("document"));
-        var billType = BillTypeOf(document);
+        var document = root.Element("document");
+        var (billType, billNumber) = ReadBill(document);
         var vote = new SenateVote(expected, SenateXml.ReadDateTime(SenateXml.Required(root, "modify_date", Name), Name),
-            billType, billType is null ? null : document!.Number);
+            billType, billNumber);
         var counts = ReadCounts(root);
         var members = ReadMembers(root.Element("members"));
         RequireCountsMatch(counts, members);
@@ -26,22 +26,17 @@ public static class SenateVoteParser
             SenateXml.Required(root, "question", Name), SenateXml.Required(root, "vote_question_text", Name),
             SenateXml.Required(root, "vote_title", Name), SenateXml.Required(root, "vote_result", Name),
             SenateXml.Optional(root, "vote_result_text", Name), SenateXml.Optional(root, "vote_document_text", Name),
-            SenateXml.Optional(root, "majority_requirement", Name), document, counts, members);
+            SenateXml.Optional(root, "majority_requirement", Name),
+            document is null ? null : SenateXml.Optional(document, "document_name", Name), counts, members);
     }
 
-    private static SenateVoteDocument? ReadDocument(XElement? element)
+    private static (string? Type, int? Number) ReadBill(XElement? document)
     {
-        if (element is null || SenateXml.Optional(element, "document_type", Name) is not { } type) return null;
-        var number = ApiPageQuery.TryReadNumber(SenateXml.Required(element, "document_number", Name))
-            ?? throw new InvalidDataException("Senate vote document number is invalid.");
-        return new SenateVoteDocument(type, number, SenateXml.Required(element, "document_name", Name),
-            SenateXml.Optional(element, "document_title", Name));
-    }
-
-    private static string? BillTypeOf(SenateVoteDocument? document)
-    {
-        if (document is null || CongressBillListItem.NormalizeCitationType(document.Type) is not { } type) return null;
-        return document.Number >= 1 ? type : throw new InvalidDataException("Senate vote bill number must be 1 or more.");
+        if (document is null || SenateXml.Optional(document, "document_type", Name) is not { } citationType ||
+            CongressBillListItem.NormalizeCitationType(citationType) is not { } type)
+            return (null, null);
+        var number = ApiPageQuery.TryReadNumber(SenateXml.Required(document, "document_number", Name));
+        return number is >= 1 ? (type, number) : throw new InvalidDataException("Senate vote bill number is invalid.");
     }
 
     private static SenateVoteCounts ReadCounts(XElement root)

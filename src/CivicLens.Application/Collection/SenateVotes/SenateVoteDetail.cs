@@ -10,6 +10,6 @@ public sealed record SenateVoteDetail(
     string? ResultText,
     string? DocumentText,
     string? MajorityRequirement,
-    SenateVoteDocument? Document,
+    string? DocumentName,
     SenateVoteCounts Counts,
     IReadOnlyList<SenateVoteMember> Members);
