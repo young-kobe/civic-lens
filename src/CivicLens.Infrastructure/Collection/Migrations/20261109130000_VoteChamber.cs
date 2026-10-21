@@ -65,7 +65,6 @@ public partial class VoteChamber : Migration
         DELETE FROM vote_review_decisions WHERE record_id IN (SELECT record_id FROM vote_drafts WHERE chamber = 'Senate');
         DELETE FROM vote_revisions WHERE record_id IN (SELECT record_id FROM vote_drafts WHERE chamber = 'Senate');
         DELETE FROM vote_drafts WHERE chamber = 'Senate';
-        UPDATE vote_analysis_runs SET previous_run_id = NULL WHERE candidate_id IN (SELECT candidate_id FROM vote_candidates WHERE chamber = 'Senate');
         DELETE FROM vote_analysis_runs WHERE candidate_id IN (SELECT candidate_id FROM vote_candidates WHERE chamber = 'Senate');
         DELETE FROM vote_analysis WHERE candidate_id IN (SELECT candidate_id FROM vote_candidates WHERE chamber = 'Senate');
         DELETE FROM vote_candidates WHERE chamber = 'Senate';

@@ -13,9 +13,9 @@ using CivicLens.Host.Collection;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Collection.Processing;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using Npgsql;
-using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Host;
 
