@@ -42,6 +42,7 @@ public sealed class PublishedOfficialPageTests
             SchemaVersion = PublicationProtocol.SchemaVersion,
             ReleaseNumber = 1,
             PublishedAtUtc = published,
+            Withdrawals = [],
             Records = [.. entries.Select(entry => entry with { IssueIds = ["housing"] })]
         }, new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None)).Issues.Single();
 

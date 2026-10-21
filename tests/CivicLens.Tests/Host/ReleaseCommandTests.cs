@@ -20,6 +20,9 @@ public sealed class ReleaseCommandTests
     [InlineData("releases", "publish", "key", "--note", "statement:abc", "text")]
     [InlineData("releases", "publish", "key", "statement:abc", "--note", "draft:abc", "text")]
     [InlineData("releases", "publish", "key", "statement:abc", "--note", "statement:abc")]
+    [InlineData("releases", "publish", "key", "--withdraw")]
+    [InlineData("releases", "publish", "key", "--withdraw", "statement:abc")]
+    [InlineData("releases", "publish", "key", "--withdraw", "draft:abc", "text")]
     [InlineData("releases", "list", "abc")]
     [InlineData("releases", "list", "0")]
     [InlineData("releases", "list", "5", "6")]
@@ -105,6 +108,28 @@ public sealed class ReleaseCommandTests
             scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName][PublicationProtocol.RecordDataPath(action)],
             PublicationProtocol.JsonOptions)!;
         Assert.Equal("Fixed the issue.", Assert.Single(record.Corrections).Note);
+    }
+
+    [Fact]
+    public async Task WithdrawOptionWithdrawsTheNamedRecordWithoutAnyRecordToPublishAndAnUnpublishedRecordExitsWithTwo()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('a');
+        var reference = $"action:{action}";
+        await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", reference], scenario.Publisher(), null!, null!,
+            PublicationScenario.Owner, CancellationToken.None);
+
+        var unknown = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", "--withdraw", $"action:{new string('b', 64)}", "Wrong."],
+            scenario.Publisher(), null!, null!, PublicationScenario.Owner, CancellationToken.None);
+        var withdrawn = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k3", "--withdraw", reference, "Wrong bill."],
+            scenario.Publisher(), null!, null!, PublicationScenario.Owner, CancellationToken.None);
+
+        Assert.Equal((2, 0), (unknown, withdrawn));
+        var manifest = JsonSerializer.Deserialize<PublicationRelease>(
+            scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName][PublicationProtocol.ManifestPath],
+            PublicationProtocol.JsonOptions)!;
+        Assert.Equal("Wrong bill.", Assert.Single(manifest.Withdrawals).Note);
+        Assert.Empty(manifest.Records);
     }
 
     [Fact]

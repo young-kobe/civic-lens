@@ -267,6 +267,7 @@ public sealed class PostgresBriefPublicationTests(PostgresCollection postgres) :
             SchemaVersion = PublicationProtocol.SchemaVersion,
             ReleaseNumber = 1,
             PublishedAtUtc = InWeek,
+            Withdrawals = [],
             Records = entries
         };
         File.WriteAllBytes(Path.Combine(folder, PublicationProtocol.ManifestPath), JsonSerializer.SerializeToUtf8Bytes(manifest, PublicationProtocol.JsonOptions));

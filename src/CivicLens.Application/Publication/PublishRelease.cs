@@ -47,6 +47,7 @@ public sealed class PublishRelease
         var byCode = ReviewAuthor.IsCode(actor.Subject);
         var references = ValidateRequest(request);
         var notes = PublicationCorrections.ValidateNotes(request.Notes, references, byCode);
+        var withdrawalNotes = PublicationWithdrawals.ValidateNotes(request.Withdrawals, byCode);
         var payloadHash = ReviewValidation.HashPayload(request);
         var replay = await publications.FindReplayAsync(actor.Subject, request.IdempotencyKey, payloadHash, cancellationToken);
         if (replay is not null)
@@ -58,20 +59,30 @@ public sealed class PublishRelease
         var now = clock.GetUtcNow();
         var state = await publications.GetStateAsync(cancellationToken);
         var previous = await PreviousRelease.LoadAsync(releases, state.Active, cancellationToken);
-        var corrections = await PublicationCorrections.LoadAsync(releases, previous, now, byCode, notes, references, cancellationToken);
-        var build = new PublicationBuild(previous, now, rules, renderer, corrections);
+        var withdrawn = ImmutableArray.CreateRange(withdrawalNotes.Keys);
+        var corrections = await PublicationCorrections.LoadAsync(releases, previous, now, byCode, notes, [.. references, .. withdrawn],
+            cancellationToken);
+        var newWithdrawals = PublicationWithdrawals.Create(previous, corrections, now, withdrawalNotes);
+        var build = new PublicationBuild(previous, now, rules, renderer, corrections).WithRemoved(withdrawn);
         var additions = await LoadAdditionsAsync(references, build, cancellationToken);
-        var pages = await releasePages.RenderAsync(build.WithAdded(additions), additions, cancellationToken);
-        var requested = references.ToHashSet();
-        var carried = previous.Entries.Where(entry => !requested.Contains(new(entry.Kind, entry.RecordId))).ToList();
-        if (carried.Count + additions.Count > PublicationProtocol.MaximumRecordsPerRelease)
+        var released = build.WithAdded(additions);
+        await WithdrawalCascade.RequireNoCitersAsync(releases, loaders, released, additions, cancellationToken);
+        var pages = await releasePages.RenderAsync(released, additions, cancellationToken);
+        var replaced = references.Concat(withdrawn).ToHashSet();
+        var carried = previous.Entries.Where(entry => !replaced.Contains(new(entry.Kind, entry.RecordId))).ToList();
+        var removed = previous.Entries.Where(entry => withdrawalNotes.ContainsKey(new(entry.Kind, entry.RecordId))).ToList();
+        List<PublishedWithdrawal> withdrawals = [.. previous.Withdrawals, .. newWithdrawals];
+        if (carried.Count + additions.Count + withdrawals.Count > PublicationProtocol.MaximumRecordsPerRelease)
             throw new ArgumentException("The release would exceed the maximum record count.", nameof(request));
 
         var number = state.LatestReleaseNumber + 1;
-        var (directory, entries) = await StageAsync(number, now, previous, carried, additions, pages, cancellationToken);
+        var (directory, entries) = await StageAsync(number, now, previous, carried, additions, removed, withdrawals, pages, cancellationToken);
         var commit = new PublicationCommit(number, state.Active?.ReleaseNumber, directory,
             [.. entries.Select(PublishedRevisionBinding.Of)],
-            [.. additions.Select(addition => addition.Expectation)]);
+            [.. additions.Select(addition => addition.Expectation)])
+        {
+            WithdrawnRecords = [.. newWithdrawals.Select(PublishedRevisionBinding.Of)]
+        };
         var summary = await CommitAsync(actor, commit, request.IdempotencyKey, payloadHash, cancellationToken);
         await ServeActiveReleaseAsync(cancellationToken);
         return summary;
@@ -94,10 +105,13 @@ public sealed class PublishRelease
         ArgumentNullException.ThrowIfNull(request);
         ReviewValidation.ValidateIdempotencyKey(request.IdempotencyKey);
         var records = request.Records;
-        if (records.IsDefaultOrEmpty || records.Length > MaximumRecords)
-            throw new ArgumentException($"Select 1 to {MaximumRecords} records to publish.", nameof(request));
-        foreach (var record in records) loaders.For(record.Kind).ValidateId(record.RecordId);
-        if (records.ToHashSet().Count != records.Length)
+        if (records.IsDefault || request.Withdrawals.IsDefault)
+            throw new ArgumentException("Records and withdrawals must not be default.", nameof(request));
+        var named = records.Concat(request.Withdrawals.Select(withdrawal => withdrawal.Reference)).ToArray();
+        if (named.Length is 0 or > MaximumRecords)
+            throw new ArgumentException($"Select 1 to {MaximumRecords} records to publish or withdraw.", nameof(request));
+        foreach (var record in named) loaders.For(record.Kind).ValidateId(record.RecordId);
+        if (named.ToHashSet().Count != named.Length)
             throw new ArgumentException("Selected records must be distinct.", nameof(request));
         return records;
     }
@@ -116,7 +130,8 @@ public sealed class PublishRelease
 
     private async Task<(string Directory, List<PublishedRecordEntry> Entries)> StageAsync(int number, DateTimeOffset now,
         PreviousRelease previous, List<PublishedRecordEntry> carried, List<PendingRecord> additions,
-        IReadOnlyDictionary<string, string> pages, CancellationToken cancellationToken)
+        List<PublishedRecordEntry> removed, List<PublishedWithdrawal> withdrawals, IReadOnlyDictionary<string, string> pages,
+        CancellationToken cancellationToken)
     {
         List<PublishedRecordEntry> entries = [.. carried, .. additions.Select(addition => addition.Entry)];
         var manifest = new PublicationRelease
@@ -125,7 +140,9 @@ public sealed class PublishRelease
             ReleaseNumber = number,
             PublishedAtUtc = now,
             Records = [.. entries.OrderByDescending(entry => entry.FirstPublishedAtUtc)
-                .ThenBy(entry => entry.RecordId, StringComparer.Ordinal)]
+                .ThenBy(entry => entry.RecordId, StringComparer.Ordinal)],
+            Withdrawals = [.. withdrawals.OrderByDescending(withdrawal => withdrawal.WithdrawnAtUtc)
+                .ThenBy(withdrawal => withdrawal.RecordId, StringComparer.Ordinal)]
         };
         manifest.Validate();
         var manifestJson = JsonSerializer.SerializeToUtf8Bytes(manifest, PublicationProtocol.JsonOptions);
@@ -148,6 +165,7 @@ public sealed class PublishRelease
                 Encoding.UTF8.GetBytes(pages[addition.RecordId]), cancellationToken);
         }
 
+        await WriteWithdrawalPagesAsync(staging, previous, withdrawals, cancellationToken);
         foreach (var asset in renderer.Assets)
             await staging.WriteFileAsync(asset.RelativePath, asset.Content, cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestGzipPath,
@@ -157,9 +175,23 @@ public sealed class PublishRelease
         var facets = ReleaseFacets.From(manifest, catalog);
         await indexPages.WriteAsync(staging, manifest, facets, additions, previous, cancellationToken);
         var officials = await dataFiles.WriteAsync(staging, manifest, facets, additions, previous, cancellationToken);
-        await officialPages.WriteAsync(staging, manifest, officials, additions, previous, cancellationToken);
+        await officialPages.WriteAsync(staging, manifest, officials, additions, removed, previous, cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestPath, manifestJson, cancellationToken);
         return (await staging.CompleteAsync(number, cancellationToken), entries);
+    }
+
+    private async Task WriteWithdrawalPagesAsync(IReleaseStaging staging, PreviousRelease previous,
+        List<PublishedWithdrawal> withdrawals, CancellationToken cancellationToken)
+    {
+        foreach (var withdrawal in withdrawals)
+        {
+            var path = PublicationProtocol.RecordPagePath(withdrawal.RecordId);
+            if (previous.IsWithdrawn(withdrawal.RecordId))
+                await staging.LinkFileAsync(previous.DirectoryName!, path, cancellationToken);
+            else
+                await staging.WriteFileAsync(path, Encoding.UTF8.GetBytes(await renderer.RenderWithdrawalAsync(withdrawal, cancellationToken)),
+                    cancellationToken);
+        }
     }
 
     private static byte[] Compress(byte[] content, Func<Stream, Stream> compressor)

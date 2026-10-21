@@ -86,6 +86,16 @@ public sealed class ReleaseRenderer(string? publicApiUrl = null, string? turnsti
         });
     }
 
+    public Task<string> RenderWithdrawalAsync(PublishedWithdrawal withdrawal, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(withdrawal);
+        withdrawal.Validate();
+        return RenderAsync<PublishedWithdrawalPage>(new Dictionary<string, object?>
+        {
+            [nameof(PublishedWithdrawalPage.Withdrawal)] = withdrawal
+        });
+    }
+
     public Task<string> RenderHomeAsync(PublicationRelease release, PublishedBrief? brief, ReleaseFacets facets,
         CancellationToken cancellationToken)
     {

@@ -1,0 +1,13 @@
+@using CivicLens.Publication.Contracts
+
+<PublicPage Title="Record withdrawn" RootPath="../">
+    <a class="back-link" href="@("../" + PublicationProtocol.AllRecordsPagePath(1))">All records</a>
+    <RecordView HeadingLevel="1" Headline="This record was withdrawn"
+                Summary="A person withdrew this record. Its content is no longer published."
+                Facts="PublishedWithdrawalView.Facts(Withdrawal)" />
+    <PublishedCorrectionList Corrections="Withdrawal.Corrections" />
+</PublicPage>
+
+@code {
+    [Parameter, EditorRequired] public PublishedWithdrawal Withdrawal { get; set; } = default!;
+}

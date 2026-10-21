@@ -13,6 +13,7 @@ public interface IReleaseRenderer
         CancellationToken cancellationToken);
     Task<string> RenderRelationshipAsync(PublishedRelationship record, CancellationToken cancellationToken);
     Task<string> RenderBriefAsync(PublishedBrief record, CancellationToken cancellationToken);
+    Task<string> RenderWithdrawalAsync(PublishedWithdrawal withdrawal, CancellationToken cancellationToken);
     Task<string> RenderHomeAsync(PublicationRelease release, PublishedBrief? brief, ReleaseFacets facets, CancellationToken cancellationToken);
     Task<string> RenderAllRecordsAsync(PublicationRelease release, int page, CancellationToken cancellationToken);
     Task<string> RenderFacetPageAsync(ReleaseFacet facet, int page, CancellationToken cancellationToken);

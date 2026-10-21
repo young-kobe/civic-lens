@@ -37,10 +37,7 @@ internal sealed class PublicationCorrections
         var trimmed = new Dictionary<PublishedRecordReference, string>();
         foreach (var note in notes)
         {
-            var text = note.Note?.Replace("\r\n", "\n", StringComparison.Ordinal).Trim() ?? string.Empty;
-            if (!PublishedCorrection.IsNote(text))
-                throw new ArgumentException(
-                    $"A correction note has 1 to {PublishedCorrection.MaximumNoteLength} characters and no NUL.", nameof(notes));
+            var text = note.ValidText(nameof(notes));
             if (!requested.Contains(note.Reference))
                 throw new ArgumentException($"{note.Reference} has a note but is not in the release.", nameof(notes));
             if (!trimmed.TryAdd(note.Reference, text))
@@ -62,6 +59,7 @@ internal sealed class PublicationCorrections
     public PublishedCorrection[] For(PublishedRecordKind kind, string recordId)
     {
         var reference = new PublishedRecordReference(kind, recordId);
+        if (previous.IsWithdrawn(recordId)) throw new WithdrawnRecordException(reference);
         var note = notes.GetValueOrDefault(reference);
         if (previous.Find(kind, recordId) is not { } replaced)
             return note is null ? [] : throw new ArgumentException($"{reference} is not in the active release, so it takes no note.");
@@ -72,6 +70,8 @@ internal sealed class PublicationCorrections
             throw new CorrectionLimitException(reference);
         return PublishedCorrection.Prepend(kept, new() { ReplacedRevisionNumber = replaced.RevisionNumber, PublishedAtUtc = now, Note = note });
     }
+
+    public PublishedCorrection[] Earlier(PublishedRecordReference record) => earlier[record];
 
     private static async Task<PublishedCorrection[]> ReadAsync(IReleaseDirectory releases, string directoryName,
         PublishedRecordReference record, CancellationToken cancellationToken)

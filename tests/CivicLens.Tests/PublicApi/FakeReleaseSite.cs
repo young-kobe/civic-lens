@@ -17,13 +17,16 @@ internal sealed class FakeReleaseSite : HttpMessageHandler
     public List<string> RecordRequests { get; } = [];
     public List<string> Requests { get; } = [];
 
-    public void Publish(int number, params SampleRecord[] records)
+    public void Publish(int number, params SampleRecord[] records) => Publish(number, [], records);
+
+    public void Publish(int number, PublishedWithdrawal[] withdrawals, params SampleRecord[] records)
     {
         var manifest = new PublicationRelease
         {
             SchemaVersion = PublicationProtocol.SchemaVersion,
             ReleaseNumber = number,
             PublishedAtUtc = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero).AddDays(number),
+            Withdrawals = withdrawals,
             Records = [.. records.Select(record => record.Entry)]
         };
         files.Clear();

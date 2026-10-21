@@ -152,6 +152,28 @@ public sealed class PublishCodeApprovedFactsTests
     }
 
     [Fact]
+    public async Task AWithdrawnRecordIsLeftOutAndReportedSoATickNeverPublishesItAgain()
+    {
+        var scenario = new PublicationScenario();
+        var withdrawn = scenario.AddAction('a', ApprovedByCode('a'));
+        var other = scenario.AddAction('b', ApprovedByCode('b'));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, withdrawn)], "k1"));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            new PublishReleaseRequest([], "k2") { Withdrawals = [new(PublishedRecordKind.Action, withdrawn, "Wrong.")] });
+        AddUnpublished(scenario, withdrawn, other);
+        ListedUntilPublished(scenario);
+        var reported = new List<Exception>();
+
+        var published = await Facts(scenario, reported).ExecuteAsync(default);
+
+        Assert.Equal(1, published);
+        Assert.Equal([other], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId));
+        var failure = Assert.Single(reported);
+        Assert.Contains($"action:{withdrawn}", failure.Message);
+        Assert.Contains("withdrawn", failure.Message);
+    }
+
+    [Fact]
     public async Task AConflictEndsTheTickWithoutAFailureBecauseTheNextTickBuildsAgainFromTheLatestRelease()
     {
         var scenario = new PublicationScenario();

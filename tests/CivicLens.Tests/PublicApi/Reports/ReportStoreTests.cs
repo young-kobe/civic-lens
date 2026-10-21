@@ -1,5 +1,6 @@
 using CivicLens.PublicApi;
 using CivicLens.PublicApi.Reports;
+using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.Fixtures;
 using Npgsql;
@@ -31,6 +32,24 @@ public sealed class ReportStoreTests(PostgresCollection postgres)
     {
         await using var command = world.Database.CreateCommand("SELECT acked_sequence FROM report_pull_state");
         return (long)(await command.ExecuteScalarAsync())!;
+    }
+
+    [Fact]
+    public async Task AReportOnARevisionThatALaterReleaseWithdrewIsStillStoredBecauseTheReaderSawThatRevisionBeforeTheWithdrawal()
+    {
+        await using var world = await SearchWorld.CreateAsync(postgres);
+        var record = PublishedSamples.Statement('a', "Rent cap");
+        await world.PublishAndIngestAsync(1, record);
+        world.Site.Publish(2, [new PublishedWithdrawal
+        {
+            Kind = record.Entry.Kind, RecordId = RecordId, WithdrawnRevisionNumber = 1, FirstPublishedAtUtc = record.Entry.FirstPublishedAtUtc,
+            WithdrawnAtUtc = record.Entry.FirstPublishedAtUtc.AddDays(1), Note = "Wrong.", Corrections = []
+        }]);
+        await world.IngestAsync();
+
+        var receipt = await world.Reports.StoreAsync(new(RecordId, 1, "other", "The page said something wrong.", "token"), CancellationToken.None);
+
+        Assert.Equal(ReportReceipt.Stored, receipt);
     }
 
     [Fact]
