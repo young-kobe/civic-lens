@@ -5,14 +5,7 @@ namespace CivicLens.Infrastructure.Statements;
 
 internal static class StatementReviewQueries
 {
-    public const string UnpublishedApproved = $"""
-        WITH {ReviewQueries.ActivePublishedRecords}
-        SELECT d.candidate_id AS "RecordId", d.current_revision_number AS "CurrentRevisionNumber",
-               d.created_at_utc_ticks AS "CreatedAtUtcTicks", a.revision_number AS "PublishedRevisionNumber"
-        FROM statement_drafts d
-        LEFT JOIN active a ON a.kind = 'statement' AND a.record_id = d.candidate_id
-        WHERE d.review_status = 'Approved'
-        """;
+    public static readonly string UnpublishedApproved = ReviewQueries.UnpublishedApproved("statement", "statement_drafts", "candidate_id");
 
     public const string NotInReview = $"""
         SELECT c.candidate_id AS "CandidateId", c.source_id AS "SourceId", c.url AS "Url",

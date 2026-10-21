@@ -61,14 +61,20 @@ internal static class ReviewQueries
             row.RecordId, row.RevisionNumber))];
 
     // Published state comes from the active release, not the draft, so this stays a read query.
-    public const string UnpublishedApprovedDrafts = $"""
+    // The subquery does not use the draft, so Postgres builds the map of published revisions once.
+    // A row by row join of the release entries is quadratic: Postgres counts one entry for the release.
+    // The map must stay in a subquery. As the inner side of a join, Postgres copies the whole map for each draft.
+    public static string UnpublishedApproved(string kind, string draftTable, string recordIdColumn) => $"""
         WITH {ActivePublishedRecords}
-        SELECT d.draft_id AS "RecordId", d.current_revision_number AS "CurrentRevisionNumber",
-               d.created_at_utc_ticks AS "CreatedAtUtcTicks", a.revision_number AS "PublishedRevisionNumber"
-        FROM document_change_drafts d
-        LEFT JOIN active a ON a.kind = 'documentChange' AND a.record_id = d.draft_id
+        SELECT d.{recordIdColumn} AS "RecordId", d.current_revision_number AS "CurrentRevisionNumber",
+               d.created_at_utc_ticks AS "CreatedAtUtcTicks",
+               ((SELECT jsonb_object_agg(record_id, revision_number) FROM active WHERE kind = '{kind}') ->> d.{recordIdColumn})::int
+                   AS "PublishedRevisionNumber"
+        FROM {draftTable} d
         WHERE d.review_status = 'Approved'
         """;
+
+    public static readonly string UnpublishedApprovedDrafts = UnpublishedApproved("documentChange", "document_change_drafts", "draft_id");
 
     // The latest decision of a record in the Approved status is the approval of the current revision.
     public static string CodeApprovedOnly(string unpublishedApprovedSql, string decisionTable) => $"""
