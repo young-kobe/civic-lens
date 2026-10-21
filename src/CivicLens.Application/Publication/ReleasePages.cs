@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
@@ -13,21 +12,26 @@ internal sealed class ReleasePages(IReleaseDirectory releases, PublishedRecordLo
         var pages = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var addition in additions)
             pages[addition.RecordId] = await addition.RenderPage(links.Citing(addition.Entry.Kind, addition.RecordId), cancellationToken);
-        foreach (var cited in CarriedCitedBy(links, additions, build.Removed))
+        foreach (var carried in await CarriedToRenderAsync(links, build, additions, cancellationToken))
         {
-            var json = await releases.ReadFileAsync(build.Previous.DirectoryName!, PublicationProtocol.RecordDataPath(cited.RecordId),
+            var json = await releases.ReadFileAsync(build.Previous.DirectoryName!, PublicationProtocol.RecordDataPath(carried.RecordId),
                 PublishedRecordFiles.MaximumCitedRecordBytes, cancellationToken);
-            pages[cited.RecordId] = await loaders.Carried(cited.Kind).RenderCarriedAsync(cited.RecordId, json, links, build, cancellationToken);
+            pages[carried.RecordId] = await loaders.Carried(carried.Kind).RenderCarriedAsync(carried.RecordId, json, links, build, cancellationToken);
         }
         return pages;
     }
 
-    private static IEnumerable<PublishedRelationshipCitation> CarriedCitedBy(ReleaseLinks links, IReadOnlyList<PendingRecord> additions,
-        ImmutableArray<PublishedRecordReference> removed)
+    // A carried page changes when a link of its related panel changes, or when its bill link points at a withdrawn action.
+    private async Task<IEnumerable<PublishedRecordReference>> CarriedToRenderAsync(ReleaseLinks links, PublicationBuild build,
+        IReadOnlyList<PendingRecord> additions, CancellationToken cancellationToken)
     {
         var skipped = additions.Select(addition => (addition.Entry.Kind, addition.RecordId))
-            .Concat(removed.Select(record => (record.Kind, record.RecordId))).ToHashSet();
-        return links.ChangedCitations.Where(cited => !skipped.Contains((cited.Kind, cited.RecordId)))
-            .DistinctBy(cited => (cited.Kind, cited.RecordId));
+            .Concat(build.Removed.Select(record => (record.Kind, record.RecordId))).ToHashSet();
+        var votesOnWithdrawnBills = await loaders.Votes.FindOnBillsOfActionsAsync(
+            build.Removed.Where(record => record.Kind == PublishedRecordKind.Action).Select(record => record.RecordId), cancellationToken);
+        return links.ChangedCitations.Select(cited => new PublishedRecordReference(cited.Kind, cited.RecordId))
+            .Concat(build.ReleaseRecords.Where(record => record.Kind == PublishedRecordKind.Vote && votesOnWithdrawnBills.Contains(record.RecordId))
+                .Select(record => new PublishedRecordReference(record.Kind, record.RecordId)))
+            .Where(record => !skipped.Contains((record.Kind, record.RecordId))).Distinct();
     }
 }

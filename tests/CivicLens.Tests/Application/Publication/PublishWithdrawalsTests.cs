@@ -37,14 +37,14 @@ public sealed class PublishWithdrawalsTests
     }
 
     [Fact]
-    public async Task TheCommitNamesTheWithdrawnRevisionSoTheStoreCanCheckThatReviewBlockedTheRecord()
+    public async Task TheCommitNamesTheWithdrawnRecordSoTheStoreCanCheckThatReviewBlockedIt()
     {
         var (scenario, action) = await PublishedActionAsync();
 
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong bill."));
 
         var commit = scenario.Publications.LastCommit!;
-        Assert.Equal(new PublishedRevisionBinding(PublishedRecordKind.Action, action, 1), Assert.Single(commit.WithdrawnRecords));
+        Assert.Equal(Reference(action), Assert.Single(commit.WithdrawnRecords));
         Assert.Empty(commit.Records);
         Assert.Empty(commit.AddedRecords);
     }
@@ -188,7 +188,7 @@ public sealed class PublishWithdrawalsTests
     }
 
     [Fact]
-    public async Task APublishOfAWithdrawnRecordIsRefusedForAPersonAndForCodeUntilAnotherChangeBringsItBack()
+    public async Task APublishOfAWithdrawnRecordIsRefusedForAPersonAndForCode()
     {
         var (scenario, action) = await PublishedActionAsync();
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong."));
@@ -333,6 +333,37 @@ public sealed class PublishWithdrawalsTests
         Assert.Equal(2, VoteRows(afterOlder, PublicationProtocol.OfficialVotesPath("mayor", 119)).Length);
         var afterRecent = scenario.Releases.Directories[third.DirectoryName];
         Assert.Equal([sameCongress], VoteRows(afterRecent, PublicationProtocol.OfficialVotesPath("mayor", 119)).Select(row => row.RecordId));
+    }
+
+    [Fact]
+    public async Task AVotePageThatLinkedTheWithdrawnActionOfItsBillIsWrittenAgainWithoutTheLink()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('d');
+        var vote = scenario.AddVote('a', billActionRecordIds: [action]);
+        var unrelated = scenario.AddVote('b', billType: null);
+        var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            Reference(action), Reference(vote, PublishedRecordKind.Vote), Reference(unrelated, PublishedRecordKind.Vote)));
+        Assert.Equal($"<html>vote {vote} bill {action}</html>", Page(scenario.Releases.Directories[first.DirectoryName], PublicationProtocol.RecordPagePath(vote)));
+        scenario.Releases.Links.Clear();
+
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong bill."));
+
+        var files = scenario.Releases.Directories[second.DirectoryName];
+        Assert.Equal($"<html>vote {vote} bill </html>", Page(files, PublicationProtocol.RecordPagePath(vote)));
+        Assert.Contains((first.DirectoryName, PublicationProtocol.RecordPagePath(unrelated)), scenario.Releases.Links);
+    }
+
+    [Fact]
+    public async Task ANullNoteOrNullWithdrawalIsRefusedWithAnArgumentExceptionBeforeAnythingIsRead()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        var request = PublicationScenario.Request("k2", Reference(action));
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, request with { Withdrawals = [null!] }));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, request with { Notes = [null!] }));
     }
 
     private static async Task<(PublicationScenario Scenario, string Action)> PublishedActionAsync()

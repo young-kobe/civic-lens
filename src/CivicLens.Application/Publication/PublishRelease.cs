@@ -81,7 +81,7 @@ public sealed class PublishRelease
             [.. entries.Select(PublishedRevisionBinding.Of)],
             [.. additions.Select(addition => addition.Expectation)])
         {
-            WithdrawnRecords = [.. newWithdrawals.Select(PublishedRevisionBinding.Of)]
+            WithdrawnRecords = withdrawn
         };
         var summary = await CommitAsync(actor, commit, request.IdempotencyKey, payloadHash, cancellationToken);
         await ServeActiveReleaseAsync(cancellationToken);
@@ -105,8 +105,10 @@ public sealed class PublishRelease
         ArgumentNullException.ThrowIfNull(request);
         ReviewValidation.ValidateIdempotencyKey(request.IdempotencyKey);
         var records = request.Records;
-        if (records.IsDefault || request.Withdrawals.IsDefault)
-            throw new ArgumentException("Records and withdrawals must not be default.", nameof(request));
+        if (records.IsDefault || request.Notes.IsDefault || request.Withdrawals.IsDefault)
+            throw new ArgumentException("Records, notes, and withdrawals must not be default.", nameof(request));
+        if (request.Notes.Any(note => note is null) || request.Withdrawals.Any(withdrawal => withdrawal is null))
+            throw new ArgumentException("Notes and withdrawals must not hold null.", nameof(request));
         var named = records.Concat(request.Withdrawals.Select(withdrawal => withdrawal.Reference)).ToArray();
         if (named.Length is 0 or > MaximumRecords)
             throw new ArgumentException($"Select 1 to {MaximumRecords} records to publish or withdraw.", nameof(request));

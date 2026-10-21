@@ -176,6 +176,20 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
         return await ReadBillActionRecordIdsAsync(db, bills, cancellationToken);
     }
 
+    public async Task<IReadOnlySet<string>> FindVoteRecordIdsOnBillsOfActionsAsync(ImmutableArray<string> actionRecordIds,
+        CancellationToken cancellationToken)
+    {
+        if (actionRecordIds.IsEmpty) return new HashSet<string>();
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var found = await db.Database.SqlQueryRaw<string>("""
+                SELECT DISTINCT d.record_id AS "Value" FROM vote_drafts d
+                JOIN vote_candidates c ON c.candidate_id = d.candidate_id
+                JOIN action_drafts a ON a.congress = c.congress AND a.bill_type = c.bill_type AND a.bill_number = c.bill_number
+                WHERE a.record_id = ANY({0})
+                """, (object)actionRecordIds.ToArray()).ToArrayAsync(cancellationToken);
+        return found.ToHashSet(StringComparer.Ordinal);
+    }
+
     private static async Task<Dictionary<string, ImmutableArray<string>>> ReadBillActionRecordIdsAsync(CollectionAttemptDbContext db,
         ImmutableArray<VoteBill> bills, CancellationToken cancellationToken)
     {

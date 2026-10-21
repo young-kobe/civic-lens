@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
@@ -10,9 +9,6 @@ namespace CivicLens.Application.Publication;
 /// </summary>
 internal sealed class ReleaseOfficialVotes(IReleaseDirectory releases, VoteRecordLoader votes)
 {
-    private static readonly JsonSerializerOptions ReadCongressOptions =
-        new(PublicationProtocol.JsonOptions) { UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip, RespectRequiredConstructorParameters = true };
-
     public async Task<OfficialVoteChanges> ChangesAsync(IReadOnlyList<PendingRecord> additions,
         IReadOnlyList<PublishedRecordEntry> removed, PreviousRelease previous, CancellationToken cancellationToken)
     {
@@ -39,7 +35,7 @@ internal sealed class ReleaseOfficialVotes(IReleaseDirectory releases, VoteRecor
     {
         var json = await releases.ReadFileAsync(previous.DirectoryName!, PublicationProtocol.RecordDataPath(recordId),
             PublishedRecordFiles.MaximumCitedRecordBytes, cancellationToken);
-        return (JsonSerializer.Deserialize<VoteCongress>(json, ReadCongressOptions)
+        return (JsonSerializer.Deserialize<VoteCongress>(json, PublishedRecordFiles.PartialReadOptions)
             ?? throw new InvalidDataException("A carried vote file is empty.")).Congress;
     }
 

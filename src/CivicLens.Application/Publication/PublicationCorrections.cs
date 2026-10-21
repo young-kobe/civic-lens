@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
@@ -8,9 +7,6 @@ namespace CivicLens.Application.Publication;
 /// <summary>Owns the correction list of each record that a publish writes, and the rule for its notes.</summary>
 internal sealed class PublicationCorrections
 {
-    private static readonly JsonSerializerOptions ReadCorrectionsOptions =
-        new(PublicationProtocol.JsonOptions) { UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip, RespectRequiredConstructorParameters = true };
-
     private readonly PreviousRelease previous;
     private readonly DateTimeOffset now;
     private readonly bool byCode;
@@ -80,7 +76,7 @@ internal sealed class PublicationCorrections
             PublishedRecordFiles.MaximumCitedRecordBytes, cancellationToken);
         try
         {
-            return (JsonSerializer.Deserialize<CorrectionsOnly>(json, ReadCorrectionsOptions)
+            return (JsonSerializer.Deserialize<CorrectionsOnly>(json, PublishedRecordFiles.PartialReadOptions)
                 ?? throw new InvalidDataException("A carried record file is empty.")).Corrections;
         }
         catch (JsonException exception)

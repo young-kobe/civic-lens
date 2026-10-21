@@ -510,7 +510,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     private static PublicationCommit WithdrawalCommit(int number, int? baseNumber, PublishedRecordKind kind, string recordId) =>
         new(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}", [], [])
         {
-            WithdrawnRecords = [new(kind, recordId, 1)]
+            WithdrawnRecords = [new(kind, recordId)]
         };
 
     private async Task<string> SeedDraftAsync(PublishedRecordKind kind)

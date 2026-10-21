@@ -174,7 +174,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         CancellationToken cancellationToken)
     {
         var named = commit.AddedRecords.Select(expectation => (expectation.Kind, expectation.RecordId))
-            .Concat(commit.WithdrawnRecords.Select(binding => (binding.Kind, binding.RecordId))).ToArray();
+            .Concat(commit.WithdrawnRecords.Select(record => (record.Kind, record.RecordId))).ToArray();
         var current = await ReadCurrentReviewStatesAsync(db, named, cancellationToken);
         foreach (var expectation in commit.AddedRecords)
         {
@@ -182,10 +182,9 @@ public sealed class PostgresPublicationStore : IPublicationStore
                 state.RevisionNumber != expectation.RevisionNumber || state.ReviewStateVersion != expectation.ReviewStateVersion)
                 throw new PublicationConflictException("Review state changed after the release was built. Rebuild it.");
         }
-        foreach (var withdrawn in commit.WithdrawnRecords)
+        foreach (var reference in commit.WithdrawnRecords)
         {
-            var reference = new PublishedRecordReference(withdrawn.Kind, withdrawn.RecordId);
-            if (!current.TryGetValue((withdrawn.Kind, withdrawn.RecordId), out var state))
+            if (!current.TryGetValue((reference.Kind, reference.RecordId), out var state))
                 throw new ArgumentException($"{reference} has no review record, so it cannot be withdrawn.");
             if (!PublishedRecordRules.IsWithdrawable(state.ReviewStatus))
                 throw new ArgumentException(

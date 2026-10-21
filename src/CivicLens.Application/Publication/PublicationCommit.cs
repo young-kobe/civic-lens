@@ -6,5 +6,5 @@ public sealed record PublicationCommit(int ReleaseNumber, int? BaseReleaseNumber
     ImmutableArray<PublishedRevisionBinding> Records,
     ImmutableArray<ReviewStateExpectation> AddedRecords)
 {
-    public ImmutableArray<PublishedRevisionBinding> WithdrawnRecords { get; init; } = [];
+    public ImmutableArray<PublishedRecordReference> WithdrawnRecords { get; init; } = [];
 }
