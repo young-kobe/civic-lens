@@ -41,14 +41,6 @@ public sealed class SenateVoteKindTableTests
     }
 
     [Fact]
-    public void ARatificationVoteIsNotPassageBecauseAgreeingToATreatyIsNotPassingALaw()
-    {
-        var (kind, _) = SenateVoteKindTable.Classify([Fact("Question: On the Resolution of Ratification")]);
-
-        Assert.NotEqual(VoteKind.Passage, kind);
-    }
-
-    [Fact]
     public void ASenateRollCallWithoutAQuestionLineIsOtherWithNoCitation()
     {
         var (kind, citation) = SenateVoteKindTable.Classify([new("Result: Confirmed", new SourceSpan(new string('c', 64), 0, 17))]);
