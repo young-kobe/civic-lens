@@ -2,6 +2,7 @@ using CivicLens.Tests.Fixtures;
 using CivicLens.Application.Issues;
 using CivicLens.Infrastructure.Relationships;
 using CivicLens.Infrastructure.Votes;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using CivicLens.Application.Publication;
@@ -48,6 +49,10 @@ public sealed partial class PostgresBillStreamTests
 
         Assert.Equal("action", await ScalarAsync("SELECT records_json::jsonb -> 0 ->> 'kind' FROM publication_releases"));
         Assert.Empty(await ActionReviews().ListUnpublishedApprovedAsync(10, default));
+
+        await AddSponsorAsync(UpdatedAt.AddDays(1));
+
+        Assert.Equal(1, Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, default)).PublishedRevisionNumber);
     }
 
     [Fact]
@@ -61,6 +66,41 @@ public sealed partial class PostgresBillStreamTests
 
         Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(1, default));
         Assert.Empty(await ActionReviews().ListCodeApprovedUnpublishedAsync(1, default));
+    }
+
+    // The statistics describe one draft, as they do after a bulk load. Postgres then counts one release entry
+    // and joins entries row by row, which takes more than 15 s for 15000 drafts.
+    [Fact]
+    public async Task TheCodeApprovedListStaysFastWhenTheActiveReleaseHoldsThousandsOfActionsBecauseItLooksUpOneMapOfPublishedRevisions()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+        await ExecuteAsync(connectionString, """
+            ALTER TABLE action_drafts SET (autovacuum_enabled = false);
+            ALTER TABLE action_review_decisions SET (autovacuum_enabled = false);
+            ALTER TABLE publication_releases SET (autovacuum_enabled = false);
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, records_json, is_active)
+            VALUES (1, '000001-' || md5('bulk'), 'bulk', 0, 15000, '[]', true);
+            ANALYZE action_drafts, action_review_decisions, publication_releases;
+            CREATE TEMP TABLE seeded AS
+            SELECT md5(n::text) || md5('x' || n::text) AS record_id, n FROM generate_series(1, 15000) n;
+            INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks,
+                review_state_version, review_status)
+            SELECT record_id, 'bulk', 119, 'hr', n, 1, 0, 1, 'Approved' FROM seeded;
+            INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
+            SELECT record_id, 1, 'bulk', 'Person', '{}', 0 FROM seeded;
+            INSERT INTO action_review_decisions (decision_id, record_id, revision_number, review_state_version, decision_json, kind,
+                created_at_utc_ticks)
+            SELECT md5(record_id), record_id, 1, 1, '{"actorSubject":"civic-lens:code"}', 'Approve', 0 FROM seeded;
+            UPDATE publication_releases SET records_json =
+                (SELECT jsonb_agg(jsonb_build_object('kind', 'action', 'recordId', record_id, 'revisionNumber', 1)) FROM seeded)::text;
+            """);
+
+        var clock = Stopwatch.StartNew();
+        var ready = Assert.Single(await ActionReviews().ListCodeApprovedUnpublishedAsync(10, default));
+        clock.Stop();
+
+        Assert.Equal(RecordId, ready.Action.RecordId);
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(5), $"The ready list took {clock.Elapsed}.");
     }
 
     [Fact]
