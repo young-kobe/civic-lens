@@ -61,8 +61,6 @@ internal static class ReviewQueries
             row.RecordId, row.RevisionNumber))];
 
     // Published state comes from the active release, not the draft, so this stays a read query.
-    // The subquery does not use the draft, so Postgres builds the map of published revisions once.
-    // A row by row join of the release entries is quadratic: Postgres counts one entry for the release.
     // The map must stay in a subquery. As the inner side of a join, Postgres copies the whole map for each draft.
     public static string UnpublishedApproved(string kind, string draftTable, string recordIdColumn) => $"""
         WITH {ActivePublishedRecords}

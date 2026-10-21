@@ -49,6 +49,10 @@ public sealed partial class PostgresBillStreamTests
 
         Assert.Equal("action", await ScalarAsync("SELECT records_json::jsonb -> 0 ->> 'kind' FROM publication_releases"));
         Assert.Empty(await ActionReviews().ListUnpublishedApprovedAsync(10, default));
+
+        await AddSponsorAsync(UpdatedAt.AddDays(1));
+
+        Assert.Equal(1, Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, default)).PublishedRevisionNumber);
     }
 
     [Fact]
@@ -82,7 +86,8 @@ public sealed partial class PostgresBillStreamTests
             INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks,
                 review_state_version, review_status)
             SELECT record_id, 'bulk', 119, 'hr', n, 1, 0, 1, 'Approved' FROM seeded;
-            ALTER TABLE action_review_decisions DROP CONSTRAINT "FK_action_review_decisions_action_revisions_record_id_revision_";
+            INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
+            SELECT record_id, 1, 'bulk', 'Person', '{}', 0 FROM seeded;
             INSERT INTO action_review_decisions (decision_id, record_id, revision_number, review_state_version, decision_json, kind,
                 created_at_utc_ticks)
             SELECT md5(record_id), record_id, 1, 1, '{"actorSubject":"civic-lens:code"}', 'Approve', 0 FROM seeded;
