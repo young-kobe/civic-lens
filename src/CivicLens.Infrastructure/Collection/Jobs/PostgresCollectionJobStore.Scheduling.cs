@@ -131,7 +131,7 @@ public sealed partial class PostgresCollectionJobStore
         ConfiguredCollectionSource configured, WatchedSourceConfiguration source, DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var billCursor = source.ApiParser == ApiParser.CongressBillList
+        var billCursor = ConfiguredCollectionSource.IsScheduleCollected(source)
             ? await ReadCursorAsync(db, source.Id, cancellationToken)
             : null;
         return configured.CreateScheduledJobDefinition(now, billCursor);

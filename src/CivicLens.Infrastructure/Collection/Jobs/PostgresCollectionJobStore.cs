@@ -48,6 +48,10 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         if (!source.IsCollectedBySchedule) return await EnqueueAsync(source, idempotencyKey, cancellationToken);
         return await TransactionAsync<CollectionJobRecord?>(async (db, now) =>
         {
+            if (!source.IsActiveOn(DateOnly.FromDateTime(now.UtcDateTime)))
+                throw new ArgumentException("The source has no active coverage today.");
+            if ((await ReadSourcesWithActiveRootAsync(db, [source.SourceId], cancellationToken)).Count > 0)
+                throw new ArgumentException("A check of the source is already active.");
             if (await MakeScheduleDueAsync(db, source.SourceId, now, cancellationToken) is not { Enabled: true })
                 throw new ArgumentException("The source has no active schedule.");
             return null;

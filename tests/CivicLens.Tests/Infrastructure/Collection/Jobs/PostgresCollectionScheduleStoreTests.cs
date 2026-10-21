@@ -164,6 +164,25 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
     }
 
     [Fact]
+    public async Task ACheckRequestFailsWithoutActiveCoverageOrWithAnActiveRootJob()
+    {
+        var configuration = CongressBillSourceConfigurationTests.Configuration();
+        var future = configuration with
+        {
+            Sources = [configuration.Sources[0] with { BackfillFrom = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30) }]
+        };
+        await store.SynchronizeAsync(future, default);
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.RequestCheckAsync(new ConfiguredCollectionSource(future, "congress-bills"), "no-coverage", default));
+
+        await store.SynchronizeAsync(configuration, default);
+        await SetDueAsync("congress-bills", 0);
+        Assert.Equal(1, await store.AdvanceDueAsync(10, default));
+        var source = new ConfiguredCollectionSource(configuration, "congress-bills");
+        await Assert.ThrowsAsync<ArgumentException>(() => store.RequestCheckAsync(source, "active-root", default));
+    }
+
+    [Fact]
     public async Task ACheckRequestForAPageSourceEnqueuesAJobWithItsKey()
     {
         var configuration = Configuration();

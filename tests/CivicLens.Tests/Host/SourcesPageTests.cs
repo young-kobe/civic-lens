@@ -152,6 +152,13 @@ public sealed class SourcesPageTests(PostgresCollection postgres) : IAsyncLifeti
         Assert.Single(await Jobs.ListAsync(50, default));
     }
 
+    // A bill list check creates no job, so the notice must say that the schedule is due, not that a check is queued.
+    [Fact]
+    public void ACheckThatOnlyMakesTheScheduleDueSaysSo()
+    {
+        Assert.Contains("schedule is due", SourceStatusDisplay.CheckNotice(null), StringComparison.Ordinal);
+    }
+
     // Stop must end a waiting check and the page must then report it as stopped, not as a failure.
     [Fact]
     public async Task StopCancelsAQueuedCheck()

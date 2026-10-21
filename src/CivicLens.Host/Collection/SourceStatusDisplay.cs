@@ -1,4 +1,5 @@
 using CivicLens.Application.Collection.Health;
+using CivicLens.Application.Collection.Jobs;
 using CivicLens.Host.Components.Ui;
 
 namespace CivicLens.Host.Collection;
@@ -18,6 +19,10 @@ public static class SourceStatusDisplay
         SourceCheckState.UpToDate => new("Up to date", Tone.Ok),
         _ => new("Not checked yet", Tone.Neutral)
     };
+
+    public static string CheckNotice(CollectionJobRecord? job) => job is null
+        ? "The schedule is due now. The next scheduler pass starts the check, and its result appears in Recent checks."
+        : "Check queued. Its result appears in Recent checks.";
 
     public static string Detail(SourceHealth health) => health.State switch
     {

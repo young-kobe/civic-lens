@@ -22,11 +22,14 @@ internal static class CollectionJobCommand
     public static async Task<int> EnqueueAsync(ICollectionJobStore jobs, ConfiguredCollectionSource source,
         string key, CancellationToken cancellationToken)
     {
+        if (source.IsCollectedBySchedule)
+        {
+            Console.Error.WriteLine("This source is collected by its schedule. Use Check now on the Sources page. A key, a date, and a configuration file do not apply.");
+            return 2;
+        }
         try
         {
-            var job = await jobs.RequestCheckAsync(source, key, cancellationToken);
-            if (job is null) Console.WriteLine("Check scheduled. No job exists yet. The scheduler admits it at its next pass.");
-            else CollectionCommandOutput.Write(job);
+            CollectionCommandOutput.Write(await jobs.EnqueueAsync(source, key, cancellationToken));
             return 0;
         }
         catch (ArgumentException)

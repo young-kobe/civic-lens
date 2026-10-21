@@ -27,7 +27,12 @@ public sealed class ConfiguredCollectionSource
     public DateOnly? AsOf { get; }
     public string SourceUrl => ReadSource().Url;
 
-    public bool IsCollectedBySchedule => ReadSource().ApiParser == ApiParser.CongressBillList;
+    public bool IsCollectedBySchedule => IsScheduleCollected(ReadSource());
+
+    public static bool IsScheduleCollected(WatchedSourceConfiguration source) =>
+        source.ApiParser == ApiParser.CongressBillList;
+
+    public bool IsActiveOn(DateOnly day) => Revision.Configuration.IsActiveOn(ReadSource(), day);
 
     public CollectionJobDefinition CreateJobDefinition(DateOnly currentDate, CollectionJobDefinition? existing = null)
     {
@@ -44,7 +49,7 @@ public sealed class ConfiguredCollectionSource
         var currentDate = DateOnly.FromDateTime(now.UtcDateTime);
         var source = ReadSource();
         if (source.ApiParser is null) return CreateJobDefinition(currentDate);
-        var target = source.ApiParser == ApiParser.CongressBillList
+        var target = IsScheduleCollected(source)
             ? NextBillWindowTarget(source, now, billCursor)
             : FixedApiTarget(source, currentDate);
         return target is { } found ? PrepareDefinition(source, currentDate, null, article: false, found) : null;
@@ -164,7 +169,7 @@ public sealed class ConfiguredCollectionSource
     }
 
     private static ApiTarget FirstEnqueuedApiTarget(WatchedSourceConfiguration source, DateOnly currentDate) =>
-        source.ApiParser == ApiParser.CongressBillList
+        IsScheduleCollected(source)
             ? throw new ArgumentException("A bill list source is collected only by its schedule.")
             : FixedApiTarget(source, currentDate)
                 ?? throw new ArgumentException("The API source has no work to collect now.");
