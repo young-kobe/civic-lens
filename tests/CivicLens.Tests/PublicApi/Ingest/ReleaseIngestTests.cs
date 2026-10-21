@@ -30,7 +30,7 @@ public sealed class ReleaseIngestTests(PostgresCollection postgres) : IAsyncLife
     }
 
     [Fact]
-    public async Task TheOfficialsAndCatalogFilesOfASchemaFiveReleaseAreNeverFetchedSoTheSearchIndexHoldsTheSameRecords()
+    public async Task TheOfficialsAndCatalogFilesOfAReleaseAreNeverFetchedSoTheSearchIndexHoldsTheSameRecords()
     {
         world.Site.Publish(1, PublishedSamples.Statement('a', "Rent cap"), PublishedSamples.Statement('b', "Zoning"));
 

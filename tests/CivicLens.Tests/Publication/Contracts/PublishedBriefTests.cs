@@ -128,6 +128,7 @@ public sealed class PublishedBriefTests
 
     private static PublishedBrief Brief() => new()
     {
+        Corrections = [],
         RecordId = BriefId,
         RevisionNumber = 1,
         Headline = "A week of housing news",

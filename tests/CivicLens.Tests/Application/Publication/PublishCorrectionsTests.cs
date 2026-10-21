@@ -49,20 +49,76 @@ public sealed class PublishCorrectionsTests
     }
 
     [Fact]
-    public async Task APublishOverTheCapFailsLoudInsteadOfDroppingTheOldestEntry()
+    public async Task APersonPublishOverTheNotedCapFailsLoudInsteadOfDroppingTheOldestEntry()
+    {
+        var (scenario, action) = await WithNotedCorrectionsAsync(PublishedCorrection.MaximumNotedEntries);
+        scenario.ReviseAction(action, PublishedCorrection.MaximumNotedEntries + 2);
+
+        await Assert.ThrowsAsync<CorrectionLimitException>(() =>
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("over", action, "One too many.")));
+    }
+
+    [Fact]
+    public async Task ARunOfCodeUpdatesStaysOneEntryThatNamesTheNewestReplacedRevision()
     {
         var (scenario, action) = await PublishedActionAsync();
-        for (var revision = 2; revision <= PublishedCorrection.MaximumEntries + 1; revision++)
-        {
-            scenario.ReviseAction(action, revision);
-            await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request($"k{revision}", action, "Fix."));
-        }
-        scenario.ReviseAction(action, PublishedCorrection.MaximumEntries + 2);
+        scenario.ReviseAction(action, 2);
+        await scenario.Publisher().ExecuteAsync(Code, Request("k2", action));
+        scenario.ReviseAction(action, 3);
+        scenario.Clock.Now = scenario.Clock.Now.AddDays(1);
 
-        var error = await Assert.ThrowsAsync<ArgumentException>(() =>
-            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("over", action, "One too many.")));
+        var third = await scenario.Publisher().ExecuteAsync(Code, Request("k3", action));
 
-        Assert.Contains("already has 20 corrections", error.Message);
+        var entry = Assert.Single(ReadAction(scenario, third.DirectoryName, action).Corrections);
+        Assert.Equal((2, scenario.Clock.Now, null), (entry.ReplacedRevisionNumber, entry.PublishedAtUtc, entry.Note));
+    }
+
+    [Fact]
+    public async Task ACodeUpdateAfterAPersonCorrectionAddsOneEntryAndKeepsTheCorrection()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        scenario.ReviseAction(action, 2);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", action, "Fix."));
+        scenario.ReviseAction(action, 3);
+
+        var third = await scenario.Publisher().ExecuteAsync(Code, Request("k3", action));
+
+        var corrections = ReadAction(scenario, third.DirectoryName, action).Corrections;
+        Assert.Equal([(2, null), (1, "Fix.")], corrections.Select(item => (item.ReplacedRevisionNumber, item.Note)));
+    }
+
+    [Fact]
+    public async Task ACodeUpdateOfARecordAtTheNotedCapStillPublishesSoCodeFactsNeverStall()
+    {
+        var (scenario, action) = await WithNotedCorrectionsAsync(PublishedCorrection.MaximumNotedEntries);
+        scenario.ReviseAction(action, PublishedCorrection.MaximumNotedEntries + 2);
+
+        var next = await scenario.Publisher().ExecuteAsync(Code, Request("code", action));
+
+        var corrections = ReadAction(scenario, next.DirectoryName, action).Corrections;
+        Assert.Equal(PublishedCorrection.MaximumNotedEntries + 1, corrections.Length);
+        Assert.Null(corrections[0].Note);
+    }
+
+    [Fact]
+    public async Task AWindowsLineBreakCountsAsOneCharacterSoTheBrowserLimitAndTheServerAgree()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        scenario.ReviseAction(action, 2);
+        var note = "a\r\n" + new string('b', PublishedCorrection.MaximumNoteLength - 2);
+
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", action, note));
+
+        Assert.Equal(note.Replace("\r\n", "\n"), Assert.Single(ReadAction(scenario, second.DirectoryName, action).Corrections).Note);
+    }
+
+    [Fact]
+    public async Task ADefaultNoteListIsRefusedBeforeAnythingIsBuilt()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+
+        await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            Request("k2", action) with { Notes = default }));
     }
 
     [Fact]
@@ -178,6 +234,17 @@ public sealed class PublishCorrectionsTests
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('c');
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", action));
+        return (scenario, action);
+    }
+
+    private static async Task<(PublicationScenario Scenario, string Action)> WithNotedCorrectionsAsync(int count)
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        for (var revision = 2; revision <= count + 1; revision++)
+        {
+            scenario.ReviseAction(action, revision);
+            await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request($"k{revision}", action, "Fix."));
+        }
         return (scenario, action);
     }
 

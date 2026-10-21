@@ -8,9 +8,8 @@ internal static class PublishedCorrectionView
     public static string Heading(PublishedCorrection correction) =>
         $"{Title(correction)}, {Moment.Iso(DateOnly.FromDateTime(correction.PublishedAtUtc.UtcDateTime))}. {Replaces(correction)}";
 
-    public static TimelineEvent Event(PublishedCorrection correction) =>
-        new(DateOnly.FromDateTime(correction.PublishedAtUtc.UtcDateTime), $"{Title(correction)}. {Replaces(correction)}",
-            TimeOnly.FromDateTime(correction.PublishedAtUtc.UtcDateTime));
+    public static string TimelineText(PublishedCorrection correction) =>
+        $"{Title(correction)}, replaces revision {correction.ReplacedRevisionNumber}";
 
     private static string Title(PublishedCorrection correction) => correction.Note is null ? "Updated from the source" : "Correction";
 

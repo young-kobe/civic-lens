@@ -6,7 +6,7 @@ namespace CivicLens.Tests.Publication.Contracts;
 public sealed class PublishedOfficialsTests
 {
     [Fact]
-    public void ASchemaFiveReleaseKeepsItsOfficialsAndCatalogThroughAJsonRoundTrip()
+    public void AReleaseKeepsItsOfficialsAndCatalogThroughAJsonRoundTrip()
     {
         var officials = new PublishedOfficials
         {

@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
@@ -7,6 +8,9 @@ namespace CivicLens.Application.Publication;
 /// <summary>Owns the correction list of each record that a publish writes, and the rule for its notes.</summary>
 internal sealed class PublicationCorrections
 {
+    private static readonly JsonSerializerOptions ReadCorrectionsOptions =
+        new(PublicationProtocol.JsonOptions) { UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip };
+
     private readonly PreviousRelease previous;
     private readonly DateTimeOffset now;
     private readonly bool byCode;
@@ -27,12 +31,13 @@ internal sealed class PublicationCorrections
     public static Dictionary<PublishedRecordReference, string> ValidateNotes(ImmutableArray<RecordNote> notes,
         ImmutableArray<PublishedRecordReference> records, bool byCode)
     {
+        if (notes.IsDefault) throw new ArgumentException("Notes must not be default.", nameof(notes));
         if (byCode && !notes.IsEmpty) throw new ArgumentException("The code subject gives no correction notes.", nameof(notes));
         var requested = records.ToHashSet();
         var trimmed = new Dictionary<PublishedRecordReference, string>();
         foreach (var note in notes)
         {
-            var text = note.Note?.Trim() ?? string.Empty;
+            var text = note.Note?.Replace("\r\n", "\n", StringComparison.Ordinal).Trim() ?? string.Empty;
             if (!PublishedCorrection.IsNote(text))
                 throw new ArgumentException(
                     $"A correction note has 1 to {PublishedCorrection.MaximumNoteLength} characters and no NUL.", nameof(notes));
@@ -63,9 +68,9 @@ internal sealed class PublicationCorrections
         if (note is null && !byCode)
             throw new MissingCorrectionNoteException(reference);
         var kept = earlier[reference];
-        if (kept.Length >= PublishedCorrection.MaximumEntries)
-            throw new ArgumentException($"{reference} already has {PublishedCorrection.MaximumEntries} corrections.");
-        return [new() { ReplacedRevisionNumber = replaced.RevisionNumber, PublishedAtUtc = now, Note = note }, .. kept];
+        if (note is not null && PublishedCorrection.NotedCount(kept) >= PublishedCorrection.MaximumNotedEntries)
+            throw new CorrectionLimitException(reference);
+        return PublishedCorrection.Prepend(kept, new() { ReplacedRevisionNumber = replaced.RevisionNumber, PublishedAtUtc = now, Note = note });
     }
 
     private static async Task<PublishedCorrection[]> ReadAsync(IReleaseDirectory releases, string directoryName,
@@ -73,10 +78,9 @@ internal sealed class PublicationCorrections
     {
         var json = await releases.ReadFileAsync(directoryName, PublicationProtocol.RecordDataPath(record.RecordId),
             PublishedRecordFiles.MaximumCitedRecordBytes, cancellationToken);
-        using var document = JsonDocument.Parse(json);
-        var list = document.RootElement.TryGetProperty("corrections", out var property)
-            ? property.Deserialize<PublishedCorrection[]>(PublicationProtocol.JsonOptions)
-            : null;
-        return list ?? throw new InvalidDataException("A carried record has no correction list.");
+        return (JsonSerializer.Deserialize<CorrectionsOnly>(json, ReadCorrectionsOptions)
+            ?? throw new InvalidDataException("A carried record file is empty.")).Corrections;
     }
+
+    private sealed record CorrectionsOnly(PublishedCorrection[] Corrections);
 }

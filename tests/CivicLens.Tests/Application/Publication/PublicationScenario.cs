@@ -234,7 +234,7 @@ internal sealed class PublicationScenario
         return recordId;
     }
 
-    public void ReviseAction(string recordId, int revisionNumber)
+    public void ReviseAction(string recordId, int revisionNumber, string? approverSubject = null)
     {
         var publishable = Actions.Publishable[recordId];
         var review = publishable.Review;
@@ -248,7 +248,7 @@ internal sealed class PublicationScenario
                 Decisions = review.Decisions.Add(Decision(recordId, revisionNumber, ReviewDecisionKind.Approve) with
                 {
                     RevisionNumber = revisionNumber,
-                    ActorSubject = review.Decisions[^1].ActorSubject
+                    ActorSubject = approverSubject ?? review.Decisions[^1].ActorSubject
                 }),
                 ReviewStateVersion = revisionNumber
             }

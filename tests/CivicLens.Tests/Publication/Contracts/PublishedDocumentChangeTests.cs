@@ -65,6 +65,7 @@ public sealed class PublishedDocumentChangeTests
 
     private static PublishedDocumentChange Record(PublishedCitation citation) => new()
     {
+        Corrections = [],
         RecordId = "0123456789abcdef0123456789abcdef",
         RevisionNumber = 1,
         Headline = "Headline",

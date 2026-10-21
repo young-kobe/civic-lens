@@ -16,8 +16,8 @@ public sealed class PublishedCorrectionTests
     [Fact]
     public void RejectsEntriesThatAreNotStrictlyDecreasingSoTheListShowsOneHistory()
     {
-        Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(2), Entry(2)], 3));
-        Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(1), Entry(2)], 3));
+        Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(2, "a"), Entry(2, "b")], 3));
+        Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(1, "a"), Entry(2, "b")], 3));
     }
 
     [Theory]
@@ -30,12 +30,26 @@ public sealed class PublishedCorrectionTests
     }
 
     [Fact]
-    public void RejectsMoreThanTheMaximumEntries()
+    public void RejectsMoreThanTheMaximumNotedEntries()
     {
-        var list = Enumerable.Range(1, PublishedCorrection.MaximumEntries + 1).Reverse().Select(number => Entry(number)).ToArray();
+        var list = Enumerable.Range(1, PublishedCorrection.MaximumNotedEntries + 1).Reverse().Select(number => Entry(number, "Fix.")).ToArray();
 
         PublishedCorrection.ValidateAll(list[1..], 30);
         Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll(list, 30));
+    }
+
+    [Fact]
+    public void RejectsTwoCodeUpdatesNextToEachOtherBecauseARunOfThemIsOneEntry()
+    {
+        Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(2), Entry(1)], 3));
+    }
+
+    [Fact]
+    public void AcceptsCodeUpdatesBetweenNotedEntriesSoTheListHoldsAtMostFortyOne()
+    {
+        var list = Enumerable.Range(1, 41).Reverse().Select(number => Entry(number, number % 2 == 0 ? "Fix." : null)).ToArray();
+
+        PublishedCorrection.ValidateAll(list, 42);
     }
 
     [Theory]

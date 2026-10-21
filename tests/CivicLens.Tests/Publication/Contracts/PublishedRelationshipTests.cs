@@ -138,6 +138,7 @@ public sealed class PublishedRelationshipTests
 
     private static PublishedRelationship Link() => new()
     {
+        Corrections = [],
         RecordId = LinkId,
         RevisionNumber = 1,
         Headline = "Doe on rent and A housing bill",

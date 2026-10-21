@@ -17,6 +17,7 @@ internal static class PublishedSamples
     {
         var record = new PublishedStatement
         {
+            Corrections = [],
             RecordId = new string(id, 64),
             RevisionNumber = revision,
             Headline = headline,
@@ -41,6 +42,7 @@ internal static class PublishedSamples
         const string beforeId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
         var record = new PublishedDocumentChange
         {
+            Corrections = [],
             RecordId = new string('c', 32),
             RevisionNumber = 1,
             Headline = headline,
@@ -73,6 +75,7 @@ internal static class PublishedSamples
     {
         var record = new PublishedAction
         {
+            Corrections = [],
             RecordId = new string('f', 64),
             RevisionNumber = 1,
             Headline = headline,
@@ -115,6 +118,7 @@ internal static class PublishedSamples
         };
         var record = new PublishedVote
         {
+            Corrections = [],
             RecordId = new string('e', 64),
             RevisionNumber = 1,
             Headline = headline,
@@ -140,6 +144,7 @@ internal static class PublishedSamples
     {
         var record = new PublishedBrief
         {
+            Corrections = [],
             RecordId = CivicLens.Core.Briefs.BriefWeek.RecordIdOf(new DateOnly(2026, 10, 5)),
             RevisionNumber = 1,
             Headline = headline,
@@ -158,6 +163,7 @@ internal static class PublishedSamples
     {
         var record = new PublishedRelationship
         {
+            Corrections = [],
             RecordId = new string('9', 64),
             RevisionNumber = 1,
             Headline = headline,

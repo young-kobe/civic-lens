@@ -55,7 +55,7 @@ internal static class PublishedTimelineView
     {
         events.Add(At(approvedAtUtc, "Approved"));
         events.Add(At(firstPublishedAtUtc, "First published"));
-        events.AddRange(corrections.Select(PublishedCorrectionView.Event));
+        events.AddRange(corrections.Select(correction => At(correction.PublishedAtUtc, PublishedCorrectionView.TimelineText(correction))));
         return [.. events.OrderBy(item => item.Day).ThenBy(item => item.Time)];
     }
 }

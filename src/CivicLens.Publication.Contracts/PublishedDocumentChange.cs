@@ -19,7 +19,7 @@ public sealed record PublishedDocumentChange
     public required PublishedCitation[] Citations { get; init; }
     public required DateTimeOffset ApprovedAtUtc { get; init; }
     public required DateTimeOffset FirstPublishedAtUtc { get; init; }
-    public PublishedCorrection[] Corrections { get; init; } = [];
+    public required PublishedCorrection[] Corrections { get; init; }
 
     public PublishedRecordEntry ToEntry() => new()
     {

@@ -174,6 +174,7 @@ public sealed class PublishedActionTests
 
     private static PublishedAction Action() => new()
     {
+        Corrections = [],
         RecordId = new string('5', 64),
         RevisionNumber = 1,
         Headline = "Headline",

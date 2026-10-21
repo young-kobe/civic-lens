@@ -62,6 +62,7 @@ public sealed partial class ReviewHome
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (PublicationConflictException) { return "/Review?status=publish-conflict#publish"; }
         catch (MissingCorrectionNoteException) { return "/Review?status=publish-note-required#publish"; }
+        catch (CorrectionLimitException) { return "/Review?status=publish-correction-limit#publish"; }
         catch (ArgumentException) { return "/Review?status=publish-invalid#publish"; }
         catch (UnauthorizedAccessException) { return "/Review?status=publish-forbidden#publish"; }
         catch (Exception) { return "/Review?status=publish-unavailable#publish"; }

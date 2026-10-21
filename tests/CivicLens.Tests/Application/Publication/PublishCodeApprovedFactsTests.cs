@@ -212,6 +212,30 @@ public sealed class PublishCodeApprovedFactsTests
         Assert.Equal((1, null), (entry.ReplacedRevisionNumber, entry.Note));
     }
 
+    [Fact]
+    public async Task ATickPublishesAnUpdateOfARecordThatHasTheMostPersonCorrectionsInsteadOfSkippingIt()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('a');
+        var reference = new PublishedRecordReference(PublishedRecordKind.Action, action);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([reference], "k1"));
+        for (var revision = 2; revision <= PublishedCorrection.MaximumNotedEntries + 1; revision++)
+        {
+            scenario.ReviseAction(action, revision);
+            await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+                new PublishReleaseRequest([reference], $"k{revision}") { Notes = [new(reference.Kind, action, "Fix.")] });
+        }
+        scenario.ReviseAction(action, PublishedCorrection.MaximumNotedEntries + 2, ReviewAuthor.CodeSubject);
+        scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[action].Review, PublishedCorrection.MaximumNotedEntries + 1));
+        ListedUntilPublished(scenario);
+        var reported = new List<Exception>();
+
+        var published = await Facts(scenario, reported).ExecuteAsync(default);
+
+        Assert.Equal(1, published);
+        Assert.Empty(reported);
+    }
+
     private static PublishCodeApprovedFacts Facts(PublicationScenario scenario, List<Exception>? reported = null) =>
         new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), (reported ?? []).Add);
 

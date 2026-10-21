@@ -138,6 +138,7 @@ public sealed class PublishedStatementTests
 
     internal static PublishedStatement Statement() => new()
     {
+        Corrections = [],
         RecordId = new string('4', 64),
         RevisionNumber = 1,
         Headline = "Headline",

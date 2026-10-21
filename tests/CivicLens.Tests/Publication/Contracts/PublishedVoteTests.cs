@@ -221,6 +221,7 @@ public sealed class PublishedVoteTests
 
     private static PublishedVote Vote() => new()
     {
+        Corrections = [],
         RecordId = new string('5', 64),
         RevisionNumber = 1,
         Headline = "Headline",
