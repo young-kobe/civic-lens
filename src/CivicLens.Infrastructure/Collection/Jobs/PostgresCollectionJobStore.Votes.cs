@@ -1,11 +1,11 @@
-using CivicLens.Application.Collection.Votes;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Application.Collection.Votes;
+using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection.BillStream;
 using CivicLens.Infrastructure.Collection.Votes;
-using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Statements;
 using CivicLens.Infrastructure.Votes;
 using Microsoft.EntityFrameworkCore;
@@ -98,12 +98,14 @@ public sealed partial class PostgresCollectionJobStore : IVoteAdmissionStore
         foreach (var candidateId in waiting) VoteDraftQueueRows.Add(db, candidateId, Ticks(now), priority);
     }
 
-    private static string HashHouseVoteCandidate(string sourceId, int congress, int sessionNumber, int rollCallNumber,
+    internal static string HashVoteCandidate(Chamber chamber, string sourceId, int congress, int sessionNumber, int rollCallNumber,
         long updateDateUtcTicks) =>
-        HashIdentity($"house-vote:{sourceId.Length}:{sourceId}{congress}:{sessionNumber}:{rollCallNumber}:{updateDateUtcTicks}");
+        HashIdentity($"{IdentityPrefix(chamber)}:{sourceId.Length}:{sourceId}{congress}:{sessionNumber}:{rollCallNumber}:{updateDateUtcTicks}");
 
-    internal static string HashHouseVoteRecord(string sourceId, int congress, int sessionNumber, int rollCallNumber) =>
-        HashIdentity($"house-vote-record:{sourceId.Length}:{sourceId}{congress}:{sessionNumber}:{rollCallNumber}");
+    internal static string HashVoteRecord(Chamber chamber, string sourceId, int congress, int sessionNumber, int rollCallNumber) =>
+        HashIdentity($"{IdentityPrefix(chamber)}-record:{sourceId.Length}:{sourceId}{congress}:{sessionNumber}:{rollCallNumber}");
+
+    private static string IdentityPrefix(Chamber chamber) => $"{chamber.ToString().ToLowerInvariant()}-vote";
 
     private static Task<VoteVersionRow?> FindHouseVoteAsync(CollectionAttemptDbContext db, string sourceId, HouseVote vote,
         CancellationToken cancellationToken)
@@ -134,7 +136,7 @@ public sealed partial class PostgresCollectionJobStore : IVoteAdmissionStore
     private static VoteCandidateRow NewHouseVoteCandidate(ConfiguredCollectionSource source, VoteVersionRow vote,
         string membersJobId, string membersExtractionId, DateTimeOffset now) => new()
         {
-            CandidateId = HashHouseVoteCandidate(vote.SourceId, vote.Congress, vote.SessionNumber, vote.RollCallNumber,
+            CandidateId = HashVoteCandidate(vote.Chamber, vote.SourceId, vote.Congress, vote.SessionNumber, vote.RollCallNumber,
                 vote.UpdateDateUtcTicks),
             SourceId = vote.SourceId,
             Chamber = vote.Chamber,

@@ -1,5 +1,5 @@
-using CivicLens.Core.Votes;
 using CivicLens.Core.Review;
+using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Review.Persistence;
 
 namespace CivicLens.Infrastructure.Votes.Persistence;

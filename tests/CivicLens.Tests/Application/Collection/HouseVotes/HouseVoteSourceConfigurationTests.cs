@@ -1,6 +1,6 @@
-using CivicLens.Application.Collection.Votes;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.HouseVotes;
+using CivicLens.Application.Collection.Votes;
 using CivicLens.Collection.Contracts;
 using CivicLens.Tests.Application.Collection.Bills;
 using CivicLens.Tests.Fixtures;

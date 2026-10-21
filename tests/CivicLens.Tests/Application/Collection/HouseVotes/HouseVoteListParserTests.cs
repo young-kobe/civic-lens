@@ -1,8 +1,8 @@
-using CivicLens.Application.Collection.Votes;
 using System.Text;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.HouseVotes;
+using CivicLens.Application.Collection.Votes;
 using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Collection.HouseVotes;

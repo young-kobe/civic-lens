@@ -1,6 +1,6 @@
-using CivicLens.Application.Collection.Votes;
 using System.Text.Json;
 using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Votes;
 using CivicLens.Application.Configuration;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;

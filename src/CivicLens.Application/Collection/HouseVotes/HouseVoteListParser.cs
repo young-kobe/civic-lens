@@ -1,5 +1,5 @@
-using CivicLens.Application.Collection.Votes;
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Application.Collection.Votes;
 using CivicLens.Collection.Contracts;
 
 namespace CivicLens.Application.Collection.HouseVotes;

@@ -4,8 +4,8 @@ using CivicLens.Core.Relationships;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.BillStream;
-using CivicLens.Infrastructure.Collection.Votes;
 using CivicLens.Infrastructure.Collection.Jobs;
+using CivicLens.Infrastructure.Collection.Votes;
 using CivicLens.Infrastructure.Documents.Persistence;
 using CivicLens.Infrastructure.Votes.Persistence;
 using CivicLens.Infrastructure.Review;
@@ -47,7 +47,7 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var row = await db.Set<VoteCandidateRow>().AsNoTracking().SingleOrDefaultAsync(item => item.CandidateId == candidateId, cancellationToken);
         if (row is null) return null;
-        var recordId = PostgresCollectionJobStore.HashHouseVoteRecord(row.SourceId, row.Congress, row.SessionNumber, row.RollCallNumber);
+        var recordId = PostgresCollectionJobStore.HashVoteRecord(row.Chamber, row.SourceId, row.Congress, row.SessionNumber, row.RollCallNumber);
         var revisions = await StoredJobDefinition.LoadRevisionsAsync(db, [row.ConfigurationRevisionId], cancellationToken);
         var candidate = new VoteDraftCandidate(row.CandidateId, recordId, row.SourceId, row.Chamber, row.Congress, row.SessionNumber, row.RollCallNumber,
             row.BillType, row.BillNumber, new DateTimeOffset(row.UpdateDateUtcTicks, TimeSpan.Zero));

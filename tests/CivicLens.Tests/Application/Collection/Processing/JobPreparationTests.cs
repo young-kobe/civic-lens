@@ -1,4 +1,3 @@
-using CivicLens.Application.Collection.Votes;
 using System.Text;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
@@ -6,6 +5,7 @@ using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
+using CivicLens.Application.Collection.Votes;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Paging;

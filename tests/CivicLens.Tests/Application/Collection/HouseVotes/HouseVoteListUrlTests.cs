@@ -1,5 +1,5 @@
-using CivicLens.Application.Collection.Votes;
 using CivicLens.Application.Collection.HouseVotes;
+using CivicLens.Application.Collection.Votes;
 using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Collection.HouseVotes;
