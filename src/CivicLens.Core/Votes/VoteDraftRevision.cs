@@ -31,7 +31,9 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
     {
         if (!LowercaseHex.Is(RecordId, 64) || !LowercaseHex.Is(CandidateId, 64) || !LowercaseHex.Is(IssueRevisionId, 64))
             throw new ArgumentException("A vote revision needs valid record, candidate, and issue revision IDs.");
-        if (RevisionNumber < 1 || string.IsNullOrWhiteSpace(SourceId) || !Enum.IsDefined(Chamber) || Congress < 1 || SessionNumber is not (1 or 2) || RollCallNumber < 1)
+        if (!ReviewAuthor.IsValidRevisionHeader(RevisionNumber, AuthorSubject, CreatedAtUtc))
+            throw new ArgumentException("A vote revision needs a number, an author, and a UTC creation time.");
+        if (string.IsNullOrWhiteSpace(SourceId) || !Enum.IsDefined(Chamber) || Congress < 1 || SessionNumber is not (1 or 2) || RollCallNumber < 1)
             throw new ArgumentException("A vote revision needs a source and a roll call identity.");
         if ((BillType is null) != (BillNumber is null) || BillType is not null && (string.IsNullOrWhiteSpace(BillType) || BillType.Length > MaximumBillTypeLength || BillNumber < 1))
             throw new ArgumentException($"A bill type has at most {MaximumBillTypeLength} characters and a number, and a number has a type.");

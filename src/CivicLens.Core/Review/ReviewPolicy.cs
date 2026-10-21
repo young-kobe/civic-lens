@@ -58,7 +58,7 @@ public static class ReviewPolicy
     private static void ValidateDecisionFields(ReviewDecision decision)
     {
         if (!LowercaseHex.Is(decision.DecisionId, 32) ||
-            string.IsNullOrWhiteSpace(decision.ActorSubject) || decision.ActorSubject.Length > 256 || !Enum.IsDefined(decision.Kind) ||
+            !ReviewAuthor.IsValidSubject(decision.ActorSubject) || !Enum.IsDefined(decision.Kind) ||
             decision.ResolvedDecisionIds.IsDefault || decision.ResolvedDecisionIds.Length > MaximumOpenConcerns ||
             decision.ResolvedDecisionIds.Distinct(StringComparer.Ordinal).Count() != decision.ResolvedDecisionIds.Length)
             throw new ArgumentException("Review decision is invalid.", nameof(decision));

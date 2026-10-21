@@ -50,7 +50,6 @@ if (args is [] or ["--help"] or ["help"])
 {
     Console.WriteLine("""
         Civic Lens:
-          status
           validate <config.json>
           collect <config.json> <source-id> <collector.dll> <artifact-directory> [--as-of yyyy-MM-dd]
           db migrate
@@ -115,12 +114,6 @@ if (args is [] or ["--help"] or ["help"])
         documents commands require the database. Citations use UTF-16 offsets into immutable extracted text.
         Exit codes: 0 success, 1 failed/deferred collection or operational failure, 2 invalid input/configuration.
         """);
-    return 0;
-}
-
-if (args is ["status"])
-{
-    Console.WriteLine(FoundationStatus.Description);
     return 0;
 }
 

@@ -75,7 +75,7 @@ public sealed partial record BriefRevision(string RecordId, int RevisionNumber, 
     {
         if (!LowercaseHex.Is(RecordId, 64) || !LowercaseHex.Is(Fingerprint, 64))
             throw new ArgumentException("A brief revision needs a valid record ID and fingerprint.");
-        if (RevisionNumber < 1 || string.IsNullOrWhiteSpace(AuthorSubject) || AuthorSubject.Length > 256 || CreatedAtUtc.Offset != TimeSpan.Zero)
+        if (!ReviewAuthor.IsValidRevisionHeader(RevisionNumber, AuthorSubject, CreatedAtUtc))
             throw new ArgumentException("A brief revision needs a number, an author, and a UTC creation time.");
         Window.Validate();
         if (RecordId != Window.RecordId)

@@ -37,6 +37,13 @@ public sealed class VoteDraftRevisionTests
     }
 
     [Fact]
+    public void ARevisionNeedsAnAuthorAndAUtcCreationTimeBecauseEveryRevisionKindSharesOneHeaderRule()
+    {
+        Assert.Throws<ArgumentException>(() => (Revision() with { AuthorSubject = " " }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (Revision() with { CreatedAtUtc = Revision().CreatedAtUtc.ToOffset(TimeSpan.FromHours(2)) }).ValidateShape());
+    }
+
+    [Fact]
     public void ACastOrBillTypeOverTheLimitIsRefusedBecauseThePublishedVoteRefusesItToo()
     {
         Assert.Throws<ArgumentException>(() => (Revision() with { Members = [Member() with { Cast = new string('y', VoteDraftRevision.MaximumCastLength + 1) }] }).ValidateShape());

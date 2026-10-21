@@ -24,7 +24,7 @@ CIVIC_LENS_LIVE_AI=1 ANTHROPIC_API_KEY=... dotnet test CivicLens.slnx --configur
 
 For a database-free test run, use `dotnet test CivicLens.slnx --configuration Release --no-build --filter 'Category!=Postgres'`. This leaves out the Postgres adapter and CLI database integration tests. It does not replace the full required check. Testcontainers needs Docker socket access, so an agent sandbox may need an execution override for Docker and local test sockets. Missing Docker fails the full suite; it never skips database checks silently. The test fixture pins the Postgres image by tag and digest. Its first run and the Testcontainers cleanup container may download images.
 
-`dotnet run --project src/CivicLens.Host -- status` describes implemented capabilities. `dotnet run --project src/CivicLens.Collector -- --help` describes the manifest-driven collector. Unsupported commands return nonzero exit codes.
+Run `dotnet run --project src/CivicLens.Host -- --help` to list the host commands. `dotnet run --project src/CivicLens.Collector -- --help` describes the manifest-driven collector. Unsupported commands return nonzero exit codes.
 
 Generate the self-contained architecture explorer with `python3 tools/render-architecture.py`, then open artifacts/architecture.html in a browser. The HTML needs no remote assets or network access. The same script updates the Mermaid blocks in architecture.md. `--check` detects diagram drift without changing files. `python3 tools/check-docs.py --check` checks repository paths, local links, and sentence length in the core docs.
 
