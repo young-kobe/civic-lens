@@ -6,7 +6,7 @@ namespace CivicLens.Application.Publication;
 
 internal sealed class PublishedRecordBuilder(PublishedRecordRules rules)
 {
-    public PublishedDocumentChange Build(PublishableDocumentChange change, PublishedRecordEntry? previous,
+    public PublishedDocumentChange Build(PublishableDocumentChange change, PublishedRecordEntry? previous, PublishedCorrection[] corrections,
         DateTimeOffset now)
     {
         var (review, comparison, before, after) = change;
@@ -43,7 +43,8 @@ internal sealed class PublishedRecordBuilder(PublishedRecordRules rules)
             Changes = [.. comparison.Comparison.Hunks.Select(MapChange)],
             Citations = [.. revision.Citations.Select(Cite)],
             ApprovedAtUtc = PublishedRecordRules.GetApprovalTime(revision.RevisionNumber, review.Decisions),
-            FirstPublishedAtUtc = previous?.FirstPublishedAtUtc ?? now
+            FirstPublishedAtUtc = previous?.FirstPublishedAtUtc ?? now,
+            Corrections = corrections
         };
         record.Validate();
         return record;

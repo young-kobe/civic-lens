@@ -17,8 +17,8 @@ public sealed class PublishedRelationshipTests
     {
         var json = JsonSerializer.Serialize(Link(), PublicationProtocol.JsonOptions);
 
-        Assert.Equal(5, PublicationProtocol.SchemaVersion);
-        Assert.True(json == $$"""{"recordId":"{{LinkId}}","revisionNumber":1,"headline":"Doe on rent and A housing bill","statement":{"kind":"statement","recordId":"{{StatementId}}","revisionNumber":2,"headline":"Doe on rent"},"target":{"kind":"action","recordId":"{{ActionId}}","revisionNumber":3,"headline":"A housing bill"},"type":"describesOwnBill","reason":"Doe says the bill is hers.","quote":"I introduced the bill.","targetFact":"Title: A housing bill","statementDate":"2026-05-01","officials":[{"id":"o1","name":"Jane Doe"}],"issueIds":["housing"],"policyAreaIds":["land-use"],"approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00"}""",
+        Assert.Equal(6, PublicationProtocol.SchemaVersion);
+        Assert.True(json == $$"""{"recordId":"{{LinkId}}","revisionNumber":1,"headline":"Doe on rent and A housing bill","statement":{"kind":"statement","recordId":"{{StatementId}}","revisionNumber":2,"headline":"Doe on rent"},"target":{"kind":"action","recordId":"{{ActionId}}","revisionNumber":3,"headline":"A housing bill"},"type":"describesOwnBill","reason":"Doe says the bill is hers.","quote":"I introduced the bill.","targetFact":"Title: A housing bill","statementDate":"2026-05-01","officials":[{"id":"o1","name":"Jane Doe"}],"issueIds":["housing"],"policyAreaIds":["land-use"],"approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00","corrections":[]}""",
             "The published relationship JSON changed. Bump PublicationProtocol.SchemaVersion if a reader would break, update the version table " +
             "in docs/architecture.md, then update this test. Actual: " + json);
     }

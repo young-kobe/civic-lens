@@ -70,7 +70,7 @@ public sealed class PublishOfficialVotesTests
         await PublishVotesAsync(scenario, "k1", vote);
         Revise(scenario, vote, headline: "Vote a, second revision", members: ["mayor"]);
 
-        var second = await PublishVotesAsync(scenario, "k2", vote);
+        var second = await ReplaceVotesAsync(scenario, "k2", vote);
 
         var row = Assert.Single(VotesOf(scenario, second.DirectoryName, MayorFile).Votes);
         Assert.Equal("Vote a, second revision", row.Headline);
@@ -86,7 +86,7 @@ public sealed class PublishOfficialVotesTests
             new PublishedRecordReference(PublishedRecordKind.Vote, vote), new PublishedRecordReference(PublishedRecordKind.Statement, statement)));
         Revise(scenario, vote, headline: "Vote a", members: ["chair"]);
 
-        var second = await PublishVotesAsync(scenario, "k2", vote);
+        var second = await ReplaceVotesAsync(scenario, "k2", vote);
 
         var files = scenario.Releases.Directories[second.DirectoryName];
         Assert.DoesNotContain(MayorFile, files.Keys);
@@ -114,7 +114,7 @@ public sealed class PublishOfficialVotesTests
         Revise(scenario, recent, headline: "Recent, second revision", members: ["mayor"]);
         Revise(scenario, older, headline: "Older, second revision", members: ["chair"]);
 
-        var second = await PublishVotesAsync(scenario, "k2", recent, older);
+        var second = await ReplaceVotesAsync(scenario, "k2", recent, older);
 
         Assert.Equal(["Recent, second revision"], VotesOf(scenario, second.DirectoryName, MayorFile).Votes.Select(vote => vote.Headline));
         Assert.DoesNotContain(PublicationProtocol.OfficialVotesPath("mayor", 118), scenario.Releases.Directories[second.DirectoryName].Keys);
@@ -149,6 +149,13 @@ public sealed class PublishOfficialVotesTests
     private static Task<PublicationReleaseSummary> PublishVotesAsync(PublicationScenario scenario, string key, params string[] votes) =>
         scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request(key, [.. votes.Select(vote => new PublishedRecordReference(PublishedRecordKind.Vote, vote))]));
+
+    private static Task<PublicationReleaseSummary> ReplaceVotesAsync(PublicationScenario scenario, string key, params string[] votes)
+    {
+        PublishedRecordReference[] references = [.. votes.Select(vote => new PublishedRecordReference(PublishedRecordKind.Vote, vote))];
+        return scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.WithNotesFor(PublicationScenario.Request(key, references), references));
+    }
 
     private static void Revise(PublicationScenario scenario, string vote, string headline, string[] members)
     {

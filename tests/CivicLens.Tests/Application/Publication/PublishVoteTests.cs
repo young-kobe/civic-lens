@@ -175,7 +175,7 @@ public sealed class PublishVoteTests
         };
         scenario.Clock.Now = firstPublishedAt.AddDays(1);
 
-        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", vote));
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", vote) with { Notes = [new(PublishedRecordKind.Vote, vote, "Fixed the question.")] });
 
         var entry = Assert.Single(ReadManifest(scenario, second.DirectoryName).Records);
         Assert.Equal((2, firstPublishedAt), (entry.RevisionNumber, entry.FirstPublishedAtUtc));

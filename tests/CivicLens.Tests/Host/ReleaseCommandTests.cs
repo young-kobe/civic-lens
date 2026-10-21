@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
 using CivicLens.Host.Publication;
@@ -14,6 +15,11 @@ public sealed class ReleaseCommandTests
     [InlineData("releases", "publish", "key", "draft:abc")]
     [InlineData("releases", "publish", "key", "statement:")]
     [InlineData("releases", "publish", "key", "Statement:abc")]
+    [InlineData("releases", "publish", "key", "--note")]
+    [InlineData("releases", "publish", "key", "--note", "statement:abc")]
+    [InlineData("releases", "publish", "key", "--note", "statement:abc", "text")]
+    [InlineData("releases", "publish", "key", "statement:abc", "--note", "draft:abc", "text")]
+    [InlineData("releases", "publish", "key", "statement:abc", "--note", "statement:abc")]
     [InlineData("releases", "list", "abc")]
     [InlineData("releases", "list", "0")]
     [InlineData("releases", "list", "5", "6")]
@@ -77,6 +83,28 @@ public sealed class ReleaseCommandTests
         var files = scenario.Releases.Directories.Values.Single();
         Assert.Contains(PublicationProtocol.RecordPagePath(statement), files.Keys);
         Assert.Contains(PublicationProtocol.RecordPagePath(change), files.Keys);
+    }
+
+    [Fact]
+    public async Task NoteOptionsAttachTheirTextToTheNamedRecordSoTheReplacementEntryHoldsIt()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('a');
+        var reference = $"action:{action}";
+        await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", reference], scenario.Publisher(), null!, null!,
+            PublicationScenario.Owner, CancellationToken.None);
+        scenario.ReviseAction(action, 2);
+
+        var missing = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", reference], scenario.Publisher(), null!, null!,
+            PublicationScenario.Owner, CancellationToken.None);
+        var noted = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", reference, "--note", reference, "Fixed the issue."],
+            scenario.Publisher(), null!, null!, PublicationScenario.Owner, CancellationToken.None);
+
+        Assert.Equal((2, 0), (missing, noted));
+        var record = JsonSerializer.Deserialize<PublishedAction>(
+            scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName][PublicationProtocol.RecordDataPath(action)],
+            PublicationProtocol.JsonOptions)!;
+        Assert.Equal("Fixed the issue.", Assert.Single(record.Corrections).Note);
     }
 
     [Fact]

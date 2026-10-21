@@ -24,6 +24,7 @@ public sealed record PublishedRelationship
     public required string[] PolicyAreaIds { get; init; }
     public required DateTimeOffset ApprovedAtUtc { get; init; }
     public required DateTimeOffset FirstPublishedAtUtc { get; init; }
+    public PublishedCorrection[] Corrections { get; init; } = [];
 
     public PublishedRecordEntry ToEntry() => new()
     {
@@ -45,6 +46,7 @@ public sealed record PublishedRelationship
 
     public void Validate()
     {
+        PublishedCorrection.ValidateAll(Corrections, RevisionNumber);
         if (!PublicationProtocol.IsRecordId(PublishedRecordKind.Relationship, RecordId) || RevisionNumber < 1)
             throw new InvalidDataException("Published relationship identity is invalid.");
         RequireText(Headline, MaximumHeadlineLength);

@@ -124,26 +124,14 @@ public sealed class PublishActionTests
         var action = scenario.AddAction('c');
         var firstPublishedAt = scenario.Clock.Now;
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", action));
-        var review = scenario.Actions.Publishable[action].Review;
-        var revised = review.CurrentRevision with { RevisionNumber = 2, TrackedIssueIds = ["transit"] };
-        scenario.Actions.Publishable[action] = scenario.Actions.Publishable[action] with
-        {
-            Review = review with
-            {
-                CurrentRevision = revised,
-                Revisions = review.Revisions.Add(revised),
-                Decisions = review.Decisions.Add(PublicationScenario.Decision(action, 2, ReviewDecisionKind.Approve) with { RevisionNumber = 2 }),
-                ReviewStateVersion = 2
-            }
-        };
-
+        scenario.ReviseAction(action, 2);
         scenario.Clock.Now = firstPublishedAt.AddDays(1);
 
-        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", action));
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", action) with { Notes = [Note(action)] });
 
         var entry = Assert.Single(ReadManifest(scenario, second.DirectoryName).Records);
         Assert.Equal(2, entry.RevisionNumber);
-        Assert.Equal(["transit"], entry.IssueIds);
+        Assert.Equal(["issue-2"], entry.IssueIds);
         Assert.Equal(firstPublishedAt, entry.FirstPublishedAtUtc);
         Assert.Empty(scenario.Releases.Links);
     }
@@ -161,6 +149,8 @@ public sealed class PublishActionTests
 
         Assert.Equal(1, scenario.Releases.BeginCount);
     }
+
+    private static RecordNote Note(string actionId) => new(PublishedRecordKind.Action, actionId, "Fixed the tracked issue.");
 
     private static PublishReleaseRequest Request(string key, string actionId) =>
         PublicationScenario.Request(key, new PublishedRecordReference(PublishedRecordKind.Action, actionId));

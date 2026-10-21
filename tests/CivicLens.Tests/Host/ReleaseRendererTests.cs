@@ -777,6 +777,39 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task AReplacedRecordShowsEachCorrectionWithItsNoteOrTheUpdatedFromTheSourceLabelAndAddsItToTheTimeline()
+    {
+        var corrections = new PublishedCorrection[]
+        {
+            new() { ReplacedRevisionNumber = 2, PublishedAtUtc = new DateTimeOffset(2026, 2, 4, 9, 0, 0, TimeSpan.Zero), Note = "Fixed the <sponsor> date." },
+            new() { ReplacedRevisionNumber = 1, PublishedAtUtc = new DateTimeOffset(2026, 2, 2, 9, 0, 0, TimeSpan.Zero) }
+        };
+        var action = Action() with { RevisionNumber = 3, Corrections = corrections };
+        var statement = Statement() with { RevisionNumber = 3, Corrections = corrections };
+        var renderer = new ReleaseRenderer();
+
+        foreach (var html in new[] { await renderer.RenderActionAsync(action, [], CancellationToken.None),
+                     await renderer.RenderStatementAsync(statement, [], CancellationToken.None) })
+        {
+            var entries = new HtmlParser().ParseDocument(html).QuerySelectorAll("ul.corrections > li")
+                .Select(item => (item.QuerySelector("strong")!.TextContent, item.QuerySelector("p")?.TextContent)).ToArray();
+            Assert.Equal(("Correction, 2026-02-04. Replaces revision 2.", "Fixed the <sponsor> date."), entries[0]);
+            Assert.Equal(("Updated from the source, 2026-02-02. Replaces revision 1.", null), entries[1]);
+        }
+        var timeline = await TimelineOf(renderer => renderer.RenderActionAsync(action, [], CancellationToken.None));
+        Assert.Contains("2026-02-04|Correction. Replaces revision 2.", timeline);
+        Assert.Contains("2026-02-02|Updated from the source. Replaces revision 1.", timeline);
+    }
+
+    [Fact]
+    public async Task ARecordWithNoCorrectionsShowsNoCorrectionList()
+    {
+        var html = await new ReleaseRenderer().RenderActionAsync(Action(), [], CancellationToken.None);
+
+        Assert.Empty(new HtmlParser().ParseDocument(html).QuerySelectorAll("ul.corrections"));
+    }
+
+    [Fact]
     public async Task TimesOnOneDayKeepTheirClockOrderSoTheShownTimesNeverContradictTheOrder()
     {
         var vote = Vote() with

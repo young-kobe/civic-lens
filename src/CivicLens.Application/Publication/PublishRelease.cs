@@ -44,7 +44,9 @@ public sealed class PublishRelease
         CancellationToken cancellationToken = default)
     {
         ReviewAuthorization.RequireOwner(actor, allowCode: IsOnlyFactRecords(request));
+        var byCode = ReviewAuthor.IsCode(actor.Subject);
         var references = ValidateRequest(request);
+        var notes = PublicationCorrections.ValidateNotes(request.Notes, references, byCode);
         var payloadHash = ReviewValidation.HashPayload(request);
         var replay = await publications.FindReplayAsync(actor.Subject, request.IdempotencyKey, payloadHash, cancellationToken);
         if (replay is not null)
@@ -56,7 +58,8 @@ public sealed class PublishRelease
         var now = clock.GetUtcNow();
         var state = await publications.GetStateAsync(cancellationToken);
         var previous = await PreviousRelease.LoadAsync(releases, state.Active, cancellationToken);
-        var build = new PublicationBuild(previous, now, rules, renderer);
+        var corrections = await PublicationCorrections.LoadAsync(releases, previous, now, byCode, notes, references, cancellationToken);
+        var build = new PublicationBuild(previous, now, rules, renderer, corrections);
         var additions = await LoadAdditionsAsync(references, build, cancellationToken);
         var pages = await releasePages.RenderAsync(build.WithAdded(additions), additions, cancellationToken);
         var requested = references.ToHashSet();
