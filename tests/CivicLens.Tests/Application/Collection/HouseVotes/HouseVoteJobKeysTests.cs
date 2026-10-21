@@ -1,4 +1,5 @@
 using CivicLens.Application.Collection.HouseVotes;
+using CivicLens.Application.Collection.Votes;
 using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Collection.HouseVotes;
@@ -36,7 +37,7 @@ public sealed class HouseVoteJobKeysTests
     [Fact]
     public void RollCallsOfTwoSessionsNeverShareAKey()
     {
-        var secondSession = Item with { Roll = new HouseVoteRoll(new HouseVoteSession(119, 2), 100) };
+        var secondSession = Item with { Roll = new HouseVoteRoll(new VoteSession(119, 2), 100) };
 
         Assert.NotEqual(HouseVoteJobKeys.Detail(HouseVoteFixtures.SourceId, Item), HouseVoteJobKeys.Detail(HouseVoteFixtures.SourceId, secondSession));
     }

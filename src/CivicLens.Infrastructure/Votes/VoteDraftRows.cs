@@ -3,7 +3,7 @@ using CivicLens.Application.Votes;
 using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection;
-using CivicLens.Infrastructure.Collection.HouseVotes;
+using CivicLens.Infrastructure.Collection.Votes;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Votes.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -20,7 +20,7 @@ internal static class VoteDraftRows
     {
         revision.ValidateShape();
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.VoteReview, cancellationToken);
-        if (await HasNewerCandidateAsync(db, revision.SourceId, revision.Congress, revision.SessionNumber, revision.RollCallNumber,
+        if (await HasNewerCandidateAsync(db, revision.SourceId, revision.Chamber, revision.Congress, revision.SessionNumber, revision.RollCallNumber,
                 revision.CandidateUpdateDate.UtcTicks, cancellationToken))
             return VoteDraftErrorCodes.SupersededByNewerCandidate;
         var draft = await db.Set<VoteDraftRow>().SingleOrDefaultAsync(row => row.RecordId == revision.RecordId, cancellationToken);
@@ -35,9 +35,9 @@ internal static class VoteDraftRows
         CancellationToken cancellationToken) =>
         (await ApprovalCheck.OfAsync(() => PostgresVoteReviewStore.ValidateApprovalAsync(db, revision, cancellationToken))).Passed;
 
-    public static Task<bool> HasNewerCandidateAsync(CollectionAttemptDbContext db, string sourceId, int congress, int sessionNumber,
-        int rollCallNumber, long updateDateUtcTicks, CancellationToken cancellationToken) =>
-        db.Set<HouseVoteCandidateRow>().AsNoTracking().AnyAsync(newer => newer.SourceId == sourceId && newer.Congress == congress &&
+    public static Task<bool> HasNewerCandidateAsync(CollectionAttemptDbContext db, string sourceId, Chamber chamber, int congress,
+        int sessionNumber, int rollCallNumber, long updateDateUtcTicks, CancellationToken cancellationToken) =>
+        db.Set<VoteCandidateRow>().AsNoTracking().AnyAsync(newer => newer.SourceId == sourceId && newer.Chamber == chamber && newer.Congress == congress &&
             newer.SessionNumber == sessionNumber && newer.RollCallNumber == rollCallNumber && newer.UpdateDateUtcTicks > updateDateUtcTicks,
             cancellationToken);
 
@@ -62,6 +62,7 @@ internal static class VoteDraftRows
     {
         RecordId = revision.RecordId,
         SourceId = revision.SourceId,
+        Chamber = revision.Chamber,
         Congress = revision.Congress,
         SessionNumber = revision.SessionNumber,
         RollCallNumber = revision.RollCallNumber,

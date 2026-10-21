@@ -13,7 +13,7 @@ public sealed record PublishedOfficialVotes
     {
         var file = new PublishedOfficialVotes
         {
-            Votes = [.. votes.OrderByDescending(vote => vote.VotedOn).ThenByDescending(vote => vote.Session)
+            Votes = [.. votes.OrderByDescending(vote => vote.VotedOn).ThenBy(vote => vote.Chamber).ThenByDescending(vote => vote.Session)
                 .ThenByDescending(vote => vote.RollCallNumber).ThenBy(vote => vote.RecordId, StringComparer.Ordinal)]
         };
         file.Validate();

@@ -12,6 +12,7 @@ internal static class PublishedVoteView
     [
         new("Voted on", Moment.Iso(vote.VotedOn)),
         new("Kind", PublishedRecordLabels.VoteKind(vote.Kind)),
+        new("Chamber", vote.Chamber.ToString()),
         new("Roll call", $"{vote.RollCallNumber}, Congress {vote.Congress}, session {vote.Session}"),
         Fact.List("Tracked issues", vote.TrackedIssueIds),
         new("Published", $"From the official record, checked {Moment.Full(vote.ApprovedAtUtc)}; first published {Moment.Full(vote.FirstPublishedAtUtc)}"),

@@ -124,6 +124,7 @@ internal static class PublishedSamples
             Headline = headline,
             Summary = summary,
             TextOrigin = PublishedTextOrigin.Model,
+            Chamber = PublishedChamber.House,
             Congress = 119,
             Session = 1,
             RollCallNumber = 100,

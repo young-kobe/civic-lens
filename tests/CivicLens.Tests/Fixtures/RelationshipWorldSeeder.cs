@@ -46,19 +46,20 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
 
     public Task VoteAsync(VoteDraftRevision vote, string reviewStatus = "Approved") => ExecuteAsync("""
         SET session_replication_role = replica;
-        INSERT INTO house_vote_candidates (candidate_id, source_id, congress, session_number, roll_call_number, update_date_utc_ticks, bill_type,
+        INSERT INTO vote_candidates (candidate_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks, bill_type,
             bill_number, detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
-        VALUES (@candidate, @source, @congress, @session, @roll, 1, @type, @bill, 'detail', 'members', @extraction, @extraction, @extraction, 1)
+        VALUES (@candidate, @source, @chamber, @congress, @session, @roll, 1, @type, @bill, 'detail', 'members', @extraction, @extraction, @extraction, 1)
         ON CONFLICT DO NOTHING;
-        INSERT INTO vote_drafts (record_id, source_id, congress, session_number, roll_call_number, current_revision_number, review_state_version,
+        INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number, review_state_version,
                                  review_status, created_at_utc_ticks, candidate_id, event_on, issue_ids, official_ids)
-        VALUES (@id, @source, @congress, @session, @roll, @number, 0, @status, 1, @candidate, @eventOn, @issues, @officials)
+        VALUES (@id, @source, @chamber, @congress, @session, @roll, @number, 0, @status, 1, @candidate, @eventOn, @issues, @officials)
         ON CONFLICT (record_id) DO UPDATE SET current_revision_number = @number, review_status = @status, candidate_id = @candidate,
                                               event_on = @eventOn, issue_ids = @issues, official_ids = @officials;
         INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
         VALUES (@id, @number, 'auth0|editor', 'Person', NULL, @json, 1)
         ON CONFLICT (record_id, revision_number) DO UPDATE SET revision_json = EXCLUDED.revision_json
-        """, ("id", vote.RecordId), ("candidate", vote.CandidateId), ("source", vote.SourceId), ("congress", vote.Congress),
+        """, ("id", vote.RecordId), ("candidate", vote.CandidateId), ("source", vote.SourceId), ("chamber", vote.Chamber.ToString()),
+        ("congress", vote.Congress),
         ("session", vote.SessionNumber), ("roll", vote.RollCallNumber), ("type", vote.BillType!), ("bill", vote.BillNumber!.Value),
         ("extraction", RelationshipFixtures.ExtractionId), ("number", vote.RevisionNumber), ("status", reviewStatus),
         ("json", JsonSerializer.Serialize(vote, Web)), ("eventOn", vote.VotedOn), ("issues", vote.TrackedIssueIds.ToArray()),

@@ -1,7 +1,8 @@
 using CivicLens.Application.Review;
-using CivicLens.Tests.Application.Actions;
 using CivicLens.Core.Review;
+using CivicLens.Core.Votes;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Application.Actions;
 using CivicLens.Tests.Application.Votes;
 using CivicLens.Tests.Fixtures;
 
@@ -42,13 +43,15 @@ public sealed class LookupDraftTests
     }
 
     [Fact]
-    public async Task ARollCallMeansTheCurrentCongressAndSessionBecauseRollNumbersRestartEachSession()
+    public async Task ARollCallMeansAHouseRollOfTheCurrentCongressAndSessionBecauseRollNumbersRestartEachSessionAndEachChamber()
     {
-        votes.Rolls[(119, 2, 245)] = VoteRecord;
-        votes.Rolls[(119, 1, 246)] = "first-session";
+        votes.Rolls[(Chamber.House, 119, 2, 245)] = VoteRecord;
+        votes.Rolls[(Chamber.House, 119, 1, 246)] = "first-session";
+        votes.Rolls[(Chamber.Senate, 119, 2, 247)] = "senate-vote";
 
         Assert.Equal(new DraftLookupHit(PublishedRecordKind.Vote, VoteRecord), await Lookup().ExecuteAsync(Reviewer, "Roll 245"));
         Assert.Null(await Lookup().ExecuteAsync(Reviewer, "roll 246"));
+        Assert.Null(await Lookup().ExecuteAsync(Reviewer, "roll 247"));
     }
 
     [Fact]

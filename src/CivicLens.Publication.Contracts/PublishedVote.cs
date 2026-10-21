@@ -15,6 +15,7 @@ public sealed record PublishedVote
     public required string Headline { get; init; }
     public required string Summary { get; init; }
     public required PublishedTextOrigin TextOrigin { get; init; }
+    public required PublishedChamber Chamber { get; init; }
     public required int Congress { get; init; }
     public required int Session { get; init; }
     public required int RollCallNumber { get; init; }
@@ -53,7 +54,7 @@ public sealed record PublishedVote
         if (!PublicationProtocol.IsRecordId(PublishedRecordKind.Vote, RecordId) || RevisionNumber < 1 ||
             string.IsNullOrWhiteSpace(Headline) || string.IsNullOrWhiteSpace(Summary))
             throw new InvalidDataException("Published record identity or wording is invalid.");
-        if (Congress < 1 || Session is not (1 or 2) || RollCallNumber < 1)
+        if (!Enum.IsDefined(Chamber) || Congress < 1 || Session is not (1 or 2) || RollCallNumber < 1)
             throw new InvalidDataException("Published vote requires a roll call identity.");
         if ((BillType is null) != (BillNumber is null) || BillType is not null && (string.IsNullOrWhiteSpace(BillType) || BillNumber < 1))
             throw new InvalidDataException("A published vote bill type has a number, and a number has a type.");

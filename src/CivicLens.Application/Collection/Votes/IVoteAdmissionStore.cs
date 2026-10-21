@@ -1,8 +1,9 @@
 using CivicLens.Application.Collection.Discovery;
+using CivicLens.Application.Collection.HouseVotes;
 
-namespace CivicLens.Application.Collection.HouseVotes;
+namespace CivicLens.Application.Collection.Votes;
 
-public interface IHouseVoteAdmissionStore
+public interface IVoteAdmissionStore
 {
     Task<DiscoveryAdmissionResult> AdmitListPageAsync(ConfiguredCollectionSource source, string listJobId,
         HouseVoteListPage page, CancellationToken cancellationToken);

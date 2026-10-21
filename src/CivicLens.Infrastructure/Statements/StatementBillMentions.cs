@@ -8,7 +8,7 @@ using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.BillStream;
-using CivicLens.Infrastructure.Collection.HouseVotes;
+using CivicLens.Infrastructure.Collection.Votes;
 using CivicLens.Infrastructure.Votes;
 using Microsoft.EntityFrameworkCore;
 
@@ -42,7 +42,7 @@ internal static class StatementBillMentions
         var actions = await db.Set<ActionCandidateRow>().AsNoTracking()
             .Where(candidate => candidate.Congress == congress && numbers.Contains(candidate.BillNumber))
             .Select(candidate => new { candidate.CandidateId, candidate.BillType, candidate.BillNumber }).ToArrayAsync(cancellationToken);
-        var votes = await db.Set<HouseVoteCandidateRow>().AsNoTracking()
+        var votes = await db.Set<VoteCandidateRow>().AsNoTracking()
             .Where(candidate => candidate.Congress == congress && candidate.BillNumber != null && numbers.Contains(candidate.BillNumber.Value))
             .Select(candidate => new { candidate.CandidateId, candidate.BillType, candidate.BillNumber }).ToArrayAsync(cancellationToken);
         await AnalysisPriority.RaiseAsync(db, PostgresActionDraftStore.Table, "candidate_id", ActionDraftTask.Task,

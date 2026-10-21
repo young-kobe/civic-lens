@@ -1,9 +1,10 @@
 using System.Text.Json;
 using CivicLens.Application.Collection;
-using CivicLens.Application.Configuration;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Application.Collection.Votes;
+using CivicLens.Application.Configuration;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
@@ -122,7 +123,7 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
     [Fact]
     public async Task TheLastPageOfTheCurrentSessionAdmitsNoFurtherListPage()
     {
-        var current = HouseVoteSession.ForYear(Convert.ToInt32(await ScalarAsync("SELECT EXTRACT(YEAR FROM clock_timestamp() AT TIME ZONE 'UTC')")));
+        var current = VoteSession.ForYear(Convert.ToInt32(await ScalarAsync("SELECT EXTRACT(YEAR FROM clock_timestamp() AT TIME ZONE 'UTC')")));
 
         var result = await AdmitListAsync("sweep-one", Page(current, [Item(100, session: current)], null));
 
@@ -200,7 +201,7 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
 
         Assert.Equal((0, 1), (replay.Jobs.Count, replay.DuplicateCount));
         Assert.Equal((0, 1), (sameJobAgain.Jobs.Count, sameJobAgain.DuplicateCount));
-        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM house_votes"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_versions"));
         Assert.Equal(1L, await CountAdmittedAsync(ApiResource.HouseVoteMembers));
     }
 
@@ -214,7 +215,7 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
         var result = await AdmitDetailAsync(second, HouseVoteFixtures.Vote(100, Updated.AddDays(2)));
 
         Assert.Single(result.Jobs);
-        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM house_votes"));
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM vote_versions"));
         Assert.Equal(2L, await CountAdmittedAsync(ApiResource.HouseVoteMembers));
     }
 
@@ -225,7 +226,7 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
 
         await AdmitDetailAsync(detail, HouseVoteFixtures.Vote(100, Updated));
 
-        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM house_vote_candidates"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM vote_candidates"));
     }
 
     [Fact]
@@ -266,7 +267,7 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
         var replay = await AdmitMembersAsync(members, vote);
 
         Assert.Equal(1, replay.DuplicateCount);
-        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM house_vote_candidates"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_candidates"));
     }
 
     [Fact]
@@ -280,7 +281,7 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
         await AdmitMembersAsync(firstMembers, first);
         await AdmitMembersAsync(secondMembers, second);
 
-        Assert.Equal(2L, await ScalarAsync("SELECT count(DISTINCT candidate_id) FROM house_vote_candidates"));
+        Assert.Equal(2L, await ScalarAsync("SELECT count(DISTINCT candidate_id) FROM vote_candidates"));
     }
 
     [Fact]
@@ -294,7 +295,7 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
         await Assert.ThrowsAsync<InvalidDataException>(() => AdmitMembersAsync(members,
             HouseVoteFixtures.Vote(101, Updated)));
 
-        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM house_vote_candidates"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM vote_candidates"));
     }
 
     [Fact]
@@ -318,8 +319,8 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
         await AdmitMembersAsync(members, vote);
 
         var bound = await ScalarAsync($"""
-            SELECT count(*) FROM house_vote_candidates candidate
-            JOIN house_votes vote ON vote.detail_job_id = candidate.detail_job_id
+            SELECT count(*) FROM vote_candidates candidate
+            JOIN vote_versions vote ON vote.detail_job_id = candidate.detail_job_id
             WHERE candidate.detail_extraction_id = vote.extraction_id
               AND EXISTS (SELECT 1 FROM document_extractions extraction JOIN collection_job_attempts attempt ON attempt.attempt_id = extraction.attempt_id
                           WHERE extraction.extraction_id = candidate.detail_extraction_id AND attempt.job_id = '{detail}')
@@ -340,7 +341,7 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
         await Assert.ThrowsAsync<InvalidDataException>(() => store.AdmitDetailAsync(Source(), detail,
             HouseVoteFixtures.Vote(100, Updated), foreign, default));
 
-        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM house_votes"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM vote_versions"));
         Assert.Equal(0L, await CountAdmittedAsync(ApiResource.HouseVoteMembers));
     }
 
@@ -356,7 +357,7 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
         await Assert.ThrowsAsync<InvalidDataException>(() => store.AdmitMembersAsync(Source(), members, vote,
             new string('a', 64), default));
 
-        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM house_vote_candidates"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM vote_candidates"));
     }
 
     [Fact]
@@ -367,8 +368,8 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
         var extraction = await ExtractionAsync(detail);
 
         var refused = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync($"""
-            INSERT INTO house_votes (detail_job_id, source_id, congress, session_number, roll_call_number, update_date_utc_ticks, bill_type, bill_number, extraction_id)
-            VALUES ('{detail}', '{HouseVoteFixtures.SourceId}', 119, 1, 100, 1, 'hr', NULL, '{extraction}')
+            INSERT INTO vote_versions (detail_job_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks, bill_type, bill_number, extraction_id)
+            VALUES ('{detail}', '{HouseVoteFixtures.SourceId}', 'House', 119, 1, 100, 1, 'hr', NULL, '{extraction}')
             """));
 
         Assert.Equal(PostgresErrorCodes.CheckViolation, refused.SqlState);
@@ -422,11 +423,11 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
         WHERE idempotency_key NOT LIKE '{TestJobKeyPrefix}%' AND definition_json::jsonb ->> 'apiResource' = '{JsonSerializer.Serialize(resource).Trim('"')}'
         """);
 
-    private static HouseVoteListPage Page(HouseVoteSession session, params HouseVoteListItem[] votes) => Page(session, votes, null);
+    private static HouseVoteListPage Page(VoteSession session, params HouseVoteListItem[] votes) => Page(session, votes, null);
 
-    private static HouseVoteListPage Page(HouseVoteSession session, HouseVoteListItem[] votes, string? next) => new(session, votes, next);
+    private static HouseVoteListPage Page(VoteSession session, HouseVoteListItem[] votes, string? next) => new(session, votes, next);
 
-    private static HouseVoteListItem Item(int roll, DateTimeOffset? updateDate = null, HouseVoteSession? session = null) =>
+    private static HouseVoteListItem Item(int roll, DateTimeOffset? updateDate = null, VoteSession? session = null) =>
         new(new HouseVoteRoll(session ?? HouseVoteFixtures.FirstSession, roll), updateDate ?? Updated);
 
     private static ConfiguredCollectionSource Source() =>
@@ -439,7 +440,7 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""
             SELECT detail_job_id, congress, session_number, roll_call_number, update_date_utc_ticks, bill_type, bill_number
-            FROM house_votes
+            FROM vote_versions
             """, connection);
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
@@ -455,7 +456,7 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
         await using var command = new NpgsqlCommand("""
             SELECT candidate_id, congress, session_number, roll_call_number, update_date_utc_ticks, bill_type, bill_number,
                    detail_job_id, members_job_id, configuration_revision_id
-            FROM house_vote_candidates
+            FROM vote_candidates
             """, connection);
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());

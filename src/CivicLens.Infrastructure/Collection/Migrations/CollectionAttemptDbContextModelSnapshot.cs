@@ -1639,7 +1639,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.ToTable("collection_discoveries", (string)null);
                 });
 
-            modelBuilder.Entity("CivicLens.Infrastructure.Collection.HouseVotes.HouseVoteCandidateRow", b =>
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.Votes.VoteCandidateRow", b =>
                 {
                     b.Property<string>("CandidateId")
                         .HasMaxLength(64)
@@ -1654,6 +1654,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("bill_type");
+
+                    b.Property<string>("Chamber")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("chamber");
 
                     b.Property<string>("ConfigurationRevisionId")
                         .IsRequired()
@@ -1719,29 +1725,31 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("DetailJobId")
                         .IsUnique()
-                        .HasDatabaseName("ux_house_vote_candidates_detail_job");
+                        .HasDatabaseName("ux_vote_candidates_detail_job");
 
                     b.HasIndex("MembersExtractionId");
 
                     b.HasIndex("MembersJobId");
 
                     b.HasIndex("Congress", "BillType", "BillNumber")
-                        .HasDatabaseName("ix_house_vote_candidates_bill");
+                        .HasDatabaseName("ix_vote_candidates_bill");
 
-                    b.HasIndex("SourceId", "Congress", "SessionNumber", "RollCallNumber", "UpdateDateUtcTicks")
-                        .HasDatabaseName("ix_house_vote_candidates_roll");
+                    b.HasIndex("SourceId", "Chamber", "Congress", "SessionNumber", "RollCallNumber", "UpdateDateUtcTicks")
+                        .HasDatabaseName("ix_vote_candidates_roll");
 
-                    b.ToTable("house_vote_candidates", null, t =>
+                    b.ToTable("vote_candidates", null, t =>
                         {
-                            t.HasCheckConstraint("ck_house_vote_candidates_bill", "(bill_type IS NULL) = (bill_number IS NULL) AND (bill_number IS NULL OR bill_number >= 1)");
+                            t.HasCheckConstraint("ck_vote_candidates_bill", "(bill_type IS NULL) = (bill_number IS NULL) AND (bill_number IS NULL OR bill_number >= 1)");
 
-                            t.HasCheckConstraint("ck_house_vote_candidates_created", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                            t.HasCheckConstraint("ck_vote_candidates_chamber", "chamber IN ('House', 'Senate')");
 
-                            t.HasCheckConstraint("ck_house_vote_candidates_id", "candidate_id ~ '^[0-9a-f]{64}$'");
+                            t.HasCheckConstraint("ck_vote_candidates_created", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
-                            t.HasCheckConstraint("ck_house_vote_candidates_roll", "congress >= 1 AND session_number IN (1, 2) AND roll_call_number >= 1");
+                            t.HasCheckConstraint("ck_vote_candidates_id", "candidate_id ~ '^[0-9a-f]{64}$'");
 
-                            t.HasCheckConstraint("ck_house_vote_candidates_update", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                            t.HasCheckConstraint("ck_vote_candidates_roll", "congress >= 1 AND session_number IN (1, 2) AND roll_call_number >= 1");
+
+                            t.HasCheckConstraint("ck_vote_candidates_update", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
                         });
                 });
 
@@ -1933,7 +1941,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
-            modelBuilder.Entity("CivicLens.Infrastructure.Collection.HouseVotes.HouseVoteRow", b =>
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.Votes.VoteVersionRow", b =>
                 {
                     b.Property<string>("DetailJobId")
                         .HasMaxLength(128)
@@ -1948,6 +1956,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("bill_type");
+
+                    b.Property<string>("Chamber")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("chamber");
 
                     b.Property<int>("Congress")
                         .HasColumnType("integer")
@@ -1981,17 +1995,19 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("ExtractionId");
 
-                    b.HasIndex("SourceId", "Congress", "SessionNumber", "RollCallNumber", "UpdateDateUtcTicks")
+                    b.HasIndex("SourceId", "Chamber", "Congress", "SessionNumber", "RollCallNumber", "UpdateDateUtcTicks")
                         .IsUnique()
-                        .HasDatabaseName("ux_house_votes_version");
+                        .HasDatabaseName("ux_vote_versions_roll");
 
-                    b.ToTable("house_votes", null, t =>
+                    b.ToTable("vote_versions", null, t =>
                         {
-                            t.HasCheckConstraint("ck_house_votes_bill", "(bill_type IS NULL) = (bill_number IS NULL) AND (bill_number IS NULL OR bill_number >= 1)");
+                            t.HasCheckConstraint("ck_vote_versions_bill", "(bill_type IS NULL) = (bill_number IS NULL) AND (bill_number IS NULL OR bill_number >= 1)");
 
-                            t.HasCheckConstraint("ck_house_votes_roll", "congress >= 1 AND session_number IN (1, 2) AND roll_call_number >= 1");
+                            t.HasCheckConstraint("ck_vote_versions_chamber", "chamber IN ('House', 'Senate')");
 
-                            t.HasCheckConstraint("ck_house_votes_update", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                            t.HasCheckConstraint("ck_vote_versions_roll", "congress >= 1 AND session_number IN (1, 2) AND roll_call_number >= 1");
+
+                            t.HasCheckConstraint("ck_vote_versions_update", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
                         });
                 });
 
@@ -4237,6 +4253,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasDefaultValue("")
                         .HasColumnName("candidate_id");
 
+                    b.Property<string>("Chamber")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("chamber");
+
                     b.Property<int>("Congress")
                         .HasColumnType("integer")
                         .HasColumnName("congress");
@@ -4303,12 +4325,14 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasMethod("gin")
                         .HasDatabaseName("ix_vote_drafts_official_ids");
 
-                    b.HasIndex("SourceId", "Congress", "SessionNumber", "RollCallNumber")
+                    b.HasIndex("SourceId", "Chamber", "Congress", "SessionNumber", "RollCallNumber")
                         .IsUnique()
                         .HasDatabaseName("ux_vote_drafts_roll");
 
                     b.ToTable("vote_drafts", null, t =>
                         {
+                            t.HasCheckConstraint("ck_vote_drafts_chamber", "chamber IN ('House', 'Senate')");
+
                             t.HasCheckConstraint("ck_vote_drafts_id", "record_id ~ '^[0-9a-f]{64}$'");
 
                             t.HasCheckConstraint("ck_vote_drafts_review_state_version", "review_state_version >= 0");
@@ -4642,14 +4666,14 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("CivicLens.Infrastructure.Collection.HouseVotes.HouseVoteCandidateRow", b =>
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.Votes.VoteCandidateRow", b =>
                 {
                     b.HasOne("CivicLens.Infrastructure.Collection.Jobs.Persistence.ConfigurationRevisionRow", null)
                         .WithMany()
                         .HasForeignKey("ConfigurationRevisionId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_house_vote_candidates_configuration_revision");
+                        .HasConstraintName("fk_vote_candidates_configuration_revision");
 
                     b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
                         .WithMany()
@@ -4657,7 +4681,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("CivicLens.Infrastructure.Collection.HouseVotes.HouseVoteRow", null)
+                    b.HasOne("CivicLens.Infrastructure.Collection.Votes.VoteVersionRow", null)
                         .WithMany()
                         .HasForeignKey("DetailJobId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -4676,7 +4700,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("CivicLens.Infrastructure.Collection.HouseVotes.HouseVoteRow", b =>
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.Votes.VoteVersionRow", b =>
                 {
                     b.HasOne("CivicLens.Infrastructure.Collection.Jobs.Persistence.JobRow", null)
                         .WithMany()
@@ -4981,7 +5005,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             modelBuilder.Entity("CivicLens.Infrastructure.Votes.Persistence.VoteAnalysisRow", b =>
                 {
-                    b.HasOne("CivicLens.Infrastructure.Collection.HouseVotes.HouseVoteCandidateRow", null)
+                    b.HasOne("CivicLens.Infrastructure.Collection.Votes.VoteCandidateRow", null)
                         .WithMany()
                         .HasForeignKey("CandidateId")
                         .OnDelete(DeleteBehavior.Restrict)

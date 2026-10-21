@@ -4,11 +4,11 @@ using CivicLens.Core.Relationships;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.BillStream;
-using CivicLens.Infrastructure.Collection.HouseVotes;
 using CivicLens.Infrastructure.Collection.Jobs;
+using CivicLens.Infrastructure.Collection.Votes;
 using CivicLens.Infrastructure.Documents.Persistence;
-using CivicLens.Infrastructure.Votes.Persistence;
 using CivicLens.Infrastructure.Review;
+using CivicLens.Infrastructure.Votes.Persistence;
 using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 using State = CivicLens.Application.Analysis.AnalysisState;
@@ -45,18 +45,18 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(candidateId);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var row = await db.Set<HouseVoteCandidateRow>().AsNoTracking().SingleOrDefaultAsync(item => item.CandidateId == candidateId, cancellationToken);
+        var row = await db.Set<VoteCandidateRow>().AsNoTracking().SingleOrDefaultAsync(item => item.CandidateId == candidateId, cancellationToken);
         if (row is null) return null;
-        var recordId = PostgresCollectionJobStore.HashHouseVoteRecord(row.SourceId, row.Congress, row.SessionNumber, row.RollCallNumber);
+        var recordId = PostgresCollectionJobStore.HashVoteRecord(row.Chamber, row.SourceId, row.Congress, row.SessionNumber, row.RollCallNumber);
         var revisions = await StoredJobDefinition.LoadRevisionsAsync(db, [row.ConfigurationRevisionId], cancellationToken);
-        var candidate = new VoteDraftCandidate(row.CandidateId, recordId, row.SourceId, row.Congress, row.SessionNumber, row.RollCallNumber,
+        var candidate = new VoteDraftCandidate(row.CandidateId, recordId, row.SourceId, row.Chamber, row.Congress, row.SessionNumber, row.RollCallNumber,
             row.BillType, row.BillNumber, new DateTimeOffset(row.UpdateDateUtcTicks, TimeSpan.Zero));
         return new(candidate, StoredJobDefinition.Find(revisions, row.ConfigurationRevisionId),
             await ReadPageAsync(db, row.DetailJobId, row.DetailExtractionId, cancellationToken),
             await ReadPageAsync(db, row.MembersJobId, row.MembersExtractionId, cancellationToken),
             await ReadBillDetailAsync(db, row, cancellationToken),
             await VoteDraftRows.ReadCurrentAsync(db, recordId, cancellationToken),
-            await VoteDraftRows.HasNewerCandidateAsync(db, row.SourceId, row.Congress, row.SessionNumber, row.RollCallNumber,
+            await VoteDraftRows.HasNewerCandidateAsync(db, row.SourceId, row.Chamber, row.Congress, row.SessionNumber, row.RollCallNumber,
                 row.UpdateDateUtcTicks, cancellationToken));
     }
 
@@ -75,12 +75,13 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
         var entries = db.Set<VoteAnalysisRow>().AsNoTracking().Where(row => row.Task == VoteDraftTask.Task);
         if (view is { } selected) entries = entries.Where(InView(selected));
         var rows = await (from entry in entries
-                          join candidate in db.Set<HouseVoteCandidateRow>().AsNoTracking() on entry.CandidateId equals candidate.CandidateId
+                          join candidate in db.Set<VoteCandidateRow>().AsNoTracking() on entry.CandidateId equals candidate.CandidateId
                           orderby entry.CreatedAtUtcTicks, entry.CandidateId
                           select new
                           {
                               Entry = entry,
                               candidate.SourceId,
+                              candidate.Chamber,
                               candidate.Congress,
                               candidate.SessionNumber,
                               candidate.RollCallNumber,
@@ -92,7 +93,7 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
         var latest = await AnalysisRunLookup.Latest<VoteAnalysisRunRow>(db, VoteDraftTask.Task, nameof(VoteAnalysisRunRow.CandidateId), ids)
             .Select(run => new { run.CandidateId, run.RunId }).ToDictionaryAsync(run => run.CandidateId, run => run.RunId, cancellationToken);
         return [.. rows.Select(row => new VoteDraftListItem(row.Entry.CandidateId, row.SourceId,
-            $"{row.Congress} {row.SessionNumber} {row.RollCallNumber}", row.BillType is null ? null : $"{row.Congress} {row.BillType} {row.BillNumber}",
+            $"{row.Chamber} {row.Congress} {row.SessionNumber} {row.RollCallNumber}", row.BillType is null ? null : $"{row.Congress} {row.BillType} {row.BillNumber}",
             row.Entry.Status, ViewOf(row.Entry.Status, row.Entry.ErrorCode), row.Entry.ErrorCode, row.Entry.Attempts,
             latest.GetValueOrDefault(row.Entry.CandidateId)))];
     }
@@ -103,7 +104,7 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
         return await AnalysisQueueCounts.CountAsync<VoteAnalysisRow, VoteDraftView>(db, VoteDraftTask.Task, ViewOf, cancellationToken);
     }
 
-    private static async Task<VoteDraftPage?> ReadBillDetailAsync(CollectionAttemptDbContext db, HouseVoteCandidateRow candidate,
+    private static async Task<VoteDraftPage?> ReadBillDetailAsync(CollectionAttemptDbContext db, VoteCandidateRow candidate,
         CancellationToken cancellationToken)
     {
         if (candidate.BillType is null) return null;

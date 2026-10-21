@@ -234,7 +234,7 @@ public sealed partial class PostgresHouseVoteTests
         var candidate = await PendingCandidateAsync();
         await SettleForReviewAsync(candidate, await RevisionAsync(candidate, 1));
         var recordId = await RecordIdAsync(candidate);
-        await ExecuteAsync($"SET session_replication_role = replica; DELETE FROM house_vote_candidates WHERE candidate_id = '{candidate}'");
+        await ExecuteAsync($"SET session_replication_role = replica; DELETE FROM vote_candidates WHERE candidate_id = '{candidate}'");
 
         await Assert.ThrowsAsync<InvalidDataException>(() => new GetVoteReview(VoteReviews()).ExecuteAsync(Reviewer, recordId));
     }

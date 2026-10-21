@@ -19,7 +19,7 @@ public sealed partial class PostgresHouseVoteTests
 
         await AdmitMembersAsync(members, vote);
 
-        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM house_vote_candidates"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_candidates"));
         Assert.Empty(await QueueAsync());
     }
 
@@ -66,9 +66,59 @@ public sealed partial class PostgresHouseVoteTests
 
         var queued = await QueueAsync();
         Assert.Equal(2, queued.Count);
-        var olderId = (string)(await ScalarAsync($"SELECT candidate_id FROM house_vote_candidates WHERE update_date_utc_ticks = {older.UpdateDate.UtcTicks}"))!;
+        var olderId = (string)(await ScalarAsync($"SELECT candidate_id FROM vote_candidates WHERE update_date_utc_ticks = {older.UpdateDate.UtcTicks}"))!;
         Assert.True((await VoteStore().ReadEvidenceAsync(olderId, default))!.HasNewerCandidate);
     }
+
+    [Fact]
+    public async Task ANewerSenateCandidateOfTheSameNumbersDoesNotSupersedeTheHouseVote()
+    {
+        var house = await AdmitHouseCandidateAsync();
+        await SeedSenateCandidateAsync(house);
+
+        Assert.False((await VoteStore().ReadEvidenceAsync(house, default))!.HasNewerCandidate);
+    }
+
+    [Fact]
+    public async Task HouseIdsKeepTheirOldValuesAndASenateVoteOfTheSameNumbersGetsOtherIds()
+    {
+        var vote = HouseVoteFixtures.Vote(100, Updated);
+        var house = await AdmitHouseCandidateAsync(vote);
+        var source = HouseVoteFixtures.SourceId;
+        var numbers = $"{vote.Roll.Session.Congress}:{vote.Roll.Session.Number}:{vote.Roll.Number}";
+        var senate = await SeedSenateCandidateAsync(house);
+
+        var houseEvidence = (await VoteStore().ReadEvidenceAsync(house, default))!;
+        var senateEvidence = (await VoteStore().ReadEvidenceAsync(senate, default))!;
+
+        Assert.Equal(Sha256($"house-vote:{source.Length}:{source}{numbers}:{vote.UpdateDate.UtcTicks}"), house);
+        Assert.Equal(Sha256($"house-vote-record:{source.Length}:{source}{numbers}"), houseEvidence.Candidate.RecordId);
+        Assert.Equal(Sha256($"senate-vote-record:{source.Length}:{source}{numbers}"), senateEvidence.Candidate.RecordId);
+    }
+
+    private async Task<string> AdmitHouseCandidateAsync(HouseVote? vote = null)
+    {
+        vote ??= HouseVoteFixtures.Vote(100, Updated);
+        var (_, members) = await DetailWithMembersJobAsync(vote);
+        await AdmitMembersAsync(members, vote);
+        return (string)(await ScalarAsync("SELECT candidate_id FROM vote_candidates"))!;
+    }
+
+    private async Task<string> SeedSenateCandidateAsync(string houseCandidateId)
+    {
+        var senate = new string('9', 64);
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO vote_candidates (candidate_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks,
+                detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
+            SELECT '{senate}', source_id, 'Senate', congress, session_number, roll_call_number, update_date_utc_ticks + 1,
+                'senate-detail', 'senate-members', detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks
+            FROM vote_candidates WHERE candidate_id = '{houseCandidateId}'
+            """);
+        return senate;
+    }
+
+    private static string Sha256(string text) => Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(text)));
 
     [Fact]
     public async Task AVoteWhoseBillDetailWasSavedBeforeTheVoteIsQueuedAtOnce()
@@ -117,7 +167,7 @@ public sealed partial class PostgresHouseVoteTests
         var noBill = HouseVoteFixtures.Vote(101, Updated, billType: null, billNumber: null);
         var (_, members) = await DetailWithMembersJobAsync(noBill);
         await AdmitMembersAsync(members, noBill);
-        var noBillCandidate = (string)(await ScalarAsync("SELECT candidate_id FROM house_vote_candidates WHERE bill_type IS NULL"))!;
+        var noBillCandidate = (string)(await ScalarAsync("SELECT candidate_id FROM vote_candidates WHERE bill_type IS NULL"))!;
 
         var evidence = (await VoteStore().ReadEvidenceAsync(withBill, default))!;
 
@@ -163,7 +213,7 @@ public sealed partial class PostgresHouseVoteTests
             await AdmitMembersAsync(members, vote);
         }
 
-        await ExecuteAsync("DELETE FROM vote_analysis WHERE candidate_id IN (SELECT candidate_id FROM house_vote_candidates WHERE bill_type IS NULL)");
+        await ExecuteAsync("DELETE FROM vote_analysis WHERE candidate_id IN (SELECT candidate_id FROM vote_candidates WHERE bill_type IS NULL)");
 
         var before = await VoteStore().CountWaitingForBillAsync(default);
         await AdmitBillDetailAsync();

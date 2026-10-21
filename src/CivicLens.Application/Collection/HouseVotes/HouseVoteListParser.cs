@@ -1,4 +1,5 @@
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Application.Collection.Votes;
 using CivicLens.Collection.Contracts;
 
 namespace CivicLens.Application.Collection.HouseVotes;
@@ -20,7 +21,7 @@ public static class HouseVoteListParser
         return new HouseVoteListPage(current.Session, votes, current.ReadNext(wire.Pagination.Next, scope, sourceUrl));
     }
 
-    private static HouseVoteListItem ToItem(HouseVoteWire? item, HouseVoteSession session)
+    private static HouseVoteListItem ToItem(HouseVoteWire? item, VoteSession session)
     {
         if (item?.UpdateDate is null || item.ReadRoll() is not { } roll)
             throw new InvalidDataException("House vote list item is incomplete.");

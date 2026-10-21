@@ -20,6 +20,7 @@ internal sealed class PublishedVoteBuilder(PublishedRecordRules rules)
             Headline = revision.Headline,
             Summary = revision.Summary,
             TextOrigin = PublishedRecordRules.TextOriginOf(revision.TextOrigin),
+            Chamber = ChamberOf(revision.Chamber),
             Congress = revision.Congress,
             Session = revision.SessionNumber,
             RollCallNumber = revision.RollCallNumber,
@@ -45,6 +46,13 @@ internal sealed class PublishedVoteBuilder(PublishedRecordRules rules)
         record.Validate();
         return record;
     }
+
+    private static PublishedChamber ChamberOf(Chamber chamber) => chamber switch
+    {
+        Chamber.House => PublishedChamber.House,
+        Chamber.Senate => PublishedChamber.Senate,
+        _ => throw new ArgumentOutOfRangeException(nameof(chamber), chamber, "Chamber has no published form.")
+    };
 
     private static PublishedVoteKind KindOf(VoteKind kind) => kind switch
     {

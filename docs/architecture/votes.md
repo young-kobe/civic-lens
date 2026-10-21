@@ -6,10 +6,12 @@ The votes feature collects House roll-call votes from the Congress.gov `house-vo
 
 ## Decisions
 
+- One vote model serves both chambers. The enum `Chamber` (`House`, `Senate`) is a field of the vote revision, the published vote, and the official vote row. The tables of versions, candidates, and drafts have a `chamber` column. Names that hold no chamber rule are neutral: `VoteSession`, `IVoteAdmissionStore`, `PostgresCollectionJobStore.Votes.cs`, and the tables `vote_versions` and `vote_candidates`. Parsers, URLs, the renderer, and the kind table are per chamber and stay House named. Only the House connector exists today, and it writes `House`.
+- A roll number restarts in each session and in each chamber. Every key or label of a roll call therefore holds the chamber. This covers the unique indexes, the newer-candidate check, the roll call lookup, the labels, and the record and candidate IDs. The ID hash text starts with `house-vote` or `senate-vote`, from the chamber. `PostgresCollectionJobStore.HashVoteRecord` and `HashVoteCandidate` own this rule. House IDs equal the IDs from before the chamber field.
 - The vote connector mirrors the [bills](bills.md) connector. It reuses job keys, admission, budgets, URL page rules, and preparation dispatch.
 - The Congress.gov vote list ignores `fromDateTime` and is not ordered by date. The source therefore has no cursor and no window.
 - A daily sweep reads the whole list of each session, from the session of `backfillFrom` to the session of today. Unchanged votes cost one list read and no job.
-- The session of a calendar year Y has congress `(Y - 1787) / 2` (integer division). Its number is 1 for an odd Y and 2 for an even Y. `HouseVoteSession` owns this rule.
+- The session of a calendar year Y has congress `(Y - 1787) / 2` (integer division). Its number is 1 for an odd Y and 2 for an even Y. `VoteSession` owns this rule.
 - The sweep is one chain of list jobs. The first job lists the first session. The last page of a session admits the first page of the following session, up to the session of today.
 - Every list page is a root job, as for bills, so a running sweep blocks the next scheduled check.
 - A detail job is keyed by source, roll call, and exact update time. A known key is a duplicate. A changed vote has a new update time and so gets a new job.
@@ -43,7 +45,7 @@ The votes feature collects House roll-call votes from the Congress.gov `house-vo
 - A motion to commit and a motion to commit with instructions are a motion to recommit. A motion to concur in a Senate amendment is passage. A consideration of a resolution stays other.
 - A resolution agreed to by the question `On Agreeing to the Resolution` is a rule when its legislation is a House resolution (`HRES`). Its bill title must also hold `consideration of`, in any case and at any position. Any other resolution so agreed is passage, because agreeing to it is its final vote. This choice is deliberate: the kind list has no resolution kind.
 - Code stores the kind in the revision at draft time, with the cited `Question` line, as `PolicyAreaId` is stored for actions. Publication never derives it again.
-- Code also stores the vote day, `VotedOn`, with the cited `Started` line, as it stores the kind. The day is the date of the start time in the offset that the API gives. A vote without a start time blocks with `evidenceUnavailable`, because its day would have no citation. The vote recovers when the API sends a later roll call version, which is a new candidate. The task version is `vote-draft-v3`. Code reads no older revision shape, so the dev rows are reset.
+- Code also stores the vote day, `VotedOn`, with the cited `Started` line, as it stores the kind. The day is the date of the start time in the offset that the API gives. A vote without a start time blocks with `evidenceUnavailable`, because its day would have no citation. The vote recovers when the API sends a later roll call version, which is a new candidate. The task version is `vote-draft-v4`. It rose when the revision gained the field `Chamber`. Code reads no older revision shape, so the dev rows are reset.
 - The citation covers the `Question` line only. The rule test also reads the `Legislation` and `Title` facts. The same revision cites them.
 - D-15 (accepted on 2026-10-19): code approves the worker revisions of a vote, as it does for [actions](actions.md#decisions). Public pages label the headline and the summary as an AI summary of the official record when the origin of the published text is Model. They add no label when a person wrote the text.
 - A worker revision of a newer candidate gets a new code approval if three rules hold. No concern is open. The revision holds no text that a person wrote. The approval checks pass. A person edit stays with a person even after a person approved it. The release keeps the earlier approved revision until the owner publishes the new one. A copy revision for changed member votes follows the same rule.
@@ -53,12 +55,12 @@ The votes feature collects House roll-call votes from the Congress.gov `house-vo
 Each line gives the rule, what enforces it, and the test that protects it. Cross-feature invariants are in [architecture](../architecture.md#invariants).
 
 - The event date of a vote is its vote day. The draft row copies it, the candidate ID, the tracked issue IDs, and the member person IDs from the current revision at each append. Enforced by `VoteDraftRows.Revised`. Test: `PostgresHouseVoteTests.EachWorkerRevisionReplacesTheListedColumnsWithThoseOfTheCurrentRevision`.
-- One record exists for each vote version. Enforced by `ux_house_votes_version`. Test: `PostgresHouseVoteTests.ASecondDetailJobOfTheSameVoteVersionRecordsNothingAndAdmitsNoMembersJob`.
+- One record exists for each vote version. Enforced by `ux_vote_versions_roll`. Test: `PostgresHouseVoteTests.ASecondDetailJobOfTheSameVoteVersionRecordsNothingAndAdmitsNoMembersJob`.
 - A changed vote is a new version with its own members job. Enforced by `HouseVoteJobKeys` and `PostgresCollectionJobStore.AdmitDetailAsync`. Test: `PostgresHouseVoteTests.AChangedVoteIsRecordedAsANewVersionWithItsOwnMembersJob`.
-- A bill type has a number, and a number has a type. Enforced by `ck_house_votes_bill` and `ck_house_vote_candidates_bill`. Test: `PostgresHouseVoteTests.TheDatabaseRefusesABillTypeWithoutANumber`.
+- A bill type has a number, and a number has a type. Enforced by `ck_vote_versions_bill` and `ck_vote_candidates_bill`. Test: `PostgresHouseVoteTests.TheDatabaseRefusesABillTypeWithoutANumber`.
 - A candidate needs a recorded detail of the same version. Enforced by `PostgresCollectionJobStore.AdmitMembersAsync`. Test: `PostgresHouseVoteTests.MembersOfAVersionWithoutARecordedDetailAreInvalidDataAndWriteNoCandidate`.
 - A candidate binds an extraction of its own detail job and an extraction of its own members job. Enforced by `PostgresCollectionJobStore.EnsureExtractionIsOfJobAsync`. Test: `PostgresHouseVoteTests.ADetailWithAnExtractionOfAnotherJobIsInvalidDataAndRecordsNoVote`.
-- A vote version has one candidate. Enforced by `ux_house_vote_candidates_detail_job`. Test: `PostgresHouseVoteTests.ReplayingTheMembersOfAVoteAddsNoSecondCandidate`.
+- A vote version has one candidate. Enforced by `ux_vote_candidates_detail_job`. Test: `PostgresHouseVoteTests.ReplayingTheMembersOfAVoteAddsNoSecondCandidate`.
 - A detail alone makes no candidate. Enforced by `PostgresCollectionJobStore.AdmitMembersAsync`. Test: `PostgresHouseVoteTests.NoCandidateExistsUntilTheMembersOfTheVoteAreCaptured`.
 - A roll call without legislation still gets a candidate. Enforced by `PostgresCollectionJobStore.AdmitMembersAsync`. Test: `PostgresHouseVoteTests.ARollCallWithoutLegislationStillBecomesACandidateBecauseNoRelevanceGateExists`.
 - Each job URL has the exact form of its resource kind. Enforced by `HouseVoteListUrl`, `HouseVoteRollUrl`, and `CollectionJobDefinition.Validate`. Test: `HouseVoteSourceConfigurationTests.AJobUrlMustHaveTheExactFormOfItsResourceSoTheWorkerNeverReadsItAsAnotherKind`.
@@ -66,10 +68,12 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A malformed response is invalid data and blocks preparation. Enforced by the three parsers. Test: `JobPreparationTests.AMalformedVoteResponseIsInvalidDataSoTheWorkerBlocksThePermanentFailure`.
 - A total is a party total or a candidate total, never both or neither. Enforced by `HouseVoteParser`. Test: `HouseVoteParserTests.ATotalMustBeExactlyOneOfAPartyTotalOrACandidateTotalWithACountSoNoCountIsMisfiled`.
 - A response for another roll call than the job URL is invalid. Enforced by `HouseVoteWire.ToVote`. Test: `HouseVoteParserTests.ADetailOfAnotherRollCallThanTheJobRequestedIsInvalid`.
-- The sweep covers every session from `backfillFrom` to today, also across a year boundary. Enforced by `HouseVoteSession`. Test: `HouseVoteSessionTests.TheSweepFollowsSessionByStepUntilTheSessionOfToday`.
+- The sweep covers every session from `backfillFrom` to today, also across a year boundary. Enforced by `VoteSession`. Test: `VoteSessionTests.TheSweepFollowsSessionByStepUntilTheSessionOfToday`.
 - Vote admission never defers a job; a deferral fails the transaction. Enforced by `PostgresCollectionJobStore`. Test: `PostgresHouseVoteTests.AFullPageWithItsNextPageJobFitsTheBudgetButOneMoreJobIsAnInvalidDeferralThatSavesNothing`.
 - The shipped source budgets hold a full page and its next-page job. Enforced by `CollectionConfiguration.Validate`. Test: `PostgresHouseVoteTests.ShippedSourceBudgetsAdmitAFullPageAndItsNextPage`.
-- One vote record exists for each source and roll call. Enforced by `ux_vote_drafts_roll` and `VoteDraftRows.AppendAnalysisRevisionAsync`. Tests: `PostgresHouseVoteTests.TheDatabaseAllowsOneDraftForEachRollCallAndRefusesABadRecordId` and `PostgresHouseVoteTests.ACollectedAgainVoteAppendsRevisionTwoToTheSameDraftBecauseTheRecordIsOnePerRollCall`.
+- One vote record exists for each chamber, source, and roll call. Enforced by `ux_vote_drafts_roll` and `VoteDraftRows.AppendAnalysisRevisionAsync`. Tests: `PostgresHouseVoteTests.TheDatabaseAllowsOneDraftForEachRollCallAndRefusesABadRecordId`, `PostgresHouseVoteTests.ACollectedAgainVoteAppendsRevisionTwoToTheSameDraftBecauseTheRecordIsOnePerRollCall`, `VoteChamberMigrationTests.TheSameRollNumberCanExistInBothChambersButNotTwiceInOne`, and `PostgresRollLookupTests.ARollCallFindsOnlyTheVoteDraftOfItsChamberCongressSessionAndNumber`.
+- A newer candidate of another chamber never supersedes a vote. Enforced by the chamber filter of `VoteDraftRows.HasNewerCandidateAsync`. Test: `PostgresHouseVoteTests.ANewerSenateCandidateOfTheSameNumbersDoesNotSupersedeTheHouseVote`.
+- A record ID and a candidate ID differ between chambers for the same source, Congress, session, and roll. House IDs keep their old values. Enforced by `PostgresCollectionJobStore.HashVoteRecord` and `HashVoteCandidate`. Test for the record ID: `PostgresHouseVoteTests.HouseIdsKeepTheirOldValuesAndASenateVoteOfTheSameNumbersGetsOtherIds`. The Senate candidate ID gets its test in PR 2 of R-42, with Senate collection.
 - A candidate with a bill identity gets no queue row until a bill detail of that bill is saved. Enforced by `PostgresCollectionJobStore.AdmitMembersAsync`. Test: `PostgresHouseVoteTests.AVoteWhoseBillHasNoSavedDetailGetsNoQueueRowBecauseTheDraftNeedsTheBillTitle`.
 - The bill detail admission queues the waiting candidates of that bill in its own transaction, once. Enforced by `PostgresCollectionJobStore.AdmitDetailAsync` (bill) and `VoteDraftQueueRows`. Tests: `PostgresHouseVoteTests.TheBillDetailQueuesTheWaitingVoteInTheSameTransactionThatRecordsTheBill` and `PostgresHouseVoteTests.ALaterVersionOfTheBillAddsNoSecondQueueRowBecauseALaterDetailDoesNotRedraftAVote`.
 - A candidate without a bill identity is queued at once. Enforced by `PostgresCollectionJobStore.AdmitMembersAsync`. Test: `PostgresHouseVoteTests.AVoteWithoutABillIdentityIsQueuedAtOnceBecauseItHasNoTitleToWaitFor`.
@@ -126,7 +130,7 @@ The shipped source `congress-house-votes` sets `backfillFrom` 2025-01-03 and `mi
 
 ### Daily sweep
 
-The due check of the schedule creates one list job for `HouseVoteSession.FirstOfSweep`. That is the session of `backfillFrom`, or the first session of `minimumCongress` when that is later. No job is created when the session starts after today. The check waits one interval.
+The due check of the schedule creates one list job for `VoteSession.FirstOfSweep`. That is the session of `backfillFrom`, or the first session of `minimumCongress` when that is later. No job is created when the session starts after today. The check waits one interval.
 
 A scheduled check does not start while a list job of the source is active. The source checks once a day.
 
@@ -200,15 +204,15 @@ Member: A000055, Robert Aderholt, R, AL, Yea
 
 ### Admission
 
-`IHouseVoteAdmissionStore` admits one list page, one detail, or one members response in one transaction. It shares `AdmitApiJobsAsync` with the [bill stream](bills.md#admission). The budgets come from `admissionPolicy` through `DiscoveryAdmissionPolicy`.
+`IVoteAdmissionStore` admits one list page, one detail, or one members response in one transaction. It shares `AdmitApiJobsAsync` with the [bill stream](bills.md#admission). The budgets come from `admissionPolicy` through `DiscoveryAdmissionPolicy`.
 
 For each list item, the store admits one detail job. A known key is a duplicate and is skipped. A page of 250 items plus the next page needs 251 jobs. `CollectionConfiguration.Validate` rejects a vote source whose policy cannot reserve them.
 
-A detail job saves its extraction first. It then records the vote version and the extraction in `house_votes` and admits one members job. The extraction must belong to an attempt of the job. A second detail job of the same version records nothing and admits nothing.
+A detail job saves its extraction first. It then records the vote version and the extraction in `vote_versions` and admits one members job. The extraction must belong to an attempt of the job. A second detail job of the same version records nothing and admits nothing.
 
-A members job finds the `house_votes` row by source, roll call, and exact update time. A missing row is invalid data. This covers a vote that changed between the two fetches. The members of that newer version then wait for its own detail job.
+A members job finds the `vote_versions` row by source, roll call, and exact update time. A missing row is invalid data. This covers a vote that changed between the two fetches. The members of that newer version then wait for its own detail job.
 
-When the row is found, the store writes one candidate in `house_vote_candidates`. The candidate copies the vote identity, the bill identity, and the detail extraction of the row. It adds the members extraction, which must belong to an attempt of the members job. A replay finds the candidate and writes nothing.
+When the row is found, the store writes one candidate in `vote_candidates`. The candidate copies the vote identity, the bill identity, and the detail extraction of the row. It adds the members extraction, which must belong to an attempt of the members job. A replay finds the candidate and writes nothing.
 
 The store then queues the candidate for drafting. A candidate without a bill identity is queued at once. A candidate with a bill identity is queued only when a bill detail of that bill is already saved. A saved bill detail is a `bill_pages` row of the role Detail, found through its `bill_gates` row. The extraction alone is not enough, because it is saved before the bill admission transaction.
 
@@ -264,7 +268,7 @@ A run that makes no call has the reason `unchanged`, `noTrackedMember`, `memberV
 
 ### Record and append
 
-The record ID is the SHA-256 of the source, the congress, the session, and the roll call (`PostgresCollectionJobStore.HashHouseVoteRecord`). It frames the text with the prefix `house-vote-record:`. The update time is not part of it.
+The record ID is the SHA-256 of the source, the congress, the session, and the roll call (`PostgresCollectionJobStore.HashVoteRecord`). It frames the text with the prefix `house-vote-record:` or `senate-vote-record:`. The update time is not part of it.
 
 `VoteDraftRevision` (Core/Votes) holds the headline, the summary, the text origin, the suggestion, the candidate identity, and the bill identity. It also holds the facts and the vote kind with the citation of its question. Last come the member votes, the tracked issue IDs, and the issue revision ID. `VoteDraftRows.AppendAnalysisRevisionAsync` appends it in the settlement transaction of the queue row. It takes the `civic-lens-vote-review` lock and refuses a candidate with a newer one. It checks the expected revision number and calls `ReviewRecords.AppendRevision`. A refused append discards the run and keeps the entry for a retry.
 
@@ -317,12 +321,12 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 ## Storage and contracts
 
 - The generated [votes schema](schema/votes.md) lists every table, column, key, check, and index.
-- `house_votes` holds one row for each vote version, keyed by its detail job. The row stores the identity, the exact update time, and the nullable bill identity. It also names the extraction of the detail. The store reads it to find duplicates and to write the candidate.
-- `house_vote_candidates` holds one row for each vote version with both pages captured. It names the detail job, the members job, both extractions, and the configuration revision. Drafting reads these rows.
-- The candidate ID is a SHA-256 hash of the source, the roll call, and the exact update time. `PostgresCollectionJobStore.HashHouseVoteCandidate` builds it. It frames the text like the bill candidate ID, with the prefix `house-vote:`.
+- `vote_versions` holds one row for each vote version, keyed by its detail job. The row stores the chamber and the identity, the exact update time, and the nullable bill identity. It also names the extraction of the detail. The store reads it to find duplicates and to write the candidate.
+- `vote_candidates` holds one row for each vote version with both pages captured. It stores the chamber, and it names the detail job, the members job, both extractions, and the configuration revision. Drafting reads these rows.
+- The candidate ID is a SHA-256 hash of the source, the roll call, and the exact update time. `PostgresCollectionJobStore.HashVoteCandidate` builds it. It frames the text like the bill candidate ID, with the prefix `house-vote:` or `senate-vote:`.
 - The store writes no page rows. The two extractions and the captures of the two jobs are the evidence of a candidate.
-- `ix_house_vote_candidates_roll` serves the newer-candidate check of a roll call.
-- `ix_house_vote_candidates_bill` on congress, bill type, and bill number serves the waiting-candidate query of the bill detail admission.
+- `ix_vote_candidates_roll` serves the newer-candidate check of a roll call.
+- `ix_vote_candidates_bill` on congress, bill type, and bill number serves the waiting-candidate query of the bill detail admission.
 - `vote_analysis`, `vote_analysis_runs`, and `vote_analysis_budget` hold the queue, the runs, and the daily charge of the task `vote-draft`. They have the shape of the [action tables](actions.md#storage-and-contracts). A run has the reason column for a bypassed run.
 - `vote_drafts` holds one record for each source and roll call. `vote_revisions` holds its revisions as JSON, each with the run of its analysis author. `vote_review_decisions` holds the review decisions of vote records. It mirrors the action decision table.
 - A bill detail is found through `bill_gates` and `bill_pages`, which the bill stream owns. `BillDetailRows` owns this lookup for both the queue rule and the evidence read. Vote drafting adds no table and no column.
@@ -331,16 +335,16 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 
 | Concern | Files |
 |---|---|
-| Sessions and the sweep | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteSession.cs`, `src/CivicLens.Application/Collection/HouseVotes/HouseVoteRoll.cs` |
+| Sessions and the sweep | `src/CivicLens.Application/Collection/Votes/VoteSession.cs`, `src/CivicLens.Application/Collection/HouseVotes/HouseVoteRoll.cs` |
 | URLs and keys | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteListUrl.cs`, `src/CivicLens.Application/Collection/HouseVotes/HouseVoteRollUrl.cs`, `src/CivicLens.Application/Collection/HouseVotes/HouseVoteJobKeys.cs` |
 | Rendering | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteRenderer.cs`, `src/CivicLens.Application/Collection/RenderedText.cs` |
 | Parsers | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteListParser.cs`, `src/CivicLens.Application/Collection/HouseVotes/HouseVoteParser.cs`, `src/CivicLens.Application/Collection/HouseVotes/HouseVoteMembersParser.cs`, `src/CivicLens.Application/Collection/HouseVotes/HouseVoteWire.cs` |
 | Resource kinds and parser list | `src/CivicLens.Application/Collection/ApiResource.cs`, `src/CivicLens.Application/Collection/ApiParser.cs` |
 | Configuration and job binding | `src/CivicLens.Application/Collection/CollectionConfiguration.cs`, `src/CivicLens.Application/Collection/ConfiguredCollectionSource.cs`, `src/CivicLens.Application/Collection/Jobs/CollectionJobDefinition.cs` |
 | Preparation | `src/CivicLens.Application/Collection/Processing/JobPreparation.cs` |
-| Admission port | `src/CivicLens.Application/Collection/HouseVotes/IHouseVoteAdmissionStore.cs` |
-| Postgres admission and candidates | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.HouseVotes.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.Scheduling.cs` |
-| Table rows | `src/CivicLens.Infrastructure/Collection/HouseVotes/` |
+| Admission port | `src/CivicLens.Application/Collection/Votes/IVoteAdmissionStore.cs` |
+| Postgres admission and candidates | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.Votes.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.Scheduling.cs` |
+| Table rows | `src/CivicLens.Infrastructure/Collection/Votes/` |
 | Drafting step and checks | `src/CivicLens.Application/Votes/VoteDraftStep.cs`, `src/CivicLens.Application/Votes/VoteDraftContext.cs`, `src/CivicLens.Application/Votes/VoteDraftResolver.cs` |
 | Bill detail lookup | `src/CivicLens.Infrastructure/Collection/BillStream/BillDetailRows.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.BillFollowOns.cs` |
 | Evidence reader, snapshot, fingerprint | `src/CivicLens.Application/Votes/VoteReader.cs`, `src/CivicLens.Application/Votes/VoteSnapshot.cs`, `src/CivicLens.Application/Votes/VoteFingerprint.cs`, `src/CivicLens.Application/Documents/LineCitations.cs` |
@@ -379,4 +383,5 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 - Rolling back the `VoteKindChangedReason` migration fails while any vote run has the `kindChanged` reason.
 - The session of today uses the UTC date. The new session therefore starts a few hours early on 1 January in US time zones. Its list is empty then.
 - Senate votes need senate.gov data and a `lis_member_id` crosswalk. They are planned in [R-42](../roadmap.md#next). See [actions](actions.md#limits-and-planned-work).
-- Roll call lookup ignores the source of a vote draft, because House votes have one source and no code owns its ID. A second vote source needs a source filter in `FindRecordIdByRollAsync`.
+- Roll call lookup keys by chamber, Congress, session, and number. It ignores the source of a vote draft, because each chamber has one source and no code owns its ID. A second source for one chamber needs a source filter in `FindRecordIdByRollAsync`. The lookup text `Roll N` means a House roll. A Senate form of the text comes with the Senate drafting work.
+- The review page links a roll call to clerk.house.gov for every vote. A Senate vote needs its own link.

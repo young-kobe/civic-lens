@@ -24,7 +24,7 @@ internal static class PublishedOfficialView
 
     public static string RollCall(PublishedOfficialVote vote)
     {
-        var roll = $"Roll call {vote.RollCallNumber}, Congress {vote.Congress}, session {vote.Session}";
+        var roll = $"{vote.Chamber} roll call {vote.RollCallNumber}, Congress {vote.Congress}, session {vote.Session}";
         return vote.BillType is null ? roll : $"{roll}, {ActionLabels.Bill(vote.Congress, vote.BillType, vote.BillNumber!.Value)}";
     }
 }

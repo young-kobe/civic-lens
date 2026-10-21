@@ -45,13 +45,13 @@ public sealed class BillLinksWorkspaceTests(PostgresCollection postgres) : IAsyn
 
         var rows = page.QuerySelectorAll("[aria-labelledby='bill-votes'] li").ToArray();
         Assert.Equal([Id(3), Id(20), Id(10)], rows.Select(row => row.QuerySelector("a")!.GetAttribute("href")!.Split('/')[^1]));
-        Assert.Contains("Roll call 3, Congress 119, session 2", rows[0].TextContent, StringComparison.Ordinal);
+        Assert.Contains("House roll call 3, Congress 119, session 2", rows[0].TextContent, StringComparison.Ordinal);
         Assert.Contains("Open concerns", rows[0].TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain("0 open", rows[0].TextContent, StringComparison.Ordinal);
-        Assert.Contains("Roll call 20, Congress 119, session 1", rows[1].TextContent, StringComparison.Ordinal);
+        Assert.Contains("House roll call 20, Congress 119, session 1", rows[1].TextContent, StringComparison.Ordinal);
         Assert.Contains("Passage, 2025-05-01", rows[1].TextContent, StringComparison.Ordinal);
         Assert.Contains("Approved", rows[1].TextContent, StringComparison.Ordinal);
-        Assert.Contains("Roll call 10, Congress 119, session 1", rows[2].TextContent, StringComparison.Ordinal);
+        Assert.Contains("House roll call 10, Congress 119, session 1", rows[2].TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain("The newest", page.QuerySelector("[aria-labelledby='bill-votes']")!.TextContent, StringComparison.Ordinal);
     }
 
@@ -198,9 +198,9 @@ public sealed class BillLinksWorkspaceTests(PostgresCollection postgres) : IAsyn
         };
         await Seeder.ExecuteAsync("""
             SET session_replication_role = replica;
-            INSERT INTO house_vote_candidates (candidate_id, source_id, congress, session_number, roll_call_number, update_date_utc_ticks, bill_type,
+            INSERT INTO vote_candidates (candidate_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks, bill_type,
                 bill_number, detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
-            VALUES (@candidate, @source, @congress, @session, @roll, 1, @type, @bill, 'detail-' || @roll, 'members-' || @roll, 'x', 'x', 'x', 1)
+            VALUES (@candidate, @source, 'House', @congress, @session, @roll, 1, @type, @bill, 'detail-' || @roll, 'members-' || @roll, 'x', 'x', 'x', 1)
             """, ("candidate", vote.CandidateId), ("source", vote.SourceId), ("congress", congress), ("session", session),
             ("roll", roll), ("type", vote.BillType!), ("bill", vote.BillNumber!.Value));
         await Seeder.VoteAsync(vote, status);

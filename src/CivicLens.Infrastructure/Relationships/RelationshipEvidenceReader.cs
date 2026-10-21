@@ -49,11 +49,11 @@ internal static class RelationshipEvidenceReader
         SELECT r.revision_json AS "Value" FROM vote_drafts d
         JOIN vote_revisions r ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
         WHERE @@scope
-          AND EXISTS (SELECT 1 FROM house_vote_candidates c
+          AND EXISTS (SELECT 1 FROM vote_candidates c
                       JOIN unnest({0}, {1}, {2}) AS b(congress, bill_type, bill_number)
                         ON c.congress = b.congress AND c.bill_type = b.bill_type AND c.bill_number = b.bill_number
-                      WHERE c.source_id = d.source_id AND c.congress = d.congress AND c.session_number = d.session_number
-                        AND c.roll_call_number = d.roll_call_number)
+                      WHERE c.source_id = d.source_id AND c.chamber = d.chamber AND c.congress = d.congress
+                        AND c.session_number = d.session_number AND c.roll_call_number = d.roll_call_number)
         """;
 
     private const string VoteById = """

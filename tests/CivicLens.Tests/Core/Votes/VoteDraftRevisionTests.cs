@@ -10,6 +10,14 @@ public sealed class VoteDraftRevisionTests
     private static readonly string ExtractionId = new('c', 64);
 
     [Fact]
+    public void ARevisionNeedsADefinedChamberBecauseRollNumbersRepeatAcrossChambers()
+    {
+        Revision().ValidateShape();
+
+        Assert.Throws<ArgumentException>(() => (Revision() with { Chamber = (Chamber)9 }).ValidateShape());
+    }
+
+    [Fact]
     public void AnAnalysisRevisionFollowsTheCurrentOneAndAFirstRevisionIsNumberOne()
     {
         Revision().ValidateAsAnalysisRevision(null);
@@ -126,6 +134,7 @@ public sealed class VoteDraftRevisionTests
         Assert.Throws<ArgumentException>(() => (edit with { CandidateId = new string('f', 64) }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (edit with { IssueRevisionId = new string('f', 64) }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (edit with { SourceId = "other-source" }).ValidatePersonEditOf(previous));
+        Assert.Throws<ArgumentException>(() => (edit with { Chamber = Chamber.Senate }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (edit with { Congress = 118 }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (edit with { SessionNumber = 2 }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (edit with { RollCallNumber = 101 }).ValidatePersonEditOf(previous));
@@ -189,7 +198,7 @@ public sealed class VoteDraftRevisionTests
 
     private static VoteDraftRevision Revision(int number = 1, string author = "civic-lens:analysis") => new(
         VoteWorld.RecordId, number, author, VoteWorld.UpdatedAt.AddMinutes(number), "The House voted", "The House decided a question.", ReviewTextOrigin.Model, null,
-        "congress-house-votes", 119, 1, 100, "hconres", 14, VoteWorld.CandidateId, VoteWorld.UpdatedAt,
+        "congress-house-votes", Chamber.House, 119, 1, 100, "hconres", 14, VoteWorld.CandidateId, VoteWorld.UpdatedAt,
         [new("Result: Passed", new SourceSpan(ExtractionId, 0, 14))], new DateOnly(2025, 4, 10), new SourceSpan(ExtractionId, 30, 28),
         VoteKind.Passage, new SourceSpan(ExtractionId, 15, 20), [Member()], ["rent"], new string('e', 64));
 }

@@ -7,7 +7,7 @@ namespace CivicLens.Core.Votes;
 
 public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, string AuthorSubject, DateTimeOffset CreatedAtUtc,
     string Headline, string Summary, ReviewTextOrigin TextOrigin, ReviewTextSuggestion? Suggestion,
-    string SourceId, int Congress, int SessionNumber, int RollCallNumber, string? BillType, int? BillNumber,
+    string SourceId, Chamber Chamber, int Congress, int SessionNumber, int RollCallNumber, string? BillType, int? BillNumber,
     string CandidateId, DateTimeOffset CandidateUpdateDate, ImmutableArray<VoteFact> Facts, DateOnly VotedOn, SourceSpan VotedOnCitation, VoteKind Kind, SourceSpan? KindCitation, ImmutableArray<MemberVote> Members,
     ImmutableArray<string> TrackedIssueIds, string IssueRevisionId)
     : IHeadlineSummaryRevision
@@ -29,7 +29,7 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
     {
         if (!LowercaseHex.Is(RecordId, 64) || !LowercaseHex.Is(CandidateId, 64) || !LowercaseHex.Is(IssueRevisionId, 64))
             throw new ArgumentException("A vote revision needs valid record, candidate, and issue revision IDs.");
-        if (RevisionNumber < 1 || string.IsNullOrWhiteSpace(SourceId) || Congress < 1 || SessionNumber is not (1 or 2) || RollCallNumber < 1)
+        if (RevisionNumber < 1 || string.IsNullOrWhiteSpace(SourceId) || !Enum.IsDefined(Chamber) || Congress < 1 || SessionNumber is not (1 or 2) || RollCallNumber < 1)
             throw new ArgumentException("A vote revision needs a source and a roll call identity.");
         if ((BillType is null) != (BillNumber is null) || BillType is not null && (string.IsNullOrWhiteSpace(BillType) || BillNumber < 1))
             throw new ArgumentException("A bill type has a number, and a number has a type.");
@@ -85,7 +85,7 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
     }
 
     private bool HasSameStructuredPartAs(VoteDraftRevision other) =>
-        RecordId == other.RecordId && SourceId == other.SourceId && Congress == other.Congress && SessionNumber == other.SessionNumber &&
+        RecordId == other.RecordId && SourceId == other.SourceId && Chamber == other.Chamber && Congress == other.Congress && SessionNumber == other.SessionNumber &&
         RollCallNumber == other.RollCallNumber && BillType == other.BillType && BillNumber == other.BillNumber &&
         CandidateId == other.CandidateId && CandidateUpdateDate == other.CandidateUpdateDate && VotedOn == other.VotedOn &&
         VotedOnCitation == other.VotedOnCitation && Facts.SequenceEqual(other.Facts) &&

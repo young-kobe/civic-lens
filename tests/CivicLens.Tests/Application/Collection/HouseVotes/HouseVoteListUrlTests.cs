@@ -1,4 +1,5 @@
 using CivicLens.Application.Collection.HouseVotes;
+using CivicLens.Application.Collection.Votes;
 using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Collection.HouseVotes;
@@ -11,8 +12,8 @@ public sealed class HouseVoteListUrlTests
     [Fact]
     public void TheFirstPageOfASessionHasTheExactListForm()
     {
-        Assert.Equal(First, HouseVoteListUrl.FirstPage(Source, new HouseVoteSession(119, 1)));
-        Assert.Equal(new HouseVoteListUrl(new HouseVoteSession(119, 1), 0), HouseVoteListUrl.TryRead(Source, First));
+        Assert.Equal(First, HouseVoteListUrl.FirstPage(Source, new VoteSession(119, 1)));
+        Assert.Equal(new HouseVoteListUrl(new VoteSession(119, 1), 0), HouseVoteListUrl.TryRead(Source, First));
     }
 
     [Fact]
@@ -20,7 +21,7 @@ public sealed class HouseVoteListUrlTests
     {
         var url = HouseVoteListUrl.TryRead(Source, Source + "/119/2?offset=250&limit=250&format=json");
 
-        Assert.Equal(new HouseVoteListUrl(new HouseVoteSession(119, 2), 250), url);
+        Assert.Equal(new HouseVoteListUrl(new VoteSession(119, 2), 250), url);
     }
 
     [Theory]

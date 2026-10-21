@@ -2,6 +2,7 @@ using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Application.Collection.Votes;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Roster;
@@ -16,7 +17,7 @@ public sealed class JobPreparation(
     ICollectionAttemptStore attempts,
     IDiscoveryAdmissionStore admissions,
     IBillStreamAdmissionStore billAdmissions,
-    IHouseVoteAdmissionStore voteAdmissions,
+    IVoteAdmissionStore voteAdmissions,
     IMemberRosterStore roster,
     IExecutiveRosterStore executives,
     ICaptureBodyReader bodies,

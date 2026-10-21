@@ -271,7 +271,7 @@ Before the first production deploy ([R-23](roadmap.md#later)), reset the develop
 | Action draft task | `action-draft-v2` | `src/CivicLens.Application/Actions/ActionDraftTask.cs` | Action analysis runs | Task flow or output handling changes |
 | Action draft prompt | `action-draft-prompt-v3` | same file | Action analysis runs | Prompt text or input framing changes |
 | Action draft schema | `action-draft-schema-v1` | same file | Action analysis runs | The model output schema changes |
-| Vote draft task | `vote-draft-v3` | `src/CivicLens.Application/Votes/VoteDraftTask.cs` | Vote analysis runs | Task flow or output handling changes |
+| Vote draft task | `vote-draft-v4` | `src/CivicLens.Application/Votes/VoteDraftTask.cs` | Vote analysis runs | Task flow or output handling changes |
 | Vote draft prompt | `vote-draft-prompt-v2` | same file | Vote analysis runs | Prompt text or input framing changes |
 | Vote draft schema | `vote-draft-schema-v1` | same file | Vote analysis runs | The model output schema changes |
 | Vote fingerprint | `vote-fingerprint-v1` | `src/CivicLens.Application/Votes/VoteFingerprint.cs` | The run input hash of a draft that makes no call | The canonical text of the fingerprint changes |
@@ -351,10 +351,10 @@ This is the only navigation index.
 | Bill gate and follow-on pages | [Bills](architecture/bills.md#bill-gate) | `src/CivicLens.Application/Collection/Bills/BillGate.cs` |
 | Bill page extraction text | [Bills](architecture/bills.md#extraction) | `src/CivicLens.Application/Collection/Bills/CongressBillRenderer.cs` |
 | Action candidates | [Bills](architecture/bills.md#action-candidate) | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ActionCandidates.cs` |
-| Congress.gov House vote sweep, sessions, URLs | [Votes](architecture/votes.md#daily-sweep) | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteSession.cs` |
+| Congress.gov House vote sweep, sessions, URLs | [Votes](architecture/votes.md#daily-sweep) | `src/CivicLens.Application/Collection/Votes/VoteSession.cs` |
 | House vote parsers and admission | [Votes](architecture/votes.md#parsing) | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteParser.cs` |
-| Vote candidates | [Votes](architecture/votes.md#admission) | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.HouseVotes.cs` |
-| Vote tables: versions and candidates | [Votes](architecture/votes.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Collection/HouseVotes/` |
+| Vote candidates | [Votes](architecture/votes.md#admission) | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.Votes.cs` |
+| Vote tables: versions and candidates | [Votes](architecture/votes.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Collection/Votes/` |
 | Vote drafting, facts, and the member-vote copy | [Votes](architecture/votes.md#drafting) | `src/CivicLens.Application/Votes/VoteDraftStep.cs` |
 | Vote commands | [Votes](architecture/votes.md#owner-commands) | `src/CivicLens.Host/Votes/VoteCommand.cs` |
 | Vote kind table | [Votes](architecture/votes.md#decisions) | `src/CivicLens.Application/Votes/VoteKindTable.cs` |

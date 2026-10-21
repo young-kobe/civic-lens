@@ -1,5 +1,6 @@
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Application.Collection.Votes;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection.Jobs.Persistence;
 using Microsoft.EntityFrameworkCore;

@@ -129,7 +129,7 @@ public sealed class PublishOfficialVotesTests
         scenario.SeedRelease(withFiles: true, []);
         var misplaced = PublishedOfficialVotes.Of([new PublishedOfficialVote
         {
-            RecordId = new string('f', 64), VotedOn = new DateOnly(2024, 1, 1), Congress = 118, Session = 1, RollCallNumber = 1, Cast = "Yea", Headline = "Misplaced"
+            RecordId = new string('f', 64), VotedOn = new DateOnly(2024, 1, 1), Chamber = PublishedChamber.House, Congress = 118, Session = 1, RollCallNumber = 1, Cast = "Yea", Headline = "Misplaced"
         }]);
         scenario.Releases.Directories["seeded"][MayorFile] = JsonSerializer.SerializeToUtf8Bytes(misplaced, PublicationProtocol.JsonOptions);
 

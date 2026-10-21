@@ -21,7 +21,7 @@ public sealed class PublishedOfficialPageTests
         Assert.Equal([new string('2', 64), new string('3', 64), new string('1', 64), new string('4', 64)],
             records.QuerySelectorAll("a.cell-title").Select(link => link.GetAttribute("href")!.Replace("../records/", "").Replace(".html", "")));
         Assert.Equal(["2026-05-01", "2026-04-01", "2026-03-01", "2025-12-01"], records.QuerySelectorAll("tbody td.num").Select(cell => cell.TextContent));
-        Assert.Contains("Roll call 100, Congress 119, session 1, HR 7", records.TextContent, StringComparison.Ordinal);
+        Assert.Contains("House roll call 100, Congress 119, session 1, HR 7", records.TextContent, StringComparison.Ordinal);
         Assert.Contains("Yea", records.TextContent, StringComparison.Ordinal);
     }
 
@@ -170,6 +170,7 @@ public sealed class PublishedOfficialPageTests
     {
         RecordId = new string(id, 64),
         VotedOn = date,
+        Chamber = PublishedChamber.House,
         Congress = 119,
         Session = 1,
         RollCallNumber = 100,

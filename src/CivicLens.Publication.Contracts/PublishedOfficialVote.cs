@@ -9,6 +9,7 @@ public sealed record PublishedOfficialVote
 
     public required string RecordId { get; init; }
     public required DateOnly VotedOn { get; init; }
+    public required PublishedChamber Chamber { get; init; }
     public required int Congress { get; init; }
     public required int Session { get; init; }
     public required int RollCallNumber { get; init; }
@@ -21,6 +22,7 @@ public sealed record PublishedOfficialVote
     {
         RecordId = vote.RecordId,
         VotedOn = vote.VotedOn,
+        Chamber = vote.Chamber,
         Congress = vote.Congress,
         Session = vote.Session,
         RollCallNumber = vote.RollCallNumber,
@@ -32,7 +34,7 @@ public sealed record PublishedOfficialVote
 
     public void Validate()
     {
-        if (!PublicationProtocol.IsRecordId(PublishedRecordKind.Vote, RecordId) || Congress < 1 || Session is not (1 or 2) ||
+        if (!PublicationProtocol.IsRecordId(PublishedRecordKind.Vote, RecordId) || !Enum.IsDefined(Chamber) || Congress < 1 || Session is not (1 or 2) ||
             RollCallNumber < 1 || !IsText(Cast, MaximumCastLength) || !IsText(Headline, MaximumHeadlineLength) ||
             (BillType is null) != (BillNumber is null) || BillType is not null && (!IsText(BillType, MaximumBillTypeLength) || BillNumber < 1))
             throw new InvalidDataException("Published official vote is invalid.");

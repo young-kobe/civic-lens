@@ -2,6 +2,7 @@ using System.Text;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.HouseVotes;
+using CivicLens.Application.Collection.Votes;
 using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Collection.HouseVotes;
@@ -24,10 +25,10 @@ public sealed class HouseVoteListParserTests
              "pagination":{"count":362,"next":"
             """ + next + "\"}}");
 
-        Assert.Equal(new HouseVoteSession(119, 1), page.Session);
-        Assert.Equal([new HouseVoteListItem(new HouseVoteRoll(new HouseVoteSession(119, 1), 240),
+        Assert.Equal(new VoteSession(119, 1), page.Session);
+        Assert.Equal([new HouseVoteListItem(new HouseVoteRoll(new VoteSession(119, 1), 240),
                 new DateTimeOffset(2025, 9, 9, 22, 53, 19, TimeSpan.Zero)),
-            new HouseVoteListItem(new HouseVoteRoll(new HouseVoteSession(119, 1), 306),
+            new HouseVoteListItem(new HouseVoteRoll(new VoteSession(119, 1), 306),
                 new DateTimeOffset(2025, 12, 19, 14, 53, 45, TimeSpan.Zero))], page.Votes);
         Assert.Equal(next, page.Next);
     }

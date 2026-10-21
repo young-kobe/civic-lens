@@ -22,9 +22,9 @@ internal static class PairPriority
         """;
 
     private const string VoteCandidatesOfRecords = """
-        SELECT c.candidate_id AS "Value" FROM house_vote_candidates c
-        JOIN vote_drafts d ON d.source_id = c.source_id AND d.congress = c.congress AND d.session_number = c.session_number
-                          AND d.roll_call_number = c.roll_call_number
+        SELECT c.candidate_id AS "Value" FROM vote_candidates c
+        JOIN vote_drafts d ON d.source_id = c.source_id AND d.chamber = c.chamber AND d.congress = c.congress
+                          AND d.session_number = c.session_number AND d.roll_call_number = c.roll_call_number
         WHERE d.record_id = ANY({0})
         """;
 

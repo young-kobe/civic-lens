@@ -2,6 +2,7 @@ using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Application.Collection.Votes;
 using CivicLens.Collection.Contracts;
 
 namespace CivicLens.Application.Collection;
@@ -185,7 +186,7 @@ public sealed class ConfiguredCollectionSource
         switch (source.ApiParser)
         {
             case ApiParser.CongressHouseVoteList:
-                return HouseVoteSession.FirstOfSweep(source.BackfillFrom!.Value, today, source.MinimumCongress!.Value) is { } first
+                return VoteSession.FirstOfSweep(source.BackfillFrom!.Value, today, source.MinimumCongress!.Value) is { } first
                     ? new ApiTarget(ApiResource.HouseVoteList, HouseVoteListUrl.FirstPage(source.Url, first))
                     : null;
             case ApiParser.CongressLegislators:
@@ -199,7 +200,7 @@ public sealed class ConfiguredCollectionSource
 
     private readonly record struct ApiTarget(ApiResource Resource, string Url);
 
-    private static string? FollowingSessionUrl(WatchedSourceConfiguration source, HouseVoteSession session, DateOnly today) =>
+    private static string? FollowingSessionUrl(WatchedSourceConfiguration source, VoteSession session, DateOnly today) =>
         session.Following(today) is { } following ? HouseVoteListUrl.FirstPage(source.Url, following) : null;
 
     private WatchedSourceConfiguration ReadHouseVoteSource() =>

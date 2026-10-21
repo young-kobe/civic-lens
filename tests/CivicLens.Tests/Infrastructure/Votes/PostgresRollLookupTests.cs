@@ -1,3 +1,4 @@
+using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Votes;
 using CivicLens.Tests.Fixtures;
@@ -18,16 +19,20 @@ public sealed class PostgresRollLookupTests(PostgresCollection postgres) : IAsyn
     public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
 
     [Fact]
-    public async Task ARollCallFindsOnlyTheVoteDraftOfItsCongressSessionAndNumber()
+    public async Task ARollCallFindsOnlyTheVoteDraftOfItsChamberCongressSessionAndNumber()
     {
-        var vote = RelationshipFixtures.Vote();
-        await new RelationshipWorldSeeder(connectionString).VoteAsync(vote);
+        var house = RelationshipFixtures.Vote();
+        var senate = house with { RecordId = new string('7', 64), CandidateId = new string('8', 64), Chamber = Chamber.Senate };
+        var seeder = new RelationshipWorldSeeder(connectionString);
+        await seeder.VoteAsync(house);
+        await seeder.VoteAsync(senate);
         var store = new PostgresVoteReviewStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options));
 
-        Assert.Equal(vote.RecordId, await store.FindRecordIdByRollAsync(vote.Congress, vote.SessionNumber, vote.RollCallNumber, default));
-        Assert.Null(await store.FindRecordIdByRollAsync(vote.Congress, vote.SessionNumber + 1, vote.RollCallNumber, default));
-        Assert.Null(await store.FindRecordIdByRollAsync(vote.Congress - 1, vote.SessionNumber, vote.RollCallNumber, default));
-        Assert.Null(await store.FindRecordIdByRollAsync(vote.Congress, vote.SessionNumber, vote.RollCallNumber + 1, default));
+        Assert.Equal(house.RecordId, await store.FindRecordIdByRollAsync(Chamber.House, house.Congress, house.SessionNumber, house.RollCallNumber, default));
+        Assert.Equal(senate.RecordId, await store.FindRecordIdByRollAsync(Chamber.Senate, house.Congress, house.SessionNumber, house.RollCallNumber, default));
+        Assert.Null(await store.FindRecordIdByRollAsync(Chamber.House, house.Congress, house.SessionNumber + 1, house.RollCallNumber, default));
+        Assert.Null(await store.FindRecordIdByRollAsync(Chamber.House, house.Congress - 1, house.SessionNumber, house.RollCallNumber, default));
+        Assert.Null(await store.FindRecordIdByRollAsync(Chamber.House, house.Congress, house.SessionNumber, house.RollCallNumber + 1, default));
     }
 }

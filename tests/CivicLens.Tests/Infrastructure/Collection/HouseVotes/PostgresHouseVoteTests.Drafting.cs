@@ -134,9 +134,9 @@ public sealed partial class PostgresHouseVoteTests
         var recordId = await RecordIdAsync(candidate);
         var revision = await RevisionAsync(candidate, 1);
         await ExecuteAsync($"""
-            INSERT INTO vote_drafts (record_id, source_id, congress, session_number, roll_call_number, current_revision_number, review_state_version,
+            INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number, review_state_version,
                 review_status, created_at_utc_ticks)
-            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', 119, 1, 100, 1, 0, 'AwaitingReview', 0);
+            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', 'House', 119, 1, 100, 1, 0, 'AwaitingReview', 0);
             INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
             VALUES ('{recordId}', 1, 'auth0|editor', 'Person', NULL, 'x', 0)
             """);
@@ -187,9 +187,9 @@ public sealed partial class PostgresHouseVoteTests
         var candidate = await PendingCandidateAsync();
         var recordId = await RecordIdAsync(candidate);
         await ExecuteAsync($"""
-            INSERT INTO vote_drafts (record_id, source_id, congress, session_number, roll_call_number, current_revision_number, review_state_version,
+            INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number, review_state_version,
                 review_status, created_at_utc_ticks)
-            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', 119, 1, 100, 1, 0, 'AwaitingReview', 0)
+            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', 'House', 119, 1, 100, 1, 0, 'AwaitingReview', 0)
             """);
 
         var withoutRun = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync($"""
@@ -208,9 +208,9 @@ public sealed partial class PostgresHouseVoteTests
     public async Task TheDatabaseAllowsOneDraftForEachRollCallAndRefusesABadRecordId()
     {
         var insert = (string id) => $"""
-            INSERT INTO vote_drafts (record_id, source_id, congress, session_number, roll_call_number, current_revision_number, review_state_version,
+            INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number, review_state_version,
                 review_status, created_at_utc_ticks)
-            VALUES ('{id}', 'source', 119, 1, 100, 1, 0, 'AwaitingReview', 0)
+            VALUES ('{id}', 'source', 'House', 119, 1, 100, 1, 0, 'AwaitingReview', 0)
             """;
         await ExecuteAsync(insert(new string('a', 64)));
 
@@ -257,7 +257,7 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal([1, 1, 1, 0, 0, 0], new[] { VoteDraftView.Pending, VoteDraftView.Unchanged, VoteDraftView.Failed, VoteDraftView.Drafted,
             VoteDraftView.Superseded, VoteDraftView.NoTrackedMember }.Select(view => counts[view]));
         var item = Assert.Single(unchangedItems);
-        Assert.Equal((unchanged, "119 1 100", "119 hconres 14", VoteDraftView.Unchanged), (item.CandidateId, item.RollCall, item.Bill, item.View));
+        Assert.Equal((unchanged, "House 119 1 100", "119 hconres 14", VoteDraftView.Unchanged), (item.CandidateId, item.RollCall, item.Bill, item.View));
         Assert.Equal(3, (await VoteStore().ListAsync(null, 10, default)).Count);
         Assert.Contains(pending, (await VoteStore().ListAsync(VoteDraftView.Pending, 10, default)).Select(entry => entry.CandidateId));
     }
@@ -268,7 +268,7 @@ public sealed partial class PostgresHouseVoteTests
         var (_, members) = await DetailWithMembersJobAsync(vote);
         await AdmitMembersAsync(members, vote);
         await AdmitBillDetailAsync();
-        return (string)(await ScalarAsync($"SELECT candidate_id FROM house_vote_candidates WHERE update_date_utc_ticks = {vote.UpdateDate.UtcTicks}"))!;
+        return (string)(await ScalarAsync($"SELECT candidate_id FROM vote_candidates WHERE update_date_utc_ticks = {vote.UpdateDate.UtcTicks}"))!;
     }
 
     private PostgresVoteDraftStore VoteStore() => new(new PooledDbContextFactory<CollectionAttemptDbContext>(
@@ -324,7 +324,7 @@ public sealed partial class PostgresHouseVoteTests
         var member = new SourceSpan(evidence.Members.ExtractionId, 0, 5);
         var identity = evidence.Candidate;
         return new(identity.RecordId, number, "civic-lens:analysis", Updated.AddMinutes(number), "Headline", "Summary.", ReviewTextOrigin.Model, null,
-            identity.SourceId, identity.Congress, identity.SessionNumber, identity.RollCallNumber, identity.BillType, identity.BillNumber, candidate,
+            identity.SourceId, identity.Chamber, identity.Congress, identity.SessionNumber, identity.RollCallNumber, identity.BillType, identity.BillNumber, candidate,
             identity.UpdateDate, [new("Result: Passed", fact)], new DateOnly(2025, 4, 10), fact, VoteKind.Other, null, [new("with-id-a", "A000001", "Yea", member)], [], new string('e', 64));
     }
 

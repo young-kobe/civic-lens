@@ -4,6 +4,7 @@ using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
+using CivicLens.Application.Collection.Votes;
 using CivicLens.Application.Documents;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Votes;
@@ -18,7 +19,7 @@ public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader respo
         if (BillError(evidence) is { } billError) return new(null, billError);
         if (!HasCurrentVersions(evidence.Detail, HouseVoteParser.Version) || !HasCurrentVersions(evidence.Members, HouseVoteMembersParser.Version))
             return new(null, VoteDraftErrorCodes.ExtractionVersionChanged);
-        var roll = new HouseVoteRoll(new HouseVoteSession(candidate.Congress, candidate.SessionNumber), candidate.RollCallNumber);
+        var roll = new HouseVoteRoll(new VoteSession(candidate.Congress, candidate.SessionNumber), candidate.RollCallNumber);
         var detail = HouseVoteParser.Parse((await LoadAsync(evidence.Detail, cancellationToken)).Body, roll);
         if (TextError(evidence.Detail, HouseVoteRenderer.RenderDetail(detail)) is { } detailError) return new(null, detailError);
         var members = HouseVoteMembersParser.Parse((await LoadAsync(evidence.Members, cancellationToken)).Body, roll);

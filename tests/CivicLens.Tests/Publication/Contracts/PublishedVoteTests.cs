@@ -36,7 +36,7 @@ public sealed class PublishedVoteTests
     {
         var json = JsonSerializer.Serialize(Vote(), PublicationProtocol.JsonOptions);
 
-        Assert.Equal(["recordId", "revisionNumber", "headline", "summary", "textOrigin", "congress", "session", "rollCallNumber", "kind", "kindCitation",
+        Assert.Equal(["recordId", "revisionNumber", "headline", "summary", "textOrigin", "chamber", "congress", "session", "rollCallNumber", "kind", "kindCitation",
             "votedOn", "votedOnCitation", "facts", "members", "billType", "billNumber", "trackedIssueIds", "sources", "approvedAtUtc",
             "firstPublishedAtUtc", "corrections"], JsonDocument.Parse(json).RootElement.EnumerateObject().Select(property => property.Name));
         Assert.Contains("\"kind\":\"passage\"", json, StringComparison.Ordinal);
@@ -214,6 +214,18 @@ public sealed class PublishedVoteTests
     }
 
     [Fact]
+    public void ContractChambersMirrorTheCoreChambers()
+    {
+        Assert.Equal(Enum.GetNames<Chamber>(), Enum.GetNames<PublishedChamber>());
+    }
+
+    [Fact]
+    public void RequiresADefinedChamber()
+    {
+        Assert.Throws<InvalidDataException>((Vote() with { Chamber = (PublishedChamber)9 }).Validate);
+    }
+
+    [Fact]
     public void ContractKindsMirrorTheCoreKinds()
     {
         Assert.Equal(Enum.GetNames<VoteKind>(), Enum.GetNames<PublishedVoteKind>());
@@ -227,6 +239,7 @@ public sealed class PublishedVoteTests
         Headline = "Headline",
         Summary = "Summary",
         TextOrigin = PublishedTextOrigin.Model,
+        Chamber = PublishedChamber.House,
         Congress = 119,
         Session = 1,
         RollCallNumber = 100,
