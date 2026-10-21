@@ -2,6 +2,7 @@ using CivicLens.Application.Reports;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Layout;
 using CivicLens.Host.Components.Ui;
+using CivicLens.Host.Publication;
 using Microsoft.AspNetCore.Components;
 
 namespace CivicLens.Host.Review;
@@ -25,7 +26,7 @@ public sealed partial class ReportDetail
 
     private IReadOnlyList<Fact> ReportFacts =>
     [
-        new("Record", ReportLabels.Kind(item!.Report.Kind)),
+        new("Record", PublishedRecordLabels.Kind(item!.Report.Kind)),
         new("Revision", ReportLabels.Revision(item)),
         new("Received", Moment.Full(item.Report.ReceivedAtUtc))
     ];

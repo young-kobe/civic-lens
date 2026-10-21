@@ -14,20 +14,16 @@ internal static class ReportLabels
         ReaderReportProtocol.WrongAttributionCategory => "Wrong attribution",
         ReaderReportProtocol.MissingContextCategory => "Missing context",
         ReaderReportProtocol.BrokenSourceLinkCategory => "Broken source link",
-        _ => "Other"
+        ReaderReportProtocol.OtherCategory => "Other",
+        _ => throw new ArgumentOutOfRangeException(nameof(category), category, "Report category has no label.")
     };
 
     public static string Status(ReaderReportStatus status) => status switch
     {
         ReaderReportStatus.Open => "Open",
         ReaderReportStatus.Dismissed => "Dismissed",
-        _ => "Correction needed"
-    };
-
-    public static string Kind(PublishedRecordKind kind) => kind switch
-    {
-        PublishedRecordKind.DocumentChange => "Document change",
-        _ => kind.ToString()
+        ReaderReportStatus.CorrectionNeeded => "Correction needed",
+        _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Report status has no label.")
     };
 
     public static string Revision(ReaderReportListItem item) =>
