@@ -9,7 +9,7 @@ namespace CivicLens.Application.Publication;
 internal sealed class PublicationCorrections
 {
     private static readonly JsonSerializerOptions ReadCorrectionsOptions =
-        new(PublicationProtocol.JsonOptions) { UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip };
+        new(PublicationProtocol.JsonOptions) { UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip, RespectRequiredConstructorParameters = true };
 
     private readonly PreviousRelease previous;
     private readonly DateTimeOffset now;
@@ -78,8 +78,15 @@ internal sealed class PublicationCorrections
     {
         var json = await releases.ReadFileAsync(directoryName, PublicationProtocol.RecordDataPath(record.RecordId),
             PublishedRecordFiles.MaximumCitedRecordBytes, cancellationToken);
-        return (JsonSerializer.Deserialize<CorrectionsOnly>(json, ReadCorrectionsOptions)
-            ?? throw new InvalidDataException("A carried record file is empty.")).Corrections;
+        try
+        {
+            return (JsonSerializer.Deserialize<CorrectionsOnly>(json, ReadCorrectionsOptions)
+                ?? throw new InvalidDataException("A carried record file is empty.")).Corrections;
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException("A carried record has no correction list.", exception);
+        }
     }
 
     private sealed record CorrectionsOnly(PublishedCorrection[] Corrections);

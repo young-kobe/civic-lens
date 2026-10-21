@@ -113,6 +113,21 @@ public sealed class PublishCorrectionsTests
     }
 
     [Fact]
+    public async Task ACarriedRecordFileWithoutACorrectionListFailsLoudInsteadOfBindingToNull()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        var files = scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName];
+        var path = PublicationProtocol.RecordDataPath(action);
+        files[path] = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(files[path]).Replace("\"corrections\":[]", "\"other\":1"));
+        scenario.ReviseAction(action, 2);
+
+        var error = await Assert.ThrowsAsync<InvalidDataException>(() =>
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", action, "Fix.")));
+
+        Assert.Equal("A carried record has no correction list.", error.Message);
+    }
+
+    [Fact]
     public async Task ADefaultNoteListIsRefusedBeforeAnythingIsBuilt()
     {
         var (scenario, action) = await PublishedActionAsync();
