@@ -13,16 +13,16 @@ public sealed class ListPublishable(PublishedRecordLoaders loaders, IPublication
         var reads = await Task.WhenAll(loaders.All.Select(loader => loader.ListReadyAsync(limit, cancellationToken)));
         var ready = reads.Select(read => read.Ready).ToArray();
         var hasMore = reads.Any(read => read.HasMore) || ready.Sum(kind => kind.Count) > limit;
-        var withdrawn = await WithdrawnIdsAsync(cancellationToken);
-        return new([.. ShareLimitBetweenKinds(ready, limit).Select(item => item with { IsWithdrawn = withdrawn.Contains(item.RecordId) })], hasMore);
+        var withdrawn = await WithdrawnRevisionsAsync(cancellationToken);
+        return new([.. ShareLimitBetweenKinds(ready, limit).Select(item => item with { WithdrawnRevisionNumber = withdrawn.GetValueOrDefault(item.RecordId) })], hasMore);
     }
 
-    private async Task<HashSet<string>> WithdrawnIdsAsync(CancellationToken cancellationToken)
+    private async Task<Dictionary<string, int?>> WithdrawnRevisionsAsync(CancellationToken cancellationToken)
     {
         var active = (await publications.GetStateAsync(cancellationToken)).Active;
         if (active is null) return [];
         var manifest = await PreviousRelease.LoadManifestAsync(releases, active, cancellationToken);
-        return [.. manifest.Withdrawals.Select(withdrawal => withdrawal.RecordId)];
+        return manifest.Withdrawals.ToDictionary(withdrawal => withdrawal.RecordId, withdrawal => (int?)withdrawal.WithdrawnRevisionNumber);
     }
 
     // Each kind gets an equal share of the limit. A kind with fewer ready records gives its unused share to the others.

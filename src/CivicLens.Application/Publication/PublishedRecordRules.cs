@@ -13,6 +13,8 @@ public sealed class PublishedRecordRules(PublicationCatalog catalog)
     public static bool IsWithdrawable(ReviewStatus status) =>
         status is ReviewStatus.ApprovalWithdrawn or ReviewStatus.ChangesRequested or ReviewStatus.AwaitingReviewWithConcerns;
 
+    public static bool CanReturn(int revisionNumber, int withdrawnRevisionNumber) => revisionNumber > withdrawnRevisionNumber;
+
     public static DateTimeOffset GetApprovalTime(int revisionNumber, ImmutableArray<ReviewDecision> decisions) =>
         decisions
             .Where(item => item.RevisionNumber == revisionNumber && item.Kind == ReviewDecisionKind.Approve)
