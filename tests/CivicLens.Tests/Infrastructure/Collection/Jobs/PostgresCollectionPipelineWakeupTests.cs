@@ -1,5 +1,6 @@
 using CivicLens.Tests.Fixtures;
 using System.Diagnostics;
+using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
@@ -63,7 +64,7 @@ public sealed class PostgresCollectionPipelineWakeupTests(PostgresCollection pos
     public async Task ReleasingRunnableClaimWakesAfterQueueSkippedItsLease()
     {
         var jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
-        var job = await jobs.EnqueueAsync(Definition(), "release-runnable", default);
+        var job = await jobs.EnqueueAsync(Source(), "release-runnable", default);
         var claim = await jobs.TryClaimAsync(job.JobId, TimeSpan.FromSeconds(30), default);
         Assert.NotNull(claim);
         await using var wakeup = PostgresCollectionPipelineWakeup.FromConnectionString(connectionString);
@@ -81,7 +82,7 @@ public sealed class PostgresCollectionPipelineWakeupTests(PostgresCollection pos
     public async Task ReleasingOriginBlockedClaimDoesNotWakeItself()
     {
         var jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
-        var job = await jobs.EnqueueAsync(Definition(), "release-blocked", default);
+        var job = await jobs.EnqueueAsync(Source(), "release-blocked", default);
         var claim = await jobs.TryClaimAsync(job.JobId, TimeSpan.FromSeconds(30), default);
         Assert.NotNull(claim);
         await using (var connection = new NpgsqlConnection(connectionString))
@@ -104,7 +105,7 @@ public sealed class PostgresCollectionPipelineWakeupTests(PostgresCollection pos
     public async Task ReleaseCommittedAfterBarrierDeadlineStillWakesListener()
     {
         var jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
-        var job = await jobs.EnqueueAsync(Definition(), "late-release", default);
+        var job = await jobs.EnqueueAsync(Source(), "late-release", default);
         var claim = await jobs.TryClaimAsync(job.JobId, TimeSpan.FromSeconds(30), default);
         Assert.NotNull(claim);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -153,8 +154,8 @@ public sealed class PostgresCollectionPipelineWakeupTests(PostgresCollection pos
         await wakeup.WaitAsync(releaseTimeout.Token);
     }
 
-    private static CollectionJobDefinition Definition() =>
-        CollectionFixtures.PageDefinition(pathPrefix: "/", policy: new CollectionJobPolicy());
+    private static ConfiguredCollectionSource Source() =>
+        CollectionFixtures.PageSource(pathPrefix: "/", policy: new CollectionJobPolicy());
 
     private async Task InsertJobAsync(string id, long createdAt, long? retryAt)
     {

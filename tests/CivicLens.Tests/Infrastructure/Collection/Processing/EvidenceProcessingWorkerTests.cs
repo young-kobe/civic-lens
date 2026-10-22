@@ -116,8 +116,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     [Fact]
     public async Task OnceWorkerDrainsCollectionThroughPreparationExtractionAndComparison()
     {
-        var definition = ConfiguredDefinition();
-        var job = await jobs.EnqueueAsync(definition, "pipeline-once", default);
+        var job = await jobs.EnqueueAsync(ConfiguredSource(), "pipeline-once", default);
         var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
             new CaptureArtifactVerifier(), new FixtureCollector("Pipeline wording.", fail: false,
                 Interlocked.Increment(ref observationTick)), NullLogger<RunCollectionJob>.Instance);
@@ -140,10 +139,10 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     [Fact]
     public async Task ApiCaptureWithoutAResourceIsBlockedInsteadOfSilentlyPrepared()
     {
-        var rosterJob = new ConfiguredCollectionSource(RosterFixtures.Configuration(), RosterFixtures.SourceId)
-            .CreateJobDefinition(DateOnly.FromDateTime(ObservationEpoch.UtcDateTime));
-        var definition = rosterJob with { ApiResource = null };
-        var job = await jobs.EnqueueAsync(definition, "api-once", default);
+        var roster = new ConfiguredCollectionSource(RosterFixtures.Configuration(), RosterFixtures.SourceId,
+            DateOnly.FromDateTime(ObservationEpoch.UtcDateTime));
+        var job = await jobs.EnqueueAsync(roster, "api-once", default);
+        await RemoveApiResourceAsync(job.JobId);
         var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
             new CaptureArtifactVerifier(), new ApiFixtureCollector(RosterFixtures.Json), NullLogger<RunCollectionJob>.Instance);
         var pipeline = new CollectionJobWorker(PostgresCollectionWorkerQueue.FromConnectionString(connectionString),
@@ -194,12 +193,12 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     [Fact]
     public async Task BillListCaptureAdmitsItsBillJobsAndKeepsTheCursorUntilAPassAdmitsNoNewBills()
     {
-        var job = await RunBillJobAsync(ApiResource.BillList, BillWindow.RequestUrl(BillSourceUrl), """{"bills":[{"congress":119,"type":"HR","number":"1","updateDate":"2025-01-03"},{"congress":118,"type":"HR","number":"2","updateDate":"2025-01-03"}],"pagination":{"count":2}}""");
+        var job = await RunBillJobAsync(ApiResource.BillList, """{"bills":[{"congress":119,"type":"HR","number":"1","updateDate":"2025-01-03"},{"congress":118,"type":"HR","number":"2","updateDate":"2025-01-03"}],"pagination":{"count":2}}""");
 
         var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
         Assert.Equal(EvidenceProcessingStatus.Succeeded, record.Status);
         Assert.Equal(1, record.AdmittedCount);
-        var detail = Assert.Single(await jobs.ListAsync(10, default), item => item.JobId != job.JobId);
+        var detail = Assert.Single(await JobsAdmittedByTheWorkerAsync());
         Assert.Equal("https://api.congress.gov/v3/bill/119/hr/1?format=json", detail.Definition.Url);
         Assert.Equal(ApiResource.Bill, detail.Definition.ApiResource);
         Assert.Null(await ReadBillCursorAsync());
@@ -208,7 +207,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     [Fact]
     public async Task BillDetailCaptureStoresItsGateAndAdmitsLinkedFollowOnPagesWithoutAProcessingStage()
     {
-        var job = await RunBillJobAsync(ApiResource.Bill, BillSourceUrl + "/119/hr/1?format=json", BillDetail(sponsor: "A000001", cosponsors: 2));
+        var job = await RunBillJobAsync(ApiResource.Bill, BillDetail(sponsor: "A000001", cosponsors: 2));
 
         var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
         Assert.Equal(EvidenceProcessingStatus.Succeeded, record.Status);
@@ -224,19 +223,19 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     {
         issues = null;
 
-        var job = await RunBillJobAsync(ApiResource.Bill, BillSourceUrl + "/119/hr/1?format=json", BillDetail(sponsor: "A000001", cosponsors: 2));
+        var job = await RunBillJobAsync(ApiResource.Bill, BillDetail(sponsor: "A000001", cosponsors: 2));
 
         var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
         Assert.Equal(EvidenceProcessingStatus.Blocked, record.Status);
         Assert.Equal("issuesConfigurationUnavailable", record.ErrorCode);
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM bill_gates"));
-        Assert.Single(await jobs.ListAsync(10, default));
+        Assert.Empty(await JobsAdmittedByTheWorkerAsync());
     }
 
     [Fact]
     public async Task EveryBillPageCaptureGetsOneExtractionAndNeverAStatementCandidate()
     {
-        var detail = await RunBillJobAsync(ApiResource.Bill, BillSourceUrl + "/119/hr/1?format=json", BillDetail(sponsor: "A000001", cosponsors: 2));
+        var detail = await RunBillJobAsync(ApiResource.Bill, BillDetail(sponsor: "A000001", cosponsors: 2));
         var attempt = Assert.Single(detail.Attempts).AttemptId;
 
         var saved = Assert.Single(await ReadBillExtractionsAsync());
@@ -249,7 +248,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     [Fact]
     public async Task PreparingABillDetailAgainKeepsTheOneExtractionEvenThoughTheGateIsADuplicate()
     {
-        var detail = await RunBillJobAsync(ApiResource.Bill, BillSourceUrl + "/119/hr/1?format=json", BillDetail(sponsor: "A000001", cosponsors: 2));
+        var detail = await RunBillJobAsync(ApiResource.Bill, BillDetail(sponsor: "A000001", cosponsors: 2));
         var replay = new JobPreparation(jobs, attempts, jobs, jobs, jobs, PostgresMemberRosterStore.FromConnectionString(connectionString), PostgresExecutiveRosterStore.FromConnectionString(connectionString), new CaptureBodyReader(), processing, extractions, new CaptureDocumentTextExtractor(), issues);
 
         var result = await replay.PrepareAsync(detail.JobId, artifactRoot, default);
@@ -261,8 +260,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     [Fact]
     public async Task ADetailWhoseTitleHoldsANulBlocksAndWritesNoExtractionGateOrFollowOnJob()
     {
-        var job = await RunBillJobAsync(ApiResource.Bill, BillSourceUrl + "/119/hr/1?format=json",
-            BillDetail(sponsor: "A000001", cosponsors: 2).Replace("A bill", "A\\u0000 bill"));
+        var job = await RunBillJobAsync(ApiResource.Bill, BillDetail(sponsor: "A000001", cosponsors: 2).Replace("A bill", "A\\u0000 bill"));
 
         var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
         Assert.Equal(EvidenceProcessingStatus.Blocked, record.Status);
@@ -274,7 +272,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     [Fact]
     public async Task ANotRelevantBillIsStillExtracted()
     {
-        _ = await RunBillJobAsync(ApiResource.Bill, BillSourceUrl + "/119/hr/1?format=json", BillDetail(sponsor: "Z000009", cosponsors: 0, policyArea: "Zoology"));
+        _ = await RunBillJobAsync(ApiResource.Bill, BillDetail(sponsor: "Z000009", cosponsors: 0, policyArea: "Zoology"));
 
         Assert.Equal(("NotRelevant", "UntrackedPolicyArea"), await ReadGateAsync());
         Assert.Single(await ReadBillExtractionsAsync());
@@ -283,10 +281,9 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     [Fact]
     public async Task CosponsorAndActionsPagesAreExtractedByTheirOwnParsers()
     {
-        _ = await RunBillJobAsync(ApiResource.BillCosponsors, BillSourceUrl + "/119/hr/1/cosponsors?format=json&limit=250",
-            """{"cosponsors":[{"bioguideId":"A000001","sponsorshipDate":"2025-01-04","isOriginalCosponsor":true}],"pagination":{}}""");
+        var job = await RunBillJobAsync(ApiResource.BillCosponsors, """{"cosponsors":[{"bioguideId":"A000001","sponsorshipDate":"2025-01-04","isOriginalCosponsor":true}],"pagination":{}}""");
 
-        var saved = Assert.Single(await ReadBillExtractionsAsync());
+        var saved = Assert.Single(await ReadBillExtractionsAsync(), extraction => extraction.AttemptId == Assert.Single(job.Attempts).AttemptId);
         Assert.Equal(("congress-bill-cosponsors-v1", "Bill: 119 hr 1\nCosponsor: A000001, original, 2025-01-04"),
             (saved.ParserVersion, saved.Text));
     }
@@ -294,10 +291,9 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     [Fact]
     public async Task ASummariesPageIsExtractedWithTheCombinedParserVersionAndNeverBecomesAStatementCandidate()
     {
-        _ = await RunBillJobAsync(ApiResource.BillSummaries, BillSourceUrl + "/119/hr/1/summaries?format=json&limit=1",
-            """{"summaries":[{"versionCode":"173","actionDate":"2025-01-04","actionDesc":"Introduced in House","updateDate":"2025-01-05T08:00:00Z","text":"<p><strong>Title.</strong></p><p>Requires the agency to act.</p>"}],"pagination":{}}""");
+        var job = await RunBillJobAsync(ApiResource.BillSummaries, """{"summaries":[{"versionCode":"173","actionDate":"2025-01-04","actionDesc":"Introduced in House","updateDate":"2025-01-05T08:00:00Z","text":"<p><strong>Title.</strong></p><p>Requires the agency to act.</p>"}],"pagination":{}}""");
 
-        var saved = Assert.Single(await ReadBillExtractionsAsync());
+        var saved = Assert.Single(await ReadBillExtractionsAsync(), extraction => extraction.AttemptId == Assert.Single(job.Attempts).AttemptId);
         Assert.Equal(("congress-bill-summaries-v1+capture-text-v2+body-text-v1", "congress-bill-render-v1"),
             (saved.ParserVersion, saved.NormalizationVersion));
         Assert.Equal("Bill: 119 hr 1\n\nSummary version: 173\nAction date: 2025-01-04\nAction: Introduced in House\n" +
@@ -309,35 +305,38 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     [Fact]
     public async Task ABillDetailWithSummariesAdmitsItsSummariesPageBesideTheOthers()
     {
-        _ = await RunBillJobAsync(ApiResource.Bill, BillSourceUrl + "/119/hr/1?format=json", BillDetail(sponsor: "A000001", cosponsors: 2, summaries: 3));
+        _ = await RunBillJobAsync(ApiResource.Bill, BillDetail(sponsor: "A000001", cosponsors: 2, summaries: 3));
 
         Assert.Equal(3L, await ScalarAsync("SELECT count(*) FROM bill_follow_on_jobs"));
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM collection_jobs WHERE idempotency_key LIKE '%/summaries/%'"));
     }
 
     [Theory]
-    [InlineData(ApiResource.Bill, "/119/hr/1?format=json")]
-    [InlineData(ApiResource.BillCosponsors, "/119/hr/1/cosponsors?format=json&limit=250")]
-    [InlineData(ApiResource.BillActions, "/119/hr/1/actions?format=json&limit=250")]
-    [InlineData(ApiResource.BillSummaries, "/119/hr/1/summaries?format=json&limit=1")]
-    public async Task MalformedBillResponsesBlockPreparationLikeABadListPage(ApiResource resource, string path)
+    [InlineData(ApiResource.Bill)]
+    [InlineData(ApiResource.BillCosponsors)]
+    [InlineData(ApiResource.BillActions)]
+    [InlineData(ApiResource.BillSummaries)]
+    public async Task MalformedBillResponsesBlockPreparationLikeABadListPage(ApiResource resource)
     {
-        var job = await RunBillJobAsync(resource, BillSourceUrl + path, """{"unexpected":true}""");
+        var jobId = await SeedBillJobAsync(resource);
+        var gatesBefore = await ScalarAsync("SELECT count(*) FROM bill_gates");
+
+        var job = await RunSeededJobAsync(jobId, """{"unexpected":true}""");
 
         var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
         Assert.Equal(EvidenceProcessingStatus.Blocked, record.Status);
-        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM bill_gates"));
-        Assert.Single(await jobs.ListAsync(10, default));
+        Assert.Equal(gatesBefore, await ScalarAsync("SELECT count(*) FROM bill_gates"));
+        Assert.Empty(await JobsAdmittedByTheWorkerAsync());
     }
 
     [Fact]
     public async Task MalformedBillListCaptureBlocksPreparationAndLeavesTheCursorBehind()
     {
-        var job = await RunBillJobAsync(ApiResource.BillList, BillWindow.RequestUrl(BillSourceUrl), """{"bills":[{"congress":119,"type":"HR","number":"1"}],"pagination":{}}""");
+        var job = await RunBillJobAsync(ApiResource.BillList, """{"bills":[{"congress":119,"type":"HR","number":"1"}],"pagination":{}}""");
 
         var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
         Assert.Equal(EvidenceProcessingStatus.Blocked, record.Status);
-        Assert.Single(await jobs.ListAsync(10, default));
+        Assert.Empty(await JobsAdmittedByTheWorkerAsync());
         Assert.Null(await ReadBillCursorAsync());
     }
 
@@ -447,8 +446,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     private async Task<CollectionJobRecord> CollectAsync(string key, string? body, string? etag = null, bool fail = false,
         bool legacySchema = false)
     {
-        var configured = ConfiguredDefinition(etag);
-        var job = await jobs.EnqueueAsync(configured, key, default);
+        var job = await jobs.EnqueueAsync(ConfiguredSource(etag), key, default);
         var collector = new FixtureCollector(body, fail, Interlocked.Increment(ref observationTick));
         var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
             new CaptureArtifactVerifier(), collector, NullLogger<RunCollectionJob>.Instance);
@@ -456,8 +454,18 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         Assert.True(result.Status is CollectionJobRunStatus.Completed or CollectionJobRunStatus.AttemptFailed,
             $"Collection returned {result.Status}: {result.BlockReason}, retry {result.RetryAt:O}.");
         var record = (await jobs.GetAsync(job.JobId, default))!;
-        if (legacySchema) await StoreLegacyDefinitionAsync(job.JobId, configured);
+        if (legacySchema) await StoreLegacyDefinitionAsync(job.JobId, job.Definition);
         return record;
+    }
+
+    private async Task RemoveApiResourceAsync(string jobId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "UPDATE collection_jobs SET definition_json = (definition_json::jsonb - 'apiResource')::text WHERE job_id = @id", connection);
+        command.Parameters.AddWithValue("id", jobId);
+        await command.ExecuteNonQueryAsync();
     }
 
     private async Task StoreLegacyDefinitionAsync(string jobId, CollectionJobDefinition definition)
@@ -494,11 +502,11 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         new JobPreparation(jobs, attempts, jobs, jobs, jobs, PostgresMemberRosterStore.FromConnectionString(connectionString), PostgresExecutiveRosterStore.FromConnectionString(connectionString), new CaptureBodyReader(), processingStore, extractions, new CaptureDocumentTextExtractor(), issues), processingStore, extract, new GetDocumentHistory(historyStore ?? PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
         new CompareDocuments(comparisons), 1, NullLogger<EvidenceProcessingWorker>.Instance);
 
-    private CollectionJobDefinition ConfiguredDefinition(string? etag = null)
-    {
-        var source = new ConfiguredCollectionSource(Configuration(etag), "source");
-        return source.CreateJobDefinition(DateOnly.FromDateTime(ObservationEpoch.UtcDateTime));
-    }
+    private CollectionJobDefinition ConfiguredDefinition(string? etag = null) =>
+        ConfiguredSource(etag).CreateJobDefinition(DateOnly.FromDateTime(ObservationEpoch.UtcDateTime));
+
+    private ConfiguredCollectionSource ConfiguredSource(string? etag = null) =>
+        new(Configuration(etag), "source", DateOnly.FromDateTime(ObservationEpoch.UtcDateTime));
 
     private static CollectionConfiguration Configuration(string? etag = null) => new()
     {
@@ -571,20 +579,66 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
 
     private static readonly BillStreamWindow BillWindow = new(new DateOnly(2025, 1, 3), new DateOnly(2025, 1, 4));
 
-    private const string BillSourceUrl = "https://api.congress.gov/v3/bill";
+    private readonly HashSet<string> seededBillJobIds = [];
 
-    private async Task<CollectionJobRecord> RunBillJobAsync(ApiResource resource, string url, string json)
+    private async Task<CollectionJobRecord> RunBillJobAsync(ApiResource resource, string json) =>
+        await RunSeededJobAsync(await SeedBillJobAsync(resource), json);
+
+    private async Task<CollectionJobRecord> RunSeededJobAsync(string jobId, string json)
     {
-        var today = DateOnly.FromDateTime(ObservationEpoch.UtcDateTime);
-        var definition = new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", today)
-            .CreateApiJobDefinition(resource, url, today);
-        var job = await jobs.EnqueueAsync(definition, "bill-list-once", default);
         var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
             new CaptureArtifactVerifier(), new ApiFixtureCollector(json), NullLogger<RunCollectionJob>.Instance);
         var pipeline = new CollectionJobWorker(PostgresCollectionWorkerQueue.FromConnectionString(connectionString),
             runner, NullLogger<CollectionJobWorker>.Instance, Worker(processing));
         _ = await pipeline.ExecuteAsync(artifactRoot, once: true, batchSize: 20, leaseDuration: TimeSpan.FromSeconds(60));
-        return (await jobs.GetAsync(job.JobId, default))!;
+        return (await jobs.GetAsync(jobId, default))!;
+    }
+
+    private async Task<IReadOnlyList<CollectionJobRecord>> JobsAdmittedByTheWorkerAsync() =>
+        [.. (await jobs.ListAsync(100, default)).Where(job => !seededBillJobIds.Contains(job.JobId))];
+
+    // Walks the production chain: scheduled list job, list page admission, then bill detail admission. Only the target stays runnable.
+    private async Task<string> SeedBillJobAsync(ApiResource target)
+    {
+        var configuration = CongressBillSourceConfigurationTests.Configuration();
+        var today = DateOnly.FromDateTime(ObservationEpoch.UtcDateTime);
+        var source = new ConfiguredCollectionSource(configuration, "congress-bills", today);
+        await jobs.SynchronizeAsync(configuration, default);
+        await MakeEverySourceDueAsync();
+        await jobs.AdvanceDueAsync(10, default);
+        var list = Assert.Single(await jobs.ListAsync(10, default));
+        seededBillJobIds.Add(list.JobId);
+        if (target == ApiResource.BillList) return list.JobId;
+
+        await SucceededJobs.MarkSucceededAsync(connectionString, list.JobId);
+        var page = new CongressBillListPage([new CongressBillListItem(119, "hr", 1, today)], null, StartsPass: true);
+        var detail = Assert.Single((await jobs.AdmitListPageAsync(source, list.JobId, BillWindow, page, default)).Jobs);
+        seededBillJobIds.Add(detail.JobId);
+        if (target == ApiResource.Bill) return detail.JobId;
+
+        await SucceededJobs.MarkSucceededAsync(connectionString, detail.JobId);
+        var extractionId = await SaveSeededExtractionAsync(detail.JobId);
+        var bill = new CongressBill(119, "hr", 1, "A bill", today, ObservationEpoch, "Taxation", ["A000001"], 2, 1, 1);
+        var followOns = (await jobs.AdmitDetailAsync(source, detail.JobId, bill,
+            BillGateOutcome.Passed(BillGateReason.CoveredSponsor), BillGateFixtures.Revision().Id, extractionId, default)).Jobs;
+        seededBillJobIds.UnionWith(followOns.Select(job => job.JobId));
+        var segment = target switch
+        {
+            ApiResource.BillCosponsors => "/cosponsors?",
+            ApiResource.BillActions => "/actions?",
+            _ => "/summaries?"
+        };
+        foreach (var other in followOns.Where(job => !job.Url.Contains(segment, StringComparison.Ordinal)))
+            _ = await jobs.CancelAsync(other.JobId, default);
+        return followOns.Single(job => job.Url.Contains(segment, StringComparison.Ordinal)).JobId;
+    }
+
+    private async Task<string> SaveSeededExtractionAsync(string jobId)
+    {
+        var seeder = new StatementCandidateSeeder(attempts, extractions, connectionString, artifactRoot);
+        var text = "Bill: 119 hr 1\nTitle: A bill";
+        return await new JobExtractionSeeder(jobs, extractions, seeder, connectionString, artifactRoot)
+            .SaveAsync(jobId, text, text, "parser", "normalizer");
     }
 
     private static string BillDetail(string sponsor, int cosponsors, string policyArea = "Taxation", int summaries = 0) => $$$"""

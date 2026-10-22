@@ -18,11 +18,13 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
 {
     private string connectionString = null!;
     private PostgresCollectionJobStore store = null!;
+    private PostgresCollectionAttemptStore attempts = null!;
 
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
         store = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        attempts = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
     }
 
     public async Task DisposeAsync()
@@ -203,9 +205,8 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
     {
         var configuration = Configuration(intervalSeconds: 60, mode: CollectionMode.Html);
         await SynchronizeDueAsync(configuration);
-        var source = CollectionFixtures.Definition(configuration, "senate");
-        await store.EnqueueAsync(source with { Mode = CollectionMode.Page, Url = "https://example.test/senate/article" },
-            "article", default);
+        var source = new ConfiguredCollectionSource(configuration, "senate");
+        await DiscoveredArticles.AdmitAsync(store, attempts, source, "article", "https://example.test/senate/article");
 
         Assert.Equal(1, await store.AdvanceDueAsync(10, default));
         Assert.Equal(2, (await store.ListAsync(10, default)).Count);

@@ -25,6 +25,8 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     private const string SourceUrl = "https://api.congress.gov/v3/bill";
     private const string ListJobKeyPrefix = "test-list/";
     private static readonly DateOnly Backfill = new(2025, 1, 3);
+    private readonly HashSet<string> seededJobIds = [];
+    private int detailSequence;
     private string connectionString = null!;
     private PostgresCollectionJobStore store = null!;
     private PostgresDocumentExtractionStore extractions = null!;
@@ -333,7 +335,8 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
         var result = await AdmitAsync(Source(), "full", window, page);
 
         Assert.Equal(ApiPageQuery.PageLimit + 1, result.AdmittedCount);
-        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM collection_configuration_revisions"));
+        // One revision for the seeded list job and one that all admitted jobs share.
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM collection_configuration_revisions"));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM collection_jobs WHERE definition_json::jsonb -> 'configurationRevision' IS NOT NULL"));
         var expected = CollectionConfigurationRevision.Create(Configuration());
         Assert.All(await AdmittedJobsAsync(), job => Assert.Equal(expected, job.Definition.ConfigurationRevision));
@@ -1149,11 +1152,14 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
 
     private async Task<string> EnqueueDetailAsync(string name)
     {
-        var definition = Source().CreateApiJobDefinition(ApiResource.Bill, "https://api.congress.gov/v3/bill/119/hr/7?format=json", Backfill);
-        var job = await store.EnqueueAsync(definition, ListJobKeyPrefix + name, default);
-        await ExecuteAsync(connectionString, $"UPDATE collection_jobs SET state = 'Succeeded' WHERE job_id = '{job.JobId}'");
-        return job.JobId;
+        var detail = await SucceededJobs.BillDetailAsync(store, connectionString, Source(), await ListJobAsync(name),
+            new CongressBillListItem(119, "hr", 7, Backfill.AddDays(++detailSequence)));
+        seededJobIds.Add(detail);
+        return detail;
     }
+
+    private async Task<string> ListJobAsync(string name) =>
+        await SucceededJobs.RootAsync(store, connectionString, CollectionFixtures.PageSource(sourceId: "list-root"), ListJobKeyPrefix + name);
 
     private async Task<DiscoveryAdmissionResult> AdmitDetailAsync(string detailJobId, CongressBill bill, BillGateOutcome gate) =>
         await store.AdmitDetailAsync(Source(), detailJobId, bill, gate, BillGateFixtures.Revision().Id,
@@ -1208,14 +1214,13 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     private async Task<DiscoveryAdmissionResult> AdmitAsync(ConfiguredCollectionSource source, string listJob,
         BillStreamWindow window, CongressBillListPage page)
     {
-        var definition = source.CreateApiJobDefinition(ApiResource.BillList, window.RequestUrl(SourceUrl), Backfill);
-        var job = await store.EnqueueAsync(definition, ListJobKeyPrefix + listJob, default);
-        await ExecuteAsync(connectionString, $"UPDATE collection_jobs SET state = 'Succeeded' WHERE job_id = '{job.JobId}'");
-        return await store.AdmitListPageAsync(source, job.JobId, window, page, default);
+        var job = await ListJobAsync(listJob);
+        return await store.AdmitListPageAsync(source, job, window, page, default);
     }
 
     private async Task<IReadOnlyList<CollectionJobRecord>> AdmittedJobsAsync() =>
-        [.. (await store.ListAsync(100, default)).Where(job => !job.IdempotencyKey.StartsWith(ListJobKeyPrefix, StringComparison.Ordinal))];
+        [.. (await store.ListAsync(100, default)).Where(job => !job.IdempotencyKey.StartsWith(ListJobKeyPrefix, StringComparison.Ordinal) &&
+            !seededJobIds.Contains(job.JobId))];
 
     private async Task<object?> ScalarAsync(string sql)
     {

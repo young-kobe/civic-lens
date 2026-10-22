@@ -100,10 +100,9 @@ public sealed class PostgresSenateVoteTests(PostgresCollection postgres) : IAsyn
         shipped = shipped with { Sources = [source with { Enabled = true }] };
         var configured = new ConfiguredCollectionSource(shipped, SenateVoteFixtures.SourceId, Backfill.AddDays(400));
         var menu = Menu(Enumerable.Range(1, SenateVoteMenuParser.MaximumVotes).Select(roll => Item(roll, DaysAgo(200))).ToArray());
-        var definition = configured.CreateApiJobDefinition(ApiResource.SenateVoteMenu, SenateVoteUrl.Menu(SourceUrl, menu.Session), Backfill);
-        var list = await store.EnqueueAsync(definition, TestJobKeyPrefix + "shipped", default);
+        var list = await SucceededJobs.RootAsync(store, connectionString, configured, TestJobKeyPrefix + "shipped");
 
-        var result = await store.AdmitSenateMenuAsync(configured, list.JobId, menu, default);
+        var result = await store.AdmitSenateMenuAsync(configured, list, menu, default);
 
         Assert.Equal(SenateVoteMenuParser.MaximumVotes + 1, result.AdmittedCount);
         Assert.Equal(0, result.DeferredCount);
@@ -162,7 +161,7 @@ public sealed class PostgresSenateVoteTests(PostgresCollection postgres) : IAsyn
     public async Task ASecondFetchOfAFileWithTheSameModifyDateRecordsNothingNew()
     {
         var first = await EnqueueVoteAsync("first", 1);
-        var second = await EnqueueVoteAsync("second", 1);
+        var second = await EnqueueVoteAsync("second", 1, DaysAgo(1));
         await store.AdmitSenateVoteAsync(Source(), first, Vote(1, "s", 5), await ExtractionAsync(first), default);
 
         var replay = await store.AdmitSenateVoteAsync(Source(), second, Vote(1, "s", 5), await ExtractionAsync(second), default);
@@ -177,7 +176,7 @@ public sealed class PostgresSenateVoteTests(PostgresCollection postgres) : IAsyn
     public async Task AFileWithANewModifyDateIsANewVersionAndCandidateOfTheSameRoll()
     {
         var first = await EnqueueVoteAsync("first", 1);
-        var second = await EnqueueVoteAsync("second", 1);
+        var second = await EnqueueVoteAsync("second", 1, DaysAgo(1));
         await store.AdmitSenateVoteAsync(Source(), first, Vote(1, "s", 5), await ExtractionAsync(first), default);
 
         await store.AdmitSenateVoteAsync(Source(), second, Vote(1, "s", 5, Modified.AddDays(1)), await ExtractionAsync(second), default);
@@ -213,19 +212,12 @@ public sealed class PostgresSenateVoteTests(PostgresCollection postgres) : IAsyn
 
     private async Task<DiscoveryAdmissionResult> AdmitMenuAsync(string menuJob, SenateVoteMenu menu)
     {
-        var definition = Source().CreateApiJobDefinition(ApiResource.SenateVoteMenu, SenateVoteUrl.Menu(SourceUrl, menu.Session), Backfill);
-        var job = await store.EnqueueAsync(definition, TestJobKeyPrefix + menuJob, default);
-        await ExecuteAsync($"UPDATE collection_jobs SET state = 'Succeeded' WHERE job_id = '{job.JobId}'");
-        return await store.AdmitSenateMenuAsync(Source(), job.JobId, menu, default);
+        var job = await SucceededJobs.RootAsync(store, connectionString, Source(), TestJobKeyPrefix + menuJob);
+        return await store.AdmitSenateMenuAsync(Source(), job, menu, default);
     }
 
-    private async Task<string> EnqueueVoteAsync(string name, int roll)
-    {
-        var url = SenateVoteUrl.Vote(SourceUrl, new SenateVoteRoll(SenateVoteFixtures.Session, roll));
-        var job = await store.EnqueueAsync(Source().CreateApiJobDefinition(ApiResource.SenateVote, url, Backfill), TestJobKeyPrefix + name, default);
-        await ExecuteAsync($"UPDATE collection_jobs SET state = 'Succeeded' WHERE job_id = '{job.JobId}'");
-        return job.JobId;
-    }
+    private Task<string> EnqueueVoteAsync(string name, int roll, DateOnly? voteDay = null) =>
+        SucceededJobs.SenateVoteAsync(store, connectionString, Source(), TestJobKeyPrefix + name, Item(roll, voteDay ?? DaysAgo(200)));
 
     private Task<string> ExtractionAsync(string jobId)
     {
