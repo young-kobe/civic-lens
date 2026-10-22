@@ -1,3 +1,5 @@
+using CivicLens.Host.Documents;
+using Microsoft.Extensions.Logging;
 using CivicLens.Application.Activity;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Briefs;
@@ -12,10 +14,8 @@ using CivicLens.Core.Review;
 using CivicLens.Host.Collection;
 using CivicLens.Host.Components.Layout;
 using CivicLens.Host.Components.Ui;
-using CivicLens.Host.Documents;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Host.Review;
 

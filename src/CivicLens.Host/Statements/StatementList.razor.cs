@@ -1,10 +1,10 @@
+using CivicLens.Host.Review;
+using Microsoft.Extensions.Logging;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
 using CivicLens.Host.Components.Layout;
 using CivicLens.Host.Components.Ui;
-using CivicLens.Host.Review;
 using Microsoft.AspNetCore.Components;
-using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Host.Statements;
 

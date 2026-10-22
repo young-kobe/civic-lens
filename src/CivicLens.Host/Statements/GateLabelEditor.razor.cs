@@ -1,13 +1,13 @@
+using CivicLens.Host.Review;
+using Microsoft.Extensions.Logging;
+using System.Collections.Immutable;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Statements;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Host.Components.Layout;
-using CivicLens.Host.Review;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.Extensions.Logging;
-using System.Collections.Immutable;
 
 namespace CivicLens.Host.Statements;
 

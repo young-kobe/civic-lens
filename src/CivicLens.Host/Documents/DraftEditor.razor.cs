@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+using System.Globalization;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Review;
@@ -7,12 +9,10 @@ using CivicLens.Core.Review;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Layout;
 using CivicLens.Host.Components.Ui;
-using CivicLens.Host.Documents;
+using CivicLens.Host.Review;
 using Microsoft.AspNetCore.Components;
-using System.Collections.Immutable;
-using System.Globalization;
 
-namespace CivicLens.Host.Review;
+namespace CivicLens.Host.Documents;
 
 public sealed partial class DraftEditor
 {

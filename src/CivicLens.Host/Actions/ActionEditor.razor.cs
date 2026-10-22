@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Review;
@@ -8,7 +9,6 @@ using CivicLens.Host.Components.Layout;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Host.Review;
 using Microsoft.AspNetCore.Components;
-using System.Collections.Immutable;
 
 namespace CivicLens.Host.Actions;
 
