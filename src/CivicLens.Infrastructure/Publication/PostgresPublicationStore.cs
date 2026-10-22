@@ -157,6 +157,14 @@ public sealed class PostgresPublicationStore : IPublicationStore
         db.Set<PublicationReleaseRow>().Where(row => row.IsActive)
             .ExecuteUpdateAsync(update => update.SetProperty(row => row.IsActive, false), cancellationToken);
 
+    public async Task<IReadOnlyDictionary<PublishedRecordReference, ReviewStatus>> ReadReviewStatusesAsync(
+        IReadOnlyCollection<PublishedRecordReference> records, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var current = await ReadCurrentReviewStatesAsync(db, [.. records.Select(record => (record.Kind, record.RecordId))], cancellationToken);
+        return current.ToDictionary(state => new PublishedRecordReference(state.Key.Kind, state.Key.RecordId), state => state.Value.ReviewStatus);
+    }
+
     private static async Task RequireUnchangedReleasesAsync(CollectionAttemptDbContext db, PublicationCommit commit,
         CancellationToken cancellationToken)
     {

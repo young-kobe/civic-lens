@@ -322,6 +322,5 @@ This is an owner command. It prints the count of entries that it queued or moved
 - The text of a person survives later model runs by rule. A person who edited a brief cannot rebind a changed citation to the new revision. The person can only drop the citation.
 - The approval gate reads the flag at the moment of approval only. Publication reads it again.
 - A published brief page links to the current page of each cited record. A newer revision of a cited record can replace the cited one in a later release. The page then shows the revision number that the brief cited, and the linked page shows the newer text.
-- Corrections of published briefs wait for R-32, which covers all record kinds; see [roadmap](../roadmap.md).
 - The cited-record texts on the editor come from one read per page load. A cited record can change while the page is open. The flag shows at the next load.
 - News coverage in briefs is deferred; see [roadmap](../roadmap.md#deferred).

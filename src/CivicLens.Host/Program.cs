@@ -339,8 +339,11 @@ try
         var releases = new FileReleaseDirectory(releaseRoot);
         var (publish, _) = PublicationComposition.Create(connectionString, publications, releases, publishConfiguration, issueConfiguration);
         executing = true;
+        using var loggers = LoggerFactory.Create(logging => logging.AddConsole(console => console.LogToStandardErrorThreshold = LogLevel.Trace));
+        var blocked = new BlockedPublishedRecords(publications);
         return await ReleaseCommand.ExecuteAsync(args, publish, new ListPublicationReleases(publications, releases),
-            new ActivatePublicationRelease(publications, releases), owner,
+            new ListBlockedPublished(publications, releases, blocked),
+            new ActivatePublicationRelease(publications, releases, blocked, loggers.CreateLogger<ActivatePublicationRelease>()), owner,
             cancellation.Token);
     }
 

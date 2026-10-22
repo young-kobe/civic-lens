@@ -346,6 +346,7 @@ internal static class ReviewWorkspace
         services.AddSingleton(loaders);
         services.AddSingleton(publish);
         services.AddScoped(_ => new ListPublishable(loaders, publications, releases));
+        services.AddScoped(_ => new ListBlockedPublished(publications, releases, new BlockedPublishedRecords(publications)));
     }
 
     private static void SetHeaders(HttpResponse response)

@@ -1,3 +1,5 @@
+using CivicLens.Core.Review;
+
 namespace CivicLens.Application.Publication;
 
 public interface IPublicationStore
@@ -8,6 +10,9 @@ public interface IPublicationStore
 
     Task<PublicationReleaseSummary?> ServeActiveAsync(Func<string, CancellationToken, Task> serve,
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyDictionary<PublishedRecordReference, ReviewStatus>> ReadReviewStatusesAsync(
+        IReadOnlyCollection<PublishedRecordReference> records, CancellationToken cancellationToken);
 
     Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken);

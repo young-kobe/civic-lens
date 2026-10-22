@@ -387,7 +387,7 @@ public sealed class PublishReleaseTests
         var one = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", first));
         var second = scenario.AddDraft('b');
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", second));
-        await new ActivatePublicationRelease(scenario.Publications, scenario.Releases)
+        await scenario.Activator()
             .ExecuteAsync(PublicationScenario.Owner, one.ReleaseNumber);
         scenario.Clock.Now = firstTime.AddDays(7);
         var third = scenario.AddDraft('c');

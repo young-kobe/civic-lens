@@ -465,6 +465,36 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
+    public async Task OnlyTheOwnerSeesPublishedRecordsThatReviewBlockedWithTheWithdrawHintAsync()
+    {
+        await SaveComparisonAsync("Fee: 10 dollars.\n", "Fee: 12 dollars.\n");
+        SignIn(Owner);
+        var draftUrl = await StartFirstDraftAsync();
+        var draftId = draftUrl[("/Review/".Length)..];
+        await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars");
+        using var approved = await DecideAsync(draftUrl, "Approve");
+        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+        var summary = await host.GetDocumentAsync($"/Review?publish=documentChange:{draftId}");
+        using var published = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(Fields(summary.QuerySelector("#publish-confirm")!)));
+        Assert.Equal(HttpStatusCode.Redirect, published.StatusCode);
+        Assert.Equal("No published record is blocked",
+            (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='blocked'] .empty h3")!.TextContent);
+
+        using var withdrawn = await DecideAsync(draftUrl, "WithdrawApproval", "The source was wrong.");
+        Assert.Equal(HttpStatusCode.Redirect, withdrawn.StatusCode);
+
+        var panel = (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='blocked']")!;
+        Assert.Contains("Fee rose to 12 dollars", panel.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Approval withdrawn", panel.TextContent, StringComparison.Ordinal);
+        Assert.Contains($"releases publish <key> --withdraw documentChange:{draftId} \"note\"", panel.TextContent, StringComparison.Ordinal);
+        Assert.NotNull(panel.QuerySelector($"a[href='{draftUrl}']"));
+
+        host.Client.DefaultRequestHeaders.Remove("Cookie");
+        SignIn(Reviewer);
+        Assert.Null((await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='blocked']"));
+    }
+
+    [Fact]
     public async Task ReviewerCannotPublishEvenWithAForgedPostAsync()
     {
         await SaveComparisonAsync("Fee: 10 dollars.\n", "Fee: 12 dollars.\n");

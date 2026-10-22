@@ -500,6 +500,49 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         }
     }
 
+    [Theory]
+    [MemberData(nameof(AllKinds))]
+    public async Task TheStatusReadReportsTheCurrentReviewStatusForEveryKindAndSkipsARecordWithNoReviewRow(PublishedRecordKind kind)
+    {
+        var recordId = await SeedDraftAsync(kind);
+        var reference = new PublishedRecordReference(kind, recordId);
+        var missing = new PublishedRecordReference(kind, new string('9', 64));
+        foreach (var status in new[] { ReviewStatus.Approved, ReviewStatus.ChangesRequested })
+        {
+            await SetReviewStatusAsync(kind, recordId, status);
+
+            var statuses = await publications.ReadReviewStatusesAsync([reference, missing], default);
+
+            Assert.Equal(status, Assert.Single(statuses).Value);
+            Assert.Equal(reference, Assert.Single(statuses).Key);
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(StatusesAPublishedKindCanHold))]
+    public async Task TheBlockedListAndTheWithdrawalCommitAgreeOnEveryReviewStatus(ReviewStatus status)
+    {
+        const PublishedRecordKind kind = PublishedRecordKind.Action;
+        var recordId = await SeedDraftAsync(kind);
+        await SetReviewStatusAsync(kind, recordId, status);
+        var entry = new PublishedRecordEntry
+        {
+            Kind = kind,
+            RecordId = recordId,
+            RevisionNumber = 1,
+            Headline = "Headline",
+            FirstPublishedAtUtc = PublishedAt
+        };
+
+        var listed = (await new BlockedPublishedRecords(publications).FindAsync([entry], default)).Count == 1;
+        var withdrawn = await Record.ExceptionAsync(() => publications.CommitAsync(Owner.Subject,
+            WithdrawalCommit(1, null, kind, recordId), "key", Hash(1), default)) is null;
+
+        Assert.Equal(withdrawn, listed);
+    }
+
+    public static TheoryData<ReviewStatus> StatusesAPublishedKindCanHold => new(Enum.GetValues<ReviewStatus>().Where(status => status != ReviewStatus.NotDrafted));
+
     [Fact]
     public async Task AReviewChangeBetweenTheBuildAndTheCommitOfAReturnFailsTheCommit()
     {
