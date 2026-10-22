@@ -746,9 +746,9 @@ To take a record out of the release, give `--withdraw <kind>:<id> <text>`. A req
 - Review did not block the record.
 - A relationship or a brief that stays in the release cites the record. The message lists the citing records. Withdraw them in the same request.
 
-### Return a record
-
 To list the published records that review blocked, run `releases blocked`. It prints the kind, the ID, the headline, the published revision, and the review status of each record. The list is empty when no release is active. Use it to choose the records to withdraw.
+
+### Return a record
 
 To bring a withdrawn record back, first revise it in review and approve the new revision. The revision number must be higher than the withdrawn revision. Return it from the Review page, or with the CLI: publish the withdrawn ID with a note: `releases publish <idempotency-key> <kind>:<id> --note <kind>:<id> <text>`. The note shows on the record page as a correction. The publish exits with code 2 if the note is missing or the revision is not higher. The code subject cannot return a record. The worker only logs the withdrawn record and skips it.
 
@@ -760,7 +760,7 @@ A concurrent review decision, draft save, other release, or rollback makes the c
 
 Repeat the same key and records to receive the original result. The repeat also repairs a link swap that failed after the commit. To roll back, activate an earlier release number. The next `publish` builds on the active release, so records added after it are not carried forward. `list` shows `activeReleaseNumber`, the release that Postgres records as active, and `servedDirectoryName`, the release that the link serves. If they differ, run `releases activate` with the active release number. Releases are never deleted automatically.
 
-The command `releases activate` prints one object with four fields. `summary` is the activated release. `restoredWithdrawals` lists records that the replaced release withdrew and the activated release shows again. `withdrawnAgain` lists records that the activated release withdraws and the replaced release showed. `blocked` lists records of the activated release that review now blocks. Read the lists after each rollback. If the lists are empty and you expected content, check the manifests: a failed manifest read gives empty lists and a warning on standard error.
+The command `releases activate` prints one object with four fields. `summary` is the activated release. `restoredWithdrawals` lists records that the replaced release withdrew and the activated release shows again. `withdrawnAgain` lists records that the activated release withdraws and the replaced release showed. `blocked` lists records of the activated release that review now blocks. The lists describe the release that the link serves. Read them after each rollback. A failed read gives a warning on standard error and empty lists, and the switch stays done. If the manifest of the activated release cannot be read, all three lists are empty. If the manifest of the replaced release cannot be read, `restoredWithdrawals` and `withdrawnAgain` are empty. If the review read fails, `blocked` is empty.
 
 To check that the public pages work without the operational application, stop the review workspace, the worker, and Postgres. Then serve the active release with a plain static server:
 

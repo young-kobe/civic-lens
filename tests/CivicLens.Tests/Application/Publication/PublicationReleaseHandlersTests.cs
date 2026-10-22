@@ -148,6 +148,37 @@ public sealed class PublicationReleaseHandlersTests
         Assert.Equal(LogLevel.Warning, Assert.Single(logger.Entries).Level);
     }
 
+    [Fact]
+    public async Task AnUnreadableReplacedManifestEmptiesOnlyTheComparisonListsAndKeepsTheBlockedList()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k2", scenario.AddDraft('a')));
+        scenario.Publications.ReviewStatuses[action] = ReviewStatus.ChangesRequested;
+        scenario.Releases.Directories[scenario.Publications.Committed[1].DirectoryName].Remove(PublicationProtocol.ManifestPath);
+        var logger = new CapturingLogger<ActivatePublicationRelease>();
+
+        var result = await scenario.Activator(logger).ExecuteAsync(PublicationScenario.Owner, 1);
+
+        Assert.Equal(action, Assert.Single(result.Blocked).Reference);
+        Assert.Empty(result.RestoredWithdrawals);
+        Assert.Empty(result.WithdrawnAgain);
+        Assert.Equal(LogLevel.Warning, Assert.Single(logger.Entries).Level);
+    }
+
+    [Fact]
+    public async Task TheListsDescribeTheReleaseThatIsServedWhenAnotherActivationWonTheRace()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        await WithdrawAsync(scenario, action);
+        scenario.Publications.BeforeServe = () => scenario.Publications.ActiveReleaseNumber = 2;
+
+        var result = await scenario.Activator().ExecuteAsync(PublicationScenario.Owner, 1);
+
+        Assert.Equal(scenario.Publications.Committed[1].DirectoryName, scenario.Releases.Active);
+        Assert.Empty(result.RestoredWithdrawals);
+    }
+
     private static async Task<(PublicationScenario Scenario, PublishedRecordReference Action)> PublishedActionAsync()
     {
         var scenario = new PublicationScenario();

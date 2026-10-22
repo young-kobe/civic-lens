@@ -535,10 +535,13 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         };
 
         var listed = (await new BlockedPublishedRecords(publications).FindAsync([entry], default)).Count == 1;
-        var withdrawn = await Record.ExceptionAsync(() => publications.CommitAsync(Owner.Subject,
-            WithdrawalCommit(1, null, kind, recordId), "key", Hash(1), default)) is null;
+        var failure = await Record.ExceptionAsync(() => publications.CommitAsync(Owner.Subject,
+            WithdrawalCommit(1, null, kind, recordId), "key", Hash(1), default));
 
-        Assert.Equal(withdrawn, listed);
+        Assert.Equal(PublishedRecordRules.IsWithdrawable(status), listed);
+        Assert.Equal(listed, failure is null);
+        if (failure is not null)
+            Assert.Contains($"is {status} in review", Assert.IsType<ArgumentException>(failure).Message, StringComparison.Ordinal);
     }
 
     public static TheoryData<ReviewStatus> StatusesAPublishedKindCanHold => new(Enum.GetValues<ReviewStatus>().Where(status => status != ReviewStatus.NotDrafted));

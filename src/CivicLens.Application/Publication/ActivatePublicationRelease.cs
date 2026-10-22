@@ -15,26 +15,41 @@ public sealed class ActivatePublicationRelease(IPublicationStore publications, I
         if (releaseNumber < 1) throw new ArgumentOutOfRangeException(nameof(releaseNumber), "Release number must be at least 1.");
         var replaced = (await publications.GetStateAsync(cancellationToken)).Active;
         var summary = await publications.ActivateAsync(releaseNumber, cancellationToken);
-        await publications.ServeActiveAsync(releases.ActivateAsync, cancellationToken);
-        return await CompareAsync(replaced, summary, cancellationToken);
+        var served = await publications.ServeActiveAsync(releases.ActivateAsync, cancellationToken) ?? summary;
+        return await CompareAsync(replaced, summary, served, cancellationToken);
     }
 
-    // The switch is done when this runs, so a failed manifest read must not fail the command.
+    // The switch is done when this runs, so a failed read must not fail the command. Each failure empties only its own lists.
     private async Task<ActivatedRelease> CompareAsync(PublicationReleaseSummary? replaced, PublicationReleaseSummary activated,
-        CancellationToken cancellationToken)
+        PublicationReleaseSummary served, CancellationToken cancellationToken)
+    {
+        var after = await TryReadAsync<PublicationRelease?>(
+            async () => await PreviousRelease.LoadManifestAsync(releases, served, cancellationToken), null, served, "manifest");
+        if (after is null) return new(activated, [], [], []);
+        var (restored, withdrawnAgain) = await TryReadAsync(() => CompareWithReplacedAsync(replaced, after, cancellationToken),
+            ([], []), served, "rollback comparison");
+        var blockedRecords = await TryReadAsync<IReadOnlyList<BlockedPublishedRecord>>(
+            () => blocked.FindAsync(after.Records, cancellationToken), [], served, "blocked list");
+        return new(activated, restored, withdrawnAgain, blockedRecords);
+    }
+
+    private async Task<(PublishedRecordReference[] Restored, PublishedRecordReference[] WithdrawnAgain)> CompareWithReplacedAsync(
+        PublicationReleaseSummary? replaced, PublicationRelease after, CancellationToken cancellationToken)
+    {
+        var before = replaced is null ? null : await PreviousRelease.LoadManifestAsync(releases, replaced, cancellationToken);
+        return (Overlap(before?.Withdrawals, after.Records), Overlap(after.Withdrawals, before?.Records));
+    }
+
+    private async Task<T> TryReadAsync<T>(Func<Task<T>> read, T unread, PublicationReleaseSummary release, string what)
     {
         try
         {
-            var before = replaced is null ? null : await PreviousRelease.LoadManifestAsync(releases, replaced, cancellationToken);
-            var after = await PreviousRelease.LoadManifestAsync(releases, activated, cancellationToken);
-            return new(activated, Overlap(before?.Withdrawals, after.Records), Overlap(after.Withdrawals, before?.Records),
-                await blocked.FindAsync(after.Records, cancellationToken));
+            return await read();
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            logger.LogWarning(exception, "Release {ReleaseNumber} is active, but its rollback comparison could not be read.",
-                activated.ReleaseNumber);
-            return new(activated, [], [], []);
+            logger.LogWarning(exception, "Release {ReleaseNumber} is active, but its {Read} could not be read.", release.ReleaseNumber, what);
+            return unread;
         }
     }
 

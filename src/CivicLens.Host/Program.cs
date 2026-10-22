@@ -170,7 +170,7 @@ try
         using var terminate = OperatingSystem.IsWindows() ? null : PosixSignalRegistration.Create(PosixSignal.SIGTERM,
             context => { context.Cancel = true; cancellation.Cancel(); });
         CollectionWorkerCommand.ValidateArguments(args);
-        using var loggers = LoggerFactory.Create(logging => logging.AddConsole(console => console.LogToStandardErrorThreshold = LogLevel.Trace));
+        using var loggers = CreateLoggers();
         var workerConfiguration = ConfigurationFile.ReadCollectionFromEnvironment()
             ?? throw new ArgumentException("Worker requires CIVIC_LENS_COLLECTION_CONFIG.");
         var issueConfiguration = ConfigurationFile.ReadIssuesFromEnvironment();
@@ -339,7 +339,7 @@ try
         var releases = new FileReleaseDirectory(releaseRoot);
         var (publish, _) = PublicationComposition.Create(connectionString, publications, releases, publishConfiguration, issueConfiguration);
         executing = true;
-        using var loggers = LoggerFactory.Create(logging => logging.AddConsole(console => console.LogToStandardErrorThreshold = LogLevel.Trace));
+        using var loggers = CreateLoggers();
         var blocked = new BlockedPublishedRecords(publications);
         return await ReleaseCommand.ExecuteAsync(args, publish, new ListPublicationReleases(publications, releases),
             new ListBlockedPublished(publications, releases, blocked),
@@ -458,6 +458,9 @@ catch (Exception)
         : "Command failed. Check filesystem access, collector availability, or database connectivity as applicable.");
     return 1;
 }
+
+static ILoggerFactory CreateLoggers() =>
+    LoggerFactory.Create(logging => logging.AddConsole(console => console.LogToStandardErrorThreshold = LogLevel.Trace));
 
 static PostgresCollectionAttemptStore CreateDatabase()
 {
