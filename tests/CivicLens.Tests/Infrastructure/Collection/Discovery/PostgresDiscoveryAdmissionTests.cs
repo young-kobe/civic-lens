@@ -49,11 +49,17 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
     {
         var urls = new[] { "https://example.test/articles/one", "https://example.test/articles/two", "https://example.test/articles/three" };
         var attemptId = await SaveFeedAsync(urls);
-        var request = new DiscoveryAdmissionRequest(attemptId, "batch-one", Template(),
-            new DiscoveryAdmissionPolicy { MaxJobs = 10, MaxTotalRequests = requests, MaxTotalBytes = bytes, MaxTotalTimeoutSeconds = seconds });
+        var policy = new DiscoveryAdmissionPolicy
+        {
+            MaxJobs = 10,
+            MaxTotalRequests = requests,
+            MaxTotalBytes = bytes,
+            MaxTotalTimeoutSeconds = seconds
+        };
+        var source = Source(policy: policy);
 
-        var first = await jobs.AdmitAsync(request, default);
-        var replay = await jobs.AdmitAsync(request, default);
+        var first = await jobs.AdmitAsync(source, attemptId, "batch-one", default);
+        var replay = await jobs.AdmitAsync(source, attemptId, "batch-one", default);
 
         Assert.Equal(2, first.AdmittedCount);
         Assert.Equal(1, first.DeferredCount);
@@ -66,14 +72,23 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         Assert.All(storedJobs, job => Assert.Equal(CollectionJobState.Pending, job!.State));
 
         var sameCandidate = await SaveFeedAsync([urls[0]]);
-        var duplicate = await jobs.AdmitAsync(new DiscoveryAdmissionRequest(sameCandidate, "batch-two", Template(), new DiscoveryAdmissionPolicy()), default);
+        var duplicate = await jobs.AdmitAsync(Source(), sameCandidate, "batch-two", default);
         Assert.Equal(0, duplicate.AdmittedCount);
         Assert.Equal(1, duplicate.DuplicateCount);
 
-        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(request with
-        {
-            ArticleTemplate = Template() with { MaxBytes = 11 }
-        }, default));
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(Source(maxBytes: 11, policy: policy),
+            attemptId, "batch-one", default));
+    }
+
+    [Fact]
+    public async Task ConflictingReuseOfAnAdmissionKeyFails()
+    {
+        var url = "https://example.test/articles/one";
+        var first = await SaveFeedAsync([url]);
+        var other = await SaveFeedAsync([url]);
+        await jobs.AdmitAsync(Source(), first, "reused-key", default);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(Source(), other, "reused-key", default));
     }
 
     [Fact]
@@ -83,8 +98,7 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
             .Select(index => $"https://example.test/articles/{index:D2}")
             .ToArray();
         var firstAttempt = await SaveFeedAsync(urls.Take(10).ToArray());
-        var firstBatch = await jobs.AdmitAsync(new DiscoveryAdmissionRequest(firstAttempt, "candidate-seed",
-            Template(), new DiscoveryAdmissionPolicy()), default);
+        var firstBatch = await jobs.AdmitAsync(Source(), firstAttempt, "candidate-seed", default);
         Assert.Equal(10, firstBatch.AdmittedCount);
 
         var attempt = await SaveFeedAsync(urls);
@@ -93,15 +107,15 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString)
                 .AddInterceptors(counter).Options);
         var countedJobs = new PostgresCollectionJobStore(countedFactory);
-        var request = new DiscoveryAdmissionRequest(attempt, "candidate-mixed", Template(), new DiscoveryAdmissionPolicy { MaxJobs = 40 });
+        var source = Source(policy: new DiscoveryAdmissionPolicy { MaxJobs = 40 });
 
-        var admitted = await countedJobs.AdmitAsync(request, default);
+        var admitted = await countedJobs.AdmitAsync(source, attempt, "candidate-mixed", default);
         Assert.Equal(10, admitted.DuplicateCount);
         Assert.Equal(30, admitted.AdmittedCount);
         Assert.Equal(urls.Skip(10), admitted.Jobs.Select(job => job.Url));
         Assert.Equal(1, counter.CandidateSelectCount);
 
-        var replay = await countedJobs.AdmitAsync(request, default);
+        var replay = await countedJobs.AdmitAsync(source, attempt, "candidate-mixed", default);
         Assert.Equal(admitted.Jobs, replay.Jobs);
         Assert.Equal(admitted.DeferredCount, replay.DeferredCount);
         Assert.Equal(admitted.DuplicateCount, replay.DuplicateCount);
@@ -113,8 +127,7 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
     {
         var url = "https://example.test/articles/known";
         var firstAttempt = await SaveFeedAsync([url]);
-        var first = await jobs.AdmitAsync(new DiscoveryAdmissionRequest(firstAttempt, "manual-seed", Template(),
-            new DiscoveryAdmissionPolicy()), default);
+        var first = await jobs.AdmitAsync(Source(), firstAttempt, "manual-seed", default);
         var initialJob = Assert.Single(first.Jobs);
         Assert.NotNull(await jobs.CancelAsync(initialJob.JobId, default));
 
@@ -187,8 +200,8 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         var secondAttempt = await SaveDiscoveryAsync([url], CollectionMode.Html);
 
         var results = await Task.WhenAll(
-            jobs.AdmitAsync(new DiscoveryAdmissionRequest(firstAttempt, "concurrent-one", Template(), new DiscoveryAdmissionPolicy()), default),
-            jobs.AdmitAsync(new DiscoveryAdmissionRequest(secondAttempt, "concurrent-two", Template(), new DiscoveryAdmissionPolicy(), CollectionMode.Html), default));
+            jobs.AdmitAsync(Source(), firstAttempt, "concurrent-one", default),
+            jobs.AdmitAsync(Source(CollectionMode.Html), secondAttempt, "concurrent-two", default));
 
         Assert.Equal(1, results.Sum(result => result.AdmittedCount));
         Assert.Equal(1, results.Sum(result => result.DuplicateCount));
@@ -199,7 +212,6 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
     public async Task FailedAdmissionRollsBackJobsBindingsAndBatchAndCanRetry()
     {
         var attemptId = await SaveFeedAsync(["https://example.test/articles/one"]);
-        var request = new DiscoveryAdmissionRequest(attemptId, "rollback", Template(), new DiscoveryAdmissionPolicy());
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using (var trigger = new NpgsqlCommand("""
@@ -209,7 +221,7 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
             FOR EACH ROW EXECUTE FUNCTION fail_admission();
             """, connection))
             await trigger.ExecuteNonQueryAsync();
-        await Assert.ThrowsAsync<Microsoft.EntityFrameworkCore.DbUpdateException>(() => jobs.AdmitAsync(request, default));
+        await Assert.ThrowsAsync<Microsoft.EntityFrameworkCore.DbUpdateException>(() => jobs.AdmitAsync(Source(), attemptId, "rollback", default));
         foreach (var table in new[] { "collection_jobs", "collection_candidate_jobs", "collection_admission_batches" })
         {
             await using var count = new NpgsqlCommand($"SELECT count(*) FROM {table}", connection);
@@ -217,18 +229,16 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         }
         await using (var drop = new NpgsqlCommand("DROP TRIGGER fail_admission ON collection_admission_batches", connection))
             await drop.ExecuteNonQueryAsync();
-        Assert.Single((await jobs.AdmitAsync(request, default)).Jobs);
+        Assert.Single((await jobs.AdmitAsync(Source(), attemptId, "rollback", default)).Jobs);
     }
 
     [Fact]
     public async Task InvalidDiscoveryAndChangedScopeCannotAdmitJobs()
     {
         var invalid = await SaveFeedAsync([], DiscoveryStatus.Invalid);
-        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(
-            new DiscoveryAdmissionRequest(invalid, "invalid", Template(), new DiscoveryAdmissionPolicy()), default));
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(Source(), invalid, "invalid", default));
         var parsed = await SaveFeedAsync(["https://example.test/articles/one"]);
-        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(
-            new DiscoveryAdmissionRequest(parsed, "scope", Template("/articles"), new DiscoveryAdmissionPolicy()), default));
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(Source(path: "/articles"), parsed, "scope", default));
         Assert.Empty(await jobs.ListAsync(100, default));
     }
 
@@ -237,11 +247,9 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
     {
         var attemptId = await SaveDiscoveryAsync(["https://example.test/articles/html-story"], CollectionMode.Html);
 
-        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(new DiscoveryAdmissionRequest(attemptId,
-            "html-wrong-mode", Template(), new DiscoveryAdmissionPolicy()), default));
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(Source(), attemptId, "html-wrong-mode", default));
 
-        var admitted = await jobs.AdmitAsync(new DiscoveryAdmissionRequest(attemptId, "html-correct-mode", Template(),
-            new DiscoveryAdmissionPolicy(), CollectionMode.Html), default);
+        var admitted = await jobs.AdmitAsync(Source(CollectionMode.Html), attemptId, "html-correct-mode", default);
         Assert.Equal("https://example.test/articles/html-story", Assert.Single(admitted.Jobs).Url);
     }
 
@@ -287,11 +295,9 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
     {
         var attemptId = await SaveDiscoveryAsync(["https://example.test/articles/v7"], CollectionMode.Feed,
             version: CollectionProtocol.OldestReadableVersion);
-        var request = new DiscoveryAdmissionRequest(attemptId, "version-seven-replay", Template(),
-            new DiscoveryAdmissionPolicy());
 
-        var first = await jobs.AdmitAsync(request, default);
-        var replay = await jobs.AdmitAsync(request, default);
+        var first = await jobs.AdmitAsync(Source(), attemptId, "version-seven-replay", default);
+        var replay = await jobs.AdmitAsync(Source(), attemptId, "version-seven-replay", default);
 
         Assert.Equal(first.Jobs, replay.Jobs);
         Assert.Single(first.Jobs);
@@ -325,8 +331,7 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
             Assert.Equal(7, evidence!.Discovery!.Request.Version);
             Assert.Equal("https://example.test/article", Assert.Single(evidence.Discovery.Urls));
             var upgradedJobs = PostgresCollectionJobStore.FromConnectionString(upgradeConnectionString);
-            var duplicate = await upgradedJobs.AdmitAsync(new DiscoveryAdmissionRequest("historical-v7", "another-batch",
-                Template(), new DiscoveryAdmissionPolicy()), default);
+            var duplicate = await upgradedJobs.AdmitAsync(Source(), "historical-v7", "another-batch", default);
             Assert.Equal(1, duplicate.DuplicateCount);
             Assert.Empty(duplicate.Jobs);
             await db.GetService<IMigrator>().MigrateAsync("20261007002616_FeedDiscoveryAdmission");
@@ -439,35 +444,33 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
     [InlineData(CollectionMode.Html)]
     public async Task AdmissionPinsRevisionsAndRejectsCorrectedConfigurationOnReplay(CollectionMode mode)
     {
-        var template = Template();
         var configuration = new CollectionConfiguration
         {
             People = [new PersonConfiguration { Id = "person", Name = "Original" }],
             Sources = [new WatchedSourceConfiguration
             {
-                Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = template.Url,
-                AllowedOrigin = template.AllowedOrigin, AllowedPathPrefix = template.AllowedPathPrefix,
-                Mode = mode, MaxRequests = template.MaxRequests, MaxBytes = template.MaxBytes,
-                TimeoutSeconds = template.TimeoutSeconds, MinDelayMilliseconds = template.MinDelayMilliseconds,
-                JobPolicy = template.Policy
+                Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }],
+                Url = "https://example.test/articles/template", AllowedOrigin = "https://example.test", AllowedPathPrefix = "/",
+                Mode = mode, MaxRequests = 2, MaxBytes = 10, TimeoutSeconds = 4, MinDelayMilliseconds = 0,
+                JobPolicy = new CollectionJobPolicy { MaxAttempts = 2, InitialRetryDelaySeconds = 0, MaximumRetryDelaySeconds = 0 }
             }]
         };
-        var definition = CollectionFixtures.Definition(configuration, "source", new DateOnly(2026, 7, 1)) with
-        { Mode = CollectionMode.Page, ETag = null, LastModified = null };
+        var coverageDate = new DateOnly(2026, 7, 1);
+        var original = new ConfiguredCollectionSource(configuration, "source", coverageDate);
         var nextAttempt = await SaveDiscoveryAsync(["https://example.test/articles/two"], mode);
-        var request = new DiscoveryAdmissionRequest(nextAttempt, "new-revision", definition, new DiscoveryAdmissionPolicy(), mode);
-        var admitted = await jobs.AdmitAsync(request, default);
+        var admitted = await jobs.AdmitAsync(original, nextAttempt, "new-revision", default);
         var stored = await jobs.GetAsync(Assert.Single(admitted.Jobs).JobId, default);
-        Assert.Equal(definition.ConfigurationRevision, stored!.Definition.ConfigurationRevision);
-        Assert.Equal(definition.CoverageAsOf, stored.Definition.CoverageAsOf);
+        Assert.Equal(original.Revision, stored!.Definition.ConfigurationRevision);
+        Assert.Equal(coverageDate, stored.Definition.CoverageAsOf);
         stored.Definition.Validate();
-        configuration.People[0] = configuration.People[0] with { Name = "Correction" };
-        var corrected = CollectionFixtures.Definition(configuration, "source", definition.CoverageAsOf) with
-        { Mode = CollectionMode.Page, ETag = null, LastModified = null };
-        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(request with { ArticleTemplate = corrected }, default));
-        Assert.Equal(admitted.Jobs, (await jobs.AdmitAsync(request, default)).Jobs);
         var otherMode = mode == CollectionMode.Feed ? CollectionMode.Html : CollectionMode.Feed;
-        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(request with { ExpectedDiscoveryMode = otherMode }, default));
+        var otherModeSource = new ConfiguredCollectionSource(
+            configuration with { Sources = [configuration.Sources[0] with { Mode = otherMode }] }, "source", coverageDate);
+        configuration.People[0] = configuration.People[0] with { Name = "Correction" };
+        var corrected = new ConfiguredCollectionSource(configuration, "source", coverageDate);
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(corrected, nextAttempt, "new-revision", default));
+        Assert.Equal(admitted.Jobs, (await jobs.AdmitAsync(original, nextAttempt, "new-revision", default)).Jobs);
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(otherModeSource, nextAttempt, "new-revision", default));
 
         var concurrentAttempt = await SaveDiscoveryAsync(["https://example.test/articles/concurrent"], mode);
         var configuredSource = new ConfiguredCollectionSource(configuration, "source");
@@ -504,6 +507,21 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
                 JobPolicy = template.Policy
             }]
         }, "source", new DateOnly(2026, 10, 8));
+
+    private static ConfiguredCollectionSource Source(CollectionMode mode = CollectionMode.Feed, string path = "/",
+        DiscoveryAdmissionPolicy? policy = null, long maxBytes = 10) => new(
+        new CollectionConfiguration
+        {
+            People = [new PersonConfiguration { Id = "person", Name = "Official" }],
+            Sources = [new WatchedSourceConfiguration
+            {
+                Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }],
+                Url = "https://example.test/articles/template", AllowedOrigin = "https://example.test", AllowedPathPrefix = path,
+                Mode = mode, MaxRequests = 2, MaxBytes = maxBytes, TimeoutSeconds = 4, MinDelayMilliseconds = 0,
+                JobPolicy = new CollectionJobPolicy { MaxAttempts = 2, InitialRetryDelaySeconds = 0, MaximumRetryDelaySeconds = 0 },
+                AdmissionPolicy = policy
+            }]
+        }, "source", new DateOnly(2026, 7, 1));
 
     private static CollectionJobDefinition Template(string path = "/") =>
         CollectionFixtures.Definition(new CollectionConfiguration

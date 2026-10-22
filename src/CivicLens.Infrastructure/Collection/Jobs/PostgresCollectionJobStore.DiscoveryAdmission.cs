@@ -34,15 +34,6 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                 existing, recheckKnownCandidates: true), cancellationToken);
     }
 
-    public Task<DiscoveryAdmissionResult> AdmitAsync(DiscoveryAdmissionRequest request, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        request.Validate();
-        if (request.RecheckKnownCandidates)
-            throw new ArgumentException("Rechecking known candidates is reserved for automatic source checks.", nameof(request));
-        return AdmitAsync(request.IdempotencyKey, (_, _) => request, cancellationToken);
-    }
-
     private Task<DiscoveryAdmissionResult> AdmitAsync(string idempotencyKey,
         Func<CollectionJobDefinition?, DateOnly, DiscoveryAdmissionRequest> prepareRequest, CancellationToken cancellationToken)
     {
@@ -61,7 +52,7 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                 : Write(new AdmissionInput(request.AttemptId, storedTemplate, request.Policy, request.ExpectedDiscoveryMode));
             if (batch is not null)
             {
-                if (!MatchesAdmission(batch, inputJson, request))
+                if (!SameJson(batch.InputJson, inputJson))
                     throw new ArgumentException("The admission idempotency key belongs to different input.", nameof(request));
                 return Read<DiscoveryAdmissionResult>(batch.ResultJson);
             }
@@ -184,9 +175,6 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
         return await StoredJobDefinition.ReadAsync(db, input.RootElement.GetProperty("articleTemplate").GetRawText(),
             batch.ConfigurationRevisionId, cancellationToken);
     }
-
-    private static bool MatchesAdmission(DiscoveryAdmissionBatchRow batch, string inputJson, DiscoveryAdmissionRequest request) =>
-        batch.ConfigurationRevisionId == request.ArticleTemplate.ConfigurationRevision!.Id && SameJson(batch.InputJson, inputJson);
 
     private static bool SameJson(string stored, string current) =>
         JsonNode.DeepEquals(JsonNode.Parse(stored), JsonNode.Parse(current));

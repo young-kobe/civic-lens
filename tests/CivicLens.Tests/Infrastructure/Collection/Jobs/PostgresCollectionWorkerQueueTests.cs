@@ -78,7 +78,7 @@ public sealed class PostgresCollectionWorkerQueueTests(PostgresCollection postgr
     }
 
     private Task<CollectionJobRecord> EnqueueAsync(string key) =>
-        jobs.EnqueueAsync(CollectionFixtures.PageDefinition(), key, CancellationToken.None);
+        jobs.EnqueueAsync(CollectionFixtures.PageSource(), key, CancellationToken.None);
 
     private async Task ExecuteAsync(string sql, params NpgsqlParameter[] parameters)
     {

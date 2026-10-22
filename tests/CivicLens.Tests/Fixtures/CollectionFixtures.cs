@@ -11,7 +11,11 @@ internal static class CollectionFixtures
 
     internal static CollectionJobDefinition PageDefinition(string origin = "https://example.test", string pathPrefix = "/page",
         CollectionJobPolicy? policy = null, string sourceId = "source") =>
-        Definition(new CollectionConfiguration
+        PageSource(origin, pathPrefix, policy, sourceId).CreateJobDefinition(PageCoverageDate);
+
+    internal static ConfiguredCollectionSource PageSource(string origin = "https://example.test", string pathPrefix = "/page",
+        CollectionJobPolicy? policy = null, string sourceId = "source") =>
+        new(new CollectionConfiguration
         {
             People = [new PersonConfiguration { Id = "person", Name = "Person" }],
             Sources = [new WatchedSourceConfiguration
@@ -20,7 +24,9 @@ internal static class CollectionFixtures
                 AllowedOrigin = origin, AllowedPathPrefix = pathPrefix, MaxRequests = 5, MaxBytes = 100, TimeoutSeconds = 10,
                 MinDelayMilliseconds = 0, JobPolicy = policy ?? new CollectionJobPolicy { InitialRetryDelaySeconds = 0 }
             }]
-        }, sourceId, new DateOnly(2026, 7, 1));
+        }, sourceId, PageCoverageDate);
+
+    private static readonly DateOnly PageCoverageDate = new(2026, 7, 1);
 
     internal static CollectionRequest Request() => new()
     {

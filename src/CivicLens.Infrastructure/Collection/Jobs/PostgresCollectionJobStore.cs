@@ -37,8 +37,17 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(source);
-        return EnqueueAsync((existing, currentDate) => source.CreateJobDefinition(currentDate, existing),
-            idempotencyKey, cancellationToken);
+        if (string.IsNullOrWhiteSpace(idempotencyKey) || idempotencyKey.Length > 256)
+            throw new ArgumentException("Job idempotency key must contain 1 to 256 characters.", nameof(idempotencyKey));
+        return TransactionAsync(async (db, now) =>
+        {
+            var existing = await db.Set<JobRow>().SingleOrDefaultAsync(row => row.IdempotencyKey == idempotencyKey, cancellationToken);
+            var savedDefinition = existing is null ? null : await ReadDefinitionAsync(db, existing, cancellationToken);
+            var definition = source.CreateJobDefinition(DateOnly.FromDateTime(now.UtcDateTime), savedDefinition);
+            if (existing is not null) return await ToRecordAsync(db, existing, savedDefinition!, cancellationToken);
+            var row = await new JobRowWriter(db, Ticks(now)).AddJobAsync(idempotencyKey, definition, cancellationToken);
+            return ToRecord(row, definition, []);
+        }, cancellationToken);
     }
 
     public async Task<CollectionJobRecord?> RequestCheckAsync(ConfiguredCollectionSource source, string idempotencyKey,
@@ -55,36 +64,6 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
             if (await MakeScheduleDueAsync(db, source.SourceId, now, cancellationToken) is not { Enabled: true })
                 throw new ArgumentException("The source has no active schedule.");
             return null;
-        }, cancellationToken);
-    }
-
-    public Task<CollectionJobRecord> EnqueueAsync(CollectionJobDefinition definition, string idempotencyKey,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(definition);
-        definition.Validate();
-        return EnqueueAsync((_, _) => definition, idempotencyKey, cancellationToken);
-    }
-
-    private Task<CollectionJobRecord> EnqueueAsync(
-        Func<CollectionJobDefinition?, DateOnly, CollectionJobDefinition> prepareDefinition, string idempotencyKey,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(idempotencyKey) || idempotencyKey.Length > 256)
-            throw new ArgumentException("Job idempotency key must contain 1 to 256 characters.", nameof(idempotencyKey));
-        return TransactionAsync(async (db, now) =>
-        {
-            var existing = await db.Set<JobRow>().SingleOrDefaultAsync(row => row.IdempotencyKey == idempotencyKey, cancellationToken);
-            var savedDefinition = existing is null ? null : await ReadDefinitionAsync(db, existing, cancellationToken);
-            var definition = prepareDefinition(savedDefinition, DateOnly.FromDateTime(now.UtcDateTime));
-            if (existing is not null)
-            {
-                if (definition != savedDefinition)
-                    throw new ArgumentException("The idempotency key belongs to a different job definition.");
-                return await ToRecordAsync(db, existing, savedDefinition!, cancellationToken);
-            }
-            var row = await new JobRowWriter(db, Ticks(now)).AddJobAsync(idempotencyKey, definition, cancellationToken);
-            return ToRecord(row, definition, []);
         }, cancellationToken);
     }
 

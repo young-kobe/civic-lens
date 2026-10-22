@@ -53,8 +53,8 @@ public sealed class ConfigurationRevisionReferencesMigrationTests(PostgresCollec
         foreach (var id in new[] { "legacy-job-1", "legacy-job-2" })
             Assert.Equal(definition, (await jobs.GetAsync(id, default))!.Definition);
 
-        var request = new DiscoveryAdmissionRequest("legacy-attempt", "legacy-batch", definition, new DiscoveryAdmissionPolicy());
-        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(request, default));
+        var source = new ConfiguredCollectionSource(ArticleConfiguration("Original"), "source", new DateOnly(2026, 7, 1));
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(source, "legacy-attempt", "legacy-batch", default));
     }
 
     private async Task SeedLegacyRowsAsync(CollectionJobDefinition definition)
@@ -91,20 +91,23 @@ public sealed class ConfigurationRevisionReferencesMigrationTests(PostgresCollec
 
     private static CollectionJobDefinition ArticleDefinition(string personName)
     {
-        var configuration = new CollectionConfiguration
+        var configuration = ArticleConfiguration(personName);
+        return CollectionFixtures.Definition(configuration, "source", new DateOnly(2026, 7, 1)) with
+        { Mode = CollectionMode.Page, ETag = null, LastModified = null };
+    }
+
+    private static CollectionConfiguration ArticleConfiguration(string personName) =>
+        new()
         {
             People = [new PersonConfiguration { Id = "person", Name = personName }],
             Sources = [new WatchedSourceConfiguration
             {
-                Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = "https://example.test/feed.xml",
+                Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = "https://example.test/articles/template",
                 AllowedOrigin = "https://example.test", AllowedPathPrefix = "/", Mode = CollectionMode.Feed,
                 MaxRequests = 2, MaxBytes = 10, TimeoutSeconds = 4, MinDelayMilliseconds = 0,
                 JobPolicy = new CollectionJobPolicy { MaxAttempts = 2, InitialRetryDelaySeconds = 0, MaximumRetryDelaySeconds = 0 }
             }]
         };
-        return CollectionFixtures.Definition(configuration, "source", new DateOnly(2026, 7, 1)) with
-        { Mode = CollectionMode.Page, ETag = null, LastModified = null, Url = "https://example.test/articles/template" };
-    }
 
     private async Task<object?> ScalarAsync(string sql)
     {

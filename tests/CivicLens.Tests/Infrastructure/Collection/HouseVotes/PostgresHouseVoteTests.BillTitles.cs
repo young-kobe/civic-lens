@@ -10,6 +10,7 @@ public sealed partial class PostgresHouseVoteTests
 {
     private const string BillSourceId = "congress-bills";
     private const string JobLockKey = "civic-lens-collection-jobs";
+    private int billListSequence;
 
     [Fact]
     public async Task AVoteWhoseBillHasNoSavedDetailGetsNoQueueRowBecauseTheDraftNeedsTheBillTitle()
@@ -150,9 +151,11 @@ public sealed partial class PostgresHouseVoteTests
         var (_, members) = await DetailWithMembersJobAsync(vote);
         await AdmitMembersAsync(members, vote);
 
-        await AdmitBillDetailAsync(number: 15);
-        await AdmitBillDetailAsync(congress: 118);
+        var otherNumber = await AdmitBillDetailAsync(number: 15);
+        var otherCongress = await AdmitBillDetailAsync(congress: 118);
 
+        Assert.Equal(2L, await ScalarAsync(
+            $"SELECT count(*) FROM bill_gates WHERE detail_job_id IN ('{otherNumber.JobId}', '{otherCongress.JobId}')"));
         Assert.Empty(await QueueAsync());
     }
 
@@ -232,16 +235,21 @@ public sealed partial class PostgresHouseVoteTests
 
     private async Task<PreparedBillDetail> PrepareBillDetailAsync(DateTimeOffset? updatedAt = null, int congress = 119, int number = 14)
     {
-        var source = new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), BillSourceId, Backfill.AddDays(400));
-        var url = $"https://api.congress.gov/v3/bill/{congress}/hconres/{number}?format=json";
-        var definition = source.CreateApiJobDefinition(ApiResource.Bill, url, Backfill);
-        var job = await store.EnqueueAsync(definition, TestJobKeyPrefix + "bill-" + Guid.NewGuid().ToString("N"), default);
-        await ExecuteAsync($"UPDATE collection_jobs SET state = 'Succeeded' WHERE job_id = '{job.JobId}'");
+        var configuration = CongressBillSourceConfigurationTests.Configuration();
+        configuration = configuration with
+        {
+            Sources = [.. configuration.Sources.Select(source => source with { MinimumCongress = Math.Min(congress, source.MinimumCongress ?? congress) })]
+        };
+        var source = new ConfiguredCollectionSource(configuration, BillSourceId, Backfill.AddDays(400));
+        var listJob = await SucceededJobs.RootAsync(store, connectionString, CollectionFixtures.PageSource(sourceId: "list-root"),
+            TestJobKeyPrefix + "bill-list-" + Guid.NewGuid().ToString("N"));
+        var jobId = await SucceededJobs.BillDetailAsync(store, connectionString, source, listJob,
+            new CongressBillListItem(congress, "hconres", number, Backfill.AddDays(++billListSequence)));
         var text = $"Bill: {congress} hconres {number}\nTitle: A concurrent resolution\n{Guid.NewGuid():N}";
-        var extractionId = await extractions.SaveAsync(job.JobId, text, text, "parser", "normalizer");
+        var extractionId = await extractions.SaveAsync(jobId, text, text, "parser", "normalizer");
         var bill = new CongressBill(congress, "hconres", number, "A concurrent resolution", Backfill, updatedAt ?? Updated,
             BillGateFixtures.UntrackedPolicyArea, [], 0, 1, 0);
-        return new(source, job.JobId, bill, extractionId);
+        return new(source, jobId, bill, extractionId);
     }
 
     private Task AdmitPreparedBillDetailAsync(PreparedBillDetail prepared, bool hasTrackedIssue = false) =>

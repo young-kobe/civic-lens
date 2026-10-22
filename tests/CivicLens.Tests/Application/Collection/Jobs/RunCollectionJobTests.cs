@@ -250,7 +250,6 @@ public sealed class RunCollectionJobTests
         public bool ReturnFalseOnSettlement { get; init; }
         public Exception? SettlementFailure { get; init; }
         public CollectionRequest? StartRequest { get; init; }
-        public Task<CollectionJobRecord> EnqueueAsync(CollectionJobDefinition definition, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobRecord> EnqueueAsync(ConfiguredCollectionSource source, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobRecord?> RequestCheckAsync(ConfiguredCollectionSource source, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobRecord?> GetAsync(string jobId, CancellationToken cancellationToken)

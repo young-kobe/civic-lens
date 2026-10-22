@@ -154,12 +154,10 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
         shipped = shipped with { Sources = [source with { Enabled = true }] };
         var votes = Enumerable.Range(1, 250).Select(roll => Item(roll)).ToArray();
         var page = Page(HouseVoteFixtures.FirstSession, votes, SourceUrl + "/119/1?offset=250&limit=250&format=json");
-        var definition = new ConfiguredCollectionSource(shipped, HouseVoteFixtures.SourceId, Backfill.AddDays(400))
-            .CreateApiJobDefinition(ApiResource.HouseVoteList, HouseVoteListUrl.FirstPage(SourceUrl, page.Session), Backfill);
-        var list = await store.EnqueueAsync(definition, TestJobKeyPrefix + "pilot", default);
+        var configured = new ConfiguredCollectionSource(shipped, HouseVoteFixtures.SourceId, Backfill.AddDays(400));
+        var list = await SucceededJobs.RootAsync(store, connectionString, configured, TestJobKeyPrefix + "pilot");
 
-        var result = await store.AdmitListPageAsync(new ConfiguredCollectionSource(shipped, HouseVoteFixtures.SourceId,
-            Backfill.AddDays(400)), list.JobId, page, default);
+        var result = await store.AdmitListPageAsync(configured, list, page, default);
 
         Assert.Equal(251, result.AdmittedCount);
         Assert.Equal(0, result.DeferredCount);
@@ -168,7 +166,7 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
     [Fact]
     public async Task DetailRecordsTheVoteVersionAndAdmitsOneMembersJobKeyedByThatVersion()
     {
-        var detail = await EnqueueAsync("detail", ApiResource.HouseVoteDetail, SourceUrl + "/119/1/100?format=json");
+        var detail = await DetailJobAsync("detail", 100);
 
         var result = await AdmitDetailAsync(detail, HouseVoteFixtures.Vote(100, Updated));
 
@@ -182,7 +180,7 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
     [Fact]
     public async Task ARollCallWithoutLegislationIsRecordedWithNoBill()
     {
-        var detail = await EnqueueAsync("detail", ApiResource.HouseVoteDetail, SourceUrl + "/119/1/100?format=json");
+        var detail = await DetailJobAsync("detail", 100);
 
         await AdmitDetailAsync(detail, HouseVoteFixtures.Vote(100, Updated, billType: null, billNumber: null));
 
@@ -192,8 +190,8 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
     [Fact]
     public async Task ASecondDetailJobOfTheSameVoteVersionRecordsNothingAndAdmitsNoMembersJob()
     {
-        var first = await EnqueueAsync("first", ApiResource.HouseVoteDetail, SourceUrl + "/119/1/100?format=json");
-        var second = await EnqueueAsync("second", ApiResource.HouseVoteDetail, SourceUrl + "/119/1/100?format=json");
+        var first = await DetailJobAsync("first", 100);
+        var second = await DetailJobAsync("second", 100, Updated.AddDays(1));
         await AdmitDetailAsync(first, HouseVoteFixtures.Vote(100, Updated));
 
         var replay = await AdmitDetailAsync(second, HouseVoteFixtures.Vote(100, Updated));
@@ -208,8 +206,8 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
     [Fact]
     public async Task AChangedVoteIsRecordedAsANewVersionWithItsOwnMembersJob()
     {
-        var first = await EnqueueAsync("first", ApiResource.HouseVoteDetail, SourceUrl + "/119/1/100?format=json");
-        var second = await EnqueueAsync("second", ApiResource.HouseVoteDetail, SourceUrl + "/119/1/100?format=json");
+        var first = await DetailJobAsync("first", 100);
+        var second = await DetailJobAsync("second", 100, Updated.AddDays(1));
         await AdmitDetailAsync(first, HouseVoteFixtures.Vote(100, Updated));
 
         var result = await AdmitDetailAsync(second, HouseVoteFixtures.Vote(100, Updated.AddDays(2)));
@@ -222,7 +220,7 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
     [Fact]
     public async Task NoCandidateExistsUntilTheMembersOfTheVoteAreCaptured()
     {
-        var detail = await EnqueueAsync("detail", ApiResource.HouseVoteDetail, SourceUrl + "/119/1/100?format=json");
+        var detail = await DetailJobAsync("detail", 100);
 
         await AdmitDetailAsync(detail, HouseVoteFixtures.Vote(100, Updated));
 
@@ -333,8 +331,8 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
     [Fact]
     public async Task ADetailWithAnExtractionOfAnotherJobIsInvalidDataAndRecordsNoVote()
     {
-        var detail = await EnqueueAsync("detail", ApiResource.HouseVoteDetail, SourceUrl + "/119/1/100?format=json");
-        var other = await EnqueueAsync("other", ApiResource.HouseVoteDetail, SourceUrl + "/119/1/101?format=json");
+        var detail = await DetailJobAsync("detail", 100);
+        var other = await DetailJobAsync("other", 101);
 
         var foreign = await ExtractionAsync(other);
 
@@ -363,7 +361,7 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
     [Fact]
     public async Task TheDatabaseRefusesABillTypeWithoutANumber()
     {
-        var detail = await EnqueueAsync("detail", ApiResource.HouseVoteDetail, SourceUrl + "/119/1/100?format=json");
+        var detail = await DetailJobAsync("detail", 100);
 
         var extraction = await ExtractionAsync(detail);
 
@@ -377,8 +375,7 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
 
     private async Task<(string Detail, string Members)> DetailWithMembersJobAsync(HouseVote vote)
     {
-        var url = HouseVoteRollUrl.Detail(SourceUrl, vote.Roll);
-        var detail = await EnqueueAsync("detail-" + Guid.NewGuid().ToString("N"), ApiResource.HouseVoteDetail, url);
+        var detail = await DetailJobAsync("detail-" + Guid.NewGuid().ToString("N"), vote.Roll.Number, vote.UpdateDate);
         var result = await AdmitDetailAsync(detail, vote);
         return (detail, Assert.Single(result.Jobs).JobId);
     }
@@ -395,21 +392,18 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
         return extractions.SaveAsync(jobId, text, text, "parser", "normalizer");
     }
 
-    private async Task<string> EnqueueAsync(string name, ApiResource resource, string url)
+    private async Task<string> DetailJobAsync(string name, int roll, DateTimeOffset? listedAt = null)
     {
-        var definition = Source().CreateApiJobDefinition(resource, url, Backfill);
-        var job = await store.EnqueueAsync(definition, TestJobKeyPrefix + name, default);
-        await ExecuteAsync($"UPDATE collection_jobs SET state = 'Succeeded' WHERE job_id = '{job.JobId}'");
-        return job.JobId;
+        var admitted = await AdmitListAsync(name, Page(HouseVoteFixtures.FirstSession, Item(roll, listedAt)));
+        var detail = Assert.Single(admitted.Jobs, job => job.Url == HouseVoteRollUrl.Detail(SourceUrl, Item(roll).Roll));
+        await SucceededJobs.MarkSucceededAsync(connectionString, detail.JobId);
+        return detail.JobId;
     }
 
     private async Task<DiscoveryAdmissionResult> AdmitListAsync(string listJob, HouseVoteListPage page)
     {
-        var url = HouseVoteListUrl.FirstPage(SourceUrl, page.Session);
-        var definition = Source().CreateApiJobDefinition(ApiResource.HouseVoteList, url, Backfill);
-        var job = await store.EnqueueAsync(definition, TestJobKeyPrefix + listJob, default);
-        await ExecuteAsync($"UPDATE collection_jobs SET state = 'Succeeded' WHERE job_id = '{job.JobId}'");
-        return await store.AdmitListPageAsync(Source(), job.JobId, page, default);
+        var job = await SucceededJobs.RootAsync(store, connectionString, Source(), TestJobKeyPrefix + listJob);
+        return await store.AdmitListPageAsync(Source(), job, page, default);
     }
 
     private async Task MakeSourceDueAsync()

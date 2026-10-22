@@ -26,6 +26,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     private PostgresCollectionJobStore jobs = null!;
     private PostgresCollectionAttemptStore evidence = null!;
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(30);
+    private static readonly DateOnly RevisionCoverageDate = new(2026, 7, 1);
 
     public async Task InitializeAsync()
     {
@@ -51,7 +52,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
             Timeout = 3
         }.ConnectionString;
         jobs = PostgresCollectionJobStore.FromConnectionString(pooled);
-        var claim = await EnqueueClaimAsync("single-connection", Definition());
+        var claim = await EnqueueClaimAsync("single-connection", Source());
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
         var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404);
         await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
@@ -65,7 +66,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task ConflictingHandoffSettlesRetainedEvidenceWithoutRefundOrDeletion()
     {
-        var claim = await EnqueueClaimAsync("conflicting-handoff", Definition());
+        var claim = await EnqueueClaimAsync("conflicting-handoff", Source());
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
         var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404);
         await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
@@ -83,20 +84,20 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         Assert.Null(Assert.Single(result.Job.Attempts).Resolution!.Receipt);
         Assert.Equal(start.Attempt.AttemptId, Assert.Single(await handoffs.ListAsync(default)));
         Assert.Equal(receipt.FinalUrl, (await evidence.GetAsync(start.Attempt.AttemptId, default))!.AttemptResult.FinalUrl);
-        var next = await EnqueueClaimAsync("next", Definition());
+        var next = await EnqueueClaimAsync("next", Source());
         Assert.Equal(CollectionJobStartStatus.Started, (await jobs.TryStartAttemptAsync(next.Lease, root, default)).Status);
     }
 
     [Fact]
     public async Task GetAndListReadJobAttemptsWithoutWaitingForCoordinationLock()
     {
-        var first = await EnqueueClaimAsync("first", Definition());
+        var first = await EnqueueClaimAsync("first", Source());
         var initial = await jobs.TryStartAttemptAsync(first.Lease, root, default);
         await jobs.ReleaseCollectorAsync(first.Lease, initial.CollectorLease!, default);
         await jobs.SettleAttemptAsync(first.Lease, initial.Attempt!.AttemptId,
             new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null, "UnknownUsage"), default);
         var retry = await jobs.TryStartAttemptAsync(first.Lease, root, default);
-        var empty = await jobs.EnqueueAsync(Definition(), "empty", default);
+        var empty = await jobs.EnqueueAsync(Source(), "empty", default);
         var counter = new ReadCounter();
         var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString)
             .AddInterceptors(counter).Options;
@@ -141,7 +142,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task SettlementRejectsDifferentEvidenceBeforeRefundingBudget()
     {
-        var claim = await EnqueueClaimAsync("binding", Definition());
+        var claim = await EnqueueClaimAsync("binding", Source());
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
         var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404);
         await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
@@ -158,21 +159,21 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task EnqueueIsIdempotentAndConflictingKeysCannotReplaceSnapshots()
     {
-        var definition = Definition();
-        var enqueued = await Task.WhenAll(jobs.EnqueueAsync(definition, "request", default),
-            jobs.EnqueueAsync(definition, "request", default));
+        var source = Source();
+        var enqueued = await Task.WhenAll(jobs.EnqueueAsync(source, "request", default),
+            jobs.EnqueueAsync(source, "request", default));
         Assert.Equal(enqueued[0].JobId, enqueued[1].JobId);
-        await Assert.ThrowsAsync<ArgumentException>(() => jobs.EnqueueAsync(definition with { MaxBytes = 99 }, "request", default));
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.EnqueueAsync(Source(policy: new CollectionJobPolicy { InitialRetryDelaySeconds = 7 }), "request", default));
         var stored = Assert.Single(await jobs.ListAsync(10, default));
-        Assert.Equal(definition, stored.Definition);
+        Assert.Equal(CollectionFixtures.PageDefinition(), stored.Definition);
         Assert.Empty(stored.Attempts);
     }
 
     [Fact]
     public async Task SingletonAdmissionSurvivesDifferentRootsAndOriginBarrierOutlivesCollectorRelease()
     {
-        var first = await EnqueueClaimAsync("first", Definition());
-        var other = await EnqueueClaimAsync("other", Definition("https://other.test"));
+        var first = await EnqueueClaimAsync("first", Source());
+        var other = await EnqueueClaimAsync("other", Source("https://other.test"));
         var starts = await Task.WhenAll(jobs.TryStartAttemptAsync(first.Lease, root, default),
             jobs.TryStartAttemptAsync(other.Lease, root + "-other", default));
         Assert.Single(starts, start => start.Status == CollectionJobStartStatus.Started);
@@ -181,7 +182,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var active = starts.Single(start => start.Status == CollectionJobStartStatus.Started);
         Assert.True(await jobs.ReleaseCollectorAsync(winner.Lease, active.CollectorLease!, default));
 
-        var sameOrigin = await EnqueueClaimAsync("same", winner.Job.Definition);
+        var sameOrigin = await EnqueueClaimAsync("same", Source(winner.Job.Definition.AllowedOrigin));
         var blocked = await jobs.TryStartAttemptAsync(sameOrigin.Lease, root, default);
         Assert.Equal(CollectionJobBlockReason.AttemptUnresolved, blocked.BlockReason);
         Assert.Empty((await jobs.GetAsync(sameOrigin.Job.JobId, default))!.Attempts);
@@ -190,7 +191,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task ExpiredOwnerCannotRenewSettleOrReleaseNewOwnershipAndReservationsSurvive()
     {
-        var original = await EnqueueClaimAsync("expired", Definition());
+        var original = await EnqueueClaimAsync("expired", Source());
         var start = await jobs.TryStartAttemptAsync(original.Lease, root, default);
         await SqlAsync("UPDATE collection_jobs SET lease_expires_at = 1; UPDATE collection_collector_slot SET expires_at = 1;");
         var recovered = (await jobs.TryClaimAsync(original.Job.JobId, LeaseDuration, default))!;
@@ -200,7 +201,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         Assert.False(await jobs.ReleaseCollectorAsync(original.Lease, start.CollectorLease!, default));
         var interrupted = new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null, "NoReceipt");
         Assert.False(await jobs.SettleAttemptAsync(original.Lease, start.Attempt!.AttemptId, interrupted, default));
-        var competing = await EnqueueClaimAsync("competing", Definition());
+        var competing = await EnqueueClaimAsync("competing", Source());
         Assert.Equal(CollectionJobBlockReason.AttemptUnresolved,
             (await jobs.TryStartAttemptAsync(competing.Lease, root, default)).BlockReason);
         Assert.True(await jobs.SettleAttemptAsync(recovered.Lease, start.Attempt.AttemptId, interrupted, default));
@@ -214,15 +215,15 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task RateLimitBackoffIsSharedByOriginAndVerifiedUsageRefundsUnusedReservation()
     {
-        var job = await jobs.EnqueueAsync(Definition(), "limited", default);
+        var job = await jobs.EnqueueAsync(Source(), "limited", default);
         var runner = Runner(new ReceiptCollector(429));
         var completed = await runner.ExecuteAsync(job.JobId, root, LeaseDuration);
         Assert.Equal(CollectionJobState.WaitingToRetry, completed.Job!.State);
         Assert.Equal(2, CollectionJobCharges.Of(completed.Job.Attempts).Requests);
         Assert.Equal(0, CollectionJobCharges.Of(completed.Job.Attempts).Bytes);
         Assert.Equal(10, CollectionJobCharges.Of(completed.Job.Attempts).TimeoutSeconds);
-        Assert.True(await UnclaimableUntilAsync("same-origin", Definition()) > DateTimeOffset.UtcNow.AddSeconds(50));
-        var unrelated = await EnqueueClaimAsync("unrelated", Definition("https://elsewhere.test"));
+        Assert.True(await UnclaimableUntilAsync("same-origin", Source()) > DateTimeOffset.UtcNow.AddSeconds(50));
+        var unrelated = await EnqueueClaimAsync("unrelated", Source("https://elsewhere.test"));
         Assert.Equal(CollectionJobStartStatus.Started,
             (await jobs.TryStartAttemptAsync(unrelated.Lease, root, default)).Status);
     }
@@ -230,7 +231,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task DerivedChargesMatchTheRetiredCountersAcrossStartRefundAndRetry()
     {
-        var claim = await EnqueueClaimAsync("derived", Definition());
+        var claim = await EnqueueClaimAsync("derived", Source());
         var counters = new CollectionJobCharges(0, 0, 0);
 
         var first = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
@@ -273,22 +274,22 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task RateLimitOnOneGroupMemberDelaysAnotherMemberOfTheSameGroup()
     {
-        var limited = await jobs.EnqueueAsync(GroupedDefinition("a.house.gov"), "group-limited", default);
+        var limited = await jobs.EnqueueAsync(GroupedSource("a.house.gov"), "group-limited", default);
         await Runner(new RobotsDeferredCollector(CollectionFailureCode.RateLimited)).ExecuteAsync(limited.JobId, root, LeaseDuration);
 
-        Assert.True(await UnclaimableUntilAsync("group-sibling", GroupedDefinition("b.house.gov")) >
+        Assert.True(await UnclaimableUntilAsync("group-sibling", GroupedSource("b.house.gov")) >
             DateTimeOffset.UtcNow.AddSeconds(50));
-        var otherGroup = await EnqueueClaimAsync("group-other", GroupedDefinition("a.senate.gov"));
+        var otherGroup = await EnqueueClaimAsync("group-other", GroupedSource("a.senate.gov"));
         Assert.Equal(CollectionJobStartStatus.Started, (await jobs.TryStartAttemptAsync(otherGroup.Lease, root, default)).Status);
     }
 
     [Fact]
     public async Task ServerErrorOnOneGroupMemberOnlyAppliesTheNormalGroupDelay()
     {
-        var failed = await jobs.EnqueueAsync(GroupedDefinition("a.house.gov"), "group-server-error", default);
+        var failed = await jobs.EnqueueAsync(GroupedSource("a.house.gov"), "group-server-error", default);
         await Runner(new RobotsDeferredCollector(CollectionFailureCode.RobotsUnavailable)).ExecuteAsync(failed.JobId, root, LeaseDuration);
 
-        var unclaimableUntil = await UnclaimableUntilAsync("group-after-error", GroupedDefinition("b.house.gov"));
+        var unclaimableUntil = await UnclaimableUntilAsync("group-after-error", GroupedSource("b.house.gov"));
 
         Assert.InRange(unclaimableUntil, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddSeconds(10));
     }
@@ -296,10 +297,10 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task EverySettlementSpacesGroupMembersByTheGroupDelay()
     {
-        var first = await jobs.EnqueueAsync(GroupedDefinition("a.house.gov"), "group-spacing", default);
+        var first = await jobs.EnqueueAsync(GroupedSource("a.house.gov"), "group-spacing", default);
         await Runner(new ReceiptCollector(404)).ExecuteAsync(first.JobId, root, LeaseDuration);
 
-        var unclaimableUntil = await UnclaimableUntilAsync("group-spacing-sibling", GroupedDefinition("b.house.gov"));
+        var unclaimableUntil = await UnclaimableUntilAsync("group-spacing-sibling", GroupedSource("b.house.gov"));
 
         Assert.InRange(unclaimableUntil, DateTimeOffset.UtcNow.AddSeconds(1), DateTimeOffset.UtcNow.AddSeconds(4));
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM collection_job_origins WHERE origin = 'group:house.gov'"));
@@ -308,10 +309,10 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task LookalikeHostOutsideTheGroupIsNotDelayed()
     {
-        var limited = await jobs.EnqueueAsync(GroupedDefinition("a.house.gov"), "lookalike-limited", default);
+        var limited = await jobs.EnqueueAsync(GroupedSource("a.house.gov"), "lookalike-limited", default);
         await Runner(new RobotsDeferredCollector(CollectionFailureCode.RateLimited)).ExecuteAsync(limited.JobId, root, LeaseDuration);
 
-        var lookalike = await EnqueueClaimAsync("lookalike", GroupedDefinition("evilhouse.gov"));
+        var lookalike = await EnqueueClaimAsync("lookalike", GroupedSource("evilhouse.gov"));
 
         Assert.Equal(CollectionJobStartStatus.Started, (await jobs.TryStartAttemptAsync(lookalike.Lease, root, default)).Status);
     }
@@ -319,8 +320,8 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task AClosedGroupLeavesItsJobsUnclaimedWhileAnotherGroupInTheSameQueueIsClaimed()
     {
-        var paced = await jobs.EnqueueAsync(GroupedDefinition("b.house.gov"), "closed-group", default);
-        var open = await jobs.EnqueueAsync(GroupedDefinition("a.senate.gov"), "open-group", default);
+        var paced = await jobs.EnqueueAsync(GroupedSource("b.house.gov"), "closed-group", default);
+        var open = await jobs.EnqueueAsync(GroupedSource("a.senate.gov"), "open-group", default);
         await ClosePacingKeyAsync("group:house.gov", TimeSpan.FromHours(1));
 
         var page = await PostgresCollectionWorkerQueue.FromConnectionString(connectionString)
@@ -334,7 +335,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task AJobBecomesClaimableOnceItsPacingBlockExpires()
     {
-        var paced = await jobs.EnqueueAsync(GroupedDefinition("b.house.gov"), "expiring-group", default);
+        var paced = await jobs.EnqueueAsync(GroupedSource("b.house.gov"), "expiring-group", default);
         await ClosePacingKeyAsync("group:house.gov", TimeSpan.FromHours(1));
         Assert.Null(await jobs.TryClaimAsync(paced.JobId, LeaseDuration, default));
 
@@ -349,7 +350,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task RunningAJobWhoseGroupIsClosedReportsTheGroupBackoffInsteadOfNotClaimed()
     {
-        var paced = await jobs.EnqueueAsync(GroupedDefinition("b.house.gov"), "run-closed-group", default);
+        var paced = await jobs.EnqueueAsync(GroupedSource("b.house.gov"), "run-closed-group", default);
         await ClosePacingKeyAsync("group:house.gov", TimeSpan.FromHours(1));
         var notBefore = (long)(await ScalarAsync("SELECT not_before FROM collection_job_origins WHERE origin = 'group:house.gov'"))!;
 
@@ -364,7 +365,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task RunningAJobThatAnotherWorkerHoldsIsStillNotClaimed()
     {
-        var held = await EnqueueClaimAsync("run-held", Definition());
+        var held = await EnqueueClaimAsync("run-held", Source());
 
         var result = await Runner(new RejectCollector()).ExecuteAsync(held.Job.JobId, root, LeaseDuration);
 
@@ -375,7 +376,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task ARunningJobIsClaimedForRecoveryEvenWhileItsPacingKeyIsClosed()
     {
-        var claim = await EnqueueClaimAsync("recover-paced", GroupedDefinition("a.house.gov"));
+        var claim = await EnqueueClaimAsync("recover-paced", GroupedSource("a.house.gov"));
         Assert.Equal(CollectionJobStartStatus.Started, (await jobs.TryStartAttemptAsync(claim.Lease, root, default)).Status);
         await SqlAsync("UPDATE collection_jobs SET lease_expires_at = 1; UPDATE collection_collector_slot SET expires_at = 1;");
         await ClosePacingKeyAsync("group:house.gov", TimeSpan.FromHours(1));
@@ -386,8 +387,8 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task EachNewJobStoresTheKeyThatPacesItsAdmission()
     {
-        var grouped = await jobs.EnqueueAsync(GroupedDefinition("a.house.gov"), "grouped-key", default);
-        var ungrouped = await jobs.EnqueueAsync(Definition(), "origin-key", default);
+        var grouped = await jobs.EnqueueAsync(GroupedSource("a.house.gov"), "grouped-key", default);
+        var ungrouped = await jobs.EnqueueAsync(Source(), "origin-key", default);
 
         Assert.Equal("group:house.gov", await ScalarAsync($"SELECT pacing_key FROM collection_jobs WHERE job_id = '{grouped.JobId}'"));
         Assert.Equal("https://example.test:443",
@@ -400,7 +401,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         ON CONFLICT (origin) DO UPDATE SET not_before = EXCLUDED.not_before
         """);
 
-    private static CollectionJobDefinition GroupedDefinition(string host)
+    private static ConfiguredCollectionSource GroupedSource(string host)
     {
         var configuration = new CollectionConfiguration
         {
@@ -416,13 +417,13 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
                 new PacingGroupConfiguration { HostSuffix = "senate.gov", MinDelayMilliseconds = 3000 }
             ]
         };
-        return CollectionFixtures.Definition(configuration, host, new DateOnly(2026, 7, 1));
+        return new ConfiguredCollectionSource(configuration, host, new DateOnly(2026, 7, 1));
     }
 
     [Fact]
     public async Task SavedReceiptRecoveryImportsWithoutCollectorAndCancellationPreservesEvidence()
     {
-        var claim = await EnqueueClaimAsync("recover", Definition());
+        var claim = await EnqueueClaimAsync("recover", Source());
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
         var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404);
         var handoffs = new FileCollectionReceiptHandoffStore(root);
@@ -442,7 +443,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task AlreadyImportedReceiptWithoutSpoolRetainsReservationAndServerBackoff()
     {
-        var claim = await EnqueueClaimAsync("already-imported", Definition());
+        var claim = await EnqueueClaimAsync("already-imported", Source());
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
         var receipt = await new ReceiptCollector(429).RunAsync(start.Attempt!.Request, default);
         await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
@@ -454,13 +455,13 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         Assert.Equal(CollectionJobState.WaitingToRetry, result.Job!.State);
         Assert.Equal(5, CollectionJobCharges.Of(result.Job.Attempts).Requests);
         Assert.Equal(100, CollectionJobCharges.Of(result.Job.Attempts).Bytes);
-        Assert.True(await UnclaimableUntilAsync("after-recovery", Definition()) > DateTimeOffset.UtcNow);
+        Assert.True(await UnclaimableUntilAsync("after-recovery", Source()) > DateTimeOffset.UtcNow);
     }
 
     [Fact]
     public async Task SuccessfulCaptureRecoveryWithoutSpoolPreservesRobotsDelay()
     {
-        var claim = await EnqueueClaimAsync("robots-delay-capture-recovery", Definition());
+        var claim = await EnqueueClaimAsync("robots-delay-capture-recovery", Source());
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
         var hash = new string('a', 64);
         var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404) with
@@ -479,33 +480,33 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var recovered = await Runner(new RejectCollector()).ExecuteAsync(claim.Job.JobId, root, LeaseDuration);
 
         Assert.Equal(CollectionJobState.Succeeded, recovered.Job!.State);
-        Assert.True(await UnclaimableUntilAsync("robots-delay-capture-same-origin", Definition()) >
+        Assert.True(await UnclaimableUntilAsync("robots-delay-capture-same-origin", Source()) >
             DateTimeOffset.UtcNow.AddSeconds(40));
     }
 
     [Fact]
     public async Task RobotsRateLimitWithoutContentRequestSharesRetryAfterBackoff()
     {
-        var job = await jobs.EnqueueAsync(Definition(), "robots-rate-limit", default);
+        var job = await jobs.EnqueueAsync(Source(), "robots-rate-limit", default);
         var completed = await Runner(new RobotsRateLimitedCollector()).ExecuteAsync(job.JobId, root, LeaseDuration);
         Assert.Equal(CollectionJobState.WaitingToRetry, completed.Job!.State);
 
-        Assert.True(await UnclaimableUntilAsync("robots-rate-limit-same-origin", Definition()) >
+        Assert.True(await UnclaimableUntilAsync("robots-rate-limit-same-origin", Source()) >
             DateTimeOffset.UtcNow.AddSeconds(50));
     }
 
     [Fact]
     public async Task UnknownUsageCannotResetAggregateBudgetAndCancellationPreventsAdmission()
     {
-        var definition = Definition(policy: new CollectionJobPolicy { MaxAttempts = 3, MaxTotalRequests = 5, InitialRetryDelaySeconds = 0 });
-        var claim = await EnqueueClaimAsync("budget", definition);
+        var source = Source(policy: new CollectionJobPolicy { MaxAttempts = 3, MaxTotalRequests = 5, InitialRetryDelaySeconds = 0 });
+        var claim = await EnqueueClaimAsync("budget", source);
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
         await jobs.ReleaseCollectorAsync(claim.Lease, start.CollectorLease!, default);
         Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt!.AttemptId,
             new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null, "UnknownUsage"), default));
         Assert.Equal(CollectionJobState.Failed, (await jobs.GetAsync(claim.Job.JobId, default))!.State);
         Assert.Equal(CollectionJobStartStatus.Exhausted, (await jobs.TryStartAttemptAsync(claim.Lease, root, default)).Status);
-        var cancelled = await EnqueueClaimAsync("cancel", Definition());
+        var cancelled = await EnqueueClaimAsync("cancel", Source());
         await jobs.CancelAsync(cancelled.Job.JobId, default);
         Assert.True((await jobs.RenewAsync(cancelled.Lease, null, LeaseDuration, default)).CancellationRequested);
         Assert.Equal(CollectionJobStartStatus.Cancelled, (await jobs.TryStartAttemptAsync(cancelled.Lease, root, default)).Status);
@@ -514,7 +515,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task SettlingACapturedJobQueuesOnePreparationRowAndReplayDoesNotAddAnother()
     {
-        var claim = await EnqueueClaimAsync("prepare-captured", Definition());
+        var claim = await EnqueueClaimAsync("prepare-captured", Source());
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
         var receipt = await CapturedReceiptAsync(start.Attempt!.Request);
         await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
@@ -532,7 +533,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task SettlingWithoutAReceiptQueuesOnePreparationRow()
     {
-        var claim = await EnqueueClaimAsync("prepare-no-receipt", Definition());
+        var claim = await EnqueueClaimAsync("prepare-no-receipt", Source());
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
         var receipt = await CapturedReceiptAsync(start.Attempt!.Request);
         await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
@@ -547,7 +548,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task SuccessAfterARetryQueuesOnePreparationRowAndFailureQueuesNone()
     {
-        var retry = await EnqueueClaimAsync("prepare-retry", Definition());
+        var retry = await EnqueueClaimAsync("prepare-retry", Source());
         var first = await jobs.TryStartAttemptAsync(retry.Lease, root, default);
         await jobs.ReleaseCollectorAsync(retry.Lease, first.CollectorLease!, default);
         Assert.True(await jobs.SettleAttemptAsync(retry.Lease, first.Attempt!.AttemptId,
@@ -562,7 +563,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         await jobs.ReleaseCollectorAsync(retry.Lease, second.CollectorLease!, default);
         await SqlAsync("UPDATE collection_job_origins SET not_before = 0");
 
-        var failed = await EnqueueClaimAsync("prepare-failed", Definition());
+        var failed = await EnqueueClaimAsync("prepare-failed", Source());
         var start = await jobs.TryStartAttemptAsync(failed.Lease, root, default);
         var notFound = ReceiptCollector.Result(start.Attempt!.Request, 404);
         await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, notFound, evidence, default);
@@ -573,7 +574,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task ExistingPreparationRowIsKeptWhenAJobSucceeds()
     {
-        var claim = await EnqueueClaimAsync("prepare-existing", Definition());
+        var claim = await EnqueueClaimAsync("prepare-existing", Source());
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
         var receipt = await CapturedReceiptAsync(start.Attempt!.Request);
         await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
@@ -591,7 +592,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task FailedPreparationInsertRollsBackTheSettlement()
     {
-        var claim = await EnqueueClaimAsync("prepare-rollback", Definition());
+        var claim = await EnqueueClaimAsync("prepare-rollback", Source());
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
         var receipt = await CapturedReceiptAsync(start.Attempt!.Request);
         await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
@@ -673,7 +674,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         new FileCollectionReceiptHandoffStore(root), new CaptureArtifactVerifier(), collector, NullLogger<RunCollectionJob>.Instance);
 
     [Fact]
-    public async Task NewJobsRetainRevisionsAndRefuseAnotherRevisionOrAnUnboundDefinitionAtEnqueue()
+    public async Task NewJobsRetainRevisionsAndRefuseAnotherRevisionAtEnqueue()
     {
         var configuration = new CollectionConfiguration
         {
@@ -684,15 +685,15 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
                 AllowedOrigin = "https://example.test", AllowedPathPrefix = "/"
             }]
         };
-        var definition = CollectionFixtures.Definition(configuration, "source", new DateOnly(2026, 7, 1));
-        var current = await jobs.EnqueueAsync(definition, "current", default);
+        var coverageDate = new DateOnly(2026, 7, 1);
+        var original = new ConfiguredCollectionSource(configuration, "source", coverageDate);
+        var current = await jobs.EnqueueAsync(original, "current", default);
         var reopened = PostgresCollectionJobStore.FromConnectionString(connectionString);
         var stored = await reopened.GetAsync(current.JobId, default);
-        Assert.Equal(definition, stored!.Definition);
+        Assert.Equal(original.CreateJobDefinition(coverageDate), stored!.Definition);
         configuration.People[0] = configuration.People[0] with { Name = "Correction" };
-        var corrected = CollectionFixtures.Definition(configuration, "source", definition.CoverageAsOf);
+        var corrected = new ConfiguredCollectionSource(configuration, "source", coverageDate);
         await Assert.ThrowsAsync<ArgumentException>(() => reopened.EnqueueAsync(corrected, "current", default));
-        await Assert.ThrowsAsync<ArgumentException>(() => reopened.EnqueueAsync(definition with { ConfigurationRevision = null, CoverageAsOf = null }, "current", default));
 
         var source = new ConfiguredCollectionSource(configuration, "source");
         var concurrent = await Task.WhenAll(jobs.EnqueueAsync(source, "concurrent-configured", default),
@@ -729,7 +730,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
             }]
         };
         var definition = CollectionFixtures.Definition(configuration, "source", new DateOnly(2026, 7, 1));
-        var claim = await EnqueueClaimAsync("corrupt-binding", definition);
+        var claim = await EnqueueClaimAsync("corrupt-binding", new ConfiguredCollectionSource(configuration, "source", new DateOnly(2026, 7, 1)));
         var invalid = removeDate ? definition with { CoverageAsOf = null } : definition with { MaxBytes = 100 };
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
@@ -750,9 +751,10 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task AJobReadsBackTheExactRevisionAndTheRowStoresOnlyItsId()
     {
-        var definition = RevisionDefinition();
+        var source = RevisionSource();
+        var definition = source.CreateJobDefinition(RevisionCoverageDate);
 
-        var job = await jobs.EnqueueAsync(definition, "revision-reference", default);
+        var job = await jobs.EnqueueAsync(source, "revision-reference", default);
 
         var read = await jobs.GetAsync(job.JobId, default);
         Assert.Equal(definition.ConfigurationRevision, read!.Definition.ConfigurationRevision);
@@ -765,19 +767,19 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task JobsAdmittedFromOneRevisionShareOneStoredRevision()
     {
-        var definition = RevisionDefinition();
+        var source = RevisionSource();
 
-        await jobs.EnqueueAsync(definition, "shared-one", default);
-        await jobs.EnqueueAsync(definition, "shared-two", default);
+        await jobs.EnqueueAsync(source, "shared-one", default);
+        await jobs.EnqueueAsync(source, "shared-two", default);
 
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM collection_configuration_revisions"));
-        Assert.All(await jobs.ListAsync(10, default), job => Assert.Equal(definition.ConfigurationRevision, job.Definition.ConfigurationRevision));
+        Assert.All(await jobs.ListAsync(10, default), job => Assert.Equal(source.Revision, job.Definition.ConfigurationRevision));
     }
 
     [Fact]
     public async Task ATamperedStoredRevisionFailsTheHashCheckInsteadOfBindingTheJobToDifferentSettings()
     {
-        var job = await jobs.EnqueueAsync(RevisionDefinition(), "tampered-revision", default);
+        var job = await jobs.EnqueueAsync(RevisionSource(), "tampered-revision", default);
         await ExecuteAsync("UPDATE collection_configuration_revisions SET json = json || ' '");
 
         await Assert.ThrowsAsync<InvalidDataException>(() => jobs.GetAsync(job.JobId, default));
@@ -786,7 +788,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task TheDatabaseRefusesToDeleteARevisionThatAJobStillNeeds()
     {
-        var job = await jobs.EnqueueAsync(RevisionDefinition(), "referenced-revision", default);
+        var job = await jobs.EnqueueAsync(RevisionSource(), "referenced-revision", default);
 
         var refused = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync("DELETE FROM collection_configuration_revisions"));
 
@@ -797,13 +799,13 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task AStoredJobRowWithoutARevisionCannotBeRead()
     {
-        var job = await jobs.EnqueueAsync(Definition(), "unbound-row", default);
+        var job = await jobs.EnqueueAsync(Source(), "unbound-row", default);
         await SqlAsync($"UPDATE collection_jobs SET configuration_revision_id = NULL WHERE job_id = '{job.JobId}'");
 
         await Assert.ThrowsAsync<InvalidDataException>(() => jobs.GetAsync(job.JobId, default));
     }
 
-    private static CollectionJobDefinition RevisionDefinition()
+    private static ConfiguredCollectionSource RevisionSource()
     {
         var configuration = new CollectionConfiguration
         {
@@ -814,7 +816,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
                 AllowedOrigin = "https://example.test", AllowedPathPrefix = "/"
             }]
         };
-        return CollectionFixtures.Definition(configuration, "source", new DateOnly(2026, 7, 1));
+        return new ConfiguredCollectionSource(configuration, "source", RevisionCoverageDate);
     }
 
     private async Task<object?> ScalarAsync(string sql)
@@ -838,7 +840,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     public async Task JobPagesWalkOlderThenNewerOverTheSameRowsEvenWhenCreationTimesTie()
     {
         var ids = new List<string>();
-        for (var index = 0; index < 7; index++) ids.Add((await jobs.EnqueueAsync(Definition(), "page-" + index, default)).JobId);
+        for (var index = 0; index < 7; index++) ids.Add((await jobs.EnqueueAsync(Source(), "page-" + index, default)).JobId);
         // Three jobs share each creation time, so only the job ID tie-breaker (ascending) separates them.
         var keyed = ids.Select((id, index) => (Id: id, Ticks: 5_000L + index / 3)).ToArray();
         foreach (var key in keyed) await SqlAsync($"UPDATE collection_jobs SET created_at = {key.Ticks} WHERE job_id = '{key.Id}'");
@@ -873,12 +875,12 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
                 Url = $"https://example.test/{id}", AllowedOrigin = "https://example.test", AllowedPathPrefix = "/"
             })]
         };
-        var a = CollectionFixtures.Definition(configuration, "a");
+        var a = new ConfiguredCollectionSource(configuration, "a");
         var older = await jobs.EnqueueAsync(a, "a-old", default);
         var newer = await jobs.EnqueueAsync(a, "a-new", default);
-        var article = await jobs.EnqueueAsync(a with { Mode = CollectionMode.Page, Url = "https://example.test/a/article" },
-            "a-article", default);
-        var other = await jobs.EnqueueAsync(CollectionFixtures.Definition(configuration, "b"), "b-only", default);
+        var article = Assert.Single((await DiscoveredArticles.AdmitAsync(jobs, evidence, a, "a-article",
+            "https://example.test/a/article")).Jobs);
+        var other = await jobs.EnqueueAsync(new ConfiguredCollectionSource(configuration, "b"), "b-only", default);
         await SqlAsync($"UPDATE collection_jobs SET created_at = 100 WHERE job_id = '{older.JobId}'");
         await SqlAsync($"UPDATE collection_jobs SET created_at = 200 WHERE job_id = '{newer.JobId}'");
         await SqlAsync($"UPDATE collection_jobs SET created_at = 300 WHERE job_id = '{article.JobId}'");
@@ -895,13 +897,13 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     public async Task LatestBySourceFindsTheNewestBillListJobAndSkipsNewerDetailJobs()
     {
         var backfill = new DateOnly(2025, 1, 3);
-        var configured = new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", backfill);
-        var listUrl = new BillStreamWindow(backfill, backfill).RequestUrl(configured.SourceUrl);
-        var list = await jobs.EnqueueAsync(configured.CreateApiJobDefinition(ApiResource.BillList, listUrl, backfill), "list", default);
-        var detail = await jobs.EnqueueAsync(configured.CreateApiJobDefinition(ApiResource.Bill,
-            "https://api.congress.gov/v3/bill/119/hr/1?format=json", backfill), "detail", default);
+        var configuration = CongressBillSourceConfigurationTests.Configuration();
+        var configured = new ConfiguredCollectionSource(configuration, "congress-bills", backfill);
+        var list = await SucceededJobs.ScheduledBillListAsync(jobs, connectionString, configuration);
+        var detailId = await SucceededJobs.BillDetailAsync(jobs, connectionString, configured, list.JobId,
+            new CongressBillListItem(119, "hr", 1, backfill));
         await SqlAsync($"UPDATE collection_jobs SET created_at = 100 WHERE job_id = '{list.JobId}'");
-        await SqlAsync($"UPDATE collection_jobs SET created_at = 200 WHERE job_id = '{detail.JobId}'");
+        await SqlAsync($"UPDATE collection_jobs SET created_at = 200 WHERE job_id = '{detailId}'");
 
         var latest = await jobs.ListLatestBySourceAsync(["congress-bills"], default);
 
@@ -911,9 +913,9 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     [Fact]
     public async Task ActivityListsNewestStartsAndFailuresByFailureTime()
     {
-        var oldFailure = await jobs.EnqueueAsync(Definition(sourceId: "old-failure"), "old-failure", default);
-        var lateFailure = await jobs.EnqueueAsync(Definition(sourceId: "late-failure"), "late-failure", default);
-        var running = await jobs.EnqueueAsync(Definition(sourceId: "fine"), "fine", default);
+        var oldFailure = await jobs.EnqueueAsync(Source(sourceId: "old-failure"), "old-failure", default);
+        var lateFailure = await jobs.EnqueueAsync(Source(sourceId: "late-failure"), "late-failure", default);
+        var running = await jobs.EnqueueAsync(Source(sourceId: "fine"), "fine", default);
         await SqlAsync($"UPDATE collection_jobs SET created_at = 100, state = 'Failed' WHERE job_id = '{oldFailure.JobId}'");
         await SqlAsync($"UPDATE collection_jobs SET created_at = 50, state = 'Failed' WHERE job_id = '{lateFailure.JobId}'");
         await SqlAsync($"UPDATE collection_jobs SET created_at = 200 WHERE job_id = '{running.JobId}'");
@@ -930,15 +932,15 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         Assert.Equal(new DateTimeOffset(100, TimeSpan.Zero), activity.Failed[1].OccurredAt);
     }
 
-    private async Task<CollectionJobClaim> EnqueueClaimAsync(string key, CollectionJobDefinition definition)
+    private async Task<CollectionJobClaim> EnqueueClaimAsync(string key, ConfiguredCollectionSource source)
     {
-        var job = await jobs.EnqueueAsync(definition, key, default);
+        var job = await jobs.EnqueueAsync(source, key, default);
         return (await jobs.TryClaimAsync(job.JobId, LeaseDuration, default))!;
     }
 
-    private async Task<DateTimeOffset> UnclaimableUntilAsync(string key, CollectionJobDefinition definition)
+    private async Task<DateTimeOffset> UnclaimableUntilAsync(string key, ConfiguredCollectionSource source)
     {
-        var job = await jobs.EnqueueAsync(definition, key, default);
+        var job = await jobs.EnqueueAsync(source, key, default);
         Assert.Null(await jobs.TryClaimAsync(job.JobId, LeaseDuration, default));
         var notBefore = (long)(await ScalarAsync($"""
             SELECT pace.not_before FROM collection_jobs job
@@ -956,9 +958,9 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         await command.ExecuteNonQueryAsync();
     }
 
-    private static CollectionJobDefinition Definition(string origin = "https://example.test",
+    private static ConfiguredCollectionSource Source(string origin = "https://example.test",
         CollectionJobPolicy? policy = null, string sourceId = "source") =>
-        CollectionFixtures.PageDefinition(origin, policy: policy, sourceId: sourceId);
+        CollectionFixtures.PageSource(origin, policy: policy, sourceId: sourceId);
 
     private sealed class RejectCollector : ICollectorProcess
     {
