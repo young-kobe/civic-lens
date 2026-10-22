@@ -60,6 +60,48 @@ public sealed class ListPublishableTests
         Assert.Equal([(withdrawn, true), (fresh, false)], list.Items.Select(item => (item.RecordId, item.IsWithdrawn)));
     }
 
+    private static async Task<(PublicationScenario Scenario, ReadyToPublishList List, string Same, string Higher)> WithdrawnAtRevisionOneAsync()
+    {
+        var scenario = new PublicationScenario();
+        var same = scenario.AddAction('a');
+        var higher = scenario.AddAction('b');
+        foreach (var id in new[] { same, higher })
+            await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, id)], $"k-{id}"));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "w")
+        {
+            Withdrawals = [new(PublishedRecordKind.Action, same, "Wrong."), new(PublishedRecordKind.Action, higher, "Wrong.")]
+        });
+        scenario.ReviseAction(higher, 2);
+        scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[same].Review, null));
+        scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[higher].Review, null));
+
+        var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
+        return (scenario, list, same, higher);
+    }
+
+    [Fact]
+    public async Task AWithdrawnRecordCanReturnOnlyAboveTheWithdrawnRevision()
+    {
+        var (_, list, same, higher) = await WithdrawnAtRevisionOneAsync();
+
+        Assert.Equal([(same, 1, false), (higher, 1, true)],
+            list.Items.Select(item => (item.RecordId, item.WithdrawnRevisionNumber!.Value, item.CanReturn)).OrderBy(item => item.RecordId));
+    }
+
+    [Fact]
+    public async Task TheListAndThePublishLoaderAgreeOnWhichWithdrawnRecordsCanReturnSoNoCheckboxLeadsToARefusal()
+    {
+        var (scenario, list, _, _) = await WithdrawnAtRevisionOneAsync();
+
+        foreach (var item in list.Items)
+        {
+            var publish = () => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+                new PublishReleaseRequest([item.Reference], $"r-{item.RecordId}") { Notes = [new(item.Kind, item.RecordId, "Back.")] });
+            if (item.CanReturn) await publish();
+            else Assert.Contains("Revise it before it returns", (await Assert.ThrowsAsync<ArgumentException>(publish)).Message, StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     public async Task ApprovedDraftWithAnUnresolvedConcernIsNotReadyBecausePublishWouldRefuseIt()
     {

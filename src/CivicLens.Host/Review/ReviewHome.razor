@@ -178,7 +178,7 @@
                                         <td><a class="cell-title" href="@RecordRoutes.Editor(item.Kind, item.RecordId)">@DraftStatusDisplay.DraftName(item.Headline)</a></td>
                                         <td>@PublishedRecordLabels.Kind(item.Kind)</td>
                                         <td>
-                                            <StatusBadge Tone="@(item.IsReplacement ? Tone.Warn : Tone.Ok)" Text="@(item.IsReplacement ? "Replacement" : "New")" />
+                                            <StatusBadge Tone="@(item.NeedsNote ? Tone.Warn : Tone.Ok)" Text="@(item.IsWithdrawn ? "Returning" : item.IsReplacement ? "Replacement" : "New")" />
                                             @if (item.NoLongerMatches)
                                             {
                                                 <StatusBadge Tone="Tone.Warn" Text="No longer matches" />
@@ -186,7 +186,7 @@
                                         </td>
                                         <td class="num hide-narrow">@item.RevisionNumber</td>
                                         <td>
-                                            @if (item.IsReplacement)
+                                            @if (item.NeedsNote)
                                             {
                                                 <textarea class="plain" form="publish-confirm" name="@($"notes[{item.Reference}]")" maxlength="@PublishedCorrection.MaximumNoteLength" rows="2" aria-label="@($"Correction note for {DraftStatusDisplay.DraftName(item.Headline)}")"></textarea>
                                             }
@@ -211,7 +211,7 @@
                                     </Head>
                                     <Row Context="item">
                                         <td class="fit">
-                                            @if (!item.IsWithdrawn)
+                                            @if (item.IsSelectable)
                                             {
                                                 <input type="checkbox" form="publish-select" name="publish" value="@item.Reference" aria-label="@($"Select {DraftStatusDisplay.DraftName(item.Headline)}")" />
                                             }
@@ -221,8 +221,11 @@
                                         <td>
                                             @if (item.IsWithdrawn)
                                             {
-                                                <StatusBadge Tone="Tone.Warn" Text="Withdrawn" />
-                                                <span class="actions-hint">To bring it back, run <code>releases publish &lt;key&gt; @item.Reference --note @item.Reference "text"</code>.</span>
+                                                <StatusBadge Tone="Tone.Warn" Text="@(item.CanReturn ? "Withdrawn, can return" : "Withdrawn")" />
+                                                @if (!item.CanReturn)
+                                                {
+                                                    <span class="actions-hint">Revise it in review and approve the new revision before it can return.</span>
+                                                }
                                             }
                                             else
                                             {

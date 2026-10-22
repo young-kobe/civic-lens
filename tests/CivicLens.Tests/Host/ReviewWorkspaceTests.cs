@@ -417,6 +417,54 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
+    public async Task OnlyAWithdrawnRecordWithAHigherApprovedRevisionCanBeSelectedAndItReturnsWithANote()
+    {
+        await SaveComparisonAsync("Fee: 10 dollars.\n", "Fee: 12 dollars.\n");
+        SignIn(Owner);
+        var draftUrl = await StartFirstDraftAsync();
+        var draftId = draftUrl[("/Review/".Length)..];
+        var reference = $"documentChange:{draftId}";
+        await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars");
+        await ApproveAsync(draftUrl);
+        var publications = PostgresPublicationStore.FromConnectionString(host.ConnectionString);
+        var firstSummary = await host.GetDocumentAsync($"/Review?publish={reference}");
+        using var first = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(Fields(firstSummary.QuerySelector("#publish-confirm")!)));
+        Assert.Equal("/Review?status=published&release=1", PathOf(first).Split('#')[0]);
+        using (var withdrawn = await DecideAsync(draftUrl, "WithdrawApproval", "Wrong figure.")) Assert.Equal(HttpStatusCode.Redirect, withdrawn.StatusCode);
+        await WithdrawWithCliAsync(reference, "Wrong figure.");
+        await ApproveAsync(draftUrl);
+
+        // Review approved the withdrawn revision again. Publish refuses it, so the row offers no checkbox.
+        var blocked = await host.GetDocumentAsync("/Review");
+        var blockedRow = blocked.QuerySelector("[aria-labelledby='publish'] tbody tr")!;
+        Assert.Contains("Withdrawn", blockedRow.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Revise it in review", blockedRow.TextContent, StringComparison.Ordinal);
+        Assert.Null(blocked.QuerySelector("input[type=checkbox][name=publish]"));
+        var stale = await host.GetDocumentAsync($"/Review?publish={reference}");
+        Assert.Null(stale.QuerySelector("#publish-confirm input[name=records]"));
+        Assert.Contains("no longer ready", stale.QuerySelector("[aria-labelledby='publish']")!.TextContent, StringComparison.Ordinal);
+
+        // A new approved revision can return, and the return needs a note like a replacement.
+        await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars, effective now");
+        await ApproveAsync(draftUrl);
+        var returnable = await host.GetDocumentAsync("/Review");
+        Assert.Equal(reference, returnable.QuerySelector("input[type=checkbox][name=publish]")!.GetAttribute("value"));
+        var summary = await host.GetDocumentAsync($"/Review?publish={reference}");
+        Assert.Equal("Returning", summary.QuerySelector("[aria-labelledby='publish'] tbody .badge")!.TextContent);
+        Assert.NotNull(summary.QuerySelector($"textarea[name='notes[{reference}]']"));
+        var fields = Fields(summary.QuerySelector("#publish-confirm")!);
+        using var noNote = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(fields));
+        Assert.Equal("/Review?status=publish-note-required", PathOf(noNote).Split('#')[0]);
+        Assert.Equal(2, (await publications.GetStateAsync(default)).LatestReleaseNumber);
+        fields.Add(new($"notes[{reference}]", "The figure is now correct."));
+        using var returned = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(fields));
+        Assert.Equal("/Review?status=published&release=3", PathOf(returned).Split('#')[0]);
+        var after = await host.GetDocumentAsync("/Review");
+        Assert.Equal("0", StatValue(after, "Ready to publish"));
+        Assert.DoesNotContain("Withdrawn", after.QuerySelector("[aria-labelledby='publish']")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ReviewerCannotPublishEvenWithAForgedPostAsync()
     {
         await SaveComparisonAsync("Fee: 10 dollars.\n", "Fee: 12 dollars.\n");
@@ -543,6 +591,27 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         if (note is not null) Set(fields, "Decision.Note", note);
         foreach (var id in resolved ?? []) fields.Add(new("Decision.ResolvedDecisionIds", id));
         return await host.Client.PostAsync(editorUrl, new FormUrlEncodedContent(fields));
+    }
+
+    private async Task ApproveAsync(string editorUrl)
+    {
+        var editor = await host.GetDocumentAsync(editorUrl);
+        var concerns = editor.QuerySelectorAll("input[name='Decision.ResolvedDecisionIds']").Select(box => box.GetAttribute("value")!);
+        using var approved = await DecideAsync(editorUrl, "Approve", "Checked again.", concerns);
+        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+    }
+
+    private async Task WithdrawWithCliAsync(string reference, string note)
+    {
+        var environment = new Dictionary<string, string>
+        {
+            ["CIVIC_LENS_REVIEW_OWNER"] = Owner,
+            ["CIVIC_LENS_RELEASE_DIRECTORY"] = host.ReleaseDirectory,
+            ["CIVIC_LENS_COLLECTION_CONFIG"] = Path.Combine(host.KeyDirectory, "sources.json"),
+            ["CIVIC_LENS_ISSUES_CONFIG"] = Path.Combine(host.KeyDirectory, "issues.json")
+        };
+        var result = await HostProcess.RunWithEnvironmentAsync(host.ConnectionString, null, environment, ["releases", "publish", "withdraw", "--withdraw", reference, note]);
+        Assert.True(result.ExitCode == 0, result.Error + result.Output);
     }
 
     private async Task<(List<string[]> Down, List<string[]> Up)> WalkAsync(string start, string panel, Func<IDocument, string[]> ids)

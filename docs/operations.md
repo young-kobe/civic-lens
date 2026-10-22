@@ -717,9 +717,9 @@ To try it on the dev machine, run the search service as in [run the search servi
 
 ## Publish a static release
 
-The owner can publish from the Review home page. Select records in the Publish section and choose Review selection. The list shows each record as a document change, a statement, an action, a vote, a relationship, or a brief. The summary lists each headline with its kind, as new or a replacement, and shows the release number. Write a correction note in each replacement row. Choose Publish to confirm. The page lists recent releases read-only. Rollback stays in the CLI.
+The owner can publish from the Review home page. Select records in the Publish section and choose Review selection. The list shows each record as a document change, a statement, an action, a vote, a relationship, or a brief. The summary lists each headline with its kind, as new or a replacement, and shows the release number. Write a correction note in each replacement row. A withdrawn record shows a checkbox once review approves a revision above the withdrawn revision. Until then the row tells you to revise it. A returning record is marked Returning and needs a note. Choose Publish to confirm. The page lists recent releases read-only. Rollback stays in the CLI.
 
-The CLI is a local owner command. Set `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER` (the owner subject recorded on the release), and `CIVIC_LENS_RELEASE_DIRECTORY` (an absolute path, for example `$PWD/.runtime/releases`). Publishing also needs `CIVIC_LENS_COLLECTION_CONFIG`, an absolute configuration path that supplies the officials' display names, and `CIVIC_LENS_ISSUES_CONFIG`, an absolute path that supplies the issue and policy area names. The command trusts the local operator, who already holds database credentials.
+The Review page cannot withdraw a record. The CLI is a local owner command. Set `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER` (the owner subject recorded on the release), and `CIVIC_LENS_RELEASE_DIRECTORY` (an absolute path, for example `$PWD/.runtime/releases`). Publishing also needs `CIVIC_LENS_COLLECTION_CONFIG`, an absolute configuration path that supplies the officials' display names, and `CIVIC_LENS_ISSUES_CONFIG`, an absolute path that supplies the issue and policy area names. The command trusts the local operator, who already holds database credentials.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases publish <idempotency-key> [<kind>:<id>...] [--note <kind>:<id> <text>]... [--withdraw <kind>:<id> <text>]...
@@ -747,7 +747,7 @@ To take a record out of the release, give `--withdraw <kind>:<id> <text>`. A req
 
 ### Return a record
 
-To bring a withdrawn record back, first revise it in review and approve the new revision. The revision number must be higher than the withdrawn revision. Then publish the withdrawn ID with a note: `releases publish <idempotency-key> <kind>:<id> --note <kind>:<id> <text>`. The note shows on the record page as a correction. The publish exits with code 2 if the note is missing or the revision is not higher. The code subject cannot return a record. The worker only logs the withdrawn record and skips it.
+To bring a withdrawn record back, first revise it in review and approve the new revision. The revision number must be higher than the withdrawn revision. Return it from the Review page, or with the CLI: publish the withdrawn ID with a note: `releases publish <idempotency-key> <kind>:<id> --note <kind>:<id> <text>`. The note shows on the record page as a correction. The publish exits with code 2 if the note is missing or the revision is not higher. The code subject cannot return a record. The worker only logs the withdrawn record and skips it.
 
 A relationship or a brief that cited the record stays withdrawn. Publish it again, in the same request or later.
 
