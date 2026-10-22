@@ -81,6 +81,17 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task ConflictingReuseOfAnAdmissionKeyFails()
+    {
+        var url = "https://example.test/articles/one";
+        var first = await SaveFeedAsync([url]);
+        var other = await SaveFeedAsync([url]);
+        await jobs.AdmitAsync(Source(), first, "reused-key", default);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.AdmitAsync(Source(), other, "reused-key", default));
+    }
+
+    [Fact]
     public async Task AdmissionChecksExistingCandidatesWithOneQueryAndReplaysWithoutRechecking()
     {
         var urls = Enumerable.Range(0, 40)

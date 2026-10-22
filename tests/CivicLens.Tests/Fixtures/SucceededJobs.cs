@@ -1,7 +1,6 @@
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Jobs;
-using CivicLens.Collection.Contracts;
 using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Infrastructure.Collection.BillStream;
 using CivicLens.Infrastructure.Collection.Jobs;

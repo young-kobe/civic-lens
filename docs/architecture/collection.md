@@ -216,7 +216,7 @@ A batch reserves the full aggregate retry allowance of each admitted job against
 
 Admission uses the job coordination transaction and lock. It reads the candidate bindings in one bounded hash lookup. Collision checks and budget reservations then follow the retained URL order. The batch input, the result, the URL bindings, and the new jobs commit together.
 
-- The same key and inputs return the saved result. Conflicting reuse of a key fails.
+- The same key and inputs return the saved result. Conflicting reuse of a key fails. Enforced by `ConfiguredCollectionSource.PrepareDefinition` for the template and by the saved input comparison in `PostgresCollectionJobStore`. Test: `PostgresDiscoveryAdmissionTests.ConflictingReuseOfAnAdmissionKeyFails`.
 - Source plus exact resolved URL identifies an initial article admission, across feed and HTML discoveries from that source.
 - URL hashes bound the index size. Exact value comparisons guard against collisions.
 - Admission skips a discovered URL that is a listing page of its source. That is a URL with the path of the configured URL or of the allowed path prefix. The query and a trailing slash do not count, and the path compare is case sensitive. The root job already checks the configured page, and an admitted copy would be a second root job. The skipped URL counts as a duplicate, also when the batch rechecks known candidates.
