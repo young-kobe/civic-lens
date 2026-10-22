@@ -57,7 +57,7 @@ public sealed partial class StatementTriage
 
     private async Task DecideSelectedAsync()
     {
-        var (href, failure) = await ReviewCommand.RunAsync(RecordDecisionAsync, HttpContext.Response, RequestAborted);
+        var (href, failure) = await ReviewCommand.RunAsync(RecordDecisionAsync, HttpContext.Response, Logger, RequestAborted);
         switch (failure)
         {
             case ReviewCommandFailure.None:

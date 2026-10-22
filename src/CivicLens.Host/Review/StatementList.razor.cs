@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
 using CivicLens.Host.Components.Layout;
@@ -59,7 +60,11 @@ public sealed partial class StatementList
         }
         catch (OperationCanceledException) when (RequestAborted.IsCancellationRequested) { throw; }
         catch (ArgumentException) { return StatementRoutes.List + "?status=invalid"; }
-        catch (Exception) { return StatementRoutes.List + "?status=unavailable"; }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "A statement draft could not start.");
+            return StatementRoutes.List + "?status=unavailable";
+        }
     }
 
     private static string HeadlineOf(StatementReviewListItem draft) => draft.CurrentRevision is null

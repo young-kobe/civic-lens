@@ -71,6 +71,8 @@ internal static class ReviewWorkspace
             // Build output lacks framework scripts such as blazor.web.js; publish output includes them.
             builder.WebHost.UseStaticWebAssets();
             builder.Logging.ClearProviders();
+            builder.Logging.AddConsole(console => console.LogToStandardErrorThreshold = LogLevel.Trace);
+            builder.Logging.SetMinimumLevel(LogLevel.Warning);
             builder.WebHost.ConfigureKestrel(options =>
             {
                 options.Listen(IPAddress.Loopback, port);
@@ -108,8 +110,9 @@ internal static class ReviewWorkspace
                 context.Request.Scheme = "https";
                 try { await next(); }
                 catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested) { throw; }
-                catch
+                catch (Exception exception)
                 {
+                    app.Logger.LogError(exception, "A review request failed.");
                     if (!context.Response.HasStarted)
                     {
                         context.Response.Clear();

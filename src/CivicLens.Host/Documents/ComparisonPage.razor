@@ -4,7 +4,9 @@
 @using CivicLens.Core.Documents
 @using CivicLens.Host.Collection
 @using CivicLens.Host.Review
+@using Microsoft.Extensions.Logging
 @inject GetDocumentComparison Comparisons
+@inject ILogger<ComparisonPage> Logger
 @inject IDocumentExtractionStore Extractions
 @inject CreateDocumentChangeDraft CreateDraft
 @inject ReviewActorAccessor Actors
@@ -104,6 +106,7 @@
         }
         catch (Exception exception) when (exception is not NavigationException)
         {
+            Logger.LogError(exception, "A document change draft could not be created.");
             FailDraft(StatusCodes.Status503ServiceUnavailable, "The draft could not be created. Try again.");
         }
     }
@@ -132,6 +135,10 @@
             return before is null || after is null ? EvidenceProblem.Unavailable : null;
         }
         catch (OperationCanceledException) when (Aborted.IsCancellationRequested) { throw; }
-        catch (Exception) { return EvidenceProblem.Unavailable; }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "A comparison could not load.");
+            return EvidenceProblem.Unavailable;
+        }
     }
 }

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using CivicLens.Application.Briefs;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
@@ -20,6 +21,7 @@ public sealed partial class BriefList
     private string? error;
 
     [Inject] private ReviewActorAccessor Actors { get; set; } = default!;
+    [Inject] private ILogger<BriefList> Logger { get; set; } = default!;
     [Inject] private ListBriefReviews ListDrafts { get; set; } = default!;
     [Inject] private GetBriefReviewCounts GetCounts { get; set; } = default!;
 
@@ -45,8 +47,9 @@ public sealed partial class BriefList
         {
             error = "This page link is no longer valid. Go back to the first page of the list.";
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            Logger.LogError(exception, "The brief list could not load.");
             error = "The brief list could not load. Refresh the page to try again.";
         }
     }

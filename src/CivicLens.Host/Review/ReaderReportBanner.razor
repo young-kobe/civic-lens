@@ -1,3 +1,4 @@
+@using Microsoft.Extensions.Logging
 @using CivicLens.Application.Reports
 @using CivicLens.Core.Review
 @using CivicLens.Publication.Contracts
@@ -20,6 +21,7 @@
     private bool failed;
 
     [Inject] private ListUnansweredCorrections ListCorrections { get; set; } = default!;
+    [Inject] private ILogger<ReaderReportBanner> Logger { get; set; } = default!;
 
     [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
 
@@ -35,8 +37,9 @@
             reports = await ListCorrections.ExecuteAsync(Actor, Kind, RecordId, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (Exception)
+        catch (Exception exception)
         {
+            Logger.LogError(exception, "The reader report banner could not load.");
             failed = true;
         }
     }

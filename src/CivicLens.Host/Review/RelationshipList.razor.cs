@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using CivicLens.Application.Relationships;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
@@ -20,6 +21,7 @@ public sealed partial class RelationshipList
     private string? error;
 
     [Inject] private ReviewActorAccessor Actors { get; set; } = default!;
+    [Inject] private ILogger<RelationshipList> Logger { get; set; } = default!;
     [Inject] private ListRelationshipReviews ListDrafts { get; set; } = default!;
     [Inject] private GetRelationshipReviewCounts GetCounts { get; set; } = default!;
 
@@ -45,8 +47,9 @@ public sealed partial class RelationshipList
         {
             error = "This page link is no longer valid. Go back to the first page of the list.";
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            Logger.LogError(exception, "The relationship list could not load.");
             error = "The relationship list could not load. Refresh the page to try again.";
         }
     }

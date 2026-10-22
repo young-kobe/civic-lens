@@ -1,9 +1,10 @@
 using CivicLens.Application.Analysis;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Application;
 
-/// <summary>Runs one pass, then sleeps until the wakeup. A pass returns its progress count. A failed pass is reported and counted.</summary>
-public sealed class StageWorker(Func<CancellationToken, Task<int>> pass, IWorkerWakeup wakeup, Action<Exception> reportFailure)
+/// <summary>Runs one pass, then sleeps until the wakeup. A pass returns its progress count. A failed pass is logged and counted.</summary>
+public sealed class StageWorker(string name, Func<CancellationToken, Task<int>> pass, IWorkerWakeup wakeup, ILogger<StageWorker> logger)
 {
     public async Task<AnalysisWorkerResult> ExecuteAsync(bool once, CancellationToken cancellationToken = default)
     {
@@ -23,7 +24,7 @@ public sealed class StageWorker(Func<CancellationToken, Task<int>> pass, IWorker
                 catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
                 {
                     failures++;
-                    reportFailure(exception);
+                    logger.LogError(exception, "Stage {Stage} failed a pass.", name);
                 }
                 if (once) break;
                 failures += await WorkerLoop.WaitForWorkAsync(wakeup, false, cancellationToken);

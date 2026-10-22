@@ -1,5 +1,7 @@
 using CivicLens.Application;
 using CivicLens.Tests.Fixtures;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CivicLens.Tests.Application;
 
@@ -9,16 +11,17 @@ public sealed class StageWorkerTests
     public async Task AFailedPassIsReportedAndCountedAndTheProgressOfOtherPassesStaysSoTheOwnerSeesEveryFailure()
     {
         var calls = 0;
-        var reported = new List<Exception>();
+        var logger = new CapturingLogger<StageWorker>();
         using var stop = new CancellationTokenSource();
         var wakeup = new CountingWakeup(() => { if (calls == 2) stop.Cancel(); });
-        var worker = new StageWorker(_ => ++calls == 1 ? Task.FromException<int>(new InvalidOperationException("down")) : Task.FromResult(3),
-            wakeup, reported.Add);
+        var worker = new StageWorker("test", _ => ++calls == 1 ? Task.FromException<int>(new InvalidOperationException("down")) : Task.FromResult(3),
+            wakeup, logger);
 
         var result = await worker.ExecuteAsync(once: false, stop.Token);
 
         Assert.Equal((2, 3, 1), (result.Passes, result.ProgressCount, result.Failures));
-        Assert.Equal("down", Assert.Single(reported).Message);
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal((LogLevel.Error, "down"), (entry.Level, entry.Exception!.Message));
     }
 
     [Fact]
@@ -28,7 +31,7 @@ public sealed class StageWorkerTests
         using var stop = new CancellationTokenSource();
         var wakeup = new CountingWakeup(() => { if (passes == 2) stop.Cancel(); });
 
-        var result = await new StageWorker(_ => Task.FromResult(++passes), wakeup, _ => { }).ExecuteAsync(once: false, stop.Token);
+        var result = await new StageWorker("test", _ => Task.FromResult(++passes), wakeup, NullLogger<StageWorker>.Instance).ExecuteAsync(once: false, stop.Token);
 
         Assert.Equal((2, 3, 2), (result.Passes, result.ProgressCount, wakeup.WaitCount));
     }
@@ -38,7 +41,7 @@ public sealed class StageWorkerTests
     {
         var wakeup = new CountingWakeup();
 
-        var result = await new StageWorker(_ => Task.FromResult(5), wakeup, _ => { }).ExecuteAsync(once: true);
+        var result = await new StageWorker("test", _ => Task.FromResult(5), wakeup, NullLogger<StageWorker>.Instance).ExecuteAsync(once: true);
 
         Assert.Equal((1, 5, 0), (result.Passes, result.ProgressCount, wakeup.WaitCount));
     }

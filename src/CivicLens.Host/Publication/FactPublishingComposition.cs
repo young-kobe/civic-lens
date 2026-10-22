@@ -5,14 +5,17 @@ using CivicLens.Application.Publication;
 using CivicLens.Host.Collection;
 using CivicLens.Infrastructure;
 using CivicLens.Infrastructure.Publication;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Host.Publication;
 
 internal sealed record FactPublishingComposition(AnalysisStage Stage, IWorkerWakeup Wakeup)
 {
+    private const string StageName = "factPublishing";
     private const string EnabledVariable = "CIVIC_LENS_FACT_PUBLISHING";
 
-    public static FactPublishingComposition? Create(string connectionString, CollectionConfiguration collection, IssueConfiguration? issues)
+    public static FactPublishingComposition? Create(string connectionString, CollectionConfiguration collection, IssueConfiguration? issues,
+        ILoggerFactory loggers)
     {
         var setting = Environment.GetEnvironmentVariable(EnabledVariable);
         if (string.IsNullOrWhiteSpace(setting)) return null;
@@ -24,8 +27,8 @@ internal sealed record FactPublishingComposition(AnalysisStage Stage, IWorkerWak
         var (publish, loaders) = PublicationComposition.Create(connectionString, publications, new FileReleaseDirectory(releaseRoot),
             collection, PublicationComposition.RequireIssues(issues));
         var wakeup = PostgresIntervalWakeup.FromConnectionString(connectionString, "civic_lens_fact_publishing", TimeSpan.FromHours(1));
-        Action<Exception> report = exception => Console.Error.WriteLine($"factPublishing failed: {exception.GetType().Name}: {exception.Message}");
-        var worker = new StageWorker(new PublishCodeApprovedFacts(publish, publications, loaders, report, line => Console.Error.WriteLine($"factPublishing: {line}")).ExecuteAsync, wakeup, report);
-        return new(new AnalysisStage("factPublishing", worker.ExecuteAsync), wakeup);
+        var publishFacts = new PublishCodeApprovedFacts(publish, publications, loaders, loggers.CreateLogger<PublishCodeApprovedFacts>());
+        var worker = new StageWorker(StageName, publishFacts.ExecuteAsync, wakeup, loggers.CreateLogger<StageWorker>());
+        return new(new AnalysisStage(StageName, worker.ExecuteAsync), wakeup);
     }
 }

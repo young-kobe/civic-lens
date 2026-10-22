@@ -699,7 +699,7 @@ The `worker` command can publish code-approved actions and votes. [Publication](
 | `CIVIC_LENS_RELEASE_DIRECTORY` | The release root, shared with the review workspace and the `releases` commands. Required when the stage runs |
 | `CIVIC_LENS_ISSUES_CONFIG` | The issue file. Required when the stage runs, as for `releases publish` |
 
-The worker also needs `CIVIC_LENS_COLLECTION_CONFIG`, as always. The stage ticks when the worker starts and then at each full hour by the database clock. A tick publishes batches of up to 64 records until no code-approved record is ready. A failure prints `factPublishing failed: <error type>: <message>` on stderr. A failure of the tick counts in the stage result. A record that cannot build is reported and left out, and it does not count. The stage waits after a rollback with `releases activate`. It resumes when you activate the latest release or publish with the CLI. Each release is about 29 MB in development. Releases stay until [R-24](roadmap.md#later) adds retention.
+The worker also needs `CIVIC_LENS_COLLECTION_CONFIG`, as always. The stage ticks when the worker starts and then at each full hour by the database clock. A tick publishes batches of up to 64 records until no code-approved record is ready. A failure is logged at error level with its exception on stderr, under the stage name `factPublishing`. A failure of the tick counts in the stage result. A record that cannot build is reported and left out, and it does not count. The stage waits after a rollback with `releases activate`. It resumes when you activate the latest release or publish with the CLI. Each release is about 29 MB in development. Releases stay until [R-24](roadmap.md#later) adds retention.
 
 ## Reader report queue
 
@@ -711,7 +711,7 @@ The `worker` command can pull reader reports from the search service into the re
 | `CIVIC_LENS_REPORT_PULL_URL` | The address of the search service, for example `http://127.0.0.1:8100`. Only `http` and `https` are valid. Required when the stage runs |
 | `CIVIC_LENS_REPORT_PULL_TOKEN` | The same value as `CIVIC_LENS_REPORT_PULL_TOKEN` of the service, with at least 32 characters. Required when the stage runs. The worker never prints it |
 
-A missing or invalid value stops the worker with exit code 2. The stage pulls when the worker starts and then every 5 minutes by the database clock. A call has a limit of 30 seconds. A failure prints `reportPull failed: <error type>: <message>` on stderr and counts in the stage result. The cursor stays, so the next tick asks again.
+A missing or invalid value stops the worker with exit code 2. The stage pulls when the worker starts and then every 5 minutes by the database clock. A call has a limit of 30 seconds. A failure is logged at error level with its exception on stderr, under the stage name `reportPull`. It counts in the stage result. The cursor stays, so the next tick asks again.
 
 To try it on the dev machine, run the search service as in [run the search service](#run-the-search-service) with a pull token and send a report. Start the worker with the three variables above, the service address, and the same token. The next tick shows the report at `/Review/Reports`. A restart of the worker pulls at once.
 

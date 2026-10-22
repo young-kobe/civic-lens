@@ -53,6 +53,13 @@ Host uses the ASP.NET Core Web SDK and its shared framework. `review [port]` ser
 
 Pages call Application handlers for editorial and collection actions. Evidence pages are described in [documents](documents.md#evidence-pages).
 
+### Logging
+
+- Workers and review pages log each caught failure through `ILogger<T>` with the full exception.
+- Among the batch CLI commands, only `worker` writes logs. It writes them to stderr, so JSON on stdout stays clean.
+- The review workspace builds its own console provider. It writes warnings and errors to stderr.
+- CLI results and usage errors stay on the console.
+
 ### Presentation
 
 Light and dark themes follow the system setting. A toggle on both surfaces stores an override for each browser. The review workspace uses a denser layout where the task needs it.

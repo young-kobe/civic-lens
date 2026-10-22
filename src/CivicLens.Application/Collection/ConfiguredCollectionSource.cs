@@ -167,15 +167,11 @@ public sealed class ConfiguredCollectionSource
         if (existing is not null)
         {
             // Compare the request to the saved decision without reevaluating current eligibility.
-            // Legacy keys retain unknown provenance and compare only their original execution settings.
-            if (existing.ConfigurationRevision is not null)
+            definition = definition with
             {
-                definition = definition with
-                {
-                    ConfigurationRevision = Revision,
-                    CoverageAsOf = AsOf ?? existing.CoverageAsOf
-                };
-            }
+                ConfigurationRevision = Revision,
+                CoverageAsOf = AsOf ?? existing.CoverageAsOf
+            };
             if (definition != existing)
                 throw new ArgumentException("The idempotency key belongs to different admission input.");
             return existing;

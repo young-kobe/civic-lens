@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.Collections.Immutable;
 using CivicLens.Application.Publication;
 using CivicLens.Publication.Contracts;
@@ -65,7 +66,11 @@ public sealed partial class ReviewHome
         catch (CorrectionLimitException) { return "/Review?status=publish-correction-limit#publish"; }
         catch (ArgumentException) { return "/Review?status=publish-invalid#publish"; }
         catch (UnauthorizedAccessException) { return "/Review?status=publish-forbidden#publish"; }
-        catch (Exception) { return "/Review?status=publish-unavailable#publish"; }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "A release could not be published.");
+            return "/Review?status=publish-unavailable#publish";
+        }
     }
 
     private ImmutableArray<RecordNote> ConfirmedNotes() =>

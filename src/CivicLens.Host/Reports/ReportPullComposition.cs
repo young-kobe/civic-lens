@@ -6,16 +6,19 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Reports;
 using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Host.Reports;
 
 internal sealed record ReportPullComposition(AnalysisStage Stage, IWorkerWakeup Wakeup)
 {
+    private const string StageName = "reportPull";
     private const string EnabledVariable = "CIVIC_LENS_REPORT_PULL";
     private const string UrlVariable = "CIVIC_LENS_REPORT_PULL_URL";
     private const string TokenVariable = "CIVIC_LENS_REPORT_PULL_TOKEN";
 
-    public static ReportPullComposition? Create(IDbContextFactory<CollectionAttemptDbContext> contexts, string connectionString)
+    public static ReportPullComposition? Create(IDbContextFactory<CollectionAttemptDbContext> contexts, string connectionString,
+        ILoggerFactory loggers)
     {
         var setting = Environment.GetEnvironmentVariable(EnabledVariable);
         if (string.IsNullOrWhiteSpace(setting)) return null;
@@ -27,9 +30,9 @@ internal sealed record ReportPullComposition(AnalysisStage Stage, IWorkerWakeup 
         };
         var puller = new HttpReportPuller(client, ReadAddress(), ReadToken());
         var wakeup = PostgresIntervalWakeup.FromConnectionString(connectionString, "civic_lens_report_pull", TimeSpan.FromMinutes(5));
-        Action<Exception> report = exception => Console.Error.WriteLine($"reportPull failed: {exception.GetType().Name}: {exception.Message}");
-        var worker = new StageWorker(new PullReaderReports(puller, new PostgresReaderReportStore(contexts)).ExecuteAsync, wakeup, report);
-        return new(new AnalysisStage("reportPull", worker.ExecuteAsync), wakeup);
+        var worker = new StageWorker(StageName, new PullReaderReports(puller, new PostgresReaderReportStore(contexts)).ExecuteAsync, wakeup,
+            loggers.CreateLogger<StageWorker>());
+        return new(new AnalysisStage(StageName, worker.ExecuteAsync), wakeup);
     }
 
     private static Uri ReadAddress() =>

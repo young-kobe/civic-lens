@@ -3,6 +3,7 @@ using CivicLens.Application.Documents;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Application.Collection.Processing;
 
@@ -14,7 +15,8 @@ public sealed class EvidenceProcessingWorker(
     ExtractDocument extract,
     GetDocumentHistory history,
     CompareDocuments compare,
-    int concurrency)
+    int concurrency,
+    ILogger<EvidenceProcessingWorker> logger)
 {
     public const int MaximumBatchSize = 100;
     private const int MaximumAttempts = 5;
@@ -41,7 +43,11 @@ public sealed class EvidenceProcessingWorker(
                 if (await ProcessAsync(record, artifactRoot, leaseDuration, token)) Interlocked.Increment(ref progress);
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-            catch (Exception exception) when (WorkerLoop.IsRecoverable(exception)) { Interlocked.Increment(ref failures); }
+            catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
+            {
+                logger.LogError(exception, "Evidence processing failed for job {JobId}.", record.JobId);
+                Interlocked.Increment(ref failures);
+            }
         });
         return new(progress, failures);
     }
@@ -118,13 +124,7 @@ public sealed class EvidenceProcessingWorker(
         }
         var job = await jobs.GetAsync(record.JobId, cancellationToken)
             ?? throw new InvalidOperationException("Processing job disappeared.");
-        if (job.Definition.ConfigurationRevision is null)
-        {
-            await CompleteAsync(claim, EvidenceProcessingStage.Complete, EvidenceProcessingStatus.Blocked,
-                EvidenceProcessingOutcome.Blocked, "configurationUnavailable", cancellationToken);
-            return;
-        }
-        var configuration = job.Definition.ConfigurationRevision.Configuration;
+        var configuration = job.Definition.ConfigurationRevision!.Configuration;
         var source = configuration.Sources.SingleOrDefault(candidate => candidate.Id == record.SourceId);
         if (source?.DocumentProfileId is null || configuration.DocumentProfiles is null)
         {

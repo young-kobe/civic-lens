@@ -2,6 +2,8 @@ using CivicLens.Application;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
 using CivicLens.Tests.Fixtures;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CivicLens.Tests.Application.Publication;
 
@@ -12,12 +14,12 @@ public sealed class FactPublishingWorkerTests
     {
         var scenario = ScenarioWithOneReadyAction();
         scenario.Publications.FailOnCommit = new InvalidOperationException("disk full");
-        var reported = new List<Exception>();
+        var logger = new CapturingLogger<StageWorker>();
 
-        var result = await Worker(scenario, reported.Add).ExecuteAsync(once: true);
+        var result = await Worker(scenario, logger).ExecuteAsync(once: true);
 
         Assert.Equal(1, result.Failures);
-        Assert.Equal("disk full", Assert.Single(reported).Message);
+        Assert.Equal("disk full", Assert.Single(logger.Entries).Exception!.Message);
     }
 
     [Fact]
@@ -25,12 +27,12 @@ public sealed class FactPublishingWorkerTests
     {
         var scenario = ScenarioWithOneReadyAction();
         scenario.Publications.ConflictOnCommit = true;
-        var reported = new List<Exception>();
+        var logger = new CapturingLogger<StageWorker>();
 
-        var result = await Worker(scenario, reported.Add).ExecuteAsync(once: true);
+        var result = await Worker(scenario, logger).ExecuteAsync(once: true);
 
         Assert.Equal(0, result.Failures);
-        Assert.Empty(reported);
+        Assert.Empty(logger.Entries);
     }
 
     private static PublicationScenario ScenarioWithOneReadyAction()
@@ -43,8 +45,8 @@ public sealed class FactPublishingWorkerTests
     }
 
     private static PublishCodeApprovedFacts Facts(PublicationScenario scenario) =>
-        new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), _ => { }, _ => { });
+        new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), NullLogger<PublishCodeApprovedFacts>.Instance);
 
-    private static StageWorker Worker(PublicationScenario scenario, Action<Exception> report) =>
-        new(Facts(scenario).ExecuteAsync, new CountingWakeup(() => { }), report);
+    private static StageWorker Worker(PublicationScenario scenario, ILogger<StageWorker> logger) =>
+        new("factPublishing", Facts(scenario).ExecuteAsync, new CountingWakeup(() => { }), logger);
 }

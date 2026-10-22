@@ -61,26 +61,6 @@ public sealed class ConfiguredCollectionSourceTests
     }
 
     [Fact]
-    public void LegacyReplayDoesNotAcquireARevisionOrDependOnCurrentCoverage()
-    {
-        var config = Configuration();
-        var saved = CollectionFixtures.Definition(config, "source", AdmittedOn) with
-        { ConfigurationRevision = null, CoverageAsOf = null };
-        config.Sources[0] = config.Sources[0] with { Enabled = false };
-        var source = new ConfiguredCollectionSource(config, "source");
-
-        Assert.Same(saved, source.CreateJobDefinition(ExpiredOn, saved));
-        Assert.Null(saved.ConfigurationRevision);
-        Assert.Null(saved.CoverageAsOf);
-        Assert.Same(saved, new ConfiguredCollectionSource(config, "source", ExpiredOn)
-            .CreateJobDefinition(ExpiredOn, saved));
-        Assert.Throws<ArgumentException>(() => source.CreateJobDefinition(ExpiredOn));
-        config.Sources[0] = config.Sources[0] with { MaxBytes = 100 };
-        Assert.Throws<ArgumentException>(() => new ConfiguredCollectionSource(config, "source")
-            .CreateJobDefinition(ExpiredOn, saved));
-    }
-
-    [Fact]
     public void HandEnqueuedAndScheduledRosterJobsCarryTheSameResource()
     {
         var source = new ConfiguredCollectionSource(RosterFixtures.Configuration(), RosterFixtures.SourceId, ExpiredOn);

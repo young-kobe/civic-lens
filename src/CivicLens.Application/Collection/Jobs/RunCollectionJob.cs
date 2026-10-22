@@ -1,4 +1,5 @@
 using CivicLens.Collection.Contracts;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Application.Collection.Jobs;
 
@@ -8,7 +9,8 @@ public sealed class RunCollectionJob(
     ICollectionAttemptStore attempts,
     ICollectionReceiptHandoffStore handoffs,
     ICaptureArtifactVerifier verifier,
-    ICollectorProcess collector)
+    ICollectorProcess collector,
+    ILogger<RunCollectionJob> logger)
 {
     public async Task<CollectionJobRunResult> ExecuteAsync(string jobId, string artifactDirectory,
         TimeSpan leaseDuration, CancellationToken cancellationToken = default)
@@ -80,8 +82,14 @@ public sealed class RunCollectionJob(
         {
             receipt = await collector.RunAsync(attempt.Request, lease.CollectorToken);
         }
+        catch (Exception exception) when (lease.CollectorToken.IsCancellationRequested && WorkerLoop.IsRecoverable(exception))
+        {
+            logger.LogInformation(exception, "The collector stopped because its work was cancelled or its lease was lost, for attempt {AttemptId} of job {JobId}.", attempt.AttemptId, lease.JobId);
+            executionFailure = exception;
+        }
         catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
         {
+            logger.LogError(exception, "The collector failed for attempt {AttemptId} of job {JobId}.", attempt.AttemptId, lease.JobId);
             executionFailure = exception;
         }
         finally
@@ -101,6 +109,7 @@ public sealed class RunCollectionJob(
             }
             catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
             {
+                logger.LogError(exception, "The receipt of attempt {AttemptId} of job {JobId} failed validation or verification.", attempt.AttemptId, lease.JobId);
                 executionFailure = exception;
                 receipt = null;
             }
@@ -128,7 +137,12 @@ public sealed class RunCollectionJob(
         using var settlementTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         bool settled;
         try { settled = await lease.SettleAttemptAsync(attempt.AttemptId, interrupted, settlementTimeout.Token); }
-        catch (Exception exception) when (WorkerLoop.IsRecoverable(exception)) { settled = false; }
+        catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
+        {
+            logger.LogError(exception, "Settling interrupted attempt {AttemptId} of job {JobId} failed.", attempt.AttemptId, lease.JobId);
+            return new CollectionJobRunResult(lease.IsOwned ? CollectionJobRunStatus.RecoveryBlocked : CollectionJobRunStatus.LostOwnership,
+                await ReadJobBoundedAsync(lease.JobId));
+        }
         return new CollectionJobRunResult(settled ? CollectionJobRunStatus.AttemptFailed : CollectionJobRunStatus.LostOwnership,
             await ReadJobBoundedAsync(lease.JobId));
     }

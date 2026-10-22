@@ -71,8 +71,9 @@ public sealed class JobSourceColumnsMigrationTests(PostgresCollection postgres) 
             ["bill-list"] = ("congress-bills", true),
             ["bill-detail"] = ("congress-bills", false)
         }, columns);
-        Assert.Equal(jobs.ToDictionary(job => job.Key, job => job.Value.IsRoot()),
-            columns.ToDictionary(row => row.Key, row => row.Value.Item2));
+        var bound = jobs.Where(job => job.Value.ConfigurationRevision is not null).ToDictionary();
+        Assert.Equal(bound.ToDictionary(job => job.Key, job => job.Value.IsRoot()),
+            columns.Where(row => bound.ContainsKey(row.Key)).ToDictionary(row => row.Key, row => row.Value.Item2));
     }
 
     private static CollectionConfiguration PageConfiguration(string pageUrl) => new()

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using CivicLens.Application;
@@ -169,6 +170,7 @@ try
         using var terminate = OperatingSystem.IsWindows() ? null : PosixSignalRegistration.Create(PosixSignal.SIGTERM,
             context => { context.Cancel = true; cancellation.Cancel(); });
         CollectionWorkerCommand.ValidateArguments(args);
+        using var loggers = LoggerFactory.Create(logging => logging.AddConsole(console => console.LogToStandardErrorThreshold = LogLevel.Trace));
         var workerConfiguration = ConfigurationFile.ReadCollectionFromEnvironment()
             ?? throw new ArgumentException("Worker requires CIVIC_LENS_COLLECTION_CONFIG.");
         var issueConfiguration = ConfigurationFile.ReadIssuesFromEnvironment();
@@ -182,27 +184,27 @@ try
         var queue = PostgresCollectionWorkerQueue.FromConnectionString(connectionString);
         var analysisContexts = AnalysisDbContextFactory.Create(connectionString);
         var analysis = DocumentChangeDraftComposition.Create(analysisContexts, connectionString,
-            issueConfiguration?.Issues.Select(issue => issue.Id) ?? []);
+            issueConfiguration?.Issues.Select(issue => issue.Id) ?? [], loggers);
         await using var analysisWakeup = analysis.Wakeup;
-        var gate = StatementGateComposition.Create(analysisContexts, connectionString, issues);
+        var gate = StatementGateComposition.Create(analysisContexts, connectionString, issues, loggers);
         await using var gateWakeup = gate.Wakeup;
-        var statementDrafting = StatementDraftComposition.Create(analysisContexts, connectionString);
+        var statementDrafting = StatementDraftComposition.Create(analysisContexts, connectionString, loggers);
         await using var statementDraftingWakeup = statementDrafting.Wakeup;
         var textExtractor = new CaptureDocumentTextExtractor();
         var apiResponses = new ApiResponseReader(attempts, new CaptureBodyReader());
         var artifactRoot = CollectionWorkerCommand.ArtifactRootOf(args);
         var actionDrafting = ActionDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, textExtractor, issues,
-            artifactRoot);
+            artifactRoot, loggers);
         await using var actionDraftingWakeup = actionDrafting.Wakeup;
-        var voteDrafting = VoteDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, issues, artifactRoot);
+        var voteDrafting = VoteDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, issues, artifactRoot, loggers);
         await using var voteDraftingWakeup = voteDrafting.Wakeup;
-        var relationshipDrafting = RelationshipDraftComposition.Create(analysisContexts, connectionString, workerConfiguration);
+        var relationshipDrafting = RelationshipDraftComposition.Create(analysisContexts, connectionString, workerConfiguration, loggers);
         await using var relationshipDraftingWakeup = relationshipDrafting.Wakeup;
-        var briefDrafting = BriefDraftComposition.Create(analysisContexts, connectionString, workerConfiguration);
+        var briefDrafting = BriefDraftComposition.Create(analysisContexts, connectionString, workerConfiguration, loggers);
         await using var briefDraftingWakeup = briefDrafting.Wakeup;
-        var factPublishing = FactPublishingComposition.Create(connectionString, workerConfiguration, issueConfiguration);
+        var factPublishing = FactPublishingComposition.Create(connectionString, workerConfiguration, issueConfiguration, loggers);
         await using var factPublishingWakeup = factPublishing?.Wakeup;
-        var reportPull = ReportPullComposition.Create(analysisContexts, connectionString);
+        var reportPull = ReportPullComposition.Create(analysisContexts, connectionString, loggers);
         await using var reportPullWakeup = reportPull?.Wakeup;
         executing = true;
         await jobs.SynchronizeAsync(workerConfiguration, cancellation.Token);
@@ -224,9 +226,9 @@ try
             new ExtractDocument(attempts, textExtractor, extractions),
             new GetDocumentHistory(PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
             new CompareDocuments(comparisons),
-            evidenceConcurrency);
+            evidenceConcurrency, loggers.CreateLogger<EvidenceProcessingWorker>());
         await using var wakeup = PostgresCollectionPipelineWakeup.FromConnectionString(connectionString);
-        return await CollectionWorkerCommand.ExecuteAsync(args, queue, jobs, attempts, cancellation.Token, processing, wakeup, jobs,
+        return await CollectionWorkerCommand.ExecuteAsync(args, queue, jobs, attempts, loggers, cancellation.Token, processing, wakeup, jobs,
             [.. new[]
             {
                 AnalysisStage.For("drafting", analysis.Worker),

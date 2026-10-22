@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using CivicLens.Application.Statements;
 using CivicLens.Core.Review;
 using CivicLens.Host.Components.Layout;
@@ -16,6 +17,7 @@ public sealed partial class GateLabelList
     private string? error;
 
     [Inject] private ReviewActorAccessor Actors { get; set; } = default!;
+    [Inject] private ILogger<GateLabelList> Logger { get; set; } = default!;
     [Inject] private ListGateLabelQueue ListQueue { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
 
@@ -40,8 +42,9 @@ public sealed partial class GateLabelList
             queue = await ListQueue.ExecuteAsync(actor, PageSize, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (Exception)
+        catch (Exception exception)
         {
+            Logger.LogError(exception, "The gate label list could not load.");
             error = "The label list could not load. Refresh the page to try again.";
         }
     }

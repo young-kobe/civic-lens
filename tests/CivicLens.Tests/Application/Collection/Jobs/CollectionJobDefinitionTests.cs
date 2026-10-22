@@ -58,6 +58,7 @@ public sealed class CollectionJobDefinitionTests
         var definition = CollectionFixtures.Definition(DatedConfig(date), "first", date);
         Assert.Throws<ArgumentException>(() => (definition with { CoverageAsOf = null }).Validate());
         Assert.Throws<ArgumentException>(() => (definition with { ConfigurationRevision = null }).Validate());
+        Assert.Throws<ArgumentException>(() => (definition with { ConfigurationRevision = null, CoverageAsOf = null }).Validate());
         Assert.Throws<ArgumentException>(() => (definition with { CoverageAsOf = date.AddDays(-1) }).Validate());
         Assert.Throws<ArgumentException>(() => (definition with { MaxBytes = 100 }).Validate());
         Assert.Throws<ArgumentException>(() => (definition with { Url = "https://example.test/page/other" }).Validate());
@@ -84,7 +85,6 @@ public sealed class CollectionJobDefinitionTests
 
         Assert.True(definition.IsRoot());
         Assert.False((definition with { Url = "https://example.test/page/article" }).IsRoot());
-        Assert.False((definition with { ConfigurationRevision = null, CoverageAsOf = null }).IsRoot());
     }
 
     [Theory]
@@ -127,39 +127,7 @@ public sealed class CollectionJobDefinitionTests
             AllowedPathPrefix = "/"
         };
 
-        Assert.Equal(expected, (definition with { Url = url, ConfigurationRevision = null, CoverageAsOf = null }).IsListingPage());
-    }
-
-    [Fact]
-    public void WithoutAConfigurationRevisionOnlyThePrefixPathMakesAnIndexPage()
-    {
-        var definition = CollectionFixtures.Definition(Config(), "first", new DateOnly(2026, 7, 1)) with
-        {
-            ConfigurationRevision = null,
-            CoverageAsOf = null
-        };
-
-        Assert.True((definition with { Url = "https://example.test/page/" }).IsListingPage());
-        Assert.False((definition with { Url = "https://example.test/page/article" }).IsListingPage());
-    }
-
-    [Fact]
-    public void LegacyReplayMatchesExecutionSettingsWithoutInventingProvenance()
-    {
-        var config = Config();
-        var definition = CollectionFixtures.Definition(config, "first", new DateOnly(2026, 7, 1));
-        var legacy = definition with { ConfigurationRevision = null, CoverageAsOf = null };
-        var legacyJson = JsonSerializer.Serialize(legacy, CollectionProtocol.JsonOptions);
-        Assert.DoesNotContain("configurationRevision", legacyJson);
-        Assert.DoesNotContain("coverageAsOf", legacyJson);
-        Assert.True(definition.MatchesReplayOf(legacy));
-        Assert.False((definition with { MaxRequests = 4 }).MatchesReplayOf(legacy));
-        Assert.False(legacy.MatchesReplayOf(definition));
-
-        config.People[0] = config.People[0] with { Name = "Corrected" };
-        var corrected = CollectionFixtures.Definition(config, "first", definition.CoverageAsOf);
-        Assert.False(corrected.MatchesReplayOf(definition));
-        Assert.False((definition with { CoverageAsOf = new DateOnly(2026, 7, 2) }).MatchesReplayOf(definition));
+        Assert.Equal(expected, (definition with { Url = url }).IsListingPage());
     }
 
     private static CollectionConfiguration DatedConfig(DateOnly startsOn)

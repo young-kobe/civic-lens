@@ -31,6 +31,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - An office has a title and a start date. It has an end date that does not precede the start, and an optional party. Titles and parties hold at most 256 characters, and a person has at most 64 offices. A person with a bioguide ID has no offices, because the roster gives their terms. Enforced by `CollectionConfiguration`. Tests: `ConfigurationTests.AnOfficeNeedsATitleADateAndAnEndThatDoesNotPrecedeItsStart`, `ConfigurationTests.AnOfficeIsRefusedForAPersonWithABioguideIdBecauseTheRosterGivesTheirTerms`.
 - Coverage intervals of one person on one source do not overlap. Enforced by `CollectionConfiguration`. Test: `ConfigurationTests.VersionTwoRejectsOverlappingCoverageButAllowsAdjacentIntervalsAndDifferentPeople`.
 - A tracked issue links to a known policy area. Enforced by `IssueConfiguration`. Test: `IssueConfigurationRevisionTests.IssueMustLinkToKnownPolicyAreaSoItCanReachBills`.
+- A job definition names a configuration revision and a coverage date. Enforced by `CollectionJobDefinition.Validate`. Test: `CollectionJobDefinitionTests.BindingRejectsMissingContextChangedSettingsAndInactiveCoverage`.
 
 ## Behavior
 
@@ -74,7 +75,7 @@ Ending coverage or disabling a source stops new admissions for the affected date
 
 The `Configuration` property returns the parsed object. It is shared and read-only by contract, so callers must not change it. `ReadConfiguration` parses the JSON again and returns a detached copy. Use it only when a caller must change the result. `ConfiguredCollectionSource` accepts a configuration or an existing revision.
 
-A future schema or default change must preserve or migrate this representation, so old jobs stay readable.
+A future schema or default change must preserve or migrate this representation, so stored jobs stay readable.
 
 ### Revisions on managed jobs
 
@@ -83,7 +84,7 @@ New configuration-based managed jobs bind the revision and `coverageAsOf` to the
 - Job settings must match the bound source. A discovery child can use an in-scope article URL, page mode, and cleared validators.
 - A stored definition is validated again when read, before execution or replay comparison. An invalid stored binding reports an operational failure.
 - Reuse of a revision-bound job or batch key with another revision conflicts. Reuse with an explicitly different date also conflicts.
-- Jobs and standalone definitions without provenance stay supported. Replay of such an admission compares its original execution settings. It returns the original record and assigns no later revision.
+- A job definition without a revision and a coverage date is invalid. A stored job row without them cannot be read.
 - Saved receipt replay does not depend on the current configuration.
 - Direct `collect` applies coverage eligibility but keeps no revision. Its receipts stay source observations. Use managed jobs when the retained coverage decision matters.
 
@@ -94,7 +95,6 @@ New configuration-based managed jobs bind the revision and `coverageAsOf` to the
 - An existing key compares the source settings, the revision, and any explicit date, then returns the saved decision. An omitted date reuses the saved date.
 - Discovery replay also compares the attempt, mode, and admission policy.
 - An existing key gets no current-date eligibility check.
-- A legacy key compares its original execution settings, with no revision or date, even when current coverage has ended. An explicit date is ignored for its replay, because the original date is unknown. This does not establish historical coverage.
 - A new key resolves an omitted date from UTC database time. It validates eligibility before any admission write.
 
 Overloads that take a prebuilt definition or request serve callers that already hold a resolved decision. CLI admissions use the configuration-based overloads.

@@ -53,8 +53,8 @@ public sealed class ReaderReportPullTests
         var source = new ScriptedSource(Batch(Report()) with { NextCursor = "c1" }, Batch() with { NextCursor = "c1" });
         var pull = new PullReaderReports(source, store);
         await pull.ExecuteAsync(default);
-        var reported = new List<Exception>();
-        var worker = new StageWorker(pull.ExecuteAsync, new CountingWakeup(), reported.Add);
+        var logger = new CapturingLogger<StageWorker>();
+        var worker = new StageWorker("reportPull", pull.ExecuteAsync, new CountingWakeup(), logger);
 
         source.Failure = new HttpRequestException("connection refused");
         var down = await worker.ExecuteAsync(once: true);
@@ -63,7 +63,7 @@ public sealed class ReaderReportPullTests
         var recovered = await worker.ExecuteAsync(once: true);
 
         Assert.Equal((1, 0), (down.Failures, down.ProgressCount));
-        Assert.Equal("connection refused", Assert.Single(reported).Message);
+        Assert.Equal("connection refused", Assert.Single(logger.Entries).Exception!.Message);
         Assert.Equal((0, 1), (recovered.Failures, recovered.ProgressCount));
         Assert.Equal("c2", store.Cursor);
     }

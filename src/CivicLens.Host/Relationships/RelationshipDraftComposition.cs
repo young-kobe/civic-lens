@@ -6,13 +6,14 @@ using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Relationships;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Host.Relationships;
 
 internal static class RelationshipDraftComposition
 {
     public static AnalysisComposition<RelationshipDraftRun> Create(IDbContextFactory<CollectionAttemptDbContext> contexts,
-        string connectionString, CollectionConfiguration collection)
+        string connectionString, CollectionConfiguration collection, ILoggerFactory loggers)
     {
         var status = new PostgresAnalysisStatusStore(contexts, RelationshipDraftTask.Task);
         var configuration = RelationshipDraftConfiguration.FromEnvironment();
@@ -21,7 +22,7 @@ internal static class RelationshipDraftComposition
         var store = new PostgresRelationshipDraftStore(contexts);
         var names = collection.People.ToDictionary(person => person.Id, person => person.Name, StringComparer.Ordinal);
         var step = new RelationshipDraftStep(store, new AnthropicRelationshipDraftModel(configuration.ApiKey), configuration.Settings, names);
-        var worker = new AnalysisWorker<RelationshipDraftRun>(step, status, TimeProvider.System, wakeup);
+        var worker = new AnalysisWorker<RelationshipDraftRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<RelationshipDraftRun>>(), wakeup);
         return new(status, configuration.Settings.DailyTokenLimit, worker, wakeup);
     }
 }

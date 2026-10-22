@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using CivicLens.Application.Reports;
 using CivicLens.Core.Review;
 using CivicLens.Host.Components.Layout;
@@ -19,6 +20,7 @@ public sealed partial class ReportList
     private string? error;
 
     [Inject] private ReviewActorAccessor Actors { get; set; } = default!;
+    [Inject] private ILogger<ReportList> Logger { get; set; } = default!;
     [Inject] private ListReaderReports ListReports { get; set; } = default!;
     [Inject] private CountOpenReaderReports CountOpen { get; set; } = default!;
 
@@ -44,8 +46,9 @@ public sealed partial class ReportList
         {
             error = "This page link is no longer valid. Go back to the first page of the list.";
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            Logger.LogError(exception, "The reader report list could not load.");
             error = "The reader reports could not load. Refresh the page to try again.";
         }
     }

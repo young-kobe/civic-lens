@@ -5,12 +5,13 @@ using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Statements;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Host.Statements;
 
 internal static class StatementDraftComposition
 {
-    public static AnalysisComposition<StatementDraftRun> Create(IDbContextFactory<CollectionAttemptDbContext> contexts, string connectionString)
+    public static AnalysisComposition<StatementDraftRun> Create(IDbContextFactory<CollectionAttemptDbContext> contexts, string connectionString, ILoggerFactory loggers)
     {
         var status = new PostgresAnalysisStatusStore(contexts, StatementDraftTask.Task);
         var configuration = StatementDraftConfiguration.FromEnvironment();
@@ -19,6 +20,6 @@ internal static class StatementDraftComposition
             StatementDraftTask.Task);
         var step = new StatementDraftStep(new PostgresStatementDraftStore(contexts),
             new AnthropicStatementDraftModel(configuration.ApiKey), configuration.Settings);
-        return new(status, configuration.Settings.DailyTokenLimit, new AnalysisWorker<StatementDraftRun>(step, status, TimeProvider.System, wakeup), wakeup);
+        return new(status, configuration.Settings.DailyTokenLimit, new AnalysisWorker<StatementDraftRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<StatementDraftRun>>(), wakeup), wakeup);
     }
 }
