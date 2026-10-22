@@ -1,5 +1,7 @@
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Application.Collection.Jobs;
+using CivicLens.Collection.Contracts;
 using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Infrastructure.Collection.BillStream;
 using CivicLens.Infrastructure.Collection.Jobs;
@@ -16,6 +18,20 @@ internal static class SucceededJobs
         var job = await store.EnqueueAsync(source, key, default);
         await MarkSucceededAsync(connectionString, job.JobId);
         return job.JobId;
+    }
+
+    public static async Task<CollectionJobRecord> ScheduledBillListAsync(PostgresCollectionJobStore store,
+        string connectionString, CollectionConfiguration configuration)
+    {
+        await store.SynchronizeAsync(configuration, default);
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = new NpgsqlCommand("UPDATE collection_source_schedules SET next_due_utc_ticks = 0", connection);
+            await command.ExecuteNonQueryAsync();
+        }
+        await store.AdvanceDueAsync(10, default);
+        return Assert.Single(await store.ListAsync(10, default));
     }
 
     public static async Task<string> BillDetailAsync(PostgresCollectionJobStore store, string connectionString,

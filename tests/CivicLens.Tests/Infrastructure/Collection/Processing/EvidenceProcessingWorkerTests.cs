@@ -326,6 +326,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var record = Assert.Single(await processing.GetByJobIdsAsync([job.JobId], default));
         Assert.Equal(EvidenceProcessingStatus.Blocked, record.Status);
         Assert.Equal(gatesBefore, await ScalarAsync("SELECT count(*) FROM bill_gates"));
+        Assert.Equal(0L, await ScalarAsync($"SELECT count(*) FROM bill_gates WHERE detail_job_id = '{job.JobId}'"));
         Assert.Empty(await JobsAdmittedByTheWorkerAsync());
     }
 
@@ -603,10 +604,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var configuration = CongressBillSourceConfigurationTests.Configuration();
         var today = DateOnly.FromDateTime(ObservationEpoch.UtcDateTime);
         var source = new ConfiguredCollectionSource(configuration, "congress-bills", today);
-        await jobs.SynchronizeAsync(configuration, default);
-        await MakeEverySourceDueAsync();
-        await jobs.AdvanceDueAsync(10, default);
-        var list = Assert.Single(await jobs.ListAsync(10, default));
+        var list = await SucceededJobs.ScheduledBillListAsync(jobs, connectionString, configuration);
         seededBillJobIds.Add(list.JobId);
         if (target == ApiResource.BillList) return list.JobId;
 

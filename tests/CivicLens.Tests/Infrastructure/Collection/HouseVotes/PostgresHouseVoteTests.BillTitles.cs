@@ -151,9 +151,11 @@ public sealed partial class PostgresHouseVoteTests
         var (_, members) = await DetailWithMembersJobAsync(vote);
         await AdmitMembersAsync(members, vote);
 
-        await AdmitBillDetailAsync(number: 15);
-        await AdmitBillDetailAsync(congress: 118);
+        var otherNumber = await AdmitBillDetailAsync(number: 15);
+        var otherCongress = await AdmitBillDetailAsync(congress: 118);
 
+        Assert.Equal(2L, await ScalarAsync(
+            $"SELECT count(*) FROM bill_gates WHERE detail_job_id IN ('{otherNumber.JobId}', '{otherCongress.JobId}')"));
         Assert.Empty(await QueueAsync());
     }
 

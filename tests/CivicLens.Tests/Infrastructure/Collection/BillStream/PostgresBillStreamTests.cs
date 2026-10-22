@@ -335,7 +335,7 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
         var result = await AdmitAsync(Source(), "full", window, page);
 
         Assert.Equal(ApiPageQuery.PageLimit + 1, result.AdmittedCount);
-        // One revision for the seeded list job and one that all admitted jobs share.
+        // The fixture list job is a page-mode job with its own revision. All admitted jobs share the second revision.
         Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM collection_configuration_revisions"));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM collection_jobs WHERE definition_json::jsonb -> 'configurationRevision' IS NOT NULL"));
         var expected = CollectionConfigurationRevision.Create(Configuration());

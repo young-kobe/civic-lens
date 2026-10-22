@@ -3,8 +3,9 @@ using CivicLens.Application.Collection.Discovery;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
+using CivicLens.Tests.Fixtures;
 
-namespace CivicLens.Tests.Fixtures;
+namespace CivicLens.Tests.Infrastructure.Collection.Jobs;
 
 internal static class DiscoveredArticles
 {

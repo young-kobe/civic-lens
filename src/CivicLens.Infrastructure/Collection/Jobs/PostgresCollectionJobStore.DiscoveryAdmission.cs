@@ -34,15 +34,6 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                 existing, recheckKnownCandidates: true), cancellationToken);
     }
 
-    public Task<DiscoveryAdmissionResult> AdmitAsync(DiscoveryAdmissionRequest request, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        request.Validate();
-        if (request.RecheckKnownCandidates)
-            throw new ArgumentException("Rechecking known candidates is reserved for automatic source checks.", nameof(request));
-        return AdmitAsync(request.IdempotencyKey, (_, _) => request, cancellationToken);
-    }
-
     private Task<DiscoveryAdmissionResult> AdmitAsync(string idempotencyKey,
         Func<CollectionJobDefinition?, DateOnly, DiscoveryAdmissionRequest> prepareRequest, CancellationToken cancellationToken)
     {

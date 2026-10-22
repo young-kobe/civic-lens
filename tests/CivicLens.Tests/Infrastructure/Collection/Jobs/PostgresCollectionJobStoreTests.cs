@@ -899,10 +899,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var backfill = new DateOnly(2025, 1, 3);
         var configuration = CongressBillSourceConfigurationTests.Configuration();
         var configured = new ConfiguredCollectionSource(configuration, "congress-bills", backfill);
-        await jobs.SynchronizeAsync(configuration, default);
-        await SqlAsync("UPDATE collection_source_schedules SET next_due_utc_ticks = 0");
-        await jobs.AdvanceDueAsync(10, default);
-        var list = Assert.Single(await jobs.ListAsync(10, default));
+        var list = await SucceededJobs.ScheduledBillListAsync(jobs, connectionString, configuration);
         var detailId = await SucceededJobs.BillDetailAsync(jobs, connectionString, configured, list.JobId,
             new CongressBillListItem(119, "hr", 1, backfill));
         await SqlAsync($"UPDATE collection_jobs SET created_at = 100 WHERE job_id = '{list.JobId}'");
