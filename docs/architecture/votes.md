@@ -336,7 +336,7 @@ The Senate publishes one XML file for each roll call and one menu for each sessi
 
 One `api` source with `apiParser` set to `senateVoteList` follows the Senate votes. It sets `minimumCongress` and `backfillFrom` like the House source. It refuses a `credential` and a `coverage` list. It covers every configured person with a `bioguideId`, as the House source does. The roster `lis` ID matches members in the drafting work.
 
-The source URL is `https://www.senate.gov/legislative/LIS`. The shipped source `senate-votes` sets `backfillFrom` 2025-01-03 and `minimumCongress` 119. It ships with `enabled: false`. The admission policy holds 1,000 jobs, because one menu lists up to 999 votes.
+The source URL is `https://www.senate.gov/legislative/LIS`. The shipped source `senate-votes` sets `backfillFrom` 2025-01-03 and `minimumCongress` 119. It ships with `enabled: false`, like the other `api` sources. The admission policy holds 1,000 jobs, because one menu lists up to 999 votes.
 
 The daily sweep is the House sweep. The due check creates one menu job for `VoteSession.FirstOfSweep`. A menu job admits one job for each vote and the menu of the following session. The next-menu key is `senate-vote/{source}/menu/{menu job ID}`.
 
@@ -427,7 +427,6 @@ The reader takes the `lis` IDs of the senators from `IMemberRosterStore.ReadSena
 - A members response that is newer than the recorded detail blocks its job until the next sweep admits the newer detail.
 - Rolling back the `VoteKindChangedReason` migration fails while any vote run has the `kindChanged` reason.
 - The session of today uses the UTC date. The new session therefore starts a few hours early on 1 January in US time zones. Its list is empty then.
-- Senate drafting is built but the shipped `senate-votes` source is disabled. PR 4 of [R-42](../roadmap.md#next) adds the operations steps and the enable flag. See [actions](actions.md#limits-and-planned-work).
 - The Senate reader skips a tracked person who is not in the roster only if the vote file has no `lis` ID for that person. A real senator missing from the roster blocks the draft.
 - The Senate time zone is a guess. The Senate files do not name it. No en bloc or treaty vote file has been seen. The parser has no rule for them. A file with a document type that is no bill type parses as a vote with no bill. A file that breaks a parser rule is invalid data, which blocks the job.
 - The parser ignores the `tie_breaker` element. A tie-break cast of the Vice President is not in the member list, so no record shows it.
