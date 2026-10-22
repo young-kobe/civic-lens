@@ -5,6 +5,7 @@ using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using CivicLens.Host.Components.Layout;
 using CivicLens.Host.Components.Ui;
+using CivicLens.Host.Documents;
 using CivicLens.Host.Review;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;

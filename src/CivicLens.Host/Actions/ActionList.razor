@@ -1,0 +1,52 @@
+@page "/Review/Actions"
+@using CivicLens.Host.Review
+@inherits DraftListPage
+
+<TopBarTitle Crumbs="Crumbs" />
+
+<div class="content">
+    <PageHeader Title="Actions" Lede="Bill sponsorship records that the AI drafter wrote. Each record has one entry, which shows its newest revision." />
+    @if (error is not null)
+    {
+        <Notice Tone="Tone.Bad">@error</Notice>
+    }
+
+    @if (drafts is not null && counts is not null)
+    {
+        <Panel Title="Records" Id="drafts">
+            <Aside><FilterTabs Label="Filter action records" Tabs="DraftTabs" /></Aside>
+            <ChildContent>
+                <DraftFilterForm Label="Filter action records by issue, official, and date" Action="@($"{ActionRoutes.List}#drafts")"
+                                 ClearHref="@ClearHref(ActionRoutes.List)" Status="@DraftFilterNames.NameOf(Filter)"
+                                 Issues="Issues.Issues" Officials="OfficialChoices"
+                                 IssueId="@IssueId" OfficialId="@OfficialId" From="@From" To="@To" />
+                <DataTable Items="drafts.Items" Caption="Action records">
+                    <Head>
+                        <th>Action</th>
+                        <th class="fit hide-narrow">Bill</th>
+                        <th>Status</th>
+                        <th class="num">Open concerns</th>
+                        <th class="act"><span class="visually-hidden">Open</span></th>
+                    </Head>
+                    <Row Context="item">
+                        <td>
+                            <a class="cell-title" href="@ActionRoutes.Editor(item.RecordId)">@item.CurrentRevision.Headline</a>
+                            @if (PriorityLabels.Of(drafts.Priorities[item.RecordId]) is { } tier)
+                            {
+                                <StatusBadge Text="@tier" />
+                            }
+                        </td>
+                        <td class="fit hide-narrow">@ActionLabels.Bill(item.CurrentRevision)</td>
+                        <td><StatusBadge Tone="DraftStatusDisplay.Tone(item.CurrentStatus)" Text="@DraftStatusDisplay.Label(item.CurrentStatus, item.UnresolvedConcerns.Length)" /></td>
+                        <td class="num">@item.UnresolvedConcerns.Length</td>
+                        <td class="act"><Button Small="true" Href="@ActionRoutes.Editor(item.RecordId)">Open</Button></td>
+                    </Row>
+                    <Empty>
+                        <EmptyState Title="@DraftsEmpty.Title" Text="@DraftsEmpty.Text" />
+                    </Empty>
+                </DataTable>
+                <Pager Label="Action record pages" NewerHref="@DraftsHref(drafts.NewerCursor)" OlderHref="@DraftsHref(drafts.OlderCursor)" />
+            </ChildContent>
+        </Panel>
+    }
+</div>
