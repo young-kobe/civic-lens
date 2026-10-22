@@ -38,7 +38,6 @@ Install the .NET SDK selected by `global.json`, then run:
 dotnet restore --locked-mode
 dotnet build --no-restore --configuration Release
 dotnet test --no-build --configuration Release
-dotnet run --project src/CivicLens.Host -- status
 dotnet run --project src/CivicLens.Collector -- --help
 ```
 

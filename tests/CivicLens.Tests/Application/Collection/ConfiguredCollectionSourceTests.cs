@@ -64,7 +64,7 @@ public sealed class ConfiguredCollectionSourceTests
     public void LegacyReplayDoesNotAcquireARevisionOrDependOnCurrentCoverage()
     {
         var config = Configuration();
-        var saved = CollectionJobDefinition.FromConfiguration(config, "source", AdmittedOn) with
+        var saved = CollectionFixtures.Definition(config, "source", AdmittedOn) with
         { ConfigurationRevision = null, CoverageAsOf = null };
         config.Sources[0] = config.Sources[0] with { Enabled = false };
         var source = new ConfiguredCollectionSource(config, "source");

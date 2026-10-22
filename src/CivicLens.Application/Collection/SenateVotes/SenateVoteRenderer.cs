@@ -32,11 +32,6 @@ public static class SenateVoteRenderer
         return string.Join('\n', lines);
     }
 
-    private static void AddLine(List<string> lines, string label, string? value)
-    {
-        if (!string.IsNullOrWhiteSpace(value)) lines.Add(Line(label, value));
-    }
-
     private static string CountsOf(SenateVoteCounts counts) =>
         $"Yea {Count(counts.Yeas ?? 0)}, Nay {Count(counts.Nays ?? 0)}, Present {Count(counts.Present ?? 0)}, Not voting {Count(counts.Absent ?? 0)}";
 

@@ -130,6 +130,27 @@ public sealed class PublishedVoteTests
     }
 
     [Fact]
+    public void ACastOverTheLimitIsRefusedSoNoOfficialVoteRowCanFailLaterAtStaging()
+    {
+        var vote = Vote();
+        var cast = new string('y', PublishedVote.MaximumCastLength + 1);
+        var member = vote.Members[0] with { Cast = cast, Citation = vote.Members[0].Citation with { Quote = "Member: A000055, Robert Aderholt, R, AL, " + cast } };
+
+        var error = Assert.Throws<InvalidDataException>((vote with { Members = [member, vote.Members[1]] }).Validate);
+
+        Assert.Contains($"at most {PublishedVote.MaximumCastLength} characters", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ABillTypeOrHeadlineOverTheLimitIsRefusedBecauseTheOfficialVoteRowCapsThem()
+    {
+        var vote = Vote();
+
+        Assert.Throws<InvalidDataException>((vote with { BillType = new string('H', PublishedVote.MaximumBillTypeLength + 1) }).Validate);
+        Assert.Throws<InvalidDataException>((vote with { Headline = new string('h', PublishedVote.MaximumHeadlineLength + 1) }).Validate);
+    }
+
+    [Fact]
     public void AKindOtherThanOtherNeedsItsCitationAndOtherNeedsNone()
     {
         var vote = Vote();
@@ -211,6 +232,9 @@ public sealed class PublishedVoteTests
     {
         Assert.Equal(VoteDraftRevision.MaximumMembers, PublishedVote.MaximumMembers);
         Assert.Equal(VoteDraftRevision.MaximumFacts, PublishedVote.MaximumFacts);
+        Assert.Equal(VoteDraftRevision.MaximumCastLength, PublishedVote.MaximumCastLength);
+        Assert.Equal(VoteDraftRevision.MaximumBillTypeLength, PublishedVote.MaximumBillTypeLength);
+        Assert.Equal(VoteDraftRevision.MaximumHeadlineLength, PublishedVote.MaximumHeadlineLength);
     }
 
     [Fact]

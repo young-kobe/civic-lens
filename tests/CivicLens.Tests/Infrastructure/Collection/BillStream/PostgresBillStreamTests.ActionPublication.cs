@@ -136,7 +136,7 @@ public sealed partial class PostgresBillStreamTests
         var revision = (await ActionReviews().GetRevisionAsync(RecordId, 1, default))!;
         var names = revision.Sponsorships.Select(item => item.PersonId).Distinct().ToDictionary(id => id, id => $"Official {id}");
         var releases = new FileReleaseDirectory(Path.Combine(captureRoot, "releases"));
-        var publisher = new PublishRelease(PostgresPublicationStore.FromConnectionString(connectionString), releases, new ReleaseRenderer(),
+        var publisher = new PublishRelease(PostgresPublicationStore.FromConnectionString(connectionString), releases, new ReleaseRenderer(null, null),
             new PublishedRecordLoaders(PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
                 PostgresStatementReviewStore.FromConnectionString(connectionString), ActionReviews(),
                 PostgresVoteReviewStore.FromConnectionString(connectionString),

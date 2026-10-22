@@ -1,3 +1,4 @@
+using CivicLens.Tests.Fixtures;
 using System.Security.Cryptography;
 using System.Text;
 using CivicLens.Application.Collection;
@@ -256,7 +257,7 @@ public sealed class CongressBillSourceConfigurationTests
     [Fact]
     public void AResourceKindNeedsTheBillListSourceThatDefinesItsUrlForms()
     {
-        var plain = CollectionJobDefinition.FromConfiguration(Configuration() with
+        var plain = CollectionFixtures.Definition(Configuration() with
         {
             Sources = [Configuration().Sources.Single() with
             {

@@ -150,8 +150,11 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
         var attemptId = await ImportAsync('a', 0);
         var members = RosterFixtures.Members();
         var broken = members[1] with { Terms = [members[1].Terms[0] with { Chamber = "gov" }] };
+        await SeedBlockedVoteAsync('1', "Senate", "evidenceUnavailable");
 
         await Assert.ThrowsAsync<DbUpdateException>(() => roster.AdmitAsync(attemptId, [members[0], broken], default));
+
+        Assert.Equal(["Blocked"], await StatusesAsync());
 
         Assert.Equal((0L, 0L, 0L), (await CountAsync("roster_members", attemptId), await CountAsync("roster_terms", attemptId),
             await CountAsync("roster_snapshots", attemptId)));
@@ -228,6 +231,39 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
         var job = Assert.Single(await jobs.ListAsync(10, default));
         Assert.Equal((ApiResource.MemberRoster, RosterFixtures.SourceUrl, null), (job.Definition.ApiResource, job.Definition.Url,
             job.Definition.Credential));
+    }
+
+    [Fact]
+    public async Task ANewSnapshotRequeuesOnlyTheSenateDraftsBlockedAsEvidenceUnavailableBecauseANewSenatorMayNowMatch()
+    {
+        await SeedBlockedVoteAsync('1', "Senate", "evidenceUnavailable");
+        await SeedBlockedVoteAsync('2', "House", "evidenceUnavailable");
+        await SeedBlockedVoteAsync('3', "Senate", "tooManyMembers");
+
+        await roster.AdmitAsync(await ImportAsync('a', 0), RosterFixtures.Members(), default);
+
+        Assert.Equal(["Pending", "Blocked", "Blocked"], await StatusesAsync());
+    }
+
+    private Task SeedBlockedVoteAsync(char id, string chamber, string errorCode) => ExecuteAsync($"""
+        SET session_replication_role = replica;
+        INSERT INTO vote_candidates (candidate_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks,
+            detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
+        VALUES ('{new string(id, 64)}', 'votes', '{chamber}', 119, 1, {id}, 1, 'detail-{id}', 'members-{id}',
+                '{new string('c', 64)}', '{new string('c', 64)}', '{new string('c', 64)}', 1);
+        INSERT INTO vote_analysis (candidate_id, task, status, error_code, fence, attempts, reserved_tokens, created_at_utc_ticks)
+        VALUES ('{new string(id, 64)}', 'vote-draft', 'Blocked', '{errorCode}', 0, 1, 0, 1)
+        """);
+
+    private async Task<string[]> StatusesAsync()
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("SELECT status FROM vote_analysis ORDER BY candidate_id", connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        var statuses = new List<string>();
+        while (await reader.ReadAsync()) statuses.Add(reader.GetString(0));
+        return [.. statuses];
     }
 
     private Task<string> ImportAsync(char body, int day) =>

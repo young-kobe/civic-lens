@@ -25,7 +25,7 @@ public sealed class PublishedRelatedRecordsTests : IDisposable
         var scenario = new PublicationScenario();
         var statement = scenario.AddStatement('c');
         var action = scenario.AddAction('d');
-        var publish = new PublishRelease(scenario.Publications, new FileReleaseDirectory(root), new ReleaseRenderer(), scenario.Loaders(),
+        var publish = new PublishRelease(scenario.Publications, new FileReleaseDirectory(root), new ReleaseRenderer(null, null), scenario.Loaders(),
             new PublicationCatalog(scenario.OfficialNames, IssueConfiguration.None), FixedRosters.NamedOnly(scenario.OfficialNames.Keys), scenario.Clock);
         var first = await publish.ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
             new PublishedRecordReference(PublishedRecordKind.Statement, statement), new PublishedRecordReference(PublishedRecordKind.Action, action)));

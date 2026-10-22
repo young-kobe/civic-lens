@@ -95,28 +95,24 @@ public sealed class PostgresRelationshipDraftStore : PostgresAnalysisStore<Relat
             cancellationToken);
     }
 
+    private static readonly (RelationshipDraftView View, string? ErrorCode)[] SucceededViews =
+    [
+        (RelationshipDraftView.Drafted, null),
+        (RelationshipDraftView.Unchanged, RelationshipDraftErrorCodes.Unchanged),
+        (RelationshipDraftView.NoRelationship, RelationshipDraftErrorCodes.NoRelationship),
+        (RelationshipDraftView.NoLongerMatches, RelationshipDraftErrorCodes.NoLongerMatches),
+    ];
+
     private static Expression<Func<RelationshipAnalysisRow, bool>> InView(RelationshipDraftView view) => view switch
     {
         RelationshipDraftView.Pending => AnalysisQueueStates.IsPending<RelationshipAnalysisRow>(),
-        RelationshipDraftView.Drafted => row => row.Status == State.Succeeded && row.ErrorCode == null,
-        RelationshipDraftView.Unchanged => row => row.Status == State.Succeeded && row.ErrorCode == RelationshipDraftErrorCodes.Unchanged,
-        RelationshipDraftView.NoRelationship => row => row.Status == State.Succeeded && row.ErrorCode == RelationshipDraftErrorCodes.NoRelationship,
-        RelationshipDraftView.NoLongerMatches => row => row.Status == State.Succeeded && row.ErrorCode == RelationshipDraftErrorCodes.NoLongerMatches,
-        _ => AnalysisQueueStates.IsFailed<RelationshipAnalysisRow>()
+        RelationshipDraftView.Failed => AnalysisQueueStates.IsFailed<RelationshipAnalysisRow>(),
+        _ => AnalysisQueueStates.IsSucceeded<RelationshipAnalysisRow>(SucceededViews.Single(item => item.View == view).ErrorCode)
     };
 
-    private static RelationshipDraftView ViewOf(State status, string? errorCode) => status switch
-    {
-        State.Succeeded => errorCode switch
-        {
-            null => RelationshipDraftView.Drafted,
-            RelationshipDraftErrorCodes.Unchanged => RelationshipDraftView.Unchanged,
-            RelationshipDraftErrorCodes.NoRelationship => RelationshipDraftView.NoRelationship,
-            _ => RelationshipDraftView.NoLongerMatches
-        },
-        var failed when AnalysisQueueStates.IsFailed(failed) => RelationshipDraftView.Failed,
-        _ => RelationshipDraftView.Pending
-    };
+    private static RelationshipDraftView ViewOf(State status, string? errorCode) =>
+        status == State.Succeeded ? SucceededViews.Single(item => item.ErrorCode == errorCode).View
+            : AnalysisQueueStates.IsFailed(status) ? RelationshipDraftView.Failed : RelationshipDraftView.Pending;
 
     private sealed class SettledRun
     {

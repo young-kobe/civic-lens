@@ -6,6 +6,7 @@ using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
+using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Collection;
 
@@ -35,7 +36,7 @@ public sealed class CollectionWorkspaceTests
     {
         var retainedUrl = "https://example.test/news/article";
         var oldConfiguration = Configuration(Source(CollectionMode.Feed, "https://example.test/news/feed", maxRequests: 2));
-        var oldDefinition = CollectionJobDefinition.FromConfiguration(oldConfiguration, "source") with
+        var oldDefinition = CollectionFixtures.Definition(oldConfiguration, "source") with
         {
             Mode = CollectionMode.Page,
             Url = retainedUrl,
@@ -70,7 +71,7 @@ public sealed class CollectionWorkspaceTests
     public async Task RecollectRejectsRetainedUrlOutsideCurrentScopeOrDisabledSource(bool disabled, string retainedUrl)
     {
         var oldSource = Source(CollectionMode.Feed, "https://example.test/news/feed", 2) with { AllowedPathPrefix = "/" };
-        var prior = Job(CollectionJobDefinition.FromConfiguration(Configuration(oldSource), "source") with
+        var prior = Job(CollectionFixtures.Definition(Configuration(oldSource), "source") with
         {
             Mode = CollectionMode.Page,
             Url = retainedUrl,
@@ -95,7 +96,7 @@ public sealed class CollectionWorkspaceTests
     {
         var attemptId = "attempt-one";
         var request = Request(attemptId);
-        var definition = CollectionJobDefinition.FromConfiguration(Configuration(Source(CollectionMode.Page,
+        var definition = CollectionFixtures.Definition(Configuration(Source(CollectionMode.Page,
             "https://example.test/news", 2)), "source");
         var selected = Job(definition) with
         {
@@ -118,7 +119,7 @@ public sealed class CollectionWorkspaceTests
     [Fact]
     public async Task SourcesFetchesAnOlderJobOnceAndRejectsMismatchedRetainedAttempt()
     {
-        var definition = CollectionJobDefinition.FromConfiguration(Configuration(Source(CollectionMode.Page,
+        var definition = CollectionFixtures.Definition(Configuration(Source(CollectionMode.Page,
             "https://example.test/news", 2)), "source");
         var selected = Job(definition) with
         {
@@ -138,7 +139,7 @@ public sealed class CollectionWorkspaceTests
     [Fact]
     public async Task OwnerIsCheckedBeforeSourceReads()
     {
-        var definition = CollectionJobDefinition.FromConfiguration(Configuration(Source(CollectionMode.Page,
+        var definition = CollectionFixtures.Definition(Configuration(Source(CollectionMode.Page,
             "https://example.test/news", 2)), "source");
         var selected = Job(definition) with { Attempts = [JobAttempt("attempt-one", Request("attempt-one"))] };
         var jobs = new CountingJobStore([selected]);

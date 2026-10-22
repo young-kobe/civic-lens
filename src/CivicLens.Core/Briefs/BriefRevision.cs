@@ -75,7 +75,7 @@ public sealed partial record BriefRevision(string RecordId, int RevisionNumber, 
     {
         if (!LowercaseHex.Is(RecordId, 64) || !LowercaseHex.Is(Fingerprint, 64))
             throw new ArgumentException("A brief revision needs a valid record ID and fingerprint.");
-        if (RevisionNumber < 1 || string.IsNullOrWhiteSpace(AuthorSubject) || AuthorSubject.Length > 256 || CreatedAtUtc.Offset != TimeSpan.Zero)
+        if (!ReviewAuthor.IsValidRevisionHeader(RevisionNumber, AuthorSubject, CreatedAtUtc))
             throw new ArgumentException("A brief revision needs a number, an author, and a UTC creation time.");
         Window.Validate();
         if (RecordId != Window.RecordId)
@@ -85,14 +85,14 @@ public sealed partial record BriefRevision(string RecordId, int RevisionNumber, 
     private static void ValidateContent(string headline, ImmutableArray<BriefParagraph> paragraphs, ImmutableArray<BriefCitation> citations,
         string name)
     {
-        ValidateText(headline, MaximumHeadlineLength, name);
+        ReviewTextRules.ValidateText(headline, MaximumHeadlineLength, name);
         ValidateCitations(citations, name);
         if (paragraphs.IsDefaultOrEmpty || paragraphs.Length > MaximumParagraphs)
             throw new ArgumentException($"A brief needs 1 to {MaximumParagraphs} paragraphs.", name);
         var known = citations.Select(citation => citation.Id).ToHashSet(StringComparer.Ordinal);
         foreach (var paragraph in paragraphs)
         {
-            ValidateText(paragraph.Text, MaximumParagraphLength, name);
+            ReviewTextRules.ValidateText(paragraph.Text, MaximumParagraphLength, name);
             if (paragraph.CitationIds.IsDefaultOrEmpty || paragraph.CitationIds.Distinct(StringComparer.Ordinal).Count() != paragraph.CitationIds.Length)
                 throw new ArgumentException("Each paragraph cites 1 or more distinct IDs.", name);
             if (!paragraph.CitationIds.All(known.Contains))
@@ -113,12 +113,6 @@ public sealed partial record BriefRevision(string RecordId, int RevisionNumber, 
         if (citations.Select(citation => citation.Id).Distinct(StringComparer.Ordinal).Count() != citations.Length ||
             citations.Select(citation => (citation.Kind, citation.RecordId)).Distinct().Count() != citations.Length)
             throw new ArgumentException("A brief cites each record once, under its own ID.", name);
-    }
-
-    private static void ValidateText(string text, int maximumLength, string name)
-    {
-        if (string.IsNullOrWhiteSpace(text) || text.Length > maximumLength || text.Contains('\0'))
-            throw new ArgumentException($"Text must be 1 to {maximumLength} characters and contain no NUL.", name);
     }
 
     [GeneratedRegex(@"^R[1-9][0-9]{0,3}$")]

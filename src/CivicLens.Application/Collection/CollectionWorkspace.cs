@@ -4,6 +4,7 @@ using CivicLens.Application.Collection.Health;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
 using CivicLens.Application.Paging;
+using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 
 namespace CivicLens.Application.Collection;
@@ -28,13 +29,13 @@ public sealed class CollectionWorkspace
 
     public CollectionConfiguration GetConfiguration(ReviewActor actor)
     {
-        RequireOwner(actor);
+        ReviewAuthorization.RequireOwner(actor);
         return revision.ReadConfiguration();
     }
 
     public async Task<SourceHealthReport> GetSourceHealthAsync(ReviewActor actor, CancellationToken cancellationToken)
     {
-        RequireOwner(actor);
+        ReviewAuthorization.RequireOwner(actor);
         var sourceIds = SourceIds();
         var latest = await ReadLatestJobsAsync(sourceIds, [], cancellationToken);
         var progress = await ReadProgressAsync(latest, cancellationToken);
@@ -44,7 +45,7 @@ public sealed class CollectionWorkspace
     public async Task<CollectionWorkspaceSources> GetSourcesAsync(ReviewActor actor, string? jobId, string? cursor,
         int limit = PageLimit.Default, CancellationToken cancellationToken = default)
     {
-        RequireOwner(actor);
+        ReviewAuthorization.RequireOwner(actor);
         if (jobId is not null) ValidateJobId(jobId);
         PageLimit.Validate(limit);
         var pageCursor = PageCursor.Parse(cursor);
@@ -115,14 +116,14 @@ public sealed class CollectionWorkspace
 
     public async Task<CollectionJobRecord> GetJobAsync(ReviewActor actor, string jobId, CancellationToken cancellationToken)
     {
-        RequireOwner(actor);
+        ReviewAuthorization.RequireOwner(actor);
         ValidateJobId(jobId);
         return await jobs.GetAsync(jobId, cancellationToken) ?? throw new ArgumentException("Collection job was not found.");
     }
 
     public Task<CollectionJobRecord?> EnqueueAsync(ReviewActor actor, string sourceId, string requestKey, CancellationToken cancellationToken)
     {
-        RequireOwner(actor);
+        ReviewAuthorization.RequireOwner(actor);
         if (!revision.Configuration.Sources.Any(source => source.Id == sourceId)) throw new ArgumentException("Choose a configured source.");
         return jobs.RequestCheckAsync(new ConfiguredCollectionSource(revision, sourceId),
             RequestKey(actor, "collect", requestKey), cancellationToken);
@@ -130,7 +131,7 @@ public sealed class CollectionWorkspace
 
     public Task<CollectionJobRecord?> CancelAsync(ReviewActor actor, string jobId, CancellationToken cancellationToken)
     {
-        RequireOwner(actor);
+        ReviewAuthorization.RequireOwner(actor);
         ValidateJobId(jobId);
         return jobs.CancelAsync(jobId, cancellationToken);
     }
@@ -160,12 +161,5 @@ public sealed class CollectionWorkspace
     {
         if (value is null || value.Length != 32 || value.Any(character => !char.IsAsciiHexDigitLower(character)))
             throw new ArgumentException("Expected a lowercase job or request identifier.");
-    }
-
-    private static void RequireOwner(ReviewActor actor)
-    {
-        if (actor is null || actor.Role != ReviewRole.Owner || string.IsNullOrWhiteSpace(actor.Subject) || actor.Subject.Length > 256 ||
-            ReviewAuthor.IsReserved(actor.Subject))
-            throw new UnauthorizedAccessException("Collection operations require the owner.");
     }
 }

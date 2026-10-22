@@ -60,7 +60,7 @@ public sealed class RunCollectionJob(
         {
             using var releaseTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             try { await lease.ReleaseClaimAsync(releaseTimeout.Token); }
-            catch { }
+            catch (Exception exception) when (WorkerLoop.IsRecoverable(exception)) { }
         }
     }
 
@@ -80,7 +80,7 @@ public sealed class RunCollectionJob(
         {
             receipt = await collector.RunAsync(attempt.Request, lease.CollectorToken);
         }
-        catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException)
+        catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
         {
             executionFailure = exception;
         }
@@ -88,7 +88,7 @@ public sealed class RunCollectionJob(
         {
             using var releaseTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             try { await lease.ReleaseCollectorAsync(releaseTimeout.Token); }
-            catch { }
+            catch (Exception exception) when (WorkerLoop.IsRecoverable(exception)) { }
         }
 
         if (receipt is not null)
@@ -99,7 +99,7 @@ public sealed class RunCollectionJob(
                 using var verifyTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
                 await verifier.VerifyAsync(attempt.Request, receipt, Path.GetFullPath(artifactDirectory), verifyTimeout.Token);
             }
-            catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException)
+            catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
             {
                 executionFailure = exception;
                 receipt = null;
@@ -128,7 +128,7 @@ public sealed class RunCollectionJob(
         using var settlementTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         bool settled;
         try { settled = await lease.SettleAttemptAsync(attempt.AttemptId, interrupted, settlementTimeout.Token); }
-        catch { settled = false; }
+        catch (Exception exception) when (WorkerLoop.IsRecoverable(exception)) { settled = false; }
         return new CollectionJobRunResult(settled ? CollectionJobRunStatus.AttemptFailed : CollectionJobRunStatus.LostOwnership,
             await ReadJobBoundedAsync(lease.JobId));
     }

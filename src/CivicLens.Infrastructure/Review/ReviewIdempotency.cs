@@ -1,3 +1,4 @@
+using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Review.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -8,7 +9,7 @@ internal static class ReviewIdempotency
 {
     public static void ValidateRequest(string actorSubject, string idempotencyKey, string payloadHash)
     {
-        if (string.IsNullOrWhiteSpace(actorSubject) || actorSubject.Length > 256)
+        if (!ReviewAuthor.IsValidSubject(actorSubject))
             throw new ArgumentException("Actor subject is invalid.", nameof(actorSubject));
         if (string.IsNullOrWhiteSpace(idempotencyKey) || idempotencyKey.Length > 256)
             throw new ArgumentException("Idempotency key is invalid.", nameof(idempotencyKey));

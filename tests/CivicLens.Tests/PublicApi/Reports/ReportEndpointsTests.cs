@@ -55,12 +55,12 @@ public sealed class ReportEndpointsTests(PostgresCollection postgres)
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         Assert.Equal("*", response.Headers.GetValues("Access-Control-Allow-Origin").Single());
         await using var database = NpgsqlDataSource.Create(host.Options.Database);
-        await using var command = database.CreateCommand("SELECT kind, release_number, category, body FROM reader_reports");
+        await using var command = database.CreateCommand("SELECT kind, category, body FROM reader_reports");
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
-        Assert.Equal(("statement", 1, "other", "The date is wrong."), (reader.GetString(0), reader.GetInt32(1), reader.GetString(2), reader.GetString(3)));
+        Assert.Equal(("statement", "other", "The date is wrong."), (reader.GetString(0), reader.GetString(1), reader.GetString(2)));
         Assert.False(await reader.ReadAsync());
-        Assert.Equal(["sequence", "report_id", "record_id", "revision_number", "kind", "release_number", "category", "body", "payload_hash", "received_at"],
+        Assert.Equal(["sequence", "report_id", "record_id", "revision_number", "kind", "category", "body", "payload_hash", "received_at"],
             await ColumnsAsync(host));
     }
 
@@ -131,9 +131,7 @@ public sealed class ReportEndpointsTests(PostgresCollection postgres)
         var response = await PostAsync(host, revision: "1");
 
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
-        await using var database = NpgsqlDataSource.Create(host.Options.Database);
-        await using var command = database.CreateCommand("SELECT release_number FROM reader_reports");
-        Assert.Equal(2, await command.ExecuteScalarAsync());
+        Assert.Equal(1, await CountAsync(host));
     }
 
     [Fact]

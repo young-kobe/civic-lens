@@ -33,7 +33,9 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         if (!LowercaseHex.Is(RecordId, 64) || !LowercaseHex.Is(CandidateId, 64) || !LowercaseHex.Is(Fingerprint, 64) ||
             !LowercaseHex.Is(IssueRevisionId, 64))
             throw new ArgumentException("An action revision needs valid record, candidate, fingerprint, and issue revision IDs.");
-        if (RevisionNumber < 1 || string.IsNullOrWhiteSpace(SourceId) || Congress < 1 || BillNumber < 1 || string.IsNullOrWhiteSpace(BillType))
+        if (!ReviewAuthor.IsValidRevisionHeader(RevisionNumber, AuthorSubject, CreatedAtUtc))
+            throw new ArgumentException("An action revision needs a number, an author, and a UTC creation time.");
+        if (string.IsNullOrWhiteSpace(SourceId) || Congress < 1 || BillNumber < 1 || string.IsNullOrWhiteSpace(BillType))
             throw new ArgumentException("An action revision needs a source and a bill identity.");
         ReviewTextRules.ValidateHeadlineAndSummary(this, MaximumHeadlineLength, MaximumSummaryLength);
         ReviewTextRules.ValidateText(BillTitle, MaximumTitleLength, nameof(BillTitle));

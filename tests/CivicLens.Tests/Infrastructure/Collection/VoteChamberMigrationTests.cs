@@ -71,16 +71,44 @@ public sealed class VoteChamberMigrationTests(PostgresCollection postgres) : IAs
     }
 
     [Fact]
-    public async Task RevertingRestoresTheHouseTableNames()
+    public async Task RevertingRestoresTheHouseTableNamesAndDeletesTheSenateRowsThatTheOldTablesCannotHold()
     {
         await using var db = Context();
         await db.Database.MigrateAsync();
+        await ExecuteAsync(Draft('a', "House"));
+        await ExecuteAsync(Draft('b', "Senate"));
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO vote_versions (detail_job_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks, extraction_id)
+            VALUES ('senate-detail', 'source', 'Senate', 119, 1, 100, 1, '{new string('d', 64)}');
+            INSERT INTO vote_candidates (candidate_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks,
+                detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
+            VALUES ('{new string('f', 64)}', 'source', 'Senate', 119, 1, 100, 1, 'senate-detail', 'senate-detail', '{new string('d', 64)}', '{new string('d', 64)}',
+                '{new string('c', 64)}', 1);
+            INSERT INTO vote_analysis (candidate_id, task, status, fence, attempts, reserved_tokens, created_at_utc_ticks)
+            VALUES ('{new string('f', 64)}', 'vote-draft', 'Pending', 0, 0, 0, 1);
+            INSERT INTO vote_analysis_runs (run_id, candidate_id, task, task_version, model, prompt_version, schema_version, input_hash, outcome,
+                input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, charged_tokens, started_at_utc_ticks, finished_at_utc_ticks, previous_run_id)
+            VALUES ('{new string('1', 32)}', '{new string('f', 64)}', 'vote-draft', 'v', 'm', 'p', 's', '{new string('9', 64)}', 'Drafted', 0, 0, 0, 0, 0, 1, 1, NULL),
+                   ('{new string('2', 32)}', '{new string('f', 64)}', 'vote-draft', 'v', 'm', 'p', 's', '{new string('9', 64)}', 'Drafted', 0, 0, 0, 0, 0, 1, 1, '{new string('1', 32)}');
+            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
+            VALUES ('{new string('b', 64)}', 1, 'civic-lens:analysis', 'Analysis', '{new string('2', 32)}', '[]', 1);
+            INSERT INTO vote_review_decisions (decision_id, record_id, revision_number, review_state_version, kind, decision_json, created_at_utc_ticks)
+            VALUES ('{new string('3', 32)}', '{new string('b', 64)}', 1, 1, 'Approve', '[]', 1);
+            """);
 
         await db.GetService<IMigrator>().MigrateAsync(PreviousMigration);
 
         Assert.Equal([["house_votes"], ["house_vote_candidates"]],
             await ReadAsync("SELECT to_regclass('house_votes')::text UNION ALL SELECT to_regclass('house_vote_candidates')::text"));
         Assert.Empty(await ReadAsync("SELECT conname FROM pg_constraint WHERE conname ~* '(?<!house_)vote_candidates|vote_versions' AND contype <> 'n'"));
+        Assert.Equal([[new string('a', 64)]], await ReadAsync("SELECT record_id FROM vote_drafts"));
+        Assert.Empty(await ReadAsync("SELECT 1 FROM house_vote_candidates"));
+        Assert.Empty(await ReadAsync("SELECT 1 FROM house_votes"));
+        Assert.Empty(await ReadAsync("SELECT 1 FROM vote_analysis"));
+        Assert.Empty(await ReadAsync("SELECT 1 FROM vote_analysis_runs"));
+        Assert.Empty(await ReadAsync("SELECT 1 FROM vote_revisions"));
+        Assert.Empty(await ReadAsync("SELECT 1 FROM vote_review_decisions"));
     }
 
     private static string Draft(char id, string chamber) => $"""

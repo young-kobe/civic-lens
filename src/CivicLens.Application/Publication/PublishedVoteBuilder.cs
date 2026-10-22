@@ -24,7 +24,7 @@ internal sealed class PublishedVoteBuilder(PublishedRecordRules rules)
             Congress = revision.Congress,
             Session = revision.SessionNumber,
             RollCallNumber = revision.RollCallNumber,
-            Kind = KindOf(revision.Kind),
+            Kind = PublishedVoteKinds.Of(revision.Kind),
             KindCitation = revision.KindCitation is { } kind ? Cite(kind) : null,
             VotedOn = revision.VotedOn,
             VotedOnCitation = Cite(revision.VotedOnCitation),
@@ -52,22 +52,5 @@ internal sealed class PublishedVoteBuilder(PublishedRecordRules rules)
         Chamber.House => PublishedChamber.House,
         Chamber.Senate => PublishedChamber.Senate,
         _ => throw new ArgumentOutOfRangeException(nameof(chamber), chamber, "Chamber has no published form.")
-    };
-
-    private static PublishedVoteKind KindOf(VoteKind kind) => kind switch
-    {
-        VoteKind.Rule => PublishedVoteKind.Rule,
-        VoteKind.PreviousQuestion => PublishedVoteKind.PreviousQuestion,
-        VoteKind.MotionToRecommit => PublishedVoteKind.MotionToRecommit,
-        VoteKind.Amendment => PublishedVoteKind.Amendment,
-        VoteKind.Suspension => PublishedVoteKind.Suspension,
-        VoteKind.Passage => PublishedVoteKind.Passage,
-        VoteKind.ConferenceReport => PublishedVoteKind.ConferenceReport,
-        VoteKind.VetoOverride => PublishedVoteKind.VetoOverride,
-        VoteKind.Nomination => PublishedVoteKind.Nomination,
-        VoteKind.Cloture => PublishedVoteKind.Cloture,
-        VoteKind.MotionToProceed => PublishedVoteKind.MotionToProceed,
-        VoteKind.Other => PublishedVoteKind.Other,
-        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Vote kind has no published form.")
     };
 }

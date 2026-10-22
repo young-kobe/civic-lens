@@ -436,6 +436,33 @@ public sealed class VoteDraftStepTests
     }
 
     [Fact]
+    public async Task ACastOverTheLimitBlocksBeforeAnyCallSoOneBadVoteNeverStopsTheOtherRecordsFromPublishing()
+    {
+        var model = new FakeHeadlineSummaryModel();
+        var world = Create(members: [new(Aderholt, "Robert", "Aderholt", new string('y', VoteDraftRevision.MaximumCastLength + 1))]);
+
+        var (store, _) = await RunAsync(world, model);
+
+        Assert.Equal((State.Blocked, "fieldTooLong"), (store.Entries[0].Status, store.Entries[0].ErrorCode));
+        Assert.Empty(model.Requests);
+        Assert.Empty(store.Revisions);
+    }
+
+    [Fact]
+    public async Task ABillTypeOverTheLimitBlocksBeforeAnyCallBecauseThePublishedVoteRefusesIt()
+    {
+        var model = new FakeHeadlineSummaryModel();
+        var world = Create();
+        var evidence = world.Evidence(null, null, false);
+        var longType = evidence with { Candidate = evidence.Candidate with { BillType = new string('h', VoteDraftRevision.MaximumBillTypeLength + 1) } };
+
+        var (store, _) = await RunAsync(world, model, evidence: longType);
+
+        Assert.Equal((State.Blocked, "fieldTooLong"), (store.Entries[0].Status, store.Entries[0].ErrorCode));
+        Assert.Empty(model.Requests);
+    }
+
+    [Fact]
     public async Task FactsThatAloneExceedTheByteCapBlockWithoutACall()
     {
         var model = new FakeHeadlineSummaryModel();

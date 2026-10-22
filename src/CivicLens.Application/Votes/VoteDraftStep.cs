@@ -38,6 +38,8 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
             return await attempt.CompleteAsync(State.Blocked, VoteDraftErrorCodes.TooManyMembers, cancellationToken);
         if (snapshot.Facts.Length > VoteDraftRevision.MaximumFacts || snapshot.Facts.Any(fact => fact.Text.Length > VoteDraftRevision.MaximumFactLength))
             return await attempt.CompleteAsync(State.Blocked, VoteDraftErrorCodes.FactTooLong, cancellationToken);
+        if (HasTooLongField(evidence, snapshot))
+            return await attempt.CompleteAsync(State.Blocked, VoteDraftErrorCodes.FieldTooLong, cancellationToken);
         var trackedIssueIds = BillGate.TrackedIssueIdsFor(snapshot.PolicyArea, snapshot.Day, issueConfiguration);
         var context = new VoteDraftContext(evidence, snapshot, [.. trackedIssueIds], issues.Id);
         return context.ChangeSinceCurrent() switch
@@ -48,6 +50,10 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
             _ => await DraftAsync(attempt, context, cancellationToken)
         };
     }
+
+    private static bool HasTooLongField(VoteDraftEvidence evidence, VoteSnapshot snapshot) =>
+        evidence.Candidate.BillType?.Length > VoteDraftRevision.MaximumBillTypeLength ||
+        snapshot.Members.Any(member => member.Cast.Length > VoteDraftRevision.MaximumCastLength);
 
     private Task<bool> CopyTextAsync(IAnalysisAttempt<VoteDraftRun> attempt, VoteDraftContext context, string reason,
         CancellationToken cancellationToken)

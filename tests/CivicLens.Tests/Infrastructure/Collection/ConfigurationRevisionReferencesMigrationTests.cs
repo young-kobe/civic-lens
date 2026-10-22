@@ -1,3 +1,4 @@
+using CivicLens.Tests.Fixtures;
 using System.Text.Json;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Discovery;
@@ -101,7 +102,7 @@ public sealed class ConfigurationRevisionReferencesMigrationTests(PostgresCollec
                 JobPolicy = new CollectionJobPolicy { MaxAttempts = 2, InitialRetryDelaySeconds = 0, MaximumRetryDelaySeconds = 0 }
             }]
         };
-        return CollectionJobDefinition.FromConfiguration(configuration, "source", new DateOnly(2026, 7, 1)) with
+        return CollectionFixtures.Definition(configuration, "source", new DateOnly(2026, 7, 1)) with
         { Mode = CollectionMode.Page, ETag = null, LastModified = null, Url = "https://example.test/articles/template" };
     }
 

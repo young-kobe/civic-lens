@@ -10,7 +10,7 @@ namespace CivicLens.Host.Publication;
 
 /// <param name="publicApiUrl">The address of the search service. The search page and the report page need it, and say that they are not available without it.</param>
 /// <param name="turnstileSiteKey">The public Turnstile site key. The report page needs it, and says that reporting is not available without it.</param>
-public sealed class ReleaseRenderer(string? publicApiUrl = null, string? turnstileSiteKey = null) : IReleaseRenderer
+public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteKey) : IReleaseRenderer
 {
     public const string PublicApiUrlVariable = "CIVIC_LENS_PUBLIC_API_URL";
     public const string TurnstileSiteKeyVariable = "CIVIC_LENS_TURNSTILE_SITE_KEY";

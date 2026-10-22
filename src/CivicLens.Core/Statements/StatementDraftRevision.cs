@@ -52,6 +52,8 @@ public sealed record StatementDraftRevision(string CandidateId, int RevisionNumb
 
     public void ValidateShape()
     {
+        if (!ReviewAuthor.IsValidRevisionHeader(RevisionNumber, AuthorSubject, CreatedAtUtc))
+            throw new ArgumentException("A statement revision needs a number, an author, and a UTC creation time.");
         ValidateText(Headline, MaximumHeadlineLength, nameof(Headline));
         ValidateText(Summary, MaximumSummaryLength, nameof(Summary));
         if ((StatementDate is null) != (StatementDateEvidence is null))

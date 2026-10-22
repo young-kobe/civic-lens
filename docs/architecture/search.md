@@ -27,7 +27,7 @@ The search service gives readers full-text search over every published record. I
 - Readers send a report with `POST /v1/reports`. The body is form-encoded, so the browser sends a CORS simple request and needs no preflight. The route keeps `Access-Control-Allow-Origin: *` and sets no cookie.
 - The service stores nothing about the reporter. It keeps no IP address, no hash of one, and no contact field. The client address only keys the in-memory rate limit. The service does not log it.
 - The checks run in this order: the shape of the form, the Turnstile check, then the database write. The route reads at most 32 KB of body. An unknown pair of record ID and revision answers 404.
-- A report binds to a record revision in the `records` table, in any release range. A report on a replaced revision is accepted, because a reader may hold an old page. The row stores the kind from that table and the active release number at receipt.
+- A report binds to a record revision in the `records` table, in any release range. A report on a replaced revision is accepted, because a reader may hold an old page. The row stores the kind from that table.
 - Cloudflare Turnstile checks each report in the service. `TurnstileVerifier` sends the token and the secret to the siteverify API and nothing else. It needs `success` and the configured hostname. A 5 second timeout, a failed call, an unreadable reply, or the code "internal-error" gives 503, so the check fails closed.
 - `TurnstileVerifier` is a concrete class at the Cloudflare boundary, as `ReleaseFeed` is at the release boundary. The service registers it only when a secret is set. Tests give `PublicApiApp.Build` a fake `HttpMessageHandler`, as they do for the release feed.
 - Without `CIVIC_LENS_TURNSTILE_SECRET` the report route answers 503 "reports are not available".
@@ -100,7 +100,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - The pull sends the bearer token and never puts it in an error. Enforced by `HttpReportPuller`. Tests: `HttpReportPullerTests.ThePullSendsTheBearerTokenAndTheOpaqueCursorToThePullRouteAndReadsTheBatch` and `HttpReportPullerTests.AFailedCallThrowsWithoutTheTokenSoTheStageCountsItAndNeverLogsTheSecret`.
 - The deadline of the stage is the next 5 minute mark of the database clock. Enforced by `PostgresIntervalWakeup`. Test: `PostgresIntervalWakeupTests.TheFiveMinuteWakeupDoesNotReturnBeforeItsDeadlineBecauseNothingNotifiesIt`.
 - A service address keeps its path prefix. Enforced by `HttpReportPuller`. Test: `HttpReportPullerTests.AServiceAddressKeepsItsPathPrefixWithOrWithoutATrailingSlash`.
-- The token length rule has one owner, `ReaderReportProtocol.IsPullToken`. The service and the stage both call it. Tests: `PublicApiOptionsTests.APullTokenUnder32CharactersIsRefusedAtStartupBecauseItGuardsEveryReport` and `ReportPullConfigurationTests.TheWorkerStopsAtStartupWhenTheReportPullIsSwitchedOnWithoutAUsableAddressAndTokenAndNeverPrintsTheToken`.
+- The token length rule has one owner. Enforced by `ReaderReportProtocol.IsPullToken`, which `PublicApiOptions` and `ReportPullComposition` both call. Tests: `PublicApiOptionsTests.APullTokenUnder32CharactersIsRefusedAtStartupBecauseItGuardsEveryReport` and `ReportPullConfigurationTests.TheWorkerStopsAtStartupWhenTheReportPullIsSwitchedOnWithoutAUsableAddressAndTokenAndNeverPrintsTheToken`.
 - The stage stops the worker at startup when its address or token is missing or invalid. Enforced by `ReportPullComposition`. Test: `ReportPullConfigurationTests.TheWorkerStopsAtStartupWhenTheReportPullIsSwitchedOnWithoutAUsableAddressAndTokenAndNeverPrintsTheToken`.
 - Each schema file runs once, even when two services start together. Enforced by `SchemaMigrator`. Test: `SchemaMigratorTests.TwoServicesThatStartTogetherApplyEachFileOnceAndRecordItInSchemaMigrations`.
 - Every release holds `search.html`, written before the manifest. Enforced by `PublishRelease`. Test: `PublishReleaseTests.EveryReleaseHoldsASearchPageThatIsWrittenBeforeTheManifestAndListsTheReleaseRecords`.
@@ -185,10 +185,10 @@ The poll interval is 2 minutes and the statement timeout is 2 seconds. Both are 
 
 ## Storage and contracts
 
-- The generated schema reference does not cover this database. The tables are `releases`, `records`, and `schema_migrations`, in `src/CivicLens.PublicApi/Schema/001_search_index.sql`. The tables `reader_reports` and `report_pull_state` are in `002_reader_reports.sql`.
+- The generated schema reference does not cover this database. The tables are `releases`, `records`, and `schema_migrations`, in `src/CivicLens.PublicApi/Schema/001_search_index.sql`. The tables `reader_reports` and `report_pull_state` are in `002_reader_reports.sql`. File `003_drop_report_release_number.sql` drops the unused release number column of `reader_reports`.
 - `releases` holds each ingested release number and its publication time.
 - `records` holds one row for each record revision: the manifest entry fields, the body text, the weighted `search` vector, `first_release`, and `last_release`. GIN indexes cover the vector and the three ID arrays.
-- `reader_reports` holds `sequence` (identity), `report_id`, `record_id`, `revision_number`, `kind`, `release_number`, `category`, `body`, `payload_hash`, and `received_at`. CHECK constraints bound the numbers. A unique index covers record ID, revision, and payload hash.
+- `reader_reports` holds `sequence` (identity), `report_id`, `record_id`, `revision_number`, `kind`, `category`, `body`, `payload_hash`, and `received_at`. CHECK constraints bound the numbers. A unique index covers record ID, revision, and payload hash.
 - `report_pull_state` holds one row: the `epoch` uuid, created once, and the `acked_sequence`.
 - `PulledReport`, `PulledReportBatch`, and `ReaderReportProtocol` define the pull wire format.
 - The service reads the same contract types as the static site: `PublicationRelease` and the six record types. `PublicationProtocol.SearchSourceTextCharacters` and `PublicationProtocol.SearchPagePath` are shared with the page.

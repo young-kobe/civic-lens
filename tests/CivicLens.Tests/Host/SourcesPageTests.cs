@@ -13,6 +13,7 @@ using CivicLens.Host.Collection;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Collection.Processing;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using Npgsql;
 
@@ -233,7 +234,7 @@ public sealed class SourcesPageTests(PostgresCollection postgres) : IAsyncLifeti
             Capture = null,
             FailureCode = CollectionFailureCode.HttpError
         };
-        var job = new CollectionJobRecord(new string('1', 32), CollectionJobDefinition.FromConfiguration(new CollectionConfiguration
+        var job = new CollectionJobRecord(new string('1', 32), CollectionFixtures.Definition(new CollectionConfiguration
         {
             Version = 2,
             People = [new PersonConfiguration { Id = "person", Name = "Official" }],

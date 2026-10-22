@@ -15,5 +15,8 @@ internal static class AnalysisQueueStates
     public static Expression<Func<TRow, bool>> IsFailed<TRow>() where TRow : class, IAnalysisRow =>
         row => FailedStates.Contains(row.Status);
 
+    public static Expression<Func<TRow, bool>> IsSucceeded<TRow>(string? errorCode) where TRow : class, IAnalysisRow =>
+        row => row.Status == State.Succeeded && row.ErrorCode == errorCode;
+
     public static bool IsFailed(State status) => FailedStates.Contains(status);
 }

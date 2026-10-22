@@ -7,14 +7,13 @@ public sealed record PulledReport
     public required string RecordId { get; init; }
     public required int RevisionNumber { get; init; }
     public required PublishedRecordKind Kind { get; init; }
-    public required int ReleaseNumber { get; init; }
     public required string Category { get; init; }
     public required string Text { get; init; }
     public required DateTimeOffset ReceivedAtUtc { get; init; }
 
     public void Validate()
     {
-        if (ReportId == Guid.Empty || !PublicationProtocol.IsAnyRecordId(RecordId) || RevisionNumber < 1 || ReleaseNumber < 1 ||
+        if (ReportId == Guid.Empty || !PublicationProtocol.IsAnyRecordId(RecordId) || RevisionNumber < 1 ||
             !Enum.IsDefined(Kind) || !ReaderReportProtocol.IsCategory(Category) || Text is null || !ReaderReportProtocol.IsText(Category, Text))
             throw new InvalidDataException("A pulled report is invalid.");
     }

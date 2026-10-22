@@ -44,8 +44,7 @@ public sealed record DocumentChangeDraftRevision(string DraftId, int RevisionNum
 
     public void ValidateShape()
     {
-        if (!LowercaseHex.Is(DraftId, 32) || RevisionNumber < 1 || string.IsNullOrWhiteSpace(AuthorSubject) ||
-            AuthorSubject.Length > 256 || CreatedAtUtc.Offset != TimeSpan.Zero)
+        if (!LowercaseHex.Is(DraftId, 32) || !ReviewAuthor.IsValidRevisionHeader(RevisionNumber, AuthorSubject, CreatedAtUtc))
             throw new ArgumentException("Draft revision identity is invalid.");
         if (!LowercaseHex.Is(ComparisonId, 64))
             throw new ArgumentException("Identifier must be a lowercase SHA-256 value.", nameof(ComparisonId));

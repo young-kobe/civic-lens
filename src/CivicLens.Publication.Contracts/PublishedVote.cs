@@ -6,6 +6,9 @@ public sealed record PublishedVote
 {
     private const string StartedPrefix = "Started: ";
 
+    public const int MaximumHeadlineLength = 256;
+    public const int MaximumBillTypeLength = 16;
+    public const int MaximumCastLength = 32;
     public const int MaximumFacts = 64;
     public const int MaximumMembers = 600;
     public const int MaximumSources = 3;
@@ -52,12 +55,12 @@ public sealed record PublishedVote
     {
         PublishedCorrection.ValidateAll(Corrections, RevisionNumber);
         if (!PublicationProtocol.IsRecordId(PublishedRecordKind.Vote, RecordId) || RevisionNumber < 1 ||
-            string.IsNullOrWhiteSpace(Headline) || string.IsNullOrWhiteSpace(Summary))
+            string.IsNullOrWhiteSpace(Headline) || Headline.Length > MaximumHeadlineLength || string.IsNullOrWhiteSpace(Summary))
             throw new InvalidDataException("Published record identity or wording is invalid.");
         if (!Enum.IsDefined(Chamber) || Congress < 1 || Session is not (1 or 2) || RollCallNumber < 1)
             throw new InvalidDataException("Published vote requires a roll call identity.");
-        if ((BillType is null) != (BillNumber is null) || BillType is not null && (string.IsNullOrWhiteSpace(BillType) || BillNumber < 1))
-            throw new InvalidDataException("A published vote bill type has a number, and a number has a type.");
+        if ((BillType is null) != (BillNumber is null) || BillType is not null && (string.IsNullOrWhiteSpace(BillType) || BillType.Length > MaximumBillTypeLength || BillNumber < 1))
+            throw new InvalidDataException($"A published vote bill type has at most {MaximumBillTypeLength} characters and a number, and a number has a type.");
         PublishedEvidenceRules.RequireSources(Sources, MaximumSources, "vote");
         if (!Enum.IsDefined(Kind) || Kind != PublishedVoteKind.Other && KindCitation is null)
             throw new InvalidDataException("A published vote kind other than Other requires a citation.");
@@ -82,9 +85,9 @@ public sealed record PublishedVote
         if (Members is null || Members.Length is 0 or > MaximumMembers)
             throw new InvalidDataException($"Published vote requires 1 to {MaximumMembers} member votes.");
         if (Members.Any(member => member?.Official is null || member.Citation is null || string.IsNullOrWhiteSpace(member.Official.Id) ||
-                string.IsNullOrWhiteSpace(member.Official.Name) || string.IsNullOrWhiteSpace(member.Cast) ||
+                string.IsNullOrWhiteSpace(member.Official.Name) || string.IsNullOrWhiteSpace(member.Cast) || member.Cast.Length > MaximumCastLength ||
                 member.Citation.Quote?.EndsWith(", " + member.Cast, StringComparison.Ordinal) != true))
-            throw new InvalidDataException("A published member vote requires a named official and a cast that its citation shows.");
+            throw new InvalidDataException($"A published member vote requires a named official and a cast of at most {MaximumCastLength} characters that its citation shows.");
         if (!PublishedEvidenceRules.AreDistinctAndNotBlank(Members.Select(member => member.Official.Id)))
             throw new InvalidDataException("Published vote members must be distinct officials.");
     }

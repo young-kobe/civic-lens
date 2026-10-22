@@ -84,7 +84,8 @@ internal static class RelationshipCitedReader
     {
         RelationshipRecordKind.Statement => ("statement_drafts", "candidate_id"),
         RelationshipRecordKind.Action => ("action_drafts", "record_id"),
-        _ => ("vote_drafts", "record_id")
+        RelationshipRecordKind.Vote => ("vote_drafts", "record_id"),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Relationship record kind has no draft table.")
     };
 
     private sealed class ApprovedRevisionRow

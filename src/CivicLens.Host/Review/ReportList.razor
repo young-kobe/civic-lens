@@ -1,5 +1,6 @@
 @page "/Review/Reports"
 @using CivicLens.Application.Reports
+@using CivicLens.Host.Publication
 
 <TopBarTitle Crumbs="Crumbs" />
 
@@ -31,11 +32,11 @@
                         <td>
                             @if (ReportLabels.EditorOf(item) is { } editor)
                             {
-                                <a href="@editor">@ReportLabels.Kind(item.Report.Kind)</a>
+                                <a href="@editor">@PublishedRecordLabels.Kind(item.Report.Kind)</a>
                             }
                             else
                             {
-                                <span>@ReportLabels.Kind(item.Report.Kind)</span>
+                                <span>@PublishedRecordLabels.Kind(item.Report.Kind)</span>
                                 <StatusBadge Tone="Tone.Warn" Text="Not in review" />
                             }
                             <span class="cell-sub">@ReportLabels.Revision(item)</span>

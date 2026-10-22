@@ -15,7 +15,7 @@ public sealed record RelationshipRevision(string RecordId, int RevisionNumber, s
     {
         if (!LowercaseHex.Is(RecordId, 64))
             throw new ArgumentException("A relationship revision needs a valid record ID.");
-        if (RevisionNumber < 1 || string.IsNullOrWhiteSpace(AuthorSubject) || AuthorSubject.Length > 256 || CreatedAtUtc.Offset != TimeSpan.Zero)
+        if (!ReviewAuthor.IsValidRevisionHeader(RevisionNumber, AuthorSubject, CreatedAtUtc))
             throw new ArgumentException("A relationship revision needs a number, an author, and a UTC creation time.");
         ValidateCitations();
         ValidateSpans();

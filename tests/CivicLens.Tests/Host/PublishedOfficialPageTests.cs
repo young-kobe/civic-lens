@@ -15,7 +15,7 @@ public sealed class PublishedOfficialPageTests
             [Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)), Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1))],
             [Vote('3', new DateOnly(2026, 4, 1)), Vote('4', new DateOnly(2025, 12, 1))]);
 
-        var html = await new ReleaseRenderer().RenderOfficialAsync(page, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, CancellationToken.None);
 
         var records = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-records']")!;
         Assert.Equal([new string('2', 64), new string('3', 64), new string('1', 64), new string('4', 64)],
@@ -46,8 +46,8 @@ public sealed class PublishedOfficialPageTests
             Records = [.. entries.Select(entry => entry with { IssueIds = ["housing"] })]
         }, new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None)).Issues.Single();
 
-        var official = await new ReleaseRenderer().RenderOfficialAsync(Current(entries, []), CancellationToken.None);
-        var facetHtml = await new ReleaseRenderer().RenderFacetPageAsync(facet, 1, CancellationToken.None);
+        var official = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current(entries, []), CancellationToken.None);
+        var facetHtml = await new ReleaseRenderer(null, null).RenderFacetPageAsync(facet, 1, CancellationToken.None);
 
         string[] Order(string html) => [.. new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody a.cell-title")
             .Select(link => link.GetAttribute("href")!.Replace("../records/", "").Replace(".html", ""))];
@@ -60,7 +60,7 @@ public sealed class PublishedOfficialPageTests
     {
         var page = Current([Entry('a', PublishedRecordKind.Action, new DateOnly(2026, 5, 2))], [Vote('0', new DateOnly(2026, 5, 2))]);
 
-        var html = await new ReleaseRenderer().RenderOfficialAsync(page, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, CancellationToken.None);
 
         Assert.Equal([new string('a', 64), new string('0', 64)], new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody a.cell-title")
             .Select(link => link.GetAttribute("href")!.Replace("../records/", "").Replace(".html", "")));
@@ -83,7 +83,7 @@ public sealed class PublishedOfficialPageTests
             }
         };
 
-        var html = await new ReleaseRenderer().RenderOfficialAsync(page, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         Assert.Equal("Mayor Example", document.QuerySelector("h1")!.TextContent);
@@ -100,7 +100,7 @@ public sealed class PublishedOfficialPageTests
     {
         var page = Current([], [Vote('3', new DateOnly(2026, 4, 1))]) with { PastCongresses = [118, 117] };
 
-        var html = await new ReleaseRenderer().RenderOfficialAsync(page, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, CancellationToken.None);
 
         var links = new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-earlier-congresses'] a");
         Assert.Equal(["../officials/mayor/118.html", "../officials/mayor/117.html"], links.Select(link => link.GetAttribute("href")));
@@ -111,7 +111,7 @@ public sealed class PublishedOfficialPageTests
     {
         var page = new ReleaseOfficialPage(Profile(), true, 118, false, [], [], [Vote('3', new DateOnly(2024, 4, 1)) with { Congress = 118 }]);
 
-        var html = await new ReleaseRenderer().RenderOfficialAsync(page, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         Assert.Equal("../../officials/mayor.html", document.QuerySelector("a.back-link")!.GetAttribute("href"));
@@ -124,7 +124,7 @@ public sealed class PublishedOfficialPageTests
     [Fact]
     public async Task AnOfficialWithNoTermStatesThatTheRostersAndTheConfigurationListNoOffice()
     {
-        var html = await new ReleaseRenderer().RenderOfficialAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []),
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []),
             CancellationToken.None);
 
         Assert.Contains("The rosters and the configuration list no dated office for this official.", html, StringComparison.Ordinal);
@@ -133,7 +133,7 @@ public sealed class PublishedOfficialPageTests
     [Fact]
     public async Task AnOfficialWhoLeftTheConfigurationSaysThatCivicLensNoLongerTracksThem()
     {
-        var html = await new ReleaseRenderer().RenderOfficialAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []) with { IsTracked = false },
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []) with { IsTracked = false },
             CancellationToken.None);
 
         Assert.Contains("Civic Lens no longer tracks this official", html, StringComparison.Ordinal);
@@ -143,7 +143,7 @@ public sealed class PublishedOfficialPageTests
     [Fact]
     public async Task TheOfficialListLinksEachPageAndShowsTheCountOfRecordsOtherThanVotesThatNameTheOfficial()
     {
-        var html = await new ReleaseRenderer().RenderOfficialsAsync([new OfficialListing(Profile(), 2)], CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderOfficialsAsync([new OfficialListing(Profile(), 2)], CancellationToken.None);
 
         var row = new HtmlParser().ParseDocument(html).QuerySelector("tbody tr")!;
         Assert.Equal("officials/mayor.html", row.QuerySelector("a")!.GetAttribute("href"));

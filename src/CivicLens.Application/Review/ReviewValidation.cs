@@ -14,7 +14,7 @@ internal static class ReviewAuthorization
     public static void RequireReviewer(ReviewActor actor)
     {
         ArgumentNullException.ThrowIfNull(actor);
-        if (string.IsNullOrWhiteSpace(actor.Subject) || actor.Subject.Length > 256 || !actor.CanReview || !Enum.IsDefined(actor.Role) ||
+        if (!ReviewAuthor.IsValidSubject(actor.Subject) || !actor.CanReview || !Enum.IsDefined(actor.Role) ||
             ReviewAuthor.IsReserved(actor.Subject))
             throw new UnauthorizedAccessException("The authenticated subject is not authorized for editorial review.");
     }
@@ -23,8 +23,8 @@ internal static class ReviewAuthorization
     {
         ArgumentNullException.ThrowIfNull(actor);
         var reserved = ReviewAuthor.IsAnalysis(actor.Subject) || (ReviewAuthor.IsCode(actor.Subject) && !allowCode);
-        if (string.IsNullOrWhiteSpace(actor.Subject) || actor.Subject.Length > 256 || actor.Role != ReviewRole.Owner || reserved)
-            throw new UnauthorizedAccessException("The authenticated subject is not authorized to publish.");
+        if (!ReviewAuthor.IsValidSubject(actor.Subject) || actor.Role != ReviewRole.Owner || reserved)
+            throw new UnauthorizedAccessException("The authenticated subject is not the owner.");
     }
 }
 
