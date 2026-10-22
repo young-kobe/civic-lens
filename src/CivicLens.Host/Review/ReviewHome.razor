@@ -178,7 +178,7 @@
                                         <td><a class="cell-title" href="@RecordRoutes.Editor(item.Kind, item.RecordId)">@DraftStatusDisplay.DraftName(item.Headline)</a></td>
                                         <td>@PublishedRecordLabels.Kind(item.Kind)</td>
                                         <td>
-                                            <StatusBadge Tone="@(item.IsReplacement || item.IsWithdrawn ? Tone.Warn : Tone.Ok)" Text="@(item.IsWithdrawn ? "Returning" : item.IsReplacement ? "Replacement" : "New")" />
+                                            <StatusBadge Tone="@(item.NeedsNote ? Tone.Warn : Tone.Ok)" Text="@(item.IsWithdrawn ? "Returning" : item.IsReplacement ? "Replacement" : "New")" />
                                             @if (item.NoLongerMatches)
                                             {
                                                 <StatusBadge Tone="Tone.Warn" Text="No longer matches" />

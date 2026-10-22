@@ -747,7 +747,7 @@ To take a record out of the release, give `--withdraw <kind>:<id> <text>`. A req
 
 ### Return a record
 
-To bring a withdrawn record back, first revise it in review and approve the new revision. The Review page then offers it for return. The CLI also works. The revision number must be higher than the withdrawn revision. Then publish the withdrawn ID with a note: `releases publish <idempotency-key> <kind>:<id> --note <kind>:<id> <text>`. The note shows on the record page as a correction. The publish exits with code 2 if the note is missing or the revision is not higher. The code subject cannot return a record. The worker only logs the withdrawn record and skips it.
+To bring a withdrawn record back, first revise it in review and approve the new revision. The revision number must be higher than the withdrawn revision. Return it from the Review page, or with the CLI: publish the withdrawn ID with a note: `releases publish <idempotency-key> <kind>:<id> --note <kind>:<id> <text>`. The note shows on the record page as a correction. The publish exits with code 2 if the note is missing or the revision is not higher. The code subject cannot return a record. The worker only logs the withdrawn record and skips it.
 
 A relationship or a brief that cited the record stays withdrawn. Publish it again, in the same request or later.
 

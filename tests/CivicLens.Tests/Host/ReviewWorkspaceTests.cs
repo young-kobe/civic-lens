@@ -427,9 +427,11 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars");
         await ApproveAsync(draftUrl);
         var publications = PostgresPublicationStore.FromConnectionString(host.ConnectionString);
-        await PublishWithCliAsync("first", reference);
+        var firstSummary = await host.GetDocumentAsync($"/Review?publish={reference}");
+        using var first = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(Fields(firstSummary.QuerySelector("#publish-confirm")!)));
+        Assert.Equal("/Review?status=published&release=1", PathOf(first).Split('#')[0]);
         using (var withdrawn = await DecideAsync(draftUrl, "WithdrawApproval", "Wrong figure.")) Assert.Equal(HttpStatusCode.Redirect, withdrawn.StatusCode);
-        await PublishWithCliAsync("withdraw", "--withdraw", reference, "Wrong figure.");
+        await WithdrawWithCliAsync(reference, "Wrong figure.");
         await ApproveAsync(draftUrl);
 
         // Review approved the withdrawn revision again. Publish refuses it, so the row offers no checkbox.
@@ -599,7 +601,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
     }
 
-    private async Task PublishWithCliAsync(string key, params string[] arguments)
+    private async Task WithdrawWithCliAsync(string reference, string note)
     {
         var environment = new Dictionary<string, string>
         {
@@ -608,7 +610,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
             ["CIVIC_LENS_COLLECTION_CONFIG"] = Path.Combine(host.KeyDirectory, "sources.json"),
             ["CIVIC_LENS_ISSUES_CONFIG"] = Path.Combine(host.KeyDirectory, "issues.json")
         };
-        var result = await HostProcess.RunWithEnvironmentAsync(host.ConnectionString, null, environment, ["releases", "publish", key, .. arguments]);
+        var result = await HostProcess.RunWithEnvironmentAsync(host.ConnectionString, null, environment, ["releases", "publish", "withdraw", "--withdraw", reference, note]);
         Assert.True(result.ExitCode == 0, result.Error + result.Output);
     }
 

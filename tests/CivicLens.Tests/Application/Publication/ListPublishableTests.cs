@@ -98,7 +98,7 @@ public sealed class ListPublishableTests
             var publish = () => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
                 new PublishReleaseRequest([item.Reference], $"r-{item.RecordId}") { Notes = [new(item.Kind, item.RecordId, "Back.")] });
             if (item.CanReturn) await publish();
-            else await Assert.ThrowsAsync<ArgumentException>(publish);
+            else Assert.Contains("Revise it before it returns", (await Assert.ThrowsAsync<ArgumentException>(publish)).Message, StringComparison.Ordinal);
         }
     }
 
