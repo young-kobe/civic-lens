@@ -362,10 +362,10 @@ This is the only navigation index.
 | Vote queue outcomes and codes | [Votes](architecture/votes.md#outcomes) | `src/CivicLens.Application/Votes/VoteDraftErrorCodes.cs` |
 | Vote drafting tables: queue, runs, budget, drafts, revisions, decisions | [Votes](architecture/votes.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Votes/` |
 | Vote revisions and the person edit rule | [Votes](architecture/votes.md#record-and-append) | `src/CivicLens.Core/Votes/VoteDraftRevision.cs` |
-| Vote review pages and the cast display | [Votes](architecture/votes.md#vote-review) | `src/CivicLens.Host/Review/VoteEditor.razor` |
+| Vote review pages and the cast display | [Votes](architecture/votes.md#vote-review) | `src/CivicLens.Host/Votes/VoteEditor.razor` |
 | Action drafting | [Actions](architecture/actions.md#step) | `src/CivicLens.Application/Actions/ActionDraftStep.cs` |
 | Action revisions and the person edit rule | [Actions](architecture/actions.md#revision-and-append) | `src/CivicLens.Core/Actions/ActionDraftRevision.cs` |
-| Action review pages | [Actions](architecture/actions.md#action-review) | `src/CivicLens.Host/Review/ActionEditor.razor` |
+| Action review pages | [Actions](architecture/actions.md#action-review) | `src/CivicLens.Host/Actions/ActionEditor.razor` |
 | Action commands | [Actions](architecture/actions.md#commands) | `src/CivicLens.Host/Actions/ActionCommand.cs` |
 | Action queue outcomes and codes | [Actions](architecture/actions.md#outcomes) | `src/CivicLens.Application/Actions/ActionDraftErrorCodes.cs` |
 | Bill stream tables: cursors, gates, pages, candidates | [Bills](architecture/bills.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Collection/BillStream/` |
@@ -373,14 +373,14 @@ This is the only navigation index.
 | Relationship pairs, bill number and title matching, the pair key | [Statements](architecture/statements.md#relationship-drafting) | `src/CivicLens.Application/Relationships/RelationshipPairFinder.cs` |
 | Relationship drafting, fingerprint, staleness, and outcomes | [Statements](architecture/statements.md#relationship-drafting) | `src/CivicLens.Application/Relationships/RelationshipDraftStep.cs` |
 | Relationship revisions and the Congress rule | [Statements](architecture/statements.md#relationship-drafting) | `src/CivicLens.Core/Relationships/RelationshipRevision.cs` |
-| Relationship review pages, person edits, approval gate, and changed-citation flag | [Statements](architecture/statements.md#relationship-review) | `src/CivicLens.Host/Review/RelationshipEditor.razor`, `src/CivicLens.Infrastructure/Relationships/PostgresRelationshipReviewStore.cs` |
+| Relationship review pages, person edits, approval gate, and changed-citation flag | [Statements](architecture/statements.md#relationship-review) | `src/CivicLens.Host/Relationships/RelationshipEditor.razor`, `src/CivicLens.Infrastructure/Relationships/PostgresRelationshipReviewStore.cs` |
 | Relationship commands | [Statements](architecture/statements.md#relationship-drafting) | `src/CivicLens.Host/Relationships/RelationshipCommand.cs` |
 | Relationship tables: queue, runs, budget, drafts, revisions, decisions | [Statements](architecture/statements.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Relationships/` |
 | Weekly brief drafting and the week rule | [Briefs](architecture/briefs.md#step) | `src/CivicLens.Application/Briefs/BriefDraftStep.cs` |
 | Brief selection, grouping, and fingerprint | [Briefs](architecture/briefs.md#selection) | `src/CivicLens.Application/Briefs/BriefSelection.cs` |
 | Brief revisions and citations | [Briefs](architecture/briefs.md#revision-and-append) | `src/CivicLens.Core/Briefs/BriefRevision.cs` |
 | Brief weekly enqueue and the Monday wakeup | [Briefs](architecture/briefs.md#queue) | `src/CivicLens.Infrastructure/Briefs/PostgresBriefDraftStore.cs` |
-| Brief review pages, person edits, approval gate, and changed-citation flag | [Briefs](architecture/briefs.md#brief-review) | `src/CivicLens.Host/Review/BriefEditor.razor`, `src/CivicLens.Infrastructure/Briefs/PostgresBriefReviewStore.cs` |
+| Brief review pages, person edits, approval gate, and changed-citation flag | [Briefs](architecture/briefs.md#brief-review) | `src/CivicLens.Host/Briefs/BriefEditor.razor`, `src/CivicLens.Infrastructure/Briefs/PostgresBriefReviewStore.cs` |
 | Brief staleness after a publication, an activation, or a review decision | [Briefs](architecture/briefs.md#staleness) | `src/CivicLens.Infrastructure/Briefs/BriefStaleness.cs` |
 | Brief publication: ready list, citation recheck, record, and page | [Briefs](architecture/briefs.md#publication) | `src/CivicLens.Application/Publication/BriefRecordLoader.cs` |
 | Brief commands | [Briefs](architecture/briefs.md#commands) | `src/CivicLens.Host/Briefs/BriefCommand.cs` |
@@ -395,11 +395,11 @@ This is the only navigation index.
 | Statement candidates and the issue gate | [Statements](architecture/statements.md#issue-gate) | `src/CivicLens.Application/Statements/StatementGateStep.cs` |
 | Statement drafting | [Statements](architecture/statements.md#statement-drafting) | `src/CivicLens.Application/Statements/StatementDraftStep.cs` |
 | Gate labels, held-out split, label export | [Statements](architecture/statements.md#gate-labels) | `src/CivicLens.Core/Statements/GateLabelSplit.cs` |
-| Statement review pages and commands | [Statements](architecture/statements.md#statement-review) | `src/CivicLens.Host/Review/StatementEditor.razor` |
+| Statement review pages and commands | [Statements](architecture/statements.md#statement-review) | `src/CivicLens.Host/Statements/StatementEditor.razor` |
 | Review decisions, roles, concurrency | [Review](architecture/review.md#review-decisions) | `src/CivicLens.Core/Review/ReviewPolicy.cs` |
 | Review cycles, history caps, the shared append step | [Review](architecture/review.md#review-cycles) | `src/CivicLens.Infrastructure/Review/ReviewRecords.cs` |
 | Review lists, paging, overview counts | [Review](architecture/review.md#lists-and-paging) | `src/CivicLens.Application/Review/ListDocumentChangeReviews.cs` |
-| Statement triage page and inline decisions | [Review](architecture/review.md#triage) | `src/CivicLens.Host/Review/StatementTriage.razor.cs` |
+| Statement triage page and inline decisions | [Review](architecture/review.md#triage) | `src/CivicLens.Host/Statements/StatementTriage.razor.cs` |
 | Releases, activation, rollback | [Publication](architecture/publication.md#publish) | `src/CivicLens.Application/Publication/PublishRelease.cs` |
 | Release record content and schema | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Publication.Contracts/PublicationRelease.cs` |
 | Published vote record, builder, and page | [Publication](architecture/publication.md#vote-record) | `src/CivicLens.Publication.Contracts/PublishedVote.cs` |

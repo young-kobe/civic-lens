@@ -1,3 +1,4 @@
+using CivicLens.Host.Documents;
 using Microsoft.Extensions.Logging;
 using CivicLens.Application.Activity;
 using CivicLens.Application.Analysis;

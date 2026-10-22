@@ -1,0 +1,212 @@
+@page "/Review/Briefs/{RecordId}"
+@inherits ReviewRecordPage
+@using System.Collections.Immutable
+@using CivicLens.Application.Briefs
+@using CivicLens.Core.Briefs
+@using CivicLens.Core.Review
+@using CivicLens.Host.Publication
+@using CivicLens.Host.Reports
+@using CivicLens.Host.Review
+
+@if (detail is null)
+{
+    <TopBarTitle Crumbs="Crumbs" />
+    <div class="content">
+        @if (error is not null)
+        {
+            <Notice Tone="Tone.Bad">@error</Notice>
+        }
+        @if (notFound)
+        {
+            <Panel Label="Brief not found">
+                <EmptyState Title="Brief not found" Text="This weekly brief does not exist, or its link is not valid.">
+                    <Action><Button Href="@BriefRoutes.List">Go to Briefs</Button></Action>
+                </EmptyState>
+            </Panel>
+            <form @formname="save" @onsubmit="SaveAsync" hidden></form>
+            <form @formname="decide" @onsubmit="DecideAsync" hidden></form>
+        }
+    </div>
+}
+else
+{
+    var review = detail.Review;
+    var revision = review.CurrentRevision;
+    var concerns = review.UnresolvedConcerns;
+    <TopBarTitle Crumbs="Crumbs" />
+    <div class="content">
+        <PageHeader Title="@revision.Headline" Meta="HeaderMeta(review.CurrentStatus, concerns.Length)" />
+
+        @if (error is not null)
+        {
+            <Notice Tone="Tone.Bad">@error</Notice>
+        }
+        @if (statusMessage is not null)
+        {
+            <Notice Tone="@(isConflict ? Tone.Warn : Tone.Ok)" Dismissible="@(!isConflict)">@statusMessage</Notice>
+        }
+        <ReaderReportBanner Actor="actor" Kind="PublishedRecordKind.Brief" RecordId="@RecordId" />
+        @if (revision.AuthorKind == ReviewAuthorKind.Analysis)
+        {
+            <Notice Tone="Tone.Warn">The AI drafter wrote this revision. It is not a human decision. Check each paragraph against the records it cites before you approve.</Notice>
+        }
+        @if (detail.CitedRecordsChanged)
+        {
+            <Notice Tone="Tone.Warn" id="cited-changed">A cited record changed since this brief was drafted. Approval is blocked until every cited revision is approved and in the active release.@(review.CurrentStatus == ReviewStatus.Approved ? " Withdraw the approval of this brief, then ask the owner to redraft the week." : "")</Notice>
+        }
+        @if (concerns.Length > 0)
+        {
+            <Notice Tone="Tone.Warn">Approval is blocked. @(concerns.Length == 1 ? "Resolve the open concern below first." : $"Resolve the {concerns.Length} open concerns below first.")</Notice>
+        }
+
+        @if (isDraftConflict && Input is not null)
+        {
+            <Panel Title="Compare the latest saved revision with your wording" Id="conflict-compare" Padded="true">
+                <div class="split">
+                    <RecordView Headline="@($"Saved revision {revision.RevisionNumber}: {revision.Headline}")">
+                        @foreach (var paragraph in revision.Paragraphs)
+                        {
+                            <p class="record-body">@paragraph.Text <span class="muted small">[@CitedHeadlines(paragraph.CitationIds)]</span></p>
+                        }
+                    </RecordView>
+                    <RecordView Headline="@($"Your wording: {Input.Headline}")">
+                        @foreach (var paragraph in Input.Paragraphs.Where(item => !string.IsNullOrWhiteSpace(item.Text)))
+                        {
+                            <p class="record-body">@paragraph.Text <span class="muted small">[@CitedHeadlines(paragraph.CitationIds)]</span></p>
+                        }
+                    </RecordView>
+                </div>
+                <p class="muted small">The form still holds your wording. A citation that now names another record is cleared. Choose it again. Saving again makes a new revision on top of the latest saved one.</p>
+            </Panel>
+        }
+
+        <div class="split">
+            <Panel Label="Weekly brief" Padded="true">
+                <TabSet Label="Weekly brief views" Selected="@SelectedTab" Tabs="RecordTabs">
+                    <TabPane Key="saved" Label="@($"Saved revision {revision.RevisionNumber}")">
+                        <RecordView Id="saved-approval-target" Headline="@revision.Headline" Facts="FactsOf(revision)">
+                            @ParagraphsOf(revision.Paragraphs)
+                        </RecordView>
+                    </TabPane>
+                    <TabPane Key="edit" Label="Edit wording">
+                        @if (Input is not null)
+                        {
+                            <form id="draft-form" class="form" method="post" @formname="save" @onsubmit="SaveAsync"
+                                  data-unsaved-form data-recovered-unsaved="@(hasUnsavedInput ? "true" : "false")">
+                                <AntiforgeryToken />
+                                <input type="hidden" name="expectedRevisionNumber" value="@revision.RevisionNumber" />
+                                <input type="hidden" name="idempotencyKey" value="@saveKey" />
+                                @foreach (var citation in revision.Citations)
+                                {
+                                    <input type="hidden" name="Input.LoadedCitations" value="@BriefInput.LoadedKey(citation)" />
+                                }
+                                <Field Label="Headline" For="Input_Headline" Hint="@($"Up to {BriefRevision.MaximumHeadlineLength} characters.")">
+                                    <input id="Input_Headline" class="headline" name="Input.Headline" value="@Input.Headline" maxlength="@BriefRevision.MaximumHeadlineLength" aria-describedby="Input_Headline-hint" />
+                                </Field>
+                                @for (var index = 0; index < Input.Paragraphs.Count; index++)
+                                {
+                                    @ParagraphField(index, Input.Paragraphs[index], revision.Citations)
+                                }
+                                <p class="muted small">@($"A brief holds 1 to {BriefRevision.MaximumParagraphs} paragraphs. Empty a paragraph to remove it. Fill the last empty paragraph to add one.")</p>
+                                @if (revision.Suggestion is { } suggestion)
+                                {
+                                    <section class="stack" id="suggestion">
+                                        <h3>AI suggestion</h3>
+                                        <p class="muted small">The AI drafter wrote this text for the newest records. Your text stays. Keep it for later, use it in place of your text, or dismiss it.</p>
+                                        <RecordView Headline="@suggestion.Headline" HeadingLevel="3">
+                                            @foreach (var paragraph in suggestion.Paragraphs)
+                                            {
+                                                <p class="record-body">@paragraph.Text <span class="muted small">[@CitedHeadlines(paragraph.CitationIds, detail.SuggestionCited)]</span></p>
+                                            }
+                                        </RecordView>
+                                        <div class="actions">
+                                            <Button Type="submit" name="Input.SuggestionAction" value="@SuggestionActions.Use">Use suggestion</Button>
+                                            <Button Type="submit" name="Input.SuggestionAction" value="@SuggestionActions.Dismiss">Dismiss</Button>
+                                        </div>
+                                    </section>
+                                }
+                                <div class="actions">
+                                    <Button Variant="ButtonVariant.Primary" Type="submit">Save revision @(revision.RevisionNumber + 1)</Button>
+                                    <span class="actions-hint">Approval applies only to saved wording. A person edits the text and the citations of each paragraph, not the records.</span>
+                                </div>
+                            </form>
+                        }
+                    </TabPane>
+                </TabSet>
+            </Panel>
+
+            <Panel Title="Cited records" Id="evidence" Padded="true" Raised="true" Class="split-sticky">
+                <p class="small muted">@CoverageText(revision.Coverage)</p>
+                <ul class="choices">
+                    @foreach (var citation in revision.Citations)
+                    {
+                        var cited = detail.Cited[citation.Id];
+                        var kind = BriefCitationKinds.PublishedKindOf(citation.Kind);
+                        <li>
+                            <strong>@citation.Id</strong>
+                            <a href="@RecordRoutes.Editor(kind, citation.RecordId)">@cited.Headline</a>
+                            @if (cited.Changed)
+                            {
+                                <StatusBadge Tone="Tone.Warn" Text="Changed" />
+                            }
+                            <p class="small">@cited.Summary</p>
+                            <span class="muted small">@PublishedRecordLabels.Kind(kind), revision @citation.RevisionNumber</span>
+                        </li>
+                    }
+                </ul>
+                <TechnicalDetails Items="TechnicalItems" />
+            </Panel>
+        </div>
+
+        <ReviewDecisionPanel RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="review.CurrentStatus"
+                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" OnDecide="DecideAsync">
+            <Checklist>
+                <ul class="checklist">
+                    <li>Does each paragraph say only what the records it cites say?</li>
+                    <li>Does the text name only officials in the cited records?</li>
+                    <li>Does the coverage line show what the brief leaves out?</li>
+                </ul>
+            </Checklist>
+        </ReviewDecisionPanel>
+
+        <ReviewHistoryPanel Entries="History" ViewerSubject="@actor.Subject" />
+    </div>
+}
+
+@code {
+    private RenderFragment ParagraphsOf(ImmutableArray<BriefParagraph> paragraphs) =>
+        @<text>
+            @foreach (var paragraph in paragraphs)
+            {
+                <p class="record-body">@paragraph.Text <span class="muted small">[@string.Join(", ", paragraph.CitationIds)]</span></p>
+            }
+        </text>;
+
+    private RenderFragment ParagraphField(int index, ParagraphInput paragraph, ImmutableArray<BriefCitation> citations) =>
+        @<text>
+            <Field Label="@($"Paragraph {index + 1}")" For="@($"Input_Paragraphs_{index}_Text")">
+                <textarea id="@($"Input_Paragraphs_{index}_Text")" name="@($"Input.Paragraphs[{index}].Text")" maxlength="@BriefRevision.MaximumParagraphLength" value="@paragraph.Text"></textarea>
+            </Field>
+            <FieldSet Legend="@($"Citations of paragraph {index + 1}")">
+                <ul class="choices">
+                    @foreach (var citation in citations)
+                    {
+                        <li>
+                            <Choice Name="@($"Input.Paragraphs[{index}].CitationIds")" Value="@citation.Id" Label="@($"{citation.Id}: {detail!.Cited[citation.Id].Headline}")"
+                                    Checked="@((paragraph.CitationIds ?? []).Contains(citation.Id))" />
+                        </li>
+                    }
+                </ul>
+            </FieldSet>
+        </text>;
+
+    private RenderFragment HeaderMeta(ReviewStatus status, int concerns) =>
+        @<text>
+            <StatusBadge Tone="DraftStatusDisplay.Tone(status)" Text="@DraftStatusDisplay.Label(status, concerns)" />
+            @if (detail!.CitedRecordsChanged)
+            {
+                <StatusBadge Tone="Tone.Warn" Text="Cited records changed" />
+            }
+            <span class="muted small">Week of @Moment.Iso(Revision.Window.WeekStart), revision @Revision.RevisionNumber, saved @Moment.Full(Revision.CreatedAtUtc)</span>
+        </text>;
+}

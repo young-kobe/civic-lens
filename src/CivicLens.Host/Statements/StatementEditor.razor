@@ -1,0 +1,214 @@
+@page "/Review/Statements/{CandidateId}"
+@inherits ReviewRecordPage
+@using CivicLens.Application.Statements
+@using CivicLens.Core.Review
+@using CivicLens.Core.Statements
+@using CivicLens.Host.Reports
+@using CivicLens.Host.Review
+
+<form id="start-draft" method="post" @formname="start" @onsubmit="StartAsync">
+    <AntiforgeryToken />
+    <input type="hidden" name="idempotencyKey" value="@startKey" />
+</form>
+
+@if (detail is null)
+{
+    <TopBarTitle Crumbs="Crumbs" />
+    <div class="content">
+        @if (error is not null)
+        {
+            <Notice Tone="Tone.Bad">@error</Notice>
+        }
+        @if (notFound)
+        {
+            <Panel Label="Statement not found">
+                <EmptyState Title="Statement not found" Text="This statement does not exist, or its link is not valid.">
+                    <Action><Button Href="@StatementRoutes.List">Go to Statements</Button></Action>
+                </EmptyState>
+            </Panel>
+            <form @formname="save" @onsubmit="SaveAsync" hidden></form>
+            <form @formname="decide" @onsubmit="DecideAsync" hidden></form>
+        }
+    </div>
+}
+else
+{
+    var status = review!.CurrentStatus;
+    var concerns = review.UnresolvedConcerns;
+    <TopBarTitle Crumbs="Crumbs" />
+    <div class="content">
+        <PageHeader Title="@Headline" Meta="HeaderMeta(status, concerns.Length)" />
+
+        @if (error is not null)
+        {
+            <Notice Tone="Tone.Bad">@error</Notice>
+        }
+        @if (statusMessage is not null)
+        {
+            <Notice Tone="@(isConflict ? Tone.Warn : Tone.Ok)" Dismissible="@(!isConflict)">@statusMessage</Notice>
+        }
+        <ReaderReportBanner Actor="actor" Kind="PublishedRecordKind.Statement" RecordId="@CandidateId" />
+        @if (IsAiRevision)
+        {
+            <Notice Tone="Tone.Warn">The AI drafter wrote this revision@(detail.AnalysisRunId is null ? "" : $" in analysis run {detail.AnalysisRunId}"). It is not a human decision. Check every sentence, date, speaker, and quotation against the article before you approve it.</Notice>
+        }
+        @if (concerns.Length > 0)
+        {
+            <Notice Tone="Tone.Warn">Approval is blocked. @(concerns.Length == 1 ? "Resolve the open concern below first." : $"Resolve the {concerns.Length} open concerns below first.")</Notice>
+        }
+
+        @if (isDraftConflict && Input is not null && Revision is not null)
+        {
+            <Panel Title="Compare the latest saved revision with your wording" Id="conflict-compare" Padded="true">
+                <div class="split">
+                    <StatementRecord Content="SavedContent" />
+                    <StatementRecord Content="UnsavedContent" />
+                </div>
+                <p class="muted small">The form still holds your wording. Saving again makes a new revision on top of the latest saved one.</p>
+            </Panel>
+        }
+
+        <div class="split">
+            @if (Revision is null)
+            {
+                <Panel Label="Statement" Padded="true">
+                    <EmptyState Title="No draft exists" Text="Nobody has drafted this article. Read the evidence, then start a draft.">
+                        <Action><Button Variant="ButtonVariant.Primary" Type="submit" form="start-draft">Start draft</Button></Action>
+                    </EmptyState>
+                </Panel>
+            }
+            else
+            {
+                <Panel Label="Statement" Padded="true">
+                    <TabSet Label="Statement views" Selected="@SelectedTab" Tabs="StatementTabs">
+                        <TabPane Key="saved" Label="@($"Saved revision {Revision.RevisionNumber}")">
+                            <StatementRecord Id="saved-approval-target" Content="SavedContent" />
+                        </TabPane>
+                        <TabPane Key="edit" Label="Edit wording">
+                            @if (Input is not null)
+                            {
+                                <form id="draft-form" class="form" method="post" @formname="save" @onsubmit="SaveAsync"
+                                      data-unsaved-form data-recovered-unsaved="@(hasUnsavedInput ? "true" : "false")">
+                                    <AntiforgeryToken />
+                                    <input type="hidden" name="expectedRevisionNumber" value="@Revision.RevisionNumber" />
+                                    <input type="hidden" name="idempotencyKey" value="@saveKey" />
+                                    <Field Label="Headline" For="Input_Headline" Hint="@($"Up to {StatementDraftRevision.MaximumHeadlineLength} characters.")">
+                                        <input id="Input_Headline" class="headline" name="Input.Headline" value="@Input.Headline" maxlength="@StatementDraftRevision.MaximumHeadlineLength" aria-describedby="Input_Headline-hint" />
+                                    </Field>
+                                    <Field Label="Plain-language summary" For="Input_Summary" Hint="Name the speaker and the main claims. Say only what the article shows.">
+                                        <textarea id="Input_Summary" name="Input.Summary" maxlength="@StatementDraftRevision.MaximumSummaryLength" aria-describedby="Input_Summary-hint" value="@Input.Summary"></textarea>
+                                    </Field>
+                                    @if (HasUnconfirmedAiDate)
+                                    {
+                                        <Notice Tone="Tone.Warn" id="unconfirmed-statement-date">Unverified statement date. The AI drafter proposed it. Check it against its cited passage, then tick Date checked and save. A save without the tick removes the date. Approval stays blocked until a person saves.</Notice>
+                                        <Chip Name="Input.StatementDateChecked" Value="true" Text="Date checked" Checked="@(Input.StatementDateChecked == true)" />
+                                    }
+                                    <Field Label="Statement date" For="Input_StatementDate" Optional="true" Hint="Leave it empty unless the article shows when the statement was made.">
+                                        <input id="Input_StatementDate" name="Input.StatementDate" type="date" value="@Input.StatementDate" aria-describedby="Input_StatementDate-hint" />
+                                    </Field>
+                                    <FieldSet Legend="Date evidence" Hint="If you enter a statement date, choose the passage that supports it.">
+                                        <ul class="choices">
+                                            <li>
+                                                <Choice Name="Input.DateEvidenceSelection" Value="" Radio="true" Label="No statement date"
+                                                        Checked="@string.IsNullOrEmpty(Input.DateEvidenceSelection)" />
+                                            </li>
+                                            @foreach (var option in spans)
+                                            {
+                                                <li>
+                                                    <Choice Name="Input.DateEvidenceSelection" Value="@option.Key" Radio="true" Label="@SpanLabel(option)"
+                                                            Checked="@(option.Key == Input.DateEvidenceSelection)">
+                                                        <span class="quote">@EncodedEvidence.Markup(option.Text)</span>
+                                                    </Choice>
+                                                </li>
+                                            }
+                                        </ul>
+                                    </FieldSet>
+                                    <FieldSet Legend="Speakers" Hint="@(Officials.Length == 0 ? "No officials covered this source on the capture date." : null)">
+                                        <div class="chips">
+                                            @foreach (var official in Officials)
+                                            {
+                                                <Chip Name="Input.SpeakerOfficialIds" Value="@official.Id" Text="@official.Name" Checked="@(Input.SpeakerOfficialIds?.Contains(official.Id) == true)" />
+                                            }
+                                        </div>
+                                    </FieldSet>
+                                    <Field Label="Other speakers" For="Input_OtherSpeakersText" Optional="true" Hint="@($"One name per line. Up to {StatementDraftRevision.MaximumOtherSpeakers} names.")">
+                                        <textarea id="Input_OtherSpeakersText" name="Input.OtherSpeakersText" aria-describedby="Input_OtherSpeakersText-hint" value="@Input.OtherSpeakersText"></textarea>
+                                    </Field>
+                                    <FieldSet Legend="Issues" Hint="@(AllowedIssueIds.Length == 0 ? "No issues are configured." : null)">
+                                        <div class="chips">
+                                            @foreach (var id in AllowedIssueIds)
+                                            {
+                                                <Chip Name="Input.IssueIds" Value="@id" Text="@names!.Issue(id)" Checked="@(Input.IssueIds?.Contains(id) == true)" />
+                                            }
+                                        </div>
+                                    </FieldSet>
+                                    <FieldSet Legend="Policy areas" Hint="@(AllowedPolicyAreaIds.Length == 0 ? "No policy areas are configured." : null)">
+                                        <div class="chips">
+                                            @foreach (var id in AllowedPolicyAreaIds)
+                                            {
+                                                <Chip Name="Input.PolicyAreaIds" Value="@id" Text="@names!.PolicyArea(id)" Checked="@(Input.PolicyAreaIds?.Contains(id) == true)" />
+                                            }
+                                        </div>
+                                    </FieldSet>
+                                    <FieldSet Legend="Quotations" Aside="@($"up to {StatementDraftRevision.MaximumQuotations} passages")" Hint="Choose the exact article passages that support the account. The system sets each quotation kind and the bill numbers when you save.">
+                                        <ul class="choices">
+                                            @foreach (var option in spans)
+                                            {
+                                                <li>
+                                                    <Choice Name="Input.QuotationSelection" Value="@option.Key" Label="@SpanLabel(option)"
+                                                            Checked="@(Input.QuotationSelection?.Contains(option.Key) == true)">
+                                                        <span class="quote">@EncodedEvidence.Markup(option.Text)</span>
+                                                    </Choice>
+                                                </li>
+                                            }
+                                        </ul>
+                                    </FieldSet>
+                                    <div class="actions">
+                                        <Button Variant="ButtonVariant.Primary" Type="submit">Save revision @(Revision.RevisionNumber + 1)</Button>
+                                        <span class="actions-hint">Approval applies only to saved wording.</span>
+                                    </div>
+                                </form>
+                            }
+                        </TabPane>
+                    </TabSet>
+                </Panel>
+            }
+
+            <Panel Title="Evidence" Id="evidence" Padded="true" Raised="true" Class="split-sticky">
+                <p class="small muted">Article captured @Moment.Full(detail.Extraction.SourceAttempt.ObservedAt). The cited passages are marked.</p>
+                <DocumentText Label="Article text with the cited passages marked" Runs="ArticleRuns" />
+                <p class="row small">
+                    <a href="@($"/Documents/Extraction?extractionId={detail.Extraction.ExtractionId}")">Full article text</a>
+                </p>
+                <TechnicalDetails Items="TechnicalItems" />
+            </Panel>
+        </div>
+
+        @if (Revision is not null)
+        {
+            <ReviewDecisionPanel RevisionNumber="Revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="status"
+                                 Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" OnDecide="DecideAsync">
+                <Checklist>
+                    <ul class="checklist">
+                        <li>Does each quotation appear in the article as written?</li>
+                        <li>Does each speaker match the article?</li>
+                        <li>Is the statement date, if any, supported by its evidence?</li>
+                    </ul>
+                </Checklist>
+            </ReviewDecisionPanel>
+
+            <ReviewHistoryPanel Entries="History" ViewerSubject="@actor.Subject" />
+        }
+    </div>
+}
+
+@code {
+    private RenderFragment HeaderMeta(ReviewStatus status, int concerns) =>
+        @<text>
+            <StatusBadge Tone="DraftStatusDisplay.Tone(status)" Text="@DraftStatusDisplay.Label(status, concerns)" />
+            @if (Revision is not null)
+            {
+                <span class="muted small">Revision @Revision.RevisionNumber, saved @Moment.Full(Revision.CreatedAtUtc)</span>
+            }
+        </text>;
+}
