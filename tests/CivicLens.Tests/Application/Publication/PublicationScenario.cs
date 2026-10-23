@@ -12,6 +12,8 @@ using CivicLens.Application.Relationships;
 using CivicLens.Core.Relationships;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Core.Actions;
@@ -72,6 +74,13 @@ internal sealed class PublicationScenario
 
     public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events }, Loaders(),
         new PublicationCatalog(OfficialNames, Issues), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers), new FixedExecutiveRoster(ExecutiveOfficials)), Clock);
+
+    public BlockedPublishedRecords Blocked() => new(Publications);
+
+    public ListBlockedPublished BlockedLister() => new(Publications, Releases, Blocked());
+
+    public ActivatePublicationRelease Activator(ILogger<ActivatePublicationRelease>? logger = null) =>
+        new(Publications, Releases, Blocked(), logger ?? NullLogger<ActivatePublicationRelease>.Instance);
 
     private const string PunctuatedHeadline = "Mayor\u2019s \u201Chousing\u201D plan: caf\u00E9 owners, r\u00E9sum\u00E9 rules; it\u2019s 100% ready? ";
 
@@ -417,6 +426,7 @@ internal sealed class FakePublicationStore : IPublicationStore
     public Exception? FailOnCommit { get; set; }
     public PublicationReleaseSummary? ConcurrentWinner { get; set; }
 
+    public Dictionary<PublishedRecordReference, ReviewStatus> ReviewStatuses { get; } = [];
     public int? ActiveReleaseNumber { get; set; }
     public Action? BeforeServe { get; set; }
 
@@ -440,6 +450,11 @@ internal sealed class FakePublicationStore : IPublicationStore
         if (active is not null) await serve(active.DirectoryName, cancellationToken);
         return active;
     }
+
+    public Task<IReadOnlyDictionary<PublishedRecordReference, ReviewStatus>> ReadReviewStatusesAsync(
+        IReadOnlyCollection<PublishedRecordReference> records, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<PublishedRecordReference, ReviewStatus>>(
+            records.Where(ReviewStatuses.ContainsKey).ToDictionary(record => record, record => ReviewStatuses[record]));
 
     public Task<IReadOnlyList<PublicationReleaseSummary>> ListAsync(int limit, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<PublicationReleaseSummary>>([.. Committed.AsEnumerable().Reverse().Take(limit)]);

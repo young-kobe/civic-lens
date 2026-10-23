@@ -222,6 +222,7 @@ Run commands are in [operations](../operations.md#run-the-search-service).
 - The pull trusts the cursor of the token holder. A cursor above the highest sequence acknowledges reports that the puller never saw.
 - A search database restored from a backup keeps its epoch. Reports made after the backup are lost, and the puller can skip new reports that reuse the lost sequences.
 - Edge blocking of `/internal/*` is deferred to [R-24](../roadmap.md#later).
+- The search API answers 200 for a withdrawn record in the pinned releases that hold it. A status 410 needs the ingest to read withdrawals and the API to change its status. This waits until after [R-24](../roadmap.md#later).
 - Only the first full ingest is long, because it fetches every record inside one transaction. Later ingests fetch only new revisions. Readers are not blocked, because they read committed rows.
 - A release that was never stored and is older than the newest stored release is refused and logged. The service keeps serving the active release. This happens only if the service missed a release and the site rolls back to it.
 - One service runs per search database. Two replicas could move the active release back and forth when they read different copies of the site.

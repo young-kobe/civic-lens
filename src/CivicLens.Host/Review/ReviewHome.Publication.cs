@@ -14,6 +14,7 @@ public sealed partial class ReviewHome
     private bool publishingOff;
     private ReadyToPublishList? ready;
     private PublicationReleaseList? releases;
+    private IReadOnlyList<BlockedPublishedRecord>? blocked;
     private IReadOnlyList<ReadyToPublishRecord>? selection;
     private bool selectionStale;
     private int nextReleaseNumber;
@@ -28,6 +29,7 @@ public sealed partial class ReviewHome
     private async Task LoadPublicationAsync(CancellationToken cancellationToken)
     {
         ready = await Services.GetRequiredService<ListPublishable>().ExecuteAsync(actor!, cancellationToken);
+        blocked = await Services.GetRequiredService<ListBlockedPublished>().ExecuteAsync(actor!, cancellationToken);
         releases = await Services.GetRequiredService<ListPublicationReleases>()
             .ExecuteAsync(actor!, ReleaseHistoryLimit, cancellationToken);
         nextReleaseNumber = (releases.Releases.Count == 0 ? 0 : releases.Releases.Max(release => release.ReleaseNumber)) + 1;

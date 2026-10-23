@@ -157,6 +157,14 @@ public sealed class PostgresPublicationStore : IPublicationStore
         db.Set<PublicationReleaseRow>().Where(row => row.IsActive)
             .ExecuteUpdateAsync(update => update.SetProperty(row => row.IsActive, false), cancellationToken);
 
+    public async Task<IReadOnlyDictionary<PublishedRecordReference, ReviewStatus>> ReadReviewStatusesAsync(
+        IReadOnlyCollection<PublishedRecordReference> records, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var current = await ReadCurrentReviewStatesAsync(db, [.. records.Select(record => (record.Kind, record.RecordId))], cancellationToken);
+        return current.ToDictionary(state => new PublishedRecordReference(state.Key.Kind, state.Key.RecordId), state => state.Value.ReviewStatus);
+    }
+
     private static async Task RequireUnchangedReleasesAsync(CollectionAttemptDbContext db, PublicationCommit commit,
         CancellationToken cancellationToken)
     {
@@ -247,9 +255,11 @@ public sealed class PostgresPublicationStore : IPublicationStore
     {
         if (draftIds.Length == 0) return;
         var changes = await db.Set<DocumentChangeDraftRow>().AsNoTracking()
-            .Where(row => draftIds.Contains(row.DraftId)).ToArrayAsync(cancellationToken);
+            .Where(row => draftIds.Contains(row.DraftId))
+            .Select(row => new { Id = row.DraftId, row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus })
+            .ToArrayAsync(cancellationToken);
         foreach (var row in changes)
-            current[(PublishedRecordKind.DocumentChange, row.DraftId)] = new(row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus);
+            current[(PublishedRecordKind.DocumentChange, row.Id)] = new(row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus);
     }
 
     private static async Task AddStatementStatesAsync(CollectionAttemptDbContext db, string[] candidateIds,
@@ -257,9 +267,11 @@ public sealed class PostgresPublicationStore : IPublicationStore
     {
         if (candidateIds.Length == 0) return;
         var statements = await db.Set<StatementDraftRow>().AsNoTracking()
-            .Where(row => candidateIds.Contains(row.CandidateId)).ToArrayAsync(cancellationToken);
+            .Where(row => candidateIds.Contains(row.CandidateId))
+            .Select(row => new { Id = row.CandidateId, row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus })
+            .ToArrayAsync(cancellationToken);
         foreach (var row in statements)
-            current[(PublishedRecordKind.Statement, row.CandidateId)] = new(row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus);
+            current[(PublishedRecordKind.Statement, row.Id)] = new(row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus);
     }
 
     private static async Task AddActionStatesAsync(CollectionAttemptDbContext db, string[] recordIds,
@@ -267,9 +279,11 @@ public sealed class PostgresPublicationStore : IPublicationStore
     {
         if (recordIds.Length == 0) return;
         var actions = await db.Set<ActionDraftRow>().AsNoTracking()
-            .Where(row => recordIds.Contains(row.RecordId)).ToArrayAsync(cancellationToken);
+            .Where(row => recordIds.Contains(row.RecordId))
+            .Select(row => new { Id = row.RecordId, row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus })
+            .ToArrayAsync(cancellationToken);
         foreach (var row in actions)
-            current[(PublishedRecordKind.Action, row.RecordId)] = new(row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus);
+            current[(PublishedRecordKind.Action, row.Id)] = new(row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus);
     }
 
     private static async Task AddVoteStatesAsync(CollectionAttemptDbContext db, string[] recordIds,
@@ -277,9 +291,11 @@ public sealed class PostgresPublicationStore : IPublicationStore
     {
         if (recordIds.Length == 0) return;
         var votes = await db.Set<VoteDraftRow>().AsNoTracking()
-            .Where(row => recordIds.Contains(row.RecordId)).ToArrayAsync(cancellationToken);
+            .Where(row => recordIds.Contains(row.RecordId))
+            .Select(row => new { Id = row.RecordId, row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus })
+            .ToArrayAsync(cancellationToken);
         foreach (var row in votes)
-            current[(PublishedRecordKind.Vote, row.RecordId)] = new(row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus);
+            current[(PublishedRecordKind.Vote, row.Id)] = new(row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus);
     }
 
     private static async Task AddRelationshipStatesAsync(CollectionAttemptDbContext db, string[] recordIds,
@@ -287,9 +303,11 @@ public sealed class PostgresPublicationStore : IPublicationStore
     {
         if (recordIds.Length == 0) return;
         var relationships = await db.Set<RelationshipDraftRow>().AsNoTracking()
-            .Where(row => recordIds.Contains(row.RecordId)).ToArrayAsync(cancellationToken);
+            .Where(row => recordIds.Contains(row.RecordId))
+            .Select(row => new { Id = row.RecordId, row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus })
+            .ToArrayAsync(cancellationToken);
         foreach (var row in relationships)
-            current[(PublishedRecordKind.Relationship, row.RecordId)] = new(row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus);
+            current[(PublishedRecordKind.Relationship, row.Id)] = new(row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus);
     }
 
     private static async Task AddBriefStatesAsync(CollectionAttemptDbContext db, string[] recordIds,
@@ -297,9 +315,11 @@ public sealed class PostgresPublicationStore : IPublicationStore
     {
         if (recordIds.Length == 0) return;
         var briefs = await db.Set<BriefDraftRow>().AsNoTracking()
-            .Where(row => recordIds.Contains(row.RecordId)).ToArrayAsync(cancellationToken);
+            .Where(row => recordIds.Contains(row.RecordId))
+            .Select(row => new { Id = row.RecordId, row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus })
+            .ToArrayAsync(cancellationToken);
         foreach (var row in briefs)
-            current[(PublishedRecordKind.Brief, row.RecordId)] = new(row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus);
+            current[(PublishedRecordKind.Brief, row.Id)] = new(row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus);
     }
 
     private static string[] IdsOf((PublishedRecordKind Kind, string RecordId)[] named, PublishedRecordKind kind) =>

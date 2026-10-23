@@ -717,13 +717,14 @@ To try it on the dev machine, run the search service as in [run the search servi
 
 ## Publish a static release
 
-The owner can publish from the Review home page. Select records in the Publish section and choose Review selection. The list shows each record as a document change, a statement, an action, a vote, a relationship, or a brief. The summary lists each headline with its kind, as new or a replacement, and shows the release number. Write a correction note in each replacement row. A withdrawn record shows a checkbox once review approves a revision above the withdrawn revision. Until then the row tells you to revise it. A returning record is marked Returning and needs a note. Choose Publish to confirm. The page lists recent releases read-only. Rollback stays in the CLI.
+The owner can publish from the Review home page. Select records in the Publish section and choose Review selection. The list shows each record as a document change, a statement, an action, a vote, a relationship, or a brief. The summary lists each headline with its kind, as new or a replacement, and shows the release number. Write a correction note in each replacement row. A withdrawn record shows a checkbox once review approves a revision above the withdrawn revision. Until then the row tells you to revise it. A returning record is marked Returning and needs a note. Choose Publish to confirm. The page lists recent releases read-only. The Blocked by review panel lists the published records that review blocked, with the withdraw command for each. Rollback stays in the CLI.
 
 The Review page cannot withdraw a record. The CLI is a local owner command. Set `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER` (the owner subject recorded on the release), and `CIVIC_LENS_RELEASE_DIRECTORY` (an absolute path, for example `$PWD/.runtime/releases`). Publishing also needs `CIVIC_LENS_COLLECTION_CONFIG`, an absolute configuration path that supplies the officials' display names, and `CIVIC_LENS_ISSUES_CONFIG`, an absolute path that supplies the issue and policy area names. The command trusts the local operator, who already holds database credentials.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases publish <idempotency-key> [<kind>:<id>...] [--note <kind>:<id> <text>]... [--withdraw <kind>:<id> <text>]...
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases list [limit]
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases blocked
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases activate <release-number>
 ```
 
@@ -745,6 +746,8 @@ To take a record out of the release, give `--withdraw <kind>:<id> <text>`. A req
 - Review did not block the record.
 - A relationship or a brief that stays in the release cites the record. The message lists the citing records. Withdraw them in the same request.
 
+To list the published records that review blocked, run `releases blocked`. It prints the kind, the ID, the headline, the published revision, and the review status of each record. The list is empty when no release is active. Use it to choose the records to withdraw.
+
 ### Return a record
 
 To bring a withdrawn record back, first revise it in review and approve the new revision. The revision number must be higher than the withdrawn revision. Return it from the Review page, or with the CLI: publish the withdrawn ID with a note: `releases publish <idempotency-key> <kind>:<id> --note <kind>:<id> <text>`. The note shows on the record page as a correction. The publish exits with code 2 if the note is missing or the revision is not higher. The code subject cannot return a record. The worker only logs the withdrawn record and skips it.
@@ -756,6 +759,8 @@ A schema 6 release with no `withdrawals` list cannot be read. Reset the developm
 A concurrent review decision, draft save, other release, or rollback makes the commit fail with exit code 1. The built directory is deleted and nothing is activated. Invalid input or a non-owner actor exits with code 2 and prints the rule that failed. The publish rules are in [publication](architecture/publication.md#publish).
 
 Repeat the same key and records to receive the original result. The repeat also repairs a link swap that failed after the commit. To roll back, activate an earlier release number. The next `publish` builds on the active release, so records added after it are not carried forward. `list` shows `activeReleaseNumber`, the release that Postgres records as active, and `servedDirectoryName`, the release that the link serves. If they differ, run `releases activate` with the active release number. Releases are never deleted automatically.
+
+The command `releases activate` prints one object with four fields. `summary` is the activated release. `restoredWithdrawals` lists records that the replaced release withdrew and the activated release shows again. `withdrawnAgain` lists records that the activated release withdraws and the replaced release showed. `blocked` lists records of the activated release that review now blocks. The lists describe the release that the link serves. Read them after each rollback. A failed read gives a warning on standard error and empty lists, and the switch stays done. If the manifest of the activated release cannot be read, all three lists are empty. If the manifest of the replaced release cannot be read, `restoredWithdrawals` and `withdrawnAgain` are empty. If the review read fails, `blocked` is empty.
 
 To check that the public pages work without the operational application, stop the review workspace, the worker, and Postgres. Then serve the active release with a plain static server:
 

@@ -13,7 +13,7 @@ public static class ReleaseCommand
     public static bool Matches(string[] args) => args is ["releases", ..];
 
     public static Task<int> ExecuteAsync(string[] args, PublishRelease publish,
-        ListPublicationReleases list, ActivatePublicationRelease activate, ReviewActor owner,
+        ListPublicationReleases list, ListBlockedPublished blocked, ActivatePublicationRelease activate, ReviewActor owner,
         CancellationToken cancellationToken) =>
         OwnerCommand.RunAsync(async () =>
         {
@@ -30,11 +30,14 @@ public static class ReleaseCommand
                     case ["releases", "list", var limitText] when TryParsePositive(limitText, out var limit):
                         CommandOutput.Write(await list.ExecuteAsync(owner, limit, cancellationToken));
                         return 0;
+                    case ["releases", "blocked"]:
+                        CommandOutput.Write(await blocked.ExecuteAsync(owner, cancellationToken));
+                        return 0;
                     case ["releases", "activate", var numberText] when TryParsePositive(numberText, out var number):
                         CommandOutput.Write(await activate.ExecuteAsync(owner, number, cancellationToken));
                         return 0;
                     default:
-                        Console.Error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--note <kind>:<id> <text>]... [--withdraw <kind>:<id> <text>]... (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], or releases activate <release-number>.");
+                        Console.Error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--note <kind>:<id> <text>]... [--withdraw <kind>:<id> <text>]... (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, or releases activate <release-number>.");
                         return 2;
                 }
             }
