@@ -26,6 +26,26 @@
             </DataTable>
         </Panel>
     }
+    @if (Page.TalkAndAction is { } profile)
+    {
+        <Panel Title="@($"Talk and action in Congress {Page.Congress}")">
+            <DataTable Items="profile.IssueIds" Caption="@($"Share of statements, sponsorships, and votes of {Page.Profile.Name} on each issue")">
+                <Head><th>Issue</th><th class="num">Statements</th><th class="num">Sponsorships</th><th class="num">Votes</th></Head>
+                <Row Context="issueId">
+                    <td>@issueId</td>
+                    <td class="num">@PublishedOfficialView.Share(profile.Statements, issueId)</td>
+                    <td class="num">@PublishedOfficialView.Share(profile.Sponsorships, issueId)</td>
+                    <td class="num">@PublishedOfficialView.Share(profile.Votes, issueId)</td>
+                </Row>
+                <Empty><EmptyState Title="No tracked issue" Text="No statement, sponsorship, or substantive vote of this Congress has a tracked issue." /></Empty>
+            </DataTable>
+            <p class="muted small">
+                Records with no tracked issue: @profile.Statements.WithoutIssue statements, @profile.Sponsorships.WithoutIssue sponsorships,
+                @profile.Votes.WithoutIssue votes. Substantive roll calls marked Not Voting: @profile.NotVotingRolls. Procedural votes left out: @profile.ProceduralVotes.
+                <a href="@(Page.RootPath + PublicationProtocol.MethodPagePath)">How the profile works</a>
+            </p>
+        </Panel>
+    }
     <Panel Title="Records">
         <DataTable Items="Rows" Caption="@($"Published records of {Page.Profile.Name}")">
             <Head><th class="fit num">Date</th><th>Record</th><th class="hide-narrow">Cast</th></Head>

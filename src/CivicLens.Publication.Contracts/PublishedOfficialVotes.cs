@@ -4,7 +4,7 @@ namespace CivicLens.Publication.Contracts;
 public sealed record PublishedOfficialVotes
 {
     public const int MaximumVotes = 5000;
-    public const int MaximumBytesPerVote = 4096;
+    public const int MaximumBytesPerVote = 52 * 1024;
     public const int MaximumBytes = MaximumVotes * MaximumBytesPerVote;
 
     public required PublishedOfficialVote[] Votes { get; init; }

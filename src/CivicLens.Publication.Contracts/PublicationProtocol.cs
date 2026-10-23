@@ -21,6 +21,7 @@ public static class PublicationProtocol
     public const int SearchSourceTextCharacters = 200_000;
     public const string SearchPagePath = "search.html";
     public const string ReportPagePath = "report.html";
+    public const string MethodPagePath = "method.html";
     public const string OfficialsPath = "officials.json";
     public const string CatalogPath = "catalog.json";
     public const string OfficialsPagePath = "officials.html";

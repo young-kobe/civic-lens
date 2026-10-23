@@ -27,7 +27,7 @@ public sealed record PublishedRecordEntry
                 $"Release manifest filters allow {MaximumFilterValues} distinct values of up to {MaximumFilterValueLength} characters each.");
     }
 
-    private static bool AreFilterValues(IEnumerable<string?>? values)
+    internal static bool AreFilterValues(IEnumerable<string?>? values)
     {
         if (values is null) return false;
         var all = values.ToArray();

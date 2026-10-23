@@ -100,8 +100,9 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
 
         var current = newestFirst.IsEmpty ? (int?)null : newestFirst[0];
         var currentRows = current is { } newest ? await RowsAsync(newest) : [];
+        var talkAndAction = current is null ? null : TalkAndActionProfile.Of(current.Value, entries, currentRows);
         await WriteAsync(staging, PublicationProtocol.OfficialPagePath(profile.Id), await renderer.RenderOfficialAsync(
-            new(profile, tracked, current, true, past, entries, currentRows), cancellationToken), cancellationToken);
+            new(profile, tracked, current, true, past, entries, currentRows, talkAndAction), cancellationToken), cancellationToken);
     }
 
     private static Task WriteAsync(IReleaseStaging staging, string path, string html, CancellationToken cancellationToken) =>

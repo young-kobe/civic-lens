@@ -37,6 +37,7 @@ internal sealed class PublicationScenario
     public static readonly DateTimeOffset ApprovedAt = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     public List<string> Events { get; } = [];
+    public List<ReleaseOfficialPage> OfficialPages { get; } = [];
     public FakeClock Clock { get; } = new(new(2026, 2, 1, 0, 0, 0, TimeSpan.Zero));
     public FakePublicationStore Publications { get; } = new();
     public FakeReleaseDirectory Releases { get; }
@@ -72,7 +73,7 @@ internal sealed class PublicationScenario
 
     public IssueConfiguration Issues { get; set; } = IssueConfiguration.None;
 
-    public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events }, Loaders(),
+    public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events, OfficialPages = OfficialPages }, Loaders(),
         new PublicationCatalog(OfficialNames, Issues), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers), new FixedExecutiveRoster(ExecutiveOfficials)), Clock);
 
     public BlockedPublishedRecords Blocked() => new(Publications);
@@ -368,6 +369,7 @@ internal sealed class PublicationScenario
 internal sealed class FakeRenderer : IReleaseRenderer
 {
     public List<string>? Events { get; init; }
+    public List<ReleaseOfficialPage>? OfficialPages { get; init; }
     public IReadOnlyList<ReleaseAsset> Assets { get; } = [new("assets/site.css", [1, 2, 3])];
     public Task<string> RenderRecordAsync(PublishedDocumentChange record, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>{record.RecordId}</html>");
@@ -395,12 +397,17 @@ internal sealed class FakeRenderer : IReleaseRenderer
         Task.FromResult($"<html>facet {facet.Name} {page} {string.Join(',', facet.Records.Select(entry => entry.RecordId))}</html>");
     public Task<string> RenderFacetsAsync(ReleaseFacets facets, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>facets {facets.Issues.Length} {facets.PolicyAreas.Length}</html>");
-    public Task<string> RenderOfficialAsync(ReleaseOfficialPage page, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>official {page.Profile.Id} {(page.IsTracked ? "tracked" : "untracked")} {(page.IsCurrent ? "current" : "past")} {page.Congress} past [{string.Join(',', page.PastCongresses)}] records [{string.Join(',', page.Records.Select(entry => entry.RecordId))}] votes [{string.Join(',', page.Votes.Select(vote => vote.RecordId))}]</html>");
+    public Task<string> RenderOfficialAsync(ReleaseOfficialPage page, CancellationToken cancellationToken)
+    {
+        OfficialPages?.Add(page);
+        return Task.FromResult($"<html>official {page.Profile.Id} {(page.IsTracked ? "tracked" : "untracked")} {(page.IsCurrent ? "current" : "past")} {page.Congress} past [{string.Join(',', page.PastCongresses)}] records [{string.Join(',', page.Records.Select(entry => entry.RecordId))}] votes [{string.Join(',', page.Votes.Select(vote => vote.RecordId))}]</html>");
+    }
     public Task<string> RenderOfficialsAsync(IReadOnlyList<OfficialListing> officials, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>officials {string.Join(',', officials.Select(official => $"{official.Profile.Id}:{official.RecordCount}"))}</html>");
     public Task<string> RenderReportAsync(CancellationToken cancellationToken) =>
         Task.FromResult("<html>report</html>");
+    public Task<string> RenderMethodAsync(CancellationToken cancellationToken) =>
+        Task.FromResult("<html>method</html>");
     public Task<string> RenderSearchAsync(PublicationRelease release, ReleaseFacets facets, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>search {release.Records.Length} {facets.Issues.Length}</html>");
 

@@ -335,6 +335,42 @@ public sealed class PublishOfficialPagesTests
             scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", scenario.AddDraft('b'))));
     }
 
+    [Fact]
+    public async Task TheCurrentPageGetsTheProfileOfItsCongressWithTheStatementTheSponsoredBillAndTheVoteAndACosponsorGetsNoPage()
+    {
+        var scenario = new PublicationScenario();
+        var statement = scenario.AddStatement('a', statementDate: new DateOnly(2026, 1, 1));
+        var action = scenario.AddAction('b');
+        var vote = scenario.AddVote('c');
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k",
+            new PublishedRecordReference(PublishedRecordKind.Statement, statement), new PublishedRecordReference(PublishedRecordKind.Action, action),
+            new PublishedRecordReference(PublishedRecordKind.Vote, vote)));
+
+        var page = scenario.OfficialPages.Single(page => page.Profile.Id == "mayor" && page.IsCurrent);
+        var profile = page.TalkAndAction!;
+        Assert.Equal(119, page.Congress);
+        Assert.Equal([1, 1, 1], new[] { profile.Statements, profile.Sponsorships, profile.Votes }.Select(column => column.CountOf("housing")));
+        Assert.DoesNotContain(scenario.OfficialPages, page => page.Profile.Id == "chair");
+    }
+
+    [Fact]
+    public async Task OnlyTheCurrentPageOfAnOfficialWithAVoteCarriesAProfile()
+    {
+        var scenario = new PublicationScenario();
+        var older = scenario.AddVote('a', congress: 118);
+        var newer = scenario.AddVote('b');
+        var statementOnly = scenario.AddStatement('c', speakerIds: ["chair"]);
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k",
+            new PublishedRecordReference(PublishedRecordKind.Vote, older), new PublishedRecordReference(PublishedRecordKind.Vote, newer),
+            new PublishedRecordReference(PublishedRecordKind.Statement, statementOnly)));
+
+        Assert.Equal([119], scenario.OfficialPages.Where(page => page.Profile.Id == "mayor" && page.TalkAndAction is not null)
+            .Select(page => page.Congress!.Value));
+        Assert.All(scenario.OfficialPages.Where(page => page.Profile.Id == "chair" || !page.IsCurrent), page => Assert.Null(page.TalkAndAction));
+    }
+
     private static Task<PublicationReleaseSummary> PublishAsync(PublicationScenario scenario, string key, PublishedRecordKind kind, string recordId) =>
         scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request(key, new PublishedRecordReference(kind, recordId)));
 
