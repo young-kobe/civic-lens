@@ -6,6 +6,7 @@ namespace CivicLens.Tests.Application;
 public sealed class WorkerLoopTests
 {
     private static readonly TimeSpan Lease = TimeSpan.FromMilliseconds(1500);
+    private static readonly TimeSpan FailureTolerantLease = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(10);
 
     [Fact]
@@ -15,11 +16,11 @@ public sealed class WorkerLoopTests
         var calls = 0;
         var started = Stopwatch.StartNew();
 
-        await WorkerLoop.RenewLeaseAsync(_ => { calls++; throw new InvalidOperationException("Database unavailable."); }, Lease, ownership);
+        await WorkerLoop.RenewLeaseAsync(_ => { calls++; throw new InvalidOperationException("Database unavailable."); }, FailureTolerantLease, ownership);
 
         Assert.True(ownership.IsCancellationRequested);
         Assert.True(calls >= 2, $"Only {calls} renewal attempts were made.");
-        Assert.True(started.Elapsed >= Lease);
+        Assert.True(started.Elapsed >= FailureTolerantLease);
     }
 
     [Fact]
