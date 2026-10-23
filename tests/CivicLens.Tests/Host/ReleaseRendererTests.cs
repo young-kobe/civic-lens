@@ -182,6 +182,19 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task TheMethodPageNamesTheSubstantiveVoteKindsAndTheThresholdFromTheirOwners()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None);
+
+        var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
+        Assert.Contains("Amendment, Suspension of the rules, Passage, Conference report, Veto override, Nomination.", text, StringComparison.Ordinal);
+        Assert.Contains($"at least {TalkAndActionProfile.MinimumRecordsForShare} records", text, StringComparison.Ordinal);
+        Assert.Contains("Too few records", text, StringComparison.Ordinal);
+        Assert.Contains("policy area of the bill in Congress.gov", text, StringComparison.Ordinal);
+        Assert.Contains("Some tags can still be wrong", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ReportPageHoldsEveryProtocolCategoryWithALabelAndPostsToTheConfiguredServiceWithTheSiteKey()
     {
         var html = await new ReleaseRenderer("https://api.example.test", "site-key-1").RenderReportAsync(CancellationToken.None);

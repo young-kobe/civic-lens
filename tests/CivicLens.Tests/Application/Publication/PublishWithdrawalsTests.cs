@@ -489,6 +489,27 @@ public sealed class PublishWithdrawalsTests
     }
 
     [Fact]
+    public async Task AWithdrawnStatementNoLongerCountsInTheTalkAndActionProfile()
+    {
+        var scenario = new PublicationScenario();
+        var kept = scenario.AddStatement('a', statementDate: new DateOnly(2026, 1, 1));
+        var withdrawn = scenario.AddStatement('b', statementDate: new DateOnly(2026, 1, 1));
+        var vote = scenario.AddVote('c');
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Statement, kept), new PublishedRecordReference(PublishedRecordKind.Statement, withdrawn),
+            new PublishedRecordReference(PublishedRecordKind.Vote, vote)));
+        Assert.Equal(2, MayorProfile(scenario).Statements.CountOf("housing"));
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            new PublishReleaseRequest([], "k2") { Withdrawals = [Note(withdrawn, "Wrong.", PublishedRecordKind.Statement)] });
+
+        Assert.Equal(1, MayorProfile(scenario).Statements.CountOf("housing"));
+    }
+
+    private static TalkAndActionProfile MayorProfile(PublicationScenario scenario) =>
+        scenario.OfficialPages.Last(page => page.Profile.Id == "mayor" && page.IsCurrent).TalkAndAction!;
+
+    [Fact]
     public async Task AWithdrawnVoteLeavesTheVoteFilesOfItsMembersAndACongressWithNoRowDisappears()
     {
         var scenario = new PublicationScenario();

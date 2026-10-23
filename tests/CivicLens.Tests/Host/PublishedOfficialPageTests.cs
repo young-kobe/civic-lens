@@ -96,6 +96,35 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
+    public async Task TheProfilePanelShowsCountsAndSharesOrTooFewRecordsAndLinksTheMethodNote()
+    {
+        PublishedRecordEntry[] statements = [.. Enumerable.Range(1, 5).Select(index => Entry((char)('0' + index), PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)) with { IssueIds = index < 3 ? ["housing", "health"] : ["housing"] })];
+        var page = Current(statements, [Vote('a', new DateOnly(2026, 4, 1)) with { IssueIds = ["housing"] }, Vote('b', new DateOnly(2026, 4, 2)) with { Kind = PublishedVoteKind.Cloture },
+            Vote('c', new DateOnly(2026, 4, 3)) with { IssueIds = ["health"], Cast = PublishedOfficialVote.NotVoting },
+            Vote('d', new DateOnly(2026, 4, 4)) with { Kind = PublishedVoteKind.Cloture }]);
+        page = page with { TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes) };
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, CancellationToken.None);
+
+        var panel = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-talk-and-action-in-congress-119']")!;
+        Assert.Equal(["health", "2 (40%)", "0 (Too few records)", "0 (Too few records)"],
+            panel.QuerySelectorAll("tbody tr:nth-child(1) td").Select(cell => cell.TextContent));
+        Assert.Equal(["housing", "5 (100%)", "0 (Too few records)", "1 (Too few records)"],
+            panel.QuerySelectorAll("tbody tr:nth-child(2) td").Select(cell => cell.TextContent));
+        Assert.Contains("Substantive roll calls marked Not Voting: 1", panel.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Procedural votes left out: 2", panel.TextContent, StringComparison.Ordinal);
+        Assert.Equal("../method.html", panel.QuerySelector("a")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task APageWithNoProfileHasNoProfilePanel()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([], []), CancellationToken.None);
+
+        Assert.DoesNotContain("Talk and action", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TheCurrentPageLinksEachEarlierCongressPageFromItsOwnFolder()
     {
         var page = Current([], [Vote('3', new DateOnly(2026, 4, 1))]) with { PastCongresses = [118, 117] };
@@ -178,6 +207,8 @@ public sealed class PublishedOfficialPageTests
         BillType = "hr",
         BillNumber = 7,
         Cast = "Yea",
-        Headline = $"Vote {id}"
+        Headline = $"Vote {id}",
+        Kind = PublishedVoteKind.Passage,
+        IssueIds = []
     };
 }

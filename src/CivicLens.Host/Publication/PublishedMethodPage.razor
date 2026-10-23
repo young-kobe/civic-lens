@@ -1,0 +1,34 @@
+@using CivicLens.Application.Publication
+@using CivicLens.Publication.Contracts
+
+<PublicPage Title="How the talk and action profile works">
+    <a class="back-link" href="@PublicationProtocol.OfficialsPagePath">Officials</a>
+    <PageHeader Title="How the talk and action profile works" Lede="Code builds the profile on each official page. No model is used." />
+    <Panel Title="What each column counts" Padded="true">
+        <ul>
+            <li>Statements: the published statements of the official. A statement counts in the Congress of its day. The day is the statement day, or the first publication day when the statement has no day.</li>
+            <li>Sponsorships: the published bills that name the official as sponsor. Cosponsors do not count. A bill counts in the Congress of its latest sponsorship day.</li>
+            <li>Votes: the roll call votes of the official, with a substantive kind, where the official cast a vote. A roll call counts once. A cast of Not Voting does not count, and each page shows how many such roll calls it left out. Any other cast counts.</li>
+        </ul>
+    </Panel>
+    <Panel Title="The window" Padded="true">
+        <p>All three columns use the current Congress. The current Congress of an official is the newest Congress with a published vote of that official.</p>
+    </Panel>
+    <Panel Title="Substantive votes" Padded="true">
+        <p>These vote kinds count: @SubstantiveKinds. The profile leaves out all other kinds, such as rules, cloture, and motions. These are procedural votes. Each official page shows how many it left out.</p>
+    </Panel>
+    <Panel Title="Where the issues come from" Padded="true">
+        <p>A person reviews the issue tags of a statement and approves them. Some tags can still be wrong. The issues of a sponsorship and of a vote come from the policy area of the bill in Congress.gov.</p>
+    </Panel>
+    <Panel Title="How a share is computed" Padded="true">
+        <p>The share of an issue in a column is the number of records in that column with the issue. It is divided by the number of records in that column with at least one tracked issue.</p>
+        <p>A record with several issues counts once for each issue. The shares of a column can therefore add up to more than 100%.</p>
+        <p>A record with no tracked issue is not in the share. Each page shows the count of these records for each column.</p>
+        <p>Each page always shows the counts. It shows a share only when the column has at least @TalkAndActionProfile.MinimumRecordsForShare records with an issue. Otherwise it shows "Too few records".</p>
+    </Panel>
+</PublicPage>
+
+@code {
+    private static string SubstantiveKinds => string.Join(", ", Enum.GetValues<PublishedVoteKind>()
+        .Where(kind => kind.IsSubstantive()).Select(PublishedRecordLabels.VoteKind));
+}

@@ -22,6 +22,10 @@ internal static class PublishedOfficialView
     [.. ReleaseRecordOrder.NewestFirst(page.Records.Select(PublishedOfficialRow.Of).Concat(page.Votes.Select(PublishedOfficialRow.Of)),
         row => row.Date, row => row.PublishedAtUtc, row => row.RecordId)];
 
+    public static string Share(TalkAndActionColumn column, string issueId) => column.ShareOf(issueId) is { } share
+        ? string.Create(CultureInfo.InvariantCulture, $"{column.CountOf(issueId)} ({share * 100:0}%)")
+        : $"{column.CountOf(issueId)} (Too few records)";
+
     public static string RollCall(PublishedOfficialVote vote)
     {
         var roll = $"{vote.Chamber} roll call {vote.RollCallNumber}, Congress {vote.Congress}, session {vote.Session}";

@@ -173,6 +173,9 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
             [nameof(PublishedReportPage.TurnstileSiteKey)] = turnstileSiteKey
         });
 
+    public Task<string> RenderMethodAsync(CancellationToken cancellationToken) =>
+        RenderAsync<PublishedMethodPage>(new Dictionary<string, object?>());
+
     public Task<string> RenderSearchAsync(PublicationRelease release, ReleaseFacets facets, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(release);

@@ -11,7 +11,7 @@ public sealed class PublishOfficialVotesTests
     private static readonly string ChairFile = PublicationProtocol.OfficialVotesPath("chair", 119);
 
     [Fact]
-    public async Task AVoteRowCarriesTheRollCallBillCastAndHeadlineSoTheProfilePageNeedsNoRecordFile()
+    public async Task AVoteRowCarriesTheRollCallBillCastHeadlineKindAndIssuesSoTheProfilePageNeedsNoRecordFile()
     {
         var scenario = new PublicationScenario();
 
@@ -20,6 +20,8 @@ public sealed class PublishOfficialVotesTests
         var row = Assert.Single(VotesOf(scenario, summary.DirectoryName, MayorFile).Votes);
         Assert.Equal((new string('a', 64), new DateOnly(2025, 4, 10), 119, 1, 100), (row.RecordId, row.VotedOn, row.Congress, row.Session, row.RollCallNumber));
         Assert.Equal(("hr", 7, "Yea", "Vote a"), (row.BillType, row.BillNumber, row.Cast, row.Headline));
+        Assert.Equal(PublishedVoteKind.Passage, row.Kind);
+        Assert.Equal(["housing"], row.IssueIds);
     }
 
     [Fact]
@@ -129,7 +131,8 @@ public sealed class PublishOfficialVotesTests
         scenario.SeedRelease(withFiles: true, []);
         var misplaced = PublishedOfficialVotes.Of([new PublishedOfficialVote
         {
-            RecordId = new string('f', 64), VotedOn = new DateOnly(2024, 1, 1), Chamber = PublishedChamber.House, Congress = 118, Session = 1, RollCallNumber = 1, Cast = "Yea", Headline = "Misplaced"
+            RecordId = new string('f', 64), VotedOn = new DateOnly(2024, 1, 1), Chamber = PublishedChamber.House, Congress = 118, Session = 1, RollCallNumber = 1, Cast = "Yea", Headline = "Misplaced",
+            Kind = PublishedVoteKind.Passage, IssueIds = []
         }]);
         scenario.Releases.Directories["seeded"][MayorFile] = JsonSerializer.SerializeToUtf8Bytes(misplaced, PublicationProtocol.JsonOptions);
 

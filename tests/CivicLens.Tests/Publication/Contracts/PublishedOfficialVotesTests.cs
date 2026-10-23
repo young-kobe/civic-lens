@@ -10,7 +10,7 @@ public sealed class PublishedOfficialVotesTests
     {
         var file = PublishedOfficialVotes.Of([Vote('b', new DateOnly(2026, 2, 1), 9)]);
 
-        Assert.Equal("""{"votes":[{"recordId":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","votedOn":"2026-02-01","chamber":"house","congress":119,"session":1,"rollCallNumber":9,"billType":"hr","billNumber":7,"cast":"Yea","headline":"Vote b"}]}""",
+        Assert.Equal("""{"votes":[{"recordId":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","votedOn":"2026-02-01","chamber":"house","congress":119,"session":1,"rollCallNumber":9,"billType":"hr","billNumber":7,"cast":"Yea","headline":"Vote b","kind":"passage","issueIds":["housing"]}]}""",
             JsonSerializer.Serialize(file, PublicationProtocol.JsonOptions));
     }
 
@@ -40,20 +40,55 @@ public sealed class PublishedOfficialVotesTests
     [Fact]
     public void AFullCongressOfMaximumLengthRowsStaysUnderTheByteCapSoTheFileCanAlwaysBeReadBack()
     {
-        var long8 = new string('é', PublishedVote.MaximumHeadlineLength);
+        var long8 = new string('€', PublishedVote.MaximumHeadlineLength);
+        string[] issueIds = [.. Enumerable.Range(0, PublishedRecordEntry.MaximumFilterValues)
+            .Select(issue => issue.ToString("x2") + new string('€', PublishedRecordEntry.MaximumFilterValueLength - 2))];
         var rows = Enumerable.Range(0, PublishedOfficialVotes.MaximumVotes)
             .Select(index => Vote('a', new DateOnly(2026, 1, 1), index + 1) with
             {
                 RecordId = index.ToString("x64"),
                 Headline = long8,
-                Cast = new string('é', PublishedVote.MaximumCastLength),
-                BillType = new string('z', PublishedVote.MaximumBillTypeLength)
+                Cast = new string('€', PublishedVote.MaximumCastLength),
+                BillType = new string('z', PublishedVote.MaximumBillTypeLength),
+                IssueIds = issueIds
             });
 
         var json = JsonSerializer.SerializeToUtf8Bytes(PublishedOfficialVotes.Of(rows), PublicationProtocol.JsonOptions);
 
         Assert.True(json.Length < PublishedOfficialVotes.MaximumBytes);
     }
+
+    [Fact]
+    public void AnUndefinedKindIsRefused()
+    {
+        Assert.Throws<InvalidDataException>(() => PublishedOfficialVotes.Of([Vote('a', new DateOnly(2026, 1, 1), 1) with { Kind = (PublishedVoteKind)99 }]));
+    }
+
+    [Fact]
+    public void TheRowKeepsTheKindAndTheTrackedIssuesOfItsVote()
+    {
+        var file = PublishedOfficialVotes.Of([Vote('a', new DateOnly(2026, 1, 1), 1) with { Kind = PublishedVoteKind.Cloture, IssueIds = ["housing", "health"] }]);
+
+        var row = JsonSerializer.Deserialize<PublishedOfficialVotes>(JsonSerializer.Serialize(file, PublicationProtocol.JsonOptions), PublicationProtocol.JsonOptions)!.Votes.Single();
+
+        Assert.Equal(PublishedVoteKind.Cloture, row.Kind);
+        Assert.Equal(["housing", "health"], row.IssueIds);
+    }
+
+    [Theory]
+    [MemberData(nameof(InvalidIssueIds))]
+    public void IssueIdsThatTheManifestEntryWouldRefuseAreRefusedOnTheRow(string[] issueIds)
+    {
+        Assert.Throws<InvalidDataException>(() => PublishedOfficialVotes.Of([Vote('a', new DateOnly(2026, 1, 1), 1) with { IssueIds = issueIds }]));
+    }
+
+    public static TheoryData<string[]> InvalidIssueIds() => new()
+    {
+        { ["housing", "housing"] },
+        { [" "] },
+        { [new string('x', PublishedRecordEntry.MaximumFilterValueLength + 1)] },
+        { [.. Enumerable.Range(0, PublishedRecordEntry.MaximumFilterValues + 1).Select(index => $"issue-{index}")] }
+    };
 
     [Fact]
     public void MoreVotesThanTheCapAreRefused()
@@ -93,6 +128,8 @@ public sealed class PublishedOfficialVotesTests
         BillType = "hr",
         BillNumber = 7,
         Cast = "Yea",
-        Headline = $"Vote {id}"
+        Headline = $"Vote {id}",
+        Kind = PublishedVoteKind.Passage,
+        IssueIds = ["housing"]
     };
 }
