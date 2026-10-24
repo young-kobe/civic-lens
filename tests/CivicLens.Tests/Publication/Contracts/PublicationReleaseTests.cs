@@ -45,11 +45,11 @@ public sealed class PublicationReleaseTests
     }
 
     [Theory]
-    [InlineData(0)]
-    [InlineData(2)]
-    public void RejectsAnyOtherSchemaVersion(int version)
+    [InlineData(-1)]
+    [InlineData(1)]
+    public void RejectsAnyOtherSchemaVersion(int offset)
     {
-        Assert.Throws<InvalidDataException>(Release(version, Entry(PublishedRecordKind.DocumentChange, ChangeId)).Validate);
+        Assert.Throws<InvalidDataException>(Release(PublicationProtocol.SchemaVersion + offset, Entry(PublishedRecordKind.DocumentChange, ChangeId)).Validate);
     }
 
     [Fact]

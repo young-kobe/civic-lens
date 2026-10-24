@@ -754,10 +754,6 @@ To bring a withdrawn record back, first revise it in review and approve the new 
 
 A relationship or a brief that cited the record stays withdrawn. Publish it again, in the same request or later.
 
-A schema 6 release with no `withdrawals` list cannot be read. Reset the development releases before the next publish.
-
-A schema 6 vote file with no `kind` or `issueIds` in its rows cannot be read. Reset the development releases before the next publish. Production has no release yet.
-
 A concurrent review decision, draft save, other release, or rollback makes the commit fail with exit code 1. The built directory is deleted and nothing is activated. Invalid input or a non-owner actor exits with code 2 and prints the rule that failed. The publish rules are in [publication](architecture/publication.md#publish).
 
 Repeat the same key and records to receive the original result. The repeat also repairs a link swap that failed after the commit. To roll back, activate an earlier release number. The next `publish` builds on the active release, so records added after it are not carried forward. `list` shows `activeReleaseNumber`, the release that Postgres records as active, and `servedDirectoryName`, the release that the link serves. If they differ, run `releases activate` with the active release number. Releases are never deleted automatically.
