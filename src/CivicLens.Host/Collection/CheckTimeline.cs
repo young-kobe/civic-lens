@@ -56,7 +56,7 @@ public static class CheckTimeline
     }
 
     private static string Skipped(DiscoveryResult discovery) =>
-        discovery.OutOfScopeCount is > 0 and var count ? $" and {count} outside the source scope skipped" : "";
+        discovery.OutOfScopeCount > 0 ? $" and {discovery.OutOfScopeCount} outside the source scope skipped" : "";
 
     private static Tone ToneOf(CollectionJobAttempt attempt, bool retained) => attempt.Resolution switch
     {

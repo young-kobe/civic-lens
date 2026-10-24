@@ -146,7 +146,7 @@ A robots 404 permits collection. Other ambiguous or unreadable responses block c
 
 The cache write uses a temporary file and moves it over the old entry. Unlike capture promotion, it does not flush first and it replaces an existing file. A lost or torn entry only causes a refetch. The collector holds no other state and still enforces robots itself.
 
-The result field `robotsCacheHit` is omitted by the collector when false. Every non-API result that made requests needs a robots request or a cache hit. A crawl delay or a `crawlDelay` deferral also needs one of them. API results cannot set it.
+Every result carries a required `robotsRequestCount`. The collector omits the result field `robotsCacheHit` when it is false. Every non-API result that made requests needs a robots request or a cache hit. A crawl delay or a `crawlDelay` deferral also needs one of them. API results cannot set it.
 
 **Crawl delay.** Crawl-delay is a supported extension. Nonnegative decimal seconds round up to milliseconds. Repeated declarations in the selected groups use the maximum. A zero declaration is distinct from an absent declaration. Receipts carry the declaration as `robotsCrawlDelayMilliseconds`.
 

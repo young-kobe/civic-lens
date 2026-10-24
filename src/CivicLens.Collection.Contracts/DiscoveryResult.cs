@@ -24,7 +24,7 @@ public sealed record DiscoveryResult
         if (Status != DiscoveryStatus.Parsed && Urls.Length != 0)
             throw new InvalidDataException("Failed discovery cannot contain candidates.");
         if (!HasValidOutOfScopeCount())
-            throw new InvalidDataException("Out-of-scope count is invalid for this protocol version.");
+            throw new InvalidDataException("Out-of-scope count is invalid.");
         if (Urls.Length > request.MaxCandidates)
             throw new InvalidDataException("Discovery exceeds the candidate limit.");
         var seen = new HashSet<string>(StringComparer.Ordinal);
