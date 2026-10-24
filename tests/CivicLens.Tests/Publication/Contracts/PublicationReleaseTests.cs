@@ -59,7 +59,7 @@ public sealed class PublicationReleaseTests
     }
 
     [Fact]
-    public void SchemaThreeFiltersRoundTripSoSearchReadsWhatPublishWrote()
+    public void FiltersRoundTripSoSearchReadsWhatPublishWrote()
     {
         var entry = Entry(PublishedRecordKind.Statement, StatementId) with
         {

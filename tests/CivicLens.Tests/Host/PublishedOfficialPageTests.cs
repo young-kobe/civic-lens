@@ -180,7 +180,7 @@ public sealed class PublishedOfficialPageTests
         Assert.Equal("Records other than votes", new HtmlParser().ParseDocument(html).QuerySelector("thead th.num")!.TextContent);
     }
 
-    private static PublishedOfficialProfile Profile() => new() { Id = "mayor", Name = "Mayor Example" };
+    private static PublishedOfficialProfile Profile() => new() { Id = "mayor", Name = "Mayor Example", Terms = [] };
 
     private static ReleaseOfficialPage Current(PublishedRecordEntry[] entries, PublishedOfficialVote[] votes) =>
         new(Profile(), true, 119, true, [], [.. entries], [.. votes]);

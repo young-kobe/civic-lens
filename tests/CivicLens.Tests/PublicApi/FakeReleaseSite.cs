@@ -32,7 +32,7 @@ internal sealed class FakeReleaseSite : HttpMessageHandler
         files.Clear();
         files[PublicationProtocol.ManifestPath] = JsonSerializer.SerializeToUtf8Bytes(manifest, PublicationProtocol.JsonOptions);
         files[PublicationProtocol.OfficialsPath] = JsonSerializer.SerializeToUtf8Bytes(
-            new PublishedOfficials { Officials = [new() { Id = "mayor", Name = "Mayor Example" }] }, PublicationProtocol.JsonOptions);
+            new PublishedOfficials { Officials = [new() { Id = "mayor", Name = "Mayor Example", Terms = [] }] }, PublicationProtocol.JsonOptions);
         files[PublicationProtocol.CatalogPath] = JsonSerializer.SerializeToUtf8Bytes(
             new PublishedCatalog { Issues = [new() { Id = "housing", Name = "Housing costs" }], PolicyAreas = [] }, PublicationProtocol.JsonOptions);
         foreach (var record in records)

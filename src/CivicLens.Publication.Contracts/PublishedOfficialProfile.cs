@@ -5,7 +5,7 @@ public sealed record PublishedOfficialProfile
     public required string Id { get; init; }
     public required string Name { get; init; }
     public string? WikidataId { get; init; }
-    public PublishedOfficeTerm[] Terms { get; init; } = [];
+    public required PublishedOfficeTerm[] Terms { get; init; }
 
     public void Validate()
     {

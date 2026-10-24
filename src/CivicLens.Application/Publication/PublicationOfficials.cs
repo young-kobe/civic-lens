@@ -68,7 +68,7 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
 
     private static PublishedOfficialProfile Unconfigured(string id, IReadOnlyDictionary<string, string> recordNames) =>
         recordNames.TryGetValue(id, out var name)
-            ? new() { Id = id, Name = name }
+            ? new() { Id = id, Name = name, Terms = NoTerms }
             : throw new InvalidDataException($"Official {id} is named by a record but no record holds a name for the official.");
 
     private static PublishedOfficialProfile ToProfile(PersonConfiguration person, Dictionary<string, PublishedOfficeTerm[]> memberTerms,
