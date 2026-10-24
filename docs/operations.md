@@ -95,13 +95,13 @@ The host prints a verified JSON receipt. A captured result points to `capture.re
 
 ## Standalone collector
 
-Run `CivicLens.Collector collect <manifest.json>` or `dotnet <collector.dll> collect <manifest.json>`. `CollectionRequest` in Collection.Contracts defines the version 10 fields:
+Run `CivicLens.Collector collect <manifest.json>` or `dotnet <collector.dll> collect <manifest.json>`. `CollectionRequest` in Collection.Contracts defines the version 1 fields:
 
 - required: `version`, `jobId`, `sourceId`, `url`, `allowedOrigin`, `allowedPathPrefix`, and an absolute `artifactDirectory`
 - optional, bounded: `maxRequests`, `maxBytes`, `timeoutSeconds`, `minDelayMilliseconds`, `eTag`, `lastModified`
 - for `api` mode only: `credential`
 
-JSON names are case-sensitive. Use version 10 in new manifests, and rebuild the host and collector together. The collector rejects every other version. Validators are explicit in standalone manifests. A 429 gives `deferred` with an optional `retryAfterSeconds`; wait before you run again. The protocol rules are in [collection](architecture/collection.md#collector-protocol).
+JSON names are case-sensitive. Use version 1 in new manifests, and rebuild the host and collector together. The collector rejects every other version. Validators are explicit in standalone manifests. A 429 gives `deferred` with an optional `retryAfterSeconds`; wait before you run again. The protocol rules are in [collection](architecture/collection.md#collector-protocol).
 
 Do not run concurrent collectors for the same origin. Host runs that share a capture directory exclude each other, but separate directories and standalone runs are not coordinated. Use managed jobs for cross-run admission, retry budgets, and origin pacing.
 

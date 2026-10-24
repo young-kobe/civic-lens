@@ -33,10 +33,9 @@ public sealed class CollectionProtocolTests
     }
 
     [Theory]
-    [InlineData(null)]
     [InlineData(-1)]
     [InlineData(3)]
-    public void MissingNegativeOrExcessRobotsRequestCountsAreRejected(int? robotsRequests)
+    public void NegativeOrExcessRobotsRequestCountsAreRejected(int robotsRequests)
     {
         var request = Request();
         Assert.Throws<InvalidDataException>(() => (Receipt(request) with
@@ -46,18 +45,7 @@ public sealed class CollectionProtocolTests
     }
 
     [Fact]
-    public void VersionSevenResultWithRequestsButNoRobotsRequestIsRejected()
-    {
-        var request = Request() with { Version = 7 };
-        var receipt = Receipt(request);
-
-        receipt.ValidateAgainst(request);
-        Assert.True(receipt.RequestCount > 0);
-        Assert.Throws<InvalidDataException>(() => (receipt with { RobotsRequestCount = 0 }).ValidateAgainst(request));
-    }
-
-    [Fact]
-    public void VersionTenResultWithRequestsNeedsARobotsRequestOrACacheHit()
+    public void ResultWithRequestsNeedsARobotsRequestOrACacheHit()
     {
         var request = Request();
         var receipt = Receipt(request);
@@ -76,20 +64,6 @@ public sealed class CollectionProtocolTests
             .ValidateAgainst(request));
         Assert.Throws<InvalidDataException>(() => (Receipt(request) with { RobotsRequestCount = 0, RobotsCacheHit = true, RobotsCrawlDelayMilliseconds = -1 })
             .ValidateAgainst(request));
-    }
-
-    [Fact]
-    public void VersionNineReceiptsKeepTheirOldRulesAndCannotClaimACacheHit()
-    {
-        var request = Request() with { Version = 9 };
-        var receipt = Receipt(request);
-
-        receipt.ValidateAgainst(request);
-        Assert.Throws<InvalidDataException>(() => (receipt with { RobotsRequestCount = 0 }).ValidateAgainst(request));
-        Assert.Throws<InvalidDataException>(() => (receipt with { RobotsRequestCount = 0, RobotsCacheHit = true }).ValidateAgainst(request));
-        var json = JsonSerializer.Serialize(receipt, CollectionProtocol.JsonOptions);
-        Assert.DoesNotContain("robotsCacheHit", json, StringComparison.Ordinal);
-        JsonSerializer.Deserialize<CollectionResult>(json, CollectionProtocol.JsonOptions)!.ValidateAgainst(request);
     }
 
     [Fact]
@@ -152,44 +126,25 @@ public sealed class CollectionProtocolTests
     public void ScopeAllowsExactPathOrDescendants(string url) => (Request() with { Url = url }).Validate();
 
     [Fact]
-    public void VersionTenIsTheOnlyVersionForNewRequestsAndOlderVersionsAreRejected()
+    public void VersionOneIsTheOnlyVersionAndOtherVersionsAreRejected()
     {
         var requestJson = JsonSerializer.Serialize(Request(), CollectionProtocol.JsonOptions);
-        Assert.Contains("\"version\":10", requestJson, StringComparison.Ordinal);
+        Assert.Contains("\"version\":1,", requestJson, StringComparison.Ordinal);
         var resultJson = JsonSerializer.Serialize(Receipt(Request()), CollectionProtocol.JsonOptions);
         Assert.Contains("\"failureCode\":null", resultJson, StringComparison.Ordinal);
         var roundTrip = JsonSerializer.Serialize(JsonSerializer.Deserialize<CollectionResult>(resultJson, CollectionProtocol.JsonOptions), CollectionProtocol.JsonOptions);
         Assert.Equal(resultJson, roundTrip);
-        foreach (var version in new[] { 1, 2, 3, 4, 5, 6, 8 })
+        foreach (var version in new[] { 0, 2, 7, 10 })
         {
-            var oldRequest = requestJson.Replace("\"version\":10", $"\"version\":{version}", StringComparison.Ordinal);
-            Assert.Throws<ArgumentException>(() => JsonSerializer.Deserialize<CollectionRequest>(oldRequest, CollectionProtocol.JsonOptions)!.ValidateReadable());
+            Assert.Throws<ArgumentException>(() => (Request() with { Version = version }).Validate());
             Assert.Throws<InvalidDataException>(() => (Receipt(Request()) with { Version = version }).ValidateAgainst(Request()));
         }
-        Assert.Throws<ArgumentException>(() => (Request() with { Version = 7 }).Validate());
-        Assert.Throws<ArgumentException>(() => (Request() with { Version = 9 }).Validate());
-    }
-
-    [Fact]
-    public void VersionSevenRequestAndReceiptRemainReadableForRecovery()
-    {
-        var request = Request() with { Version = 7 };
-        var requestJson = JsonSerializer.Serialize(request, CollectionProtocol.JsonOptions);
-        var recoveredRequest = JsonSerializer.Deserialize<CollectionRequest>(requestJson, CollectionProtocol.JsonOptions)!;
-        recoveredRequest.ValidateReadable();
-        Assert.Equal(7, recoveredRequest.Version);
-
-        var receiptJson = JsonSerializer.Serialize(Receipt(request), CollectionProtocol.JsonOptions);
-        var recoveredReceipt = JsonSerializer.Deserialize<CollectionResult>(receiptJson, CollectionProtocol.JsonOptions)!;
-        recoveredReceipt.ValidateAgainst(recoveredRequest);
-        Assert.Equal(7, recoveredReceipt.Version);
-        Assert.Equal(1, recoveredReceipt.RobotsRequestCount);
     }
 
     [Theory]
-    [InlineData("\"version\":10", "\"version\":99")]
-    [InlineData("\"version\":10", "\"version\":10,\"version\":10")]
-    [InlineData("\"version\":10", "\"version\":10,\"extra\":true")]
+    [InlineData("\"version\":1,", "\"version\":99,")]
+    [InlineData("\"version\":1,", "\"version\":1,\"version\":1,")]
+    [InlineData("\"version\":1,", "\"version\":1,\"extra\":true,")]
     [InlineData("\"sourceId\":\"source\"", "\"sourceId\":null")]
     public void MalformedOrUnsupportedWireContractsAreRejected(string original, string replacement)
     {
@@ -199,27 +154,23 @@ public sealed class CollectionProtocolTests
     }
 
     [Theory]
-    [InlineData(7, CollectionMode.Feed)]
-    [InlineData(7, CollectionMode.Html)]
-    [InlineData(9, CollectionMode.Feed)]
-    [InlineData(9, CollectionMode.Html)]
-    public void DiscoveryWireRecoveryPreservesReadableVersionsAndRequiresCapturedCandidates(int version, CollectionMode mode)
+    [InlineData(CollectionMode.Feed)]
+    [InlineData(CollectionMode.Html)]
+    public void DiscoveryWireRecoveryRequiresCapturedCandidates(CollectionMode mode)
     {
-        var request = Request() with { Version = version, Mode = mode };
+        var request = Request() with { Mode = mode };
         var result = Receipt(request) with
         {
-            Version = version,
             Discovery = new DiscoveryResult
             {
                 Status = DiscoveryStatus.Parsed,
                 Urls = ["https://example.test/pages/article?q=1"],
-                OutOfScopeCount = version >= CollectionProtocol.SchemeUpgradeVersion ? 2 : null
+                OutOfScopeCount = 2
             }
         };
         var json = JsonSerializer.Serialize(result, CollectionProtocol.JsonOptions);
         var restored = JsonSerializer.Deserialize<CollectionResult>(json, CollectionProtocol.JsonOptions)!;
         restored.ValidateAgainst(request);
-        Assert.Equal(version, restored.Version);
         Assert.Equal(result.Discovery.Urls, restored.Discovery!.Urls);
         Assert.Equal(result.Discovery.OutOfScopeCount, restored.Discovery.OutOfScopeCount);
         Assert.Throws<InvalidDataException>(() => (restored with { Discovery = null }).ValidateAgainst(request));
@@ -234,19 +185,6 @@ public sealed class CollectionProtocolTests
             Discovery = result.Discovery with { Status = DiscoveryStatus.LimitExceeded }
         }).ValidateAgainst(request));
     }
-
-    [Theory]
-    [InlineData(3)]
-    [InlineData(4)]
-    public void HtmlModeCannotBeSmuggledIntoAnOlderProtocol(int version) =>
-        Assert.Throws<ArgumentException>(() => (Request() with { Version = version, Mode = CollectionMode.Html }).Validate());
-
-    [Theory]
-    [InlineData(3)]
-    [InlineData(5)]
-    [InlineData(8)]
-    public void ApiModeCannotBeSmuggledIntoAnOlderProtocol(int version) =>
-        Assert.Throws<ArgumentException>(() => (Request() with { Version = version, Mode = CollectionMode.Api }).Validate());
 
     [Theory]
     [InlineData(CollectionMode.Page, CollectionCredentials.CongressGov)]
@@ -313,15 +251,25 @@ public sealed class CollectionProtocolTests
     }
 
     [Theory]
-    [InlineData(9, null, DiscoveryStatus.Parsed)]
-    [InlineData(9, -1, DiscoveryStatus.Parsed)]
-    [InlineData(9, 3, DiscoveryStatus.Invalid)]
-    [InlineData(7, 0, DiscoveryStatus.Parsed)]
-    public void DiscoveryOutOfScopeCountIsBoundToProtocolVersion(int version, int? count, DiscoveryStatus status)
+    [InlineData(-1, DiscoveryStatus.Parsed)]
+    [InlineData(3, DiscoveryStatus.Invalid)]
+    public void DiscoveryOutOfScopeCountMustBeNonNegativeAndZeroWhenNotParsed(int count, DiscoveryStatus status)
     {
-        var request = Request() with { Version = version, Mode = CollectionMode.Feed };
+        var request = Request() with { Mode = CollectionMode.Feed };
         var discovery = new DiscoveryResult { Status = status, Urls = [], OutOfScopeCount = count };
         Assert.Throws<InvalidDataException>(() => discovery.ValidateAgainst(request));
+    }
+
+    [Theory]
+    [InlineData(",\"outOfScopeCount\":0", "")]
+    [InlineData("\"robotsRequestCount\":1,", "")]
+    public void ResultsWithoutRequiredCountsAreRejected(string original, string replacement)
+    {
+        var request = Request() with { Mode = CollectionMode.Feed };
+        var result = Receipt(request) with { Discovery = new DiscoveryResult { Status = DiscoveryStatus.Parsed, Urls = [], OutOfScopeCount = 0 } };
+        var json = JsonSerializer.Serialize(result, CollectionProtocol.JsonOptions);
+        Assert.Contains(original, json, StringComparison.Ordinal);
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<CollectionResult>(json.Replace(original, replacement, StringComparison.Ordinal), CollectionProtocol.JsonOptions));
     }
 
     [Theory]
@@ -384,7 +332,7 @@ public sealed class CollectionProtocolTests
         var result = Receipt(request);
         result.ValidateAgainst(request);
         Assert.Throws<InvalidDataException>(() => (result with { JobId = "other" }).ValidateAgainst(request));
-        Assert.Throws<InvalidDataException>(() => (result with { Version = 1 }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (result with { Version = 2 }).ValidateAgainst(request));
         Assert.Throws<InvalidDataException>(() => (result with { FinalUrl = "https://example.test/private" }).ValidateAgainst(request));
         Assert.Throws<InvalidDataException>(() => (result with { Capture = result.Capture! with { RelativePath = "../capture.gz" } }).ValidateAgainst(request));
         Assert.Throws<InvalidDataException>(() => (result with { Capture = result.Capture! with { ByteLength = result.BytesReceived + 1 } }).ValidateAgainst(request));

@@ -299,7 +299,7 @@ public sealed class CollectionAttemptImporterTests
         Outcome = outcome,
         ObservedAt = ObservedAt,
         BytesReceived = 0,
-        RobotsRequestCount = request.Version >= 6 ? 1 : null,
+        RobotsRequestCount = 1,
         RequestCount = 1
     };
 

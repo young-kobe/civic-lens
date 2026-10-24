@@ -75,7 +75,7 @@ The connectors are HTTP pages, RSS and Atom feeds, bounded HTML discovery, and J
 
 ### Collector protocol
 
-`Collection.Contracts` owns JSON protocol version 10. The collector and `CollectionRequest.Validate` accept only version 10 for new requests. `CollectionRequest.ValidateReadable` also accepts versions 7 and 9. Stored attempts, discoveries, and handoffs use it. `CollectionResult.ValidateAgainst` and `DiscoveryResult.ValidateAgainst` call it. Version 7 stored data has robots accounting and no `outOfScopeCount`. Other versions are unsupported. Jobs queued before an upgrade run at version 10. Configuration version 2 is independent of the collector protocol.
+`Collection.Contracts` owns JSON protocol version 1. `CollectionRequest.Validate` accepts only version 1. The collector, stored attempts, discoveries, and handoffs use it. `CollectionResult.ValidateAgainst` and `DiscoveryResult.ValidateAgainst` call it. Other versions are unsupported. Configuration version 2 is independent of the collector protocol.
 
 The collector accepts `collect <manifest.json>`. Both sides reject unsupported or missing versions, unknown fields, duplicate fields, and null required fields. Wire names are case-sensitive camelCase. Exit codes are 0 for `captured` or `notModified`, 1 for `failed` or `deferred`, and 2 for invalid input.
 
@@ -146,7 +146,7 @@ A robots 404 permits collection. Other ambiguous or unreadable responses block c
 
 The cache write uses a temporary file and moves it over the old entry. Unlike capture promotion, it does not flush first and it replaces an existing file. A lost or torn entry only causes a refetch. The collector holds no other state and still enforces robots itself.
 
-Version 10 adds the result field `robotsCacheHit`, which the collector omits when false. Every non-API result that made requests needs a robots request or a cache hit. A crawl delay or a `crawlDelay` deferral also needs one of them. Version 9 results always need a robots request and cannot set the field. API results cannot set it.
+The result field `robotsCacheHit` is omitted by the collector when false. Every non-API result that made requests needs a robots request or a cache hit. A crawl delay or a `crawlDelay` deferral also needs one of them. API results cannot set it.
 
 **Crawl delay.** Crawl-delay is a supported extension. Nonnegative decimal seconds round up to milliseconds. Repeated declarations in the selected groups use the maximum. A zero declaration is distinct from an absent declaration. Receipts carry the declaration as `robotsCrawlDelayMilliseconds`.
 
@@ -202,7 +202,7 @@ Character decoding uses the BOM, the HTTP charset, a real meta charset declarati
 
 **Discovery result.** A captured feed or HTML page has a separate discovery status: `parsed`, `invalid`, `unsupported`, or `limitExceeded`. A parsing failure keeps the raw capture and returns no partial candidate list. A successful collection job therefore does not prove a successful parse.
 
-Discovery results carry a required `outOfScopeCount`: the number of distinct resolved links excluded by scope. A failed discovery reports 0. Stored version 7 results omit the count, so `DiscoveryResult.ValidateAgainst` requires it to be absent for them. The check history in the review workspace shows a nonzero count.
+Discovery results carry a required `outOfScopeCount`: the number of distinct resolved links excluded by scope. A failed discovery reports 0. `DiscoveryResult.ValidateAgainst` rejects a negative count. The check history in the review workspace shows a nonzero count.
 
 A 304 has no new discovery result. Retained candidates stay bound to the earlier captured attempt. Failed and deferred outcomes create no candidate list.
 

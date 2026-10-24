@@ -26,13 +26,6 @@ public sealed record CollectionRequest
 
     public void Validate()
     {
-        if (Version != CollectionProtocol.Version)
-            throw new ArgumentException("New collection requests must use the current protocol version.");
-        ValidateReadable();
-    }
-
-    public void ValidateReadable()
-    {
         ValidateIdentity();
         ValidateOrigin();
         ValidatePathPrefix();
@@ -47,10 +40,10 @@ public sealed record CollectionRequest
 
     private void ValidateIdentity()
     {
-        if (!CollectionProtocol.IsReadable(Version))
+        if (Version != CollectionProtocol.Version)
             throw new ArgumentException("Unsupported collection protocol version.");
-        if (!Enum.IsDefined(Mode) || (Mode == CollectionMode.Api && Version < CollectionProtocol.ApiVersion))
-            throw new ArgumentException("Collection mode is unsupported for this protocol version.");
+        if (!Enum.IsDefined(Mode))
+            throw new ArgumentException("Collection mode is unsupported.");
         if (string.IsNullOrWhiteSpace(JobId) || string.IsNullOrWhiteSpace(SourceId))
             throw new ArgumentException("Job and source IDs are required.");
     }

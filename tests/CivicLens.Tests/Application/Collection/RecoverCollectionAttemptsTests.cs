@@ -179,7 +179,7 @@ public sealed class RecoverCollectionAttemptsTests
             FailureCode = CollectionFailureCode.TransportError,
             ObservedAt = ObservedAt,
             BytesReceived = 0,
-            RobotsRequestCount = request.Version >= 6 ? 1 : null,
+            RobotsRequestCount = 1,
             RequestCount = 1
         };
         return new PendingCollectionHandoff(PendingCollectionHandoff.CurrentVersion, id, request, receipt);
