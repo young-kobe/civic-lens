@@ -28,6 +28,9 @@ public sealed partial record PublishedBrief
         RevisionNumber = RevisionNumber,
         Headline = Headline,
         FirstPublishedAtUtc = FirstPublishedAtUtc,
+        Officials = [],
+        IssueIds = [],
+        PolicyAreaIds = [],
         EventDate = WeekStart
     };
 

@@ -51,7 +51,7 @@ public sealed class PublishedOfficialsTests
         };
         var catalog = new PublishedCatalog { Issues = [new() { Id = "housing", Name = "Housing" }], PolicyAreas = [] };
 
-        Assert.Equal(6, PublicationProtocol.SchemaVersion);
+        Assert.Equal(1, PublicationProtocol.SchemaVersion);
         Assert.Equal("""{"officials":[{"id":"mayor","name":"Mayor Example","wikidataId":null,"terms":[{"office":"sen","state":"WA","district":null,"party":"Democrat","start":"2025-01-03","end":"2031-01-03"}]}]}""",
             JsonSerializer.Serialize(officials, PublicationProtocol.JsonOptions));
         Assert.Equal("""{"issues":[{"id":"housing","name":"Housing"}],"policyAreas":[]}""",

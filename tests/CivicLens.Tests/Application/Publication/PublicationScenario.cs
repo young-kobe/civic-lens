@@ -111,6 +111,10 @@ internal sealed class PublicationScenario
     public void SeedRelease(int recordCount, bool withFiles) =>
         SeedRelease(withFiles, [.. Enumerable.Range(0, recordCount).Select(index => new PublishedRecordEntry
         {
+            IssueIds = [],
+            Kind = PublishedRecordKind.DocumentChange,
+            Officials = [],
+            PolicyAreaIds = [],
             RecordId = index.ToString("x32"),
             RevisionNumber = 1,
             Headline = $"Seeded {index}",
@@ -145,27 +149,17 @@ internal sealed class PublicationScenario
         Publications.ActiveReleaseNumber = 1;
     }
 
-    public void SeedVersionOneRelease(string draftId)
+    public void SeedReleaseOfAnotherSchemaVersion()
     {
         var manifest = new JsonObject
         {
-            ["schemaVersion"] = 1,
+            ["schemaVersion"] = PublicationProtocol.SchemaVersion + 1,
             ["releaseNumber"] = 1,
             ["publishedAtUtc"] = ApprovedAt,
-            ["records"] = new JsonArray(new JsonObject
-            {
-                ["recordId"] = draftId,
-                ["revisionNumber"] = 1,
-                ["headline"] = "Seeded by version one",
-                ["firstPublishedAtUtc"] = ApprovedAt
-            })
+            ["records"] = new JsonArray(),
+            ["withdrawals"] = new JsonArray()
         };
-        Releases.Directories["seeded"] = new()
-        {
-            [PublicationProtocol.ManifestPath] = JsonSerializer.SerializeToUtf8Bytes(manifest),
-            [PublicationProtocol.RecordDataPath(draftId)] = [],
-            [PublicationProtocol.RecordPagePath(draftId)] = []
-        };
+        Releases.Directories["seeded"] = new() { [PublicationProtocol.ManifestPath] = JsonSerializer.SerializeToUtf8Bytes(manifest) };
         Releases.Active = "seeded";
         Publications.Committed.Add(new(1, "seeded", ApprovedAt, 1));
         Publications.ActiveReleaseNumber = 1;

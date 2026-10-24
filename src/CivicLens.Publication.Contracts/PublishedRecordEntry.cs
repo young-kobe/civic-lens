@@ -5,14 +5,14 @@ public sealed record PublishedRecordEntry
     public const int MaximumFilterValues = 64;
     public const int MaximumFilterValueLength = 256;
 
-    public PublishedRecordKind Kind { get; init; } = PublishedRecordKind.DocumentChange;
+    public required PublishedRecordKind Kind { get; init; }
     public required string RecordId { get; init; }
     public required int RevisionNumber { get; init; }
     public required string Headline { get; init; }
     public required DateTimeOffset FirstPublishedAtUtc { get; init; }
-    public PublishedOfficial[] Officials { get; init; } = [];
-    public string[] IssueIds { get; init; } = [];
-    public string[] PolicyAreaIds { get; init; } = [];
+    public required PublishedOfficial[] Officials { get; init; }
+    public required string[] IssueIds { get; init; }
+    public required string[] PolicyAreaIds { get; init; }
     public string? SourceHost { get; init; }
     public DateOnly? EventDate { get; init; }
 

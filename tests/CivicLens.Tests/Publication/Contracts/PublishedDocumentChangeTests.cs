@@ -57,7 +57,7 @@ public sealed class PublishedDocumentChangeTests
         var record = Record(new() { ExtractionId = AfterId, Start = 1, Length = 2, Quote = "\U0001F600" });
         var json = System.Text.Json.JsonSerializer.Serialize(record, PublicationProtocol.JsonOptions);
 
-        Assert.Equal(6, PublicationProtocol.SchemaVersion);
+        Assert.Equal(1, PublicationProtocol.SchemaVersion);
         Assert.True(json == """{"recordId":"0123456789abcdef0123456789abcdef","revisionNumber":1,"headline":"Headline","summary":"Summary","significance":null,"limits":null,"institution":"Institution","changeDate":null,"changeDateEvidence":null,"officials":[],"issueIds":[],"before":{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","url":"https://example.test/a","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"ab"},"after":{"extractionId":"2222222222222222222222222222222222222222222222222222222222222222","url":"https://example.test/a","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"a\uD83D\uDE00b"},"changes":[{"beforeStart":1,"beforeLength":0,"afterStart":1,"afterLength":2,"beforeContextStart":0,"beforeContextLength":2,"afterContextStart":0,"afterContextLength":4,"wordEdits":[]}],"citations":[{"extractionId":"2222222222222222222222222222222222222222222222222222222222222222","start":1,"length":2,"quote":"\uD83D\uDE00"}],"approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00","corrections":[]}""",
             "The published record JSON changed. Bump PublicationProtocol.SchemaVersion, update the version table " +
             "in docs/architecture.md, then update this test. Actual: " + json);

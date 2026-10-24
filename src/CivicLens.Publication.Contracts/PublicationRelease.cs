@@ -10,7 +10,7 @@ public sealed record PublicationRelease
 
     public void Validate()
     {
-        if (SchemaVersion is < PublicationProtocol.OldestReadableSchemaVersion or > PublicationProtocol.SchemaVersion ||
+        if (SchemaVersion != PublicationProtocol.SchemaVersion ||
             ReleaseNumber < 1 || Records is null || Withdrawals is null ||
             Records.Length + Withdrawals.Length > PublicationProtocol.MaximumRecordsPerRelease)
             throw new InvalidDataException("Release manifest is invalid.");

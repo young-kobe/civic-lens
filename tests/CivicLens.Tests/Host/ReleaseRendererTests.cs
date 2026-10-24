@@ -256,6 +256,10 @@ public sealed class ReleaseRendererTests
             [
                 new PublishedRecordEntry
                 {
+                    Kind = PublishedRecordKind.DocumentChange,
+                    Officials = [],
+                    IssueIds = [],
+                    PolicyAreaIds = [],
                     RecordId = new string('c', 32),
                     RevisionNumber = 1,
                     Headline = "Headline <i>one</i>",
@@ -762,6 +766,8 @@ public sealed class ReleaseRendererTests
     {
         PublishedRecordEntry Entry(char id, DateTimeOffset published, DateOnly? eventDate, params string[] officials) => new()
         {
+            Kind = PublishedRecordKind.DocumentChange,
+            PolicyAreaIds = [],
             RecordId = new string(id, 32),
             RevisionNumber = 1,
             Headline = $"Headline {id}",
@@ -957,11 +963,14 @@ public sealed class ReleaseRendererTests
         [
             new PublishedRecordEntry
             {
+                Kind = PublishedRecordKind.DocumentChange,
+                PolicyAreaIds = [],
                 RecordId = new string('c', 32), RevisionNumber = 1, Headline = "One", FirstPublishedAtUtc = DateTimeOffset.UnixEpoch,
                 Officials = [new PublishedOfficial { Id = "o2", Name = "Jane Doe" }], IssueIds = ["transit"], SourceHost = "b.gov"
             },
             new PublishedRecordEntry
             {
+                Kind = PublishedRecordKind.DocumentChange,
                 RecordId = new string('d', 32), RevisionNumber = 1, Headline = "Two", FirstPublishedAtUtc = DateTimeOffset.UnixEpoch,
                 Officials = [new PublishedOfficial { Id = "o1", Name = "Ann Roe" }], IssueIds = ["housing", "transit"],
                 PolicyAreaIds = ["area-one"], SourceHost = "a.gov"
@@ -977,6 +986,10 @@ public sealed class ReleaseRendererTests
         Withdrawals = [],
         Records = [.. Enumerable.Range(0, count).Select(index => new PublishedRecordEntry
         {
+            IssueIds = [],
+            Kind = PublishedRecordKind.DocumentChange,
+            Officials = [],
+            PolicyAreaIds = [],
             RecordId = index.ToString("x32"),
             RevisionNumber = 1,
             Headline = $"Headline {index}",

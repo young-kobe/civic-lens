@@ -30,6 +30,7 @@ public sealed record PublishedDocumentChange
         FirstPublishedAtUtc = FirstPublishedAtUtc,
         Officials = Officials,
         IssueIds = IssueIds,
+        PolicyAreaIds = [],
         SourceHost = After.Host,
         EventDate = ChangeDate
     };

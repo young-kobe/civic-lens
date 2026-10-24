@@ -728,7 +728,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases activate <release-number>
 ```
 
-The first publish of schema version 6 needs a clean development reset. The publisher reads the active release and refuses a release of an older schema. Do these steps once, in order. Production has no older release.
+The first publish of schema version 1 needs a clean development reset. The publisher reads the active release and refuses a release of another schema version. Do these steps once, in order. Production has no older release.
 
 1. Stop the static server, the review workspace, the worker, and the search service.
 2. Delete the contents of `CIVIC_LENS_RELEASE_DIRECTORY`.

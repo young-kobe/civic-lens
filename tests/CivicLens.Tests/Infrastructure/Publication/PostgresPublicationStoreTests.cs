@@ -527,6 +527,9 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         await SetReviewStatusAsync(kind, recordId, status);
         var entry = new PublishedRecordEntry
         {
+            Officials = [],
+            IssueIds = [],
+            PolicyAreaIds = [],
             Kind = kind,
             RecordId = recordId,
             RevisionNumber = 1,

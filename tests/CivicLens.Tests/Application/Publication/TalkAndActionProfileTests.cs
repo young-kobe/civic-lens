@@ -142,6 +142,8 @@ public sealed class TalkAndActionProfileTests
 
     private static PublishedRecordEntry Entry(int id, PublishedRecordKind kind, DateOnly day, string[] issueIds) => new()
     {
+        Officials = [],
+        PolicyAreaIds = [],
         Kind = kind,
         RecordId = id.ToString("x64"),
         RevisionNumber = 1,

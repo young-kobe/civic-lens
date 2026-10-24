@@ -187,6 +187,8 @@ public sealed class PublishedOfficialPageTests
 
     private static PublishedRecordEntry Entry(char id, PublishedRecordKind kind, DateOnly date) => new()
     {
+        IssueIds = [],
+        PolicyAreaIds = [],
         Kind = kind,
         RecordId = new string(id, 64),
         RevisionNumber = 1,
