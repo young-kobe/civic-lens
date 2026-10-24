@@ -704,7 +704,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
 
         var expiredConfiguration = configuration with
         {
-            Version = 2,
+            Version = 1,
             Sources = [configuration.Sources[0] with
             {
                 Enabled = false,

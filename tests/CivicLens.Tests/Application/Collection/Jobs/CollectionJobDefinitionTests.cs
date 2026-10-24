@@ -135,7 +135,7 @@ public sealed class CollectionJobDefinitionTests
         var config = Config();
         return config with
         {
-            Version = 2,
+            Version = 1,
             Sources = [config.Sources[0] with
             {
                 Coverage = [new SourceCoverageConfiguration { PersonId = "person", StartsOn = startsOn }]

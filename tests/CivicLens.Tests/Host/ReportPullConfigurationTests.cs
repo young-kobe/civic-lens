@@ -24,7 +24,7 @@ public sealed class ReportPullConfigurationTests
         {
             var config = Path.Combine(directory, "config.json");
             await File.WriteAllTextAsync(config, """
-                {"version":2,"people":[{"id":"person","name":"Fixture"}],"sources":[
+                {"version":1,"people":[{"id":"person","name":"Fixture"}],"sources":[
                   {"id":"source","coverage":[{"personId":"person"}],"url":"https://example.test/page",
                    "allowedOrigin":"https://example.test","allowedPathPrefix":"/page"}]}
                 """);

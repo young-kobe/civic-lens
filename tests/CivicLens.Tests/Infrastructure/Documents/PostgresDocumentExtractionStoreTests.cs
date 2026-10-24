@@ -591,7 +591,7 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
 
     private static CollectionConfiguration ProfileConfiguration() => new()
     {
-        Version = 2,
+        Version = 1,
         People = [new PersonConfiguration { Id = "person", Name = "Fixture Official" }],
         DocumentProfiles = [new DocumentProfileConfiguration { Id = "policy", Selector = "main", ExcludedSelectors = [".aside"] }],
         Sources = [new WatchedSourceConfiguration

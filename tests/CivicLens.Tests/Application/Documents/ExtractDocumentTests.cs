@@ -109,7 +109,7 @@ public sealed class ExtractDocumentTests
 
     private static CollectionConfiguration Configuration() => new()
     {
-        Version = 2,
+        Version = 1,
         People = [new PersonConfiguration { Id = "person", Name = "Person" }],
         DocumentProfiles = [new DocumentProfileConfiguration { Id = "article", Selector = "main", ExcludedSelectors = [".nav"] }],
         Sources =

@@ -511,7 +511,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
 
     private static CollectionConfiguration Configuration(string? etag = null) => new()
     {
-        Version = 2,
+        Version = 1,
         People = [new PersonConfiguration { Id = "person", Name = "Test Person" }],
         DocumentProfiles = [Profile()],
         Sources = [new WatchedSourceConfiguration

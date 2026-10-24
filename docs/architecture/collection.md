@@ -156,7 +156,7 @@ Application keeps the declared delay with the imported attempt evidence, also ze
 
 Settlement extends the origin deadline by the greater of configured and declared pacing, measured from database settlement time. Deferred observations also apply the shared retry backoff. Deadline arithmetic saturates at the maximum supported date.
 
-**Pacing groups.** Configuration v2 can define top-level `pacingGroups`. Each group has a lowercase `hostSuffix` of at least two labels and a `minDelayMilliseconds` from 1 to 3,600,000. Omitted groups leave the canonical JSON and the revision IDs unchanged. Duplicate suffixes are invalid.
+**Pacing groups.** Configuration can define top-level `pacingGroups`. Each group has a lowercase `hostSuffix` of at least two labels and a `minDelayMilliseconds` from 1 to 3,600,000. Omitted groups leave the canonical JSON and the revision IDs unchanged. Duplicate suffixes are invalid.
 
 `CollectionConfiguration.PacingGroupOf` resolves an origin. A host matches when it equals the suffix or ends with a dot and the suffix, so `evilhouse.gov` does not match `house.gov`. The longest matching suffix wins, so each origin has at most one group.
 

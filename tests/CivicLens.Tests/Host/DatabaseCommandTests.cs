@@ -67,7 +67,7 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
             ConfigurationJson.Options)!;
         config = config with
         {
-            Version = 2,
+            Version = 1,
             Sources = [config.Sources[0] with
             {
                 Coverage = [new SourceCoverageConfiguration
@@ -156,7 +156,7 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         var configuration = JsonSerializer.Deserialize<CollectionConfiguration>(await File.ReadAllTextAsync(path), ConfigurationJson.Options)!;
         configuration = configuration with
         {
-            Version = 2,
+            Version = 1,
             Sources = [configuration.Sources[0] with
             {
                 Coverage = [new SourceCoverageConfiguration
