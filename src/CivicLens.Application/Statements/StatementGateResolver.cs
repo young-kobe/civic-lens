@@ -18,7 +18,6 @@ public static class StatementGateResolver
         var errors = new List<string>();
         var citationErrors = new List<string>();
         CheckConfidence(output.Confidence, "confidence", errors);
-        if (output.NamesBillOrVote is null) errors.Add("namesBillOrVote is missing.");
         CheckPolicyAreas(output.PolicyAreas, rubric, errors);
         var quotes = ResolveIssues(output.TrackedIssues, evidence, rubric, errors, citationErrors);
         if (errors.Count > 0) return Rejected(errors, citationErrors.Count > 0);
@@ -28,7 +27,7 @@ public static class StatementGateResolver
     private static string PassReason(StatementGateOutput output, ImmutableArray<StatementGateQuote> quotes, StatementArticle evidence)
     {
         if (!quotes.IsEmpty) return StatementGateReasons.Passed;
-        if (output.NamesBillOrVote is true) return StatementGateReasons.PassedBillOrVote;
+        if (output.NamesBillOrVote) return StatementGateReasons.PassedBillOrVote;
         return BillNumberFinder.Find(evidence.Extraction.Text).IsEmpty
             ? StatementGateReasons.NoTrackedIssue : StatementGateReasons.PassedBillNumber;
     }

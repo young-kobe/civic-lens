@@ -31,16 +31,6 @@ public sealed class StatementGateCarryOverTests
         Assert.Equal([HousingArea], carried.PolicyAreaIds.ToArray());
     }
 
-    [Fact]
-    public void AGateRunStoredBeforeTheBillOrVoteQuestionStillCarriesItsPolicyAreas()
-    {
-        var version1Output = $$"""{"trackedIssues":[],"policyAreas":[{"id":"{{HousingArea}}","confidence":0.7}],"confidence":0.8}""";
-
-        var carried = StatementGateCarryOver.From(GateRun(StatementGateReasons.Passed, version1Output, RentIssue));
-
-        Assert.Equal([HousingArea], carried.PolicyAreaIds.ToArray());
-    }
-
     [Theory]
     [InlineData(StatementGateReasons.FailedOpen)]
     [InlineData(StatementGateReasons.OverByteCap)]

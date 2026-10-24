@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 namespace CivicLens.Application.Statements;
 
 internal sealed record StatementGateOutput(ImmutableArray<StatementGateOutputIssue> TrackedIssues,
-    ImmutableArray<StatementGateOutputPolicyArea> PolicyAreas, double Confidence, bool? NamesBillOrVote = null);
+    ImmutableArray<StatementGateOutputPolicyArea> PolicyAreas, double Confidence, bool NamesBillOrVote);
 
 internal sealed record StatementGateOutputIssue(string Id, string Quote, double Confidence);
 
