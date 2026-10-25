@@ -52,7 +52,7 @@ public sealed class DocumentComparison
         cancellationToken.ThrowIfCancellationRequested();
         var id = CreateId(before.ExtractionId, after.ExtractionId);
         if (!IsCompatible(before, after))
-            return new(id, before.ExtractionId, after.ExtractionId, DocumentComparisonStatus.Incompatible, "The extractions do not share source, requested URL, parser, normalization, and profile settings.", []);
+            return new(id, before.ExtractionId, after.ExtractionId, DocumentComparisonStatus.Incompatible, "The extractions do not share source, requested URL, extraction version, and profile revision.", []);
 
         var left = DocumentLines.Split(before.Text, MaximumLines);
         var right = DocumentLines.Split(after.Text, MaximumLines);

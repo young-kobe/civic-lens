@@ -96,11 +96,11 @@ Each succeeded page job goes through [preparation](collection.md#preparation). T
 
 | Parser | Version | Reads |
 |---|---|---|
-| `CongressBillListParser` | `congress-bill-list-v1` | One list page of at most 250 items |
+| `CongressBillListParser` | none, because a list has no extraction | One list page of at most 250 items |
 | `CongressBillParser` | `congress-bill-detail-v1` | One detail, including `summaries.count` (a missing object means 0) |
 | `CongressBillCosponsorsParser` | `congress-bill-cosponsors-v1` | One cosponsors page of at most 250 items |
 | `CongressBillActionsParser` | `congress-bill-actions-v1` | One actions page of at most 250 items |
-| `CongressBillSummariesParser` | `congress-bill-summaries-v1` | One summaries page of at most 1 item |
+| `CongressBillSummariesParser` | `congress-bill-summaries-v1+html-text-v1` | One summaries page of at most 1 item |
 
 The list parser checks the type against `hr`, `s`, `hjres`, `sjres`, `hconres`, `sconres`, `hres`, and `sres`. A list `next` link must stay inside the source origin and path prefix. It must carry the same window and must not carry `api_key`.
 
@@ -176,7 +176,7 @@ An actions page job or a summaries page job admits the next page of its own kind
 
 Every captured API page of a bill is saved as one `DocumentExtraction`: the detail and each cosponsor, actions, and summaries page. A bill list page is not saved. API jobs get no processing stage.
 
-`CongressBillRenderer` has one method for each page kind and owns the text. The extraction version is the `ExtractionVersion` constant of the parser that read the page. The source attempt of the extraction is the captured attempt of the job.
+`CongressBillRenderer` has one method for each page kind and owns the text. A renderer change bumps the extraction version of each page kind it renders. The extraction version is the `ExtractionVersion` constant of the parser that read the page. The source attempt of the extraction is the captured attempt of the job.
 
 A summaries page is the exception. Its extraction version is `{CongressBillSummariesParser.Version}+{extractor.ExtractionVersion}`. Today that is `congress-bill-summaries-v1+html-text-v1`.
 

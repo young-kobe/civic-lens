@@ -256,7 +256,8 @@ public sealed class JobPreparation(
         JobPreparationResult.Prepared(admitted: result.AdmittedCount, deferred: result.DeferredCount,
             duplicates: result.DuplicateCount);
 
-    private async Task<string> SaveExtractionAsync(CapturedAttemptResult captured, string extractionVersion, string text, CancellationToken cancellationToken) =>
+    private async Task<string> SaveExtractionAsync(CapturedAttemptResult captured, string extractionVersion,
+        string text, CancellationToken cancellationToken) =>
         (await extractions.SaveAsync(new DocumentExtraction(captured, extractionVersion, text),
             cancellationToken)).ExtractionId;
 

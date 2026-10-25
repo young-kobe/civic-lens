@@ -174,11 +174,11 @@ Each succeeded job goes through [preparation](collection.md#preparation). The pa
 
 | Parser | Version | Reads |
 |---|---|---|
-| `HouseVoteListParser` | `congress-house-vote-list-v1` | One list page of at most 250 items |
+| `HouseVoteListParser` | none, because a list has no extraction | One list page of at most 250 items |
 | `HouseVoteParser` | `congress-house-vote-v1` | One detail |
 | `HouseVoteMembersParser` | `congress-house-vote-members-v1` | One members response, with at least one member |
 
-`HouseVoteRenderer` renders the parsed detail and members. Its text belongs to the extraction versions `congress-house-vote-v1` and `congress-house-vote-members-v1`. The `Started` line keeps the offset of the API, for example `2025-07-02T21:15:00-04:00`, so the cited day is the House day. Version 1 wrote UTC. Code reads no extraction of version 1, so the dev rows are reset.
+`HouseVoteRenderer` renders the parsed detail and members. Its text belongs to the extraction versions `congress-house-vote-v1` and `congress-house-vote-members-v1`. The `Started` line keeps the offset of the API, for example `2025-07-02T21:15:00-04:00`, so the cited day is the House day. A renderer change bumps the extraction version of each page kind it renders.
 
 A list item needs `congress`, `sessionNumber`, `rollCallNumber`, and `updateDate`. Its session must be the session of the page. A detail and a members response need the same roll call as the job URL and an `updateDate`.
 
@@ -345,7 +345,7 @@ The daily sweep is the House sweep. The due check creates one menu job for `Vote
 | `senateVoteMenu` | `{source url}/roll_call_lists/vote_menu_{congress}_{session}.xml` | `SenateVoteMenuParser` | none, because a menu has no extraction |
 | `senateVote` | `{source url}/roll_call_votes/vote{congress}{session}/vote_{congress}_{session}_{roll, 5 digits}.xml` | `SenateVoteParser` | `congress-senate-vote-v1` |
 
-A vote file holds the detail and the members, so one job gives one extraction. `SenateVoteRenderer` renders it under the extraction version `congress-senate-vote-v1`. The `Vote title` line holds the title of the vote, so it cannot collide with the `Title` fact of a bill. The first line is `Senate vote: {congress} {session} {roll}`. The `Updated` line holds the modify date in UTC. The `Started` line keeps the Eastern offset. A `Count` line and one `Member` line for each senator follow. A member line holds the `lis` ID, the name, the party, the state, and the cast.
+A vote file holds the detail and the members, so one job gives one extraction. `SenateVoteRenderer` renders it under the extraction version `congress-senate-vote-v1`. A renderer change bumps that version. The `Vote title` line holds the title of the vote, so it cannot collide with the `Title` fact of a bill. The first line is `Senate vote: {congress} {session} {roll}`. The `Updated` line holds the modify date in UTC. The `Started` line keeps the Eastern offset. A `Count` line and one `Member` line for each senator follow. A member line holds the `lis` ID, the name, the party, the state, and the cast.
 
 The files give times with no zone. The parser reads them as US Eastern, with `TimeZoneInfo` offset rules. This is a guess. For a time that occurs twice or never at a clock change, the standard offset applies.
 

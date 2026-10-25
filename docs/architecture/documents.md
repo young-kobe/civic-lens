@@ -19,7 +19,7 @@ The documents feature turns verified captures into immutable text extractions, e
 
 Each line gives the rule, what enforces it, and the test that protects it. Cross-feature invariants are in [architecture](../architecture.md#invariants).
 
-- An extraction ID depends on the attempt and the versions, never on the text. Enforced by `DocumentExtraction`. Test: `DocumentExtractionTests.IdentityIsFramedAndIndependentOfTextWhileTextHashTracksContent`.
+- An extraction ID depends on the attempt, the extraction version, and the profile revision, never on the text. Enforced by `DocumentExtraction`. Test: `DocumentExtractionTests.IdentityIsFramedAndIndependentOfTextWhileTextHashTracksContent`.
 - One extraction identity keeps one text and one provenance. Enforced by `PostgresDocumentExtractionStore`: an insert that finds the row compares the committed winner and throws on a mismatch. Test: `PostgresDocumentExtractionStoreTests.RejectsChangedProvenanceAndDetectsStoredTextTampering`.
 - A read verifies the text hash and the identity. Enforced by `PostgresDocumentExtractionStore`. Test: `PostgresDocumentExtractionStoreTests.RejectsChangedProvenanceAndDetectsStoredTextTampering`.
 - Versions that differ give an Incompatible comparison, not a diff. Enforced by `DocumentComparison`. Test: `DocumentComparisonTests.RequiresEqualProfileRevisionAndProcessingVersions`.

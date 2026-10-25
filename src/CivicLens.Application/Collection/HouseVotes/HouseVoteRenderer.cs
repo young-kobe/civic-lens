@@ -7,7 +7,6 @@ public static class HouseVoteRenderer
 {
     private const string StartedFormat = "yyyy-MM-dd'T'HH:mm:sszzz";
 
-
     public static string RenderDetail(HouseVoteDetail detail)
     {
         ArgumentNullException.ThrowIfNull(detail);

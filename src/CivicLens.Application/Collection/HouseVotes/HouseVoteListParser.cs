@@ -6,8 +6,6 @@ namespace CivicLens.Application.Collection.HouseVotes;
 
 public static class HouseVoteListParser
 {
-    public const string Version = "congress-house-vote-list-v1";
-
     public static HouseVoteListPage Parse(ReadOnlySpan<byte> json, CollectionRequest scope, string sourceUrl)
     {
         ArgumentNullException.ThrowIfNull(scope);

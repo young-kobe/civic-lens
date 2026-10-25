@@ -7,7 +7,6 @@ public static class SenateVoteRenderer
 {
     private const string TimeFormat = "yyyy-MM-dd'T'HH:mm:sszzz";
 
-
     public static string Render(SenateVoteDetail detail)
     {
         ArgumentNullException.ThrowIfNull(detail);

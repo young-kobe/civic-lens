@@ -125,16 +125,20 @@ public sealed class JobPreparationTests
         Assert.Equal("173", Assert.Single(call.Page.Summaries).VersionCode);
     }
 
+    private static void AssertPinned(DocumentExtraction saved, string pinnedVersion, string constant, bool renderedTextMatches) =>
+        Assert.True(saved.ExtractionVersion == pinnedVersion && renderedTextMatches,
+            $"Extraction output changed. Bump {constant}, then update this test. Actual: {saved.ExtractionVersion}\n{saved.Text}");
+
     [Fact]
     public async Task ADetailPageIsExtractedOnceWithTheDetailParserAndTheCapturedAttempt()
     {
         _ = await Prepare(ApiResource.Bill, DetailUrl, Detail("A000001", BillGateFixtures.TrackedPolicyArea, 3), BillGateFixtures.Revision());
 
         var saved = Assert.Single(extractions.Saved);
-        Assert.Equal((CongressBillParser.ExtractionVersion, "attempt"),
-            (saved.ExtractionVersion, saved.SourceAttempt.AttemptId));
-        Assert.Equal("Bill: 119 hr 1\nTitle: A bill\nIntroduced: 2025-01-03\nUpdated: 2025-01-03T12:00:00Z\n" +
-            $"Policy area: {BillGateFixtures.TrackedPolicyArea}\nSponsor: A000001\nCosponsors (including withdrawn): 3\nActions: 1", saved.Text);
+        Assert.Equal("attempt", saved.SourceAttempt.AttemptId);
+        AssertPinned(saved, "congress-bill-detail-v1", "CongressBillParser.ExtractionVersion",
+            saved.Text == "Bill: 119 hr 1\nTitle: A bill\nIntroduced: 2025-01-03\nUpdated: 2025-01-03T12:00:00Z\n" +
+            $"Policy area: {BillGateFixtures.TrackedPolicyArea}\nSponsor: A000001\nCosponsors (including withdrawn): 3\nActions: 1");
     }
 
     [Theory]
@@ -163,9 +167,9 @@ public sealed class JobPreparationTests
         _ = await Prepare(ApiResource.BillCosponsors, CosponsorUrl, Cosponsors("A000001", next: null), BillGateFixtures.Revision());
 
         var saved = Assert.Single(extractions.Saved);
-        Assert.Equal((CongressBillCosponsorsParser.ExtractionVersion, "attempt"),
-            (saved.ExtractionVersion, saved.SourceAttempt.AttemptId));
-        Assert.Equal("Bill: 119 hr 1\nCosponsor: A000001, 2025-01-04", saved.Text);
+        Assert.Equal("attempt", saved.SourceAttempt.AttemptId);
+        AssertPinned(saved, "congress-bill-cosponsors-v1", "CongressBillCosponsorsParser.ExtractionVersion",
+            saved.Text == "Bill: 119 hr 1\nCosponsor: A000001, 2025-01-04");
     }
 
     [Fact]
@@ -176,9 +180,9 @@ public sealed class JobPreparationTests
             BillGateFixtures.Revision());
 
         var saved = Assert.Single(extractions.Saved);
-        Assert.Equal((CongressBillActionsParser.ExtractionVersion, "attempt"),
-            (saved.ExtractionVersion, saved.SourceAttempt.AttemptId));
-        Assert.Equal("Bill: 119 hr 1\nAction 2025-01-03 09:30:00 [type IntroReferral] [code H11100] [source 2 House floor actions]: Introduced", saved.Text);
+        Assert.Equal("attempt", saved.SourceAttempt.AttemptId);
+        AssertPinned(saved, "congress-bill-actions-v1", "CongressBillActionsParser.ExtractionVersion",
+            saved.Text == "Bill: 119 hr 1\nAction 2025-01-03 09:30:00 [type IntroReferral] [code H11100] [source 2 House floor actions]: Introduced");
     }
 
     [Fact]
@@ -188,10 +192,10 @@ public sealed class JobPreparationTests
 
         var saved = Assert.Single(extractions.Saved);
         Assert.Equal("congress-bill-summaries-v1+fake-extraction", CongressBillSummariesParser.ExtractionVersion(new FakeTextExtractor()));
-        Assert.Equal((CongressBillSummariesParser.ExtractionVersion(new FakeTextExtractor()), "attempt"),
-            (saved.ExtractionVersion, saved.SourceAttempt.AttemptId));
-        Assert.Equal("Bill: 119 hr 1\n\nSummary version: 173\nAction date: 2025-01-03\nAction: Introduced in House\n" +
-            "Updated: 2025-01-04T10:00:00Z\nText:\ntext of <p>First</p>", saved.Text);
+        Assert.Equal("attempt", saved.SourceAttempt.AttemptId);
+        AssertPinned(saved, "congress-bill-summaries-v1+fake-extraction", "CongressBillSummariesParser.ExtractionVersion",
+            saved.Text == "Bill: 119 hr 1\n\nSummary version: 173\nAction date: 2025-01-03\nAction: Introduced in House\n" +
+            "Updated: 2025-01-04T10:00:00Z\nText:\ntext of <p>First</p>");
     }
 
     [Fact]
@@ -298,9 +302,9 @@ public sealed class JobPreparationTests
 
         Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
         var saved = Assert.Single(extractions.Saved);
-        Assert.Equal((SenateVoteParser.ExtractionVersion, "attempt"),
-            (saved.ExtractionVersion, saved.SourceAttempt.AttemptId));
-        Assert.Contains("\nMember: S428, Angela Alsobrooks, D, MD, Yea\n", saved.Text, StringComparison.Ordinal);
+        Assert.Equal("attempt", saved.SourceAttempt.AttemptId);
+        AssertPinned(saved, "congress-senate-vote-v1", "SenateVoteParser.ExtractionVersion",
+            saved.Text.Contains("\nMember: S428, Angela Alsobrooks, D, MD, Yea\n", StringComparison.Ordinal));
         var call = Assert.Single(votes.SenateVotes);
         Assert.Equal(("job", SenateVoteFixtures.Roll1, saved.ExtractionId), (call.JobId, call.Vote.Roll, call.ExtractionId));
     }
@@ -342,9 +346,9 @@ public sealed class JobPreparationTests
         _ = await Prepare(ApiResource.HouseVoteDetail, VoteDetailUrl, HouseVoteFixtures.Detail(), null);
 
         var saved = Assert.Single(extractions.Saved);
-        Assert.Equal((HouseVoteParser.ExtractionVersion, "attempt"),
-            (saved.ExtractionVersion, saved.SourceAttempt.AttemptId));
-        Assert.StartsWith("House vote: 119 1 100\nUpdated: 2025-06-24T12:34:41Z\n", saved.Text, StringComparison.Ordinal);
+        Assert.Equal("attempt", saved.SourceAttempt.AttemptId);
+        AssertPinned(saved, "congress-house-vote-v1", "HouseVoteParser.ExtractionVersion",
+            saved.Text.StartsWith("House vote: 119 1 100\nUpdated: 2025-06-24T12:34:41Z\n", StringComparison.Ordinal));
         Assert.Equal(saved.ExtractionId, Assert.Single(votes.ExtractionIds));
     }
 
@@ -354,9 +358,9 @@ public sealed class JobPreparationTests
         _ = await Prepare(ApiResource.HouseVoteMembers, VoteMembersUrl, HouseVoteFixtures.Members(), null);
 
         var saved = Assert.Single(extractions.Saved);
-        Assert.Equal((HouseVoteMembersParser.ExtractionVersion, "attempt"),
-            (saved.ExtractionVersion, saved.SourceAttempt.AttemptId));
-        Assert.Contains("\nMember: A000148, Jake Auchincloss, D, MA, Nay\n", saved.Text, StringComparison.Ordinal);
+        Assert.Equal("attempt", saved.SourceAttempt.AttemptId);
+        AssertPinned(saved, "congress-house-vote-members-v1", "HouseVoteMembersParser.ExtractionVersion",
+            saved.Text.Contains("\nMember: A000148, Jake Auchincloss, D, MA, Nay\n", StringComparison.Ordinal));
         Assert.Equal(saved.ExtractionId, Assert.Single(votes.ExtractionIds));
     }
 
