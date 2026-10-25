@@ -153,6 +153,9 @@ public sealed class PublishOfficialPagesTests
         }
         scenario.SeedRelease(withFiles: true, [.. ids.Chunk(PublishedRecordEntry.MaximumFilterValues).Select((chunk, index) => new PublishedRecordEntry
         {
+            IssueIds = [],
+            Kind = PublishedRecordKind.DocumentChange,
+            PolicyAreaIds = [],
             RecordId = index.ToString("x32"),
             RevisionNumber = 1,
             Headline = "Seeded",

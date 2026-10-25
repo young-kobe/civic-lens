@@ -43,7 +43,9 @@ public sealed record PublishedVote
         RevisionNumber = RevisionNumber,
         Headline = Headline,
         FirstPublishedAtUtc = FirstPublishedAtUtc,
+        Officials = [],
         IssueIds = TrackedIssueIds,
+        PolicyAreaIds = [],
         SourceHost = Sources[0].Host,
         EventDate = VotedOn
     };

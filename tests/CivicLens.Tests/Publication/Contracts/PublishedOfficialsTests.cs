@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Tests.Publication.Contracts;
@@ -51,7 +52,7 @@ public sealed class PublishedOfficialsTests
         };
         var catalog = new PublishedCatalog { Issues = [new() { Id = "housing", Name = "Housing" }], PolicyAreas = [] };
 
-        Assert.Equal(6, PublicationProtocol.SchemaVersion);
+        Assert.Equal(1, PublicationProtocol.SchemaVersion);
         Assert.Equal("""{"officials":[{"id":"mayor","name":"Mayor Example","wikidataId":null,"terms":[{"office":"sen","state":"WA","district":null,"party":"Democrat","start":"2025-01-03","end":"2031-01-03"}]}]}""",
             JsonSerializer.Serialize(officials, PublicationProtocol.JsonOptions));
         Assert.Equal("""{"issues":[{"id":"housing","name":"Housing"}],"policyAreas":[]}""",
@@ -75,9 +76,19 @@ public sealed class PublishedOfficialsTests
     [Fact]
     public void TwoOfficialsWithOneIdAreRefusedBecauseAProfilePageNeedsOnePerson()
     {
-        var official = new PublishedOfficialProfile { Id = "mayor", Name = "Mayor Example" };
+        var official = new PublishedOfficialProfile { Id = "mayor", Name = "Mayor Example", Terms = [] };
 
         Assert.Throws<InvalidDataException>(new PublishedOfficials { Officials = [official, official] }.Validate);
+    }
+
+    [Fact]
+    public void AProfileWithoutTermsIsRefusedSoAPreviousReleaseIsNeverReadAsHavingNoTerms()
+    {
+        var json = JsonNode.Parse(JsonSerializer.Serialize(
+            new PublishedOfficialProfile { Id = "mayor", Name = "Mayor Example", Terms = [] }, PublicationProtocol.JsonOptions))!.AsObject();
+        json.Remove("terms");
+
+        Assert.ThrowsAny<JsonException>(() => JsonSerializer.Deserialize<PublishedOfficialProfile>(json.ToJsonString(), PublicationProtocol.JsonOptions));
     }
 
     [Fact]
@@ -92,8 +103,8 @@ public sealed class PublishedOfficialsTests
     public void TheFilesHaveSizeCapsSoTheirSizeStaysBounded()
     {
         var many = Enumerable.Range(0, PublishedOfficials.MaximumOfficials + 1)
-            .Select(index => new PublishedOfficialProfile { Id = $"p{index}", Name = "A" }).ToArray();
-        var longName = new PublishedOfficialProfile { Id = "a", Name = new string('n', 257) };
+            .Select(index => new PublishedOfficialProfile { Id = $"p{index}", Name = "A", Terms = [] }).ToArray();
+        var longName = new PublishedOfficialProfile { Id = "a", Name = new string('n', 257), Terms = [] };
         var tooManyTerms = new PublishedOfficialProfile
         {
             Id = "a",

@@ -166,6 +166,8 @@ public sealed class PublishOfficialsTests
         };
         scenario.SeedRelease(withFiles: true, [new PublishedRecordEntry
         {
+            Kind = PublishedRecordKind.DocumentChange,
+            Officials = [],
             RecordId = 0.ToString("x32"),
             RevisionNumber = 1,
             Headline = "Seeded",

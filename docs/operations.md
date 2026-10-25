@@ -728,7 +728,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases activate <release-number>
 ```
 
-The first publish of schema version 6 needs a clean development reset. The publisher reads the active release and refuses a release of an older schema. Do these steps once, in order. Production has no older release.
+The first publish of schema version 1 needs a clean development reset. The publisher reads the active release and refuses a release of another schema version. Do these steps once, in order. Production has no older release.
 
 1. Stop the static server, the review workspace, the worker, and the search service.
 2. Delete the contents of `CIVIC_LENS_RELEASE_DIRECTORY`.
@@ -753,10 +753,6 @@ To list the published records that review blocked, run `releases blocked`. It pr
 To bring a withdrawn record back, first revise it in review and approve the new revision. The revision number must be higher than the withdrawn revision. Return it from the Review page, or with the CLI: publish the withdrawn ID with a note: `releases publish <idempotency-key> <kind>:<id> --note <kind>:<id> <text>`. The note shows on the record page as a correction. The publish exits with code 2 if the note is missing or the revision is not higher. The code subject cannot return a record. The worker only logs the withdrawn record and skips it.
 
 A relationship or a brief that cited the record stays withdrawn. Publish it again, in the same request or later.
-
-A schema 6 release with no `withdrawals` list cannot be read. Reset the development releases before the next publish.
-
-A schema 6 vote file with no `kind` or `issueIds` in its rows cannot be read. Reset the development releases before the next publish. Production has no release yet.
 
 A concurrent review decision, draft save, other release, or rollback makes the commit fail with exit code 1. The built directory is deleted and nothing is activated. Invalid input or a non-owner actor exits with code 2 and prints the rule that failed. The publish rules are in [publication](architecture/publication.md#publish).
 

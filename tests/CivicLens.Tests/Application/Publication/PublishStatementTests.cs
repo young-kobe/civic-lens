@@ -260,10 +260,10 @@ public sealed class PublishStatementTests
     }
 
     [Fact]
-    public async Task AReleaseBeforeTheOldestReadableSchemaVersionCannotBeTheBaseOfTheNextRelease()
+    public async Task AReleaseOfAnotherSchemaVersionCannotBeTheBaseOfTheNextRelease()
     {
         var scenario = new PublicationScenario();
-        scenario.SeedVersionOneRelease(new string('c', 32));
+        scenario.SeedReleaseOfAnotherSchemaVersion();
 
         await Assert.ThrowsAsync<InvalidDataException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("k", scenario.AddDraft('a'))));

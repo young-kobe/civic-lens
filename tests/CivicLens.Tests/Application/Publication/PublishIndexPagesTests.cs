@@ -119,6 +119,8 @@ public sealed class PublishIndexPagesTests
 
     private static PublishedRecordEntry Seeded(int index, string[]? issueIds = null, string[]? policyAreaIds = null) => new()
     {
+        Kind = PublishedRecordKind.DocumentChange,
+        Officials = [],
         RecordId = index.ToString("x32"),
         RevisionNumber = 1,
         Headline = $"Seeded {index}",

@@ -256,6 +256,9 @@ public sealed class PostgresBriefPublicationTests(PostgresCollection postgres) :
         Directory.CreateDirectory(folder);
         var entries = new[] { Statement, Action, DocumentChange }.Select(binding => new PublishedRecordEntry
         {
+            IssueIds = [],
+            Officials = [],
+            PolicyAreaIds = [],
             Kind = binding.Kind,
             RecordId = binding.RecordId,
             RevisionNumber = binding.RevisionNumber,

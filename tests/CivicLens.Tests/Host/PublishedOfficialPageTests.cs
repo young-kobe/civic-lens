@@ -180,13 +180,15 @@ public sealed class PublishedOfficialPageTests
         Assert.Equal("Records other than votes", new HtmlParser().ParseDocument(html).QuerySelector("thead th.num")!.TextContent);
     }
 
-    private static PublishedOfficialProfile Profile() => new() { Id = "mayor", Name = "Mayor Example" };
+    private static PublishedOfficialProfile Profile() => new() { Id = "mayor", Name = "Mayor Example", Terms = [] };
 
     private static ReleaseOfficialPage Current(PublishedRecordEntry[] entries, PublishedOfficialVote[] votes) =>
         new(Profile(), true, 119, true, [], [.. entries], [.. votes]);
 
     private static PublishedRecordEntry Entry(char id, PublishedRecordKind kind, DateOnly date) => new()
     {
+        IssueIds = [],
+        PolicyAreaIds = [],
         Kind = kind,
         RecordId = new string(id, 64),
         RevisionNumber = 1,

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Tests.Publication.Contracts;
@@ -31,26 +32,34 @@ public sealed class PublicationReleaseTests
     }
 
     [Theory]
-    [InlineData(0)]
+    [InlineData("kind")]
+    [InlineData("officials")]
+    [InlineData("issueIds")]
+    [InlineData("policyAreaIds")]
+    public void AnEntryWithoutAFilterFieldIsRefusedSoNoReaderGuessesADefault(string field)
+    {
+        var json = JsonNode.Parse(JsonSerializer.Serialize(Entry(PublishedRecordKind.Statement, StatementId), PublicationProtocol.JsonOptions))!.AsObject();
+        json.Remove(field);
+
+        Assert.ThrowsAny<JsonException>(() => JsonSerializer.Deserialize<PublishedRecordEntry>(json.ToJsonString(), PublicationProtocol.JsonOptions));
+    }
+
+    [Theory]
+    [InlineData(-1)]
     [InlineData(1)]
-    [InlineData(2)]
-    [InlineData(3)]
-    [InlineData(4)]
-    [InlineData(5)]
-    [InlineData(7)]
-    public void RejectsASchemaVersionThisReaderDoesNotKnow(int version)
+    public void RejectsAnyOtherSchemaVersion(int offset)
     {
-        Assert.Throws<InvalidDataException>(Release(version, Entry(PublishedRecordKind.DocumentChange, ChangeId)).Validate);
+        Assert.Throws<InvalidDataException>(Release(PublicationProtocol.SchemaVersion + offset, Entry(PublishedRecordKind.DocumentChange, ChangeId)).Validate);
     }
 
     [Fact]
-    public void AcceptsTheOldestReadableSchemaVersion()
+    public void AcceptsTheCurrentSchemaVersion()
     {
-        Release(PublicationProtocol.OldestReadableSchemaVersion, Entry(PublishedRecordKind.DocumentChange, ChangeId)).Validate();
+        Release(PublicationProtocol.SchemaVersion, Entry(PublishedRecordKind.DocumentChange, ChangeId)).Validate();
     }
 
     [Fact]
-    public void SchemaThreeFiltersRoundTripSoSearchReadsWhatPublishWrote()
+    public void FiltersRoundTripSoSearchReadsWhatPublishWrote()
     {
         var entry = Entry(PublishedRecordKind.Statement, StatementId) with
         {
@@ -166,7 +175,7 @@ public sealed class PublicationReleaseTests
         Assert.Throws<InvalidDataException>((release with { Withdrawals = [null!] }).Validate);
         Assert.Throws<InvalidDataException>((release with { Withdrawals = [Withdrawal(PublishedRecordKind.Action, "short")] }).Validate);
         Assert.ThrowsAny<JsonException>(() => JsonSerializer.Deserialize<PublicationRelease>(
-            """{"schemaVersion":6,"releaseNumber":1,"publishedAtUtc":"1970-01-01T00:00:00+00:00","records":[]}""", PublicationProtocol.JsonOptions));
+            """{"schemaVersion":1,"releaseNumber":1,"publishedAtUtc":"1970-01-01T00:00:00+00:00","records":[]}""", PublicationProtocol.JsonOptions));
     }
 
     private static PublishedWithdrawal Withdrawal(PublishedRecordKind kind, string id) => new()
@@ -191,6 +200,9 @@ public sealed class PublicationReleaseTests
 
     private static PublishedRecordEntry Entry(PublishedRecordKind kind, string id) => new()
     {
+        Officials = [],
+        IssueIds = [],
+        PolicyAreaIds = [],
         Kind = kind,
         RecordId = id,
         RevisionNumber = 1,
