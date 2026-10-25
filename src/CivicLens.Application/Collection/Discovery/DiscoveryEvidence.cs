@@ -10,7 +10,7 @@ public sealed class DiscoveryEvidence
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(discovery);
-        request.ValidateReadable();
+        request.Validate();
         if (request.Mode is not (CollectionMode.Feed or CollectionMode.Html))
             throw new ArgumentException("Discovery evidence requires a discovery request.");
         discovery.ValidateAgainst(request);
@@ -23,7 +23,7 @@ public sealed class DiscoveryEvidence
     public CollectionRequest Request { get; }
     public DiscoveryStatus Status { get; }
     public ImmutableArray<string> Urls { get; }
-    public int? OutOfScopeCount { get; }
+    public int OutOfScopeCount { get; }
 
     public DiscoveryResult ToResult() => new() { Status = Status, Urls = Urls.ToArray(), OutOfScopeCount = OutOfScopeCount };
 

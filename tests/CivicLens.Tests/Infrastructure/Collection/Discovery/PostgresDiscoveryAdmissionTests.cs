@@ -291,20 +291,7 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task VersionSevenFeedDiscoveryAndAdmissionReplayRemainSupported()
-    {
-        var attemptId = await SaveDiscoveryAsync(["https://example.test/articles/v7"], CollectionMode.Feed,
-            version: CollectionProtocol.OldestReadableVersion);
-
-        var first = await jobs.AdmitAsync(Source(), attemptId, "version-seven-replay", default);
-        var replay = await jobs.AdmitAsync(Source(), attemptId, "version-seven-replay", default);
-
-        Assert.Equal(first.Jobs, replay.Jobs);
-        Assert.Single(first.Jobs);
-    }
-
-    [Fact]
-    public async Task GeneralizationMigrationPreservesVersionSevenDiscoveryAndAdmissionRows()
+    public async Task GeneralizationMigrationPreservesHistoricalDiscoveryAndAdmissionRows()
     {
         var upgradeConnectionString = await postgres.CreateEmptyDatabaseAsync();
         try
@@ -322,16 +309,16 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
             Assert.Equal(1L, await CountAsync(connection, "collection_candidate_jobs"));
             Assert.Equal(1L, await CountAsync(connection, "collection_admission_batches"));
             await using var read = new NpgsqlCommand(
-                "SELECT request_json FROM collection_discoveries WHERE attempt_id = 'historical-v7'", connection);
+                "SELECT request_json FROM collection_discoveries WHERE attempt_id = 'historical-feed'", connection);
             var requestJson = (string)(await read.ExecuteScalarAsync())!;
-            Assert.Contains("\"version\":7", requestJson, StringComparison.Ordinal);
+            Assert.Contains("\"version\":1", requestJson, StringComparison.Ordinal);
             Assert.False(await TableExistsAsync(connection, "collection_feed_discoveries"));
             var upgradedAttempts = PostgresCollectionAttemptStore.FromConnectionString(upgradeConnectionString);
-            var evidence = await upgradedAttempts.GetAsync("historical-v7", default);
-            Assert.Equal(7, evidence!.Discovery!.Request.Version);
+            var evidence = await upgradedAttempts.GetAsync("historical-feed", default);
+            Assert.Equal(CollectionProtocol.Version, evidence!.Discovery!.Request.Version);
             Assert.Equal("https://example.test/article", Assert.Single(evidence.Discovery.Urls));
             var upgradedJobs = PostgresCollectionJobStore.FromConnectionString(upgradeConnectionString);
-            var duplicate = await upgradedJobs.AdmitAsync(Source(), "historical-v7", "another-batch", default);
+            var duplicate = await upgradedJobs.AdmitAsync(Source(), "historical-feed", "another-batch", default);
             Assert.Equal(1, duplicate.DuplicateCount);
             Assert.Empty(duplicate.Jobs);
             await db.GetService<IMigrator>().MigrateAsync("20261007002616_FeedDiscoveryAdmission");
@@ -353,19 +340,19 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
             INSERT INTO collection_captures (sha256, byte_length) VALUES (repeat('a', 64), 10);
             INSERT INTO collection_attempts (attempt_id, source_id, requested_url, final_url, observed_at_utc_ticks,
                 outcome, has_response, has_sent_validators, response_status_code, response_content_encodings, capture_sha256)
-            VALUES ('historical-v7', 'source', 'https://example.test/feed.xml', 'https://example.test/feed.xml',
+            VALUES ('historical-feed', 'source', 'https://example.test/feed.xml', 'https://example.test/feed.xml',
                 638953920000000000, 'captured', true, false, 200, ARRAY[]::text[], repeat('a', 64));
             INSERT INTO collection_feed_discoveries (attempt_id, source_id, request_json, discovery_json)
-            VALUES ('historical-v7', 'source',
-                '{"version":7,"jobId":"historical-job","sourceId":"source","url":"https://example.test/feed.xml","allowedOrigin":"https://example.test","allowedPathPrefix":"/","artifactDirectory":"/tmp/artifacts","mode":"feed","maxCandidates":100,"maxRequests":2,"maxBytes":10,"timeoutSeconds":4,"minDelayMilliseconds":0}',
-                '{"status":"parsed","urls":["https://example.test/article"]}');
+            VALUES ('historical-feed', 'source',
+                '{"version":1,"jobId":"historical-job","sourceId":"source","url":"https://example.test/feed.xml","allowedOrigin":"https://example.test","allowedPathPrefix":"/","artifactDirectory":"/tmp/artifacts","mode":"feed","maxCandidates":100,"maxRequests":2,"maxBytes":10,"timeoutSeconds":4,"minDelayMilliseconds":0}',
+                '{"status":"parsed","urls":["https://example.test/article"],"outOfScopeCount":0}');
             INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, state, created_at,
                 cancellation_requested, charged_requests, charged_bytes, charged_seconds, lease_fence)
             VALUES ('historical-job', 'historical-job-key', @definition, 'Pending', 1, false, 0, 0, 0, 0);
             INSERT INTO collection_feed_candidate_jobs (candidate_hash, source_id, url, job_id)
             VALUES (@hash, 'source', 'https://example.test/article', 'historical-job');
             INSERT INTO collection_feed_admission_batches (idempotency_key, attempt_id, input_json, result_json, created_at)
-            VALUES ('historical-batch', 'historical-v7',
+            VALUES ('historical-batch', 'historical-feed',
                 @input,
                 '{"jobs":[{"jobId":"historical-job","url":"https://example.test/article"}],"deferredCount":0,"duplicateCount":0,"admittedCount":1}', 1);
             """, connection);
@@ -373,7 +360,7 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         // The v4 feed batch contract had exactly these three input fields in this order.
         seed.Parameters.AddWithValue("input", JsonSerializer.Serialize(new
         {
-            attemptId = "historical-v7",
+            attemptId = "historical-feed",
             articleTemplate = Template(),
             policy = new DiscoveryAdmissionPolicy()
         }, CollectionProtocol.JsonOptions));
@@ -398,12 +385,11 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         => await SaveDiscoveryAsync(urls, CollectionMode.Feed, status);
 
     private async Task<string> SaveDiscoveryAsync(string[] urls, CollectionMode mode,
-        DiscoveryStatus status = DiscoveryStatus.Parsed, int version = CollectionProtocol.Version, string pathPrefix = "/")
+        DiscoveryStatus status = DiscoveryStatus.Parsed, string pathPrefix = "/")
     {
         var attemptId = "feed-" + Interlocked.Increment(ref feedSequence);
         var request = new CollectionRequest
         {
-            Version = version,
             JobId = "feed-job-" + feedSequence,
             SourceId = "source",
             Url = "https://example.test" + pathPrefix.TrimEnd('/') + "/feed.xml",
@@ -415,7 +401,6 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         };
         var result = new CollectionResult
         {
-            Version = version,
             JobId = request.JobId,
             SourceId = request.SourceId,
             RequestedUrl = request.Url,
@@ -425,14 +410,14 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
             Response = new HttpResponseMetadata { StatusCode = 200, ContentType = "application/rss+xml", ContentEncodings = [] },
             SentValidators = null,
             BytesReceived = 10,
-            RobotsRequestCount = version >= 6 ? 1 : null,
+            RobotsRequestCount = 1,
             RequestCount = 2,
             Capture = new CaptureArtifact { Sha256 = new string('a', 64), RelativePath = new string('a', 64) + ".gz", ByteLength = 10 },
             Discovery = new DiscoveryResult
             {
                 Status = status,
                 Urls = urls,
-                OutOfScopeCount = version >= CollectionProtocol.SchemeUpgradeVersion ? 0 : null
+                OutOfScopeCount = 0
             }
         };
         await CollectionAttemptImporter.ImportAsync(attemptId, request, result, attempts, default);

@@ -254,7 +254,7 @@ Before the first production deploy ([R-23](roadmap.md#later)), reset the develop
 
 | Version | Current value | Owner | Binds | Bump when |
 | --- | --- | --- | --- | --- |
-| Collection protocol | `10` (`Version`; reads `OldestReadableVersion` 7 and `ApiVersion` 9) | `src/CivicLens.Collection.Contracts/CollectionProtocol.cs` | Collector requests, receipts, saved handoffs, job definitions | Collector fetch, parse, or receipt rules change |
+| Collection protocol | `1` (`Version`) | `src/CivicLens.Collection.Contracts/CollectionProtocol.cs` | Collector requests, receipts, saved handoffs, job definitions | Collector fetch, parse, or receipt rules change |
 | Receipt handoff | `1` | `src/CivicLens.Application/Collection/PendingCollectionHandoff.cs` | Spool files of unimported receipts | The envelope shape changes |
 | Publication schema | `1` | `src/CivicLens.Publication.Contracts/PublicationProtocol.cs` | Release manifests and record JSON | The published JSON shape changes |
 | Collection configuration | `2` | `src/CivicLens.Application/Collection/CollectionConfiguration.cs` | Configuration files and stored revision snapshots | Coverage or source fields change meaning |

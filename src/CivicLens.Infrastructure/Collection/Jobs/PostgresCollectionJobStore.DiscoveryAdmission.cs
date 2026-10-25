@@ -64,7 +64,7 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                 throw new ArgumentException("Discovery attempt and article template have different source IDs.", nameof(request));
 
             var discoveryRequest = Read<CollectionRequest>(discoveryRow.RequestJson);
-            discoveryRequest.ValidateReadable();
+            discoveryRequest.Validate();
             if (discoveryRequest.Mode != request.ExpectedDiscoveryMode)
                 throw new ArgumentException("Configured discovery mode does not match the retained attempt.", nameof(request));
             if (discoveryRequest.SourceId != discoveryRow.SourceId)

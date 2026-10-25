@@ -49,8 +49,8 @@ public sealed record CollectionResult
     public long BytesReceived { get; init; }
     [JsonRequired]
     public int RequestCount { get; init; }
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? RobotsRequestCount { get; init; }
+    [JsonRequired]
+    public int RobotsRequestCount { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public long? RobotsCrawlDelayMilliseconds { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
@@ -64,7 +64,7 @@ public sealed record CollectionResult
     {
         if (request is null)
             throw new InvalidDataException("Collection request is required for result validation.");
-        request.ValidateReadable();
+        request.Validate();
         ValidateIdentity(request);
         ValidateObservation(request);
         ValidateRobotsAccounting(request);
@@ -86,7 +86,7 @@ public sealed record CollectionResult
 
     private void ValidateIdentity(CollectionRequest request)
     {
-        if (Version != request.Version || !CollectionProtocol.IsReadable(Version))
+        if (Version != request.Version || Version != CollectionProtocol.Version)
             throw new InvalidDataException("Unsupported collection result version.");
         if (JobId != request.JobId || SourceId != request.SourceId || RequestedUrl != request.Url)
             throw new InvalidDataException("Collector result does not identify the requested work.");
@@ -100,7 +100,7 @@ public sealed record CollectionResult
             throw new InvalidDataException("Collector result observation metadata is invalid.");
     }
 
-    private int ContentRequestCount => RequestCount - RobotsRequestCount!.Value;
+    private int ContentRequestCount => RequestCount - RobotsRequestCount;
 
     private bool RobotsEvidenced => RobotsRequestCount > 0 || RobotsCacheHit;
 
@@ -112,9 +112,7 @@ public sealed record CollectionResult
                 throw new InvalidDataException("API requests do not read robots rules.");
             return;
         }
-        if (RobotsCacheHit && Version < CollectionProtocol.RobotsCacheVersion)
-            throw new InvalidDataException("Robots cache hits require a newer protocol version.");
-        if (RobotsRequestCount is null or < 0 || RobotsRequestCount > RequestCount ||
+        if (RobotsRequestCount < 0 || RobotsRequestCount > RequestCount ||
             (RequestCount > 0 && !RobotsEvidenced) ||
             RobotsCrawlDelayMilliseconds is < 0 or > CollectionProtocol.MaximumCrawlDelayMilliseconds ||
             (RobotsCrawlDelayMilliseconds is not null && !RobotsEvidenced))

@@ -1022,7 +1022,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
             Response = new HttpResponseMetadata { StatusCode = status, ContentEncodings = [] },
             FailureCode = status == 429 ? CollectionFailureCode.RateLimited : CollectionFailureCode.HttpError,
             RetryAfterSeconds = status == 429 ? 60 : null,
-            RobotsRequestCount = request.Version >= 6 ? 1 : null
+            RobotsRequestCount = 1
         };
     }
 }
