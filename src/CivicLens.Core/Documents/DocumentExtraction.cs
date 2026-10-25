@@ -10,12 +10,10 @@ public sealed class DocumentExtraction
     public const int MaximumTextLength = 2_000_000;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
-    public DocumentExtraction(CapturedAttemptResult sourceAttempt, string parserVersion,
-        string normalizationVersion, string text, DocumentContentProfile? profile = null)
+    public DocumentExtraction(CapturedAttemptResult sourceAttempt, string extractionVersion, string text, DocumentContentProfile? profile = null)
     {
         ArgumentNullException.ThrowIfNull(sourceAttempt);
-        ValidateVersion(parserVersion, nameof(parserVersion));
-        ValidateVersion(normalizationVersion, nameof(normalizationVersion));
+        ValidateVersion(extractionVersion, nameof(extractionVersion));
         ArgumentNullException.ThrowIfNull(text);
         if (text.Length > MaximumTextLength)
             throw new ArgumentException("Extracted text exceeds the maximum length.", nameof(text));
@@ -29,17 +27,15 @@ public sealed class DocumentExtraction
         }
 
         SourceAttempt = sourceAttempt;
-        ParserVersion = parserVersion;
-        NormalizationVersion = normalizationVersion;
+        ExtractionVersion = extractionVersion;
         Text = text;
         Profile = profile;
         TextSha256 = Convert.ToHexStringLower(SHA256.HashData(textBytes));
-        ExtractionId = ComputeExtractionId(sourceAttempt.AttemptId, parserVersion, normalizationVersion, profile);
+        ExtractionId = ComputeExtractionId(sourceAttempt.AttemptId, extractionVersion, profile);
     }
 
     public CapturedAttemptResult SourceAttempt { get; }
-    public string ParserVersion { get; }
-    public string NormalizationVersion { get; }
+    public string ExtractionVersion { get; }
     public string Text { get; }
     public DocumentContentProfile? Profile { get; }
     public string TextSha256 { get; }
@@ -51,13 +47,12 @@ public sealed class DocumentExtraction
             throw new ArgumentException("Version must contain 1 to 128 characters.", parameterName);
     }
 
-    private static string ComputeExtractionId(string attemptId, string parserVersion, string normalizationVersion,
+    private static string ComputeExtractionId(string attemptId, string extractionVersion,
         DocumentContentProfile? profile)
     {
         using var buffer = new MemoryStream();
         WriteFramed(buffer, attemptId);
-        WriteFramed(buffer, parserVersion);
-        WriteFramed(buffer, normalizationVersion);
+        WriteFramed(buffer, extractionVersion);
         if (profile is not null)
             WriteFramed(buffer, profile.RevisionId);
         return Convert.ToHexStringLower(SHA256.HashData(buffer.ToArray()));

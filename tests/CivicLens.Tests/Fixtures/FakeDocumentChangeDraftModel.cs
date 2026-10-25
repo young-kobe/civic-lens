@@ -62,8 +62,8 @@ internal sealed class FakeDocumentChangeDraftModel : IDocumentChangeDraftModel
 
     public static DocumentChangeDraftEvidence Evidence(string beforeText, string afterText)
     {
-        var before = new DocumentExtraction(Attempt("https://example.test/page"), "parser", "normalizer", beforeText);
-        var after = new DocumentExtraction(Attempt("https://example.test/page"), "parser", "normalizer", afterText);
+        var before = new DocumentExtraction(Attempt("https://example.test/page"), "parser", beforeText);
+        var after = new DocumentExtraction(Attempt("https://example.test/page"), "parser", afterText);
         var comparison = DocumentComparison.Create(before, after);
         var summary = new EligibleDocumentComparison("source", "https://example.test/page", "https://example.test/page",
             "https://example.test/page", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch.AddDays(1), comparison);

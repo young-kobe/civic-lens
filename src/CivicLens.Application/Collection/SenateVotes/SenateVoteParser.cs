@@ -5,7 +5,7 @@ namespace CivicLens.Application.Collection.SenateVotes;
 
 public static class SenateVoteParser
 {
-    public const string Version = "senate-vote-v1";
+    public const string ExtractionVersion = "congress-senate-vote-v1";
 
     private const string Name = "Senate vote";
 

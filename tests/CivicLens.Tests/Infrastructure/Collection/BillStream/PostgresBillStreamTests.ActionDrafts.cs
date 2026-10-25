@@ -473,8 +473,7 @@ public sealed partial class PostgresBillStreamTests
     private async Task<string> ReadableExtractionAsync(string jobId, ApiResource resource, string body)
     {
         var url = (await store.GetAsync(jobId, default))!.Definition.Url;
-        return await ExtractionAsync(jobId, body, ActionBillWorld.RenderedText(resource, url, body), ActionBillWorld.ParserVersionOf(resource),
-            CongressBillRenderer.NormalizationVersion);
+        return await ExtractionAsync(jobId, body, ActionBillWorld.RenderedText(resource, url, body), ActionBillWorld.ExtractionVersionOf(resource));
     }
 
     private async Task<FakeHeadlineSummaryModel> RunActionWorkerAsync(FakeHeadlineSummaryModel model)

@@ -223,7 +223,7 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
         var imported = await Attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport(
             Guid.NewGuid().ToString("N"), request, receipt), default);
         var extraction = new DocumentExtraction((CapturedAttemptResult)imported.AttemptResult,
-            "parser-v1", "normalization-v1", text);
+            "extraction-v1", text);
         return await Extractions.SaveAsync(extraction, default);
     }
 

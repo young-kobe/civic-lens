@@ -179,8 +179,7 @@ public sealed class EvidenceProcessingWorker(
         }
         var previousExtraction = snapshot.PreviousCapture is null ? null : snapshot.Previous.Extractions.FirstOrDefault(item =>
             item.SourceAttempt.AttemptId == snapshot.PreviousCapture.AttemptId &&
-            item.ParserVersion == snapshot.Current.ParserVersion &&
-            item.NormalizationVersion == snapshot.Current.NormalizationVersion &&
+            item.ExtractionVersion == snapshot.Current.ExtractionVersion &&
             ((item.Profile is null && snapshot.Current.Profile is null) ||
              item.Profile?.Matches(snapshot.Current.Profile) == true));
         if (previousExtraction is null)

@@ -18,7 +18,7 @@ public sealed class ActionBillReader(ICollectionJobStore jobs, ApiResponseReader
         var candidate = evidence.Candidate;
         var configuration = evidence.ConfigurationRevision.Configuration;
         var detailPage = evidence.Pages.Single(page => page.Resource == ApiResource.Bill);
-        if (!evidence.Pages.All(HasCurrentVersions)) return new(null, ActionDraftErrorCodes.ExtractionVersionChanged);
+        if (!evidence.Pages.All(HasCurrentVersion)) return new(null, ActionDraftErrorCodes.ExtractionVersionChanged);
         var (detailJob, detailResponse) = await LoadAsync(detailPage, cancellationToken);
         var bill = CongressBillDetailJob.Parse(detailJob, detailResponse);
         if (TextError(detailPage, CongressBillRenderer.RenderDetail(bill)) is { } detailError) return new(null, detailError);
@@ -113,11 +113,11 @@ public sealed class ActionBillReader(ICollectionJobStore jobs, ApiResponseReader
         BillPageUrl.TryRead(source.SourceUrl, resource, job.Definition.Url)?.Bill
         ?? throw new InvalidDataException("Bill page job URL is not a page of its bill resource.");
 
-    private bool HasCurrentVersions(ActionDraftPage page) =>
-        page.NormalizationVersion == CongressBillRenderer.NormalizationVersion && page.ParserVersion == page.Resource switch
+    private bool HasCurrentVersion(ActionDraftPage page) =>
+        page.ExtractionVersion == page.Resource switch
         {
-            ApiResource.Bill => CongressBillParser.Version,
-            ApiResource.BillCosponsors => CongressBillCosponsorsParser.Version,
+            ApiResource.Bill => CongressBillParser.ExtractionVersion,
+            ApiResource.BillCosponsors => CongressBillCosponsorsParser.ExtractionVersion,
             _ => CongressBillSummariesParser.ExtractionVersion(textExtractor)
         };
 

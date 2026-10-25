@@ -5,8 +5,7 @@ namespace CivicLens.Application.Documents;
 
 public interface IDocumentTextExtractor
 {
-    string ParserVersion { get; }
-    string NormalizationVersion { get; }
+    string ExtractionVersion { get; }
 
     Task<string> ExtractAsync(CapturedAttemptResult attempt, string artifactRoot, DocumentContentProfile? profile,
         CancellationToken cancellationToken);

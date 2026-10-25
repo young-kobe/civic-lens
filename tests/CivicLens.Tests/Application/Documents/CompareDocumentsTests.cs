@@ -26,7 +26,7 @@ public sealed class CompareDocumentsTests
         var attempt = new CapturedAttemptResult(id, "source", "https://example.test/", "https://example.test/",
             DateTimeOffset.UnixEpoch, new CollectionResponse(200, null, null, "text/plain", []),
             new CaptureIdentity(new string('a', 64), 0));
-        return new(attempt, "parser", "normalizer", text);
+        return new(attempt, "extraction", text);
     }
 
     private sealed class ComparisonStore(DocumentComparison result) : IDocumentComparisonStore

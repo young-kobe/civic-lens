@@ -118,7 +118,7 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
     {
         var extraction = await db.Set<DocumentExtractionRow>().AsNoTracking()
             .SingleAsync(item => item.ExtractionId == extractionId, cancellationToken);
-        return new(jobId, extractionId, extraction.ParserVersion, extraction.NormalizationVersion, extraction.Text);
+        return new(jobId, extractionId, extraction.ExtractionVersion, extraction.Text);
     }
 
     private static readonly (VoteDraftView View, string? ErrorCode)[] SucceededViews =

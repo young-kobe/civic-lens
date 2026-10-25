@@ -130,8 +130,7 @@ public sealed class ExtractDocumentTests
     private sealed class TextExtractor(string? text, Exception? failure = null, CancellationTokenSource? cancel = null)
         : IDocumentTextExtractor
     {
-        public string ParserVersion => "parser-v1";
-        public string NormalizationVersion => "normalization-v1";
+        public string ExtractionVersion => "extraction-v1";
         public int Calls { get; private set; }
         public CapturedAttemptResult? LastAttempt { get; private set; }
         public DocumentContentProfile? LastProfile { get; private set; }

@@ -328,8 +328,8 @@ If the worker cannot import a saved receipt, use `receipts replay`; no new fetch
 | `elizabeth-warren-press` | Official newsroom listing; HTML discovery applies tolerant recovery to its retained markup; refresh the capture and inspect candidates before admission |
 | `ted-cruz-press` | Official newsroom listing; parsed candidates include navigation and pagination, so prefer the RSS source for article admission |
 | `ted-cruz-press-feed` | RSS endpoint that the official newsroom advertises; bounded admission of linked article jobs |
-| `elizabeth-warren-pilot-article-1` | Explicit education-oversight release; `capture-text-v2` with the `warren-article` profile extracts its retained capture |
-| `elizabeth-warren-pilot-article-2` | Explicit heating-assistance release; `capture-text-v2` with the `warren-article` profile extracts its retained capture |
+| `elizabeth-warren-pilot-article-1` | Explicit education-oversight release; `html-text-v1` with the `warren-article` profile extracts its retained capture |
+| `elizabeth-warren-pilot-article-2` | Explicit heating-assistance release; `html-text-v1` with the `warren-article` profile extracts its retained capture |
 
 Each job allows at most two attempts, five requests and 2 MB for each attempt, a 60-second attempt timeout, and at least 1.5 seconds between content requests. A discovery admission allows at most two article jobs and reserves their full retry allowances: 20 requests, 8 MB, and 240 seconds. Another explicit admission authorizes another batch. The worker is a separate command and does not start with the Host.
 

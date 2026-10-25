@@ -29,18 +29,18 @@ public sealed class GetDocumentHistoryTests
     [Fact]
     public async Task FailureAndMissingExtractionBreakAdjacencyAndSettingsHaveIndependentStreams()
     {
-        var first = Captured("first", 1, "same", parser: "parser-v1");
+        var first = Captured("first", 1, "same", parser: "extraction-v1");
         var failureAttempt = new StoredCollectionAttempt(new FailedAttemptResult("failed", "source", Url, Url,
             DateTimeOffset.UnixEpoch.AddDays(2), "network"), null, null);
-        var sameAfterGap = Captured("after-gap", 3, "same", parser: "parser-v1");
-        var changedParser = Captured("next", 4, "same", parser: "parser-v2");
+        var sameAfterGap = Captured("after-gap", 3, "same", parser: "extraction-v1");
+        var changedParser = Captured("next", 4, "same", parser: "extraction-v2");
         var history = await new GetDocumentHistory(new HistoryStore([first,
             new DocumentHistoryObservation(failureAttempt, ImmutableArray<DocumentExtraction>.Empty), sameAfterGap, changedParser]))
             .ExecuteAsync("source", Url);
 
         Assert.Equal(2, history.Streams.Length);
-        Assert.Equal(2, history.Streams.Single(stream => stream.ParserVersion == "parser-v1").Transitions.Length);
-        Assert.Single(history.Streams.Single(stream => stream.ParserVersion == "parser-v2").Transitions);
+        Assert.Equal(2, history.Streams.Single(stream => stream.ExtractionVersion == "extraction-v1").Transitions.Length);
+        Assert.Single(history.Streams.Single(stream => stream.ExtractionVersion == "extraction-v2").Transitions);
         Assert.Empty(history.Observations[1].Extractions);
     }
 
@@ -49,15 +49,15 @@ public sealed class GetDocumentHistoryTests
     {
         var observations = new[]
         {
-            Captured("both", 1, "same", parser: "parser-v1", secondText: "also same", parser2: "parser-v2"),
+            Captured("both", 1, "same", parser: "extraction-v1", secondText: "also same", parser2: "extraction-v2"),
             Captured("first-only", 2, "same"),
-            Captured("second-only", 3, "also same", parser: "parser-v2"),
+            Captured("second-only", 3, "also same", parser: "extraction-v2"),
             Captured("first-again", 4, "same")
         };
 
         var history = await new GetDocumentHistory(new HistoryStore(observations)).ExecuteAsync("source", Url);
-        var firstStream = Assert.Single(history.Streams, stream => stream.ParserVersion == "parser-v1");
-        var secondStream = Assert.Single(history.Streams, stream => stream.ParserVersion == "parser-v2");
+        var firstStream = Assert.Single(history.Streams, stream => stream.ExtractionVersion == "extraction-v1");
+        var secondStream = Assert.Single(history.Streams, stream => stream.ExtractionVersion == "extraction-v2");
 
         Assert.Equal(new[] { "both", "first-only" }, firstStream.Transitions[0].AttemptIds);
         Assert.Equal("first-again", Assert.Single(firstStream.Transitions[1].AttemptIds));
@@ -89,15 +89,15 @@ public sealed class GetDocumentHistoryTests
         Assert.Equal(0, store.Calls);
     }
 
-    private static DocumentHistoryObservation Captured(string id, int day, string text, string parser = "parser-v1",
-        string? secondText = null, string parser2 = "parser-v2")
+    private static DocumentHistoryObservation Captured(string id, int day, string text, string parser = "extraction-v1",
+        string? secondText = null, string parser2 = "extraction-v2")
     {
         var attempt = new CapturedAttemptResult(id, "source", Url, Url, DateTimeOffset.UnixEpoch.AddDays(day),
             new CollectionResponse(200, null, null, "text/plain", []), new CaptureIdentity(new string('a', 64), 4));
         var extractions = ImmutableArray.CreateBuilder<DocumentExtraction>();
-        extractions.Add(new DocumentExtraction(attempt, parser, "normalization-v1", text));
+        extractions.Add(new DocumentExtraction(attempt, parser, text));
         if (secondText is not null)
-            extractions.Add(new DocumentExtraction(attempt, parser2, "normalization-v1", secondText));
+            extractions.Add(new DocumentExtraction(attempt, parser2, secondText));
         return new DocumentHistoryObservation(new StoredCollectionAttempt(attempt, null, null),
             extractions.ToImmutable());
     }

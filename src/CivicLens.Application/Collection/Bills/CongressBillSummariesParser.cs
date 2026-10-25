@@ -5,11 +5,11 @@ namespace CivicLens.Application.Collection.Bills;
 
 public static class CongressBillSummariesParser
 {
-    public const string Version = "congress-bill-summaries-v1";
+    private const string Version = "congress-bill-summaries-v1";
     public static string ExtractionVersion(IDocumentTextExtractor extractor)
     {
         ArgumentNullException.ThrowIfNull(extractor);
-        return $"{Version}+{extractor.ParserVersion}+{extractor.NormalizationVersion}";
+        return $"{Version}+{extractor.ExtractionVersion}";
     }
 
     public static CongressBillSummariesPage Parse(ReadOnlySpan<byte> json, CollectionRequest scope, string sourceUrl,

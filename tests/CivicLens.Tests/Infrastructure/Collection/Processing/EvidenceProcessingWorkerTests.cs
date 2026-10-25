@@ -239,7 +239,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var attempt = Assert.Single(detail.Attempts).AttemptId;
 
         var saved = Assert.Single(await ReadBillExtractionsAsync());
-        Assert.Equal((attempt, "congress-bill-v1", "congress-bill-render-v1"), (saved.AttemptId, saved.ParserVersion, saved.NormalizationVersion));
+        Assert.Equal((attempt, "congress-bill-detail-v1"), (saved.AttemptId, saved.ExtractionVersion));
         Assert.StartsWith("Bill: 119 hr 1\nTitle: A bill\n", saved.Text);
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM statement_candidates"));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM statement_analysis"));
@@ -285,17 +285,16 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
 
         var saved = Assert.Single(await ReadBillExtractionsAsync(), extraction => extraction.AttemptId == Assert.Single(job.Attempts).AttemptId);
         Assert.Equal(("congress-bill-cosponsors-v1", "Bill: 119 hr 1\nCosponsor: A000001, original, 2025-01-04"),
-            (saved.ParserVersion, saved.Text));
+            (saved.ExtractionVersion, saved.Text));
     }
 
     [Fact]
-    public async Task ASummariesPageIsExtractedWithTheCombinedParserVersionAndNeverBecomesAStatementCandidate()
+    public async Task ASummariesPageIsExtractedWithTheCombinedExtractionVersionAndNeverBecomesAStatementCandidate()
     {
         var job = await RunBillJobAsync(ApiResource.BillSummaries, """{"summaries":[{"versionCode":"173","actionDate":"2025-01-04","actionDesc":"Introduced in House","updateDate":"2025-01-05T08:00:00Z","text":"<p><strong>Title.</strong></p><p>Requires the agency to act.</p>"}],"pagination":{}}""");
 
         var saved = Assert.Single(await ReadBillExtractionsAsync(), extraction => extraction.AttemptId == Assert.Single(job.Attempts).AttemptId);
-        Assert.Equal(("congress-bill-summaries-v1+capture-text-v2+body-text-v1", "congress-bill-render-v1"),
-            (saved.ParserVersion, saved.NormalizationVersion));
+        Assert.Equal("congress-bill-summaries-v1+html-text-v1", saved.ExtractionVersion);
         Assert.Equal("Bill: 119 hr 1\n\nSummary version: 173\nAction date: 2025-01-04\nAction: Introduced in House\n" +
             "Updated: 2025-01-05T08:00:00Z\nText:\nTitle.\nRequires the agency to act.", saved.Text);
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM statement_candidates"));
@@ -636,7 +635,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var seeder = new StatementCandidateSeeder(attempts, extractions, connectionString, artifactRoot);
         var text = "Bill: 119 hr 1\nTitle: A bill";
         return await new JobExtractionSeeder(jobs, extractions, seeder, connectionString, artifactRoot)
-            .SaveAsync(jobId, text, text, "parser", "normalizer");
+            .SaveAsync(jobId, text, text, "extraction");
     }
 
     private static string BillDetail(string sponsor, int cosponsors, string policyArea = "Taxation", int summaries = 0) => $$$"""
@@ -645,15 +644,15 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
          "cosponsors":{"countIncludingWithdrawnCosponsors":{{{cosponsors}}} },"actions":{"count":1},"summaries":{"count":{{{summaries}}} } } }
         """;
 
-    private async Task<List<(string AttemptId, string ParserVersion, string NormalizationVersion, string Text)>> ReadBillExtractionsAsync()
+    private async Task<List<(string AttemptId, string ExtractionVersion, string Text)>> ReadBillExtractionsAsync()
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(
-            "SELECT attempt_id, parser_version, normalization_version, text FROM document_extractions ORDER BY extraction_id", connection);
+            "SELECT attempt_id, extraction_version, text FROM document_extractions ORDER BY extraction_id", connection);
         await using var reader = await command.ExecuteReaderAsync();
-        var rows = new List<(string, string, string, string)>();
-        while (await reader.ReadAsync()) rows.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3)));
+        var rows = new List<(string, string, string)>();
+        while (await reader.ReadAsync()) rows.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2)));
         return rows;
     }
 

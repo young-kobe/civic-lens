@@ -79,7 +79,7 @@ public sealed class DocumentComparison
     private static bool IsCompatible(DocumentExtraction before, DocumentExtraction after) =>
         before.SourceAttempt.SourceId == after.SourceAttempt.SourceId &&
         before.SourceAttempt.RequestedUrl == after.SourceAttempt.RequestedUrl &&
-        before.ParserVersion == after.ParserVersion && before.NormalizationVersion == after.NormalizationVersion &&
+        before.ExtractionVersion == after.ExtractionVersion &&
         ((before.Profile is null && after.Profile is null) || before.Profile?.Matches(after.Profile) == true);
 
     private static ImmutableArray<DocumentComparisonHunk>? BuildHunks(ImmutableArray<DocumentLine> left,

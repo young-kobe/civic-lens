@@ -246,7 +246,7 @@ public sealed partial class PostgresHouseVoteTests
         var jobId = await SucceededJobs.BillDetailAsync(store, connectionString, source, listJob,
             new CongressBillListItem(congress, "hconres", number, Backfill.AddDays(++billListSequence)));
         var text = $"Bill: {congress} hconres {number}\nTitle: A concurrent resolution\n{Guid.NewGuid():N}";
-        var extractionId = await extractions.SaveAsync(jobId, text, text, "parser", "normalizer");
+        var extractionId = await extractions.SaveAsync(jobId, text, text, "extraction");
         var bill = new CongressBill(congress, "hconres", number, "A concurrent resolution", Backfill, updatedAt ?? Updated,
             BillGateFixtures.UntrackedPolicyArea, [], 0, 1, 0);
         return new(source, jobId, bill, extractionId);

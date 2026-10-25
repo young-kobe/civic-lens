@@ -91,9 +91,9 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
                            join extraction in db.Set<DocumentExtractionRow>().AsNoTracking() on page.ExtractionId equals extraction.ExtractionId
                            where page.DetailJobId == detailJobId && page.Role != BillPageRole.Actions &&
                                (includesSummaries || page.Role != BillPageRole.Summaries)
-                           select new { page.Role, page.PageOrder, page.JobId, page.ExtractionId, extraction.ParserVersion, extraction.NormalizationVersion, extraction.Text }).ToArrayAsync(cancellationToken);
+                           select new { page.Role, page.PageOrder, page.JobId, page.ExtractionId, extraction.ExtractionVersion, extraction.Text }).ToArrayAsync(cancellationToken);
         return [.. pages.OrderBy(page => ResourceOf(page.Role)).ThenBy(page => page.PageOrder)
-            .Select(page => new ActionDraftPage(ResourceOf(page.Role), page.JobId, page.ExtractionId, page.ParserVersion, page.NormalizationVersion, page.Text))];
+            .Select(page => new ActionDraftPage(ResourceOf(page.Role), page.JobId, page.ExtractionId, page.ExtractionVersion, page.Text))];
     }
 
     private static ApiResource ResourceOf(BillPageRole role) => role switch

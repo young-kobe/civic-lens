@@ -10,7 +10,7 @@ namespace CivicLens.Tests.Fixtures;
 internal sealed class JobExtractionSeeder(PostgresCollectionJobStore store, PostgresDocumentExtractionStore extractions,
     StatementCandidateSeeder seeder, string connectionString, string captureRoot)
 {
-    public async Task<string> SaveAsync(string jobId, string body, string text, string parserVersion, string normalizationVersion)
+    public async Task<string> SaveAsync(string jobId, string body, string text, string extractionVersion)
     {
         var captured = await seeder.ImportAsync(body, "https://example.test/pages/a", CandidateJobKind.None);
         var request = (await store.GetAsync(jobId, default))!.Definition.CreateRequest(captured.AttemptId, captureRoot);
@@ -23,6 +23,6 @@ internal sealed class JobExtractionSeeder(PostgresCollectionJobStore store, Post
                     (SELECT COALESCE(MAX(sequence), 0) + 1 FROM collection_job_attempts WHERE job_id = '{{jobId}}'), '{{requestJson}}', 0, '{}', 0)
             """, connection);
         await command.ExecuteNonQueryAsync();
-        return (await extractions.SaveAsync(new DocumentExtraction(captured, parserVersion, normalizationVersion, text), default)).ExtractionId;
+        return (await extractions.SaveAsync(new DocumentExtraction(captured, extractionVersion, text), default)).ExtractionId;
     }
 }

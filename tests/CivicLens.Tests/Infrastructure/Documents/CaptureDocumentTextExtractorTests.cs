@@ -20,14 +20,13 @@ public sealed class CaptureDocumentTextExtractorTests
         var text = await capture.Extractor.ExtractAsync(capture.Attempt, capture.Root, CancellationToken.None);
 
         Assert.Equal("café  title\nsecond line", text);
-        Assert.Equal("capture-text-v2", capture.Extractor.ParserVersion);
-        Assert.Equal("body-text-v1", capture.Extractor.NormalizationVersion);
+        Assert.Equal("html-text-v1", capture.Extractor.ExtractionVersion);
     }
 
     [Fact]
-    public async Task ExtractionOutputMatchesPinnedParserAndNormalizationVersions()
+    public async Task ExtractionOutputMatchesPinnedExtractionVersion()
     {
-        var bump = "Extraction output changed. Bump CaptureDocumentTextExtractor.ParserVersion or NormalizationVersion, " +
+        var bump = "Extraction output changed. Bump CaptureDocumentTextExtractor.ExtractionVersion, " +
             "update the version table in docs/architecture.md, then update this test. Actual: ";
         await using var capture = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes(
             "<html><head><title>head</title></head><body><h1>Title&nbsp;  here</h1><p>one<p>two <b>bold</b>  \n spaced</p>" +
@@ -35,8 +34,7 @@ public sealed class CaptureDocumentTextExtractorTests
 
         var text = await capture.Extractor.ExtractAsync(capture.Attempt, capture.Root, CancellationToken.None);
 
-        Assert.Equal("capture-text-v2", capture.Extractor.ParserVersion);
-        Assert.Equal("body-text-v1", capture.Extractor.NormalizationVersion);
+        Assert.Equal("html-text-v1", capture.Extractor.ExtractionVersion);
         Assert.True(text == "Title here\none\ntwo bold spaced\na\nb\nend", bump + text.Replace("\n", "\\n"));
     }
 
@@ -174,8 +172,7 @@ public sealed class CaptureDocumentTextExtractorTests
         var text = await capture.Extractor.ExtractAsync(capture.Attempt, capture.Root, null, CancellationToken.None);
 
         Assert.Equal("Navigation\nStory", text);
-        Assert.Equal("capture-text-v2", capture.Extractor.ParserVersion);
-        Assert.Equal("body-text-v1", capture.Extractor.NormalizationVersion);
+        Assert.Equal("html-text-v1", capture.Extractor.ExtractionVersion);
     }
 
     [Fact]
@@ -343,7 +340,7 @@ public sealed class CaptureDocumentTextExtractorTests
     [Fact]
     public void TheSummaryExtractionVersionNamesTheRealExtractorVersionsSoAChangeToTheHtmlRulesChangesIt()
     {
-        Assert.Equal("congress-bill-summaries-v1+capture-text-v2+body-text-v1",
+        Assert.Equal("congress-bill-summaries-v1+html-text-v1",
             CongressBillSummariesParser.ExtractionVersion(new CaptureDocumentTextExtractor()));
     }
 

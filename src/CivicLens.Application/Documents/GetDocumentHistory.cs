@@ -80,8 +80,7 @@ public sealed class GetDocumentHistory(IDocumentHistoryStore store)
             foreach (var extraction in observation.Extractions)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var key = new StreamKey(extraction.ParserVersion, extraction.NormalizationVersion,
-                    extraction.Profile?.RevisionId);
+                var key = new StreamKey(extraction.ExtractionVersion, extraction.Profile?.RevisionId);
                 currentKeys.Add(key);
                 if (!streamsByKey.TryGetValue(key, out var stream))
                 {
@@ -104,7 +103,7 @@ public sealed class GetDocumentHistory(IDocumentHistoryStore store)
         return new DocumentHistory(observations.ToImmutableArray(), streams.Select(stream => stream.Build()).ToImmutableArray());
     }
 
-    private readonly record struct StreamKey(string ParserVersion, string NormalizationVersion, string? ProfileRevisionId);
+    private readonly record struct StreamKey(string ExtractionVersion, string? ProfileRevisionId);
 
     private sealed class StreamBuilder(StreamKey key)
     {
@@ -129,7 +128,7 @@ public sealed class GetDocumentHistory(IDocumentHistoryStore store)
 
         public void Break() => hasAdjacentObservation = false;
 
-        public DocumentHistoryStream Build() => new(Key.ParserVersion, Key.NormalizationVersion,
+        public DocumentHistoryStream Build() => new(Key.ExtractionVersion,
             Key.ProfileRevisionId, transitions.Select(transition => transition.Build()).ToImmutableArray());
     }
 

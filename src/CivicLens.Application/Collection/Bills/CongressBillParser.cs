@@ -4,7 +4,7 @@ namespace CivicLens.Application.Collection.Bills;
 
 public static class CongressBillParser
 {
-    public const string Version = "congress-bill-v1";
+    public const string ExtractionVersion = "congress-bill-detail-v1";
     private static readonly string[] UpdateDateFormats = ["yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:sszzz"];
     public static CongressBill Parse(ReadOnlySpan<byte> json, CongressBillListItem expected)
     {

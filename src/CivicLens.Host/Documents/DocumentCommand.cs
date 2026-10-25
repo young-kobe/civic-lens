@@ -65,8 +65,7 @@ internal static class DocumentCommand
                 {
                     extraction.ExtractionId,
                     AttemptId = extraction.SourceAttempt.AttemptId,
-                    extraction.ParserVersion,
-                    extraction.NormalizationVersion,
+                    extraction.ExtractionVersion,
                     extraction.TextSha256,
                     TextLength = extraction.Text.Length,
                     ProfileId = extraction.Profile?.Id,

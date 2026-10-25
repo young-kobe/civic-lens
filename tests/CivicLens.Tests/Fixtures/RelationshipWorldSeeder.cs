@@ -15,8 +15,8 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
 
     public Task StatementAsync(ApprovedStatement statement, string reviewStatus = "Approved") => ExecuteAsync("""
         SET session_replication_role = replica;
-        INSERT INTO document_extractions (extraction_id, attempt_id, parser_version, normalization_version, text, text_sha256)
-        VALUES (@extraction, 'attempt', 'parser', 'normalizer', @text, @hash) ON CONFLICT DO NOTHING;
+        INSERT INTO document_extractions (extraction_id, attempt_id, extraction_version, text, text_sha256)
+        VALUES (@extraction, 'attempt', 'extraction', @text, @hash) ON CONFLICT DO NOTHING;
         INSERT INTO statement_candidates (candidate_id, source_id, url, extraction_id, attempt_id, created_at_utc_ticks)
         VALUES (@id, 'source', 'https://example.test/' || @id, @extraction, 'attempt', 1) ON CONFLICT DO NOTHING;
         INSERT INTO statement_drafts (candidate_id, current_revision_number, review_state_version, review_status, created_at_utc_ticks)

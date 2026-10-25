@@ -82,19 +82,18 @@ internal sealed class ActionBillWorld
     public ActionDraftEvidence Evidence(ActionDraftRevision? current = null, DateTimeOffset? updatedAt = null, bool hasNewerCandidate = false) =>
         new(new ActionDraftCandidate(ActionRevisionFixtures.CandidateId, ActionRevisionFixtures.RecordId, SourceId, 119, "hr", 1,
             updatedAt ?? UpdatedAt, pages.Any(page => page.Resource == ApiResource.BillSummaries)),
-            Revision, [.. pages.Select(page => new ActionDraftPage(page.Resource, page.JobId, ExtractionIdOf(page.JobId), versionOverrides.GetValueOrDefault(page.JobId) ?? ParserVersionOf(page.Resource),
-                CongressBillRenderer.NormalizationVersion, page.Text))], current, hasNewerCandidate);
+            Revision, [.. pages.Select(page => new ActionDraftPage(page.Resource, page.JobId, ExtractionIdOf(page.JobId), versionOverrides.GetValueOrDefault(page.JobId) ?? ExtractionVersionOf(page.Resource), page.Text))], current, hasNewerCandidate);
 
-    public static string ParserVersionOf(ApiResource resource) => resource switch
+    public static string ExtractionVersionOf(ApiResource resource) => resource switch
     {
-        ApiResource.Bill => CongressBillParser.Version,
-        ApiResource.BillCosponsors => CongressBillCosponsorsParser.Version,
+        ApiResource.Bill => CongressBillParser.ExtractionVersion,
+        ApiResource.BillCosponsors => CongressBillCosponsorsParser.ExtractionVersion,
         _ => CongressBillSummariesParser.ExtractionVersion(new FragmentExtractor())
     };
 
-    public void SetVersion(string jobId, string parserVersion)
+    public void SetVersion(string jobId, string extractionVersion)
     {
-        versionOverrides[jobId] = parserVersion;
+        versionOverrides[jobId] = extractionVersion;
     }
 
     public static string ExtractionIdOf(string jobId) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(jobId)));
@@ -189,8 +188,7 @@ internal sealed class ActionBillWorld
 
     internal sealed class FragmentExtractor : IDocumentTextExtractor
     {
-        public string ParserVersion => "fake-parser";
-        public string NormalizationVersion => "fake-normalization";
+        public string ExtractionVersion => "fake-extraction";
 
         public static string Text(string html) => "Text of " + html;
 

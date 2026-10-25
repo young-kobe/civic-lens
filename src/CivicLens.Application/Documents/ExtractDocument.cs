@@ -53,7 +53,7 @@ public sealed class ExtractDocument(ICollectionAttemptStore attempts, IDocumentT
     {
         var text = await extractor.ExtractAsync(captured, artifactRoot, profile, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
-        var extraction = new DocumentExtraction(captured, extractor.ParserVersion, extractor.NormalizationVersion, text, profile);
+        var extraction = new DocumentExtraction(captured, extractor.ExtractionVersion, text, profile);
         return await extractions.SaveAsync(extraction, cancellationToken);
     }
 

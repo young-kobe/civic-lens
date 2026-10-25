@@ -90,8 +90,7 @@ public sealed class PostgresDocumentHistoryStore(IDbContextFactory<CollectionAtt
         }
         var extractionsByAttempt = extractionRows.ToLookup(row => row.AttemptId, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Select(row => extractionCache[row.ExtractionId])
-                .OrderBy(extraction => extraction.ParserVersion, StringComparer.Ordinal)
-                .ThenBy(extraction => extraction.NormalizationVersion, StringComparer.Ordinal)
+                .OrderBy(extraction => extraction.ExtractionVersion, StringComparer.Ordinal)
                 .ThenBy(extraction => extraction.Profile?.RevisionId, StringComparer.Ordinal).ToImmutableArray(),
                 StringComparer.Ordinal);
 

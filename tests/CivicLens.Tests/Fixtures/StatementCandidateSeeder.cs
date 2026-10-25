@@ -25,7 +25,7 @@ internal sealed class StatementCandidateSeeder(PostgresCollectionAttemptStore at
         var definition = admittedBy ?? StatementDraftFixtures.AdmittedDefinition(StatementDraftFixtures.SoleCoverage(StatementDraftFixtures.Warren));
         var captured = await ImportAsync(text, url, CandidateJobKind.DiscoveryAdmitted, definitionJson: JsonSerializer.Serialize(definition with { ConfigurationRevision = null }, CollectionProtocol.JsonOptions),
             revisionId: await StoreRevisionAsync(definition.ConfigurationRevision));
-        await extractions.SaveAsync(new DocumentExtraction(captured, "parser", "normalizer", text), CancellationToken.None);
+        await extractions.SaveAsync(new DocumentExtraction(captured, "parser", text), CancellationToken.None);
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("SELECT candidate_id FROM statement_candidates WHERE url = @url", connection);

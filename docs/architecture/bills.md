@@ -20,8 +20,8 @@ The bills feature follows the Congress.gov bill list each day. It fetches the de
 - `BillGate` and `CongressBillRenderer` are pure types, so their tests need no database.
 - The renderer writes one fact per line, so each fact is a clean citation span.
 - A summaries page holds one summary (`limit=1`), so each summary gets its own extraction.
-- The summaries parser version includes the document extractor versions. A change to the HTML rules therefore changes the identity of the summary extraction.
-- The extraction ID is fixed by the attempt and the two versions, and a replay with different text fails. A change to rendered text or parser output therefore needs a new version.
+- The summaries extraction version includes the document extractor version. A change to the HTML rules therefore changes the identity of the summary extraction.
+- The extraction ID is fixed by the attempt and the extraction version, and a replay with different text fails. A change to rendered text or parser output therefore needs a new version.
 - The summaries chain never blocks a candidate, because a record must work without a CRS summary. CRS often publishes weeks after introduction.
 - A candidate is an immutable input. Late summaries add a second candidate and never change the first.
 
@@ -97,7 +97,7 @@ Each succeeded page job goes through [preparation](collection.md#preparation). T
 | Parser | Version | Reads |
 |---|---|---|
 | `CongressBillListParser` | `congress-bill-list-v1` | One list page of at most 250 items |
-| `CongressBillParser` | `congress-bill-v1` | One detail, including `summaries.count` (a missing object means 0) |
+| `CongressBillParser` | `congress-bill-detail-v1` | One detail, including `summaries.count` (a missing object means 0) |
 | `CongressBillCosponsorsParser` | `congress-bill-cosponsors-v1` | One cosponsors page of at most 250 items |
 | `CongressBillActionsParser` | `congress-bill-actions-v1` | One actions page of at most 250 items |
 | `CongressBillSummariesParser` | `congress-bill-summaries-v1` | One summaries page of at most 1 item |
@@ -176,9 +176,9 @@ An actions page job or a summaries page job admits the next page of its own kind
 
 Every captured API page of a bill is saved as one `DocumentExtraction`: the detail and each cosponsor, actions, and summaries page. A bill list page is not saved. API jobs get no processing stage.
 
-`CongressBillRenderer` has one method for each page kind and owns the text. The normalization version is `congress-bill-render-v1`. The parser version is the `Version` constant of the parser that read the page. The source attempt of the extraction is the captured attempt of the job.
+`CongressBillRenderer` has one method for each page kind and owns the text. The extraction version is the `ExtractionVersion` constant of the parser that read the page. The source attempt of the extraction is the captured attempt of the job.
 
-A summaries page is the exception. Its parser version is `{CongressBillSummariesParser.Version}+{extractor.ParserVersion}+{extractor.NormalizationVersion}`. Today that is `congress-bill-summaries-v1+capture-text-v2+body-text-v1`.
+A summaries page is the exception. Its extraction version is `{CongressBillSummariesParser.Version}+{extractor.ExtractionVersion}`. Today that is `congress-bill-summaries-v1+html-text-v1`.
 
 The text has one fact per line, in a fixed order, with invariant culture, `\n` line endings, and no trailing whitespace.
 

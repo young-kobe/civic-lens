@@ -7,7 +7,6 @@ public static class SenateVoteRenderer
 {
     private const string TimeFormat = "yyyy-MM-dd'T'HH:mm:sszzz";
 
-    public const string NormalizationVersion = "senate-vote-render-v2";
 
     public static string Render(SenateVoteDetail detail)
     {

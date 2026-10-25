@@ -44,7 +44,7 @@ public sealed partial class PostgresHouseVoteTests
         var row = await CandidateAsync();
         Assert.Equal((row.DetailJobId, row.MembersJobId), (evidence.Detail.JobId, evidence.Members.JobId));
         Assert.StartsWith("House vote: 119 1 100", evidence.Detail.Text, StringComparison.Ordinal);
-        Assert.Equal(("parser", "normalizer"), (evidence.Members.ParserVersion, evidence.Members.NormalizationVersion));
+        Assert.Equal("extraction", evidence.Members.ExtractionVersion);
         Assert.Equal((candidate, 119, 1, 100, "hconres", 14, Updated), (evidence.Candidate.CandidateId, evidence.Candidate.Congress,
             evidence.Candidate.SessionNumber, evidence.Candidate.RollCallNumber, evidence.Candidate.BillType, evidence.Candidate.BillNumber,
             evidence.Candidate.UpdateDate));

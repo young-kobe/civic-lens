@@ -4,7 +4,7 @@ namespace CivicLens.Application.Collection.Bills;
 
 public static class CongressBillCosponsorsParser
 {
-    public const string Version = "congress-bill-cosponsors-v1";
+    public const string ExtractionVersion = "congress-bill-cosponsors-v1";
     public static CongressBillCosponsorsPage Parse(ReadOnlySpan<byte> json, CollectionRequest scope, string sourceUrl,
         CongressBillListItem expected)
     {
