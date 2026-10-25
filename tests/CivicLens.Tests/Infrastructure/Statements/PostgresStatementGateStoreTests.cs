@@ -137,7 +137,7 @@ public sealed class PostgresStatementGateStoreTests(PostgresCollection postgres)
         var candidate = await seeder.SeedAsync(Article, "https://example.test/pages/a");
         await Worker(new FakeStatementGateModel().Classify(Output([])), Revision()).ExecuteAsync(once: true);
         Assert.Equal(0, await new RegateStatementCandidates(store).ExecuteAsync(Owner, Revision().Id, null));
-        await ExecuteAsync(connectionString, "UPDATE statement_analysis_runs SET prompt_version = 'statement-gate-prompt-v1' WHERE task = 'gate'");
+        await ExecuteAsync(connectionString, "UPDATE statement_analysis_runs SET prompt_version = 'older-gate-prompt' WHERE task = 'gate'");
 
         Assert.Equal(1, await new RegateStatementCandidates(store).ExecuteAsync(Owner, Revision().Id, null));
         Assert.Equal([("gate", "Pending", null)], await RowsAsync(candidate));
