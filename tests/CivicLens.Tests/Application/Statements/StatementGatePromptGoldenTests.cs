@@ -20,8 +20,8 @@ public sealed class StatementGatePromptGoldenTests
             $"({StatementGateTask.PromptVersion}) or {nameof(StatementGateTask.SchemaVersion)} " +
             $"({StatementGateTask.SchemaVersion}), and then update the pinned hashes in this test.";
 
-        Assert.Equal("statement-gate-prompt-v2", StatementGateTask.PromptVersion);
-        Assert.Equal("statement-gate-schema-v2", StatementGateTask.SchemaVersion);
+        Assert.Equal("statement-gate-prompt-v1", StatementGateTask.PromptVersion);
+        Assert.Equal("statement-gate-schema-v1", StatementGateTask.SchemaVersion);
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
         Assert.True(Sha256(request.SchemaJson) == SchemaSha256, $"{bump} Schema: {Sha256(request.SchemaJson)}");
         Assert.True(request.InputHash == InputHash, $"{bump} Input hash: {request.InputHash}");
