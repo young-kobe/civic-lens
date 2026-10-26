@@ -47,7 +47,7 @@ public sealed class WorkerLoopTests
             if (calls == 1) throw new InvalidOperationException("Brief outage.");
             if (calls == 3) recovered.TrySetResult();
             return Task.FromResult(true);
-        }, Lease, ownership);
+        }, FailureTolerantLease, ownership);
 
         await Task.WhenAny(recovered.Task, renewal).WaitAsync(HangGuard);
 
