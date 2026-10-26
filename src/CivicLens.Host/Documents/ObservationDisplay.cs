@@ -31,8 +31,7 @@ public static class ObservationDisplay
         var extractions = history.Observations.SelectMany(item => item.Extractions).ToArray();
         return
         [
-            ("Parser", Distinct(extractions.Select(item => item.ParserVersion))),
-            ("Normalization", Distinct(extractions.Select(item => item.NormalizationVersion))),
+            ("Extraction version", Distinct(extractions.Select(item => item.ExtractionVersion))),
             ("Content profile", Distinct(extractions.Select(item => item.Profile is { } profile ? $"{profile.Id}, revision {profile.RevisionId[..8]}" : "None")))
         ];
     }

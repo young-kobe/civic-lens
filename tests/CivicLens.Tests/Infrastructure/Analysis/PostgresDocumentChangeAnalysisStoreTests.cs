@@ -66,8 +66,8 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         var before = await seeder.ImportAsync("Deadline: October 15.\n", url, CandidateJobKind.WatchedPage);
         var after = await seeder.ImportAsync("Deadline: October 30.\n", url, CandidateJobKind.WatchedPage, definitionJson: definition, revisionId: revisionId);
         var extractions = new PostgresDocumentExtractionStore(factory);
-        var beforeExtraction = new DocumentExtraction(before, "parser", "normalizer", "Deadline: October 15.\n");
-        var afterExtraction = new DocumentExtraction(after, "parser", "normalizer", "Deadline: October 30.\n");
+        var beforeExtraction = new DocumentExtraction(before, "parser", "Deadline: October 15.\n");
+        var afterExtraction = new DocumentExtraction(after, "parser", "Deadline: October 30.\n");
         await extractions.SaveAsync(beforeExtraction, default);
         await extractions.SaveAsync(afterExtraction, default);
         var comparison = await new PostgresDocumentComparisonStore(factory).CompareAndSaveAsync(

@@ -122,8 +122,8 @@ public sealed class JobPreparation(
             ?? throw new InvalidDataException("Bill detail job URL is not a bill detail URL.");
         var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
         var bill = CongressBillParser.Parse(response.Body, expected);
-        var extractionId = await SaveExtractionAsync(response.Captured, CongressBillParser.Version,
-            CongressBillRenderer.NormalizationVersion, CongressBillRenderer.RenderDetail(bill), cancellationToken);
+        var extractionId = await SaveExtractionAsync(response.Captured, CongressBillParser.ExtractionVersion,
+            CongressBillRenderer.RenderDetail(bill), cancellationToken);
         var covered = configured.CoveredBioguideIdsOn(BillGate.DayOf(bill.UpdateDate));
         var gate = BillGate.AtDetail(bill, covered, issueConfiguration);
         return PreparedFrom(await billAdmissions.AdmitDetailAsync(configured, job.JobId, bill, gate, issues.Id,
@@ -137,8 +137,8 @@ public sealed class JobPreparation(
         var bill = ReadPageBill(configured, job, ApiResource.BillCosponsors);
         var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
         var page = CongressBillCosponsorsParser.Parse(response.Body, response.Request, configured.SourceUrl, bill);
-        var extractionId = await SaveExtractionAsync(response.Captured, CongressBillCosponsorsParser.Version,
-            CongressBillRenderer.NormalizationVersion, CongressBillRenderer.RenderCosponsors(bill, page), cancellationToken);
+        var extractionId = await SaveExtractionAsync(response.Captured, CongressBillCosponsorsParser.ExtractionVersion,
+            CongressBillRenderer.RenderCosponsors(bill, page), cancellationToken);
         return PreparedFrom(await billAdmissions.AdmitCosponsorPageAsync(configured, job.JobId, page, extractionId, cancellationToken));
     }
 
@@ -149,8 +149,8 @@ public sealed class JobPreparation(
         var bill = ReadPageBill(configured, job, ApiResource.BillActions);
         var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
         var page = CongressBillActionsParser.Parse(response.Body, response.Request, configured.SourceUrl, bill);
-        var extractionId = await SaveExtractionAsync(response.Captured, CongressBillActionsParser.Version,
-            CongressBillRenderer.NormalizationVersion, CongressBillRenderer.RenderActions(bill, page), cancellationToken);
+        var extractionId = await SaveExtractionAsync(response.Captured, CongressBillActionsParser.ExtractionVersion,
+            CongressBillRenderer.RenderActions(bill, page), cancellationToken);
         return PreparedFrom(await billAdmissions.AdmitActionsPageAsync(configured, job.JobId, page, extractionId, cancellationToken));
     }
 
@@ -164,9 +164,8 @@ public sealed class JobPreparation(
         var texts = new List<CongressBillSummaryText>();
         foreach (var summary in page.Summaries)
             texts.Add(new CongressBillSummaryText(summary, await textExtractor.ExtractHtmlFragmentAsync(summary.Html, cancellationToken)));
-        var parserVersion = CongressBillSummariesParser.ExtractionVersion(textExtractor);
-        var extractionId = await SaveExtractionAsync(response.Captured, parserVersion,
-            CongressBillRenderer.NormalizationVersion, CongressBillRenderer.RenderSummaries(bill, texts), cancellationToken);
+        var extractionId = await SaveExtractionAsync(response.Captured, CongressBillSummariesParser.ExtractionVersion(textExtractor),
+            CongressBillRenderer.RenderSummaries(bill, texts), cancellationToken);
         return PreparedFrom(await billAdmissions.AdmitSummariesPageAsync(configured, job.JobId, page, extractionId, cancellationToken));
     }
 
@@ -186,8 +185,8 @@ public sealed class JobPreparation(
         var expected = HouseVoteRollUrl.ReadDetail(configured.SourceUrl, job.Definition.Url);
         var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
         var detail = HouseVoteParser.Parse(response.Body, expected);
-        var extractionId = await SaveExtractionAsync(response.Captured, HouseVoteParser.Version,
-            HouseVoteRenderer.NormalizationVersion, HouseVoteRenderer.RenderDetail(detail), cancellationToken);
+        var extractionId = await SaveExtractionAsync(response.Captured, HouseVoteParser.ExtractionVersion,
+            HouseVoteRenderer.RenderDetail(detail), cancellationToken);
         return PreparedFrom(await voteAdmissions.AdmitDetailAsync(configured, job.JobId, detail.Vote, extractionId, cancellationToken));
     }
 
@@ -198,8 +197,8 @@ public sealed class JobPreparation(
         var expected = HouseVoteRollUrl.ReadMembers(configured.SourceUrl, job.Definition.Url);
         var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
         var members = HouseVoteMembersParser.Parse(response.Body, expected);
-        var extractionId = await SaveExtractionAsync(response.Captured, HouseVoteMembersParser.Version,
-            HouseVoteRenderer.NormalizationVersion, HouseVoteRenderer.RenderMembers(members), cancellationToken);
+        var extractionId = await SaveExtractionAsync(response.Captured, HouseVoteMembersParser.ExtractionVersion,
+            HouseVoteRenderer.RenderMembers(members), cancellationToken);
         return PreparedFrom(await voteAdmissions.AdmitMembersAsync(configured, job.JobId, members.Vote, extractionId, cancellationToken));
     }
 
@@ -220,8 +219,8 @@ public sealed class JobPreparation(
         var expected = SenateVoteUrl.ReadVote(configured.SourceUrl, job.Definition.Url);
         var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
         var detail = SenateVoteParser.Parse(response.Body, expected);
-        var extractionId = await SaveExtractionAsync(response.Captured, SenateVoteParser.Version,
-            SenateVoteRenderer.NormalizationVersion, SenateVoteRenderer.Render(detail), cancellationToken);
+        var extractionId = await SaveExtractionAsync(response.Captured, SenateVoteParser.ExtractionVersion,
+            SenateVoteRenderer.Render(detail), cancellationToken);
         return PreparedFrom(await voteAdmissions.AdmitSenateVoteAsync(configured, job.JobId, detail.Vote, extractionId, cancellationToken));
     }
 
@@ -257,9 +256,9 @@ public sealed class JobPreparation(
         JobPreparationResult.Prepared(admitted: result.AdmittedCount, deferred: result.DeferredCount,
             duplicates: result.DuplicateCount);
 
-    private async Task<string> SaveExtractionAsync(CapturedAttemptResult captured, string parserVersion,
-        string normalizationVersion, string text, CancellationToken cancellationToken) =>
-        (await extractions.SaveAsync(new DocumentExtraction(captured, parserVersion, normalizationVersion, text),
+    private async Task<string> SaveExtractionAsync(CapturedAttemptResult captured, string extractionVersion,
+        string text, CancellationToken cancellationToken) =>
+        (await extractions.SaveAsync(new DocumentExtraction(captured, extractionVersion, text),
             cancellationToken)).ExtractionId;
 
 }

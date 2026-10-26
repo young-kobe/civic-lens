@@ -4,7 +4,7 @@ namespace CivicLens.Application.Collection.Bills;
 
 public static class CongressBillActionsParser
 {
-    public const string Version = "congress-bill-actions-v1";
+    public const string ExtractionVersion = "congress-bill-actions-v1";
     public static CongressBillActionsPage Parse(ReadOnlySpan<byte> json, CollectionRequest scope, string sourceUrl,
         CongressBillListItem expected)
     {

@@ -7,19 +7,19 @@ The documents feature turns verified captures into immutable text extractions, e
 ## Decisions
 
 - Text is not part of extraction identity. Conflicting output for the same inputs is an error, so stored evidence is never overwritten.
-- A parser, normalization, or profile upgrade creates a new extraction. Old text and citations stay valid.
+- An extraction version or profile upgrade creates a new extraction. Old text and citations stay valid.
 - Content profiles use a small selector syntax. Its syntax is deliberately bounded.
 - A profile that selects zero or several elements fails. No fallback hides a configuration error.
 - One private HTML method serves captures and HTML fragments. One owner holds the HTML rules and limits.
 - History and comparison reject overflow. They never return a partial result.
-- A stored comparison is never reinterpreted. A new algorithm or settings version keeps the old code for old rows.
+- A stored comparison is never reinterpreted. A new algorithm or settings version gives new rows a new ID.
 - Neither an extraction, a citation, nor a comparison is a human approval.
 
 ## Invariants
 
 Each line gives the rule, what enforces it, and the test that protects it. Cross-feature invariants are in [architecture](../architecture.md#invariants).
 
-- An extraction ID depends on the attempt and the versions, never on the text. Enforced by `DocumentExtraction`. Test: `DocumentExtractionTests.IdentityIsFramedAndIndependentOfTextWhileTextHashTracksContent`.
+- An extraction ID depends on the attempt, the extraction version, and the profile revision, never on the text. Enforced by `DocumentExtraction`. Test: `DocumentExtractionTests.IdentityIsFramedAndIndependentOfTextWhileTextHashTracksContent`.
 - One extraction identity keeps one text and one provenance. Enforced by `PostgresDocumentExtractionStore`: an insert that finds the row compares the committed winner and throws on a mismatch. Test: `PostgresDocumentExtractionStoreTests.RejectsChangedProvenanceAndDetectsStoredTextTampering`.
 - A read verifies the text hash and the identity. Enforced by `PostgresDocumentExtractionStore`. Test: `PostgresDocumentExtractionStoreTests.RejectsChangedProvenanceAndDetectsStoredTextTampering`.
 - Versions that differ give an Incompatible comparison, not a diff. Enforced by `DocumentComparison`. Test: `DocumentComparisonTests.RequiresEqualProfileRevisionAndProcessingVersions`.
@@ -51,7 +51,7 @@ HTML parsing recovers optional paragraph closures and mismatched end tags. It ch
 
 Plain text uses the BOM, then the HTTP charset, then UTF-8. HTML uses the BOM, the HTTP charset, a meta declaration in the first 1,024 bytes, then Windows-1252. HTML encoding labels use the HTML mappings.
 
-HTML body text excludes `script`, `style`, `template`, and `noscript`. It collapses whitespace and puts a newline at block boundaries. This is static text extraction, not browser visibility or article selection. CSS, hidden elements, and navigation can remain. Plain text keeps its decoded whitespace. The current versions are `capture-text-v2` and `body-text-v1`.
+HTML body text excludes `script`, `style`, `template`, and `noscript`. It collapses whitespace and puts a newline at block boundaries. This is static text extraction, not browser visibility or article selection. CSS, hidden elements, and navigation can remain. Plain text keeps its decoded whitespace. The current extraction version is `html-text-v1`.
 
 ### Content profiles
 
@@ -73,7 +73,7 @@ A citation holds an extraction ID, a UTF-16 start, a positive length, and the ex
 
 A tracked document is a source ID plus an exact requested URL. Redirect destinations do not merge histories. `GetDocumentHistory` orders all retained observations by observation time, then by ordinal attempt ID.
 
-Each parser, normalization, and profile revision is an independent stream. Consecutive identical text is grouped, and every attempt stays inspectable. A to B to A gives three transitions. A failed check, an unresolved 304, or a capture without an extraction in that stream breaks adjacency. That break does not imply a source edit. A resolved 304 uses the extractions of its prior capture and never creates new text. Explicit reprocessing can add a stream to old observations. History is a derived view, not an editorial decision.
+Each extraction version and profile revision is an independent stream. Consecutive identical text is grouped, and every attempt stays inspectable. A to B to A gives three transitions. A failed check, an unresolved 304, or a capture without an extraction in that stream breaks adjacency. That break does not imply a source edit. A resolved 304 uses the extractions of its prior capture and never creates new text. Explicit reprocessing can add a stream to old observations. History is a derived view, not an editorial decision.
 
 `GetDocumentHistory` reads through `IDocumentHistoryStore`. The Postgres history store reads one repeatable-read snapshot. It batch-loads observations, captures, and extraction rows, and indexes them by attempt. It validates each extraction with the same rule as a single read. A hash index on the requested URL serves equality lookups for all outcomes. The query keeps the exact source and URL predicates, so a hash collision cannot merge two documents. Only accepted bounded histories are sorted in memory. Application builds transition IDs once and tracks only the active adjacent streams. Discovery candidate payloads are not in this view; discovery inspection shows them.
 
@@ -81,7 +81,7 @@ History limits are 1,000 observations, 10,000 extraction revisions, and 10 milli
 
 ### Comparison
 
-`DocumentComparison` in Core owns compatibility, identity, and a deterministic line-level longest-common-subsequence comparison. Word detail keeps whitespace. Both extractions must share the source ID, exact requested URL, parser, normalization, and profile revision. The result is `complete`, `incompatible`, or `limitExceeded`. A complete result with no hunks means the text is unchanged.
+`DocumentComparison` in Core owns compatibility, identity, and a deterministic line-level longest-common-subsequence comparison. Word detail keeps whitespace. Both extractions must share the source ID, exact requested URL, extraction version, and profile revision. The result is `complete`, `incompatible`, or `limitExceeded`. A complete result with no hunks means the text is unchanged.
 
 Changed ranges, word edits, and context keep exact UTF-16 positions on both sides. A zero-length range marks an insertion or deletion point. A positive range can go to the citation handler. A comparison finds text differences, not significance.
 
@@ -113,8 +113,8 @@ A malformed link returns 400, and missing evidence returns 404. A storage or rec
 
 - The generated [documents schema](schema/documents.md) lists every table, column, key, check, index, and trigger.
 - Text identity is the SHA-256 of strict UTF-8 text.
-- Whole-body extraction identity is the SHA-256 of three framed UTF-8 strings: attempt ID, parser version, normalization version. Each frame has a four-byte big-endian byte length.
-- A profile extraction adds the profile revision ID as a fourth framed string. Three-field identities do not change.
+- Whole-body extraction identity is the SHA-256 of two framed UTF-8 strings: attempt ID and extraction version. Each frame has a four-byte big-endian byte length.
+- A profile extraction adds the profile revision ID as a third framed string. Identities without a profile do not change.
 - Profile revision identity hashes the framed ID and selector, a four-byte big-endian exclusion count, and each framed exclusion in order. IDs and exclusion order are significant.
 - `PostgresDocumentExtractionStore` uses the operational DbContext and additive migrations. The save verifies provenance first. It then inserts with `ON CONFLICT DO NOTHING` in one ReadCommitted transaction and takes no advisory lock. If the row exists, the save compares the committed winner and throws on a mismatch. Only the inserting transaction registers statement candidates.
 - A foreign key keeps the source attempt. Reads verify extraction identity and the text hash.

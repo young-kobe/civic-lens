@@ -13,14 +13,13 @@ internal sealed class DocumentExtractionRowConfiguration : IEntityTypeConfigurat
             table.HasCheckConstraint("ck_document_extractions_hashes",
                 "extraction_id ~ '^[0-9a-f]{64}$' AND text_sha256 ~ '^[0-9a-f]{64}$'");
             table.HasCheckConstraint("ck_document_extractions_versions",
-                "length(btrim(parser_version)) > 0 AND length(btrim(normalization_version)) > 0");
+                "length(btrim(extraction_version)) > 0");
             table.HasCheckConstraint("ck_document_extractions_text_limit", "length(text) <= 2000000");
         });
         builder.HasKey(row => row.ExtractionId);
         builder.Property(row => row.ExtractionId).HasColumnName("extraction_id").HasMaxLength(64);
         builder.Property(row => row.AttemptId).HasColumnName("attempt_id").IsRequired();
-        builder.Property(row => row.ParserVersion).HasColumnName("parser_version").HasMaxLength(128).IsRequired();
-        builder.Property(row => row.NormalizationVersion).HasColumnName("normalization_version").HasMaxLength(128).IsRequired();
+        builder.Property(row => row.ExtractionVersion).HasColumnName("extraction_version").HasMaxLength(128).IsRequired();
         builder.Property(row => row.Text).HasColumnName("text").IsRequired();
         builder.Property(row => row.TextSha256).HasColumnName("text_sha256").HasMaxLength(64).IsRequired();
         builder.Property(row => row.ProfileJson).HasColumnName("profile_json").HasMaxLength(8000);

@@ -37,7 +37,7 @@ internal static class StatementGateFixtures
     {
         var attempt = new CapturedAttemptResult(Guid.NewGuid().ToString("N"), "source", url, url, observed ?? Observed,
             new CollectionResponse(200, null, null, "text/plain", []), new CaptureIdentity(new string('a', 64), 0));
-        var extraction = new DocumentExtraction(attempt, "parser", "normalizer", text);
+        var extraction = new DocumentExtraction(attempt, "parser", text);
         return new(extraction.ExtractionId, extraction);
     }
 

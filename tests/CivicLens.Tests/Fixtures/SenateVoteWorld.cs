@@ -93,7 +93,7 @@ internal sealed class SenateVoteWorld
 
     public VoteDraftEvidence Evidence(string versionOverride = "")
     {
-        var vote = Page("vote", string.IsNullOrEmpty(versionOverride) ? SenateVoteParser.Version : versionOverride);
+        var vote = Page("vote", string.IsNullOrEmpty(versionOverride) ? SenateVoteParser.ExtractionVersion : versionOverride);
         return new(new VoteDraftCandidate(CandidateId, RecordId, SenateVoteFixtures.SourceId, Chamber.Senate, 119, 1, 1,
                 HasBill ? "s" : null, HasBill ? 5 : null, UpdatedAt),
             Revision, vote, vote, HasBill ? BillPage() : null, null, false);
@@ -108,10 +108,10 @@ internal sealed class SenateVoteWorld
     }
 
     private VoteDraftPage BillPage() =>
-        new("bill", ExtractionIdOf("bill"), CongressBillParser.Version, CongressBillRenderer.NormalizationVersion, texts["bill"]);
+        new("bill", ExtractionIdOf("bill"), CongressBillParser.ExtractionVersion, texts["bill"]);
 
-    private VoteDraftPage Page(string jobId, string parserVersion) =>
-        new(jobId, ExtractionIdOf(jobId), parserVersion, SenateVoteRenderer.NormalizationVersion, texts[jobId]);
+    private VoteDraftPage Page(string jobId, string extractionVersion) =>
+        new(jobId, ExtractionIdOf(jobId), extractionVersion, texts[jobId]);
 
     private void Add(string jobId, ApiResource resource, string url, string body, string renderedText,
         CollectionConfigurationRevision revision, string sourceId, DateOnly coveredFrom)

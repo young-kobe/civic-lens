@@ -5,7 +5,6 @@ namespace CivicLens.Application.Collection.Bills;
 
 public static class CongressBillListParser
 {
-    public const string Version = "congress-bill-list-v1";
     private const string ApiKeyParameter = "api_key";
     public static CongressBillListPage Parse(ReadOnlySpan<byte> json, CollectionRequest scope, BillStreamWindow window)
     {

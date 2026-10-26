@@ -111,6 +111,6 @@ public sealed class StatementDraftRevisionTests
     {
         var attempt = new CapturedAttemptResult(Guid.NewGuid().ToString("N"), "source", "https://example.test/a", "https://example.test/a",
             DateTimeOffset.UnixEpoch, new CollectionResponse(200, null, null, "text/plain", []), new CaptureIdentity(new string('a', 64), 0));
-        return new DocumentExtraction(attempt, "parser", "normalizer", Text);
+        return new DocumentExtraction(attempt, "parser", Text);
     }
 }

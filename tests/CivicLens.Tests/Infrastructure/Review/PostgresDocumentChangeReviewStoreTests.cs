@@ -111,10 +111,10 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         var expected = new HashSet<string>(StringComparer.Ordinal);
         for (var index = 0; index < 12; index++)
         {
-            var before = new CivicLens.Core.Documents.DocumentExtraction(await ImportAsync("Before."), "parser", "normalizer", "Before.");
+            var before = new CivicLens.Core.Documents.DocumentExtraction(await ImportAsync("Before."), "extraction", "Before.");
             var changed = index % 3 == 0;
             var text = changed ? "After." : "Before.";
-            var after = new CivicLens.Core.Documents.DocumentExtraction(await ImportAsync(text), "parser", "normalizer", text);
+            var after = new CivicLens.Core.Documents.DocumentExtraction(await ImportAsync(text), "extraction", text);
             await extractions.SaveAsync(before, default);
             await extractions.SaveAsync(after, default);
             var comparison = await comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, default);
@@ -662,8 +662,8 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
 
     private async Task<CivicLens.Core.Documents.DocumentComparison> SaveComparisonAsync()
     {
-        var before = new CivicLens.Core.Documents.DocumentExtraction(await ImportAsync("Policy before."), "parser", "normalizer", "Policy before.");
-        var after = new CivicLens.Core.Documents.DocumentExtraction(await ImportAsync("Policy after."), "parser", "normalizer", "Policy after.");
+        var before = new CivicLens.Core.Documents.DocumentExtraction(await ImportAsync("Policy before."), "extraction", "Policy before.");
+        var after = new CivicLens.Core.Documents.DocumentExtraction(await ImportAsync("Policy after."), "extraction", "Policy after.");
         await extractions.SaveAsync(before, CancellationToken.None);
         await extractions.SaveAsync(after, CancellationToken.None);
         return await comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, CancellationToken.None);

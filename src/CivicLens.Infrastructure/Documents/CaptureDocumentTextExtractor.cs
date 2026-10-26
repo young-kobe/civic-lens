@@ -27,8 +27,7 @@ public sealed class CaptureDocumentTextExtractor : IDocumentTextExtractor
 
     private readonly CaptureBodyReader bodies = new();
 
-    public string ParserVersion => "capture-text-v2";
-    public string NormalizationVersion => "body-text-v1";
+    public string ExtractionVersion => "html-text-v1";
 
     public async Task<string> ExtractAsync(CapturedAttemptResult attempt, string artifactRoot,
         CancellationToken cancellationToken) => await ExtractAsync(attempt, artifactRoot, null, cancellationToken);

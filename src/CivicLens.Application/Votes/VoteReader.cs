@@ -39,7 +39,8 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
     private async Task<(ChamberRead?, string? Error)> ReadHouseAsync(VoteDraftEvidence evidence, CancellationToken cancellationToken)
     {
         var candidate = evidence.Candidate;
-        if (!HasCurrentVersions(evidence.Detail, HouseVoteParser.Version) || !HasCurrentVersions(evidence.Members, HouseVoteMembersParser.Version))
+        if (evidence.Detail.ExtractionVersion != HouseVoteParser.ExtractionVersion ||
+            evidence.Members.ExtractionVersion != HouseVoteMembersParser.ExtractionVersion)
             return (null, VoteDraftErrorCodes.ExtractionVersionChanged);
         var roll = new HouseVoteRoll(new VoteSession(candidate.Congress, candidate.SessionNumber), candidate.RollCallNumber);
         var detail = HouseVoteParser.Parse((await LoadAsync(evidence.Detail, cancellationToken)).Body, roll);
@@ -56,7 +57,7 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
     {
         var candidate = evidence.Candidate;
         var page = evidence.Detail;
-        if (page.ParserVersion != SenateVoteParser.Version || page.NormalizationVersion != SenateVoteRenderer.NormalizationVersion)
+        if (page.ExtractionVersion != SenateVoteParser.ExtractionVersion)
             return (null, VoteDraftErrorCodes.ExtractionVersionChanged);
         var roll = new SenateVoteRoll(new VoteSession(candidate.Congress, candidate.SessionNumber), candidate.RollCallNumber);
         var detail = SenateVoteParser.Parse((await LoadAsync(page, cancellationToken)).Body, roll);
@@ -112,7 +113,7 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
     private static string? BillError(VoteDraftEvidence evidence)
     {
         if (evidence.BillDetail is not { } page) return evidence.Candidate.BillType is null ? null : VoteDraftErrorCodes.EvidenceUnavailable;
-        return page.ParserVersion == CongressBillParser.Version && page.NormalizationVersion == CongressBillRenderer.NormalizationVersion
+        return page.ExtractionVersion == CongressBillParser.ExtractionVersion
             ? null : VoteDraftErrorCodes.ExtractionVersionChanged;
     }
 
@@ -149,9 +150,6 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
         var job = await jobs.GetAsync(page.JobId, cancellationToken) ?? throw new InvalidDataException("A vote page job is missing.");
         return await responses.ReadAsync(job, artifactRoot, cancellationToken);
     }
-
-    private static bool HasCurrentVersions(VoteDraftPage page, string parserVersion) =>
-        page.ParserVersion == parserVersion && page.NormalizationVersion == HouseVoteRenderer.NormalizationVersion;
 
     private static string? TextError(VoteDraftPage page, string rendered) =>
         string.Equals(rendered, page.Text, StringComparison.Ordinal) ? null : VoteDraftErrorCodes.RenderedTextMismatch;

@@ -1177,11 +1177,11 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     private Task<string> ExtractionAsync(string jobId)
     {
         var text = "Bill: 119 hr 7\n" + Guid.NewGuid().ToString("N");
-        return ExtractionAsync(jobId, text, text, "parser", "normalizer");
+        return ExtractionAsync(jobId, text, text, "extraction");
     }
 
-    private Task<string> ExtractionAsync(string jobId, string body, string text, string parserVersion, string normalizationVersion) =>
-        jobExtractions.SaveAsync(jobId, body, text, parserVersion, normalizationVersion);
+    private Task<string> ExtractionAsync(string jobId, string body, string text, string extractionVersion) =>
+        jobExtractions.SaveAsync(jobId, body, text, extractionVersion);
 
     private async Task<(string Decision, string? Reason)> GateOfAsync(string detailJobId)
     {

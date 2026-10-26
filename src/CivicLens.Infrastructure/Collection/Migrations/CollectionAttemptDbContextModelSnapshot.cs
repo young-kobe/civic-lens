@@ -2620,17 +2620,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("text")
                         .HasColumnName("attempt_id");
 
-                    b.Property<string>("NormalizationVersion")
+                    b.Property<string>("ExtractionVersion")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
-                        .HasColumnName("normalization_version");
-
-                    b.Property<string>("ParserVersion")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("parser_version");
+                        .HasColumnName("extraction_version");
 
                     b.Property<string>("ProfileJson")
                         .HasMaxLength(8000)
@@ -2659,7 +2653,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_document_extractions_text_limit", "length(text) <= 2000000");
 
-                            t.HasCheckConstraint("ck_document_extractions_versions", "length(btrim(parser_version)) > 0 AND length(btrim(normalization_version)) > 0");
+                            t.HasCheckConstraint("ck_document_extractions_versions", "length(btrim(extraction_version)) > 0");
                         });
                 });
 

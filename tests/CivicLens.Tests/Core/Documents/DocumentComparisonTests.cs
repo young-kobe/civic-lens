@@ -62,11 +62,11 @@ public sealed class DocumentComparisonTests
     public void RequiresEqualProfileRevisionAndProcessingVersions()
     {
         var source = Attempt("attempt");
-        var first = new DocumentExtraction(source, "parser", "normalizer", "old", new("p", "main", []));
-        var changedProfile = new DocumentExtraction(source, "parser", "normalizer", "new", new("p", "article", []));
+        var first = new DocumentExtraction(source, "parser", "old", new("p", "main", []));
+        var changedProfile = new DocumentExtraction(source, "parser", "new", new("p", "article", []));
         Assert.Equal(DocumentComparisonStatus.Incompatible, DocumentComparison.Create(first, changedProfile).Status);
         Assert.Equal(DocumentComparisonStatus.Incompatible,
-            DocumentComparison.Create(first, new(source, "parser-2", "normalizer", "new", new("p", "main", []))).Status);
+            DocumentComparison.Create(first, new(source, "extraction-2", "new", new("p", "main", []))).Status);
     }
 
     [Fact]
@@ -120,7 +120,7 @@ public sealed class DocumentComparisonTests
     }
 
     private static DocumentExtraction Extraction(string text, string url = "https://example.test/") =>
-        new(Attempt(Guid.NewGuid().ToString("N"), url), "parser", "normalizer", text);
+        new(Attempt(Guid.NewGuid().ToString("N"), url), "extraction", text);
 
     private static CapturedAttemptResult Attempt(string id, string url = "https://example.test/") =>
         new(id, "source", url, url, DateTimeOffset.UnixEpoch, new CollectionResponse(200, null, null, "text/html", []),

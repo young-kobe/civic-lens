@@ -78,7 +78,7 @@ public sealed class SenateVoteReaderTests
     }
 
     [Fact]
-    public async Task ASavedExtractionOfAnotherParserVersionBlocksBeforeTheCaptureIsRead()
+    public async Task ASavedExtractionOfAnotherExtractionVersionBlocksBeforeTheCaptureIsRead()
     {
         var world = Nomination();
 

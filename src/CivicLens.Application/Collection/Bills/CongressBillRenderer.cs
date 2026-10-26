@@ -5,7 +5,6 @@ namespace CivicLens.Application.Collection.Bills;
 
 public static class CongressBillRenderer
 {
-    public const string NormalizationVersion = "congress-bill-render-v1";
     private const string TimeFormat = "HH:mm:ss";
     internal const string UpdateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'";
 

@@ -397,7 +397,7 @@ public sealed class VoteDraftStepTests
     [InlineData("detail", "detail")]
     [InlineData("members", "members")]
     [InlineData("members", "detail")]
-    public async Task AChangedParserVersionBlocksBeforeAnyCaptureIsParsedSoAnUpgradeIsNeverReportedAsBrokenData(string changedJob, string unreadableJob)
+    public async Task AChangedExtractionVersionBlocksBeforeAnyCaptureIsParsedSoAnUpgradeIsNeverReportedAsBrokenData(string changedJob, string unreadableJob)
     {
         var world = Create();
         world.SetVersion(changedJob, "older-version");

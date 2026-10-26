@@ -44,10 +44,10 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
         var profileJson = SerializeProfile(extraction.Profile);
         var inserted = await db.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO document_extractions (extraction_id, attempt_id, parser_version, normalization_version, text,
+            INSERT INTO document_extractions (extraction_id, attempt_id, extraction_version, text,
                 text_sha256, profile_json)
-            VALUES ({extraction.ExtractionId}, {captured.AttemptId}, {extraction.ParserVersion},
-                {extraction.NormalizationVersion}, {extraction.Text}, {extraction.TextSha256}, {profileJson})
+            VALUES ({extraction.ExtractionId}, {captured.AttemptId}, {extraction.ExtractionVersion},
+                {extraction.Text}, {extraction.TextSha256}, {profileJson})
             ON CONFLICT (extraction_id) DO NOTHING
             """, cancellationToken);
         if (inserted == 0)
@@ -103,7 +103,7 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
             var profile = row.ProfileJson is null ? null :
                 (JsonSerializer.Deserialize<DocumentProfileConfiguration>(row.ProfileJson, CollectionProtocol.JsonOptions)
                     ?? throw new JsonException("Stored profile is null.")).ToProfile();
-            extraction = new DocumentExtraction(captured, row.ParserVersion, row.NormalizationVersion, row.Text, profile);
+            extraction = new DocumentExtraction(captured, row.ExtractionVersion, row.Text, profile);
         }
         catch (Exception exception) when (exception is ArgumentException or JsonException)
         {
@@ -115,8 +115,8 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
     }
 
     private static bool SameEvidence(DocumentExtraction left, DocumentExtraction right) =>
-        left.SourceAttempt.Equals(right.SourceAttempt) && left.ParserVersion == right.ParserVersion &&
-        left.NormalizationVersion == right.NormalizationVersion && left.Text == right.Text &&
+        left.SourceAttempt.Equals(right.SourceAttempt) && left.ExtractionVersion == right.ExtractionVersion &&
+        left.Text == right.Text &&
         (left.Profile is null ? right.Profile is null : left.Profile.Matches(right.Profile));
 
     private static string? SerializeProfile(DocumentContentProfile? profile) => profile is null ? null :

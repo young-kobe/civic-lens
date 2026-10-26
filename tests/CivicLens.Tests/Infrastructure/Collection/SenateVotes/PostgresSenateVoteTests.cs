@@ -222,7 +222,7 @@ public sealed class PostgresSenateVoteTests(PostgresCollection postgres) : IAsyn
     private Task<string> ExtractionAsync(string jobId)
     {
         var text = "Senate vote: 119 1 1\n" + Guid.NewGuid().ToString("N");
-        return extractions.SaveAsync(jobId, text, text, "parser", "normalizer");
+        return extractions.SaveAsync(jobId, text, text, "extraction");
     }
 
     private async Task<(string DetailJobId, string Chamber, long Congress, long Session, long Roll, long Ticks, string? BillType, long? BillNumber,

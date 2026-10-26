@@ -357,7 +357,7 @@ internal sealed class PublicationScenario
     internal static DocumentExtraction Extraction(string text, string attemptId, string url = "https://example.test/") => new(
         new(attemptId, "source", url, url, DateTimeOffset.UnixEpoch,
             new CollectionResponse(200, null, null, "text/html", []), new CaptureIdentity(new string('a', 64), 0)),
-        "parser", "normalizer", text);
+        "extraction", text);
 }
 
 internal sealed class FakeRenderer : IReleaseRenderer

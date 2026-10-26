@@ -389,7 +389,7 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
     private Task<string> ExtractionAsync(string jobId)
     {
         var text = "House vote: 119 1 100\n" + Guid.NewGuid().ToString("N");
-        return extractions.SaveAsync(jobId, text, text, "parser", "normalizer");
+        return extractions.SaveAsync(jobId, text, text, "extraction");
     }
 
     private async Task<string> DetailJobAsync(string name, int roll, DateTimeOffset? listedAt = null)

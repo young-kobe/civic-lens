@@ -52,7 +52,7 @@ public sealed class DocumentComparison
         cancellationToken.ThrowIfCancellationRequested();
         var id = CreateId(before.ExtractionId, after.ExtractionId);
         if (!IsCompatible(before, after))
-            return new(id, before.ExtractionId, after.ExtractionId, DocumentComparisonStatus.Incompatible, "The extractions do not share source, requested URL, parser, normalization, and profile settings.", []);
+            return new(id, before.ExtractionId, after.ExtractionId, DocumentComparisonStatus.Incompatible, "The extractions do not share source, requested URL, extraction version, and profile revision.", []);
 
         var left = DocumentLines.Split(before.Text, MaximumLines);
         var right = DocumentLines.Split(after.Text, MaximumLines);
@@ -79,7 +79,7 @@ public sealed class DocumentComparison
     private static bool IsCompatible(DocumentExtraction before, DocumentExtraction after) =>
         before.SourceAttempt.SourceId == after.SourceAttempt.SourceId &&
         before.SourceAttempt.RequestedUrl == after.SourceAttempt.RequestedUrl &&
-        before.ParserVersion == after.ParserVersion && before.NormalizationVersion == after.NormalizationVersion &&
+        before.ExtractionVersion == after.ExtractionVersion &&
         ((before.Profile is null && after.Profile is null) || before.Profile?.Matches(after.Profile) == true);
 
     private static ImmutableArray<DocumentComparisonHunk>? BuildHunks(ImmutableArray<DocumentLine> left,

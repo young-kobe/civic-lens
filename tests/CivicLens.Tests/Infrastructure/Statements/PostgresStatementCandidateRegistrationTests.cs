@@ -42,7 +42,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
     public async Task ExtractionFromADiscoveryAdmittedJobRegistersOneCandidateAndOnePendingGateRow()
     {
         var attempt = await seeder.ImportAsync("Press release.", ArticleUrl, CandidateJobKind.DiscoveryAdmitted);
-        var extraction = new DocumentExtraction(attempt, "parser-v1", "normalization-v1", "Press release.");
+        var extraction = new DocumentExtraction(attempt, "parser-v1", "Press release.");
 
         await extractions.SaveAsync(extraction, CancellationToken.None);
 
@@ -56,7 +56,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
     {
         var attempt = await seeder.ImportAsync("Policy page.", ArticleUrl, CandidateJobKind.WatchedPage);
 
-        await extractions.SaveAsync(new DocumentExtraction(attempt, "p", "n", "Policy page."), CancellationToken.None);
+        await extractions.SaveAsync(new DocumentExtraction(attempt, "p", "Policy page."), CancellationToken.None);
 
         Assert.Empty(await CandidatesAsync());
         Assert.Empty(await AnalysisRowsAsync());
@@ -67,7 +67,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
     {
         var attempt = await seeder.ImportAsync("Bill text.", ArticleUrl, CandidateJobKind.BillStream);
 
-        await extractions.SaveAsync(new DocumentExtraction(attempt, "p", "n", "Bill text."), CancellationToken.None);
+        await extractions.SaveAsync(new DocumentExtraction(attempt, "p", "Bill text."), CancellationToken.None);
 
         Assert.Empty(await CandidatesAsync());
         Assert.Empty(await AnalysisRowsAsync());
@@ -78,7 +78,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
     {
         var attempt = await seeder.ImportAsync("Imported by hand.", ArticleUrl, CandidateJobKind.None);
 
-        await extractions.SaveAsync(new DocumentExtraction(attempt, "p", "n", "Imported by hand."), CancellationToken.None);
+        await extractions.SaveAsync(new DocumentExtraction(attempt, "p", "Imported by hand."), CancellationToken.None);
 
         Assert.Empty(await CandidatesAsync());
     }
@@ -87,12 +87,12 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
     public async Task RefetchAndParserUpgradeForTheSameSourceAndUrlKeepTheFirstCandidate()
     {
         var first = await seeder.ImportAsync("First text.", ArticleUrl, CandidateJobKind.DiscoveryAdmitted);
-        var firstExtraction = new DocumentExtraction(first, "parser-v1", "n", "First text.");
+        var firstExtraction = new DocumentExtraction(first, "parser-v1", "First text.");
         await extractions.SaveAsync(firstExtraction, CancellationToken.None);
-        await extractions.SaveAsync(new DocumentExtraction(first, "parser-v2", "n", "First text, reparsed."), CancellationToken.None);
+        await extractions.SaveAsync(new DocumentExtraction(first, "parser-v2", "First text, reparsed."), CancellationToken.None);
         var refetch = await seeder.ImportAsync("Edited text.", ArticleUrl, CandidateJobKind.DiscoveryAdmitted);
 
-        await extractions.SaveAsync(new DocumentExtraction(refetch, "parser-v2", "n", "Edited text."), CancellationToken.None);
+        await extractions.SaveAsync(new DocumentExtraction(refetch, "parser-v2", "Edited text."), CancellationToken.None);
 
         Assert.Equal([(first.SourceId, ArticleUrl, firstExtraction.ExtractionId, first.AttemptId)], await CandidatesAsync());
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM statement_analysis"));
@@ -105,8 +105,8 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
         var one = await seeder.ImportAsync("Text one.", ArticleUrl, CandidateJobKind.DiscoveryAdmitted, sourceId: "source-one");
         var two = await seeder.ImportAsync("Text two.", ArticleUrl, CandidateJobKind.DiscoveryAdmitted, sourceId: "source-two");
 
-        await extractions.SaveAsync(new DocumentExtraction(one, "p", "n", "Text one."), CancellationToken.None);
-        await extractions.SaveAsync(new DocumentExtraction(two, "p", "n", "Text two."), CancellationToken.None);
+        await extractions.SaveAsync(new DocumentExtraction(one, "p", "Text one."), CancellationToken.None);
+        await extractions.SaveAsync(new DocumentExtraction(two, "p", "Text two."), CancellationToken.None);
 
         Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM statement_candidates"));
     }
@@ -118,7 +118,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
         for (var index = 0; index < 6; index++)
         {
             var text = "Version " + index;
-            saves.Add(new DocumentExtraction(await seeder.ImportAsync(text, ArticleUrl, CandidateJobKind.DiscoveryAdmitted), "p", "n", text));
+            saves.Add(new DocumentExtraction(await seeder.ImportAsync(text, ArticleUrl, CandidateJobKind.DiscoveryAdmitted), "p", text));
         }
 
         await Task.WhenAll(saves.Select(extraction => extractions.SaveAsync(extraction, CancellationToken.None)));
@@ -139,7 +139,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
         var attempt = await seeder.ImportAsync("Press release.", ArticleUrl, CandidateJobKind.DiscoveryAdmitted);
 
         await Assert.ThrowsAnyAsync<Exception>(() => extractions.SaveAsync(
-            new DocumentExtraction(attempt, "p", "n", "Press release."), CancellationToken.None));
+            new DocumentExtraction(attempt, "p", "Press release."), CancellationToken.None));
 
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM document_extractions"));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM statement_candidates"));
@@ -155,7 +155,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
         await ExecuteAsync(listener, "LISTEN civic_lens_analysis");
         var attempt = await seeder.ImportAsync("Press release.", ArticleUrl, CandidateJobKind.DiscoveryAdmitted);
 
-        await extractions.SaveAsync(new DocumentExtraction(attempt, "p", "n", "Press release."), CancellationToken.None);
+        await extractions.SaveAsync(new DocumentExtraction(attempt, "p", "Press release."), CancellationToken.None);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var waiting = listener.WaitAsync(timeout.Token);
 
@@ -171,7 +171,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
         var text = "Said: I back H.Con.Res. 14 today.";
         var attempt = await seeder.ImportAsync(text, ArticleUrl, CandidateJobKind.DiscoveryAdmitted, observedAt: In119th);
 
-        await extractions.SaveAsync(new DocumentExtraction(attempt, "parser-v1", "normalization-v1", text), CancellationToken.None);
+        await extractions.SaveAsync(new DocumentExtraction(attempt, "parser-v1", text), CancellationToken.None);
 
         Assert.Equal(1L, await ScalarAsync($"SELECT priority::bigint FROM vote_analysis WHERE candidate_id = '{new string('1', 64)}'"));
         Assert.Equal(3L, await ScalarAsync($"SELECT priority::bigint FROM vote_analysis WHERE candidate_id = '{new string('2', 64)}'"));
@@ -185,7 +185,7 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
         var text = "Said: I back H.Con.Res. 14 today.";
         var attempt = await seeder.ImportAsync(text, ArticleUrl, CandidateJobKind.DiscoveryAdmitted, observedAt: In119th);
 
-        await extractions.SaveAsync(new DocumentExtraction(attempt, "parser-v1", "normalization-v1", text), CancellationToken.None);
+        await extractions.SaveAsync(new DocumentExtraction(attempt, "parser-v1", text), CancellationToken.None);
 
         Assert.Equal(3L, await ScalarAsync($"SELECT priority::bigint FROM vote_analysis WHERE candidate_id = '{new string('1', 64)}'"));
         Assert.Equal(1L, await ScalarAsync($"SELECT priority::bigint FROM vote_analysis WHERE candidate_id = '{new string('2', 64)}'"));

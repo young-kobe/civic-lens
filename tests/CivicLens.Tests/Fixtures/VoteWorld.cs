@@ -94,7 +94,7 @@ internal sealed class VoteWorld
 
     public VoteDraftEvidence Evidence(VoteDraftRevision? current = null, DateTimeOffset? updatedAt = null, bool hasNewerCandidate = false) =>
         new(new VoteDraftCandidate(CandidateId, RecordId, SourceId, Chamber.House, 119, 1, 100, "hconres", 14, updatedAt ?? UpdatedAt), Revision,
-            Page("detail", HouseVoteParser.Version), Page("members", HouseVoteMembersParser.Version), BillPage(), current, hasNewerCandidate);
+            Page("detail", HouseVoteParser.ExtractionVersion), Page("members", HouseVoteMembersParser.ExtractionVersion), BillPage(), current, hasNewerCandidate);
 
     public static string ExtractionIdOf(string jobId) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(jobId)));
 
@@ -104,19 +104,19 @@ internal sealed class VoteWorld
         return texts[jobId].Substring(span.Start, span.Length);
     }
 
-    public void SetVersion(string jobId, string parserVersion) => versionOverrides[jobId] = parserVersion;
+    public void SetVersion(string jobId, string extractionVersion) => versionOverrides[jobId] = extractionVersion;
 
     public void TamperWithSavedText(string jobId, string text) => texts[jobId] = text;
 
     public void ReplaceCapturedBody(string jobId, string body) => bodies["attempt-" + jobId] = body;
 
     private VoteDraftPage BillPage() =>
-        new("bill", ExtractionIdOf("bill"), versionOverrides.GetValueOrDefault("bill") ?? CongressBillParser.Version,
-            CongressBillRenderer.NormalizationVersion, texts["bill"]);
+        new("bill", ExtractionIdOf("bill"), versionOverrides.GetValueOrDefault("bill") ?? CongressBillParser.ExtractionVersion,
+            texts["bill"]);
 
-    private VoteDraftPage Page(string jobId, string parserVersion) =>
-        new(jobId, ExtractionIdOf(jobId), versionOverrides.GetValueOrDefault(jobId) ?? parserVersion,
-            HouseVoteRenderer.NormalizationVersion, texts[jobId]);
+    private VoteDraftPage Page(string jobId, string extractionVersion) =>
+        new(jobId, ExtractionIdOf(jobId), versionOverrides.GetValueOrDefault(jobId) ?? extractionVersion,
+            texts[jobId]);
 
     private static string MembersBody(MemberSpec[] members) => JsonSerializer.Serialize(new
     {

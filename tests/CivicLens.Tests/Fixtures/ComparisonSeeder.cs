@@ -16,8 +16,8 @@ internal sealed class ComparisonSeeder(PostgresCollectionAttemptStore attempts, 
 {
     public async Task<DocumentComparison> SaveAsync(string beforeText, string afterText)
     {
-        var before = new DocumentExtraction(await ImportAsync(beforeText), "parser", "normalizer", beforeText);
-        var after = new DocumentExtraction(await ImportAsync(afterText), "parser", "normalizer", afterText);
+        var before = new DocumentExtraction(await ImportAsync(beforeText), "parser", beforeText);
+        var after = new DocumentExtraction(await ImportAsync(afterText), "parser", afterText);
         await extractions.SaveAsync(before, CancellationToken.None);
         await extractions.SaveAsync(after, CancellationToken.None);
         return await comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, CancellationToken.None);

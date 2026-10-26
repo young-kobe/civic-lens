@@ -2,7 +2,7 @@ namespace CivicLens.Application.Collection.HouseVotes;
 
 public static class HouseVoteParser
 {
-    public const string Version = "congress-house-vote-v1";
+    public const string ExtractionVersion = "congress-house-vote-v1";
 
     public static HouseVoteDetail Parse(ReadOnlySpan<byte> json, HouseVoteRoll expected)
     {

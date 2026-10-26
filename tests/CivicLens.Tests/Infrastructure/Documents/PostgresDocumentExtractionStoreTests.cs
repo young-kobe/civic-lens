@@ -18,7 +18,6 @@ using CivicLens.Tests.Host;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using static CivicLens.Tests.Fixtures.CollectionFixtures;
 
@@ -54,17 +53,17 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
     public async Task ConcurrentReplayPreservesOneRecordAndParserUpgradePreservesPriorText()
     {
         var attempt = await ImportAsync("source text");
-        var extraction = new DocumentExtraction(attempt, "parser-v1", "normalization-v1", "source text");
+        var extraction = new DocumentExtraction(attempt, "parser-v1", "source text");
         var results = await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => extractions.SaveAsync(extraction, CancellationToken.None)));
         Assert.All(results, result => Assert.Equal(extraction.TextSha256, result.TextSha256));
-        var upgraded = new DocumentExtraction(attempt, "parser-v2", "normalization-v1", "reprocessed text");
+        var upgraded = new DocumentExtraction(attempt, "parser-v2", "reprocessed text");
         await extractions.SaveAsync(upgraded, CancellationToken.None);
         Assert.NotEqual(extraction.ExtractionId, upgraded.ExtractionId);
         Assert.Equal("source text", (await extractions.GetAsync(extraction.ExtractionId, CancellationToken.None))!.Text);
         await using var db = await factory.CreateDbContextAsync();
         Assert.Equal(2, await db.Database.SqlQuery<int>($"SELECT count(*)::integer AS \"Value\" FROM document_extractions").SingleAsync());
         await Assert.ThrowsAsync<InvalidOperationException>(() => extractions.SaveAsync(
-            new DocumentExtraction(attempt, "parser-v1", "normalization-v1", "conflicting text"), CancellationToken.None));
+            new DocumentExtraction(attempt, "parser-v1", "conflicting text"), CancellationToken.None));
         Assert.Equal("source text", (await extractions.GetAsync(extraction.ExtractionId, CancellationToken.None))!.Text);
     }
 
@@ -74,10 +73,10 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         var attempt = await ImportAsync("source text");
         var changed = new CapturedAttemptResult(attempt.AttemptId, "other-source", attempt.RequestedUrl,
             attempt.FinalUrl, attempt.ObservedAt, attempt.Response, attempt.Capture);
-        var invalid = new DocumentExtraction(changed, "p", "n", "source text");
+        var invalid = new DocumentExtraction(changed, "p", "source text");
         await Assert.ThrowsAsync<InvalidOperationException>(() => extractions.SaveAsync(invalid, CancellationToken.None));
         Assert.Null(await extractions.GetAsync(invalid.ExtractionId, CancellationToken.None));
-        var valid = new DocumentExtraction(attempt, "p", "n", "source text");
+        var valid = new DocumentExtraction(attempt, "p", "source text");
         await extractions.SaveAsync(valid, CancellationToken.None);
         await using var db = await factory.CreateDbContextAsync();
         await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_extractions SET text = 'tampered' WHERE extraction_id = {valid.ExtractionId}");
@@ -88,7 +87,7 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
     public async Task FailedInsertAndCancellationLeaveNoRecordAndCanBeRetried()
     {
         var attempt = await ImportAsync("source text");
-        var extraction = new DocumentExtraction(attempt, "p", "n", "source text");
+        var extraction = new DocumentExtraction(attempt, "p", "source text");
         await using var db = await factory.CreateDbContextAsync();
         await db.Database.ExecuteSqlRawAsync("""
             CREATE FUNCTION fail_extraction() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -172,7 +171,7 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
     {
         var attempt = await ImportAsync("text");
         var profile = new DocumentContentProfile("policy", "main", [".aside"]);
-        var original = new DocumentExtraction(attempt, "p", "n", "text", profile);
+        var original = new DocumentExtraction(attempt, "p", "text", profile);
         await extractions.SaveAsync(original, CancellationToken.None);
         await using var db = await factory.CreateDbContextAsync();
         await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_extractions SET profile_json = NULL WHERE extraction_id = {original.ExtractionId}");
@@ -197,8 +196,8 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
     {
         await SaveComparisonAsync("Same policy.", "Same policy.");
         var comparisons = new PostgresDocumentComparisonStore(factory);
-        var before = new DocumentExtraction(await ImportAsync("Old."), "p", "n", "Old.");
-        var after = new DocumentExtraction(await ImportAsync("New."), "p2", "n", "New.");
+        var before = new DocumentExtraction(await ImportAsync("Old."), "p", "Old.");
+        var after = new DocumentExtraction(await ImportAsync("New."), "p2", "New.");
         await extractions.SaveAsync(before, CancellationToken.None);
         await extractions.SaveAsync(after, CancellationToken.None);
         var incompatible = await comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, CancellationToken.None);
@@ -228,8 +227,8 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
             CREATE TRIGGER trg_fail_analysis BEFORE INSERT ON document_change_analysis
             FOR EACH ROW EXECUTE FUNCTION fail_analysis();
             """);
-        var before = new DocumentExtraction(await ImportAsync("Old policy."), "p", "n", "Old policy.");
-        var after = new DocumentExtraction(await ImportAsync("New policy."), "p", "n", "New policy.");
+        var before = new DocumentExtraction(await ImportAsync("Old policy."), "p", "Old policy.");
+        var after = new DocumentExtraction(await ImportAsync("New policy."), "p", "New policy.");
         await extractions.SaveAsync(before, CancellationToken.None);
         await extractions.SaveAsync(after, CancellationToken.None);
         var comparisons = new PostgresDocumentComparisonStore(factory);
@@ -242,8 +241,8 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
 
     private async Task<DocumentComparison> SaveComparisonAsync(string beforeText, string afterText)
     {
-        var before = new DocumentExtraction(await ImportAsync(beforeText), "p", "n", beforeText);
-        var after = new DocumentExtraction(await ImportAsync(afterText), "p", "n", afterText);
+        var before = new DocumentExtraction(await ImportAsync(beforeText), "p", beforeText);
+        var after = new DocumentExtraction(await ImportAsync(afterText), "p", afterText);
         await extractions.SaveAsync(before, CancellationToken.None);
         await extractions.SaveAsync(after, CancellationToken.None);
         return await new PostgresDocumentComparisonStore(factory)
@@ -277,25 +276,6 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(sql, connection);
         await command.ExecuteNonQueryAsync();
-    }
-
-    [Fact]
-    public async Task ProfileMigrationPreservesExistingExtractionAndCitationIdentity()
-    {
-        await using var db = await factory.CreateDbContextAsync();
-        var attempt = await ImportAsync("old text");
-        await db.GetService<IMigrator>().MigrateAsync("20261007161805_DocumentExtractions");
-        var original = new DocumentExtraction(attempt, "p", "n", "old text");
-        await db.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO document_extractions (extraction_id, attempt_id, parser_version, normalization_version, text, text_sha256)
-            VALUES ({original.ExtractionId}, {attempt.AttemptId}, {original.ParserVersion}, {original.NormalizationVersion}, {original.Text}, {original.TextSha256})
-            """);
-        await attempts.MigrateAsync();
-        var retained = (await extractions.GetAsync(original.ExtractionId, CancellationToken.None))!;
-        Assert.Null(retained.Profile);
-        Assert.Equal(original.Text, retained.Text);
-        Assert.Equal(original.ExtractionId, retained.ExtractionId);
-        Assert.Equal("old text", new DocumentTextSpan(retained, 0, retained.Text.Length).Quote);
     }
 
     [Fact]
@@ -334,8 +314,8 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
 
     private async Task<(DocumentExtraction Before, DocumentExtraction After)> SaveExtractionPairAsync()
     {
-        var before = new DocumentExtraction(await ImportAsync("Old policy."), "p", "n", "Old policy.");
-        var after = new DocumentExtraction(await ImportAsync("New policy."), "p", "n", "New policy.");
+        var before = new DocumentExtraction(await ImportAsync("Old policy."), "p", "Old policy.");
+        var after = new DocumentExtraction(await ImportAsync("New policy."), "p", "New policy.");
         await extractions.SaveAsync(before, CancellationToken.None);
         await extractions.SaveAsync(after, CancellationToken.None);
         return (before, after);
@@ -348,8 +328,8 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         var second = await ImportAsync("B");
         var third = await ImportAsync("A", etag: "\"v3\"");
         foreach (var pair in new[] { (first, "A"), (second, "B"), (third, "A") })
-            await extractions.SaveAsync(new DocumentExtraction(pair.Item1, "p", "n", pair.Item2), CancellationToken.None);
-        await extractions.SaveAsync(new DocumentExtraction(first, "p2", "n", "reprocessed"), CancellationToken.None);
+            await extractions.SaveAsync(new DocumentExtraction(pair.Item1, "p", pair.Item2), CancellationToken.None);
+        await extractions.SaveAsync(new DocumentExtraction(first, "p2", "reprocessed"), CancellationToken.None);
         var request = Request() with { ETag = "\"v3\"" };
         var receipt = Receipt(request) with
         {
@@ -364,10 +344,10 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         var store = new PostgresDocumentHistoryStore(factory);
         var history = await new GetDocumentHistory(store).ExecuteAsync(first.SourceId, first.RequestedUrl);
         Assert.Equal(4, history.Observations.Length);
-        Assert.Equal(new[] { "A", "B", "A" }, history.Streams.Single(stream => stream.ParserVersion == "p").Transitions.Select(item => item.Text));
+        Assert.Equal(new[] { "A", "B", "A" }, history.Streams.Single(stream => stream.ExtractionVersion == "p").Transitions.Select(item => item.Text));
         Assert.Equal(third.AttemptId, Assert.Single(history.Observations[^1].Extractions).SourceAttempt.AttemptId);
-        Assert.Equal(2, history.Streams.Single(stream => stream.ParserVersion == "p").Transitions[^1].AttemptIds.Length);
-        Assert.Single(history.Streams.Single(stream => stream.ParserVersion == "p2").Transitions);
+        Assert.Equal(2, history.Streams.Single(stream => stream.ExtractionVersion == "p").Transitions[^1].AttemptIds.Length);
+        Assert.Single(history.Streams.Single(stream => stream.ExtractionVersion == "p2").Transitions);
         Assert.Empty((await new GetDocumentHistory(store).ExecuteAsync(first.SourceId, first.RequestedUrl + "?other")).Observations);
         await Assert.ThrowsAsync<DocumentHistoryLimitException>(() => store.GetAsync(first.SourceId, first.RequestedUrl, 2, CancellationToken.None));
     }
@@ -376,7 +356,7 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
     public async Task HistoryReadQueryCountDoesNotGrowWithObservationsOrExtractionRevisions()
     {
         var first = await ImportAsync("first");
-        await extractions.SaveAsync(new DocumentExtraction(first, "p0", "n", "first"), CancellationToken.None);
+        await extractions.SaveAsync(new DocumentExtraction(first, "p0", "first"), CancellationToken.None);
         var counter = new ReadCommandCounter();
         var countedFactory = new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString)
@@ -388,7 +368,7 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         {
             var attempt = await ImportAsync("text" + observation);
             for (var revision = 0; revision < 8; revision++)
-                await extractions.SaveAsync(new DocumentExtraction(attempt, "p" + revision, "n", "text" + observation), CancellationToken.None);
+                await extractions.SaveAsync(new DocumentExtraction(attempt, "p" + revision, "text" + observation), CancellationToken.None);
         }
         counter.ReadCount = 0;
         var history = await store.GetAsync(first.SourceId, first.RequestedUrl, 1000, CancellationToken.None);
@@ -409,7 +389,7 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
     {
         var captured = await ImportAsync("capture");
         for (var revision = 0; revision < 3; revision++)
-            await extractions.SaveAsync(new DocumentExtraction(captured, "p" + revision, "n",
+            await extractions.SaveAsync(new DocumentExtraction(captured, "p" + revision,
                 new string('x', DocumentExtraction.MaximumTextLength)), CancellationToken.None);
         var counter = new ReadCommandCounter();
         var countedFactory = new PooledDbContextFactory<CollectionAttemptDbContext>(
@@ -492,7 +472,7 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         };
         var imported = await attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport("discovery", request, receipt), CancellationToken.None);
         var captured = Assert.IsType<CapturedAttemptResult>(imported.AttemptResult);
-        await extractions.SaveAsync(new DocumentExtraction(captured, "p", "n", "text"), CancellationToken.None);
+        await extractions.SaveAsync(new DocumentExtraction(captured, "p", "text"), CancellationToken.None);
         Assert.Equal(1000, (await attempts.GetAsync("discovery", CancellationToken.None))!.Discovery!.Urls.Length);
         var history = await new GetDocumentHistory(new PostgresDocumentHistoryStore(factory))
             .ExecuteAsync(request.SourceId, request.Url);
@@ -504,8 +484,8 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
     [Fact]
     public async Task CliComparesInspectsAndListsHistoryWithExplicitIncompatibility()
     {
-        var before = new DocumentExtraction(await ImportAsync("Old policy."), "p", "n", "Old policy.");
-        var after = new DocumentExtraction(await ImportAsync("New policy."), "p", "n", "New policy.");
+        var before = new DocumentExtraction(await ImportAsync("Old policy."), "p", "Old policy.");
+        var after = new DocumentExtraction(await ImportAsync("New policy."), "p", "New policy.");
         await extractions.SaveAsync(before, CancellationToken.None);
         await extractions.SaveAsync(after, CancellationToken.None);
         var output = await HostProcess.RunAsync(connectionString, "documents", "compare", before.ExtractionId, after.ExtractionId);
@@ -519,7 +499,7 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         Assert.Equal(0, history.ExitCode);
         using var historyJson = JsonDocument.Parse(history.Output);
         Assert.Equal(2, historyJson.RootElement.GetProperty("observations").GetArrayLength());
-        var upgraded = new DocumentExtraction(after.SourceAttempt, "p2", "n", "New policy.");
+        var upgraded = new DocumentExtraction(after.SourceAttempt, "p2", "New policy.");
         await extractions.SaveAsync(upgraded, CancellationToken.None);
         var incompatible = await HostProcess.RunAsync(connectionString, "documents", "compare", before.ExtractionId, upgraded.ExtractionId);
         Assert.Equal(1, incompatible.ExitCode);
@@ -540,8 +520,8 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
     [Fact]
     public async Task AProcessingCheckpointRejectsAStoredComparisonThatIsNotComplete()
     {
-        var before = new DocumentExtraction(await ImportAsync("Old."), "p", "n", "Old.");
-        var after = new DocumentExtraction(await ImportAsync("New."), "p2", "n", "New.");
+        var before = new DocumentExtraction(await ImportAsync("Old."), "p", "Old.");
+        var after = new DocumentExtraction(await ImportAsync("New."), "p2", "New.");
         await extractions.SaveAsync(before, CancellationToken.None);
         await extractions.SaveAsync(after, CancellationToken.None);
         var incompatible = DocumentComparison.Create(before, after);

@@ -10,8 +10,7 @@ public static class EvidenceFacts
     [
         new("Observed", Moment.Full(extraction.SourceAttempt.ObservedAt)),
         new("URL", extraction.SourceAttempt.RequestedUrl),
-        new("Parser", extraction.ParserVersion),
-        new("Normalization", extraction.NormalizationVersion),
+        new("Extraction version", extraction.ExtractionVersion),
         new("Content profile", extraction.Profile is { } profile ? $"{profile.Id}, revision {profile.RevisionId[..8]}" : "None")
     ];
 

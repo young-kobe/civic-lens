@@ -248,9 +248,9 @@ Statements branch at step 6: an admitted article becomes a candidate in `stateme
 
 ## Behavior versions
 
-Each version below has one owner. This table only points to the owners. No shared version file exists, because layers must not depend on one. Bump a version when its behavior changes in a way that old stored data would no longer match. Keep the old behavior readable. A bump-guard test next to each owner pins sample output and the current value. It fails with the name of the constant to bump. The collection protocol and the collection configuration have no bump guard.
+Each version below has one owner. This table only points to the owners. No shared version file exists, because layers must not depend on one. Bump a version when its behavior changes in a way that old stored data would no longer match. Keep the old behavior readable. A bump-guard test next to each owner pins sample output and the current value. It fails with the name of the constant to bump. The collection protocol and the collection configuration have no bump guard. The API extraction rows are guarded by the preparation tests, which pin each version beside its sample rendered text.
 
-Before the first production deploy ([R-23](roadmap.md#later)), reset the development database. Collapse the protocol, configuration, schema, parser, and behavior versions to one baseline version 1. Squash the EF migrations into one initial migration, and delete all older readers. Merge the parser and normalization versions of an extraction into one version. Name each rule set by its behavior, for example `html-text-v1` in place of `capture-text-v2`. After the first deploy, versions only grow.
+Before the first production deploy ([R-23](roadmap.md#later)), reset the development database. Collapse the protocol, configuration, schema, parser, and behavior versions to one baseline version 1. Squash the EF migrations into one initial migration, and delete all older readers. Each extraction has one extraction version that names its behavior, for example `html-text-v1`. After the first deploy, versions only grow.
 
 | Version | Current value | Owner | Binds | Bump when |
 | --- | --- | --- | --- | --- |
@@ -259,8 +259,14 @@ Before the first production deploy ([R-23](roadmap.md#later)), reset the develop
 | Publication schema | `1` | `src/CivicLens.Publication.Contracts/PublicationProtocol.cs` | Release manifests and record JSON | The published JSON shape changes |
 | Collection configuration | `1` | `src/CivicLens.Application/Collection/CollectionConfiguration.cs` | Configuration files and stored revision snapshots | Coverage or source fields change meaning |
 | Issue configuration | `1` | `src/CivicLens.Application/Issues/IssueConfiguration.cs` (revisions in `IssueConfigurationRevision.cs`) | `config/issues.json` and revision IDs | The snapshot format changes |
-| Parser | `capture-text-v2` | `src/CivicLens.Infrastructure/Documents/CaptureDocumentTextExtractor.cs` | Extraction IDs, text, and citations | HTML or text decoding output changes |
-| Normalization | `body-text-v1` | same file | Extraction IDs, text, and citations | Whitespace or block-separator rules change |
+| HTML and text extraction | `html-text-v1` | `src/CivicLens.Infrastructure/Documents/CaptureDocumentTextExtractor.cs` | Extraction IDs, text, and citations | Decoding, whitespace, or block-separator output changes |
+| Bill detail extraction | `congress-bill-detail-v1` | `src/CivicLens.Application/Collection/Bills/CongressBillParser.cs` | Extraction IDs and text of a bill detail | The parse or the rendered text of a bill detail changes |
+| Bill cosponsors extraction | `congress-bill-cosponsors-v1` | `src/CivicLens.Application/Collection/Bills/CongressBillCosponsorsParser.cs` | Extraction IDs and text of a cosponsors page | The parse or the rendered text of a cosponsors page changes |
+| Bill actions extraction | `congress-bill-actions-v1` | `src/CivicLens.Application/Collection/Bills/CongressBillActionsParser.cs` | Extraction IDs and text of an actions page | The parse or the rendered text of an actions page changes |
+| Bill summaries extraction | `congress-bill-summaries-v1` plus the version of the HTML extraction | `src/CivicLens.Application/Collection/Bills/CongressBillSummariesParser.cs` | Extraction IDs and text of a summaries page | The parse or the rendered text of a summaries page changes |
+| House vote detail extraction | `congress-house-vote-v1` | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteParser.cs` | Extraction IDs, text, and citations of a House vote | The parse or the rendered text of a vote changes |
+| House vote members extraction | `congress-house-vote-members-v1` | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteMembersParser.cs` | Extraction IDs, text, and citations of a House member list | The parse or the rendered text of a member list changes |
+| Senate vote extraction | `congress-senate-vote-v1` | `src/CivicLens.Application/Collection/SenateVotes/SenateVoteParser.cs` | Extraction IDs, text, and citations of a Senate vote | The parse or the rendered text of a vote changes |
 | Comparison algorithm | `line-lcs-context-v1` | `src/CivicLens.Core/Documents/DocumentComparison.cs` | Stored comparison IDs and hunks | Hunk or word-edit output changes |
 | Comparison settings | `bounded-lines-2000-...-v1` | same file | Limits recorded with each comparison | Any limit constant changes |
 | Draft task | `document-change-draft-v1` | `src/CivicLens.Application/Analysis/DocumentChangeDraftTask.cs` | Analysis runs | Task flow or output handling changes |
@@ -276,7 +282,6 @@ Before the first production deploy ([R-23](roadmap.md#later)), reset the develop
 | Vote draft prompt | `vote-draft-prompt-v3` | same file | Vote analysis runs | Prompt text or input framing changes |
 | Vote draft schema | `vote-draft-schema-v1` | same file | Vote analysis runs | The model output schema changes |
 | Vote fingerprint | `vote-fingerprint-v1` | `src/CivicLens.Application/Votes/VoteFingerprint.cs` | The run input hash of a draft that makes no call | The canonical text of the fingerprint changes |
-| House vote render | `house-vote-render-v2` | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteRenderer.cs` | Vote extraction text and citations | The rendered text of a vote changes |
 | Sponsorship fingerprint | `action-fingerprint-v1` | `src/CivicLens.Application/Collection/Bills/ActionFingerprint.cs` | The fingerprint in each action revision | The canonical text of an entry changes |
 | Relationship draft task | `relationship-draft-v1` | `src/CivicLens.Application/Relationships/RelationshipDraftTask.cs` | Relationship analysis runs | Task flow or output handling changes |
 | Relationship draft prompt | `relationship-draft-prompt-v1` | same file | Relationship analysis runs | Prompt text or input framing changes |
@@ -300,7 +305,7 @@ Before the first production deploy ([R-23](roadmap.md#later)), reset the develop
 - **Capture**: the raw bytes of a response, stored once by SHA-256.
 - **Observation**: the stored record of an attempt, with its outcome and response metadata.
 - **Pacing key**: the origin or pacing group that limits how often jobs reach one host.
-- **Extraction**: the normalized text of one capture under one parser, normalization, and profile.
+- **Extraction**: the normalized text of one capture under one extraction version and profile.
 - **Comparison**: the stored diff of two compatible extractions of one source and URL.
 - **Candidate**: one item that analysis may draft: an article, a bill version, or a changed comparison.
 - **Gate**: a step that decides whether a candidate goes on to drafting.

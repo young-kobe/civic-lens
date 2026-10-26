@@ -116,7 +116,7 @@ public sealed class EvidencePagesTests(PostgresCollection postgres) : IAsyncLife
         var links = page.QuerySelectorAll("a").Select(link => link.GetAttribute("href")).ToArray();
         Assert.Contains("/Documents/Extraction?extractionId=" + before.ExtractionId, links);
         Assert.Contains("/Documents/Extraction?extractionId=" + after.ExtractionId, links);
-        Assert.Contains("parser-v1", page.QuerySelector(".tech")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("extraction-v1", page.QuerySelector(".tech")!.TextContent, StringComparison.Ordinal);
     }
 
     // A saved comparison with changed text shows both versions and may start a draft.

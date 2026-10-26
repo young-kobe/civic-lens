@@ -310,8 +310,8 @@ public sealed class PostgresEvidenceProcessingStoreTests(PostgresCollection post
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""
-            INSERT INTO document_extractions (extraction_id, attempt_id, parser_version, normalization_version, text, text_sha256)
-            VALUES (@extraction, @attempt, 'parser-v1', 'normalization-v1', 'text', @text_hash)
+            INSERT INTO document_extractions (extraction_id, attempt_id, extraction_version, text, text_sha256)
+            VALUES (@extraction, @attempt, 'extraction-v1', 'text', @text_hash)
             """, connection);
         command.Parameters.AddWithValue("extraction", ExtractionId(attemptId));
         command.Parameters.AddWithValue("attempt", attemptId);
@@ -494,8 +494,8 @@ public sealed class PostgresEvidenceProcessingStoreTests(PostgresCollection post
             INSERT INTO collection_attempts (attempt_id, source_id, requested_url, final_url, observed_at_utc_ticks,
                 outcome, has_response, response_status_code, response_content_encodings, has_sent_validators, capture_sha256)
             VALUES (@attempt, @source, @url, @url, @created, 'captured', TRUE, 200, ARRAY[]::text[], FALSE, @hash);
-            INSERT INTO document_extractions (extraction_id, attempt_id, parser_version, normalization_version, text, text_sha256)
-            VALUES (@extraction, @attempt, 'parser-v1', 'normalization-v1', 'text', @text_hash);
+            INSERT INTO document_extractions (extraction_id, attempt_id, extraction_version, text, text_sha256)
+            VALUES (@extraction, @attempt, 'extraction-v1', 'text', @text_hash);
             """, connection);
         command.Parameters.AddWithValue("job", jobId);
         command.Parameters.AddWithValue("key", "key-" + jobId);
