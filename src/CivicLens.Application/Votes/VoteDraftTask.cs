@@ -5,8 +5,8 @@ namespace CivicLens.Application.Votes;
 public static class VoteDraftTask
 {
     public const string Task = "vote-draft";
-    public const string TaskVersion = "vote-draft-v5";
-    public const string PromptVersion = "vote-draft-prompt-v3";
+    public const string TaskVersion = "vote-draft-v1";
+    public const string PromptVersion = "vote-draft-prompt-v1";
     public const string SchemaVersion = "vote-draft-schema-v1";
     public const string Model = "claude-haiku-5-5";
     public const string Effort = "medium";
