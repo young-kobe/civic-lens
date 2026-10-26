@@ -56,15 +56,15 @@ public sealed class CollectionConfigurationRevisionTests
         var malformedJson = "{";
         Assert.Throws<ArgumentException>(() => new CollectionConfigurationRevision(Hash(malformedJson), malformedJson));
 
-        const string invalidJson = "{\"version\":2,\"people\":[{\"id\":\"person\",\"name\":\"Official\"}],\"sources\":[{\"id\":\"source\",\"coverage\":[{\"personId\":\"person\"}],\"url\":\"relative\",\"allowedOrigin\":\"https://example.test\",\"allowedPathPrefix\":\"/\"}]}";
+        const string invalidJson = "{\"version\":1,\"people\":[{\"id\":\"person\",\"name\":\"Official\"}],\"sources\":[{\"id\":\"source\",\"coverage\":[{\"personId\":\"person\"}],\"url\":\"relative\",\"allowedOrigin\":\"https://example.test\",\"allowedPathPrefix\":\"/\"}]}";
         Assert.Throws<ArgumentException>(() => new CollectionConfigurationRevision(Hash(invalidJson), invalidJson));
     }
 
     [Fact]
-    public void VersionTwoRevisionWithoutBioguideIdRetainsItsOriginalJsonAndId()
+    public void RevisionWithoutBioguideIdRetainsItsOriginalJsonAndId()
     {
-        const string json = "{\"version\":2,\"people\":[{\"id\":\"person\",\"name\":\"Official\"}],\"sources\":[{\"id\":\"source\",\"coverage\":[{\"personId\":\"person\"}],\"url\":\"https://example.test/page\",\"allowedOrigin\":\"https://example.test\",\"allowedPathPrefix\":\"/\",\"mode\":\"page\",\"maxCandidates\":100,\"enabled\":true,\"maxRequests\":5,\"maxBytes\":2000000,\"timeoutSeconds\":30,\"minDelayMilliseconds\":1000}]}";
-        const string id = "58b41360ffe7248514604bf842588451d95d14c35acefccfe3d2507994273655";
+        const string json = "{\"version\":1,\"people\":[{\"id\":\"person\",\"name\":\"Official\"}],\"sources\":[{\"id\":\"source\",\"coverage\":[{\"personId\":\"person\"}],\"url\":\"https://example.test/page\",\"allowedOrigin\":\"https://example.test\",\"allowedPathPrefix\":\"/\",\"mode\":\"page\",\"maxCandidates\":100,\"enabled\":true,\"maxRequests\":5,\"maxBytes\":2000000,\"timeoutSeconds\":30,\"minDelayMilliseconds\":1000}]}";
+        const string id = "47d4eda0147b7865512e403224dd257444fbe472eea347d7dea6c555772e41e3";
 
         var revision = new CollectionConfigurationRevision(id, json);
 
@@ -78,7 +78,7 @@ public sealed class CollectionConfigurationRevisionTests
     {
         var configuration = new CollectionConfiguration
         {
-            Version = 2,
+            Version = 1,
             People = [new PersonConfiguration { Id = "person", Name = "Official", BioguideId = "W000817" }],
             Sources = [Configuration(["person"]).Sources[0]]
         };
@@ -94,7 +94,7 @@ public sealed class CollectionConfigurationRevisionTests
     {
         var configuration = new CollectionConfiguration
         {
-            Version = 2,
+            Version = 1,
             People = [new PersonConfiguration { Id = "person", Name = "Official", WikidataId = "Q22686" }],
             Sources = [Configuration(["person"]).Sources[0]]
         };

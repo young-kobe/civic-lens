@@ -20,7 +20,7 @@ public sealed class CollectionWorkspaceTests
     [InlineData((ReviewRole)99, "auth0|owner")]
     public async Task EveryCollectionEntryPointRejectsUnauthorizedActorsBeforeStorage(ReviewRole role, string subject)
     {
-        var configuration = new CollectionConfiguration { Version = 2, People = [], Sources = [] };
+        var configuration = new CollectionConfiguration { Version = 1, People = [], Sources = [] };
         var workspace = new CollectionWorkspace(configuration, null!, null!);
         var actor = new ReviewActor(subject, role);
         Assert.Throws<UnauthorizedAccessException>(() => workspace.GetConfiguration(actor));

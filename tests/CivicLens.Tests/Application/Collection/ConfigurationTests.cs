@@ -141,11 +141,11 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
-    public void VersionTwoCoverageUsesInclusiveStartExclusiveEndAndReturnsSortedIds()
+    public void CoverageUsesInclusiveStartExclusiveEndAndReturnsSortedIds()
     {
         var configuration = new CollectionConfiguration
         {
-            Version = 2,
+            Version = 1,
             People = [
                 new PersonConfiguration { Id = "z", Name = "Zed" },
                 new PersonConfiguration { Id = "a", Name = "Amy" }],
@@ -165,7 +165,7 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
-    public void VersionTwoRejectsOverlappingCoverageButAllowsAdjacentIntervalsAndDifferentPeople()
+    public void RejectsOverlappingCoverageButAllowsAdjacentIntervalsAndDifferentPeople()
     {
         var configuration = DatedConfiguration(
             [new SourceCoverageConfiguration { PersonId = "one", StartsOn = new DateOnly(2024, 1, 1), EndsBefore = new DateOnly(2024, 2, 1) },
@@ -225,7 +225,7 @@ public sealed class ConfigurationTests
     [Theory]
     [InlineData(null)]
     [InlineData("W000817")]
-    public void BioguideIdIsOptionalAndAcceptedInVersionTwo(string? bioguideId)
+    public void BioguideIdIsOptionalAndAccepted(string? bioguideId)
     {
         var person = new PersonConfiguration { Id = "one", Name = "One", BioguideId = bioguideId };
 
@@ -332,9 +332,9 @@ public sealed class ConfigurationTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(1)]
+    [InlineData(2)]
     [InlineData(3)]
-    public void OnlyConfigurationVersionTwoIsSupported(int version)
+    public void OnlyConfigurationVersionOneIsSupported(int version)
     {
         var configuration = ValidConfiguration([new PersonConfiguration { Id = "person", Name = "Official" }], ["person"]);
 
@@ -345,7 +345,7 @@ public sealed class ConfigurationTests
     public void LegacyPersonIdsMembershipIsRejectedByTheWireContract()
     {
         const string json = """
-            {"version":2,"people":[{"id":"person","name":"Official"}],"sources":[{"id":"shared","personIds":["person"],
+            {"version":1,"people":[{"id":"person","name":"Official"}],"sources":[{"id":"shared","personIds":["person"],
             "url":"http://127.0.0.1:8765/page.html","allowedOrigin":"http://127.0.0.1:8765","allowedPathPrefix":"/"}]}
             """;
 
@@ -384,7 +384,7 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
-    public void VersionTwoAcceptsAnApiSourceWithANamedCredentialAndPassesItToTheRequest()
+    public void AcceptsAnApiSourceWithANamedCredentialAndPassesItToTheRequest()
     {
         var configuration = ApiConfiguration(CollectionCredentials.CongressGov);
 
@@ -446,7 +446,7 @@ public sealed class ConfigurationTests
     private static CollectionConfiguration DatedConfiguration(SourceCoverageConfiguration[] coverage,
         PersonConfiguration? person = null) => new()
         {
-            Version = 2,
+            Version = 1,
             People = [person ?? new PersonConfiguration { Id = "one", Name = "One" },
             new PersonConfiguration { Id = "two", Name = "Two" }],
             Sources = [ValidSource([]) with { Coverage = coverage }]

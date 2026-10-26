@@ -55,7 +55,7 @@ HTML body text excludes `script`, `style`, `template`, and `noscript`. It collap
 
 ### Content profiles
 
-Configuration version 2 can define `documentProfiles`. A profile has an ID, one content selector, and excluded selectors. A source names its profile with `documentProfileId`. Several sources can share one profile.
+Configuration can define `documentProfiles`. A profile has an ID, one content selector, and excluded selectors. A source names its profile with `documentProfileId`. Several sources can share one profile.
 
 A selector is one ASCII tag name, `#id`, or `.class`. It has at most 128 characters, including its prefix. Identifiers match `[A-Za-z_][A-Za-z0-9_-]*`. A profile has at most 16 distinct exclusions. Compound selectors, combinators, attributes, pseudo-classes, and selector lists are not supported.
 

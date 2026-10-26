@@ -4,7 +4,7 @@ public sealed class ConfigurationFileTests
 {
     private const int Limit = 1_000_000;
     private const string Valid = """
-        {"version":2,"people":[{"id":"person","name":"Fixture"}],"sources":[
+        {"version":1,"people":[{"id":"person","name":"Fixture"}],"sources":[
           {"id":"source","coverage":[{"personId":"person"}],"url":"https://example.test/page",
            "allowedOrigin":"https://example.test","allowedPathPrefix":"/page"}]}
         """;

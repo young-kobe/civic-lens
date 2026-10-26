@@ -21,7 +21,7 @@ internal static class StatementDraftFixtures
 
     public static CollectionConfiguration Configuration(DateOnly? warrenEndsBefore = null) => new()
     {
-        Version = 2,
+        Version = 1,
         People = [new() { Id = Warren, Name = "Elizabeth Warren" }, new() { Id = Markey, Name = "Ed Markey" }],
         Sources =
         [

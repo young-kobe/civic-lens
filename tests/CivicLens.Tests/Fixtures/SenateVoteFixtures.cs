@@ -110,7 +110,7 @@ internal static class SenateVoteFixtures
 
     public static CollectionConfiguration Configuration(DiscoveryAdmissionPolicy? policy = null) => new()
     {
-        Version = 2,
+        Version = 1,
         People = [new PersonConfiguration { Id = "with-id-a", Name = "A", BioguideId = "A000001" }],
         Sources =
         [

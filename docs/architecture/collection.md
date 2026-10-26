@@ -75,7 +75,7 @@ The connectors are HTTP pages, RSS and Atom feeds, bounded HTML discovery, and J
 
 ### Collector protocol
 
-`Collection.Contracts` owns JSON protocol version 1. `CollectionRequest.Validate` accepts only version 1. The collector, stored attempts, discoveries, and handoffs use it. `CollectionResult.ValidateAgainst` and `DiscoveryResult.ValidateAgainst` call it. Other versions are unsupported. Configuration version 2 is independent of the collector protocol.
+`Collection.Contracts` owns JSON protocol version 1. `CollectionRequest.Validate` accepts only version 1. The collector, stored attempts, discoveries, and handoffs use it. `CollectionResult.ValidateAgainst` and `DiscoveryResult.ValidateAgainst` call it. Other versions are unsupported. Collection configuration version 1 is independent of the collector protocol.
 
 The collector accepts `collect <manifest.json>`. Both sides reject unsupported or missing versions, unknown fields, duplicate fields, and null required fields. Wire names are case-sensitive camelCase. Exit codes are 0 for `captured` or `notModified`, 1 for `failed` or `deferred`, and 2 for invalid input.
 
@@ -113,7 +113,7 @@ API mode still honors 429 with Retry-After, `minDelayMilliseconds` pacing, the b
 
 **Credentials.** An API request may name a `credential` from the closed list in `CollectionCredentials`. The only name is `congressGov`, which maps to the environment variable `CIVIC_LENS_CONGRESS_API_KEY`. The manifest, receipt, capture metadata, and diagnostics carry the name only, never the key.
 
-`CollectorProcess` keeps its strict environment allowlist and adds only the variable that the request names. The collector sends the value as the `X-Api-Key` header, only to the allowed origin. A missing or blank variable fails the attempt with `credentialUnavailable` before any request. Source configuration version 2 accepts `credential` only with mode `api`. The process adapter also removes `CIVIC_LENS_DATABASE` from the child environment.
+`CollectorProcess` keeps its strict environment allowlist and adds only the variable that the request names. The collector sends the value as the `X-Api-Key` header, only to the allowed origin. A missing or blank variable fails the attempt with `credentialUnavailable` before any request. Source configuration accepts `credential` only with mode `api`. The process adapter also removes `CIVIC_LENS_DATABASE` from the child environment.
 
 ### Robots and pacing
 
@@ -156,7 +156,7 @@ Application keeps the declared delay with the imported attempt evidence, also ze
 
 Settlement extends the origin deadline by the greater of configured and declared pacing, measured from database settlement time. Deferred observations also apply the shared retry backoff. Deadline arithmetic saturates at the maximum supported date.
 
-**Pacing groups.** Configuration v2 can define top-level `pacingGroups`. Each group has a lowercase `hostSuffix` of at least two labels and a `minDelayMilliseconds` from 1 to 3,600,000. Omitted groups leave the canonical JSON and the revision IDs unchanged. Duplicate suffixes are invalid.
+**Pacing groups.** Configuration can define top-level `pacingGroups`. Each group has a lowercase `hostSuffix` of at least two labels and a `minDelayMilliseconds` from 1 to 3,600,000. Omitted groups leave the canonical JSON and the revision IDs unchanged. Duplicate suffixes are invalid.
 
 `CollectionConfiguration.PacingGroupOf` resolves an origin. A host matches when it equals the suffix or ends with a dot and the suffix, so `evilhouse.gov` does not match `house.gov`. The longest matching suffix wins, so each origin has at most one group.
 

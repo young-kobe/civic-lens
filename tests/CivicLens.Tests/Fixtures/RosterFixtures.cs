@@ -54,7 +54,7 @@ internal static class RosterFixtures
 
     public static CollectionConfiguration Configuration(params PersonConfiguration[] people) => new()
     {
-        Version = 2,
+        Version = 1,
         People = people,
         Sources = [Source()]
     };

@@ -14,7 +14,7 @@ namespace CivicLens.Application.Collection;
 public sealed record CollectionConfiguration
 {
     [JsonRequired]
-    public int Version { get; init; } = 2;
+    public int Version { get; init; } = 1;
     public required PersonConfiguration[] People { get; init; }
     public required WatchedSourceConfiguration[] Sources { get; init; }
     public PacingGroupConfiguration[]? PacingGroups { get; init; }
@@ -32,7 +32,7 @@ public sealed record CollectionConfiguration
 
     public void Validate()
     {
-        if (Version != 2)
+        if (Version != 1)
             throw new ArgumentException("Unsupported collection configuration version.");
         if (People is null || Sources is null)
             throw new ArgumentException("People and sources are required.");

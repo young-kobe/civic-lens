@@ -236,7 +236,7 @@ public sealed class SourcesPageTests(PostgresCollection postgres) : IAsyncLifeti
         };
         var job = new CollectionJobRecord(new string('1', 32), CollectionFixtures.Definition(new CollectionConfiguration
         {
-            Version = 2,
+            Version = 1,
             People = [new PersonConfiguration { Id = "person", Name = "Official" }],
             Sources = [new WatchedSourceConfiguration { Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = request.Url, AllowedOrigin = request.AllowedOrigin, AllowedPathPrefix = request.AllowedPathPrefix }]
         }, "source"), "key", CollectionJobState.Failed, Retry, null, false,

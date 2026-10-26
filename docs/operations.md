@@ -46,11 +46,11 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- va
 
 Edit configuration to add people or shared sources. A source URL occurs once, with several `coverage` entries when needed. `enabled: false` prevents collection without removing the configuration. `allowedOrigin` includes the scheme and port. `allowedPathPrefix` permits that exact path and its descendants. The local example permits loopback explicitly. This tool is for trusted local configuration, not arbitrary public fetch requests. Keep credentials out of source URLs and manifests.
 
-Configuration version 2 is the only supported version. For example:
+Configuration version 1 is the only supported version. For example:
 
 ```json
 {
-  "version": 2,
+  "version": 1,
   "people": [{ "id": "example-official", "name": "Example Official" }],
   "sources": [{
     "id": "example-local-source",
@@ -400,11 +400,11 @@ Only captured HTML and plain-text attempts are supported. For a linked 304, sele
 
 ### Configure versioned HTML content selection
 
-In configuration v2, declare reusable profiles and name them from sources. This example targets synthetic local HTML with `<main>` and a `.related-news` subtree:
+In the configuration, declare reusable profiles and name them from sources. This example targets synthetic local HTML with `<main>` and a `.related-news` subtree:
 
 ```json
 {
-  "version": 2,
+  "version": 1,
   "people": [{ "id": "example-official", "name": "Example Official" }],
   "documentProfiles": [{ "id": "policy", "selector": "main", "excludedSelectors": [".related-news"] }],
   "sources": [{

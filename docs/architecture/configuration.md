@@ -23,13 +23,13 @@ Configuration defines the people, sources, coverage, profiles, and tracked issue
 
 Each line gives the rule, what enforces it, and the test that protects it. Cross-feature invariants are in [architecture](../architecture.md#invariants).
 
-- Only configuration version 2 loads. Enforced by `CollectionConfiguration`. Test: `ConfigurationTests.OnlyConfigurationVersionTwoIsSupported`.
+- Only configuration version 1 loads. Enforced by `CollectionConfiguration`. Test: `ConfigurationTests.OnlyConfigurationVersionOneIsSupported`.
 - A revision ID is the hash of its canonical snapshot. Enforced by `ConfigurationSnapshotRules`. Test: `CollectionConfigurationRevisionTests.ConstructorRejectsHashMismatchMalformedJsonAndInvalidConfiguration`.
 - Two people cannot share one bioguide ID. Enforced by `CollectionConfiguration`. Test: `ConfigurationTests.TwoPeopleCannotShareOneBioguideIdBecauseItNamesOneMember`.
 - Two people cannot share one Wikidata ID, and the ID has the form `Q` and digits without a leading zero. Enforced by `CollectionConfiguration`. Tests: `ConfigurationTests.WikidataIdMustBeQAndDigitsWithoutALeadingZero`, `ConfigurationTests.TwoPeopleCannotShareOneWikidataIdBecauseItNamesOnePerson`.
 - A person ID is lowercase words joined by hyphens, at most 60 characters, because the official page uses it as an address. `IssueConfiguration.ValidateId` owns the rule. Enforced by `CollectionConfiguration`. Test: `ConfigurationTests.APersonIdMustBeAPathSegmentBecauseTheOfficialPageUsesItAsAnAddress`.
 - An office has a title and a start date. It has an end date that does not precede the start, and an optional party. Titles and parties hold at most 256 characters, and a person has at most 64 offices. A person with a bioguide ID has no offices, because the roster gives their terms. Enforced by `CollectionConfiguration`. Tests: `ConfigurationTests.AnOfficeNeedsATitleADateAndAnEndThatDoesNotPrecedeItsStart`, `ConfigurationTests.AnOfficeIsRefusedForAPersonWithABioguideIdBecauseTheRosterGivesTheirTerms`.
-- Coverage intervals of one person on one source do not overlap. Enforced by `CollectionConfiguration`. Test: `ConfigurationTests.VersionTwoRejectsOverlappingCoverageButAllowsAdjacentIntervalsAndDifferentPeople`.
+- Coverage intervals of one person on one source do not overlap. Enforced by `CollectionConfiguration`. Test: `ConfigurationTests.RejectsOverlappingCoverageButAllowsAdjacentIntervalsAndDifferentPeople`.
 - A tracked issue links to a known policy area. Enforced by `IssueConfiguration`. Test: `IssueConfigurationRevisionTests.IssueMustLinkToKnownPolicyAreaSoItCanReachBills`.
 - A job definition names a configuration revision and a coverage date. Enforced by `CollectionJobDefinition.Validate`. Test: `CollectionJobDefinitionTests.BindingRejectsMissingContextChangedSettingsAndInactiveCoverage`.
 
@@ -37,7 +37,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 
 ### People and sources
 
-Version 2 is the only supported collection configuration version. Each source has nonempty `coverage` entries. An entry has a `personId`, an optional `startsOn`, and an optional `endsBefore`. The wire contract rejects the older `personIds` field.
+Version 1 is the only supported collection configuration version. Each source has nonempty `coverage` entries. An entry has a `personId`, an optional `startsOn`, and an optional `endsBefore`. The wire contract rejects the older `personIds` field.
 
 A person has a stable `id` and a current display `name`. Optional dated `names` use the same date fields. A person can also carry a `bioguideId`, the Congress.gov member identifier: one uppercase letter and six digits. A person can also carry a `wikidataId`: the letter `Q` and digits, with no leading zero. A person can also carry an `offices` array for an official with no roster terms, such as a cabinet member. An office has a `title`, a `startsOn` date, an optional `endsOn` date, and an optional `party`. An office with no end is ongoing. Publication shows the offices only when the rosters give the person no terms. Two people cannot share one bioguide ID or one Wikidata ID. Snapshots leave out an absent `bioguideId` or `wikidataId`, so revision IDs without them do not change. No shipped person sets a `wikidataId` yet. A later change links the executive roster to people through it.
 

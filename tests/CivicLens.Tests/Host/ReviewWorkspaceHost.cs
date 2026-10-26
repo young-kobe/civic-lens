@@ -85,7 +85,7 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
         Directory.CreateDirectory(KeyDirectory);
         var collectionPath = Path.Combine(KeyDirectory, "sources.json");
         await File.WriteAllTextAsync(collectionPath, $$"""
-            {"version":2,"people":[{"id":{{JsonSerializer.Serialize(OfficialId)}},"name":{{JsonSerializer.Serialize(OfficialName)}}}],
+            {"version":1,"people":[{"id":{{JsonSerializer.Serialize(OfficialId)}},"name":{{JsonSerializer.Serialize(OfficialName)}}}],
              "documentProfiles":[{"id":"main","selector":"main"}],
              "sources":[{"id":"source","coverage":[{"personId":{{JsonSerializer.Serialize(OfficialId)}}}],
                "url":"https://example.test/pages/a","allowedOrigin":"https://example.test",

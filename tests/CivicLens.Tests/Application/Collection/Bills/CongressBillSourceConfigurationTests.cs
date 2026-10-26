@@ -74,7 +74,7 @@ public sealed class CongressBillSourceConfigurationTests
     {
         var configuration = new CollectionConfiguration
         {
-            Version = 2,
+            Version = 1,
             People = [new PersonConfiguration { Id = "p", Name = "P" }],
             Sources =
             [
@@ -88,7 +88,7 @@ public sealed class CongressBillSourceConfigurationTests
                 }
             ]
         };
-        const string expected = """{"version":2,"people":[{"id":"p","name":"P"}],"sources":[{"id":"s","coverage":[{"personId":"p"}],"url":"https://example.test/a","allowedOrigin":"https://example.test","allowedPathPrefix":"/","mode":"page","maxCandidates":100,"enabled":true,"maxRequests":5,"maxBytes":2000000,"timeoutSeconds":30,"minDelayMilliseconds":1000}]}""";
+        const string expected = """{"version":1,"people":[{"id":"p","name":"P"}],"sources":[{"id":"s","coverage":[{"personId":"p"}],"url":"https://example.test/a","allowedOrigin":"https://example.test","allowedPathPrefix":"/","mode":"page","maxCandidates":100,"enabled":true,"maxRequests":5,"maxBytes":2000000,"timeoutSeconds":30,"minDelayMilliseconds":1000}]}""";
 
         var revision = CollectionConfigurationRevision.Create(configuration);
 
@@ -109,7 +109,7 @@ public sealed class CongressBillSourceConfigurationTests
     }
 
     [Fact]
-    public void OtherVersionTwoSourcesStillNeedCoverage()
+    public void OtherSourcesStillNeedCoverage()
     {
         var configuration = Configuration();
 
@@ -304,7 +304,7 @@ public sealed class CongressBillSourceConfigurationTests
 
     internal static CollectionConfiguration Configuration() => new()
     {
-        Version = 2,
+        Version = 1,
         People =
         [
             new PersonConfiguration { Id = "with-id-a", Name = "A", BioguideId = "A000001" },

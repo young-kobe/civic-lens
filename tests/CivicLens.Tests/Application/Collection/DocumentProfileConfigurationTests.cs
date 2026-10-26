@@ -6,7 +6,7 @@ namespace CivicLens.Tests.Application.Collection;
 public sealed class DocumentProfileConfigurationTests
 {
     [Fact]
-    public void VersionTwoProfilesAreReusableAndSourcesResolveTheirAssignments()
+    public void ProfilesAreReusableAndSourcesResolveTheirAssignments()
     {
         var configuration = Configuration() with
         {
@@ -50,7 +50,7 @@ public sealed class DocumentProfileConfigurationTests
 
     private static CollectionConfiguration Configuration() => new()
     {
-        Version = 2,
+        Version = 1,
         People = [new PersonConfiguration { Id = "person", Name = "Person" }],
         Sources = [Source("source", null)]
     };

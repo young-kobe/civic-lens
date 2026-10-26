@@ -101,7 +101,7 @@ public sealed class ConfiguredCollectionSourceTests
 
     private static CollectionConfiguration Configuration(CollectionMode mode = CollectionMode.Page) => new()
     {
-        Version = 2,
+        Version = 1,
         People = [new PersonConfiguration { Id = "person", Name = "Person" }],
         Sources = [new WatchedSourceConfiguration
         {
