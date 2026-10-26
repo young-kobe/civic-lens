@@ -2,7 +2,7 @@
 @using CivicLens.Core.Relationships
 @using CivicLens.Publication.Contracts
 
-<PublicPage Title="@Title" Description="@Description" RootPath="@Page.RootPath">
+<PublicPage Section="PublicSection.Officials" Title="@Title" Description="@Description" RootPath="@Page.RootPath">
     @if (Page.IsCurrent)
     {
         <a class="back-link" href="@(Page.RootPath + PublicationProtocol.OfficialsPagePath)">Officials</a>

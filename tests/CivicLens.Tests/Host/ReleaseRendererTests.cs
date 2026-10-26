@@ -870,7 +870,7 @@ public sealed class ReleaseRendererTests
             Assert.Contains(expected, text, StringComparison.Ordinal);
         Assert.Contains("Wrong &lt;bill&gt;.", html, StringComparison.Ordinal);
         Assert.Equal("Correction, 2026-02-04. Replaces revision 2.", document.QuerySelector("ul.corrections > li strong")!.TextContent);
-        Assert.Empty(document.QuerySelectorAll("a[href*='report.html']"));
+        Assert.Empty(document.QuerySelectorAll("main a[href*='report.html?']"));
     }
 
     [Fact]
@@ -1004,38 +1004,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task EveryPageTypeHasABoundedDescriptionThatOpenGraphRepeatsAndNoCanonicalLink()
     {
-        var renderer = new ReleaseRenderer(null, null);
-        var release = ReleaseWithFilters();
-        var facets = SearchFacets();
-        var withdrawal = new PublishedWithdrawal
-        {
-            Kind = PublishedRecordKind.Action,
-            RecordId = new string('c', 64),
-            WithdrawnRevisionNumber = 3,
-            FirstPublishedAtUtc = DateTimeOffset.UnixEpoch,
-            WithdrawnAtUtc = DateTimeOffset.UnixEpoch,
-            Note = "Wrong.",
-            Corrections = []
-        };
-        var official = new ReleaseOfficialPage(new PublishedOfficialProfile { Id = "mayor", Name = "Mayor Example", Terms = [] }, true, 119, true, [], [], []);
-        var pages = new[]
-        {
-            await renderer.RenderRecordAsync(Record(), CancellationToken.None),
-            await renderer.RenderStatementAsync(Statement(), [], CancellationToken.None),
-            await renderer.RenderActionAsync(Action(), [], CancellationToken.None),
-            await renderer.RenderVoteAsync(Vote(), null, [], CancellationToken.None),
-            await renderer.RenderBriefAsync(Brief(), CancellationToken.None),
-            await renderer.RenderWithdrawalAsync(withdrawal, CancellationToken.None),
-            await renderer.RenderHomeAsync(release, null, facets, CancellationToken.None),
-            await renderer.RenderAllRecordsAsync(release, 1, CancellationToken.None),
-            await renderer.RenderFacetPageAsync(facets.Issues[0], 1, CancellationToken.None),
-            await renderer.RenderFacetsAsync(facets, CancellationToken.None),
-            await renderer.RenderOfficialAsync(official, CancellationToken.None),
-            await renderer.RenderOfficialsAsync([new OfficialListing(official.Profile, 0)], CancellationToken.None),
-            await renderer.RenderSearchAsync(release, facets, CancellationToken.None),
-            await renderer.RenderMethodAsync(CancellationToken.None),
-            await renderer.RenderReportAsync(CancellationToken.None)
-        };
+        var pages = (await RenderEveryPageTypeAsync()).Select(page => page.Html);
 
         foreach (var html in pages)
         {
@@ -1050,6 +1019,80 @@ public sealed class ReleaseRendererTests
             Assert.Null(head.QuerySelector("link[rel='canonical']"));
             Assert.Null(head.QuerySelector("meta[property='og:url']"));
         }
+    }
+
+    // Written by ReleaseIndexPages and ReleaseOfficialPages. PublishReleaseTests pins them.
+    private static readonly string[] WrittenRootPages =
+    [
+        PublicationProtocol.HomePath, PublicationProtocol.OfficialsPagePath, PublicationProtocol.FacetsPath,
+        PublicationProtocol.AllRecordsPagePath(1), PublicationProtocol.SearchPagePath, PublicationProtocol.MethodPagePath,
+        PublicationProtocol.ReportPagePath
+    ];
+
+    [Fact]
+    public async Task EveryPageTypeMarksItsSectionInTheNavigationOrNoneWhenItBelongsToNoSection()
+    {
+        foreach (var (name, _, html, section) in await RenderEveryPageTypeAsync())
+        {
+            var current = new HtmlParser().ParseDocument(html).QuerySelectorAll("nav[aria-label='Site'] [aria-current]");
+
+            Assert.True(section is null ? current.Length == 0 : current.Length == 1 && current[0].TextContent == section, name);
+        }
+    }
+
+    [Fact]
+    public async Task EveryNavigationAndFooterLinkOfEveryPageTypeLeadsToAPageTheReleaseWritesSoNoReaderReachesA404()
+    {
+        foreach (var (name, pagePath, html, _) in await RenderEveryPageTypeAsync())
+        {
+            var document = new HtmlParser().ParseDocument(html);
+            var links = document.QuerySelectorAll("nav[aria-label='Site'] a, nav[aria-label='Footer'] a")
+                .Select(link => link.GetAttribute("href")!).ToList();
+
+            Assert.Equal(6, links.Count);
+            var page = new Uri("https://x/" + pagePath);
+            Assert.All(links, href => Assert.True(WrittenRootPages.Contains(new Uri(page, href).AbsolutePath[1..]), $"{name}: {href}"));
+        }
+    }
+
+    private static async Task<(string Name, string Path, string Html, string? Section)[]> RenderEveryPageTypeAsync()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var release = ReleaseWithFilters();
+        var facets = SearchFacets();
+        var withdrawal = new PublishedWithdrawal
+        {
+            Kind = PublishedRecordKind.Action,
+            RecordId = new string('c', 64),
+            WithdrawnRevisionNumber = 3,
+            FirstPublishedAtUtc = DateTimeOffset.UnixEpoch,
+            WithdrawnAtUtc = DateTimeOffset.UnixEpoch,
+            Note = "Wrong.",
+            Corrections = []
+        };
+        var profile = new PublishedOfficialProfile { Id = "mayor", Name = "Mayor Example", Terms = [] };
+        var official = new ReleaseOfficialPage(profile, true, 119, true, [], [], []);
+        var pastOfficial = new ReleaseOfficialPage(profile, true, 118, false, [], [], []);
+        return
+        [
+            ("record", PublicationProtocol.RecordPagePath(Record().RecordId), await renderer.RenderRecordAsync(Record(), CancellationToken.None), "All records"),
+            ("statement", PublicationProtocol.RecordPagePath(Statement().RecordId), await renderer.RenderStatementAsync(Statement(), [], CancellationToken.None), "All records"),
+            ("action", PublicationProtocol.RecordPagePath(Action().RecordId), await renderer.RenderActionAsync(Action(), [], CancellationToken.None), "All records"),
+            ("vote", PublicationProtocol.RecordPagePath(Vote().RecordId), await renderer.RenderVoteAsync(Vote(), null, [], CancellationToken.None), "All records"),
+            ("brief", PublicationProtocol.RecordPagePath(Brief().RecordId), await renderer.RenderBriefAsync(Brief(), CancellationToken.None), "All records"),
+            ("withdrawal", PublicationProtocol.RecordPagePath(withdrawal.RecordId), await renderer.RenderWithdrawalAsync(withdrawal, CancellationToken.None), "All records"),
+            ("home", PublicationProtocol.HomePath, await renderer.RenderHomeAsync(release, null, facets, CancellationToken.None), null),
+            ("all records", PublicationProtocol.AllRecordsPagePath(1), await renderer.RenderAllRecordsAsync(release, 1, CancellationToken.None), "All records"),
+            ("issue", facets.Issues[0].PagePath(1), await renderer.RenderFacetPageAsync(facets.Issues[0], 1, CancellationToken.None), "Issues"),
+            ("policy area", facets.PolicyAreas[0].PagePath(1), await renderer.RenderFacetPageAsync(facets.PolicyAreas[0], 1, CancellationToken.None), "Issues"),
+            ("issues", PublicationProtocol.FacetsPath, await renderer.RenderFacetsAsync(facets, CancellationToken.None), "Issues"),
+            ("official", official.PagePath, await renderer.RenderOfficialAsync(official, CancellationToken.None), "Officials"),
+            ("past congress", pastOfficial.PagePath, await renderer.RenderOfficialAsync(pastOfficial, CancellationToken.None), "Officials"),
+            ("officials", PublicationProtocol.OfficialsPagePath, await renderer.RenderOfficialsAsync([new OfficialListing(profile, 0)], CancellationToken.None), "Officials"),
+            ("search", PublicationProtocol.SearchPagePath, await renderer.RenderSearchAsync(release, facets, CancellationToken.None), "Search"),
+            ("method", PublicationProtocol.MethodPagePath, await renderer.RenderMethodAsync(CancellationToken.None), null),
+            ("report", PublicationProtocol.ReportPagePath, await renderer.RenderReportAsync(CancellationToken.None), null)
+        ];
     }
 
     [Fact]
