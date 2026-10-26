@@ -25,6 +25,7 @@ public sealed record CollectionJobDefinition
     public string? ETag { get; init; }
     public DateTimeOffset? LastModified { get; init; }
     public required CollectionJobPolicy Policy { get; init; }
+    public int Priority { get; init; } = CollectionJobPriority.Check;
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public CollectionConfigurationRevision? ConfigurationRevision { get; init; }
@@ -87,6 +88,8 @@ public sealed record CollectionJobDefinition
     {
         if (ConfigurationRevision is null || CoverageAsOf is null)
             throw new ArgumentException("A job definition needs a configuration revision and a coverage date.");
+        if (!CollectionJobPriority.IsValid(Priority))
+            throw new ArgumentException("Job priority is not a collection job priority.");
 
         var source = ConfigurationRevision.Configuration.EligibleSource(SourceId, CoverageAsOf.Value);
         var expected = FromSource(source);
@@ -98,7 +101,7 @@ public sealed record CollectionJobDefinition
         }
         if (expected.Mode is CollectionMode.Feed or CollectionMode.Html && Mode == CollectionMode.Page)
             expected = expected with { Mode = CollectionMode.Page, Url = Url, ETag = null, LastModified = null };
-        if (expected != this with { ConfigurationRevision = null, CoverageAsOf = null })
+        if (expected != this with { ConfigurationRevision = null, CoverageAsOf = null, Priority = expected.Priority })
             throw new ArgumentException("Job settings do not match the bound configuration revision.");
     }
 

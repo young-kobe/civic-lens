@@ -489,7 +489,7 @@ public sealed class JobPreparationTests
             _ when IsHouseVote(resource) => new ConfiguredCollectionSource(HouseVoteFixtures.Configuration(), HouseVoteFixtures.SourceId, Backfill),
             _ => new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", Backfill)
         };
-        var definition = configured.CreateApiJobDefinition(resource ?? ApiResource.BillList, resource is null ? ListUrl : url, Backfill);
+        var definition = configured.CreateApiJobDefinition(resource ?? ApiResource.BillList, resource is null ? ListUrl : url, Backfill, CollectionJobPriority.Check);
         if (resource is null) definition = definition with { ApiResource = null };
         var attempt = new CollectionJobAttempt("attempt", definition.CreateRequest("job", Path.GetFullPath("captures")),
             new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);

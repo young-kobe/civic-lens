@@ -1,4 +1,4 @@
 namespace CivicLens.Application.Collection.Jobs;
 
-/// <summary>Keyset position for a fair scan over durable jobs.</summary>
-public sealed record CollectionWorkerCursor(long CreatedAtUtcTicks, string JobId);
+/// <summary>Keyset position in the claim order of durable jobs: priority, creation time, then job ID.</summary>
+public sealed record CollectionWorkerCursor(int Priority, long CreatedAtUtcTicks, string JobId);

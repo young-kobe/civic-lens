@@ -227,7 +227,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- db
 
 For other application composition, build `PostgresCollectionAttemptStore` with `FromConnectionString`, or supply an `IDbContextFactory<CollectionAttemptDbContext>`. Call `MigrateAsync` explicitly before you import.
 
-The design-time context factory reads `CIVIC_LENS_DATABASE` when it is set. Otherwise it uses a local design database name for offline migration generation. The repository has one migration, `InitialSchema`. It holds the generated tables. After them, it holds the hand SQL for the notify functions and triggers, the composite prior-capture foreign key, and the descending and partial indexes. Add later schema changes as new migrations.
+The design-time context factory reads `CIVIC_LENS_DATABASE` when it is set. Otherwise it uses a local design database name for offline migration generation. The first migration, `InitialSchema`, holds the generated tables. After them, it holds the hand SQL for the notify functions and triggers, the composite prior-capture foreign key, and the descending and partial indexes. Add later schema changes as new migrations.
 
 The EF tool version is pinned in `.config/dotnet-tools.json`. Restore it once, then add a migration for `src/CivicLens.Infrastructure`, with output under `Collection/Migrations`:
 
@@ -845,7 +845,7 @@ docker rm -f civic-lens-search-db
 ```
 
    Then run the `docker run` command in [Run the search service](#run-the-search-service). Start the service again only after the first publish.
-5. Run `make migrate`. It starts the Postgres container if needed, creates the database, and applies the one migration.
+5. Run `make migrate`. It starts the Postgres container if needed, creates the database, and applies the migrations.
 
 Release numbers restart at 1 after this reset.
 

@@ -1,5 +1,6 @@
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.SenateVotes;
+using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Votes;
 using CivicLens.Collection.Contracts;
 using CivicLens.Tests.Application.Collection.Bills;
@@ -80,7 +81,7 @@ public sealed class SenateVoteSourceConfigurationTests
     [InlineData(ApiResource.SenateVote, Source + "/roll_call_votes/vote1192/vote_119_2_00659.xml")]
     public void JobsAcceptTheExactUrlFormOfTheirResourceKind(ApiResource resource, string url)
     {
-        var job = Configured().CreateApiJobDefinition(resource, url, Today);
+        var job = Configured().CreateApiJobDefinition(resource, url, Today, CollectionJobPriority.Check);
 
         Assert.Equal(resource, job.ApiResource);
         Assert.Null(job.Credential);
@@ -98,7 +99,7 @@ public sealed class SenateVoteSourceConfigurationTests
     [InlineData(ApiResource.HouseVoteList, Menu1)]
     public void AJobUrlMustHaveTheExactFormOfItsResourceSoTheWorkerNeverReadsItAsAnotherKind(ApiResource resource, string url)
     {
-        Assert.Throws<ArgumentException>(() => Configured().CreateApiJobDefinition(resource, url, Today));
+        Assert.Throws<ArgumentException>(() => Configured().CreateApiJobDefinition(resource, url, Today, CollectionJobPriority.Check));
     }
 
     [Fact]
@@ -107,7 +108,7 @@ public sealed class SenateVoteSourceConfigurationTests
         var bills = new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", Today);
 
         Assert.Throws<ArgumentException>(() => bills.CreateApiJobDefinition(ApiResource.SenateVote,
-            "https://api.congress.gov/v3/bill/119/hr/1?format=json", Today));
+            "https://api.congress.gov/v3/bill/119/hr/1?format=json", Today, CollectionJobPriority.Check));
         Assert.Throws<ArgumentException>(() => bills.CreateSenateMenuBatch("job", new SenateVoteMenu(SenateVoteFixtures.Session, []), Today));
     }
 
@@ -116,8 +117,8 @@ public sealed class SenateVoteSourceConfigurationTests
     {
         var configured = Configured();
 
-        Assert.True(configured.CreateApiJobDefinition(ApiResource.SenateVoteMenu, Menu1, Today).IsRoot());
-        Assert.False(configured.CreateApiJobDefinition(ApiResource.SenateVote, Vote1, Today).IsRoot());
+        Assert.True(configured.CreateApiJobDefinition(ApiResource.SenateVoteMenu, Menu1, Today, CollectionJobPriority.Check).IsRoot());
+        Assert.False(configured.CreateApiJobDefinition(ApiResource.SenateVote, Vote1, Today, CollectionJobPriority.Check).IsRoot());
     }
 
     [Fact]

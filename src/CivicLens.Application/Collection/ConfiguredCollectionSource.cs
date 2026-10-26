@@ -41,7 +41,7 @@ public sealed class ConfiguredCollectionSource
         var source = ReadSource();
         if (source.ApiParser is null) return PrepareDefinition(source, currentDate, existing, article: false);
         var target = existing?.ApiResource is { } resource
-            ? new ApiTarget(resource, existing.Url)
+            ? new ApiTarget(resource, existing.Url, CollectionJobPriority.Check)
             : FirstEnqueuedApiTarget(source, currentDate);
         return PrepareDefinition(source, currentDate, existing, article: false, target);
     }
@@ -52,7 +52,7 @@ public sealed class ConfiguredCollectionSource
         var source = ReadSource();
         if (source.ApiParser is null) return CreateJobDefinition(currentDate);
         var target = IsScheduleCollected(source)
-            ? NextBillWindowTarget(source, now, billCursor)
+            ? NextBillWindowTarget(source, now, billCursor, currentDate)
             : FixedApiTarget(source, currentDate);
         return target is { } found ? PrepareDefinition(source, currentDate, null, article: false, found) : null;
     }
@@ -77,8 +77,9 @@ public sealed class ConfiguredCollectionSource
         return request;
     }
 
-    public CollectionJobDefinition CreateApiJobDefinition(ApiResource resource, string url, DateOnly currentDate) =>
-        PrepareDefinition(ReadSource(), currentDate, null, article: false, new ApiTarget(resource, url));
+    public CollectionJobDefinition CreateApiJobDefinition(ApiResource resource, string url, DateOnly currentDate,
+        int priority) =>
+        PrepareDefinition(ReadSource(), currentDate, null, article: false, new ApiTarget(resource, url, priority));
 
     public BillStreamAdmission CreateBillStreamAdmission(string listJobId, BillStreamWindow window,
         CongressBillListPage page, DateOnly currentDate)
@@ -87,12 +88,18 @@ public sealed class ConfiguredCollectionSource
         var template = PrepareDefinition(source, currentDate, null, article: false);
         var bills = page.Bills.Where(bill => bill.Congress >= source.MinimumCongress)
             .Select(bill => new ApiJob(BillStreamJobKeys.Detail(SourceId, bill),
-                template with { ApiResource = ApiResource.Bill, Url = bill.DetailUrl(source.Url) }))
+                template with
+                {
+                    ApiResource = ApiResource.Bill,
+                    Url = bill.DetailUrl(source.Url),
+                    Priority = CollectionJobPriority.OfBillDay(bill.UpdateDate, currentDate)
+                }))
             .DistinctBy(job => job.IdempotencyKey);
         var nextPage = page.Next is null
             ? null
             : new ApiJob(BillStreamJobKeys.NextPage(SourceId, listJobId),
-                CreateApiJobDefinition(ApiResource.BillList, page.Next, currentDate));
+                CreateApiJobDefinition(ApiResource.BillList, page.Next, currentDate,
+                    CollectionJobPriority.OfBillDay(window.LastDay, currentDate)));
         var policy = source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy();
         return new BillStreamAdmission(SourceId, policy, template, window, page.StartsPass, [.. bills], nextPage);
     }
@@ -103,11 +110,13 @@ public sealed class ConfiguredCollectionSource
     public ApiJob CreateFirstPageJob(ApiResource resource, CongressBillListItem bill, DateTimeOffset updateDate,
         DateOnly currentDate) =>
         new(BillStreamJobKeys.FirstBillPage(SourceId, resource, bill, updateDate),
-            CreateApiJobDefinition(resource, BillPageUrl.FirstPage(ReadBillStreamSource().Url, resource, bill), currentDate));
+            CreateApiJobDefinition(resource, BillPageUrl.FirstPage(ReadBillStreamSource().Url, resource, bill),
+                currentDate, CollectionJobPriority.OfBillDay(bill.UpdateDate, currentDate)));
 
-    public ApiJob CreateNextPageJob(ApiResource resource, string parentJobId, string nextUrl, DateOnly currentDate) =>
+    public ApiJob CreateNextPageJob(ApiResource resource, string parentJobId, string nextUrl, DateOnly billDay,
+        DateOnly currentDate) =>
         new(BillStreamJobKeys.NextBillPage(SourceId, resource, parentJobId),
-            CreateApiJobDefinition(resource, nextUrl, currentDate));
+            CreateApiJobDefinition(resource, nextUrl, currentDate, CollectionJobPriority.OfBillDay(billDay, currentDate)));
 
     public ApiJobBatch CreateHouseVoteListBatch(string listJobId, HouseVoteListPage page, DateOnly currentDate)
     {
@@ -115,13 +124,19 @@ public sealed class ConfiguredCollectionSource
         var template = PrepareDefinition(source, currentDate, null, article: false);
         var details = page.Votes
             .Select(vote => new ApiJob(HouseVoteJobKeys.Detail(SourceId, vote),
-                template with { ApiResource = ApiResource.HouseVoteDetail, Url = HouseVoteRollUrl.Detail(source.Url, vote.Roll) }))
+                template with
+                {
+                    ApiResource = ApiResource.HouseVoteDetail,
+                    Url = HouseVoteRollUrl.Detail(source.Url, vote.Roll),
+                    Priority = CollectionJobPriority.OfSession(vote.Roll.Session, currentDate)
+                }))
             .DistinctBy(job => job.IdempotencyKey);
-        var nextUrl = page.Next ?? FollowingSessionUrl(source, page.Session, currentDate);
+        var following = page.Next is null ? page.Session.Following(currentDate) : null;
+        var nextUrl = page.Next ?? (following is { } session ? HouseVoteListUrl.FirstPage(source.Url, session) : null);
         var nextPage = nextUrl is null
             ? null
             : new ApiJob(HouseVoteJobKeys.NextPage(SourceId, listJobId),
-                CreateApiJobDefinition(ApiResource.HouseVoteList, nextUrl, currentDate));
+                CreateApiJobDefinition(ApiResource.HouseVoteList, nextUrl, currentDate, CollectionJobPriority.Check));
         return new ApiJobBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), template,
             nextPage is null ? [.. details] : [.. details, nextPage]);
     }
@@ -129,7 +144,7 @@ public sealed class ConfiguredCollectionSource
     public ApiJob CreateHouseVoteMembersJob(HouseVote vote, DateOnly currentDate) =>
         new(HouseVoteJobKeys.Members(SourceId, vote),
             CreateApiJobDefinition(ApiResource.HouseVoteMembers, HouseVoteRollUrl.Members(ReadHouseVoteSource().Url, vote.Roll),
-                currentDate));
+                currentDate, CollectionJobPriority.OfSession(vote.Roll.Session, currentDate)));
 
     public ApiJobBatch CreateSenateMenuBatch(string menuJobId, SenateVoteMenu menu, DateOnly currentDate)
     {
@@ -137,12 +152,18 @@ public sealed class ConfiguredCollectionSource
         var template = PrepareDefinition(source, currentDate, null, article: false);
         var votes = menu.Votes
             .Select(item => new ApiJob(SenateVoteJobKeys.Vote(SourceId, item, currentDate),
-                template with { ApiResource = ApiResource.SenateVote, Url = SenateVoteUrl.Vote(source.Url, item.Roll) }));
-        var nextUrl = menu.Session.Following(currentDate) is { } following ? SenateVoteUrl.Menu(source.Url, following) : null;
-        var nextMenu = nextUrl is null
+                template with
+                {
+                    ApiResource = ApiResource.SenateVote,
+                    Url = SenateVoteUrl.Vote(source.Url, item.Roll),
+                    Priority = CollectionJobPriority.OfSession(item.Roll.Session, currentDate)
+                }));
+        var following = menu.Session.Following(currentDate);
+        var nextMenu = following is not { } nextSession
             ? null
             : new ApiJob(SenateVoteJobKeys.NextMenu(SourceId, menuJobId),
-                CreateApiJobDefinition(ApiResource.SenateVoteMenu, nextUrl, currentDate));
+                CreateApiJobDefinition(ApiResource.SenateVoteMenu, SenateVoteUrl.Menu(source.Url, nextSession),
+                    currentDate, CollectionJobPriority.Check));
         return new ApiJobBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), template,
             nextMenu is null ? [.. votes] : [.. votes, nextMenu]);
     }
@@ -160,7 +181,7 @@ public sealed class ConfiguredCollectionSource
         existing?.Validate();
         var definition = CollectionJobDefinition.FromSource(source);
         if (target is { } api)
-            definition = definition with { ApiResource = api.Resource, Url = api.Url };
+            definition = definition with { ApiResource = api.Resource, Url = api.Url, Priority = api.Priority };
         if (article)
             definition = definition with { Mode = CollectionMode.Page, ETag = null, LastModified = null };
 
@@ -170,7 +191,8 @@ public sealed class ConfiguredCollectionSource
             definition = definition with
             {
                 ConfigurationRevision = Revision,
-                CoverageAsOf = AsOf ?? existing.CoverageAsOf
+                CoverageAsOf = AsOf ?? existing.CoverageAsOf,
+                Priority = existing.Priority
             };
             if (definition != existing)
                 throw new ArgumentException("The idempotency key belongs to different admission input.");
@@ -189,9 +211,9 @@ public sealed class ConfiguredCollectionSource
                 ?? throw new ArgumentException("The API source has no work to collect now.");
 
     private static ApiTarget? NextBillWindowTarget(WatchedSourceConfiguration source, DateTimeOffset now,
-        DateOnly? billCursor) =>
+        DateOnly? billCursor, DateOnly today) =>
         BillStreamWindow.Next(billCursor, source.BackfillFrom!.Value, now) is { } window
-            ? new ApiTarget(ApiResource.BillList, window.RequestUrl(source.Url))
+            ? new ApiTarget(ApiResource.BillList, window.RequestUrl(source.Url), CollectionJobPriority.OfBillDay(window.LastDay, today))
             : null;
 
     private static ApiTarget? FixedApiTarget(WatchedSourceConfiguration source, DateOnly today)
@@ -200,25 +222,24 @@ public sealed class ConfiguredCollectionSource
         {
             case ApiParser.CongressHouseVoteList:
                 return VoteSession.FirstOfSweep(source.BackfillFrom!.Value, today, source.MinimumCongress!.Value) is { } first
-                    ? new ApiTarget(ApiResource.HouseVoteList, HouseVoteListUrl.FirstPage(source.Url, first))
+                    ? new ApiTarget(ApiResource.HouseVoteList, HouseVoteListUrl.FirstPage(source.Url, first),
+                        CollectionJobPriority.Check)
                     : null;
             case ApiParser.SenateVoteList:
                 return VoteSession.FirstOfSweep(source.BackfillFrom!.Value, today, source.MinimumCongress!.Value) is { } firstMenu
-                    ? new ApiTarget(ApiResource.SenateVoteMenu, SenateVoteUrl.Menu(source.Url, firstMenu))
+                    ? new ApiTarget(ApiResource.SenateVoteMenu, SenateVoteUrl.Menu(source.Url, firstMenu),
+                        CollectionJobPriority.Check)
                     : null;
             case ApiParser.CongressLegislators:
-                return new ApiTarget(ApiResource.MemberRoster, source.Url);
+                return new ApiTarget(ApiResource.MemberRoster, source.Url, CollectionJobPriority.Check);
             case ApiParser.CongressLegislatorsExecutive:
-                return new ApiTarget(ApiResource.ExecutiveRoster, source.Url);
+                return new ApiTarget(ApiResource.ExecutiveRoster, source.Url, CollectionJobPriority.Check);
             default:
                 throw new ArgumentOutOfRangeException(nameof(source));
         }
     }
 
-    private readonly record struct ApiTarget(ApiResource Resource, string Url);
-
-    private static string? FollowingSessionUrl(WatchedSourceConfiguration source, VoteSession session, DateOnly today) =>
-        session.Following(today) is { } following ? HouseVoteListUrl.FirstPage(source.Url, following) : null;
+    private readonly record struct ApiTarget(ApiResource Resource, string Url, int Priority);
 
     private WatchedSourceConfiguration ReadHouseVoteSource() =>
         ReadSource() is { ApiParser: ApiParser.CongressHouseVoteList } source

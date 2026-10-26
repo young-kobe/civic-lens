@@ -1,3 +1,4 @@
+using CivicLens.Application.Collection.Jobs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -11,6 +12,7 @@ internal sealed class JobRowConfiguration : IEntityTypeConfiguration<JobRow>
         {
             table.HasCheckConstraint("ck_job_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
             table.HasCheckConstraint("ck_job_state", "state IN ('Pending','Running','WaitingToRetry','Succeeded','Failed','Cancelled')");
+            table.HasCheckConstraint("ck_job_priority", $"priority BETWEEN {CollectionJobPriority.Check} AND {CollectionJobPriority.Backfill}");
         });
         builder.Property(row => row.JobId).HasColumnName("job_id");
         builder.Property(row => row.IdempotencyKey).HasColumnName("idempotency_key");
@@ -19,6 +21,8 @@ internal sealed class JobRowConfiguration : IEntityTypeConfiguration<JobRow>
         builder.Property(row => row.IsRoot).HasColumnName("is_root");
         builder.Property(row => row.ConfigurationRevisionId).HasColumnName("configuration_revision_id").HasMaxLength(64);
         builder.Property(row => row.PacingKey).HasColumnName("pacing_key").IsRequired();
+        builder.Property(row => row.Priority).HasColumnName("priority").HasColumnType("smallint")
+            .HasDefaultValue(CollectionJobPriority.Backfill);
         builder.Property(row => row.State).HasColumnName("state");
         builder.Property(row => row.CreatedAt).HasColumnName("created_at");
         builder.Property(row => row.RetryAt).HasColumnName("retry_at");
@@ -33,7 +37,7 @@ internal sealed class JobRowConfiguration : IEntityTypeConfiguration<JobRow>
         builder.Property(row => row.State).HasConversion<string>();
         builder.HasIndex(row => row.IdempotencyKey).IsUnique();
         builder.HasIndex(row => new { row.CreatedAt, row.JobId });
-        builder.HasIndex(row => new { row.CreatedAt, row.JobId }, "ix_collection_jobs_active_created_at_job_id")
+        builder.HasIndex(row => new { row.Priority, row.CreatedAt, row.JobId }, "ix_collection_jobs_active_claim")
             .HasFilter("state IN ('Pending','Running','WaitingToRetry')");
         builder.HasIndex(row => new { row.SourceId, row.CreatedAt, row.JobId }, "ix_collection_jobs_root_source_created")
             .IsDescending(false, true, false).HasFilter("is_root");

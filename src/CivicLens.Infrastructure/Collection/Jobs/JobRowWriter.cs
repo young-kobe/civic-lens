@@ -23,6 +23,7 @@ internal sealed class JobRowWriter(CollectionAttemptDbContext db, long createdAt
             IsRoot = definition.IsRoot(),
             ConfigurationRevisionId = await StoreAsync(definition.ConfigurationRevision, cancellationToken),
             PacingKey = PostgresCollectionJobStore.PacingKeyOf(definition),
+            Priority = definition.Priority,
             State = CollectionJobState.Pending,
             CreatedAt = createdAt
         };

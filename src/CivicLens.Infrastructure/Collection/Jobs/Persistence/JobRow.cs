@@ -11,6 +11,7 @@ internal sealed class JobRow
     public bool IsRoot { get; set; }
     public string? ConfigurationRevisionId { get; set; }
     public string PacingKey { get; set; } = "";
+    public int Priority { get; set; }
     public CollectionJobState State { get; set; }
     public long CreatedAt { get; set; }
     public long? RetryAt { get; set; }

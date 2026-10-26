@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace CivicLens.Infrastructure.Collection.Jobs;
 
-/// <summary>Keyset reads due jobs using database time and the durable job creation index.</summary>
+/// <summary>Keyset reads due jobs in priority, creation, and job ID order, using database time.</summary>
 public sealed class PostgresCollectionWorkerQueue(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
     : ICollectionWorkerQueue
 {
@@ -33,15 +33,16 @@ public sealed class PostgresCollectionWorkerQueue(IDbContextFactory<CollectionAt
             (row.State == CollectionJobState.Pending || row.State == CollectionJobState.Running ||
              row.State == CollectionJobState.WaitingToRetry && (row.RetryAt == null || row.RetryAt <= nowTicks)));
         if (cursor is not null)
-            query = query.Where(row => row.CreatedAt > cursor.CreatedAtUtcTicks ||
-                row.CreatedAt == cursor.CreatedAtUtcTicks && string.Compare(row.JobId, cursor.JobId) > 0);
+            query = query.Where(row => row.Priority > cursor.Priority ||
+                row.Priority == cursor.Priority && (row.CreatedAt > cursor.CreatedAtUtcTicks ||
+                row.CreatedAt == cursor.CreatedAtUtcTicks && string.Compare(row.JobId, cursor.JobId) > 0));
 
-        var rows = await query.OrderBy(row => row.CreatedAt).ThenBy(row => row.JobId)
-            .Take(limit + 1).Select(row => new { row.JobId, row.CreatedAt }).ToArrayAsync(cancellationToken);
+        var rows = await query.OrderBy(row => row.Priority).ThenBy(row => row.CreatedAt).ThenBy(row => row.JobId)
+            .Take(limit + 1).Select(row => new { row.JobId, row.Priority, row.CreatedAt }).ToArrayAsync(cancellationToken);
         var count = Math.Min(rows.Length, limit);
         var ids = rows.Take(count).Select(row => row.JobId).ToImmutableArray();
         var next = rows.Length > limit
-            ? new CollectionWorkerCursor(rows[count - 1].CreatedAt, rows[count - 1].JobId)
+            ? new CollectionWorkerCursor(rows[count - 1].Priority, rows[count - 1].CreatedAt, rows[count - 1].JobId)
             : null;
         return new(ids, next);
     }
@@ -49,7 +50,8 @@ public sealed class PostgresCollectionWorkerQueue(IDbContextFactory<CollectionAt
     private static void ValidateCursor(CollectionWorkerCursor? cursor)
     {
         if (cursor is null) return;
-        if (cursor.CreatedAtUtcTicks is < 0 or > 3155378975999999999 ||
+        if (cursor.Priority is < CollectionJobPriority.Check or > CollectionJobPriority.Backfill ||
+            cursor.CreatedAtUtcTicks is < 0 or > 3155378975999999999 ||
             string.IsNullOrWhiteSpace(cursor.JobId) || cursor.JobId.Length > 128)
             throw new ArgumentException("Worker queue cursor is invalid.", nameof(cursor));
     }

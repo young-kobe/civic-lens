@@ -188,12 +188,12 @@ public sealed class CongressBillSourceConfigurationTests
         var listUrl = new BillStreamWindow(Backfill, Backfill).RequestUrl("https://api.congress.gov/v3/bill");
         const string detailUrl = "https://api.congress.gov/v3/bill/119/hr/1?format=json";
 
-        var listJob = configured.CreateApiJobDefinition(ApiResource.BillList, listUrl, Backfill);
-        var detailJob = configured.CreateApiJobDefinition(ApiResource.Bill, detailUrl, Backfill);
+        var listJob = configured.CreateApiJobDefinition(ApiResource.BillList, listUrl, Backfill, CollectionJobPriority.Check);
+        var detailJob = configured.CreateApiJobDefinition(ApiResource.Bill, detailUrl, Backfill, CollectionJobPriority.Check);
 
         Assert.Equal(CollectionMode.Api, listJob.Mode);
         Assert.Equal(CollectionCredentials.CongressGov, detailJob.Credential);
-        Assert.Throws<ArgumentException>(() => configured.CreateApiJobDefinition(ApiResource.Bill, "https://api.congress.gov/v3/member", Backfill));
+        Assert.Throws<ArgumentException>(() => configured.CreateApiJobDefinition(ApiResource.Bill, "https://api.congress.gov/v3/member", Backfill, CollectionJobPriority.Check));
     }
 
     // A bill list window URL is never the configured URL, yet each window is the check of the bill source.
@@ -203,9 +203,9 @@ public sealed class CongressBillSourceConfigurationTests
         var configured = new ConfiguredCollectionSource(Configuration(), "congress-bills", Backfill);
         var listUrl = new BillStreamWindow(Backfill, Backfill).RequestUrl("https://api.congress.gov/v3/bill");
 
-        Assert.True(configured.CreateApiJobDefinition(ApiResource.BillList, listUrl, Backfill).IsRoot());
+        Assert.True(configured.CreateApiJobDefinition(ApiResource.BillList, listUrl, Backfill, CollectionJobPriority.Check).IsRoot());
         Assert.False(configured.CreateApiJobDefinition(ApiResource.Bill,
-            "https://api.congress.gov/v3/bill/119/hr/1?format=json", Backfill).IsRoot());
+            "https://api.congress.gov/v3/bill/119/hr/1?format=json", Backfill, CollectionJobPriority.Check).IsRoot());
     }
 
     [Theory]
@@ -235,7 +235,7 @@ public sealed class CongressBillSourceConfigurationTests
     {
         var configured = new ConfiguredCollectionSource(Configuration(), "congress-bills", Backfill);
 
-        Assert.Throws<ArgumentException>(() => configured.CreateApiJobDefinition(resource, url, Backfill));
+        Assert.Throws<ArgumentException>(() => configured.CreateApiJobDefinition(resource, url, Backfill, CollectionJobPriority.Check));
     }
 
     [Theory]
@@ -249,7 +249,7 @@ public sealed class CongressBillSourceConfigurationTests
     {
         var configured = new ConfiguredCollectionSource(Configuration(), "congress-bills", Backfill);
 
-        var job = configured.CreateApiJobDefinition(resource, url, Backfill);
+        var job = configured.CreateApiJobDefinition(resource, url, Backfill, CollectionJobPriority.Check);
 
         Assert.Equal(resource, job.ApiResource);
     }

@@ -77,6 +77,41 @@ public sealed class PostgresCollectionWorkerQueueTests(PostgresCollection postgr
         Assert.DoesNotContain(selected, id => id.StartsWith("terminal-", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task ABackfillJobCreatedBeforeAPressCheckIsListedAfterItAcrossPages()
+    {
+        var backfill = await EnqueueAsync("backfill");
+        var press = await EnqueueAsync("press");
+        await ExecuteAsync("UPDATE collection_jobs SET priority = @priority WHERE job_id = @id",
+            new NpgsqlParameter("priority", CollectionJobPriority.Backfill), new NpgsqlParameter("id", backfill.JobId));
+        await SetCreatedAtAsync(backfill.JobId, 1);
+        await SetCreatedAtAsync(press.JobId, 2);
+
+        var first = await queue.GetEligibleJobIdsAsync(null, 1, CancellationToken.None);
+        var second = await queue.GetEligibleJobIdsAsync(first.NextCursor, 1, CancellationToken.None);
+
+        Assert.Equal(press.JobId, Assert.Single(first.JobIds));
+        Assert.Equal(backfill.JobId, Assert.Single(second.JobIds));
+        Assert.Null(second.NextCursor);
+    }
+
+    [Fact]
+    public async Task JobsOfEqualPriorityKeepCreationOrder()
+    {
+        var older = await EnqueueAsync("older");
+        var newer = await EnqueueAsync("newer");
+        await SetCreatedAtAsync(older.JobId, 1);
+        await SetCreatedAtAsync(newer.JobId, 2);
+
+        var page = await queue.GetEligibleJobIdsAsync(null, 2, CancellationToken.None);
+
+        Assert.Equal([older.JobId, newer.JobId], page.JobIds.ToArray());
+    }
+
+    private Task SetCreatedAtAsync(string jobId, long createdAt) =>
+        ExecuteAsync("UPDATE collection_jobs SET created_at = @created WHERE job_id = @id",
+            new NpgsqlParameter("created", createdAt), new NpgsqlParameter("id", jobId));
+
     private Task<CollectionJobRecord> EnqueueAsync(string key) =>
         jobs.EnqueueAsync(CollectionFixtures.PageSource(), key, CancellationToken.None);
 

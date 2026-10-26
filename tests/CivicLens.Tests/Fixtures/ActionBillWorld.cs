@@ -122,7 +122,7 @@ internal sealed class ActionBillWorld
     private void Add(ApiResource resource, string jobId, string url, string body)
     {
         var configured = new ConfiguredCollectionSource(Revision, SourceId, Backfill);
-        var definition = configured.CreateApiJobDefinition(resource, url, Backfill);
+        var definition = configured.CreateApiJobDefinition(resource, url, Backfill, CollectionJobPriority.Check);
         var attempt = new CollectionJobAttempt("attempt-" + jobId, definition.CreateRequest(jobId, Path.GetFullPath("captures")),
             new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
         jobs[jobId] = new CollectionJobRecord(jobId, definition, "key-" + jobId, CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,
@@ -135,7 +135,7 @@ internal sealed class ActionBillWorld
     {
         var bytes = Encoding.UTF8.GetBytes(body);
         var request = new ConfiguredCollectionSource(CollectionConfigurationRevision.Create(Configuration()), SourceId, Backfill)
-            .CreateApiJobDefinition(resource, url, Backfill).CreateRequest("job", Path.GetFullPath("captures"));
+            .CreateApiJobDefinition(resource, url, Backfill, CollectionJobPriority.Check).CreateRequest("job", Path.GetFullPath("captures"));
         if (resource == ApiResource.Bill)
             return CongressBillRenderer.RenderDetail(CongressBillParser.Parse(bytes, CongressBillListItem.TryReadDetailUrl(SourceUrl, url)!));
         var bill = BillPageUrl.TryRead(SourceUrl, resource, url)!.Value.Bill;

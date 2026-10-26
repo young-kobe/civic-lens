@@ -1,4 +1,5 @@
 using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
 using CivicLens.Tests.Fixtures;
 
@@ -95,11 +96,11 @@ public sealed class RosterSourceConfigurationTests
     {
         var source = new ConfiguredCollectionSource(ExecutiveFixtures.Configuration(), ExecutiveFixtures.SourceId, Today);
 
-        _ = source.CreateApiJobDefinition(ApiResource.ExecutiveRoster, ExecutiveFixtures.SourceUrl, Today);
+        _ = source.CreateApiJobDefinition(ApiResource.ExecutiveRoster, ExecutiveFixtures.SourceUrl, Today, CollectionJobPriority.Check);
         Assert.Throws<ArgumentException>(() =>
-            source.CreateApiJobDefinition(ApiResource.MemberRoster, ExecutiveFixtures.SourceUrl, Today));
+            source.CreateApiJobDefinition(ApiResource.MemberRoster, ExecutiveFixtures.SourceUrl, Today, CollectionJobPriority.Check));
         Assert.Throws<ArgumentException>(() =>
-            source.CreateApiJobDefinition(ApiResource.ExecutiveRoster, ExecutiveFixtures.SourceUrl + "?x=1", Today));
+            source.CreateApiJobDefinition(ApiResource.ExecutiveRoster, ExecutiveFixtures.SourceUrl + "?x=1", Today, CollectionJobPriority.Check));
     }
 
     [Fact]
@@ -117,8 +118,8 @@ public sealed class RosterSourceConfigurationTests
     {
         var source = new ConfiguredCollectionSource(RosterFixtures.Configuration(), RosterFixtures.SourceId, Today);
 
-        _ = source.CreateApiJobDefinition(ApiResource.MemberRoster, RosterFixtures.SourceUrl, Today);
+        _ = source.CreateApiJobDefinition(ApiResource.MemberRoster, RosterFixtures.SourceUrl, Today, CollectionJobPriority.Check);
         Assert.Throws<ArgumentException>(() =>
-            source.CreateApiJobDefinition(ApiResource.MemberRoster, RosterFixtures.SourceUrl + "?x=1", Today));
+            source.CreateApiJobDefinition(ApiResource.MemberRoster, RosterFixtures.SourceUrl + "?x=1", Today, CollectionJobPriority.Check));
     }
 }
