@@ -1,5 +1,6 @@
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.HouseVotes;
+using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Votes;
 using CivicLens.Collection.Contracts;
 using CivicLens.Tests.Application.Collection.Bills;
@@ -90,7 +91,7 @@ public sealed class HouseVoteSourceConfigurationTests
     [InlineData(ApiResource.HouseVoteMembers, Source + "/119/1/100/members?format=json")]
     public void JobsAcceptTheExactUrlFormOfTheirResourceKind(ApiResource resource, string url)
     {
-        var job = Configured().CreateApiJobDefinition(resource, url, Today);
+        var job = Configured().CreateApiJobDefinition(resource, url, Today, CollectionJobPriority.Check);
 
         Assert.Equal(resource, job.ApiResource);
         Assert.Equal(CollectionCredentials.CongressGov, job.Credential);
@@ -108,7 +109,7 @@ public sealed class HouseVoteSourceConfigurationTests
     [InlineData(ApiResource.BillList, Source + "/119/1?format=json&limit=250")]
     public void AJobUrlMustHaveTheExactFormOfItsResourceSoTheWorkerNeverReadsItAsAnotherKind(ApiResource resource, string url)
     {
-        Assert.Throws<ArgumentException>(() => Configured().CreateApiJobDefinition(resource, url, Today));
+        Assert.Throws<ArgumentException>(() => Configured().CreateApiJobDefinition(resource, url, Today, CollectionJobPriority.Check));
     }
 
     [Fact]
@@ -117,7 +118,7 @@ public sealed class HouseVoteSourceConfigurationTests
         var bills = new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", HouseVoteFixtures.Backfill);
 
         Assert.Throws<ArgumentException>(() => bills.CreateApiJobDefinition(ApiResource.HouseVoteDetail,
-            "https://api.congress.gov/v3/bill/119/1/100?format=json", Today));
+            "https://api.congress.gov/v3/bill/119/1/100?format=json", Today, CollectionJobPriority.Check));
     }
 
     [Fact]
@@ -125,9 +126,9 @@ public sealed class HouseVoteSourceConfigurationTests
     {
         var configured = Configured();
 
-        Assert.True(configured.CreateApiJobDefinition(ApiResource.HouseVoteList, Source + "/119/1?format=json&limit=250", Today).IsRoot());
-        Assert.False(configured.CreateApiJobDefinition(ApiResource.HouseVoteDetail, Source + "/119/1/100?format=json", Today).IsRoot());
-        Assert.False(configured.CreateApiJobDefinition(ApiResource.HouseVoteMembers, Source + "/119/1/100/members?format=json", Today).IsRoot());
+        Assert.True(configured.CreateApiJobDefinition(ApiResource.HouseVoteList, Source + "/119/1?format=json&limit=250", Today, CollectionJobPriority.Check).IsRoot());
+        Assert.False(configured.CreateApiJobDefinition(ApiResource.HouseVoteDetail, Source + "/119/1/100?format=json", Today, CollectionJobPriority.Check).IsRoot());
+        Assert.False(configured.CreateApiJobDefinition(ApiResource.HouseVoteMembers, Source + "/119/1/100/members?format=json", Today, CollectionJobPriority.Check).IsRoot());
     }
 
     [Fact]

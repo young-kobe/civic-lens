@@ -1869,6 +1869,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("text")
                         .HasColumnName("pacing_key");
 
+                    b.Property<short>("Priority")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)3)
+                        .HasColumnName("priority");
+
                     b.Property<long?>("RetryAt")
                         .HasColumnType("bigint")
                         .HasColumnName("retry_at");
@@ -1892,7 +1898,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("CreatedAt", "JobId");
 
-                    b.HasIndex(new[] { "CreatedAt", "JobId" }, "ix_collection_jobs_active_created_at_job_id")
+                    b.HasIndex(new[] { "Priority", "CreatedAt", "JobId" }, "ix_collection_jobs_active_claim")
                         .HasFilter("state IN ('Pending','Running','WaitingToRetry')");
 
                     b.HasIndex(new[] { "SourceId" }, "ix_collection_jobs_active_root_source_id")
@@ -1905,6 +1911,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.ToTable("collection_jobs", null, t =>
                         {
                             t.HasCheckConstraint("ck_job_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
+
+                            t.HasCheckConstraint("ck_job_priority", "priority BETWEEN 1 AND 3");
 
                             t.HasCheckConstraint("ck_job_state", "state IN ('Pending','Running','WaitingToRetry','Succeeded','Failed','Cancelled')");
                         });

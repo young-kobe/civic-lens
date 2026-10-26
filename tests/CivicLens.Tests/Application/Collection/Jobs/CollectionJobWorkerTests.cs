@@ -75,7 +75,7 @@ public sealed class CollectionJobWorkerTests
     [Fact]
     public async Task CursorPassesClaimedPageAndWrapsAfterLaterJobsAreVisited()
     {
-        var cursor = new CollectionWorkerCursor(10, "job-b");
+        var cursor = new CollectionWorkerCursor(1, 10, "job-b");
         using var cancellation = new CancellationTokenSource();
         var queue = new SequenceQueue((receivedCursor, callNumber) =>
         {

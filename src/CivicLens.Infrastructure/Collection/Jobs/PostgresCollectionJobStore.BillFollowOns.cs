@@ -44,7 +44,8 @@ public sealed partial class PostgresCollectionJobStore
                 cancellationToken);
             var jobs = new List<ApiJob>();
             if (page.Next is not null)
-                jobs.Add(source.CreateNextPageJob(ApiResource.BillCosponsors, pageJobId, page.Next, Today(now)));
+                jobs.Add(source.CreateNextPageJob(ApiResource.BillCosponsors, pageJobId, page.Next, BillGate.DayOf(UpdateDateOf(gate)),
+                    Today(now)));
             if (gate.Decision == BillGateDecision.Pending && SettleAtCosponsorPage(gate, page, source, now))
                 jobs.AddRange(PassedFirstPages(source, gate, now));
             var result = await AdmitFollowOnsAsync(db, source, gate.DetailJobId, jobs, now, cancellationToken);
@@ -77,17 +78,13 @@ public sealed partial class PostgresCollectionJobStore
         ArgumentException.ThrowIfNullOrWhiteSpace(extractionId);
         return TransactionAsync(async (db, now) =>
         {
-            var detailJobId = await ReadDetailJobIdOfPageJobAsync(db, pageJobId, cancellationToken);
-            await RecordPageAsync(db, detailJobId, pageJobId, role, extractionId, next is null, cancellationToken);
+            var gate = await ReadGateOfPageJobAsync(db, pageJobId, cancellationToken);
+            await RecordPageAsync(db, gate.DetailJobId, pageJobId, role, extractionId, next is null, cancellationToken);
             ApiJob[] jobs = next is null
                 ? []
-                : [source.CreateNextPageJob(resource, pageJobId, next, Today(now))];
-            var result = await AdmitFollowOnsAsync(db, source, detailJobId, jobs, now, cancellationToken);
-            if (next is null)
-            {
-                var gate = await db.Set<BillGateRow>().SingleAsync(row => row.DetailJobId == detailJobId, cancellationToken);
-                await RecordActionCandidateAsync(db, source, gate, now, cancellationToken);
-            }
+                : [source.CreateNextPageJob(resource, pageJobId, next, BillGate.DayOf(UpdateDateOf(gate)), Today(now))];
+            var result = await AdmitFollowOnsAsync(db, source, gate.DetailJobId, jobs, now, cancellationToken);
+            if (next is null) await RecordActionCandidateAsync(db, source, gate, now, cancellationToken);
             return result;
         }, cancellationToken);
     }
