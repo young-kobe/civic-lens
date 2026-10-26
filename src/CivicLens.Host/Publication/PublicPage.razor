@@ -5,7 +5,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
-    <title>@Title · Civic Lens</title>
+    <title>@documentTitle</title>
+    <meta name="description" content="@description" />
+    <meta property="og:title" content="@documentTitle" />
+    <meta property="og:description" content="@description" />
+    <meta property="og:type" content="@(IsArticle ? "article" : "website")" />
+    <meta property="og:site_name" content="@PublicHead.SiteName" />
+    <link rel="icon" type="image/svg+xml" href="@(RootPath + PublicAssets.Favicon)" />
     @foreach (var stylesheet in PublicAssets.Stylesheets)
     {
         <link rel="stylesheet" href="@(RootPath + stylesheet)" />
@@ -30,8 +36,21 @@
 </html>
 
 @code {
+    private string documentTitle = string.Empty;
+    private string description = string.Empty;
+
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Description { get; set; } = string.Empty;
+    [Parameter] public int Page { get; set; } = 1;
+    [Parameter] public int PageCount { get; set; } = 1;
+    [Parameter] public bool IsArticle { get; set; }
     [Parameter] public string? ExternalScript { get; set; }
     [Parameter] public string RootPath { get; set; } = string.Empty;
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        documentTitle = PublicHead.DocumentTitle(Title, Page, PageCount);
+        description = PublicHead.Description(Description);
+    }
 }
