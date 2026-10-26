@@ -162,9 +162,9 @@ public sealed class PostgresCollectionPipelineWakeupTests(PostgresCollection pos
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""
-            INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, source_id, is_root, state, created_at,
+            INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, source_id, is_root, pacing_key, state, created_at,
                 retry_at, cancellation_requested, lease_fence)
-            VALUES (@id, @key, '{}', 'source', FALSE, @state, @created, @retry, FALSE, 0)
+            VALUES (@id, @key, '{}', 'source', FALSE, 'source', @state, @created, @retry, FALSE, 0)
             """, connection);
         command.Parameters.AddWithValue("id", id);
         command.Parameters.AddWithValue("key", "key-" + id);

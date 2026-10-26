@@ -203,6 +203,24 @@ public sealed class PostgresSenateVoteTests(PostgresCollection postgres) : IAsyn
 
     private static DateOnly DaysAgo(int days) => DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-days);
 
+    [Fact]
+    public async Task TheSameRollNumberCanHaveADraftInBothChambersButNotTwoInOne()
+    {
+        await ExecuteAsync(VoteDraft('a', "House"));
+        await ExecuteAsync(VoteDraft('b', "Senate"));
+
+        var duplicate = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(VoteDraft('c', "Senate")));
+        Assert.Equal(PostgresErrorCodes.UniqueViolation, duplicate.SqlState);
+        var unknown = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(VoteDraft('d', "Congress")));
+        Assert.Equal(PostgresErrorCodes.CheckViolation, unknown.SqlState);
+    }
+
+    private static string VoteDraft(char id, string chamber) => $"""
+        INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number,
+            review_state_version, review_status, created_at_utc_ticks)
+        VALUES ('{new string(id, 64)}', 'source', '{chamber}', 119, 1, 100, 1, 0, 'AwaitingReview', 1)
+        """;
+
     private static SenateVoteMenuItem Item(int roll, DateOnly day) => new(new SenateVoteRoll(SenateVoteFixtures.Session, roll), day);
 
     private static SenateVoteMenu Menu(params SenateVoteMenuItem[] votes) => new(SenateVoteFixtures.Session, votes);

@@ -7,6 +7,7 @@ using CivicLens.Infrastructure.Reports;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
+using Npgsql;
 using static CivicLens.Tests.Publication.Contracts.PulledReportTests;
 
 namespace CivicLens.Tests.Infrastructure.Reports;
@@ -216,6 +217,25 @@ public sealed class PostgresReaderReportStoreTests(PostgresCollection postgres) 
         await PublishAsync(2, revision: 3);
         Assert.Empty(await UnansweredAsync());
     }
+
+    [Fact]
+    public async Task TheDatabaseRefusesACorrectionWithoutANoteAndAnOpenReportWithAResolverBecauseTheQueueRulesDoNotDependOnTheCode()
+    {
+        var record = new string('a', 64);
+
+        foreach (var (status, note) in new[] { ("CorrectionNeeded", "NULL"), ("Open", "NULL") })
+        {
+            var failure = await Assert.ThrowsAsync<PostgresException>(() => seeder.ExecuteAsync(InsertReport(record, status, note)));
+            Assert.Equal("ck_reader_reports_resolution", failure.ConstraintName);
+        }
+        await seeder.ExecuteAsync(InsertReport(record, "CorrectionNeeded", "'Fix it.'"));
+    }
+
+    private static string InsertReport(string record, string status, string note) => $"""
+        INSERT INTO reader_reports (report_id, record_id, kind, revision_number, category, body, received_at_utc_ticks, status, note,
+            resolved_by, resolved_at_utc_ticks, version)
+        VALUES (gen_random_uuid(), '{record}', 'Statement', 1, 'other', 'text', 1, '{status}', {note}, 'auth0|friend', 1, 0)
+        """;
 
     private async Task<(string[] Ids, string? Newer, string? Older)> ReadPageAsync(PageCursor? cursor, ReaderReportFilter filter)
     {

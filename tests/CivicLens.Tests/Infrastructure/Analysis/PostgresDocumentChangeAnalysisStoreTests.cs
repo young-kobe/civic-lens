@@ -14,7 +14,6 @@ using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.Analysis;
@@ -23,7 +22,6 @@ namespace CivicLens.Tests.Infrastructure.Analysis;
 [Trait("Category", "Postgres")]
 public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private const string PreviousMigration = "20261009130000_KeysetReads";
     private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(10);
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
     private static readonly DocumentChangeDraftCatalog Catalog = new([], []);
@@ -162,23 +160,6 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     {
         var unchanged = await seeder.SaveAsync("Same text.\n", "Same text.\n");
         Assert.Empty(await analysis.GetByComparisonIdsAsync([unchanged.ComparisonId], default));
-    }
-
-    [Fact]
-    public async Task TheUpgradeBackfillsChangedComparisonsThatHaveNoDraft()
-    {
-        // The store now queues analysis itself, so comparisons written before the upgrade are made by
-        // seeding the migrated database and migrating back down to the schema that had no analysis queue.
-        var open = await seeder.SaveAsync("Fee: 10.\n", "Fee: 12.\n");
-        var drafted = await seeder.SaveAsync("Rule A.\n", "Rule B.\n");
-        _ = await new CreateDocumentChangeDraft(reviews).ExecuteAsync(Owner, new CreateDocumentChangeDraftRequest(drafted.ComparisonId, "k"));
-        await using (var db = await factory.CreateDbContextAsync())
-            await db.GetService<IMigrator>().MigrateAsync(PreviousMigration);
-
-        await attempts.MigrateAsync();
-
-        var entries = await analysis.GetByComparisonIdsAsync([open.ComparisonId, drafted.ComparisonId], default);
-        Assert.Equal([open.ComparisonId], entries.Select(entry => entry.SubjectId));
     }
 
     [Fact]

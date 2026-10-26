@@ -307,6 +307,18 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         Assert.Equal([(StatementDraftTask.Task, "Blocked", "speakersUnavailable")], await QueueAsync(candidate, StatementDraftTask.Task));
     }
 
+    [Fact]
+    public async Task TheDatabaseRefusesANotDraftedStatusOnADraftThatHasARevision()
+    {
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, $"""
+            SET session_replication_role = replica;
+            INSERT INTO statement_drafts (candidate_id, current_revision_number, review_state_version, review_status, created_at_utc_ticks)
+            VALUES ('{new string('4', 64)}', 1, 0, 'NotDrafted', 0);
+            """));
+
+        Assert.Equal("ck_statement_drafts_not_drafted", failure.ConstraintName);
+    }
+
     private StatementGateSettings BigGate => new(StatementGatePrompt.MinimumReservation, 1);
 
     private async Task<string> PassedCandidateAsync(string article = Article, string url = "https://example.test/pages/a",

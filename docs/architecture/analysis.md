@@ -183,7 +183,7 @@ Ordinary tests use a fake model at the port. One live smoke test runs only with 
 ## Storage and contracts
 
 - The generated [analysis schema](schema/analysis.md) lists every table, column, key, check, index, and trigger.
-- `document_change_analysis` has one entry for each comparison and task. The `civic_lens_analysis` notify trigger on the table wakes the worker.
+- `document_change_analysis` has one entry for each comparison and task. The `civic_lens_analysis` notify trigger on the table wakes the worker. Every analysis queue table has this trigger. Test: `PostgresAnalysisWakeupTests.EveryAnalysisQueueTableWakesItsListenersThroughTheNotifyTrigger`.
 - Only analysis runs keep the task version.
 - `AnalysisTableConfiguration.ConfigureQueue` gives every queue table the partial claim index `ix_<table>_active_claim`. It covers `(task, priority, created_at_utc_ticks, key)` for Pending, RetryWaiting, WaitingForBudget, and Running entries, in the order of the eligible scan. The `(status, created_at_utc_ticks, key)` index stays for requeue and the review lists, which filter one finished status.
 - Every queue table has `priority`, a smallint from 1 to 3 with default 3. `ReviewPriority.Of` owns the three tiers. Tier 1 means the record would pair with a statement. Tier 2 means the record has a tracked issue. Tier 3 is the rest. The priority does not use the event date. The statement, action, and vote review lists sort by it; see [review](review.md#lists-and-paging).

@@ -49,6 +49,33 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
     }
 
     [Fact]
+    public async Task MigrationsCreateTheHandWrittenObjects()
+    {
+        string[] indexes =
+        [
+            "ix_action_drafts_approved_created", "ix_collection_jobs_created_desc", "ix_document_change_decisions_created",
+            "ix_document_change_drafts_approved_created", "ix_document_change_drafts_created",
+            "ix_document_change_drafts_needs_action_created", "ix_document_change_revisions_created",
+            "ix_document_comparisons_has_changes", "ix_evidence_processing_changed", "ix_statement_drafts_approved_created",
+            "ix_statement_drafts_needs_action_created"
+        ];
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        await using var constraint = new NpgsqlCommand(
+            "SELECT count(*) FROM pg_constraint WHERE conname = 'fk_collection_attempts_prior_capture_observation'", connection);
+        Assert.Equal(1L, await constraint.ExecuteScalarAsync());
+        await using var existing = new NpgsqlCommand(
+            "SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND indexname = ANY(@names) ORDER BY indexname", connection);
+        existing.Parameters.AddWithValue("names", indexes);
+        var found = new List<string>();
+        await using (var reader = await existing.ExecuteReaderAsync())
+            while (await reader.ReadAsync())
+                found.Add(reader.GetString(0));
+        Assert.Equal(indexes.Order(StringComparer.Ordinal), found);
+    }
+
+    [Fact]
     public async Task RobotsDelaySurvivesImportAndCannotChangeOnReplay()
     {
         var request = Request("robots-delay");

@@ -250,7 +250,7 @@ Statements branch at step 6: an admitted article becomes a candidate in `stateme
 
 Each version below has one owner. This table only points to the owners. No shared version file exists, because layers must not depend on one. Bump a version when its behavior changes in a way that old stored data would no longer match. Keep the old behavior readable. A bump-guard test next to each owner pins sample output and the current value. It fails with the name of the constant to bump. The collection protocol and the collection configuration have no bump guard. The API extraction rows are guarded by the preparation tests, which pin each version beside its sample rendered text.
 
-Before the first production deploy ([R-23](roadmap.md#later)), reset the development database. Collapse the protocol, configuration, schema, parser, and behavior versions to one baseline version 1. Squash the EF migrations into one initial migration, and delete all older readers. Each extraction has one extraction version that names its behavior, for example `html-text-v1`. After the first deploy, versions only grow.
+The protocol, configuration, schema, parser, and behavior versions start at the baseline version 1, with one initial EF migration. No reader of an older version exists. Each extraction has one extraction version that names its behavior, for example `html-text-v1`. Versions only grow from now on. A development database from before the baseline needs the [dev database reset](operations.md#dev-database-reset).
 
 | Version | Current value | Owner | Binds | Bump when |
 | --- | --- | --- | --- | --- |
