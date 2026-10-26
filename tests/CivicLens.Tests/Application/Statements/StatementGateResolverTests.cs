@@ -96,7 +96,7 @@ public sealed class StatementGateResolverTests
     }
 
     [Fact]
-    public void ALiveAnswerWithoutTheBillOrVoteFieldIsRejectedSoOnlyStoredRunsMayLackIt()
+    public void AnAnswerWithoutTheBillOrVoteFieldIsRejectedSoAMissingFieldNeverReadsAsFalse()
     {
         var answer = """{"trackedIssues":[],"policyAreas":[],"confidence":0.8}""";
 

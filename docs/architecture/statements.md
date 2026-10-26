@@ -52,7 +52,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - Only discovery-admitted jobs become candidates. Enforced by `PostgresStatementCandidateRegistration`. Test: `PostgresStatementCandidateRegistrationTests.ExtractionFromAWatchedPageJobRegistersNoCandidate`.
 - A Succeeded gate has a known reason. Enforced by `StatementGateLifecycle`. Test: `StatementGateLifecycleTests.ASucceededGateNeedsAKnownReason`.
 - When a valid answer has no verified issue and namesBillOrVote is false, a bill number in the text still passes the release. Enforced by `StatementGateResolver`. Test: `StatementGateResolverTests.ABillNumberInTheTextPassesWithoutTheModelAnswerSoTheFloorHoldsWhenTheModelMissesIt`.
-- A live gate answer must hold namesBillOrVote. Enforced by `StatementGateResolver`. Test: `StatementGateResolverTests.ALiveAnswerWithoutTheBillOrVoteFieldIsRejectedSoOnlyStoredRunsMayLackIt`.
+- A gate answer must hold `namesBillOrVote`, so a missing answer never reads as false. Enforced by `StatementGateResolver.Parse` with the required constructor parameters of `AnalysisAnswerRules.OutputJson`. Test: `StatementGateResolverTests.AnAnswerWithoutTheBillOrVoteFieldIsRejectedSoAMissingFieldNeverReadsAsFalse`.
 - Each of the three pass paths has its own reason. Enforced by `StatementGateResolver` and `ck_statement_analysis_runs_reason`. Test: `StatementGateResolverTests.TheThreePassPathsRecordThreeDistinctReasonsSoAMeasurementCanCountEachPath`.
 - A draft from a bill or vote pass accepts an empty issue list. Enforced by the draft step and the revision rules. Test: `StatementDraftStepTests.ADraftFromABillOrVotePassHasNoIssueIdsBecauseNoTrackedIssueMatched`.
 - Only a skipped gate returns from Succeeded to Pending. Enforced by `StatementGateLifecycle`. Test: `StatementGateLifecycleTests.OnlyASkippedGateMayReturnToPendingForRegate`.
@@ -508,7 +508,6 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 - Planned: structured statement extraction and temporal identity resolution.
 - Each quotation stays addressable for later matching with actions.
 - Planned after the first deploy ([R-38](../roadmap.md#later)): find the same or nearly the same sentences in releases from different offices. It shows coordinated messaging and who used the words first.
-- Gate runs from before `statement-gate-v2` have no `namesBillOrVote` answer. `StatementGateCarryOver` reads them with a null answer.
 - Rolling back the `GateBillOrVoteReasons` migration fails while any gate run holds a `passed-bill-or-vote` or `passed-bill-number` reason. Remove or change those rows first.
 - The bill or vote answer of the model is unmeasured. The `passed-bill-or-vote` and `passed-bill-number` counts show how often each path fires. The bill number rule finds only the forms that `BillNumberFinder` accepts.
 - The gate labels are the first part of D-13. The model pre-label, the model comparison, and the fine-tuning are planned. A model label needs `GateLabelEntry` with the `Analysis` kind and the ID of a run in `statement_analysis_runs`.
