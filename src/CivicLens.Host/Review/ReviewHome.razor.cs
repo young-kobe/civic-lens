@@ -1,5 +1,6 @@
 using CivicLens.Host.Documents;
 using Microsoft.Extensions.Logging;
+using CivicLens.Application.Actions;
 using CivicLens.Application.Activity;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Briefs;
@@ -10,10 +11,12 @@ using CivicLens.Application.Relationships;
 using CivicLens.Application.Reports;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
+using CivicLens.Application.Votes;
 using CivicLens.Core.Review;
 using CivicLens.Host.Collection;
 using CivicLens.Host.Components.Layout;
 using CivicLens.Host.Components.Ui;
+using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 
@@ -37,6 +40,8 @@ public sealed partial class ReviewHome
     private StatementReviewCounts? statementCounts;
     private BriefReviewCounts? briefCounts;
     private RelationshipReviewCounts? relationshipCounts;
+    private IReadOnlyList<FactException> factExceptions = [];
+    private int factExceptionTotal;
     private int openReports;
     private IReadOnlyList<FeedItem> activity = [];
     private string? error;
@@ -53,6 +58,8 @@ public sealed partial class ReviewHome
     [Inject] private GetStatementReviewCounts GetStatementCounts { get; set; } = default!;
     [Inject] private GetBriefReviewCounts GetBriefCounts { get; set; } = default!;
     [Inject] private GetRelationshipReviewCounts GetRelationshipCounts { get; set; } = default!;
+    [Inject] private ListActionsNeedingAction ListActionExceptions { get; set; } = default!;
+    [Inject] private ListVotesNeedingAction ListVoteExceptions { get; set; } = default!;
     [Inject] private CountOpenReaderReports CountReports { get; set; } = default!;
     [Inject] private GetRecentActivity GetActivity { get; set; } = default!;
     [Inject] private LookupDraft Lookup { get; set; } = default!;
@@ -109,6 +116,7 @@ public sealed partial class ReviewHome
             statementCounts = await GetStatementCounts.ExecuteAsync(actor, cancellationToken);
             briefCounts = await GetBriefCounts.ExecuteAsync(actor, cancellationToken);
             relationshipCounts = await GetRelationshipCounts.ExecuteAsync(actor, cancellationToken);
+            await LoadFactExceptionsAsync(cancellationToken);
             openReports = await CountReports.ExecuteAsync(actor, cancellationToken);
             if (collection is not null)
             {
@@ -130,6 +138,22 @@ public sealed partial class ReviewHome
             overview = null;
             error = "The review workspace could not load its records. Refresh the page to try again.";
         }
+    }
+
+    private async Task LoadFactExceptionsAsync(CancellationToken cancellationToken)
+    {
+        var actions = await ListActionExceptions.ExecuteAsync(actor!, PageSize, cancellationToken);
+        var votes = await ListVoteExceptions.ExecuteAsync(actor!, PageSize, cancellationToken);
+        factExceptionTotal = actions.Total + votes.Total;
+        factExceptions =
+        [
+            .. actions.Items.Select(item => new FactException(PublishedRecordKind.Action, item.RecordId, item.CurrentRevision.Headline,
+                item.CurrentStatus, item.UnresolvedConcerns.Length, item.CurrentRevision.CreatedAtUtc)),
+            .. votes.Items.Select(item => new FactException(PublishedRecordKind.Vote, item.RecordId, item.CurrentRevision.Headline,
+                item.CurrentStatus, item.UnresolvedConcerns.Length, item.CurrentRevision.CreatedAtUtc))
+        ];
+        factExceptions =
+            [.. factExceptions.OrderByDescending(item => item.RevisedAtUtc).ThenByDescending(item => item.RecordId, StringComparer.Ordinal)];
     }
 
     private async Task<string?> FindDraftAsync(CancellationToken cancellationToken)

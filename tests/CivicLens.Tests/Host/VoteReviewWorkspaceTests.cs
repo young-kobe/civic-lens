@@ -22,21 +22,6 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
     public Task DisposeAsync() => host.StopAsync();
 
     [Fact]
-    public async Task TheRailLinksTheVoteListWhichCountsEachFilter()
-    {
-        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
-
-        var page = await host.GetDocumentAsync("/Review/Votes");
-
-        Assert.Equal("page", page.QuerySelector(".nav a[href='/Review/Votes']")!.GetAttribute("aria-current"));
-        Assert.Null(page.QuerySelector(".nav a[href='/Review']")!.GetAttribute("aria-current"));
-        Assert.Equal(["0", "0", "0"], page.QuerySelectorAll("[aria-labelledby='drafts'] .segmented-count").Select(count => count.TextContent));
-        Assert.Equal(["/Review/Votes#drafts", "/Review/Votes?drafts=needs-action#drafts", "/Review/Votes?drafts=approved#drafts"],
-            page.QuerySelectorAll("[aria-labelledby='drafts'] a.segmented-item").Select(tab => tab.GetAttribute("href")));
-        Assert.Equal("No vote records yet", page.QuerySelector("[aria-labelledby='drafts'] .empty h3")!.TextContent);
-    }
-
-    [Fact]
     public async Task AnUnknownOrMalformedVoteRecordIsNotFound()
     {
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|owner"));
@@ -145,8 +130,8 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
             VALUES ('{candidateId}', '{HouseVoteFixtures.SourceId}', '{chamber}', 119, {session}, {roll}, 1, 'detail', 'members', '{extraction.ExtractionId}',
                 '{extraction.ExtractionId}', '{configuration.Id}', 1);
             INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number,
-                review_state_version, review_status, created_at_utc_ticks)
-            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', '{chamber}', 119, {session}, {roll}, 1, 0, 'AwaitingReview', 1);
+                review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
+            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', '{chamber}', 119, {session}, {roll}, 1, 0, 'AwaitingReview', 1, 1);
             INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
             VALUES ('{recordId}', 1, 'auth0|editor', 'Person', NULL, @revision, 1);
             """, connection);

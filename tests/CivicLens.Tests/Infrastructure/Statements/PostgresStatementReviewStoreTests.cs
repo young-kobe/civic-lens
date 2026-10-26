@@ -606,6 +606,23 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         Assert.Equal("source", byId[approvedNewest].SourceId);
     }
 
+    // Rows with the same event date differ only by ID, so a wrong ID direction would skip or repeat rows at a page edge.
+    [Fact]
+    public async Task StatementsWithTheSameEventDateListByDescendingIdAcrossPagesInBothDirections()
+    {
+        var candidates = new[] { await StartedAsync(), await StartedAsync(), await StartedAsync(), await StartedAsync() };
+        foreach (var candidate in candidates) await SetEventDateAsync(candidate, new DateOnly(2026, 5, 5));
+        var list = new ListStatementReviews(reviews);
+
+        var walk = await PageWalk.RunAsync(async cursor =>
+        {
+            var page = await list.ExecuteAsync(Owner, cursor?.Encode(), 1);
+            return ([.. page.Items.Select(item => item.CandidateId)], page.NewerCursor, page.OlderCursor);
+        });
+
+        walk.AssertExact([.. candidates.OrderByDescending(candidate => candidate, StringComparer.Ordinal)]);
+    }
+
     [Fact]
     public async Task TriageListsDraftedStatementsThatNeedActionWithTheirExtractionAndTheApprovalCheckResult()
     {

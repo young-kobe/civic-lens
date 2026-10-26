@@ -217,8 +217,8 @@ public sealed class PostgresSenateVoteTests(PostgresCollection postgres) : IAsyn
 
     private static string VoteDraft(char id, string chamber) => $"""
         INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number,
-            review_state_version, review_status, created_at_utc_ticks)
-        VALUES ('{new string(id, 64)}', 'source', '{chamber}', 119, 1, 100, 1, 0, 'AwaitingReview', 1)
+            review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
+        VALUES ('{new string(id, 64)}', 'source', '{chamber}', 119, 1, 100, 1, 0, 'AwaitingReview', 1, 1)
         """;
 
     private static SenateVoteMenuItem Item(int roll, DateOnly day) => new(new SenateVoteRoll(SenateVoteFixtures.Session, roll), day);

@@ -19,7 +19,7 @@
         {
             <Panel Label="Vote not found">
                 <EmptyState Title="Vote not found" Text="This vote record does not exist, or its link is not valid.">
-                    <Action><Button Href="@VoteRoutes.List">Go to Votes</Button></Action>
+                    <Action><Button Href="/Review">Go to Review</Button></Action>
                 </EmptyState>
             </Panel>
             <form @formname="save" @onsubmit="SaveAsync" hidden></form>

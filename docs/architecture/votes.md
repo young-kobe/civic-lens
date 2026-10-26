@@ -288,15 +288,15 @@ The record ID is the SHA-256 of the source, the congress, the session, and the r
 
 Vote review uses the shared decision rules and review cycles in [review](review.md#review-cycles). It copies the shape of [action review](actions.md#action-review). The Host has vote pages on top of the shared handlers.
 
-**Ownership.** Core/Votes holds `VoteReview`, the aggregate of one record, and the review rules on `VoteDraftRevision`. Application/Votes holds `SaveVoteDraft`, `DecideVoteReview`, `GetVoteReview`, `ListVoteReviews`, `GetVoteReviewCounts`, and the store boundary `IVoteReviewStore`. Infrastructure/Votes holds `PostgresVoteReviewStore` on the shared `ReviewRecords` core. The core and the draft rows share one instance, `VoteDraftRows.Records`. A person cannot create a vote draft, so the store has no create. The shared text rules of actions and votes are in `ReviewText`, `ReviewTextRules`, and `ReviewTextSuggestion` (Core/Review).
+**Ownership.** Core/Votes holds `VoteReview`, the aggregate of one record, and the review rules on `VoteDraftRevision`. Application/Votes holds `SaveVoteDraft`, `DecideVoteReview`, `GetVoteReview`, `ListVotesNeedingAction`, and the store boundary `IVoteReviewStore`. Infrastructure/Votes holds `PostgresVoteReviewStore` on the shared `ReviewRecords` core. The core and the draft rows share one instance, `VoteDraftRows.Records`. A person cannot create a vote draft, so the store has no create. The shared text rules of actions and votes are in `ReviewText`, `ReviewTextRules`, and `ReviewTextSuggestion` (Core/Review).
 
 **Save and decide.** `SaveVoteDraft` and `DecideVoteReview` work as the action handlers do. A decision requeues no brief until briefs can cite votes. It still calls `BriefStaleness.AfterDecision`, which takes the brief locks in the action order.
 
-**Reads.** `GetVoteReview` returns the review cycle, the extractions that the loaded revisions cite, and the configured names of the people. The names come from the configuration revisions of the candidates. `ListVoteReviews` takes the filter `All`, `NeedsAction`, or `Approved`. Every filter orders by tier, then newest vote day, then record ID; see [review](review.md#lists-and-paging). The list also takes an issue, an official, and a vote day range. The page holds the tier of each row. `GetVoteReviewCounts` counts with the same status filter.
+**Reads.** `GetVoteReview` returns the review cycle, the extractions that the loaded revisions cite, and the configured names of the people. The names come from the configuration revisions of the candidates. `ListVotesNeedingAction` returns the records in Needs action, at most one page, and the total of all of them. Needs action means every status except Approved. The order is `last_revised_at_utc_ticks` descending, then record ID, so a new revision of an old record moves it to the top. Every revision sets the column.
 
-**Pages.** `/Review/Votes` lists the records with the filter tabs and their counts, and a filter form for issue, official, and dates. A row shows a tier badge for tier 1 and tier 2. Each row shows the headline, the roll call, the vote kind, the status, and the open concerns.
+**Pages.** No page lists all votes. The Review home page shows the records in Needs action in one panel with the action exceptions; see [review](review.md#lists-and-paging). A row shows the headline, the kind, and the status, and links to the editor. The rail has no Votes link.
 
-`/Review/Votes/{record-id}` has these parts:
+`/Review/Votes/{record-id}` is the editor. It has these parts:
 
 - the change since the last approved revision: the old and the new text side by side, with the facts of each revision beside it
 - those facts are the roll call, the kind, the bill, the tracked issues, and the member votes
@@ -309,7 +309,7 @@ Vote review uses the shared decision rules and review cycles in [review](review.
 
 The action link comes from `GetVoteReview`. The review read finds the action draft of the bill with `FindBillActionRecordIdsAsync` in the same transaction, which publication uses too. The clerk link is the HTML vote page: `https://clerk.house.gov/Votes/{year}{number}`. The year is the calendar year of the session. The roll number has no padding, so roll 100 of 2025 is `2025100` and roll 5 is `20255`. The format was checked against the live site on 2026-10-19.
 
-A person cannot edit the member votes. The rail has a Votes link.
+A person cannot edit the member votes.
 
 ### Owner commands
 
@@ -400,9 +400,9 @@ The reader takes the `lis` IDs of the senators from `IMemberRosterStore.ReadSena
 | Publication reads | `src/CivicLens.Application/Votes/UnpublishedApprovedVote.cs`, `src/CivicLens.Application/Votes/PublishableVote.cs`, `src/CivicLens.Infrastructure/Votes/VoteReviewQueries.cs`, `src/CivicLens.Application/Publication/VoteRecordLoader.cs` |
 | Vote revision | `src/CivicLens.Core/Votes/VoteDraftRevision.cs`, `src/CivicLens.Core/Review/ReviewText.cs`, `src/CivicLens.Core/Review/ReviewTextRules.cs`, `src/CivicLens.Core/Review/ReviewTextSuggestion.cs`, `src/CivicLens.Core/Review/IHeadlineSummaryRevision.cs` |
 | Review aggregate | `src/CivicLens.Core/Votes/VoteReview.cs` |
-| Review commands and reads | `src/CivicLens.Application/Votes/SaveVoteDraft.cs`, `src/CivicLens.Application/Votes/DecideVoteReview.cs`, `src/CivicLens.Application/Votes/GetVoteReview.cs`, `src/CivicLens.Application/Votes/ListVoteReviews.cs`, `src/CivicLens.Application/Votes/GetVoteReviewCounts.cs`, `src/CivicLens.Application/Votes/IVoteReviewStore.cs`, `src/CivicLens.Application/Votes/BillVoteDraft.cs` |
+| Review commands and reads | `src/CivicLens.Application/Votes/SaveVoteDraft.cs`, `src/CivicLens.Application/Votes/DecideVoteReview.cs`, `src/CivicLens.Application/Votes/GetVoteReview.cs`, `src/CivicLens.Application/Votes/ListVotesNeedingAction.cs`, `src/CivicLens.Application/Votes/VotesNeedingAction.cs`, `src/CivicLens.Application/Votes/IVoteReviewStore.cs`, `src/CivicLens.Application/Votes/BillVoteDraft.cs` |
 | Review store | `src/CivicLens.Infrastructure/Votes/PostgresVoteReviewStore.cs`, `src/CivicLens.Infrastructure/Review/ConfiguredPersonNames.cs`, `src/CivicLens.Infrastructure/Votes/BillVoteDrafts.cs` |
-| Review pages | `src/CivicLens.Host/Votes/VoteList.razor`, `src/CivicLens.Host/Review/DraftListPage.cs`, `src/CivicLens.Host/Votes/VoteEditor.razor`, `src/CivicLens.Host/Votes/VoteLabels.cs`, `src/CivicLens.Host/Votes/VoteRoutes.cs`, `src/CivicLens.Host/Collection/SourcePages.cs` |
+| Review pages | `src/CivicLens.Host/Review/ReviewHome.razor`, `src/CivicLens.Host/Votes/VoteEditor.razor`, `src/CivicLens.Host/Votes/VoteLabels.cs`, `src/CivicLens.Host/Votes/VoteRoutes.cs`, `src/CivicLens.Host/Collection/SourcePages.cs` |
 | Postgres drafting store and append | `src/CivicLens.Infrastructure/Votes/PostgresVoteDraftStore.cs`, `src/CivicLens.Infrastructure/Votes/VoteDraftRows.cs`, `src/CivicLens.Infrastructure/Votes/VoteDraftQueueMapping.cs`, `src/CivicLens.Infrastructure/Votes/VoteDraftQueueRows.cs` |
 | Drafting tables and model adapter | `src/CivicLens.Infrastructure/Votes/Persistence/`, `src/CivicLens.Infrastructure/Votes/AnthropicVoteDraftModel.cs` |
 | Worker composition | `src/CivicLens.Host/Votes/VoteDraftComposition.cs`, `src/CivicLens.Host/Votes/VoteDraftConfiguration.cs` |

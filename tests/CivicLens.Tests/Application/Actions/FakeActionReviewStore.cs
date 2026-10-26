@@ -1,7 +1,6 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Paging;
-using CivicLens.Application.Review;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Review;
 
@@ -60,8 +59,5 @@ internal sealed class FakeActionReviewStore : IActionReviewStore
 
     public Task<ActionReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-    public Task<ActionReviewPage> ListAsync(PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
-
-    public Task<ActionReviewCounts> CountAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<ActionsNeedingAction> ListNeedingActionAsync(int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
 }

@@ -55,6 +55,7 @@ internal static class VoteDraftRows
     private static void Revised(VoteDraftRow draft, VoteDraftRevision revision)
     {
         draft.CandidateId = revision.CandidateId;
+        draft.LastRevisedAtUtcTicks = revision.CreatedAtUtc.UtcTicks;
         ListedDraftRows.Set(draft, revision.VotedOn, revision.TrackedIssueIds, revision.OfficialIds());
     }
 

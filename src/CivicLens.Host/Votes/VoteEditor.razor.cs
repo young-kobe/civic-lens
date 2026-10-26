@@ -27,7 +27,7 @@ public sealed partial class VoteEditor
     private VoteDraftRevision Revision => detail!.Review.CurrentRevision;
 
     private IReadOnlyList<Crumb> Crumbs =>
-        [new("Review", "/Review"), new("Votes", VoteRoutes.List), new(detail is not null ? Revision.Headline : notFound ? "Vote not found" : "Vote")];
+        [new("Review", "/Review"), new(detail is not null ? Revision.Headline : notFound ? "Vote not found" : "Vote")];
 
     private IReadOnlyList<TabDefinition> RecordTabs =>
         [new("saved", $"Saved revision {Revision.RevisionNumber}"), new("edit", "Edit wording")];

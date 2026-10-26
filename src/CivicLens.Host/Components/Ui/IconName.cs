@@ -5,8 +5,6 @@ public enum IconName
     Review,
     Sources,
     Statements,
-    Actions,
-    Votes,
     Relationships,
     Briefs,
     Labels,

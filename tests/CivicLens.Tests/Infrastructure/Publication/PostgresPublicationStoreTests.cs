@@ -595,14 +595,14 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
                 return await CreateApprovedStatementAsync();
             case PublishedRecordKind.Action:
                 await ExecuteAsync("""
-                    INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks, review_state_version, review_status)
-                    VALUES (@id, 'congress-bills', 119, 'hr', 7, 1, 0, 1, 'Approved')
+                    INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks, last_revised_at_utc_ticks, review_state_version, review_status)
+                    VALUES (@id, 'congress-bills', 119, 'hr', 7, 1, 0, 0, 1, 'Approved')
                     """, id);
                 break;
             case PublishedRecordKind.Vote:
                 await ExecuteAsync("""
-                    INSERT INTO vote_drafts (record_id, source_id, congress, session_number, roll_call_number, current_revision_number, review_state_version, review_status, created_at_utc_ticks, chamber)
-                    VALUES (@id, 'congress-house-votes', 119, 1, 100, 1, 1, 'Approved', 0, 'House')
+                    INSERT INTO vote_drafts (record_id, source_id, congress, session_number, roll_call_number, current_revision_number, review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks, chamber)
+                    VALUES (@id, 'congress-house-votes', 119, 1, 100, 1, 1, 'Approved', 0, 0, 'House')
                     """, id);
                 break;
             case PublishedRecordKind.Relationship:

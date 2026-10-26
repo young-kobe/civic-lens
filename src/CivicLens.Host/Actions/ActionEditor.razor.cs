@@ -29,7 +29,7 @@ public sealed partial class ActionEditor
     private ActionDraftRevision Revision => detail!.Review.CurrentRevision;
 
     private IReadOnlyList<Crumb> Crumbs =>
-        [new("Review", "/Review"), new("Actions", ActionRoutes.List), new(detail is not null ? Revision.Headline : notFound ? "Action not found" : "Action")];
+        [new("Review", "/Review"), new(detail is not null ? Revision.Headline : notFound ? "Action not found" : "Action")];
 
     private IReadOnlyList<TabDefinition> RecordTabs =>
         [new("saved", $"Saved revision {Revision.RevisionNumber}"), new("edit", "Edit wording")];

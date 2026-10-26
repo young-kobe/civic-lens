@@ -183,17 +183,17 @@ Its required variables are in [operations](../operations.md#action-drafting). A 
 
 Action review uses the shared decision rules and review cycles in [review](review.md#review-cycles). The Host has action pages on top of the shared handlers.
 
-**Ownership.** Core/Actions holds `ActionReview`, the aggregate of one record, and the review rules on `ActionDraftRevision`. Application/Actions holds `SaveActionDraft`, `DecideActionReview`, `GetActionReview`, `ListActionReviews`, `GetActionReviewCounts`, and the store boundary `IActionReviewStore`. Infrastructure/Actions holds `PostgresActionReviewStore` on the shared `ReviewRecords` core. A person cannot create an action draft, so the store has no create.
+**Ownership.** Core/Actions holds `ActionReview`, the aggregate of one record, and the review rules on `ActionDraftRevision`. Application/Actions holds `SaveActionDraft`, `DecideActionReview`, `GetActionReview`, `ListActionsNeedingAction`, and the store boundary `IActionReviewStore`. Infrastructure/Actions holds `PostgresActionReviewStore` on the shared `ReviewRecords` core. A person cannot create an action draft, so the store has no create.
 
 **Save.** `SaveActionDraft` reads the expected revision and copies it with the new headline and summary. The request holds one `SuggestionChoice`: `Keep`, `Dismiss`, or `Use`. `Keep` keeps the stored suggestion. `Dismiss` clears it. `Use` takes the headline and the summary from the stored suggestion, ignores the posted text, and clears the suggestion. `Use` fails when the revision has no suggestion. The store checks the edit against the current revision again under the lock, because another writer can append first.
 
 **Decide.** `DecideActionReview` mirrors the statement handler. An approval runs `ActionDraftRevision.ValidateForApproval` and checks every citation against its saved extraction.
 
-**Reads.** `GetActionReview` returns the review cycle, the extractions that the loaded revisions cite, and the configured names of the officials. The names come from the configuration revisions of the candidates. `ListActionReviews` takes the filter `All`, `NeedsAction`, or `Approved`. Every filter orders by tier, then newest event date, then record ID; see [review](review.md#lists-and-paging). The list also takes an issue, an official, and an event date range. The page holds the tier of each row. `GetActionReviewCounts` counts with the same status filter as the list.
+**Reads.** `GetActionReview` returns the review cycle, the extractions that the loaded revisions cite, and the configured names of the officials. The names come from the configuration revisions of the candidates. `ListActionsNeedingAction` returns the records in Needs action, at most one page, and the total of all of them. Needs action means every status except Approved. That includes a record that code skipped and a person edit that waits. It also includes a record with changes requested and a record with withdrawn approval. The order is `last_revised_at_utc_ticks` descending, then record ID. A new revision of an old record moves it to the top. Every revision sets the column, as for weekly briefs and relationships.
 
-**Pages.** `/Review/Actions` lists the records with the filter tabs and their counts, and a filter form for issue, official, and dates. A row shows a tier badge for tier 1 and tier 2.
+**Pages.** No page lists all actions. The Review home page shows the records in Needs action in one panel with the vote exceptions; see [review](review.md#lists-and-paging). Each row links to the editor. The rail has no Actions link, and a missing record shows a link back to Review home.
 
-`/Review/Actions/{record-id}` has these parts:
+`/Review/Actions/{record-id}` is the editor. It has these parts:
 
 - the change since the last approved revision: the old and the new text side by side
 - the saved revision and the "Edit wording" form, with the suggestion and its "Use suggestion" and "Dismiss" buttons
@@ -204,7 +204,7 @@ Action review uses the shared decision rules and review cycles in [review](revie
 
 The vote drafts come from the same read as the page, in the same transaction. They are the drafts whose candidate names the bill: same Congress, bill type, and bill number. The list shows the newest 25 by vote day and says so when it is full. The status badge has no open-concern count, because the read takes no decision history. The page stores no copy and needs no migration. A vote has no stored result, so the list shows none.
 
-"Use suggestion" saves the stored suggestion text and clears the suggestion. "Dismiss" saves the form text and clears the suggestion. The plain save keeps the suggestion. The forms use the static post-back pattern of the statement pages, and `ReviewRecordPage` maps the failures. The rail has an Actions link.
+"Use suggestion" saves the stored suggestion text and clears the suggestion. "Dismiss" saves the form text and clears the suggestion. The plain save keeps the suggestion. The forms use the static post-back pattern of the statement pages, and `ReviewRecordPage` maps the failures.
 
 ### Publication
 
@@ -228,7 +228,7 @@ All are owner commands. Variables and examples are in [operations](../operations
 - The generated [actions schema](schema/actions.md) lists every table, column, key, check, index, and trigger.
 - `action_drafts` has no foreign key to `action_candidates`. The record ID comes from the bill identity, and each revision names its candidate in `candidateId`.
 - A Bypassed run records its reason in `action_analysis_runs`. `ck_action_analysis_runs_reason` lists the allowed reasons, including `sponsorshipsChanged`.
-- `action_drafts` holds `review_state_version` and `review_status`. `action_review_decisions` mirrors the statement decision table. Partial indexes serve the Approved and Needs action lists.
+- `action_drafts` holds `review_state_version` and `review_status`. `action_review_decisions` mirrors the statement decision table.
 - The commands use the replay receipt table with the operations `action-save` and `action-decide`.
 - `ActionDraftRevision` holds the headline, the summary, `textOrigin` (`Model` or `Person`), and an optional `suggestion`. The suggestion holds a headline, a summary, a run ID, and the fingerprint it was made under.
 - It also holds the bill identity and title, `candidateId`, `candidateUpdateDate`, `candidateIncludesSummaries`, `fingerprint`, `summaryVersion`, the policy area, the optional `policyAreaId`, the tracked issue IDs, and `issueRevisionId`.
@@ -247,9 +247,9 @@ All are owner commands. Variables and examples are in [operations](../operations
 | Fingerprint and summary choice | `src/CivicLens.Application/Collection/Bills/ActionFingerprint.cs`, `src/CivicLens.Application/Collection/Bills/BillSummarySelection.cs` |
 | Store, queue mapping, model | `src/CivicLens.Infrastructure/Actions/PostgresActionDraftStore.cs`, `src/CivicLens.Infrastructure/Actions/ActionDraftQueueMapping.cs`, `src/CivicLens.Infrastructure/Actions/ActionDraftRows.cs`, `src/CivicLens.Infrastructure/Actions/AnthropicActionDraftModel.cs` |
 | Review aggregate | `src/CivicLens.Core/Actions/ActionReview.cs` |
-| Review commands and reads | `src/CivicLens.Application/Actions/SaveActionDraft.cs`, `src/CivicLens.Application/Actions/DecideActionReview.cs`, `src/CivicLens.Application/Actions/GetActionReview.cs`, `src/CivicLens.Application/Actions/ListActionReviews.cs`, `src/CivicLens.Application/Actions/GetActionReviewCounts.cs`, `src/CivicLens.Application/Actions/IActionReviewStore.cs`, `src/CivicLens.Application/Votes/BillVoteDraft.cs` |
+| Review commands and reads | `src/CivicLens.Application/Actions/SaveActionDraft.cs`, `src/CivicLens.Application/Actions/DecideActionReview.cs`, `src/CivicLens.Application/Actions/GetActionReview.cs`, `src/CivicLens.Application/Actions/ListActionsNeedingAction.cs`, `src/CivicLens.Application/Actions/ActionsNeedingAction.cs`, `src/CivicLens.Application/Actions/IActionReviewStore.cs`, `src/CivicLens.Application/Votes/BillVoteDraft.cs` |
 | Review store | `src/CivicLens.Infrastructure/Actions/PostgresActionReviewStore.cs`, `src/CivicLens.Infrastructure/Actions/Persistence/ActionReviewDecisionRow.cs`, `src/CivicLens.Infrastructure/Votes/BillVoteDrafts.cs` |
-| Review pages | `src/CivicLens.Host/Actions/ActionList.razor`, `src/CivicLens.Host/Review/DraftListPage.cs`, `src/CivicLens.Host/Actions/ActionEditor.razor`, `src/CivicLens.Host/Actions/ActionLabels.cs`, `src/CivicLens.Host/Actions/ActionRoutes.cs`, `src/CivicLens.Host/Collection/SourcePages.cs` |
+| Review pages | `src/CivicLens.Host/Review/ReviewHome.razor`, `src/CivicLens.Host/Actions/ActionEditor.razor`, `src/CivicLens.Host/Actions/ActionLabels.cs`, `src/CivicLens.Host/Actions/ActionRoutes.cs`, `src/CivicLens.Host/Collection/SourcePages.cs` |
 | Publication | `src/CivicLens.Application/Publication/ActionRecordLoader.cs`, `src/CivicLens.Application/Publication/PublishedActionBuilder.cs`, `src/CivicLens.Publication.Contracts/PublishedAction.cs`, `src/CivicLens.Host/Publication/PublishedActionPage.razor` |
 | Record ID hash | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ActionCandidates.cs` |
 | Owner requeue of Blocked entries | `src/CivicLens.Application/Actions/RequeueBlockedActionDrafts.cs` |
@@ -258,7 +258,7 @@ All are owner commands. Variables and examples are in [operations](../operations
 ## Limits and planned work
 
 - Action records can produce about 110 revisions a day, about half of them sponsorship changes on approved records. Those revisions copy the text and need no model call. Code approves them.
-- The editor page has no Host test with a drafted record yet. The Host tests cover the list, the rail, and missing records.
+- The editor page has no Host test with a drafted record yet. The Host tests cover the Review home panel and missing records.
 - The prompt does not include the candidate update date, and no page renders it yet.
 - Sponsorship changes draft at once. Measure how often an approved record gets a new revision within a few days. Add a waiting window only if that rate is high.
 - After the first action slice, build in this order: House votes, reviewed relationships between statements and actions, then Congressional Record articles as a statement connector. Cosponsorship is cheap position-taking, so votes carry most of the signal about whether words match deeds. Floor speeches cover every member, including officials with no usable web source.
