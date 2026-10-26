@@ -2,7 +2,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Jobs;
@@ -22,9 +21,6 @@ using CivicLens.Tests.Application.Collection.Bills;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using Npgsql;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using static CivicLens.Tests.Fixtures.CollectionFixtures;
 
 namespace CivicLens.Tests.Infrastructure.Collection.Processing;
@@ -59,36 +55,6 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     {
         if (Directory.Exists(artifactRoot)) Directory.Delete(artifactRoot, recursive: true);
         await postgres.DropDatabaseAsync(connectionString);
-    }
-
-    [Fact]
-    public async Task UpgradeRegistersLegacySuccessfulJobsAndResumesTheirPipeline()
-    {
-        var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options;
-        await using var db = new CollectionAttemptDbContext(options);
-        await db.GetService<IMigrator>().MigrateAsync("20261008190000_DurableEvidenceProcessing");
-        await db.Database.ExecuteSqlRawAsync("ALTER TABLE collection_jobs ADD COLUMN configuration_revision_id text, ADD COLUMN pacing_key text, " +
-            "ADD COLUMN source_id text, ADD COLUMN is_root boolean");
-        await db.Database.ExecuteSqlRawAsync("CREATE TABLE collection_configuration_revisions (revision_id text PRIMARY KEY, json text NOT NULL, created_at bigint NOT NULL)");
-        var beforeJob = await CollectAsync("earlier", "Earlier wording.", legacySchema: true);
-        var afterJob = await CollectAsync("later", "Later wording.", legacySchema: true);
-        await db.Database.ExecuteSqlRawAsync("ALTER TABLE collection_jobs DROP COLUMN configuration_revision_id, DROP COLUMN pacing_key, " +
-            "DROP COLUMN source_id, DROP COLUMN is_root");
-        await db.Database.ExecuteSqlRawAsync("DROP TABLE collection_configuration_revisions");
-        var beforeAttempt = Assert.Single(beforeJob.Attempts).AttemptId;
-        var afterAttempt = Assert.Single(afterJob.Attempts).AttemptId;
-
-        await attempts.MigrateAsync();
-        var recovered = await processing.GetByJobIdsAsync([beforeJob.JobId, afterJob.JobId], default);
-        Assert.Equal(2, recovered.Count);
-        Assert.All(recovered, record => Assert.Equal("prepare", record.AttemptId));
-        var completed = await ProcessUntilTerminalAsync(Worker(processing), afterJob.JobId, afterAttempt);
-        Assert.Equal(EvidenceProcessingOutcome.Changed, completed.Outcome);
-        var beforeRecord = await RecordAsync(beforeJob.JobId, beforeAttempt);
-        var comparison = await comparisons.GetAsync(completed.ComparisonId!, default);
-        Assert.Equal(beforeRecord!.ExtractionId, comparison!.BeforeExtractionId);
-        Assert.Equal(completed.ExtractionId, comparison.AfterExtractionId);
-        Assert.NotEmpty(comparison.Hunks);
     }
 
     [Fact]
@@ -443,8 +409,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         Assert.Equal("historyGap", resumed.ErrorCode);
     }
 
-    private async Task<CollectionJobRecord> CollectAsync(string key, string? body, string? etag = null, bool fail = false,
-        bool legacySchema = false)
+    private async Task<CollectionJobRecord> CollectAsync(string key, string? body, string? etag = null, bool fail = false)
     {
         var job = await jobs.EnqueueAsync(ConfiguredSource(etag), key, default);
         var collector = new FixtureCollector(body, fail, Interlocked.Increment(ref observationTick));
@@ -454,7 +419,6 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         Assert.True(result.Status is CollectionJobRunStatus.Completed or CollectionJobRunStatus.AttemptFailed,
             $"Collection returned {result.Status}: {result.BlockReason}, retry {result.RetryAt:O}.");
         var record = (await jobs.GetAsync(job.JobId, default))!;
-        if (legacySchema) await StoreLegacyDefinitionAsync(job.JobId, job.Definition);
         return record;
     }
 
@@ -464,16 +428,6 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(
             "UPDATE collection_jobs SET definition_json = (definition_json::jsonb - 'apiResource')::text WHERE job_id = @id", connection);
-        command.Parameters.AddWithValue("id", jobId);
-        await command.ExecuteNonQueryAsync();
-    }
-
-    private async Task StoreLegacyDefinitionAsync(string jobId, CollectionJobDefinition definition)
-    {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand("UPDATE collection_jobs SET definition_json = @definition WHERE job_id = @id", connection);
-        command.Parameters.AddWithValue("definition", JsonSerializer.Serialize(definition, CollectionProtocol.JsonOptions));
         command.Parameters.AddWithValue("id", jobId);
         await command.ExecuteNonQueryAsync();
     }

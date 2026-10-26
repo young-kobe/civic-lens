@@ -85,8 +85,8 @@ internal sealed class StatementCandidateSeeder(PostgresCollectionAttemptStore at
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""
             INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, source_id, is_root,
-                configuration_revision_id, state, created_at, cancellation_requested, lease_fence)
-            VALUES (@id, @key, @definition, @source, false, @revision, 'Succeeded', 0, false, 0);
+                configuration_revision_id, pacing_key, state, created_at, cancellation_requested, lease_fence)
+            VALUES (@id, @key, @definition, @source, false, @revision, @source, 'Succeeded', 0, false, 0);
             INSERT INTO collection_job_attempts (attempt_id, job_id, sequence, request_json, started_at)
             VALUES (@id, @id, 1, '{}', 0);
             """, connection);

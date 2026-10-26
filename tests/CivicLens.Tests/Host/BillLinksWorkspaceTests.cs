@@ -177,8 +177,8 @@ public sealed class BillLinksWorkspaceTests(PostgresCollection postgres) : IAsyn
             SET session_replication_role = replica;
             INSERT INTO collection_configuration_revisions (revision_id, json, created_at) VALUES (@revision, @configuration, 1);
             INSERT INTO action_candidates (candidate_id, source_id, congress, bill_type, bill_number, update_date_utc_ticks, detail_job_id,
-                configuration_revision_id, created_at_utc_ticks)
-            VALUES (@candidate, @source, @congress, @type, @number, 1, 'detail', @revision, 1)
+                configuration_revision_id, created_at_utc_ticks, includes_summaries)
+            VALUES (@candidate, @source, @congress, @type, @number, 1, 'detail', @revision, 1, false)
             """, ("revision", configuration.Id), ("configuration", configuration.Json), ("candidate", action.CandidateId),
             ("source", action.SourceId), ("congress", congress), ("type", type), ("number", number));
         await Seeder.ActionAsync(action, "AwaitingReview");

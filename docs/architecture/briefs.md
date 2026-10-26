@@ -309,7 +309,7 @@ This is an owner command. It prints the count of entries that it queued or moved
 | Store, queue mapping, model | `src/CivicLens.Infrastructure/Briefs/PostgresBriefDraftStore.cs`, `src/CivicLens.Infrastructure/Briefs/BriefDraftQueueMapping.cs`, `src/CivicLens.Infrastructure/Briefs/BriefDraftRows.cs`, `src/CivicLens.Infrastructure/Briefs/AnthropicBriefDraftModel.cs` |
 | Week SQL and record read | `src/CivicLens.Infrastructure/Briefs/BriefWeekSql.cs`, `src/CivicLens.Infrastructure/Briefs/BriefRecordReader.cs`, `src/CivicLens.Infrastructure/Review/ReviewQueries.cs` |
 | Staleness | `src/CivicLens.Infrastructure/Briefs/BriefStaleness.cs`, `src/CivicLens.Infrastructure/Review/ReviewRecords.cs`, `src/CivicLens.Infrastructure/Publication/PostgresPublicationStore.cs` |
-| Tables | `src/CivicLens.Infrastructure/Briefs/Persistence/`, `src/CivicLens.Infrastructure/Collection/Migrations/20261026120000_WeeklyBriefs.cs` |
+| Tables | `src/CivicLens.Infrastructure/Briefs/Persistence/` |
 | CLI and composition | `src/CivicLens.Host/Briefs/BriefCommand.cs`, `src/CivicLens.Host/Briefs/BriefDraftComposition.cs`, `src/CivicLens.Host/Briefs/BriefDraftConfiguration.cs` |
 
 ## Limits and planned work

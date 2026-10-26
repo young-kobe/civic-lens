@@ -1,7 +1,4 @@
 using CivicLens.Tests.Fixtures;
-using System.Text.Json;
-using System.Text;
-using System.Security.Cryptography;
 using System.Data.Common;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Discovery;
@@ -12,7 +9,6 @@ using CivicLens.Infrastructure.Collection.Jobs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.Collection.Discovery;
@@ -288,97 +284,6 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
 
         Assert.Equal("https://example.test/articles/story", Assert.Single(manual.Jobs).Url);
         Assert.Equal(3, manual.DuplicateCount);
-    }
-
-    [Fact]
-    public async Task GeneralizationMigrationPreservesHistoricalDiscoveryAndAdmissionRows()
-    {
-        var upgradeConnectionString = await postgres.CreateEmptyDatabaseAsync();
-        try
-        {
-            var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(upgradeConnectionString).Options;
-            await using var db = new CollectionAttemptDbContext(options);
-            await db.GetService<IMigrator>().MigrateAsync("20261007002616_FeedDiscoveryAdmission");
-            await SeedHistoricalFeedRowsAsync(upgradeConnectionString);
-
-            await db.Database.MigrateAsync();
-
-            await using var connection = new NpgsqlConnection(upgradeConnectionString);
-            await connection.OpenAsync();
-            Assert.Equal(1L, await CountAsync(connection, "collection_discoveries"));
-            Assert.Equal(1L, await CountAsync(connection, "collection_candidate_jobs"));
-            Assert.Equal(1L, await CountAsync(connection, "collection_admission_batches"));
-            await using var read = new NpgsqlCommand(
-                "SELECT request_json FROM collection_discoveries WHERE attempt_id = 'historical-feed'", connection);
-            var requestJson = (string)(await read.ExecuteScalarAsync())!;
-            Assert.Contains("\"version\":1", requestJson, StringComparison.Ordinal);
-            Assert.False(await TableExistsAsync(connection, "collection_feed_discoveries"));
-            var upgradedAttempts = PostgresCollectionAttemptStore.FromConnectionString(upgradeConnectionString);
-            var evidence = await upgradedAttempts.GetAsync("historical-feed", default);
-            Assert.Equal(CollectionProtocol.Version, evidence!.Discovery!.Request.Version);
-            Assert.Equal("https://example.test/article", Assert.Single(evidence.Discovery.Urls));
-            var upgradedJobs = PostgresCollectionJobStore.FromConnectionString(upgradeConnectionString);
-            var duplicate = await upgradedJobs.AdmitAsync(Source(), "historical-feed", "another-batch", default);
-            Assert.Equal(1, duplicate.DuplicateCount);
-            Assert.Empty(duplicate.Jobs);
-            await db.GetService<IMigrator>().MigrateAsync("20261007002616_FeedDiscoveryAdmission");
-            Assert.Equal(1L, await CountAsync(connection, "collection_feed_discoveries"));
-            await db.Database.MigrateAsync();
-            Assert.Equal(1L, await CountAsync(connection, "collection_discoveries"));
-        }
-        finally
-        {
-            await postgres.DropDatabaseAsync(upgradeConnectionString);
-        }
-    }
-
-    private static async Task SeedHistoricalFeedRowsAsync(string connectionString)
-    {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var seed = new NpgsqlCommand("""
-            INSERT INTO collection_captures (sha256, byte_length) VALUES (repeat('a', 64), 10);
-            INSERT INTO collection_attempts (attempt_id, source_id, requested_url, final_url, observed_at_utc_ticks,
-                outcome, has_response, has_sent_validators, response_status_code, response_content_encodings, capture_sha256)
-            VALUES ('historical-feed', 'source', 'https://example.test/feed.xml', 'https://example.test/feed.xml',
-                638953920000000000, 'captured', true, false, 200, ARRAY[]::text[], repeat('a', 64));
-            INSERT INTO collection_feed_discoveries (attempt_id, source_id, request_json, discovery_json)
-            VALUES ('historical-feed', 'source',
-                '{"version":1,"jobId":"historical-job","sourceId":"source","url":"https://example.test/feed.xml","allowedOrigin":"https://example.test","allowedPathPrefix":"/","artifactDirectory":"/tmp/artifacts","mode":"feed","maxCandidates":100,"maxRequests":2,"maxBytes":10,"timeoutSeconds":4,"minDelayMilliseconds":0}',
-                '{"status":"parsed","urls":["https://example.test/article"],"outOfScopeCount":0}');
-            INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, state, created_at,
-                cancellation_requested, charged_requests, charged_bytes, charged_seconds, lease_fence)
-            VALUES ('historical-job', 'historical-job-key', @definition, 'Pending', 1, false, 0, 0, 0, 0);
-            INSERT INTO collection_feed_candidate_jobs (candidate_hash, source_id, url, job_id)
-            VALUES (@hash, 'source', 'https://example.test/article', 'historical-job');
-            INSERT INTO collection_feed_admission_batches (idempotency_key, attempt_id, input_json, result_json, created_at)
-            VALUES ('historical-batch', 'historical-feed',
-                @input,
-                '{"jobs":[{"jobId":"historical-job","url":"https://example.test/article"}],"deferredCount":0,"duplicateCount":0,"admittedCount":1}', 1);
-            """, connection);
-        seed.Parameters.AddWithValue("definition", JsonSerializer.Serialize(Template() with { Url = "https://example.test/article" }, CollectionProtocol.JsonOptions));
-        // The v4 feed batch contract had exactly these three input fields in this order.
-        seed.Parameters.AddWithValue("input", JsonSerializer.Serialize(new
-        {
-            attemptId = "historical-feed",
-            articleTemplate = Template(),
-            policy = new DiscoveryAdmissionPolicy()
-        }, CollectionProtocol.JsonOptions));
-        seed.Parameters.AddWithValue("hash", Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("6:sourcehttps://example.test/article"))));
-        await seed.ExecuteNonQueryAsync();
-    }
-
-    private static async Task<long> CountAsync(NpgsqlConnection connection, string table)
-    {
-        await using var command = new NpgsqlCommand($"SELECT count(*) FROM {table}", connection);
-        return (long)(await command.ExecuteScalarAsync())!;
-    }
-
-    private static async Task<bool> TableExistsAsync(NpgsqlConnection connection, string table)
-    {
-        await using var command = new NpgsqlCommand("SELECT to_regclass(@name) IS NOT NULL", connection);
-        command.Parameters.AddWithValue("name", table);
-        return (bool)(await command.ExecuteScalarAsync())!;
     }
 
     private async Task<string> SaveFeedAsync(string[] urls, DiscoveryStatus status = DiscoveryStatus.Parsed)

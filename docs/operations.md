@@ -227,7 +227,17 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- db
 
 For other application composition, build `PostgresCollectionAttemptStore` with `FromConnectionString`, or supply an `IDbContextFactory<CollectionAttemptDbContext>`. Call `MigrateAsync` explicitly before you import.
 
-The design-time context factory reads `CIVIC_LENS_DATABASE` when it is set. Otherwise it uses a local design database name for offline migration generation. Use EF tooling version 10.0.12 to generate migrations for `src/CivicLens.Infrastructure`, with output under `Collection/Migrations`. Review the generated operations and the snapshot together. Keep and test the explicit composite prior-capture foreign key in later schema changes.
+The design-time context factory reads `CIVIC_LENS_DATABASE` when it is set. Otherwise it uses a local design database name for offline migration generation. The repository has one migration, `InitialSchema`. It holds the generated tables. After them, it holds the hand SQL for the notify functions and triggers, the composite prior-capture foreign key, and the descending and partial indexes. Add later schema changes as new migrations.
+
+The EF tool version is pinned in `.config/dotnet-tools.json`. Restore it once, then add a migration for `src/CivicLens.Infrastructure`, with output under `Collection/Migrations`:
+
+```sh
+dotnet tool restore
+dotnet ef migrations add <Name> --project src/CivicLens.Infrastructure --output-dir Collection/Migrations --context CollectionAttemptDbContext
+dotnet ef migrations has-pending-model-changes --project src/CivicLens.Infrastructure --context CollectionAttemptDbContext
+```
+
+Review the generated operations and the snapshot together. Remove the byte order mark from the generated files, because `dotnet format` rejects it. Keep the explicit composite prior-capture foreign key in later schema changes. `MigrationsCreateTheHandWrittenObjects` tests that it exists.
 
 After a schema change, regenerate the schema reference in `docs/architecture/schema/` and commit it. Place each new table in the feature map of `SchemaReferenceTests` first.
 
@@ -728,15 +738,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases activate <release-number>
 ```
 
-The first publish of schema version 1 needs a clean development reset. The publisher reads the active release and refuses a release of another schema version. Do these steps once, in order. Production has no older release.
-
-1. Stop the static server, the review workspace, the worker, and the search service.
-2. Delete the contents of `CIVIC_LENS_RELEASE_DIRECTORY`.
-3. Run `DELETE FROM publication_releases;` in the development database.
-4. Run `DELETE FROM document_change_review_idempotency WHERE operation = 'publish-release';`. A replayed key would otherwise return a release that no longer exists.
-5. If you ran the search service, remove its database with `docker rm -f civic-lens-search-db`. Then create a new empty database with the `docker run` command in [Run the search service](#run-the-search-service). Start the service again only after the first publish. Release numbers restart at 1, and a search database that holds an old release 1 would activate the old records and skip the new release.
-
-The dates of the first publication of briefs start again after this reset. This is acceptable in development.
+A development database from before schema version 1 cannot publish. The publisher reads the active release and refuses a release of another schema version. Follow [Dev database reset](#dev-database-reset) once. The dates of the first publication of briefs start again after the reset. This is acceptable in development.
 
 Write each record as `<kind>:<id>`. The kind is `documentChange`, `statement`, `action`, `vote`, `brief`, or `relationship`. For example, use `documentChange:` and a 32-character draft ID, `statement:` and a 64-character candidate ID, or `action:` and a 64-character action record ID. The other three kinds take a 64-character record ID too. The command never guesses the kind from the ID. An unknown kind or a bad shape exits with code 2. The revision must be approved with no unresolved concerns. A record that replaces a record of the active release needs a note. Give it with `--note <kind>:<id> <text>`, and repeat the option for each replacement. A note has 1 to 500 characters. The note shows on the record page as a correction. A note for a new record, or for a record that you did not name, exits with code 2.
 
@@ -772,11 +774,11 @@ Open `http://127.0.0.1:8090/`. The home page shows the latest brief, the 20 newe
 
 The search service reads a published release over HTTP and keeps its own Postgres database. It needs no operational credential. The design is in [search](architecture/search.md).
 
-Start a separate Postgres container. Use another port and another volume than the operational database:
+Start a separate Postgres container. Use another port and another volume than the operational database. Port 5434 differs from the port 5433 of `make db`:
 
 ```sh
 docker run -d --name civic-lens-search-db -e POSTGRES_USER=search -e POSTGRES_PASSWORD=search -e POSTGRES_DB=search \
-  -p 127.0.0.1:5433:5432 postgres:18.3-alpine@sha256:54451ecb8ab38c24c3ec123f2fd501303a3a1856a5c66e98cecf2460d5e1e9d7
+  -p 127.0.0.1:5434:5432 postgres:18.3-alpine@sha256:54451ecb8ab38c24c3ec123f2fd501303a3a1856a5c66e98cecf2460d5e1e9d7
 ```
 
 Serve the active release root with a plain static server:
@@ -789,7 +791,7 @@ Run the service in a second shell. It applies its schema at startup, ingests the
 
 ```sh
 export CIVIC_LENS_RELEASE_BASE_URL=http://127.0.0.1:8090/
-export CIVIC_LENS_SEARCH_DATABASE="Host=127.0.0.1;Port=5433;Database=search;Username=search;Password=search"
+export CIVIC_LENS_SEARCH_DATABASE="Host=127.0.0.1;Port=5434;Database=search;Username=search;Password=search"
 export ASPNETCORE_URLS=http://127.0.0.1:8100
 dotnet run --project src/CivicLens.PublicApi
 ```
@@ -817,6 +819,35 @@ To use the search page, set `CIVIC_LENS_PUBLIC_API_URL=http://127.0.0.1:8100` in
 To use the report page, also set `CIVIC_LENS_TURNSTILE_SITE_KEY` in the environment of the process that publishes. For a local trial use the Cloudflare test site key `1x00000000000000000000AA`, which always passes. Publish, serve the release root, and open a record page. Use its link "Report a problem with this record". Send the report, then run the pull command above to see it. Without the API address or the site key, `report.html` says that reporting is not available.
 
 Optional variables: `CIVIC_LENS_TRUSTED_PROXY_RANGES` (the Cloudflare ranges, empty in development) and `CIVIC_LENS_REQUESTS_PER_MINUTE` (default 60). There is no Dockerfile yet. R-24 adds it.
+
+## Dev database reset
+
+Reset the development database once, if it was created before the initial migration. The migrations are one initial migration, and the protocol, configuration, schema, parser, and behavior versions start at 1. The code reads no row, capture, or release from before the initial migration. Production has no older data and needs no reset.
+
+1. Stop the services that use the database: the `make review` command (proxy, review workspace, and worker), the static server, and the search service. Stop any other `dotnet` host that runs.
+2. Drop the database. The container name, user, and database name come from the ignored env file:
+
+```sh
+source .runtime/database/postgres.env
+docker exec civic-lens-postgres psql -U "$POSTGRES_USER" -d postgres -c "DROP DATABASE \"$POSTGRES_DB\" WITH (FORCE)"
+```
+
+3. Delete the saved releases and captures. The capture directory also holds the `.pending` receipt handoffs:
+
+```sh
+rm -rf .runtime/releases .runtime/captures
+```
+
+4. Recreate the search container, so that an old release 1 in its database cannot hide the new release 1:
+
+```sh
+docker rm -f civic-lens-search-db
+```
+
+   Then run the `docker run` command in [Run the search service](#run-the-search-service). Start the service again only after the first publish.
+5. Run `make migrate`. It starts the Postgres container if needed, creates the database, and applies the one migration.
+
+Release numbers restart at 1 after this reset.
 
 ## Runtime data
 

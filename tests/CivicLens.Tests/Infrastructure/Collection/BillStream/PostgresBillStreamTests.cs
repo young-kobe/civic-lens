@@ -1237,8 +1237,8 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     private static CongressBillListItem Bill(int congress, int number) => new(congress, "hr", number, Backfill);
 
     private async Task SetCursorAsync(DateOnly day) => await ExecuteAsync(connectionString, $"""
-        INSERT INTO bill_stream_cursors (source_id, last_processed_day, updated_at_utc_ticks)
-        VALUES ('{SourceId}', '{day:yyyy-MM-dd}', 0)
+        INSERT INTO bill_stream_cursors (source_id, last_processed_day, pass_admitted_bills, updated_at_utc_ticks)
+        VALUES ('{SourceId}', '{day:yyyy-MM-dd}', 0, 0)
         """);
 
     private async Task<DateOnly?> ReadCursorAsync()

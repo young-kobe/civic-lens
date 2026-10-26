@@ -175,6 +175,33 @@ public sealed class PostgresGateLabelStoreTests(PostgresCollection postgres) : I
             (row.CandidateId, row.ExtractionId, row.HeldOut, Shape(new GateLabel(row.IssueIds, row.NamesBillOrVote)), row.Text));
     }
 
+    [Fact]
+    public async Task TheRunIdHasAForeignKeyToTheAnalysisRunsAndAUniqueIndexSoOneRunLabelsOneRelease()
+    {
+        Assert.Equal(1L, await CountAsync("""
+            SELECT count(*) FROM pg_constraint
+            WHERE conname = 'FK_statement_gate_labels_statement_analysis_runs_run_id' AND confrelid = 'statement_analysis_runs'::regclass
+            """, null));
+        Assert.Equal(1L, await CountAsync("""
+            SELECT count(*) FROM pg_indexes
+            WHERE indexname = 'IX_statement_gate_labels_run_id' AND indexdef LIKE 'CREATE UNIQUE INDEX%'
+            """, null));
+    }
+
+    [Theory]
+    [InlineData("Analysis", "NULL")]
+    [InlineData("Person", "'11111111111111111111111111111111'")]
+    public async Task TheDatabaseRefusesAModelLabelWithoutARunAndAHumanLabelWithOne(string kind, string runId)
+    {
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO statement_gate_labels (label_id, candidate_id, extraction_id, author_subject, author_kind, run_id, label_json, created_at_utc_ticks)
+            VALUES ('{new string('a', 32)}', '{new string('1', 64)}', '{new string('2', 64)}', 'auth0|owner', '{kind}', {runId}, 'label', 0);
+            """));
+
+        Assert.Equal("ck_statement_gate_labels_run", failure.ConstraintName);
+    }
+
     private static string? Shape(GateLabel? label) => label is null ? null : $"{string.Join(',', label.IssueIds)}:{label.NamesBillOrVote}";
 
     private async Task<string> SeedAsync(bool heldOut)

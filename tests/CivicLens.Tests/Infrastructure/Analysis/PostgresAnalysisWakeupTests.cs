@@ -120,6 +120,26 @@ public sealed class PostgresAnalysisWakeupTests(PostgresCollection postgres) : I
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => draftingWaiting);
     }
 
+    [Theory]
+    [InlineData("action_analysis")]
+    [InlineData("brief_analysis")]
+    [InlineData("document_change_analysis")]
+    [InlineData("relationship_analysis")]
+    [InlineData("statement_analysis")]
+    [InlineData("vote_analysis")]
+    public async Task EveryAnalysisQueueTableWakesItsListenersThroughTheNotifyTrigger(string table)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand($"""
+            SELECT pg_get_triggerdef(oid) FROM pg_trigger
+            WHERE tgrelid = '{table}'::regclass AND tgfoid = 'civic_lens_notify_analysis_change'::regproc AND NOT tgisinternal
+            """, connection);
+
+        var definition = Assert.IsType<string>(await command.ExecuteScalarAsync());
+        Assert.StartsWith($"CREATE TRIGGER trg_{table}_notify AFTER INSERT OR UPDATE OF status, retry_at ON ", definition);
+    }
+
     private static async Task ExecuteAsync(string connection, string sql)
     {
         await using var open = new NpgsqlConnection(connection);

@@ -254,6 +254,15 @@ public sealed class PostgresStatementGateStoreTests(PostgresCollection postgres)
         return (long)(await command.ExecuteScalarAsync())!;
     }
 
+    [Fact]
+    public async Task TheRunReasonCheckAcceptsEveryPassReasonThatTheGateCanReturn()
+    {
+        var check = await ScalarTextAsync(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'ck_statement_analysis_runs_reason'");
+
+        Assert.All(StatementGateReasons.PassReasons, reason => Assert.Contains($"'{reason}'", check, StringComparison.Ordinal));
+    }
+
     private async Task<string> ScalarTextAsync(string sql)
     {
         await using var connection = new NpgsqlConnection(connectionString);

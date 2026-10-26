@@ -419,7 +419,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
     internal static IQueryable<JobRow> WherePacingOpen(IQueryable<JobRow> jobs, IQueryable<JobOriginRow> paces,
         long nowTicks) =>
         // A running job holds an unresolved attempt, and its recovery must not wait for pacing.
-        jobs.Where(row => row.PacingKey == null || row.State == CollectionJobState.Running ||
+        jobs.Where(row => row.State == CollectionJobState.Running ||
             !paces.Any(pace => pace.Origin == row.PacingKey && pace.NotBefore > nowTicks));
 
     private static string NormalizeOrigin(string value)
