@@ -259,7 +259,9 @@ public sealed class PublishedOfficialPageTests
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
-        Assert.Null(new HtmlParser().ParseDocument(html).QuerySelector("[data-layout-choice]"));
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.NotNull(document.QuerySelector("tbody tr.against-party"));
+        Assert.Null(document.QuerySelector("[data-layout-choice]"));
     }
 
     private static async Task<AngleSharp.Dom.IDocument> RenderedAsync(PublishedOfficialVote[] votes)
