@@ -150,6 +150,24 @@ public sealed class PublishedOfficialPageTests
         Assert.Contains("Congress 118", document.QuerySelector("title")!.TextContent, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(118, "Mayor Example, Representative for WA, district 1. Votes in Congress 118")]
+    [InlineData(119, "Mayor Example. Votes in Congress 119")]
+    [InlineData(110, "Mayor Example. Votes in Congress 110")]
+    public async Task AnEarlierCongressDescriptionNamesTheOfficeHeldInThatCongressAndNoneWhenThereWasNone(int congress, string expectedStart)
+    {
+        var profile = Profile() with
+        {
+            Terms = [new() { Office = "rep", State = "WA", District = 1, Party = "Democrat", Start = new(2021, 1, 3), End = new(2025, 1, 3) }]
+        };
+        var page = new ReleaseOfficialPage(profile, true, congress, false, [], [], []);
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, CancellationToken.None);
+
+        var description = new HtmlParser().ParseDocument(html).QuerySelector("meta[name='description']")!.GetAttribute("content")!;
+        Assert.StartsWith(expectedStart, description, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task AnOfficialWithNoTermStatesThatTheRostersAndTheConfigurationListNoOffice()
     {

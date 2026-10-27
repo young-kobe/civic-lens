@@ -1,6 +1,6 @@
 @using CivicLens.Publication.Contracts
 
-<PublicPage Title="Record withdrawn" RootPath="../">
+<PublicPage Title="@($"Withdrawn {PublishedRecordLabels.Kind(Withdrawal.Kind).ToLowerInvariant()}: {Withdrawal.RecordId[..12]}")" Description="A person withdrew this record. Its content is no longer published." RootPath="../">
     <a class="back-link" href="@("../" + PublicationProtocol.AllRecordsPagePath(1))">All records</a>
     <RecordView HeadingLevel="1" Headline="This record was withdrawn"
                 Summary="A person withdrew this record. Its content is no longer published."

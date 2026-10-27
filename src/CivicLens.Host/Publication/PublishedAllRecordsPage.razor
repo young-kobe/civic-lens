@@ -1,6 +1,6 @@
 @using CivicLens.Publication.Contracts
 
-<PublicPage Title="All published records">
+<PublicPage Title="All published records" Page="Page" PageCount="PageCount" Description="@($"All {Release.Records.Length} published records of Civic Lens, newest first. Each record shows its sources and the exact text it cites.")">
     <a class="back-link" href="@PublicationProtocol.HomePath">Home</a>
     <PageHeader Title="All published records" Lede="@($"Release {Release.ReleaseNumber}, published {Moment.Full(Release.PublishedAtUtc)}.")" />
     <Panel Label="Records">

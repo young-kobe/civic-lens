@@ -925,12 +925,156 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task PagesOfOneListHaveDifferentTitlesSoSearchResultsAndTabsCanTellThemApart()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var release = ReleaseOf(120) with { Records = [.. ReleaseOf(120).Records.Select(entry => entry with { PolicyAreaIds = ["land-use"] })] };
+        var facet = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None)).PolicyAreas.Single();
+
+        var titles = new List<string>();
+        foreach (var page in Enumerable.Range(1, 3))
+        {
+            titles.Add(TitleOf(await renderer.RenderAllRecordsAsync(release, page, CancellationToken.None)));
+            titles.Add(TitleOf(await renderer.RenderFacetPageAsync(facet, page, CancellationToken.None)));
+        }
+
+        Assert.Equal(titles.Count, titles.Distinct().Count());
+        Assert.Equal("All published records, page 2 of 3 | Civic Lens", titles[2]);
+    }
+
+    [Fact]
+    public async Task APagedTitleKeepsItsPageNumberWhenTheNameIsLongAndOnePageHasNoPageNumber()
+    {
+        var name = new string('x', 70);
+        var release = ReleaseOf(120) with { Records = [.. ReleaseOf(120).Records.Select(entry => entry with { IssueIds = ["housing"] })] };
+        var facet = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), IssuesNamed("housing", name))).Issues.Single();
+        var renderer = new ReleaseRenderer(null, null);
+
+        Assert.Equal($"{name}, page 3 of 3 | Civic Lens", TitleOf(await renderer.RenderFacetPageAsync(facet, 3, CancellationToken.None)));
+        Assert.Equal("All published records | Civic Lens", TitleOf(await renderer.RenderAllRecordsAsync(ReleaseOf(3), 1, CancellationToken.None)));
+    }
+
+    [Fact]
+    public async Task TwoWithdrawalsHaveDifferentTitlesSoTabsAndSearchResultsCanTellThemApart()
+    {
+        PublishedWithdrawal Withdrawal(char id) => new()
+        {
+            Kind = PublishedRecordKind.Action,
+            RecordId = new string(id, 64),
+            WithdrawnRevisionNumber = 1,
+            FirstPublishedAtUtc = DateTimeOffset.UnixEpoch,
+            WithdrawnAtUtc = DateTimeOffset.UnixEpoch,
+            Note = "Wrong.",
+            Corrections = []
+        };
+        var renderer = new ReleaseRenderer(null, null);
+
+        var first = TitleOf(await renderer.RenderWithdrawalAsync(Withdrawal('a'), CancellationToken.None));
+        var second = TitleOf(await renderer.RenderWithdrawalAsync(Withdrawal('b'), CancellationToken.None));
+
+        Assert.NotEqual(first, second);
+        Assert.Equal("Withdrawn action: aaaaaaaaaaaa | Civic Lens", first);
+    }
+
+    [Fact]
+    public async Task ALongSummaryWithNewlinesAndSpaceRunsIsCutAtAWholeWordOnOneLineAndOpenGraphRepeatsIt()
+    {
+        var summary = string.Join("\n  ", Enumerable.Repeat("housing   rules\nchanged", 20));
+        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record() with { Summary = summary }, CancellationToken.None);
+
+        var head = new HtmlParser().ParseDocument(html).Head!;
+        var description = head.QuerySelector("meta[name='description']")!.GetAttribute("content")!;
+        Assert.InRange(description.Length, 100, 160);
+        Assert.EndsWith("…", description, StringComparison.Ordinal);
+        Assert.Matches(@"(housing|rules|changed)…$", description);
+        Assert.DoesNotMatch(@"\s{2}|[\r\n]", description);
+        Assert.Equal(description, head.QuerySelector("meta[property='og:description']")!.GetAttribute("content"));
+    }
+
+    [Fact]
+    public async Task AWordlessHeadlineIsNeverCutBetweenTheTwoHalvesOfASurrogatePair()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record() with { Headline = string.Concat(Enumerable.Repeat("😀", 60)) }, CancellationToken.None);
+
+        var title = TitleOf(html);
+        Assert.DoesNotContain('\uFFFD', title);
+        Assert.StartsWith("😀😀", title, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task EveryPageTypeHasABoundedDescriptionThatOpenGraphRepeatsAndNoCanonicalLink()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var release = ReleaseWithFilters();
+        var facets = SearchFacets();
+        var withdrawal = new PublishedWithdrawal
+        {
+            Kind = PublishedRecordKind.Action,
+            RecordId = new string('c', 64),
+            WithdrawnRevisionNumber = 3,
+            FirstPublishedAtUtc = DateTimeOffset.UnixEpoch,
+            WithdrawnAtUtc = DateTimeOffset.UnixEpoch,
+            Note = "Wrong.",
+            Corrections = []
+        };
+        var official = new ReleaseOfficialPage(new PublishedOfficialProfile { Id = "mayor", Name = "Mayor Example", Terms = [] }, true, 119, true, [], [], []);
+        var pages = new[]
+        {
+            await renderer.RenderRecordAsync(Record(), CancellationToken.None),
+            await renderer.RenderStatementAsync(Statement(), [], CancellationToken.None),
+            await renderer.RenderActionAsync(Action(), [], CancellationToken.None),
+            await renderer.RenderVoteAsync(Vote(), null, [], CancellationToken.None),
+            await renderer.RenderBriefAsync(Brief(), CancellationToken.None),
+            await renderer.RenderWithdrawalAsync(withdrawal, CancellationToken.None),
+            await renderer.RenderHomeAsync(release, null, facets, CancellationToken.None),
+            await renderer.RenderAllRecordsAsync(release, 1, CancellationToken.None),
+            await renderer.RenderFacetPageAsync(facets.Issues[0], 1, CancellationToken.None),
+            await renderer.RenderFacetsAsync(facets, CancellationToken.None),
+            await renderer.RenderOfficialAsync(official, CancellationToken.None),
+            await renderer.RenderOfficialsAsync([new OfficialListing(official.Profile, 0)], CancellationToken.None),
+            await renderer.RenderSearchAsync(release, facets, CancellationToken.None),
+            await renderer.RenderMethodAsync(CancellationToken.None),
+            await renderer.RenderReportAsync(CancellationToken.None)
+        };
+
+        foreach (var html in pages)
+        {
+            var head = new HtmlParser().ParseDocument(html).Head!;
+            var description = head.QuerySelector("meta[name='description']")!.GetAttribute("content")!;
+            Assert.InRange(description.Length, 10, 160);
+            Assert.Equal(description, head.QuerySelector("meta[property='og:description']")!.GetAttribute("content"));
+            Assert.EndsWith(" | Civic Lens", head.QuerySelector("title")!.TextContent, StringComparison.Ordinal);
+            Assert.Equal(head.QuerySelector("title")!.TextContent, head.QuerySelector("meta[property='og:title']")!.GetAttribute("content"));
+            Assert.Equal("Civic Lens", head.QuerySelector("meta[property='og:site_name']")!.GetAttribute("content"));
+            Assert.Contains("favicon.svg", head.QuerySelector("link[rel='icon']")!.GetAttribute("href"), StringComparison.Ordinal);
+            Assert.Null(head.QuerySelector("link[rel='canonical']"));
+            Assert.Null(head.QuerySelector("meta[property='og:url']"));
+        }
+    }
+
+    [Fact]
+    public async Task ARecordPageUsesItsHeadlineAsTitleCutAtAWordAndIsAnArticle()
+    {
+        var headline = string.Join(' ', Enumerable.Repeat("housing", 30));
+        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record() with { Headline = headline }, CancellationToken.None);
+
+        var head = new HtmlParser().ParseDocument(html).Head!;
+        var title = head.QuerySelector("title")!.TextContent;
+        Assert.InRange(title.Length, 20, 70 + " | Civic Lens".Length);
+        Assert.StartsWith("housing housing", title, StringComparison.Ordinal);
+        Assert.Contains("housing… | Civic Lens", title, StringComparison.Ordinal);
+        Assert.Equal("article", head.QuerySelector("meta[property='og:type']")!.GetAttribute("content"));
+    }
+
+    private static string TitleOf(string html) => new HtmlParser().ParseDocument(html).QuerySelector("title")!.TextContent;
+
+    [Fact]
     public void AssetsIncludeTheThemeAtItsReleaseRelativePath()
     {
         var assets = new ReleaseRenderer(null, null).Assets;
 
         foreach (var path in new[] { "assets/css/theme.css", "assets/css/app.css", "assets/js/theme.js", "assets/js/app.js",
-                     "assets/fonts/instrument-sans.woff2", "assets/fonts/newsreader.woff2" })
+                     "assets/fonts/instrument-sans.woff2", "assets/fonts/newsreader.woff2", "assets/favicon.svg" })
             Assert.Contains(assets, asset => asset.RelativePath == path && asset.Content.Length > 0);
     }
 
