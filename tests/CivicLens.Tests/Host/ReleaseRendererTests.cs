@@ -1399,7 +1399,7 @@ public sealed class ReleaseRendererTests
     {
         var assets = new ReleaseRenderer(null, null).Assets;
 
-        foreach (var path in new[] { "assets/css/theme.css", "assets/css/app.css", "assets/css/public.css", "assets/js/theme.js", "assets/js/app.js",
+        foreach (var path in new[] { "assets/css/theme.css", "assets/css/app.css", "assets/css/public.css", "assets/js/theme.js", "assets/js/app.js", "assets/js/public.js",
                      "assets/fonts/instrument-sans.woff2", "assets/fonts/newsreader.woff2", "assets/favicon.svg" })
             Assert.Contains(assets, asset => asset.RelativePath == path && asset.Content.Length > 0);
     }
@@ -1443,9 +1443,11 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public void ReviewStylesStayOutOfTheRelease()
+    public void ReviewStylesAndScriptsStayOutOfTheRelease()
     {
-        Assert.DoesNotContain(new ReleaseRenderer(null, null).Assets, asset => asset.RelativePath.EndsWith("review.css", StringComparison.Ordinal));
+        var assets = new ReleaseRenderer(null, null).Assets;
+        Assert.DoesNotContain(assets, asset => asset.RelativePath.EndsWith("review.css", StringComparison.Ordinal));
+        Assert.DoesNotContain(assets, asset => asset.RelativePath.EndsWith("review.js", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1485,6 +1487,7 @@ public sealed class ReleaseRendererTests
             .Select(element => element.GetAttribute("href") ?? element.GetAttribute("src")!)
             .ToArray();
         Assert.Contains(links, link => link.EndsWith("assets/css/public.css", StringComparison.Ordinal));
+        Assert.Contains(links, link => link.EndsWith("assets/js/public.js", StringComparison.Ordinal));
         foreach (var link in links)
             Assert.Contains(renderer.Assets, asset => asset.RelativePath == ReleasePath(pagePath, link));
     }

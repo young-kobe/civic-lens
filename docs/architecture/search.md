@@ -171,7 +171,7 @@ The poll interval is 2 minutes and the statement timeout is 2 seconds. Both are 
 
 ### Search page
 
-`PublishedSearchPage` renders `search.html`. The form stays hidden until `app.js` runs. The kind filter lists the six kinds. The official and source filters list the distinct values of the release manifest. The issue and policy area filters show catalog names. The script calls `/v1/search`, shows each result with its snippet, and loads more results with the cursor. It builds the snippet with `mark` elements, never with HTML from the service.
+`PublishedSearchPage` renders `search.html`. The form stays hidden until `public.js` runs. The kind filter lists the six kinds. The official and source filters list the distinct values of the release manifest. The issue and policy area filters show catalog names. The script calls `/v1/search`, shows each result with its snippet, and loads more results with the cursor. It builds the snippet with `mark` elements, never with HTML from the service.
 
 ### Operational pull
 
@@ -206,7 +206,7 @@ The poll interval is 2 minutes and the statement timeout is 2 seconds. Both are 
 | Reader reports | `src/CivicLens.PublicApi/Reports/ReportEndpoints.cs`, `src/CivicLens.PublicApi/Reports/ReportSubmission.cs`, `src/CivicLens.PublicApi/Reports/ReportStore.cs`, `src/CivicLens.PublicApi/Reports/ReportCursor.cs`, `src/CivicLens.PublicApi/Reports/ReportReceipt.cs`, `src/CivicLens.PublicApi/Reports/TurnstileVerifier.cs`, `src/CivicLens.PublicApi/Reports/TurnstileSettings.cs`, `src/CivicLens.PublicApi/Schema/002_reader_reports.sql` |
 | Report wire types | `src/CivicLens.Publication.Contracts/ReaderReportProtocol.cs`, `src/CivicLens.Publication.Contracts/PulledReport.cs`, `src/CivicLens.Publication.Contracts/PulledReportBatch.cs` |
 | Operational pull | `src/CivicLens.Application/Reports/PullReaderReports.cs`, `src/CivicLens.Application/Reports/IReaderReportSource.cs`, `src/CivicLens.Application/StageWorker.cs`, `src/CivicLens.Infrastructure/Reports/HttpReportPuller.cs`, `src/CivicLens.Infrastructure/PostgresIntervalWakeup.cs`, `src/CivicLens.Host/Reports/ReportPullComposition.cs` |
-| Search page | `src/CivicLens.Host/Publication/PublishedSearchPage.razor`, `src/CivicLens.Host/Publication/ReleaseRenderer.cs`, `src/CivicLens.Host/wwwroot/js/app.js` |
+| Search page | `src/CivicLens.Host/Publication/PublishedSearchPage.razor`, `src/CivicLens.Host/Publication/ReleaseRenderer.cs`, `src/CivicLens.Host/wwwroot/js/public.js` |
 | Tests | `tests/CivicLens.Tests/PublicApi/`, `tests/CivicLens.Tests/Infrastructure/Reports/`, `tests/CivicLens.Tests/Application/Reports/` |
 
 Run commands are in [operations](../operations.md#run-the-search-service).

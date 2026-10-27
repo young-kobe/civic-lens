@@ -85,7 +85,8 @@ Pages compose these components. The comparison page, the draft editor, and publi
 - Markup has no style tags or style attributes.
 - There are no `*.razor.css` or `*.cshtml` files.
 - Only `App.razor` and `PublicPage.razor` own `html`, `link`, and `script` tags, and both shells load the same theme.
-- Each shell loads only its own stylesheet, after `app.css`. `App.razor` loads `review.css` and never `public.css`. The release lists `public.css` and never `review.css`.
+- Each shell loads only its own stylesheet and script, after `app.css` and `app.js`. `App.razor` loads `review.css` and `review.js`, and never `public.css` or `public.js`. The release lists `public.css` and `public.js`, and never `review.css` or `review.js`. Enforced by `App.razor`, `PublicPage.razor`, and `PublicAssets`. Test: `PresentationArchitectureTests.EachShellLoadsOnlyItsOwnStylesheetAndScriptAfterTheSharedOnes`.
+- Three scripts hold the behavior, after `theme.js`. `app.js` holds what both surfaces use: the theme toggle, the comparison layout switch, the linked highlight, and the segmented thumb. `public.js` holds search and the reader report form. `review.js` holds tabs, notice dismissal, the dialog focus trap, table scroll shadows, the unsaved changes guard, and the start of Blazor. The scripts share no global. No test, because the repository has no JavaScript test harness.
 - A selector lives in one of `app.css`, `public.css`, and `review.css`. A selector with a `.public-` class lives only in `public.css`. A rendered public page uses no class that only `review.css` defines; see [publication](publication.md#rendering).
 - Only shared components render `del` and `ins`.
 
@@ -102,7 +103,7 @@ Pages compose these components. The comparison page, the draft editor, and publi
 | Owner command rules and JSON output | `src/CivicLens.Host/OwnerCommand.cs`, `src/CivicLens.Host/CommandOutput.cs` |
 | App shell and routes | `src/CivicLens.Host/Components/App.razor`, `src/CivicLens.Host/Components/Routes.razor`, `src/CivicLens.Host/Components/Layout/WorkspaceLayout.razor` |
 | Shared evidence components | `src/CivicLens.Host/Components/Evidence/DocumentComparisonView.razor`, `src/CivicLens.Host/Components/Evidence/RecordView.razor`, `src/CivicLens.Host/Components/Evidence/StatementRecord.razor` |
-| Styles and scripts | `src/CivicLens.Host/wwwroot/css/theme.css`, `src/CivicLens.Host/wwwroot/css/app.css`, `src/CivicLens.Host/wwwroot/css/public.css`, `src/CivicLens.Host/wwwroot/css/review.css`, `src/CivicLens.Host/wwwroot/js/theme.js`, `src/CivicLens.Host/wwwroot/js/app.js` |
+| Styles and scripts | `src/CivicLens.Host/wwwroot/css/theme.css`, `src/CivicLens.Host/wwwroot/css/app.css`, `src/CivicLens.Host/wwwroot/css/public.css`, `src/CivicLens.Host/wwwroot/css/review.css`, `src/CivicLens.Host/wwwroot/js/theme.js`, `src/CivicLens.Host/wwwroot/js/app.js`, `src/CivicLens.Host/wwwroot/js/public.js`, `src/CivicLens.Host/wwwroot/js/review.js` |
 | Workspace wiring | `src/CivicLens.Host/Review/ReviewWorkspace.cs` |
 | Sources page | `src/CivicLens.Host/Collection/SourcesPage.razor` |
 | Presentation tests | `tests/CivicLens.Tests/Architecture/PresentationArchitectureTests.cs` |

@@ -9,6 +9,7 @@
     <EmbeddedResource Include="wwwroot/css/public.css" LogicalName="assets/css/public.css" />
     <EmbeddedResource Include="wwwroot/js/theme.js" LogicalName="assets/js/theme.js" />
     <EmbeddedResource Include="wwwroot/js/app.js" LogicalName="assets/js/app.js" />
+    <EmbeddedResource Include="wwwroot/js/public.js" LogicalName="assets/js/public.js" />
     <EmbeddedResource Include="wwwroot/favicon.svg" LogicalName="assets/favicon.svg" />
     <EmbeddedResource Include="wwwroot/fonts/instrument-sans.woff2" LogicalName="assets/fonts/instrument-sans.woff2" />
     <EmbeddedResource Include="wwwroot/fonts/newsreader.woff2" LogicalName="assets/fonts/newsreader.woff2" />
