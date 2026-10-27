@@ -321,7 +321,7 @@ tr.is-new td { animation: row-in 1.6s var(--ease); }
     .hide-narrow { display: none; }
     .page-header h1 { font-size: var(--t-lg); }
     .record-headline { font-size: var(--t-xl); }
-    .public-main .table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .public-main .table thead, .public-main .table td:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     .public-main .table, .public-main .table tbody { display: block; }
     .public-main .table tr { display: flex; flex-direction: column; gap: 2px; padding: 11px var(--s4); border-bottom: 1px solid var(--line); }
     .public-main .panel-padded .table tr { padding-inline: 0; }
@@ -329,6 +329,5 @@ tr.is-new td { animation: row-in 1.6s var(--ease); }
     .public-main .table td { display: block; width: auto; max-width: none; padding: 0; border: 0; text-align: left; white-space: normal; overflow-wrap: anywhere; }
     .public-main .table td[data-label]::before { content: attr(data-label) ": "; content: attr(data-label) ": " / ""; color: var(--muted); font-weight: 600; }
     .public-main .table .cell-main { order: -1; }
-    .public-main .table td:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
     .public-main .table td:empty::before { content: none; }
 }
