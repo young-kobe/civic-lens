@@ -230,7 +230,7 @@ public sealed class PublishedOfficialPageTests
 
         var document = await RenderedAsync(votes);
 
-        var marked = document.QuerySelectorAll("[aria-labelledby='panel-records'] tbody tr[data-against-party]");
+        var marked = document.QuerySelectorAll("[aria-labelledby='panel-records'] tbody tr.against-party");
         Assert.EndsWith(PublicationProtocol.RecordPagePath(Vote('a', day).RecordId), Assert.Single(marked).QuerySelector("a")!.GetAttribute("href"), StringComparison.Ordinal);
         Assert.Equal(5, document.QuerySelectorAll("[aria-labelledby='panel-records'] tbody tr").Length);
     }
@@ -247,6 +247,19 @@ public sealed class PublishedOfficialPageTests
         Assert.Equal(["All records", "Votes against their party"], switchButtons.Select(button => button.TextContent));
         Assert.Equal("all", withBreak.QuerySelector("[aria-labelledby='panel-records']")!.GetAttribute("data-layout"));
         Assert.Null(withoutBreak.QuerySelector("[aria-labelledby='panel-records'] [data-layout-choice]"));
+        Assert.Null(withoutBreak.QuerySelector("[aria-labelledby='panel-records']")!.GetAttribute("data-layout"));
+        Assert.NotNull(withBreak.QuerySelector("[aria-labelledby='panel-records'] [data-layout-switch][hidden]"));
+        Assert.Equal(["true", "false"], switchButtons.Select(button => button.GetAttribute("aria-pressed")));
+    }
+
+    [Fact]
+    public async Task AnEarlierCongressPageHasNoRecordsSwitchEvenWithAVoteAgainstTheirParty()
+    {
+        var page = new ReleaseOfficialPage(Profile(), true, 118, false, [], [], [Split('a', new DateOnly(2024, 4, 1), "Nay") with { Congress = 118 }]);
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.Null(new HtmlParser().ParseDocument(html).QuerySelector("[data-layout-choice]"));
     }
 
     private static async Task<AngleSharp.Dom.IDocument> RenderedAsync(PublishedOfficialVote[] votes)

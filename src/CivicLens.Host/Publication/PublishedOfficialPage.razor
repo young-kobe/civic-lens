@@ -86,8 +86,8 @@
             </Panel>
         }
     }
-    <Panel Title="Records" Aside="@RecordFilter" data-layout="all">
-        <DataTable Roles="true" Items="Rows" RowAttributes="AgainstPartyAttribute" Caption="@($"Published records of {Page.Profile.Name}")">
+    <Panel Title="Records" Aside="@RecordFilter" data-layout="@(RecordFilter is null ? null : PublishedOfficialView.RecordFilters[0].Value)">
+        <DataTable Roles="true" Items="Rows" RowClass="@(row => row.AgainstParty ? "against-party" : null)" Caption="@($"Published records of {Page.Profile.Name}")">
             <Head><TableCell Header Class="fit num">@PublicColumn.Date</TableCell><TableCell Header>Record</TableCell><TableCell Header>@PublicColumn.Cast</TableCell></Head>
             <Row Context="row">
                 <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Iso(row.Date)</TableCell>
@@ -130,12 +130,9 @@
         ? "The rosters and the configuration list no dated office for this official."
         : "Civic Lens no longer tracks this official, so it lists no office. The records below stay published.";
 
-    private RenderFragment? RecordFilter => Rows.Any(row => row.AgainstParty)
+    private RenderFragment? RecordFilter => Page.TalkAndAction is not null && Rows.Any(row => row.AgainstParty)
         ? @<LayoutSwitch Label="Show records" Choices="PublishedOfficialView.RecordFilters" />
         : null;
-
-    private static IReadOnlyDictionary<string, object>? AgainstPartyAttribute(PublishedOfficialRow row) =>
-        row.AgainstParty ? new Dictionary<string, object> { ["data-against-party"] = true } : null;
 
     private IReadOnlyList<PublishedOfficialRow> Rows => PublishedOfficialView.Rows(Page);
 

@@ -48,6 +48,17 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task TheComparisonStartsInRedlineWithAHiddenSwitchWhoseFirstChoiceIsPressed()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.NotNull(document.QuerySelector(".comparison[data-layout='redline'] [data-layout-switch][hidden]"));
+        Assert.Equal(["redline:true", "side:false"], document.QuerySelectorAll(".comparison [data-layout-choice]")
+            .Select(button => $"{button.GetAttribute("data-layout-choice")}:{button.GetAttribute("aria-pressed")}"));
+    }
+
+    [Fact]
     public async Task FullVersionsKeepALeadingNewlineBecauseThePageMustMatchTheApprovedEvidence()
     {
         var record = Record("\n" + BeforeText, "\n" + AfterText);

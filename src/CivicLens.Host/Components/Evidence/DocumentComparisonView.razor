@@ -1,7 +1,7 @@
 @using System.Collections.Immutable
 @using CivicLens.Core.Documents
 
-<div class="comparison" data-layout="redline">
+<div class="comparison" data-layout="@LayoutChoices[0].Value">
     @if (Heading is not null || ShowLayoutSwitch)
     {
         <div class="comparison-head">
