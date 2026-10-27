@@ -117,6 +117,14 @@ public sealed class IssueConfigurationRevisionTests
     [InlineData("")]
     public void MalformedIssueIdIsRejected(string id) => AssertInvalid(Configuration(Issue() with { Id = id }));
 
+    [Theory]
+    [InlineData("Bad Id")]
+    [InlineData("UPPER")]
+    [InlineData("-lead")]
+    [InlineData("")]
+    public void MalformedPolicyAreaIdIsRejected(string id) =>
+        AssertInvalid(Configuration(Issue() with { PolicyAreaIds = [id] }) with { PolicyAreas = [Area() with { Id = id }] });
+
     [Fact]
     public void BlankTextAndNullEntriesAreRejected()
     {

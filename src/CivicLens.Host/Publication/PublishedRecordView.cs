@@ -20,14 +20,19 @@ internal static class PublishedRecordView
         Fact.LinkList(label, [.. officials.Select(official => new FactLink(official.Name, OfficialLink(official.Id)))]);
 
     public static FactLink IssueLink(string issueId, PublicationCatalog catalog, string rootPath) =>
-        ConfiguredNameLink(catalog.HasIssue(issueId), issueId, catalog.IssueName(issueId),
+        ConfiguredNameLink(catalog.HasIssue(issueId), catalog.IssueName(issueId),
             rootPath + PublicationProtocol.IssuePagePath(issueId, 1));
 
     public static Fact Issues(string label, IEnumerable<string> issueIds, PublicationCatalog catalog) =>
         Fact.LinkList(label, [.. issueIds.Select(id => IssueLink(id, catalog, "../"))]);
 
+    public static FactLink PolicyAreaLink(string? policyAreaId, string text, PublicationCatalog catalog) =>
+        policyAreaId is null
+            ? new(text)
+            : ConfiguredNameLink(catalog.HasPolicyArea(policyAreaId), text, "../" + PublicationProtocol.PolicyAreaPagePath(policyAreaId, 1));
+
     public static Fact PolicyAreas(string label, IEnumerable<string> policyAreaIds, PublicationCatalog catalog) =>
-        Fact.LinkList(label, [.. policyAreaIds.Select(id => PolicyAreaLink(id, catalog))]);
+        Fact.LinkList(label, [.. policyAreaIds.Select(id => PolicyAreaLink(id, catalog.PolicyAreaName(id), catalog))]);
 
     public static ImmutableArray<DocumentComparisonHunk> Hunks(PublishedDocumentChange record) =>
         [.. record.Changes.Select(change => new DocumentComparisonHunk(
@@ -48,12 +53,8 @@ internal static class PublishedRecordView
             .Select(item => new CitedRange(item.anchor, item.citation.Start, item.citation.Length))];
     }
 
-    private static FactLink PolicyAreaLink(string policyAreaId, PublicationCatalog catalog) =>
-        ConfiguredNameLink(catalog.HasPolicyArea(policyAreaId), policyAreaId, catalog.PolicyAreaName(policyAreaId),
-            "../" + PublicationProtocol.PolicyAreaPagePath(policyAreaId, 1));
-
-    private static FactLink ConfiguredNameLink(bool isConfigured, string id, string name, string href) =>
-        isConfigured ? new(name, href) : new(id);
+    private static FactLink ConfiguredNameLink(bool isConfigured, string text, string href) =>
+        isConfigured ? new(text, href) : new(text);
 
     private static string Slice(string text, int start, int length) => text.Substring(start, length);
 }
