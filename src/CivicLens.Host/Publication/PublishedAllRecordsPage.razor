@@ -1,7 +1,7 @@
+@using CivicLens.Host.Components.Layout
 @using CivicLens.Publication.Contracts
 
-<PublicPage Section="PublicSection.AllRecords" Title="All published records" Page="Page" PageCount="PageCount" Description="@($"All {Release.Records.Length} published records of Civic Lens, newest first. Each record shows its sources and the exact text it cites.")">
-    <a class="back-link" href="@PublicationProtocol.HomePath">Home</a>
+<PublicPage Section="PublicSection.AllRecords" Title="All published records" Page="Page" PageCount="PageCount" Description="@($"All {Release.Records.Length} published records of Civic Lens, newest first. Each record shows its sources and the exact text it cites.")" Crumbs="Crumbs">
     <PageHeader Title="All published records" Lede="@($"Release {Release.ReleaseNumber}, published {Moment.Full(Release.PublishedAtUtc)}.")" />
     <Panel Label="Records">
         <PublishedRecordTable Records="PageRecords" Caption="Published records" />
@@ -12,6 +12,8 @@
 </PublicPage>
 
 @code {
+    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), new("All records")];
+
     [Parameter, EditorRequired] public PublicationRelease Release { get; set; } = default!;
     [Parameter, EditorRequired] public int Page { get; set; }
 

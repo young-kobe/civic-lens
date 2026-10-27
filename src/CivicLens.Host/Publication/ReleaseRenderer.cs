@@ -19,42 +19,45 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
 
     public IReadOnlyList<ReleaseAsset> Assets { get; } = PublicAssets.Load();
 
-    public Task<string> RenderRecordAsync(PublishedDocumentChange record, CancellationToken cancellationToken)
+    public Task<string> RenderRecordAsync(PublishedDocumentChange record, PublicationCatalog catalog, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(record);
         record.Validate();
         return RenderAsync<PublishedRecordPage>(new Dictionary<string, object?>
         {
-            [nameof(PublishedRecordPage.Record)] = record
+            [nameof(PublishedRecordPage.Record)] = record,
+            [nameof(PublishedRecordPage.Catalog)] = catalog
         });
     }
 
     public Task<string> RenderStatementAsync(PublishedStatement record, ImmutableArray<PublishedRelationship> related,
-        CancellationToken cancellationToken)
+        PublicationCatalog catalog, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(record);
         record.Validate();
         return RenderAsync<PublishedStatementPage>(new Dictionary<string, object?>
         {
             [nameof(PublishedStatementPage.Record)] = record,
-            [nameof(PublishedStatementPage.Related)] = related
+            [nameof(PublishedStatementPage.Related)] = related,
+            [nameof(PublishedStatementPage.Catalog)] = catalog
         });
     }
 
     public Task<string> RenderActionAsync(PublishedAction record, ImmutableArray<PublishedRelationship> related,
-        CancellationToken cancellationToken)
+        PublicationCatalog catalog, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(record);
         record.Validate();
         return RenderAsync<PublishedActionPage>(new Dictionary<string, object?>
         {
             [nameof(PublishedActionPage.Record)] = record,
-            [nameof(PublishedActionPage.Related)] = related
+            [nameof(PublishedActionPage.Related)] = related,
+            [nameof(PublishedActionPage.Catalog)] = catalog
         });
     }
 
     public Task<string> RenderVoteAsync(PublishedVote record, string? billActionRecordId, ImmutableArray<PublishedRelationship> related,
-        CancellationToken cancellationToken)
+        PublicationCatalog catalog, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(record);
         record.Validate();
@@ -62,17 +65,19 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
         {
             [nameof(PublishedVotePage.Record)] = record,
             [nameof(PublishedVotePage.BillActionRecordId)] = billActionRecordId,
-            [nameof(PublishedVotePage.Related)] = related
+            [nameof(PublishedVotePage.Related)] = related,
+            [nameof(PublishedVotePage.Catalog)] = catalog
         });
     }
 
-    public Task<string> RenderRelationshipAsync(PublishedRelationship record, CancellationToken cancellationToken)
+    public Task<string> RenderRelationshipAsync(PublishedRelationship record, PublicationCatalog catalog, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(record);
         record.Validate();
         return RenderAsync<PublishedRelationshipPage>(new Dictionary<string, object?>
         {
-            [nameof(PublishedRelationshipPage.Record)] = record
+            [nameof(PublishedRelationshipPage.Record)] = record,
+            [nameof(PublishedRelationshipPage.Catalog)] = catalog
         });
     }
 
@@ -143,13 +148,14 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
         });
     }
 
-    public Task<string> RenderOfficialAsync(ReleaseOfficialPage page, CancellationToken cancellationToken)
+    public Task<string> RenderOfficialAsync(ReleaseOfficialPage page, PublicationCatalog catalog, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(page);
         page.Profile.Validate();
         return RenderAsync<PublishedOfficialPage>(new Dictionary<string, object?>
         {
-            [nameof(PublishedOfficialPage.Page)] = page
+            [nameof(PublishedOfficialPage.Page)] = page,
+            [nameof(PublishedOfficialPage.Catalog)] = catalog
         });
     }
 

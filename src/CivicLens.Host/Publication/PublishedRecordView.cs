@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using CivicLens.Application.Publication;
 using CivicLens.Core.Documents;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Publication.Contracts;
@@ -17,6 +18,14 @@ internal static class PublishedRecordView
 
     public static Fact Officials(string label, IEnumerable<PublishedOfficial> officials) =>
         Fact.LinkList(label, [.. officials.Select(official => new FactLink(official.Name, OfficialLink(official.Id)))]);
+
+    public static FactLink IssueLink(string issueId, PublicationCatalog catalog, string rootPath) =>
+        catalog.HasIssue(issueId)
+            ? new(catalog.IssueName(issueId), rootPath + PublicationProtocol.IssuePagePath(issueId, 1))
+            : new(issueId);
+
+    public static Fact Issues(string label, IEnumerable<string> issueIds, PublicationCatalog catalog) =>
+        Fact.LinkList(label, [.. issueIds.Select(id => IssueLink(id, catalog, "../"))]);
 
     public static ImmutableArray<DocumentComparisonHunk> Hunks(PublishedDocumentChange record) =>
         [.. record.Changes.Select(change => new DocumentComparisonHunk(

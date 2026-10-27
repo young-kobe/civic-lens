@@ -1,7 +1,7 @@
+@using CivicLens.Host.Components.Layout
 @using CivicLens.Publication.Contracts
 
-<PublicPage Section="PublicSection.AllRecords" Title="@($"Withdrawn {PublishedRecordLabels.Kind(Withdrawal.Kind).ToLowerInvariant()}: {Withdrawal.RecordId[..12]}")" Description="A person withdrew this record. Its content is no longer published." RootPath="../">
-    <a class="back-link" href="@("../" + PublicationProtocol.AllRecordsPagePath(1))">All records</a>
+<PublicPage Section="PublicSection.AllRecords" Title="@Title" Description="A person withdrew this record. Its content is no longer published." RootPath="../" Crumbs="Crumbs">
     <RecordView HeadingLevel="1" Headline="This record was withdrawn"
                 Summary="A person withdrew this record. Its content is no longer published."
                 Facts="PublishedWithdrawalView.Facts(Withdrawal)" />
@@ -9,5 +9,9 @@
 </PublicPage>
 
 @code {
+    private IReadOnlyList<Crumb> Crumbs => [PublicCrumbs.Home("../"), PublicCrumbs.AllRecords("../"), new(Title)];
+
+    private string Title => $"Withdrawn {PublishedRecordLabels.Kind(Withdrawal.Kind).ToLowerInvariant()}: {Withdrawal.RecordId[..12]}";
+
     [Parameter, EditorRequired] public PublishedWithdrawal Withdrawal { get; set; } = default!;
 }

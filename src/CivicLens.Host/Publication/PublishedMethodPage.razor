@@ -1,8 +1,8 @@
 @using CivicLens.Application.Publication
+@using CivicLens.Host.Components.Layout
 @using CivicLens.Publication.Contracts
 
-<PublicPage Title="How the talk and action profile works" Description="How Civic Lens builds the talk and action profile of each official. Code builds the profile from published records. No model is used.">
-    <a class="back-link" href="@PublicationProtocol.OfficialsPagePath">Officials</a>
+<PublicPage Title="How the talk and action profile works" Description="How Civic Lens builds the talk and action profile of each official. Code builds the profile from published records. No model is used." Crumbs="Crumbs">
     <PageHeader Title="How the talk and action profile works" Lede="Code builds the profile on each official page. No model is used." />
     <Panel Title="What each column counts" Padded="true">
         <ul>
@@ -29,6 +29,8 @@
 </PublicPage>
 
 @code {
+    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), new("How the talk and action profile works")];
+
     private static string SubstantiveKinds => string.Join(", ", Enum.GetValues<PublishedVoteKind>()
         .Where(kind => kind.IsSubstantive()).Select(PublishedRecordLabels.VoteKind));
 }

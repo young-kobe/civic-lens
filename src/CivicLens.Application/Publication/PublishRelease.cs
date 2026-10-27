@@ -35,7 +35,7 @@ public sealed class PublishRelease
         this.catalog = catalog;
         indexPages = new ReleaseIndexPages(releases, renderer);
         dataFiles = new ReleaseDataFiles(releases, loaders.Votes, officials);
-        officialPages = new ReleaseOfficialPages(new ReleaseOfficialVotes(releases, loaders.Votes), officials, renderer);
+        officialPages = new ReleaseOfficialPages(new ReleaseOfficialVotes(releases, loaders.Votes), officials, renderer, catalog);
         this.clock = clock;
         rules = new PublishedRecordRules(catalog);
     }
@@ -65,7 +65,7 @@ public sealed class PublishRelease
             cancellationToken);
         var newWithdrawals = PublicationWithdrawals.Create(previous, corrections, now, withdrawalNotes);
         var returned = ImmutableArray.CreateRange(references.Where(reference => previous.IsWithdrawn(reference.RecordId)));
-        var build = new PublicationBuild(previous, now, rules, renderer, corrections).WithRemoved(withdrawn).WithReturned(returned);
+        var build = new PublicationBuild(previous, now, rules, renderer, catalog, corrections).WithRemoved(withdrawn).WithReturned(returned);
         var additions = await LoadAdditionsAsync(references, build, cancellationToken);
         var released = build.WithAdded(additions);
         await WithdrawalCascade.RequireNoCitersAsync(releases, loaders, released, additions, cancellationToken);

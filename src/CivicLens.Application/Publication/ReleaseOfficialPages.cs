@@ -10,7 +10,8 @@ namespace CivicLens.Application.Publication;
 /// official only when the official is touched, and links every other file from the previous release. An official who left the configuration is always touched. The current Congress of an
 /// official is the newest Congress with a vote file of that official.
 /// </summary>
-internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, PublicationOfficials officials, IReleaseRenderer renderer)
+internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, PublicationOfficials officials, IReleaseRenderer renderer,
+    PublicationCatalog catalog)
 {
     public async Task WriteAsync(IReleaseStaging staging, PublicationRelease manifest, PublishedOfficials published,
         IReadOnlyList<PendingRecord> additions, IReadOnlyList<PublishedRecordEntry> removed, PreviousRelease previous,
@@ -93,7 +94,7 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
             var path = PublicationProtocol.OfficialCongressPagePath(profile.Id, congress);
             if (nameChanged || rowsInMemory.ContainsKey(congress) || !files.PageCongresses.Contains(congress))
                 await WriteAsync(staging, path, await renderer.RenderOfficialAsync(
-                    new(profile, tracked, congress, false, [], [], await RowsAsync(congress)), cancellationToken), cancellationToken);
+                    new(profile, tracked, congress, false, [], [], await RowsAsync(congress)), catalog, cancellationToken), cancellationToken);
             else
                 await staging.LinkFileAsync(previous.DirectoryName!, path, cancellationToken);
         }
@@ -102,7 +103,7 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
         var currentRows = current is { } newest ? await RowsAsync(newest) : [];
         var talkAndAction = current is null ? null : TalkAndActionProfile.Of(current.Value, entries, currentRows);
         await WriteAsync(staging, PublicationProtocol.OfficialPagePath(profile.Id), await renderer.RenderOfficialAsync(
-            new(profile, tracked, current, true, past, entries, currentRows, talkAndAction), cancellationToken), cancellationToken);
+            new(profile, tracked, current, true, past, entries, currentRows, talkAndAction), catalog, cancellationToken), cancellationToken);
     }
 
     private static Task WriteAsync(IReleaseStaging staging, string path, string html, CancellationToken cancellationToken) =>

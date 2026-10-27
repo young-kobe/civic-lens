@@ -12,7 +12,14 @@
                 @for (var index = 0; index < fact.Links.Count; index++)
                 {
                     @(index > 0 ? ", " : "")
-                    <a href="@fact.Links[index].Href">@fact.Links[index].Text</a>
+                    @if (fact.Links[index].Href is { } href)
+                    {
+                        <a href="@href">@fact.Links[index].Text</a>
+                    }
+                    else
+                    {
+                        @fact.Links[index].Text
+                    }
                 }
             }
         </dd>

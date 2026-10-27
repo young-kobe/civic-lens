@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 namespace CivicLens.Application.Publication;
 
 internal sealed record PublicationBuild(PreviousRelease Previous, DateTimeOffset Now, PublishedRecordRules Rules,
-    IReleaseRenderer Renderer, PublicationCorrections Corrections)
+    IReleaseRenderer Renderer, PublicationCatalog Catalog, PublicationCorrections Corrections)
 {
     public ImmutableArray<PublishedRevisionBinding> ReleaseRecords { get; private init; } =
         [.. Previous.Entries.Select(PublishedRevisionBinding.Of)];

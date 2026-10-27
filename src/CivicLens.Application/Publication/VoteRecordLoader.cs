@@ -34,7 +34,7 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
             build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId), build.Now);
         var billActionRecordId = BillActionRecordIn(addition.BillActionRecordIds, build);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
-            (related, cancellationToken) => build.Renderer.RenderVoteAsync(record, billActionRecordId, related, cancellationToken));
+            (related, cancellationToken) => build.Renderer.RenderVoteAsync(record, billActionRecordId, related, build.Catalog, cancellationToken));
     }
 
     public Task<IReadOnlyList<VoteMembership>> MembersAsync(IEnumerable<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
@@ -55,7 +55,7 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
             ? (await votes.FindBillActionRecordIdsAsync([bill], cancellationToken)).GetValueOrDefault(recordId, [])
             : [];
         return await build.Renderer.RenderVoteAsync(vote, BillActionRecordIn(billActionRecordIds, build), links.Citing(Kind, recordId),
-            cancellationToken);
+            build.Catalog, cancellationToken);
     }
 
     private static string? BillActionRecordIn(ImmutableArray<string> billActionRecordIds, PublicationBuild build) =>

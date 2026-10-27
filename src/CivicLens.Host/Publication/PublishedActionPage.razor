@@ -1,8 +1,9 @@
 @using CivicLens.Host.Components.Evidence
 @using System.Collections.Immutable
+@using CivicLens.Application.Publication
 @using CivicLens.Publication.Contracts
 
-<PublishedRecordFrame Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="@Record.Summary" Facts="PublishedActionView.Facts(Record)"
+<PublishedRecordFrame Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="@Record.Summary" Facts="PublishedActionView.Facts(Record, Catalog)"
                       Caveat="A sponsorship is a proposal, not a law. This record lists only the officials that Civic Lens tracks. Each date comes from the Congress.gov record at the observation time of its source.">
     <PublishedRelatedPanel Related="Related" Kind="PublishedRecordKind.Action" RecordId="@Record.RecordId" />
     <PublishedTimeline Events="PublishedTimelineView.For(Record)" />
@@ -64,5 +65,6 @@
 
 @code {
     [Parameter, EditorRequired] public PublishedAction Record { get; set; } = default!;
+    [Parameter, EditorRequired] public PublicationCatalog Catalog { get; set; } = default!;
     [Parameter] public ImmutableArray<PublishedRelationship> Related { get; set; }
 }
