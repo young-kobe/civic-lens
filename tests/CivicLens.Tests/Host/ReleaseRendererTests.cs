@@ -219,6 +219,73 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task ReportPageAnnouncesAFailureThroughItsOwnAlertRegionSoNoReaderMissesAFailedSend()
+    {
+        var html = await new ReleaseRenderer("https://api.example.test", "site-key-1").RenderReportAsync(CancellationToken.None);
+        var document = new HtmlParser().ParseDocument(html);
+
+        var failure = document.QuerySelector("[data-report-failure]")!;
+        Assert.Equal("alert", failure.GetAttribute("role"));
+        Assert.Equal("-1", failure.GetAttribute("tabindex"));
+    }
+
+    [Fact]
+    public async Task MainTakesFocusFromTheSkipLinkOnEveryPageType()
+    {
+        foreach (var (name, _, html, _) in await RenderEveryPageTypeAsync())
+        {
+            var document = new HtmlParser().ParseDocument(html);
+
+            Assert.Equal("#main", document.QuerySelector("a.skip")!.GetAttribute("href"));
+            var main = document.QuerySelector("main#main")!;
+            Assert.True(main.GetAttribute("tabindex") == "-1", name);
+        }
+    }
+
+    [Fact]
+    public async Task EveryLinkBackToTheSourceTextOrTheRelationNamesItsTargetSoNoTwoLinksOnAPageSoundTheSame()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var statement = Statement();
+        var action = Action();
+        var vote = Vote() with { RecordId = new string('9', 64) };
+        var actionLink = Relationship(PublishedRecordKind.Action, action.RecordId, '7');
+        var voteLink = Relationship(PublishedRecordKind.Vote, vote.RecordId, '8') with
+        {
+            Type = PublishedRelationshipType.StatementAboutVote,
+            Target = new() { Kind = PublishedRecordKind.Vote, RecordId = vote.RecordId, RevisionNumber = 3, Headline = "House passes the housing bill" }
+        };
+        var pages = new[]
+        {
+            await renderer.RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None),
+            await renderer.RenderStatementAsync(statement, [actionLink, voteLink], PublicationCatalogs.None, CancellationToken.None),
+            await renderer.RenderActionAsync(action, [actionLink], PublicationCatalogs.None, CancellationToken.None),
+            await renderer.RenderVoteAsync(vote, null, [voteLink], PublicationCatalogs.None, CancellationToken.None)
+        };
+
+        foreach (var html in pages)
+        {
+            var names = new HtmlParser().ParseDocument(html).QuerySelectorAll("main a")
+                .Where(link => link.TextContent.StartsWith("Show in the full", StringComparison.Ordinal) || link.TextContent.StartsWith("Why they are linked", StringComparison.Ordinal))
+                .Select(link => link.TextContent).ToList();
+
+            Assert.NotEmpty(names);
+            Assert.Equal(names.Count, names.Distinct().Count());
+            Assert.All(names, name => Assert.Contains(": ", name, StringComparison.Ordinal));
+        }
+        var changeLinks = new HtmlParser().ParseDocument(pages[0]).QuerySelectorAll("main a").Select(link => link.TextContent).ToList();
+        Assert.Contains("Show in the full version: earlier version, quote 1", changeLinks);
+        Assert.Contains("Show in the full version: later version, quote 2", changeLinks);
+        var statementLinks = new HtmlParser().ParseDocument(pages[1]).QuerySelectorAll("main a").ToList();
+        Assert.Contains(statementLinks, link => link.TextContent == "Why they are linked: Housing bill funds rent aid");
+        Assert.Contains(statementLinks, link => link.TextContent == "Why they are linked: House passes the housing bill");
+        var quoteLinks = statementLinks
+            .Where(link => link.TextContent.Contains(": statement, quote ", StringComparison.Ordinal)).ToList();
+        Assert.Equal(statement.Quotations.Length, quoteLinks.Count);
+        Assert.Equal(quoteLinks.Count, quoteLinks.Select(link => link.GetAttribute("href")).Distinct().Count());
+    }
+
+    [Fact]
     public async Task OnlyTheReportPageLoadsTheTurnstileScript()
     {
         var report = await new ReleaseRenderer("https://api.example.test", "site-key-1").RenderReportAsync(CancellationToken.None);

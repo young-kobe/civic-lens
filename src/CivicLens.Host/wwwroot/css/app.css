@@ -126,7 +126,7 @@ tr.is-new td { animation: row-in 1.6s var(--ease); }
 .pager-links { display: flex; gap: var(--s2); }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); padding: 10px var(--s4); border-bottom: 1px solid var(--line); }
 .list-filter { display: flex; flex-wrap: wrap; align-items: end; gap: var(--s3); padding: 10px var(--s4); border-bottom: 1px solid var(--line); }
-.search { width: min(100%, 280px); min-height: 30px; padding: 0 10px; border: 0; border-radius: var(--r-control); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-strong); font-size: var(--t-sm); transition: box-shadow var(--fast); }
+.search { width: min(100%, 280px); min-height: 30px; padding: 0 10px; border: 0; border-radius: var(--r-control); background: var(--surface); box-shadow: inset 0 0 0 1px var(--control-line); font-size: var(--t-sm); transition: box-shadow var(--fast); }
 .search:hover { box-shadow: inset 0 0 0 1px var(--muted); }
 .search:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--focus), 0 0 0 3px var(--focus-halo); }
 .release-search { display: grid; gap: var(--s3); }
@@ -142,6 +142,8 @@ tr.is-new td { animation: row-in 1.6s var(--ease); }
 .segmented-thumb { position: absolute; top: 2px; bottom: 2px; left: 0; border-radius: var(--r-control); background: var(--surface); box-shadow: var(--e1); transition: transform var(--med) var(--ease), width var(--med) var(--ease); }
 .segmented:not(.is-measured) .segmented-item[aria-pressed="true"], .segmented:not(.is-measured) .segmented-item[aria-current="true"] { background: var(--surface); box-shadow: var(--e1); }
 .theme-toggle .segmented-item { padding: 5px 7px; }
+.theme-toggle { box-shadow: inset 0 0 0 1px var(--control-line); }
+.segmented-item[aria-pressed="true"]::after, .segmented-item[aria-current="true"]::after { content: ""; position: absolute; left: 7px; right: 7px; bottom: 1px; height: 2px; border-radius: 1px; background: currentColor; }
 
 .tabs { position: relative; display: flex; gap: var(--s4); border-bottom: 1px solid var(--line); }
 .tab { border: 0; background: transparent; padding: 10px 0; color: var(--muted); font-size: var(--t-sm); font-weight: 600; cursor: pointer; transition: color var(--fast); }
@@ -191,7 +193,7 @@ tr.is-new td { animation: row-in 1.6s var(--ease); }
 .field-optional { color: var(--muted); font-weight: 400; }
 .field-hint { color: var(--muted); font-size: var(--t-xs); }
 .field-error { color: var(--del); font-size: var(--t-xs); }
-.field input:not([type="checkbox"]):not([type="radio"]), .field textarea, .field select { width: 100%; padding: 8px 10px; border: 0; border-radius: var(--r-control); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-strong); font-size: var(--t-base); transition: box-shadow var(--fast); }
+.field input:not([type="checkbox"]):not([type="radio"]), .field textarea, .field select { width: 100%; padding: 8px 10px; border: 0; border-radius: var(--r-control); background: var(--surface); box-shadow: inset 0 0 0 1px var(--control-line); font-size: var(--t-base); transition: box-shadow var(--fast); }
 .field input:not([type="checkbox"]):not([type="radio"]):hover, .field textarea:hover, .field select:hover { box-shadow: inset 0 0 0 1px var(--muted); }
 .field input:focus-visible, .field textarea:focus-visible, .field select:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--focus), 0 0 0 3px var(--focus-halo); }
 .field textarea { min-height: 96px; resize: vertical; font-family: var(--read); font-size: var(--t-md); line-height: 1.6; }

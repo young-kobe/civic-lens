@@ -27,14 +27,14 @@
         <ul class="choices">
             <li>
                 <CitationQuote Label="Date" Quote="@Record.VotedOnCitation.Quote">
-                    <a href="@("#" + PublishedVoteView.Anchor(Record, Record.VotedOnCitation))">Show in the full source text</a>
+                    <ContextLink Href="@("#" + PublishedVoteView.Anchor(Record, Record.VotedOnCitation))" Text="Show in the full source text" Target="@PublishedRecordView.QuoteTarget("date")" />
                 </CitationQuote>
             </li>
             @if (Record.KindCitation is { } kind)
             {
                 <li>
                     <CitationQuote Label="Kind" Quote="@kind.Quote">
-                        <a href="@("#" + PublishedVoteView.Anchor(Record, kind))">Show in the full source text</a>
+                        <ContextLink Href="@("#" + PublishedVoteView.Anchor(Record, kind))" Text="Show in the full source text" Target="@PublishedRecordView.QuoteTarget("kind")" />
                     </CitationQuote>
                 </li>
             }
@@ -42,7 +42,7 @@
             {
                 <li>
                     <CitationQuote Label="@PublishedVoteView.FactLabel(fact)" Quote="@fact.Text">
-                        <a href="@("#" + PublishedVoteView.Anchor(Record, fact.Citation))">Show in the full source text</a>
+                        <ContextLink Href="@("#" + PublishedVoteView.Anchor(Record, fact.Citation))" Text="Show in the full source text" Target="@PublishedRecordView.QuoteTarget(PublishedVoteView.FactLabel(fact).ToLowerInvariant())" />
                     </CitationQuote>
                 </li>
             }
@@ -57,7 +57,7 @@
                 <TableCell Label="@PublicColumn.Cast">@member.Cast</TableCell>
                 <TableCell Label="@PublicColumn.Evidence">
                     <blockquote class="quote">@EncodedEvidence.Markup(member.Citation.Quote)</blockquote>
-                    <a class="small" href="@("#" + PublishedVoteView.Anchor(Record, member.Citation))">Show in the full source text</a>
+                    <ContextLink Class="small" Href="@("#" + PublishedVoteView.Anchor(Record, member.Citation))" Text="Show in the full source text" Target="@PublishedRecordView.QuoteTarget(member.Official.Name)" />
                 </TableCell>
             </Row>
         </DataTable>

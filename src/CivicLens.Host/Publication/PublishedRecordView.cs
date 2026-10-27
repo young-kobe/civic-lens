@@ -12,6 +12,9 @@ internal static class PublishedRecordView
 
     public static string CitationAnchor(int index) => $"cite-{index + 1}";
 
+    public static string QuoteTarget(string subject, int index = 0, int count = 1) =>
+        count == 1 ? $"{subject}, quote" : $"{subject}, quote {index + 1}";
+
     public static string RecordLink(string recordId) => "../" + PublicationProtocol.RecordPagePath(recordId);
 
     public static string OfficialLink(string officialId) => "../" + PublicationProtocol.OfficialPagePath(officialId);

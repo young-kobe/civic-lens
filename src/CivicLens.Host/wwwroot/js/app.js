@@ -154,14 +154,16 @@
         const queryInputs = Array.from(form.querySelectorAll("[data-report-query]"));
         const [recordId, revision] = queryInputs.map(input => query.get(input.name) ?? "");
         const panel = form.closest("[data-report-form-panel]");
-        const result = document.querySelector("[data-report-result]");
+        const messages = { ok: document.querySelector("[data-report-result]"), bad: document.querySelector("[data-report-failure]") };
         const category = form.querySelector("#report-category");
         const text = form.querySelector("#report-text");
         const submit = form.querySelector("[type=submit]");
         const show = (tone, message) => {
-            result.className = `notice notice-${tone}`;
-            result.textContent = message;
-            result.focus();
+            for (const [key, region] of Object.entries(messages)) {
+                region.className = key === tone ? `notice notice-${tone}` : "";
+                region.textContent = key === tone ? message : "";
+            }
+            messages[tone].focus();
         };
         const validRecord = /^([0-9a-f]{32}|[0-9a-f]{64})$/.test(recordId) && /^[0-9]+$/.test(revision)
             && Number(revision) >= 1 && Number(revision) <= 2147483647;

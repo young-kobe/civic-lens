@@ -59,6 +59,7 @@
     --muted: #5f6670;
     --line: #e1e4e8;
     --line-strong: #c3c8ce;
+    --control-line: #848c95;
 
     --rail: #1b1e22;
     --rail-top: #24282d;
@@ -109,6 +110,7 @@
         --muted: #8f96a0;
         --line: #2e3238;
         --line-strong: #474d55;
+        --control-line: #6b727b;
         --rail: #101214;
         --rail-top: #1a1d20;
         --rail-ink: #e6e8eb;
@@ -151,6 +153,7 @@
     --muted: #8f96a0;
     --line: #2e3238;
     --line-strong: #474d55;
+    --control-line: #6b727b;
     --rail: #101214;
     --rail-top: #1a1d20;
     --rail-ink: #e6e8eb;

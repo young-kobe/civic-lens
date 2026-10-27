@@ -13,10 +13,13 @@
             @for (var index = 0; index < Record.Quotations.Length; index++)
             {
                 var quotation = Record.Quotations[index];
+                var number = index + 1;
+                var target = PublishedRecordView.QuoteTarget("statement", index, Record.Quotations.Length);
+                var anchor = "#" + PublishedRecordView.CitationAnchor(index);
                 <li>
-                    <CitationQuote Label="@($"Quotation {index + 1}")" Quote="@quotation.Quote">
+                    <CitationQuote Label="@($"Quotation {number}")" Quote="@quotation.Quote">
                         <StatusBadge Text="@PublishedRecordLabels.Quotation(quotation.Kind)" />
-                        <a href="@("#" + PublishedRecordView.CitationAnchor(index))">Show in the full source text</a>
+                        <ContextLink Href="@anchor" Text="Show in the full source text" Target="@target" />
                     </CitationQuote>
                 </li>
             }
@@ -24,7 +27,7 @@
             {
                 <li>
                     <CitationQuote Label="Evidence for the statement date" Quote="@evidence.Quote">
-                        <a href="@("#" + PublishedStatementView.StatementDateAnchor)">Show in the full source text</a>
+                        <ContextLink Href="@("#" + PublishedStatementView.StatementDateAnchor)" Text="Show in the full source text" Target="@PublishedRecordView.QuoteTarget("statement date")" />
                     </CitationQuote>
                 </li>
             }
