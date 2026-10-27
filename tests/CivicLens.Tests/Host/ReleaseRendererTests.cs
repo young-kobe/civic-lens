@@ -1186,13 +1186,10 @@ public sealed class ReleaseRendererTests
                      await renderer.RenderRecordAsync(change, HousingCatalog, CancellationToken.None),
                      await renderer.RenderRelationshipAsync(relationship, HousingCatalog, CancellationToken.None) })
         {
-            var issues = new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts dt")
-                .Single(label => label.TextContent is "Tracked issues" or "Issues").NextElementSibling!;
+            var issues = FactValue(html, "Tracked issues", "Issues");
 
             Assert.Equal("Housing costs, mystery", Regex.Replace(issues.TextContent, @"\s+", " ").Trim());
-            var link = Assert.Single(issues.QuerySelectorAll("a"));
-            Assert.Equal("../" + PublicationProtocol.IssuePagePath("housing", 1), link.GetAttribute("href"));
-            Assert.Equal("Housing costs", link.TextContent);
+            AssertSingleLink(issues, "../" + PublicationProtocol.IssuePagePath("housing", 1), "Housing costs");
         }
     }
 
@@ -1221,8 +1218,8 @@ public sealed class ReleaseRendererTests
         Assert.Empty(plain.QuerySelectorAll("a"));
     }
 
-    private static AngleSharp.Dom.IElement FactValue(string html, string label) =>
-        new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts dt").Single(term => term.TextContent == label).NextElementSibling!;
+    private static AngleSharp.Dom.IElement FactValue(string html, params string[] labels) =>
+        new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts dt").Single(term => labels.Contains(term.TextContent)).NextElementSibling!;
 
     private static void AssertSingleLink(AngleSharp.Dom.IElement scope, string href, string text)
     {

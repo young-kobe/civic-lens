@@ -54,7 +54,7 @@ internal static class PublishedRecordView
     }
 
     private static FactLink ConfiguredNameLink(bool isConfigured, string text, string href) =>
-        isConfigured ? new(text, href) : new(text);
+        new(text, isConfigured ? href : null);
 
     private static string Slice(string text, int start, int length) => text.Substring(start, length);
 }
