@@ -16,6 +16,10 @@ public sealed record PublishedOfficialVote
     public string? BillType { get; init; }
     public int? BillNumber { get; init; }
     public required string Cast { get; init; }
+    public required string Result { get; init; }
+    public required PublishedVoteTotals Totals { get; init; }
+    public required string Party { get; init; }
+    public string? PartyMajority { get; init; }
     public required string Headline { get; init; }
     public required PublishedVoteKind Kind { get; init; }
     public required string[] IssueIds { get; init; }
@@ -34,6 +38,10 @@ public sealed record PublishedOfficialVote
         BillType = vote.BillType,
         BillNumber = vote.BillNumber,
         Cast = member.Cast,
+        Result = vote.Result,
+        Totals = vote.Totals,
+        Party = member.Party,
+        PartyMajority = vote.PartyMajorities.Single(majority => majority.Party == member.Party).Majority,
         Headline = vote.Headline,
         Kind = vote.Kind,
         IssueIds = vote.TrackedIssueIds
@@ -41,10 +49,12 @@ public sealed record PublishedOfficialVote
 
     public void Validate()
     {
-        if (!PublicationProtocol.IsRecordId(PublishedRecordKind.Vote, RecordId) || !Enum.IsDefined(Chamber) || Congress < 1 || Session is not (1 or 2) ||
+        if (Totals is null || !PublicationProtocol.IsRecordId(PublishedRecordKind.Vote, RecordId) || !Enum.IsDefined(Chamber) || Congress < 1 || Session is not (1 or 2) ||
             RollCallNumber < 1 || !Enum.IsDefined(Kind) || !PublishedRecordEntry.AreFilterValues(IssueIds) || !IsText(Cast, PublishedVote.MaximumCastLength) || !IsText(Headline, PublishedVote.MaximumHeadlineLength) ||
+            !IsText(Result, PublishedVote.MaximumHeadlineLength) || !IsText(Party, PublishedVote.MaximumHeadlineLength) || PartyMajority is not (null or PublishedPartyMajority.Yea or PublishedPartyMajority.Nay) ||
             (BillType is null) != (BillNumber is null) || BillType is not null && (!IsText(BillType, PublishedVote.MaximumBillTypeLength) || BillNumber < 1))
             throw new InvalidDataException("Published official vote is invalid.");
+        Totals.Validate();
     }
 
     private static bool IsText(string? value, int maximumLength) =>

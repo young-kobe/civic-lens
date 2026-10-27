@@ -162,6 +162,9 @@ public sealed class TalkAndActionProfileTests
         Session = 1,
         RollCallNumber = id + 1,
         Cast = "Yea",
+        Result = "Passed",
+        Totals = new() { Yea = 218, Nay = 210, Present = 1, NotVoting = 5 },
+        Party = "Republican",
         Headline = $"Vote {id}",
         Kind = kind,
         IssueIds = issueIds

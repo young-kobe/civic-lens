@@ -2,6 +2,8 @@ using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Publication;
+using CivicLens.Application.Roster;
+using CivicLens.Core.Votes;
 using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
 
@@ -191,6 +193,152 @@ public sealed class PublishVoteTests
 
         Assert.Equal((0, 0), (scenario.Reviews.ReadCount, scenario.Actions.PublicationReadCount));
     }
+
+    [Fact]
+    public async Task TheRecordCarriesTheResultTheTotalsAndEachPartyMajorityFromTheSavedLines()
+    {
+        var scenario = new PublicationScenario();
+        scenario.RosterMembers = [Member("M000001", Term("Democrat")), .. new[] { "R1", "R2", "R3", "R4", "R5" }.Select(id => Member(id, Term("Republican")))];
+        var vote = scenario.AddVote('d', totalLines: [PublicationScenario.DefaultPartyTotal, "Party total R: Yea 2, Nay 1, Present 1, Not voting 1"],
+            otherMemberLines: ["Member: R1, A, R, AL, Aye", "Member: R2, Smith, Jr., R, AL, Yea", "Member: R3, C, R, AL, No", "Member: R4, D, R, AL, Not Voting",
+                "Member: R5, E, R, AL, Present"]);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
+
+        var record = ReadVote(scenario, summary, vote);
+        Assert.Equal("Passed", record.Result);
+        Assert.Equal(new PublishedVoteTotals { Yea = 3, Nay = 1, Present = 1, NotVoting = 1 }, record.Totals);
+        Assert.Equal([("Democrat", 1, 0, "Yea"), ("Republican", 2, 1, "Yea")],
+            record.PartyMajorities.Select(party => (party.Party, party.YeaCount, party.NayCount, party.Majority)));
+        var row = Assert.Single(ReadOfficialVotes(scenario, summary, "mayor").Votes);
+        Assert.Equal(("Passed", "Democrat", "Yea", 3), (row.Result, row.Party, row.PartyMajority, row.Totals.Yea));
+    }
+
+    // Present is not a side. If it counted as a Nay, these Republicans would tie and the party would show no majority.
+    [Fact]
+    public async Task PresentAndNotVotingStayOutOfTheMajority()
+    {
+        var scenario = new PublicationScenario();
+        scenario.RosterMembers = [Member("M000001", Term("Republican")), Member("R1", Term("Republican")), Member("R2", Term("Republican"))];
+        var vote = scenario.AddVote('d', totalLines: ["Party total D: Yea 1, Nay 1, Present 1, Not voting 0"],
+            otherMemberLines: ["Member: R1, A, D, AL, Nay", "Member: R2, B, D, AL, Present"]);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
+
+        var party = Assert.Single(ReadVote(scenario, summary, vote).PartyMajorities);
+        Assert.Equal(("Republican", 1, 1, null), (party.Party, party.YeaCount, party.NayCount, party.Majority));
+    }
+
+    [Fact]
+    public async Task ATiedPartyHasNoMajorityOnItsOfficialRow()
+    {
+        var scenario = new PublicationScenario();
+        scenario.RosterMembers = [Member("M000001", Term("Democrat")), Member("D2", Term("Democrat"))];
+        var vote = scenario.AddVote('d', totalLines: ["Party total D: Yea 1, Nay 1, Present 0, Not voting 0"], otherMemberLines: ["Member: D2, A, D, AL, Nay"]);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
+
+        Assert.Null(Assert.Single(ReadOfficialVotes(scenario, summary, "mayor").Votes).PartyMajority);
+    }
+
+    // The source gives a bare "I" for an Independent, but the member votes with a party caucus.
+    [Fact]
+    public async Task AnIndependentWhoCaucusesWithDemocratsCountsAsDemocrat()
+    {
+        var scenario = new PublicationScenario();
+        scenario.RosterMembers = [Member("M000001", Term("Democrat")), Member("I1", Term("Independent", caucus: "Democrat"))];
+        var vote = scenario.AddVote('d', totalLines: [PublicationScenario.DefaultPartyTotal, "Party total I: Yea 0, Nay 1, Present 0, Not voting 0"],
+            otherMemberLines: ["Member: I1, A, I, VT, Nay"]);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
+
+        var party = Assert.Single(ReadVote(scenario, summary, vote).PartyMajorities);
+        Assert.Equal(("Democrat", 1, 1), (party.Party, party.YeaCount, party.NayCount));
+    }
+
+    [Fact]
+    public async Task AMemberWhoSwitchedPartyCountsWithTheTermThatCoversTheVoteDay()
+    {
+        var scenario = new PublicationScenario();
+        scenario.RosterMembers =
+        [
+            Member("M000001", new RosterTerm(0, "rep", new(2025, 1, 3), new(2025, 4, 1), "MA", 1, null, "Republican", null),
+                new RosterTerm(1, "rep", new(2025, 4, 2), new(2027, 1, 3), "MA", 1, null, "Democrat", null))
+        ];
+        var vote = scenario.AddVote('d');
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
+
+        Assert.Equal("Democrat", Assert.Single(ReadVote(scenario, summary, vote).Members).Party);
+    }
+
+    [Fact]
+    public async Task AMemberOutsideTheRosterUsesTheConfiguredOfficeThenAnUnknownPartyThatStaysCounted()
+    {
+        var scenario = new PublicationScenario();
+        scenario.ExternalIds["mayor"] = ("M000001", null);
+        scenario.Offices["mayor"] = [new() { Title = "rep", StartsOn = new(2025, 1, 3), Party = "Green" }];
+        var vote = scenario.AddVote('d', totalLines: [PublicationScenario.DefaultPartyTotal, "Party total R: Yea 0, Nay 1, Present 0, Not voting 0"],
+            otherMemberLines: ["Member: X1, A, R, AL, Nay"]);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
+
+        Assert.Equal([("Green", 1, 0), (PublishedPartyMajority.UnknownParty, 0, 1)],
+            ReadVote(scenario, summary, vote).PartyMajorities.Select(party => (party.Party, party.YeaCount, party.NayCount)));
+    }
+
+    [Fact]
+    public async Task SenateTotalsComeFromTheCountLineAndPartiesFromTheLisIdsOfTheRoster()
+    {
+        var scenario = new PublicationScenario();
+        scenario.RosterMembers = [new RosterMember("M000001", "S1", "Mayor Example", null, null, null, [Term("Democrat")]), new RosterMember("R9", "S9", "R9", null, null, null, [Term("Republican")])];
+        var vote = scenario.AddVote('d', chamber: Chamber.Senate, totalLines: ["Count: Yea 1, Nay 1, Present 0, Not voting 0"],
+            otherMemberLines: ["Member: S9, A, R, AL, Nay"], trackedSourceId: "S1");
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
+
+        var record = ReadVote(scenario, summary, vote);
+        Assert.Equal(new PublishedVoteTotals { Yea = 1, Nay = 1, Present = 0, NotVoting = 0 }, record.Totals);
+        Assert.Equal(["Democrat", "Republican"], record.PartyMajorities.Select(party => party.Party));
+    }
+
+    // A wrong count or a wrong member line would publish a false total next to cited text, so the vote must not publish.
+    [Theory]
+    [InlineData("Party total D: Yea 0, Nay 1, Present 0, Not voting 0")]
+    [InlineData("Party total R: Yea 1, Nay 0, Present 0, Not voting 0")]
+    public async Task AMemberLineThatDisagreesWithTheTotalLinesRefusesTheVoteAndStagesNothing(string total)
+    {
+        var scenario = new PublicationScenario();
+        var vote = scenario.AddVote('d', totalLines: [total]);
+
+        var error = await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote)));
+
+        Assert.Contains("do not add up", error.Message, StringComparison.Ordinal);
+        Assert.Equal(0, scenario.Releases.BeginCount);
+    }
+
+    [Fact]
+    public async Task AHouseVoteWithNoPartyTotalLinesRefusesBecauseItHasNoTotalsToShow()
+    {
+        var scenario = new PublicationScenario();
+        var vote = scenario.AddVote('d', totalLines: []);
+
+        var error = await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote)));
+
+        Assert.Contains("no party total lines", error.Message, StringComparison.Ordinal);
+    }
+
+    private static RosterTerm Term(string party, string? caucus = null) => new(0, "rep", new(2025, 1, 3), new(2027, 1, 3), "MA", 1, null, party, caucus);
+
+    private static RosterMember Member(string id, params RosterTerm[] terms) => new(id, null, id, null, null, null, terms);
+
+    private static PublishedVote ReadVote(PublicationScenario scenario, PublicationReleaseSummary summary, string recordId) =>
+        JsonSerializer.Deserialize<PublishedVote>(scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.RecordDataPath(recordId)],
+            PublicationProtocol.JsonOptions)!;
+
+    private static PublishedOfficialVotes ReadOfficialVotes(PublicationScenario scenario, PublicationReleaseSummary summary, string officialId) =>
+        JsonSerializer.Deserialize<PublishedOfficialVotes>(
+            scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.OfficialVotesPath(officialId, 119)], PublicationProtocol.JsonOptions)!;
 
     private static string PageOf(PublicationScenario scenario, PublicationReleaseSummary summary, string recordId) =>
         Encoding.UTF8.GetString(scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.RecordPagePath(recordId)]);

@@ -86,7 +86,7 @@ public sealed class PublishedOfficialsTests
         var catalog = new PublishedCatalog { Issues = [new() { Id = "housing", Name = "Housing" }], PolicyAreas = [] };
 
         Assert.Equal(1, PublicationProtocol.SchemaVersion);
-        Assert.Equal("""{"officials":[{"id":"mayor","name":"Mayor Example","wikidataId":null,"website":null,"terms":[{"office":"sen","state":"WA","district":null,"party":"Democrat","start":"2025-01-03","end":"2031-01-03"}]}]}""",
+        Assert.Equal("""{"officials":[{"id":"mayor","name":"Mayor Example","wikidataId":null,"website":null,"terms":[{"office":"sen","state":"WA","district":null,"party":"Democrat","caucus":null,"start":"2025-01-03","end":"2031-01-03"}]}]}""",
             JsonSerializer.Serialize(officials, PublicationProtocol.JsonOptions));
         Assert.Equal("""{"issues":[{"id":"housing","name":"Housing"}],"policyAreas":[]}""",
             JsonSerializer.Serialize(catalog, PublicationProtocol.JsonOptions));
@@ -102,7 +102,7 @@ public sealed class PublishedOfficialsTests
 
         officials.Validate();
 
-        Assert.Equal("""{"officials":[{"id":"sec","name":"Secretary Example","wikidataId":null,"website":null,"terms":[{"office":"Secretary of State","state":null,"district":null,"party":null,"start":"2025-01-21","end":null}]}]}""",
+        Assert.Equal("""{"officials":[{"id":"sec","name":"Secretary Example","wikidataId":null,"website":null,"terms":[{"office":"Secretary of State","state":null,"district":null,"party":null,"caucus":null,"start":"2025-01-21","end":null}]}]}""",
             JsonSerializer.Serialize(officials, PublicationProtocol.JsonOptions));
     }
 

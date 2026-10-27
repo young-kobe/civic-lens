@@ -22,11 +22,13 @@ public sealed class PublishRelease
     private readonly ReleaseDataFiles dataFiles;
     private readonly ReleaseOfficialPages officialPages;
     private readonly PublishedRecordRules rules;
+    private readonly PublicationOfficials officials;
     private readonly TimeProvider clock;
 
     public PublishRelease(IPublicationStore publications, IReleaseDirectory releases, IReleaseRenderer renderer,
         PublishedRecordLoaders loaders, PublicationCatalog catalog, PublicationOfficials officials, TimeProvider clock)
     {
+        this.officials = officials;
         this.publications = publications;
         this.releases = releases;
         this.renderer = renderer;
@@ -65,7 +67,7 @@ public sealed class PublishRelease
             cancellationToken);
         var newWithdrawals = PublicationWithdrawals.Create(previous, corrections, now, withdrawalNotes);
         var returned = ImmutableArray.CreateRange(references.Where(reference => previous.IsWithdrawn(reference.RecordId)));
-        var build = new PublicationBuild(previous, now, rules, renderer, catalog, corrections).WithRemoved(withdrawn).WithReturned(returned);
+        var build = new PublicationBuild(previous, now, rules, renderer, catalog, corrections, officials).WithRemoved(withdrawn).WithReturned(returned);
         var additions = await LoadAdditionsAsync(references, build, cancellationToken);
         var released = build.WithAdded(additions);
         await WithdrawalCascade.RequireNoCitersAsync(releases, loaders, released, additions, cancellationToken);

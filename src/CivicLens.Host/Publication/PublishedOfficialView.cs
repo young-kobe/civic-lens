@@ -42,5 +42,5 @@ internal sealed record PublishedOfficialRow(DateOnly Date, string RecordId, stri
         ReleaseRecordOrder.Day(entry), entry.RecordId, entry.Headline, entry.Kind, null, null, entry.FirstPublishedAtUtc);
 
     public static PublishedOfficialRow Of(PublishedOfficialVote vote) => new(
-        vote.VotedOn, vote.RecordId, vote.Headline, PublishedRecordKind.Vote, PublishedOfficialView.RollCall(vote), vote.Cast, DateTimeOffset.MinValue);
+        vote.VotedOn, vote.RecordId, vote.Headline, PublishedRecordKind.Vote, $"{PublishedOfficialView.RollCall(vote)}. Result of the vote: {vote.Result}", vote.Cast, DateTimeOffset.MinValue);
 }

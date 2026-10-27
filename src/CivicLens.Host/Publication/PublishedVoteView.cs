@@ -13,6 +13,8 @@ internal static class PublishedVoteView
     [
         new("Voted on", Moment.Iso(vote.VotedOn)),
         new("Kind", PublishedRecordLabels.VoteKind(vote.Kind)),
+        new("Result", vote.Result),
+        new("Totals", Totals(vote)),
         new("Chamber", vote.Chamber.ToString()),
         new("Roll call", $"{vote.RollCallNumber}, Congress {vote.Congress}, session {vote.Session}"),
         PublishedRecordView.Issues("Tracked issues", vote.TrackedIssueIds, catalog),
@@ -20,6 +22,13 @@ internal static class PublishedVoteView
         .. PublishedRecordLabels.Wording(vote.TextOrigin),
         new("Revision", vote.RevisionNumber.ToString(CultureInfo.InvariantCulture))
     ];
+
+    public static string Totals(PublishedVote vote)
+    {
+        var totals = vote.Totals;
+        var voters = vote.Chamber == PublishedChamber.Senate ? "all senators" : "all House members";
+        return $"Yea {totals.Yea}, Nay {totals.Nay}, Present {totals.Present}, Not voting {totals.NotVoting} ({voters})";
+    }
 
     public static string Caveat(PublishedVote vote) =>
         $"This record lists only the officials that Civic Lens tracks. Each cast is the wording of the {(vote.Chamber == PublishedChamber.Senate ? "Senate" : "House Clerk")} roll call at the observation time of its source.";

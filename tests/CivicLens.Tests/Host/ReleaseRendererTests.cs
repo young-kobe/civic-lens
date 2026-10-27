@@ -524,6 +524,7 @@ public sealed class ReleaseRendererTests
         Assert.Equal("House", facts["Chamber"]);
         Assert.Equal("100, Congress 119, session 1", facts["Roll call"]);
         Assert.Equal("Housing costs", facts["Tracked issues"]);
+        Assert.Equal("Passed <b>", facts["Result"]);
         var result = document.QuerySelector("[aria-labelledby='result-title']")!;
         Assert.Equal(["Started: 2025-04-10T11:08:00-04:00", "Question: On Passage", "Result: Passed <b>"],
             result.QuerySelectorAll("blockquote").Select(quote => quote.TextContent));
@@ -534,6 +535,27 @@ public sealed class ReleaseRendererTests
         Assert.Equal(["Source text 1 of 2", "Source text 2 of 2"], sources.QuerySelectorAll("[aria-label]").Select(item => item.GetAttribute("aria-label")));
         Assert.Contains("only the officials that Civic Lens tracks", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<b>", html, StringComparison.Ordinal);
+    }
+
+    // A bare count could mean the tracked members, so each total names the whole body that it counts.
+    [Theory]
+    [InlineData(PublishedChamber.House, "Yea 218, Nay 210, Present 1, Not voting 5 (all House members)")]
+    [InlineData(PublishedChamber.Senate, "Yea 218, Nay 210, Present 1, Not voting 5 (all senators)")]
+    public async Task TheVoteTotalsNameTheWholeBodyThatTheyCount(PublishedChamber chamber, string expected)
+    {
+        var vote = Vote() with
+        {
+            Chamber = chamber,
+            Totals = new() { Yea = 218, Nay = 210, Present = 1, NotVoting = 5 },
+            PartyMajorities = [PublishedPartyMajority.Of("Republican", 218, 210)]
+        };
+
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
+            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
+        Assert.Equal(expected, facts["Totals"]);
     }
 
     [Theory]
@@ -1172,6 +1194,9 @@ public sealed class ReleaseRendererTests
                 BillType = "hr",
                 BillNumber = 7,
                 Cast = "Yea",
+                Result = "Passed",
+                Totals = new() { Yea = 218, Nay = 210, Present = 1, NotVoting = 5 },
+                Party = "Republican",
                 Headline = "A vote",
                 Kind = PublishedVoteKind.Passage,
                 IssueIds = ["housing"]
@@ -1691,6 +1716,9 @@ public sealed class ReleaseRendererTests
             KindCitation = Cite(detailId, detail, "Question: On Passage"),
             VotedOn = new DateOnly(2025, 4, 10),
             VotedOnCitation = Cite(detailId, detail, "Started: 2025-04-10T11:08:00-04:00"),
+            Result = "Passed <b>",
+            Totals = new() { Yea = 1, Nay = 0, Present = 0, NotVoting = 0 },
+            PartyMajorities = [PublishedPartyMajority.Of("Republican", 1, 0)],
             Facts =
             [
                 new PublishedVoteFact { Text = "Started: 2025-04-10T11:08:00-04:00", Citation = Cite(detailId, detail, "Started: 2025-04-10T11:08:00-04:00") },
@@ -1702,6 +1730,7 @@ public sealed class ReleaseRendererTests
                 new PublishedMemberVote
                 {
                     Official = new PublishedOfficial { Id = "o1", Name = "Jane <Doe>" },
+                    Party = "Republican",
                     Cast = "Yea",
                     Citation = Cite(membersId, members, "Member: A000055, Jane Doe, R, AL, Yea")
                 }

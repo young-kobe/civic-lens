@@ -33,10 +33,18 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
         return published;
     }
 
+    internal async Task<VoteParties> ReadVotePartiesAsync(CancellationToken cancellationToken) =>
+        new(await ReadRosterAsync(cancellationToken), configuration.People);
+
+    private async Task<IReadOnlyList<RosterMember>> ReadRosterAsync(CancellationToken cancellationToken) =>
+        configuration.RosterSourceOf(ApiParser.CongressLegislators) is { } source
+            ? await members.ReadLatestAsync(source.Id, cancellationToken)
+            : [];
+
     private async Task<Dictionary<string, MemberFacts>> ReadMemberFactsAsync(bool needed, CancellationToken cancellationToken)
     {
-        if (!needed || configuration.RosterSourceOf(ApiParser.CongressLegislators) is not { } source) return [];
-        var roster = await members.ReadLatestAsync(source.Id, cancellationToken);
+        if (!needed) return [];
+        var roster = await ReadRosterAsync(cancellationToken);
         return roster.ToDictionary(member => member.BioguideId, member => new MemberFacts([.. member.Terms.Select(ToTerm)], ValidWebsite(member.Url)), StringComparer.Ordinal);
     }
 
@@ -54,6 +62,7 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
         State = term.State,
         District = term.District,
         Party = term.Party,
+        Caucus = term.Caucus,
         Start = term.Start,
         End = term.End
     };

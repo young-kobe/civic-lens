@@ -37,7 +37,7 @@ public sealed class PublishedVoteTests
         var json = JsonSerializer.Serialize(Vote(), PublicationProtocol.JsonOptions);
 
         Assert.Equal(["recordId", "revisionNumber", "headline", "summary", "textOrigin", "chamber", "congress", "session", "rollCallNumber", "kind", "kindCitation",
-            "votedOn", "votedOnCitation", "facts", "members", "billType", "billNumber", "trackedIssueIds", "sources", "approvedAtUtc",
+            "votedOn", "result", "totals", "partyMajorities", "votedOnCitation", "facts", "members", "billType", "billNumber", "trackedIssueIds", "sources", "approvedAtUtc",
             "firstPublishedAtUtc", "corrections"], JsonDocument.Parse(json).RootElement.EnumerateObject().Select(property => property.Name));
         Assert.Contains("\"kind\":\"passage\"", json, StringComparison.Ordinal);
         Assert.Contains("\"votedOn\":\"2025-04-10\"", json, StringComparison.Ordinal);
@@ -76,13 +76,13 @@ public sealed class PublishedVoteTests
     [Fact]
     public void TheVoteDayIsTheDateOfTheCitedStartLineSoALateVoteKeepsItsHouseDayAcrossUtcMidnight()
     {
-        const string evening = "Started: 2025-07-02T21:15:00-04:00\n";
+        const string evening = "Started: 2025-07-02T21:15:00-04:00\nResult: Passed\n";
         var vote = Vote();
         var cited = vote with
         {
             VotedOn = new DateOnly(2025, 7, 2),
             VotedOnCitation = Cite(DetailId, evening, "Started: 2025-07-02T21:15:00-04:00"),
-            Facts = [],
+            Facts = [new() { Text = "Result: Passed", Citation = Cite(DetailId, evening, "Result: Passed") }],
             KindCitation = null,
             Kind = PublishedVoteKind.Other,
             Sources = [vote.Sources[0] with { Text = evening }, vote.Sources[1]]
@@ -255,6 +255,45 @@ public sealed class PublishedVoteTests
         Assert.Equal(Enum.GetNames<VoteKind>(), Enum.GetNames<PublishedVoteKind>());
     }
 
+    // A reader shows the result next to the cited lines, so a result that no cited line holds would show text the source does not give.
+    [Fact]
+    public void RejectsAResultThatNoCitedResultLineHolds()
+    {
+        Assert.Throws<InvalidDataException>((Vote() with { Result = "Failed" }).Validate);
+    }
+
+    [Fact]
+    public void RejectsPartyMajoritiesThatDoNotAddUpToTheTotals()
+    {
+        var vote = Vote();
+
+        Assert.Throws<InvalidDataException>((vote with { Totals = vote.Totals with { Yea = 2 } }).Validate);
+    }
+
+    [Fact]
+    public void RejectsAMemberWhoseNamedPartyHasNoMajorityEntry()
+    {
+        var vote = Vote();
+        var stray = vote.Members[0] with { Party = "Green" };
+
+        Assert.Throws<InvalidDataException>((vote with { Members = [stray, vote.Members[1]] }).Validate);
+    }
+
+    [Fact]
+    public void ATiedPartyHasNoMajoritySoNeitherCastCountsAsFollowingIt()
+    {
+        Assert.Null(PublishedPartyMajority.Of("Republican", 3, 3).Majority);
+    }
+
+    [Fact]
+    public void RejectsAMajorityThatDoesNotMatchItsCounts()
+    {
+        var vote = Vote();
+        var wrong = vote.PartyMajorities[1] with { Majority = PublishedPartyMajority.Nay };
+
+        Assert.Throws<InvalidDataException>((vote with { PartyMajorities = [vote.PartyMajorities[0], wrong] }).Validate);
+    }
+
     private static PublishedVote Vote() => new()
     {
         Corrections = [],
@@ -271,12 +310,15 @@ public sealed class PublishedVoteTests
         KindCitation = Cite(DetailId, DetailText, "Question: On Passage"),
         VotedOn = new DateOnly(2025, 4, 10),
         VotedOnCitation = Cite(DetailId, DetailText, "Started: 2025-04-10T11:08:00-04:00"),
+        Result = "Passed",
+        Totals = new() { Yea = 1, Nay = 1, Present = 0, NotVoting = 0 },
+        PartyMajorities = [PublishedPartyMajority.Of("Democrat", 0, 1), PublishedPartyMajority.Of("Republican", 1, 0)],
         Facts = [Fact("Started: 2025-04-10T11:08:00-04:00"), Fact("Question: On Passage"), Fact("Result: Passed"), Fact("Legislation: HR 7")],
         Members =
         [
-            new() { Official = new() { Id = "aderholt", Name = "Robert Aderholt" }, Cast = "Yea",
+            new() { Official = new() { Id = "aderholt", Name = "Robert Aderholt" }, Party = "Republican", Cast = "Yea",
                 Citation = Cite(MembersId, MembersText, "Member: A000055, Robert Aderholt, R, AL, Yea") },
-            new() { Official = new() { Id = "roe", Name = "Ann Roe" }, Cast = "Nay",
+            new() { Official = new() { Id = "roe", Name = "Ann Roe" }, Party = "Democrat", Cast = "Nay",
                 Citation = Cite(MembersId, MembersText, "Member: B000001, Ann Roe, D, MA, Nay") }
         ],
         BillType = "hr",
