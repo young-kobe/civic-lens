@@ -7,20 +7,21 @@ namespace CivicLens.Application.Publication;
 
 /// <summary>
 /// The totals of one roll call and the majority of each party. The House totals are the sum of its party total lines. The Senate totals are its count line.
-/// The member lines must agree with those lines, so a wrong total or a wrong member line never publishes. The source party letter is used only for that check.
+/// The member lines must agree with those lines, so a wrong total or a wrong member line never publishes.
+/// A vote with candidate total lines, such as the election of the Speaker, has no totals and no party majorities, because its casts are candidate names.
 /// </summary>
 internal sealed class VoteTally
 {
     private readonly Dictionary<string, string> partyBySourceId;
 
-    private VoteTally(PublishedVoteTotals totals, PublishedPartyMajority[] partyMajorities, Dictionary<string, string> partyBySourceId)
+    private VoteTally(PublishedVoteTotals? totals, PublishedPartyMajority[] partyMajorities, Dictionary<string, string> partyBySourceId)
     {
         Totals = totals;
         PartyMajorities = partyMajorities;
         this.partyBySourceId = partyBySourceId;
     }
 
-    public PublishedVoteTotals Totals { get; }
+    public PublishedVoteTotals? Totals { get; }
 
     public PublishedPartyMajority[] PartyMajorities { get; }
 
@@ -31,14 +32,15 @@ internal sealed class VoteTally
     {
         var lines = membersText.Split('\n').Where(line => line.StartsWith(VoteMemberLine.Prefix, StringComparison.Ordinal))
             .Select(VoteMemberLine.Parse).ToArray();
+        var partyBySourceId = lines.ToDictionary(line => line.SourceId, line => parties.PartyOn(line, chamber, day), StringComparer.Ordinal);
+        if (VoteFacts.Find(facts, VoteFactPrefixes.CandidateTotal) is not null) return new(null, [], partyBySourceId);
+
         var partyTotals = chamber == Chamber.Senate ? SenateTotals(recordId, facts) : HouseTotals(recordId, facts);
         var totals = Sum(partyTotals.Values);
         if (TotalsOf(lines) != totals)
             throw new ArgumentException($"Vote {recordId} has member lines that do not add up to its total lines.");
         if (chamber == Chamber.House) RequireLettersMatch(recordId, lines, partyTotals);
 
-        var partyBySourceId = lines.ToDictionary(line => line.SourceId,
-            line => parties.PartyOn(line.SourceId, day) ?? PublishedPartyMajority.UnknownParty, StringComparer.Ordinal);
         var majorities = lines.GroupBy(line => partyBySourceId[line.SourceId])
             .Select(group => PublishedPartyMajority.Of(group.Key, group.Count(line => line.Cast == VoteCastKind.Yea),
                 group.Count(line => line.Cast == VoteCastKind.Nay)))
@@ -57,6 +59,7 @@ internal sealed class VoteTally
     {
         var totals = facts.Where(fact => fact.Text.StartsWith(VoteFactPrefixes.PartyTotal, StringComparison.Ordinal))
             .Select(fact => fact.Text[VoteFactPrefixes.PartyTotal.Length..].Split(": ", 2))
+            .Select(parts => parts.Length == 2 ? parts : throw new ArgumentException($"Vote {recordId} has a party total line with no counts: {parts[0]}"))
             .ToDictionary(parts => parts[0], parts => ParseCounts(recordId, parts[1]), StringComparer.Ordinal);
         return totals.Count > 0 ? totals : throw new ArgumentException($"Vote {recordId} has no party total lines.");
     }

@@ -3,7 +3,7 @@ namespace CivicLens.Application.Publication;
 internal enum VoteCastKind { Yea, Nay, Present, NotVoting }
 
 /// <summary>One saved "Member: id, name, party, state, cast" line. The name may hold commas, so the party and the cast count from the end.</summary>
-internal sealed record VoteMemberLine(string SourceId, string SourceParty, VoteCastKind Cast)
+internal sealed record VoteMemberLine(string SourceId, string SourceParty, string CastText)
 {
     public const string Prefix = "Member: ";
 
@@ -14,8 +14,18 @@ internal sealed record VoteMemberLine(string SourceId, string SourceParty, VoteC
         var fields = line.StartsWith(Prefix, StringComparison.Ordinal) ? line[Prefix.Length..].Split(", ") : [];
         if (fields.Length < MinimumFields)
             throw new ArgumentException($"A member line is not 'id, name, party, state, cast': {line}");
-        return new(fields[0], fields[^3], CastOf(fields[^1]));
+        return new(fields[0], fields[^3], fields[^1]);
     }
+
+    public VoteCastKind Cast => CastOf(CastText);
+
+    public string? SourcePartyName => SourceParty switch
+    {
+        "R" => "Republican",
+        "D" => "Democrat",
+        "I" => "Independent",
+        _ => null
+    };
 
     private static VoteCastKind CastOf(string cast) => cast switch
     {

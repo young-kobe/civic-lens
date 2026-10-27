@@ -13,7 +13,8 @@ public sealed record PublishedVote
     public const int MaximumMembers = 600;
     public const int MaximumSources = 3;
     public const int MaximumParties = 16;
-    private const string ResultPrefix = "Result: ";
+    public const string ResultPrefix = "Result: ";
+    public const string CandidateTotalPrefix = "Candidate total ";
 
     public required string RecordId { get; init; }
     public required int RevisionNumber { get; init; }
@@ -28,7 +29,7 @@ public sealed record PublishedVote
     public PublishedCitation? KindCitation { get; init; }
     public required DateOnly VotedOn { get; init; }
     public required string Result { get; init; }
-    public required PublishedVoteTotals Totals { get; init; }
+    public PublishedVoteTotals? Totals { get; init; }
     public required PublishedPartyMajority[] PartyMajorities { get; init; }
     public required PublishedCitation VotedOnCitation { get; init; }
     public required PublishedVoteFact[] Facts { get; init; }
@@ -40,6 +41,8 @@ public sealed record PublishedVote
     public required DateTimeOffset ApprovedAtUtc { get; init; }
     public required DateTimeOffset FirstPublishedAtUtc { get; init; }
     public required PublishedCorrection[] Corrections { get; init; }
+
+    private bool HasCandidateTotals => Facts.Any(fact => fact.Text.StartsWith(CandidateTotalPrefix, StringComparison.Ordinal));
 
     public PublishedRecordEntry ToEntry() => new()
     {
@@ -92,6 +95,12 @@ public sealed record PublishedVote
     {
         if (!PublishedEvidenceRules.IsBoundedText(Result) || Facts.All(fact => fact.Text != ResultPrefix + Result))
             throw new InvalidDataException("A published vote result must be the text of a cited result line.");
+        if (HasCandidateTotals)
+        {
+            if (Totals is not null || PartyMajorities is not { Length: 0 })
+                throw new InvalidDataException("A published vote with candidate totals has no totals and no party majorities.");
+            return;
+        }
         if (Totals is null || PartyMajorities is null || PartyMajorities.Length is 0 or > MaximumParties || PartyMajorities.Any(party => party is null))
             throw new InvalidDataException($"Published vote requires totals and 1 to {MaximumParties} party majorities.");
         Totals.Validate();
@@ -101,13 +110,16 @@ public sealed record PublishedVote
             throw new InvalidDataException("Published party majorities must name distinct parties and add up to the vote totals.");
     }
 
+    private bool IsKnownParty(string? party) =>
+        !string.IsNullOrWhiteSpace(party) && (HasCandidateTotals || PartyMajorities.Any(majority => majority.Party == party));
+
     private void ValidateMembers()
     {
         if (Members is null || Members.Length is 0 or > MaximumMembers)
             throw new InvalidDataException($"Published vote requires 1 to {MaximumMembers} member votes.");
         if (Members.Any(member => member?.Official is null || member.Citation is null || string.IsNullOrWhiteSpace(member.Official.Id) ||
                 string.IsNullOrWhiteSpace(member.Official.Name) || string.IsNullOrWhiteSpace(member.Cast) ||
-                PartyMajorities.All(party => party.Party != member.Party) || member.Cast.Length > MaximumCastLength ||
+                !IsKnownParty(member.Party) || member.Cast.Length > MaximumCastLength ||
                 member.Citation.Quote?.EndsWith(", " + member.Cast, StringComparison.Ordinal) != true))
             throw new InvalidDataException($"A published member vote requires a named official and a cast of at most {MaximumCastLength} characters that its citation shows.");
         if (!PublishedEvidenceRules.AreDistinctAndNotBlank(Members.Select(member => member.Official.Id)))

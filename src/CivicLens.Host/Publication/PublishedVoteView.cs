@@ -25,10 +25,15 @@ internal static class PublishedVoteView
 
     public static string Totals(PublishedVote vote)
     {
-        var totals = vote.Totals;
-        var voters = vote.Chamber == PublishedChamber.Senate ? "all senators" : "all House members";
-        return $"Yea {totals.Yea}, Nay {totals.Nay}, Present {totals.Present}, Not voting {totals.NotVoting} ({voters})";
+        var body = vote.Chamber == PublishedChamber.Senate ? "senators" : "House members";
+        return vote.Totals is { } totals
+            ? $"Casts of all {body}: Yea {totals.Yea}, Nay {totals.Nay}, Present {totals.Present}, Not voting {totals.NotVoting}"
+            : $"Votes for each candidate from all {body}: {string.Join(", ", CandidateTotals(vote))}";
     }
+
+    private static IEnumerable<string> CandidateTotals(PublishedVote vote) =>
+        vote.Facts.Where(fact => fact.Text.StartsWith(PublishedVote.CandidateTotalPrefix, StringComparison.Ordinal))
+            .Select(fact => fact.Text[PublishedVote.CandidateTotalPrefix.Length..].Replace(": ", " ", StringComparison.Ordinal));
 
     public static string Caveat(PublishedVote vote) =>
         $"This record lists only the officials that Civic Lens tracks. Each cast is the wording of the {(vote.Chamber == PublishedChamber.Senate ? "Senate" : "House Clerk")} roll call at the observation time of its source.";

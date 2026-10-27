@@ -28,7 +28,7 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
         ImmutableArray<string> recordIds, PublicationBuild build, CancellationToken cancellationToken)
     {
         var found = await votes.GetForPublicationAsync(recordIds, cancellationToken);
-        var parties = await build.Officials.ReadVotePartiesAsync(cancellationToken);
+        var parties = new VoteParties(build.Roster);
         return found.ToDictionary(item => item.Key, item => new VoteAddition(item.Value, parties), StringComparer.Ordinal);
     }
 

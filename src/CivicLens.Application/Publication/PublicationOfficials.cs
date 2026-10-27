@@ -16,11 +16,16 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
 
     public bool IsConfigured(string officialId) => configuredIds.Contains(officialId);
 
+    internal async Task<IReadOnlyList<RosterMember>> ReadRosterAsync(CancellationToken cancellationToken) =>
+        configuration.RosterSourceOf(ApiParser.CongressLegislators) is { } source
+            ? await members.ReadLatestAsync(source.Id, cancellationToken)
+            : [];
+
     public async Task<PublishedOfficials> ResolveAsync(IReadOnlySet<string> officialIds,
-        IReadOnlyDictionary<string, string> recordNames, CancellationToken cancellationToken)
+        IReadOnlyDictionary<string, string> recordNames, IReadOnlyList<RosterMember> roster, CancellationToken cancellationToken)
     {
         var people = configuration.People.Where(person => officialIds.Contains(person.Id)).ToArray();
-        var memberFacts = await ReadMemberFactsAsync(people.Any(person => person.BioguideId is not null), cancellationToken);
+        var memberFacts = people.Any(person => person.BioguideId is not null) ? MemberFactsOf(roster) : [];
         var needsExecutives = people.Any(person => person.WikidataId is not null && MemberTermsOf(person, memberFacts).Length == 0);
         var executiveTerms = await ReadExecutiveTermsAsync(needsExecutives, cancellationToken);
         var published = new PublishedOfficials
@@ -33,20 +38,8 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
         return published;
     }
 
-    internal async Task<VoteParties> ReadVotePartiesAsync(CancellationToken cancellationToken) =>
-        new(await ReadRosterAsync(cancellationToken), configuration.People);
-
-    private async Task<IReadOnlyList<RosterMember>> ReadRosterAsync(CancellationToken cancellationToken) =>
-        configuration.RosterSourceOf(ApiParser.CongressLegislators) is { } source
-            ? await members.ReadLatestAsync(source.Id, cancellationToken)
-            : [];
-
-    private async Task<Dictionary<string, MemberFacts>> ReadMemberFactsAsync(bool needed, CancellationToken cancellationToken)
-    {
-        if (!needed) return [];
-        var roster = await ReadRosterAsync(cancellationToken);
-        return roster.ToDictionary(member => member.BioguideId, member => new MemberFacts([.. member.Terms.Select(ToTerm)], ValidWebsite(member.Url)), StringComparer.Ordinal);
-    }
+    private static Dictionary<string, MemberFacts> MemberFactsOf(IReadOnlyList<RosterMember> roster) =>
+        roster.ToDictionary(member => member.BioguideId, member => new MemberFacts([.. member.Terms.Select(ToTerm)], ValidWebsite(member.Url)), StringComparer.Ordinal);
 
     private async Task<Dictionary<string, PublishedOfficeTerm[]>> ReadExecutiveTermsAsync(bool needed, CancellationToken cancellationToken)
     {

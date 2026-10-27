@@ -537,10 +537,10 @@ public sealed class ReleaseRendererTests
         Assert.DoesNotContain("<b>", html, StringComparison.Ordinal);
     }
 
-    // A bare count could mean the tracked members, so each total names the whole body that it counts.
+    // A bare count could mean the tracked members or all members who voted Yea, so each total names the whole body and what it counts.
     [Theory]
-    [InlineData(PublishedChamber.House, "Yea 218, Nay 210, Present 1, Not voting 5 (all House members)")]
-    [InlineData(PublishedChamber.Senate, "Yea 218, Nay 210, Present 1, Not voting 5 (all senators)")]
+    [InlineData(PublishedChamber.House, "Casts of all House members: Yea 218, Nay 210, Present 1, Not voting 5")]
+    [InlineData(PublishedChamber.Senate, "Casts of all senators: Yea 218, Nay 210, Present 1, Not voting 5")]
     public async Task TheVoteTotalsNameTheWholeBodyThatTheyCount(PublishedChamber chamber, string expected)
     {
         var vote = Vote() with
@@ -550,12 +550,26 @@ public sealed class ReleaseRendererTests
             PartyMajorities = [PublishedPartyMajority.Of("Republican", 218, 210)]
         };
 
-        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
+        Assert.Equal(expected, (await VoteFactsOf(vote))["Totals"]);
+    }
 
+    [Fact]
+    public async Task ASpeakerElectionShowsItsCandidateTotalsAndNoYeaAndNayLine()
+    {
+        var vote = Vote("Candidate total Emmer: 1", "Candidate total Johnson (LA): 218") with { Totals = null, PartyMajorities = [] };
+
+        var facts = await VoteFactsOf(vote);
+
+        Assert.Equal("Votes for each candidate from all House members: Emmer 1, Johnson (LA) 218", facts["Totals"]);
+        Assert.DoesNotContain("Yea", facts["Totals"], StringComparison.Ordinal);
+    }
+
+    private static async Task<Dictionary<string, string>> VoteFactsOf(PublishedVote vote)
+    {
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
         var document = new HtmlParser().ParseDocument(html);
-        var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
+        return document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
             .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
-        Assert.Equal(expected, facts["Totals"]);
     }
 
     [Theory]
@@ -1690,9 +1704,9 @@ public sealed class ReleaseRendererTests
         };
     }
 
-    private static PublishedVote Vote()
+    private static PublishedVote Vote(params string[] candidateTotalLines)
     {
-        const string detail = "Started: 2025-04-10T11:08:00-04:00\nQuestion: On Passage\nResult: Passed <b>\n";
+        var detail = "Started: 2025-04-10T11:08:00-04:00\nQuestion: On Passage\nResult: Passed <b>\n" + string.Concat(candidateTotalLines.Select(line => line + "\n"));
         const string members = "Member: A000055, Jane Doe, R, AL, Yea\n";
         var detailId = new string('1', 64);
         var membersId = new string('2', 64);
@@ -1723,7 +1737,8 @@ public sealed class ReleaseRendererTests
             [
                 new PublishedVoteFact { Text = "Started: 2025-04-10T11:08:00-04:00", Citation = Cite(detailId, detail, "Started: 2025-04-10T11:08:00-04:00") },
                 new PublishedVoteFact { Text = "Question: On Passage", Citation = Cite(detailId, detail, "Question: On Passage") },
-                new PublishedVoteFact { Text = "Result: Passed <b>", Citation = Cite(detailId, detail, "Result: Passed <b>") }
+                new PublishedVoteFact { Text = "Result: Passed <b>", Citation = Cite(detailId, detail, "Result: Passed <b>") },
+                .. candidateTotalLines.Select(line => new PublishedVoteFact { Text = line, Citation = Cite(detailId, detail, line) })
             ],
             Members =
             [

@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Review;
+using CivicLens.Application.Roster;
 using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
 
@@ -67,7 +68,8 @@ public sealed class PublishRelease
             cancellationToken);
         var newWithdrawals = PublicationWithdrawals.Create(previous, corrections, now, withdrawalNotes);
         var returned = ImmutableArray.CreateRange(references.Where(reference => previous.IsWithdrawn(reference.RecordId)));
-        var build = new PublicationBuild(previous, now, rules, renderer, catalog, corrections, officials).WithRemoved(withdrawn).WithReturned(returned);
+        var roster = await officials.ReadRosterAsync(cancellationToken);
+        var build = new PublicationBuild(previous, now, rules, renderer, catalog, corrections, roster).WithRemoved(withdrawn).WithReturned(returned);
         var additions = await LoadAdditionsAsync(references, build, cancellationToken);
         var released = build.WithAdded(additions);
         await WithdrawalCascade.RequireNoCitersAsync(releases, loaders, released, additions, cancellationToken);
@@ -80,7 +82,7 @@ public sealed class PublishRelease
             throw new ArgumentException("The release would exceed the maximum record count.", nameof(request));
 
         var number = state.LatestReleaseNumber + 1;
-        var (directory, entries) = await StageAsync(number, now, previous, carried, additions, removed, withdrawals, pages, cancellationToken);
+        var (directory, entries) = await StageAsync(number, now, previous, carried, additions, removed, withdrawals, pages, roster, cancellationToken);
         var commit = new PublicationCommit(number, state.Active?.ReleaseNumber, directory,
             [.. entries.Select(PublishedRevisionBinding.Of)],
             [.. additions.Select(addition => addition.Expectation)])
@@ -136,7 +138,7 @@ public sealed class PublishRelease
 
     private async Task<(string Directory, List<PublishedRecordEntry> Entries)> StageAsync(int number, DateTimeOffset now,
         PreviousRelease previous, List<PublishedRecordEntry> carried, List<PendingRecord> additions,
-        List<PublishedRecordEntry> removed, List<PublishedWithdrawal> withdrawals, IReadOnlyDictionary<string, string> pages,
+        List<PublishedRecordEntry> removed, List<PublishedWithdrawal> withdrawals, IReadOnlyDictionary<string, string> pages, IReadOnlyList<RosterMember> roster,
         CancellationToken cancellationToken)
     {
         List<PublishedRecordEntry> entries = [.. carried, .. additions.Select(addition => addition.Entry)];
@@ -180,7 +182,7 @@ public sealed class PublishRelease
             Compress(manifestJson, stream => new BrotliStream(stream, CompressionLevel.Optimal)), cancellationToken);
         var facets = ReleaseFacets.From(manifest, catalog);
         await indexPages.WriteAsync(staging, manifest, facets, additions, previous, cancellationToken);
-        var officials = await dataFiles.WriteAsync(staging, manifest, facets, additions, previous, cancellationToken);
+        var officials = await dataFiles.WriteAsync(staging, manifest, facets, additions, previous, roster, cancellationToken);
         await officialPages.WriteAsync(staging, manifest, officials, additions, removed, previous, cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestPath, manifestJson, cancellationToken);
         return (await staging.CompleteAsync(number, cancellationToken), entries);

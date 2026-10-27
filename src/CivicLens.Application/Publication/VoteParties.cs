@@ -1,38 +1,36 @@
-using CivicLens.Application.Collection;
 using CivicLens.Application.Roster;
+using CivicLens.Core.Votes;
+using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
 /// <summary>
-/// Finds the party of a roll call member on the day of the vote. A caucus beats the party, so an Independent who caucuses with a party counts with it.
-/// A member the roster does not hold gets the party of the configured office of that person, if any.
+/// Finds the party of a roll call member on the day of the vote. The roster term of the vote chamber that covers the day comes first, and a caucus beats the party,
+/// so an Independent who caucuses with a party counts with it. The roster holds current members only, so a member who left takes the party named by the letter on the member line.
+/// A member with neither counts as Unknown. When two terms cover the day, the term that starts later wins.
 /// </summary>
 internal sealed class VoteParties
 {
     private readonly Dictionary<string, RosterTerm[]> termsBySourceId = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, OfficeConfiguration[]> officesBySourceId = new(StringComparer.Ordinal);
 
-    public VoteParties(IEnumerable<RosterMember> roster, IEnumerable<PersonConfiguration> people)
+    public VoteParties(IEnumerable<RosterMember> roster)
     {
         foreach (var member in roster)
         {
             termsBySourceId[member.BioguideId] = member.Terms;
             if (member.LisId is not null) termsBySourceId[member.LisId] = member.Terms;
         }
-        foreach (var person in people.Where(person => person.BioguideId is not null && person.Offices is not null))
-            officesBySourceId[person.BioguideId!] = person.Offices!;
     }
 
-    public string? PartyOn(string sourceId, DateOnly day) =>
-        termsBySourceId.TryGetValue(sourceId, out var terms) && TermOn(terms, day) is { } term
+    public string PartyOn(VoteMemberLine line, Chamber chamber, DateOnly day) =>
+        termsBySourceId.TryGetValue(line.SourceId, out var terms) && TermOn(terms, chamber, day) is { } term
             ? term.Caucus ?? term.Party
-            : OfficePartyOn(sourceId, day);
+            : line.SourcePartyName ?? PublishedPartyMajority.UnknownParty;
 
-    private static RosterTerm? TermOn(RosterTerm[] terms, DateOnly day) =>
-        terms.Where(term => term.Start <= day && day <= term.End).OrderByDescending(term => term.Start).FirstOrDefault();
-
-    private string? OfficePartyOn(string sourceId, DateOnly day) =>
-        officesBySourceId.TryGetValue(sourceId, out var offices)
-            ? offices.FirstOrDefault(office => office.StartsOn <= day && (office.EndsOn is null || day <= office.EndsOn))?.Party
-            : null;
+    private static RosterTerm? TermOn(RosterTerm[] terms, Chamber chamber, DateOnly day)
+    {
+        var rosterChamber = chamber == Chamber.Senate ? MemberRosterParser.Senate : MemberRosterParser.House;
+        return terms.Where(term => term.Chamber == rosterChamber && term.Start <= day && day <= term.End)
+            .OrderByDescending(term => term.Start).FirstOrDefault();
+    }
 }

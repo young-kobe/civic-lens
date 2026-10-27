@@ -267,7 +267,7 @@ public sealed class PublishedVoteTests
     {
         var vote = Vote();
 
-        Assert.Throws<InvalidDataException>((vote with { Totals = vote.Totals with { Yea = 2 } }).Validate);
+        Assert.Throws<InvalidDataException>((vote with { Totals = vote.Totals! with { Yea = 2 } }).Validate);
     }
 
     [Fact]
@@ -292,6 +292,61 @@ public sealed class PublishedVoteTests
         var wrong = vote.PartyMajorities[1] with { Majority = PublishedPartyMajority.Nay };
 
         Assert.Throws<InvalidDataException>((vote with { PartyMajorities = [vote.PartyMajorities[0], wrong] }).Validate);
+    }
+
+    // The casts of a Speaker election are candidate names, so the vote has no Yea and Nay totals and no party majorities.
+    [Fact]
+    public void ACandidateTotalVoteHasNoTotalsAndNoPartyMajorities()
+    {
+        CandidateVote().Validate();
+    }
+
+    [Fact]
+    public void ACandidateTotalVoteWithTotalsIsRefusedBecauseItsCastsAreNotYeaOrNay()
+    {
+        var vote = CandidateVote();
+
+        Assert.Throws<InvalidDataException>((vote with { Totals = new() { Yea = 1, Nay = 1, Present = 0, NotVoting = 0 } }).Validate);
+    }
+
+    [Fact]
+    public void ACandidateTotalVoteWithPartyMajoritiesIsRefused()
+    {
+        var vote = CandidateVote();
+
+        Assert.Throws<InvalidDataException>((vote with { PartyMajorities = [PublishedPartyMajority.Of("Republican", 1, 0)] }).Validate);
+    }
+
+    [Fact]
+    public void AVoteWithNoCandidateTotalsRequiresTotals()
+    {
+        Assert.Throws<InvalidDataException>((Vote() with { Totals = null }).Validate);
+    }
+
+    [Fact]
+    public void ACandidateTotalVoteStillNamesTheNonBlankPartyOfEachMember()
+    {
+        var vote = CandidateVote();
+
+        Assert.Throws<InvalidDataException>((vote with { Members = [vote.Members[0] with { Party = " " }, vote.Members[1]] }).Validate);
+    }
+
+    private static PublishedVote CandidateVote()
+    {
+        var detail = DetailText + "Candidate total Emmer: 1\nCandidate total Johnson (LA): 218\n";
+        var vote = Vote();
+        return vote with
+        {
+            Totals = null,
+            PartyMajorities = [],
+            Facts =
+            [
+                .. vote.Facts,
+                new() { Text = "Candidate total Emmer: 1", Citation = Cite(DetailId, detail, "Candidate total Emmer: 1") },
+                new() { Text = "Candidate total Johnson (LA): 218", Citation = Cite(DetailId, detail, "Candidate total Johnson (LA): 218") }
+            ],
+            Sources = [vote.Sources[0] with { Text = detail }, vote.Sources[1]]
+        };
     }
 
     private static PublishedVote Vote() => new()
