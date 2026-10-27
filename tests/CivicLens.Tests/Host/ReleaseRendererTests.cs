@@ -1469,8 +1469,13 @@ public sealed class ReleaseRendererTests
         shipped.UnionWith(HostStyleSheets.ClassNames(HostStyleSheets.Read("public.css")));
         var reviewOnly = HostStyleSheets.ClassNames(HostStyleSheets.Read("review.css")).Except(shipped).ToHashSet();
 
-        var reportWithForm = await new ReleaseRenderer("https://api.example.test", "site-key-1").RenderReportAsync(CancellationToken.None);
-        foreach (var (name, html) in (await RenderEveryPageTypeAsync()).Select(page => (page.Name, page.Html)).Append(("report form", reportWithForm)))
+        var withForms = new ReleaseRenderer("https://api.example.test", "site-key-1");
+        (string Name, string Html)[] formPages =
+        [
+            ("report form", await withForms.RenderReportAsync(CancellationToken.None)),
+            ("search form", await withForms.RenderSearchAsync(ReleaseWithFilters(), SearchFacets(), CancellationToken.None))
+        ];
+        foreach (var (name, html) in (await RenderEveryPageTypeAsync()).Select(page => (page.Name, page.Html)).Concat(formPages))
         {
             var used = new HtmlParser().ParseDocument(html).QuerySelectorAll("[class]").SelectMany(element => element.ClassList).ToHashSet();
             Assert.Empty(used.Intersect(reviewOnly).Select(className => $"{name} uses .{className}"));
