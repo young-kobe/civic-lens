@@ -1,9 +1,10 @@
 using System.Collections.Immutable;
+using CivicLens.Application.Roster;
 
 namespace CivicLens.Application.Publication;
 
 internal sealed record PublicationBuild(PreviousRelease Previous, DateTimeOffset Now, PublishedRecordRules Rules,
-    IReleaseRenderer Renderer, PublicationCatalog Catalog, PublicationCorrections Corrections)
+    IReleaseRenderer Renderer, PublicationCatalog Catalog, PublicationCorrections Corrections, IReadOnlyList<RosterMember> Roster)
 {
     public ImmutableArray<PublishedRevisionBinding> ReleaseRecords { get; private init; } =
         [.. Previous.Entries.Select(PublishedRevisionBinding.Of)];

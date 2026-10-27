@@ -279,28 +279,33 @@ internal sealed class PublicationScenario
         };
     }
 
-    public const string VoteDetail = "Started: 2025-04-10T11:08:00-04:00\nQuestion: On Passage\nResult: Passed\nLegislation: HR 7\n";
+    public const string DefaultPartyTotal = "Party total D: Yea 1, Nay 0, Present 0, Not voting 0";
+    public const string VoteDetail = "Started: 2025-04-10T11:08:00-04:00\nQuestion: On Passage\nResult: Passed\nLegislation: HR 7\n" + DefaultPartyTotal + "\n";
     public const string VoteMembers = "Member: M000001, Mayor Example, D, MA, Yea\n";
 
     public string AddVote(char id, ImmutableArray<ReviewDecision>? decisions = null, ReviewTextOrigin origin = ReviewTextOrigin.Model,
-        string? billType = "hr", ImmutableArray<string>? billActionRecordIds = null, string[]? memberIds = null, int congress = 119)
+        string? billType = "hr", ImmutableArray<string>? billActionRecordIds = null, string[]? memberIds = null, int congress = 119,
+        string[]? totalLines = null, string[]? otherMemberLines = null, Chamber chamber = Chamber.House,
+        string trackedSourceId = "M000001", string cast = "Yea", string result = "Passed")
     {
         var recordId = new string(id, 64);
         string[] memberPersonIds = memberIds ?? ["mayor"];
-        var memberLines = memberPersonIds.Select(person => $"Member: M000001, {OfficialNames[person]}, D, MA, Yea").ToArray();
-        var memberText = string.Concat(memberLines.Select(line => line + "\n"));
-        var detail = Extraction(VoteDetail, $"vote-detail-{id}", "https://api.congress.gov/v3/house-vote/119/1/100");
+        var memberLines = memberPersonIds.Select(person => $"Member: {trackedSourceId}, {OfficialNames[person]}, D, MA, {cast}").ToArray();
+        var memberText = string.Concat(memberLines.Concat(otherMemberLines ?? []).Select(line => line + "\n"));
+        string[] totals = totalLines ?? [DefaultPartyTotal];
+        var detailText = VoteDetail[..VoteDetail.IndexOf(DefaultPartyTotal, StringComparison.Ordinal)].Replace("Result: Passed", $"Result: {result}", StringComparison.Ordinal) + string.Concat(totals.Select(line => line + "\n"));
+        var detail = Extraction(detailText, $"vote-detail-{id}", "https://api.congress.gov/v3/house-vote/119/1/100");
         var members = Extraction(memberText, $"vote-members-{id}", "https://api.congress.gov/v3/house-vote/119/1/100/members");
         SourceSpan Line(DocumentExtraction extraction, string text, string line) =>
             new(extraction.ExtractionId, text.IndexOf(line, StringComparison.Ordinal), line.Length);
-        VoteFact Fact(string line) => new(line, Line(detail, VoteDetail, line));
+        VoteFact Fact(string line) => new(line, Line(detail, detailText, line));
         var revision = new VoteDraftRevision(recordId, 1, origin == ReviewTextOrigin.Model ? "civic-lens:analysis" : "auth0|editor", ApprovedAt,
-            $"Vote {id}", "The House voted on passage.", origin, null, "congress-house-votes", Chamber.House, congress, 1, 100, billType, billType is null ? null : 7,
+            $"Vote {id}", "The House voted on passage.", origin, null, "congress-house-votes", chamber, congress, 1, 100, billType, billType is null ? null : 7,
             new string('b', 64), ApprovedAt,
-            [Fact("Started: 2025-04-10T11:08:00-04:00"), Fact("Question: On Passage"), Fact("Result: Passed"), Fact("Legislation: HR 7")],
-            new DateOnly(2025, 4, 10), Line(detail, VoteDetail, "Started: 2025-04-10T11:08:00-04:00"), VoteKind.Passage,
-            Line(detail, VoteDetail, "Question: On Passage"),
-            [.. memberPersonIds.Select((person, index) => new MemberVote(person, "M000001", "Yea", Line(members, memberText, memberLines[index])))],
+            [Fact("Started: 2025-04-10T11:08:00-04:00"), Fact("Question: On Passage"), Fact($"Result: {result}"), Fact("Legislation: HR 7"), .. totals.Select(Fact)],
+            new DateOnly(2025, 4, 10), Line(detail, detailText, "Started: 2025-04-10T11:08:00-04:00"), VoteKind.Passage,
+            Line(detail, detailText, "Question: On Passage"),
+            [.. memberPersonIds.Select((person, index) => new MemberVote(person, "M000001", cast, Line(members, memberText, memberLines[index])))],
             ["housing"], new string('e', 64));
         var all = decisions ?? [Decision(recordId, 1, ReviewDecisionKind.Approve)];
         var concerns = ReviewPolicy.GetUnresolvedConcerns(all);

@@ -108,7 +108,8 @@ internal static class PublishedSamples
     {
         var started = "Started: 2025-04-10T11:08:00-04:00";
         var member = "Member: A000055, Jane Doe, R, AL, Yea";
-        var text = started + "\n" + member + "\n" + source;
+        var result = "Result: Passed";
+        var text = started + "\n" + result + "\n" + member + "\n" + source;
         PublishedCitation Cite(string quote) => new()
         {
             ExtractionId = SourceId,
@@ -131,8 +132,11 @@ internal static class PublishedSamples
             Kind = PublishedVoteKind.Other,
             VotedOn = new DateOnly(2025, 4, 10),
             VotedOnCitation = Cite(started),
-            Facts = [],
-            Members = [new PublishedMemberVote { Official = new PublishedOfficial { Id = "o1", Name = "Official o1" }, Cast = "Yea", Citation = Cite(member) }],
+            Result = "Passed",
+            Totals = new() { Yea = 1, Nay = 0, Present = 0, NotVoting = 0 },
+            PartyMajorities = [PublishedPartyMajority.Of("Republican", 1, 0)],
+            Facts = [new PublishedVoteFact { Text = result, Citation = Cite(result) }],
+            Members = [new PublishedMemberVote { Official = new PublishedOfficial { Id = "o1", Name = "Official o1" }, Party = "Republican", Cast = "Yea", Citation = Cite(member) }],
             TrackedIssueIds = [],
             Sources = [new PublishedDocumentVersion { ExtractionId = SourceId, Url = "https://api.congress.gov/v3/house-vote/119/1/100", ObservedAtUtc = Published, Text = text }],
             ApprovedAtUtc = Published,

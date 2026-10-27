@@ -32,6 +32,23 @@ public sealed class CongressCalendarTests
     }
 
     [Theory]
+    [InlineData(1, "1st")]
+    [InlineData(2, "2nd")]
+    [InlineData(3, "3rd")]
+    [InlineData(4, "4th")]
+    [InlineData(11, "11th")]
+    [InlineData(12, "12th")]
+    [InlineData(13, "13th")]
+    [InlineData(21, "21st")]
+    [InlineData(101, "101st")]
+    [InlineData(111, "111th")]
+    [InlineData(112, "112th")]
+    [InlineData(113, "113th")]
+    [InlineData(119, "119th")]
+    public void AnOrdinalTakesThNotStNdOrRdForTheElevenToThirteenFamily(int number, string expected) =>
+        Assert.Equal(expected, CongressCalendar.Ordinal(number));
+
+    [Theory]
     [InlineData(2025, 1, 3, 1)]
     [InlineData(2025, 12, 31, 1)]
     [InlineData(2026, 1, 2, 1)]

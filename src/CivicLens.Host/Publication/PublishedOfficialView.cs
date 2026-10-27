@@ -1,5 +1,6 @@
 using System.Globalization;
 using CivicLens.Application.Publication;
+using CivicLens.Core.Relationships;
 using CivicLens.Host.Actions;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Publication.Contracts;
@@ -25,8 +26,22 @@ internal static class PublishedOfficialView
         row => row.Date, row => row.PublishedAtUtc, row => row.RecordId)];
 
     public static string Share(TalkAndActionColumn column, string issueId) => column.ShareOf(issueId) is { } share
-        ? string.Create(CultureInfo.InvariantCulture, $"{column.CountOf(issueId)} ({share * 100:0}%)")
+        ? $"{column.CountOf(issueId)} ({Percent(share)})"
         : $"{column.CountOf(issueId)} (Too few records)";
+
+    public const string MissedVoteMeaning = "A missed vote means the official did not vote on it.";
+
+    public static string MissedVotes(MissedVotes missed, int congress)
+    {
+        var chamber = missed.Chamber == PublishedChamber.Senate ? "the Senate" : "the House of Representatives";
+        var votes = missed.Held == 1 ? "vote" : "votes";
+        var share = missed.Share is { } value ? $" ({Percent(value)})" : "";
+        var days = missed.First == missed.Last ? $"on {Moment.Day(missed.First)}" : $"{Moment.Day(missed.First)} to {Moment.Day(missed.Last)}";
+        return $"Missed {missed.Missed} of {missed.Held} roll call {votes} of all kinds{share}, including procedural votes, " +
+            $"held in {chamber} while they served, {days} ({CongressCalendar.Ordinal(congress)} Congress).";
+    }
+
+    private static string Percent(double share) => string.Create(CultureInfo.InvariantCulture, $"{share * 100:0}%");
 
     public static string RollCall(PublishedOfficialVote vote)
     {
@@ -42,5 +57,5 @@ internal sealed record PublishedOfficialRow(DateOnly Date, string RecordId, stri
         ReleaseRecordOrder.Day(entry), entry.RecordId, entry.Headline, entry.Kind, null, null, entry.FirstPublishedAtUtc);
 
     public static PublishedOfficialRow Of(PublishedOfficialVote vote) => new(
-        vote.VotedOn, vote.RecordId, vote.Headline, PublishedRecordKind.Vote, PublishedOfficialView.RollCall(vote), vote.Cast, DateTimeOffset.MinValue);
+        vote.VotedOn, vote.RecordId, vote.Headline, PublishedRecordKind.Vote, $"{PublishedOfficialView.RollCall(vote)}. Result of the vote: {vote.Result}", vote.Cast, DateTimeOffset.MinValue);
 }

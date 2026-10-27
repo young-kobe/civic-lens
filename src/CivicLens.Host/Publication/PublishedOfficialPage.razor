@@ -47,9 +47,14 @@
                 </Row>
                 <Empty><EmptyState Title="No tracked issue" Text="No statement, sponsorship, or substantive vote of this Congress has a tracked issue." /></Empty>
             </DataTable>
+            @foreach (var missed in profile.MissedByChamber)
+            {
+                <p class="muted small">@PublishedOfficialView.MissedVotes(missed, Page.Congress!.Value)</p>
+            }
+            <p class="muted small">@PublishedOfficialView.MissedVoteMeaning</p>
             <p class="muted small">
                 Records with no tracked issue: @profile.Statements.WithoutIssue statements, @profile.Sponsorships.WithoutIssue sponsorships,
-                @profile.Votes.WithoutIssue votes. Substantive roll calls marked Not Voting: @profile.NotVotingRolls. Procedural votes left out: @profile.ProceduralVotes.
+                @profile.Votes.WithoutIssue votes. Procedural votes left out: @profile.ProceduralVotes.
                 <a href="@(Page.RootPath + PublicationProtocol.MethodPagePath)">How the profile works</a>
             </p>
         </Panel>

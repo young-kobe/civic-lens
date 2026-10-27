@@ -37,7 +37,7 @@ public sealed class PublishedVoteTests
         var json = JsonSerializer.Serialize(Vote(), PublicationProtocol.JsonOptions);
 
         Assert.Equal(["recordId", "revisionNumber", "headline", "summary", "textOrigin", "chamber", "congress", "session", "rollCallNumber", "kind", "kindCitation",
-            "votedOn", "votedOnCitation", "facts", "members", "billType", "billNumber", "trackedIssueIds", "sources", "approvedAtUtc",
+            "votedOn", "result", "totals", "partyMajorities", "votedOnCitation", "facts", "members", "billType", "billNumber", "trackedIssueIds", "sources", "approvedAtUtc",
             "firstPublishedAtUtc", "corrections"], JsonDocument.Parse(json).RootElement.EnumerateObject().Select(property => property.Name));
         Assert.Contains("\"kind\":\"passage\"", json, StringComparison.Ordinal);
         Assert.Contains("\"votedOn\":\"2025-04-10\"", json, StringComparison.Ordinal);
@@ -76,13 +76,13 @@ public sealed class PublishedVoteTests
     [Fact]
     public void TheVoteDayIsTheDateOfTheCitedStartLineSoALateVoteKeepsItsHouseDayAcrossUtcMidnight()
     {
-        const string evening = "Started: 2025-07-02T21:15:00-04:00\n";
+        const string evening = "Started: 2025-07-02T21:15:00-04:00\nResult: Passed\n";
         var vote = Vote();
         var cited = vote with
         {
             VotedOn = new DateOnly(2025, 7, 2),
             VotedOnCitation = Cite(DetailId, evening, "Started: 2025-07-02T21:15:00-04:00"),
-            Facts = [],
+            Facts = [new() { Text = "Result: Passed", Citation = Cite(DetailId, evening, "Result: Passed") }],
             KindCitation = null,
             Kind = PublishedVoteKind.Other,
             Sources = [vote.Sources[0] with { Text = evening }, vote.Sources[1]]
@@ -255,6 +255,125 @@ public sealed class PublishedVoteTests
         Assert.Equal(Enum.GetNames<VoteKind>(), Enum.GetNames<PublishedVoteKind>());
     }
 
+    // A reader shows the result next to the cited lines, so a result that no cited line holds would show text the source does not give.
+    [Fact]
+    public void RejectsAResultThatNoCitedResultLineHolds()
+    {
+        Assert.Throws<InvalidDataException>((Vote() with { Result = "Failed" }).Validate);
+    }
+
+    [Fact]
+    public void RejectsPartyMajoritiesThatDoNotAddUpToTheTotals()
+    {
+        var vote = Vote();
+
+        Assert.Throws<InvalidDataException>((vote with { Totals = vote.Totals! with { Yea = 2 } }).Validate);
+    }
+
+    [Fact]
+    public void RejectsAMemberWhoseNamedPartyHasNoMajorityEntry()
+    {
+        var vote = Vote();
+        var stray = vote.Members[0] with { Party = "Green" };
+
+        Assert.Throws<InvalidDataException>((vote with { Members = [stray, vote.Members[1]] }).Validate);
+    }
+
+    [Fact]
+    public void ATiedPartyHasNoMajoritySoNeitherCastCountsAsFollowingIt()
+    {
+        Assert.Null(PublishedPartyMajority.Of("Republican", 3, 3).Majority);
+    }
+
+    [Fact]
+    public void RejectsAMajorityThatDoesNotMatchItsCounts()
+    {
+        var vote = Vote();
+        var wrong = vote.PartyMajorities[1] with { Majority = PublishedPartyMajority.Nay };
+
+        Assert.Throws<InvalidDataException>((vote with { PartyMajorities = [vote.PartyMajorities[0], wrong] }).Validate);
+    }
+
+    // The casts of a Speaker election are candidate names, so the vote has no Yea and Nay totals and no party majorities.
+    [Fact]
+    public void ACandidateTotalVoteHasNoTotalsAndNoPartyMajorities()
+    {
+        CandidateVote().Validate();
+    }
+
+    [Fact]
+    public void ACandidateTotalVoteWithTotalsIsRefusedBecauseItsCastsAreNotYeaOrNay()
+    {
+        var vote = CandidateVote();
+
+        Assert.Throws<InvalidDataException>((vote with { Totals = new() { Yea = 1, Nay = 1, Present = 0, NotVoting = 0 } }).Validate);
+    }
+
+    [Fact]
+    public void ACandidateTotalVoteWithPartyMajoritiesIsRefused()
+    {
+        var vote = CandidateVote();
+
+        Assert.Throws<InvalidDataException>((vote with { PartyMajorities = [PublishedPartyMajority.Of("Republican", 1, 0)] }).Validate);
+    }
+
+    [Fact]
+    public void AVoteWithNoCandidateTotalsRequiresTotals()
+    {
+        Assert.Throws<InvalidDataException>((Vote() with { Totals = null }).Validate);
+    }
+
+    public static TheoryData<string> UnboundedParties => [" ", new string('R', PublishedRecordEntry.MaximumFilterValueLength + 1)];
+
+    [Theory]
+    [MemberData(nameof(UnboundedParties))]
+    public void ACandidateTotalVoteStillNamesABoundedPartyForEachMember(string party)
+    {
+        var vote = CandidateVote();
+
+        Assert.Throws<InvalidDataException>((vote with { Members = [vote.Members[0] with { Party = party }, vote.Members[1]] }).Validate);
+    }
+
+    // A stray candidate line beside party totals must not skip the totals, so only a vote with no party totals is a candidate vote.
+    [Fact]
+    public void AVoteWithPartyTotalsAndACandidateLineStillRequiresTotals()
+    {
+        const string party = "Party total R: Yea 1, Nay 0, Present 0, Not voting 0";
+        const string candidate = "Candidate total Emmer: 1";
+        var detail = DetailText + party + "\n" + candidate + "\n";
+        var vote = CandidateVote();
+        var mixed = vote with
+        {
+            Facts =
+            [
+                .. Vote().Facts,
+                new() { Text = party, Citation = Cite(DetailId, detail, party) },
+                new() { Text = candidate, Citation = Cite(DetailId, detail, candidate) }
+            ],
+            Sources = [vote.Sources[0] with { Text = detail }, vote.Sources[1]]
+        };
+
+        Assert.Throws<InvalidDataException>(mixed.Validate);
+    }
+
+    private static PublishedVote CandidateVote()
+    {
+        var detail = DetailText + "Candidate total Emmer: 1\nCandidate total Johnson (LA): 218\n";
+        var vote = Vote();
+        return vote with
+        {
+            Totals = null,
+            PartyMajorities = [],
+            Facts =
+            [
+                .. vote.Facts,
+                new() { Text = "Candidate total Emmer: 1", Citation = Cite(DetailId, detail, "Candidate total Emmer: 1") },
+                new() { Text = "Candidate total Johnson (LA): 218", Citation = Cite(DetailId, detail, "Candidate total Johnson (LA): 218") }
+            ],
+            Sources = [vote.Sources[0] with { Text = detail }, vote.Sources[1]]
+        };
+    }
+
     private static PublishedVote Vote() => new()
     {
         Corrections = [],
@@ -271,12 +390,15 @@ public sealed class PublishedVoteTests
         KindCitation = Cite(DetailId, DetailText, "Question: On Passage"),
         VotedOn = new DateOnly(2025, 4, 10),
         VotedOnCitation = Cite(DetailId, DetailText, "Started: 2025-04-10T11:08:00-04:00"),
+        Result = "Passed",
+        Totals = new() { Yea = 1, Nay = 1, Present = 0, NotVoting = 0 },
+        PartyMajorities = [PublishedPartyMajority.Of("Democrat", 0, 1), PublishedPartyMajority.Of("Republican", 1, 0)],
         Facts = [Fact("Started: 2025-04-10T11:08:00-04:00"), Fact("Question: On Passage"), Fact("Result: Passed"), Fact("Legislation: HR 7")],
         Members =
         [
-            new() { Official = new() { Id = "aderholt", Name = "Robert Aderholt" }, Cast = "Yea",
+            new() { Official = new() { Id = "aderholt", Name = "Robert Aderholt" }, Party = "Republican", Cast = "Yea",
                 Citation = Cite(MembersId, MembersText, "Member: A000055, Robert Aderholt, R, AL, Yea") },
-            new() { Official = new() { Id = "roe", Name = "Ann Roe" }, Cast = "Nay",
+            new() { Official = new() { Id = "roe", Name = "Ann Roe" }, Party = "Democrat", Cast = "Nay",
                 Citation = Cite(MembersId, MembersText, "Member: B000001, Ann Roe, D, MA, Nay") }
         ],
         BillType = "hr",

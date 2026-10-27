@@ -24,14 +24,15 @@ public sealed class TalkAndActionProfileTests
     }
 
     [Fact]
-    public void ANotVotingCastLeavesTheVotesColumnAndShowsInTheNotVotingCount()
+    public void ANotVotingCastLeavesTheVotesColumnWhilePresentAndACandidateNameStayIn()
     {
         var votes = new[] { Vote(1, PublishedVoteKind.Passage, ["housing"]), Vote(2, PublishedVoteKind.Passage, ["housing"]) with { Cast = PublishedOfficialVote.NotVoting },
-            Vote(3, PublishedVoteKind.Passage, ["housing"]) with { Cast = "Present" }, Vote(4, PublishedVoteKind.Cloture, ["housing"]) with { Cast = PublishedOfficialVote.NotVoting } };
+            Vote(3, PublishedVoteKind.Passage, ["housing"]) with { Cast = "Present" }, Vote(4, PublishedVoteKind.Cloture, ["housing"]) with { Cast = PublishedOfficialVote.NotVoting },
+            Vote(5, PublishedVoteKind.Passage, ["housing"]) with { Cast = "Pelosi" } };
 
         var profile = TalkAndActionProfile.Of(119, [], votes);
 
-        Assert.Equal((2, 1, 1), (profile.Votes.CountOf("housing"), profile.NotVotingRolls, profile.ProceduralVotes));
+        Assert.Equal((3, 1), (profile.Votes.CountOf("housing"), profile.ProceduralVotes));
     }
 
     [Fact]
@@ -162,6 +163,9 @@ public sealed class TalkAndActionProfileTests
         Session = 1,
         RollCallNumber = id + 1,
         Cast = "Yea",
+        Result = "Passed",
+        Totals = new() { Yea = 218, Nay = 210, Present = 1, NotVoting = 5 },
+        Party = "Republican",
         Headline = $"Vote {id}",
         Kind = kind,
         IssueIds = issueIds

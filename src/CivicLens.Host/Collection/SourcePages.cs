@@ -23,15 +23,9 @@ internal static class SourcePages
     };
 
     public static string Bill(int congress, string billType, int billNumber) =>
-        $"https://www.congress.gov/bill/{Ordinal(congress)}-congress/{BillSlugs[billType]}/{billNumber.ToString(CultureInfo.InvariantCulture)}";
+        $"https://www.congress.gov/bill/{CongressCalendar.Ordinal(congress)}-congress/{BillSlugs[billType]}/{billNumber.ToString(CultureInfo.InvariantCulture)}";
 
     public static string RollCall(Chamber chamber, int congress, int sessionNumber, int rollCallNumber) => chamber == Chamber.Senate
         ? SenateVoteUrl.VotePage(SenateLisUrl, new SenateVoteRoll(new VoteSession(congress, sessionNumber), rollCallNumber))
         : $"https://clerk.house.gov/Votes/{CongressCalendar.StartOf(congress).Year + sessionNumber - 1}{rollCallNumber.ToString(CultureInfo.InvariantCulture)}";
-
-    private static string Ordinal(int number)
-    {
-        var suffix = number % 100 is >= 11 and <= 13 ? "th" : (number % 10) switch { 1 => "st", 2 => "nd", 3 => "rd", _ => "th" };
-        return number.ToString(CultureInfo.InvariantCulture) + suffix;
-    }
 }

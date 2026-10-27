@@ -374,6 +374,21 @@ public sealed class PublishOfficialPagesTests
     }
 
     [Fact]
+    public async Task TheProfileOfThePageCountsTheMissedVotesOfItsOwnVoteRows()
+    {
+        var scenario = new PublicationScenario();
+        var missed = scenario.AddVote('a', cast: "Not Voting", totalLines: ["Party total D: Yea 0, Nay 0, Present 0, Not voting 1"]);
+        var cast = scenario.AddVote('b');
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k",
+            new PublishedRecordReference(PublishedRecordKind.Vote, missed), new PublishedRecordReference(PublishedRecordKind.Vote, cast)));
+
+        var page = scenario.OfficialPages.Single(page => page.Profile.Id == "mayor" && page.IsCurrent);
+        var chamber = Assert.Single(page.TalkAndAction!.MissedByChamber);
+        Assert.Equal((PublishedChamber.House, 1, 2), (chamber.Chamber, chamber.Missed, chamber.Held));
+    }
+
+    [Fact]
     public async Task OnlyTheCurrentPageOfAnOfficialWithAVoteCarriesAProfile()
     {
         var scenario = new PublicationScenario();

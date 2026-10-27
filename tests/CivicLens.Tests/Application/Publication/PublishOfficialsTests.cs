@@ -126,6 +126,22 @@ public sealed class PublishOfficialsTests
     }
 
     [Fact]
+    public async Task ATermKeepsTheCaucusOfTheRosterSoAReaderSeesWhoseCaucusAnIndependentJoins()
+    {
+        var scenario = new PublicationScenario();
+        scenario.ExternalIds["mayor"] = (Cantwell, null);
+        scenario.RosterMembers = [.. RosterFixtures.Members().Select(member => member with
+        {
+            Terms = [.. member.Terms.Select(term => term with { Party = "Independent", Caucus = "Democrat" })]
+        })];
+
+        var summary = await PublishAsync(scenario, scenario.AddStatement('a'));
+
+        var terms = Assert.Single(OfficialsOf(scenario, summary.DirectoryName).Officials).Terms;
+        Assert.All(terms, term => Assert.Equal(("Independent", "Democrat"), (term.Party, term.Caucus)));
+    }
+
+    [Fact]
     public async Task AMemberGetsTheWebsiteOfTheRoster()
     {
         var scenario = new PublicationScenario();

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CivicLens.Application.Roster;
 using CivicLens.Application.Votes;
 using CivicLens.Publication.Contracts;
 
@@ -8,14 +9,15 @@ namespace CivicLens.Application.Publication;
 internal sealed class ReleaseDataFiles(IReleaseDirectory releases, VoteRecordLoader votes, PublicationOfficials officials)
 {
     public async Task<PublishedOfficials> WriteAsync(IReleaseStaging staging, PublicationRelease manifest, ReleaseFacets facets,
-        IReadOnlyList<PendingRecord> additions, PreviousRelease previous, CancellationToken cancellationToken)
+        IReadOnlyList<PendingRecord> additions, PreviousRelease previous, IReadOnlyList<RosterMember> roster,
+        CancellationToken cancellationToken)
     {
         var members = await votes.MembersAsync(manifest.Records, cancellationToken);
         var entryNames = manifest.Records.SelectMany(entry => entry.Officials).DistinctBy(official => official.Id)
             .ToDictionary(official => official.Id, official => official.Name, StringComparer.Ordinal);
         var ids = entryNames.Keys.Concat(members.Select(member => member.PersonId)).ToHashSet(StringComparer.Ordinal);
         var recordNames = await RecordNamesAsync(manifest, ids, entryNames, members, additions, previous, cancellationToken);
-        var published = await officials.ResolveAsync(ids, recordNames, cancellationToken);
+        var published = await officials.ResolveAsync(ids, recordNames, roster, cancellationToken);
         var officialsJson = JsonSerializer.SerializeToUtf8Bytes(published, PublicationProtocol.JsonOptions);
         if (officialsJson.Length > PublishedOfficials.MaximumBytes)
             throw new ArgumentException("The officials file would exceed its size limit.", nameof(manifest));

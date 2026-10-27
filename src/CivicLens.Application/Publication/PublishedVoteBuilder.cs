@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using CivicLens.Application.Votes;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
@@ -9,9 +10,25 @@ namespace CivicLens.Application.Publication;
 internal sealed class PublishedVoteBuilder(PublishedRecordRules rules)
 {
     public PublishedVote Build(VoteDraftRevision revision, ImmutableArray<ReviewDecision> decisions,
-        IReadOnlyDictionary<string, DocumentExtraction> extractions, DateTimeOffset? firstPublishedAtUtc, PublishedCorrection[] corrections, DateTimeOffset now)
+        IReadOnlyDictionary<string, DocumentExtraction> extractions, DateTimeOffset? firstPublishedAtUtc, PublishedCorrection[] corrections, DateTimeOffset now, VoteParties parties)
     {
+        var tally = VoteTally.Read(revision.RecordId, revision.Chamber, revision.Facts, extractions[revision.Members[0].Citation.ExtractionId].Text,
+            revision.VotedOn, parties);
+        var result = VoteFacts.Find(revision.Facts, VoteFactPrefixes.Result)
+            ?? throw new ArgumentException($"Vote {revision.RecordId} has no result line.");
+
         PublishedCitation Cite(SourceSpan span) => PublishedRecordRules.Cite(span, extractions[span.ExtractionId]);
+        PublishedMemberVote Member(MemberVote member)
+        {
+            var citation = Cite(member.Citation);
+            return new()
+            {
+                Official = rules.MapOfficial(revision.RecordId, member.PersonId),
+                Party = tally.PartyOf(VoteMemberLine.Parse(citation.Quote).SourceId),
+                Cast = member.Cast,
+                Citation = citation
+            };
+        }
 
         var record = new PublishedVote
         {
@@ -28,13 +45,11 @@ internal sealed class PublishedVoteBuilder(PublishedRecordRules rules)
             KindCitation = revision.KindCitation is { } kind ? Cite(kind) : null,
             VotedOn = revision.VotedOn,
             VotedOnCitation = Cite(revision.VotedOnCitation),
+            Result = result.Text[VoteFactPrefixes.Result.Length..],
+            Totals = tally.Totals,
+            PartyMajorities = tally.PartyMajorities,
             Facts = [.. revision.Facts.Select(fact => new PublishedVoteFact { Text = fact.Text, Citation = Cite(fact.Citation) })],
-            Members = [.. revision.Members.Select(member => new PublishedMemberVote
-            {
-                Official = rules.MapOfficial(revision.RecordId, member.PersonId),
-                Cast = member.Cast,
-                Citation = Cite(member.Citation)
-            })],
+            Members = [.. revision.Members.Select(Member)],
             BillType = revision.BillType,
             BillNumber = revision.BillNumber,
             TrackedIssueIds = [.. revision.TrackedIssueIds],

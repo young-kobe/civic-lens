@@ -191,6 +191,8 @@ public sealed class ReleaseRendererTests
         Assert.Contains("Amendment, Suspension of the rules, Passage, Conference report, Veto override, Nomination.", text, StringComparison.Ordinal);
         Assert.Contains($"at least {TalkAndActionProfile.MinimumRecordsForShare} records", text, StringComparison.Ordinal);
         Assert.Contains("Too few records", text, StringComparison.Ordinal);
+        Assert.Contains("A missed vote means the official did not vote on it.", text, StringComparison.Ordinal);
+        Assert.Contains("A roll call that was not published is in neither number.", text, StringComparison.Ordinal);
         Assert.Contains("policy area of the bill in Congress.gov", text, StringComparison.Ordinal);
         Assert.Contains("Some tags can still be wrong", text, StringComparison.Ordinal);
     }
@@ -524,6 +526,7 @@ public sealed class ReleaseRendererTests
         Assert.Equal("House", facts["Chamber"]);
         Assert.Equal("100, Congress 119, session 1", facts["Roll call"]);
         Assert.Equal("Housing costs", facts["Tracked issues"]);
+        Assert.Equal("Passed <b>", facts["Result"]);
         var result = document.QuerySelector("[aria-labelledby='result-title']")!;
         Assert.Equal(["Started: 2025-04-10T11:08:00-04:00", "Question: On Passage", "Result: Passed <b>"],
             result.QuerySelectorAll("blockquote").Select(quote => quote.TextContent));
@@ -534,6 +537,41 @@ public sealed class ReleaseRendererTests
         Assert.Equal(["Source text 1 of 2", "Source text 2 of 2"], sources.QuerySelectorAll("[aria-label]").Select(item => item.GetAttribute("aria-label")));
         Assert.Contains("only the officials that Civic Lens tracks", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<b>", html, StringComparison.Ordinal);
+    }
+
+    // A bare count could mean the tracked members or all members who voted Yea, so each total names the whole body and what it counts.
+    [Theory]
+    [InlineData(PublishedChamber.House, "Casts of all House members: Yea 218, Nay 210, Present 1, Not voting 5")]
+    [InlineData(PublishedChamber.Senate, "Casts of all senators: Yea 218, Nay 210, Present 1, Not voting 5")]
+    public async Task TheVoteTotalsNameTheWholeBodyThatTheyCount(PublishedChamber chamber, string expected)
+    {
+        var vote = Vote() with
+        {
+            Chamber = chamber,
+            Totals = new() { Yea = 218, Nay = 210, Present = 1, NotVoting = 5 },
+            PartyMajorities = [PublishedPartyMajority.Of("Republican", 218, 210)]
+        };
+
+        Assert.Equal(expected, (await VoteFactsOf(vote))["Totals"]);
+    }
+
+    [Fact]
+    public async Task ASpeakerElectionShowsItsCandidateTotalsAndNoYeaAndNayLine()
+    {
+        var vote = Vote("Candidate total Emmer: 1", "Candidate total Johnson (LA): 218") with { Totals = null, PartyMajorities = [] };
+
+        var facts = await VoteFactsOf(vote);
+
+        Assert.Equal("Votes for each candidate from all House members: Emmer 1, Johnson (LA) 218", facts["Totals"]);
+        Assert.DoesNotContain("Yea", facts["Totals"], StringComparison.Ordinal);
+    }
+
+    private static async Task<Dictionary<string, string>> VoteFactsOf(PublishedVote vote)
+    {
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
+        var document = new HtmlParser().ParseDocument(html);
+        return document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
+            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
     }
 
     [Theory]
@@ -1172,6 +1210,9 @@ public sealed class ReleaseRendererTests
                 BillType = "hr",
                 BillNumber = 7,
                 Cast = "Yea",
+                Result = "Passed",
+                Totals = new() { Yea = 218, Nay = 210, Present = 1, NotVoting = 5 },
+                Party = "Republican",
                 Headline = "A vote",
                 Kind = PublishedVoteKind.Passage,
                 IssueIds = ["housing"]
@@ -1665,9 +1706,9 @@ public sealed class ReleaseRendererTests
         };
     }
 
-    private static PublishedVote Vote()
+    private static PublishedVote Vote(params string[] candidateTotalLines)
     {
-        const string detail = "Started: 2025-04-10T11:08:00-04:00\nQuestion: On Passage\nResult: Passed <b>\n";
+        var detail = "Started: 2025-04-10T11:08:00-04:00\nQuestion: On Passage\nResult: Passed <b>\n" + string.Concat(candidateTotalLines.Select(line => line + "\n"));
         const string members = "Member: A000055, Jane Doe, R, AL, Yea\n";
         var detailId = new string('1', 64);
         var membersId = new string('2', 64);
@@ -1691,17 +1732,22 @@ public sealed class ReleaseRendererTests
             KindCitation = Cite(detailId, detail, "Question: On Passage"),
             VotedOn = new DateOnly(2025, 4, 10),
             VotedOnCitation = Cite(detailId, detail, "Started: 2025-04-10T11:08:00-04:00"),
+            Result = "Passed <b>",
+            Totals = new() { Yea = 1, Nay = 0, Present = 0, NotVoting = 0 },
+            PartyMajorities = [PublishedPartyMajority.Of("Republican", 1, 0)],
             Facts =
             [
                 new PublishedVoteFact { Text = "Started: 2025-04-10T11:08:00-04:00", Citation = Cite(detailId, detail, "Started: 2025-04-10T11:08:00-04:00") },
                 new PublishedVoteFact { Text = "Question: On Passage", Citation = Cite(detailId, detail, "Question: On Passage") },
-                new PublishedVoteFact { Text = "Result: Passed <b>", Citation = Cite(detailId, detail, "Result: Passed <b>") }
+                new PublishedVoteFact { Text = "Result: Passed <b>", Citation = Cite(detailId, detail, "Result: Passed <b>") },
+                .. candidateTotalLines.Select(line => new PublishedVoteFact { Text = line, Citation = Cite(detailId, detail, line) })
             ],
             Members =
             [
                 new PublishedMemberVote
                 {
                     Official = new PublishedOfficial { Id = "o1", Name = "Jane <Doe>" },
+                    Party = "Republican",
                     Cast = "Yea",
                     Citation = Cite(membersId, members, "Member: A000055, Jane Doe, R, AL, Yea")
                 }
