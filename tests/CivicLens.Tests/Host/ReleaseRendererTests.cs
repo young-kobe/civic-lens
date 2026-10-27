@@ -1118,8 +1118,7 @@ public sealed class ReleaseRendererTests
                 .Select(link => link.GetAttribute("href")!).ToList();
 
             Assert.Equal(6, links.Count);
-            var page = new Uri("https://x/" + pagePath);
-            Assert.All(links, href => Assert.True(WrittenRootPages.Contains(new Uri(page, href).AbsolutePath[1..]), $"{name}: {href}"));
+            Assert.All(links, href => Assert.True(WrittenRootPages.Contains(ReleasePath(pagePath, href)), $"{name}: {href}"));
         }
     }
 
@@ -1232,9 +1231,8 @@ public sealed class ReleaseRendererTests
             var links = new HtmlParser().ParseDocument(html).QuerySelectorAll("nav[aria-label='Breadcrumb'] a")
                 .Select(link => link.GetAttribute("href")!).ToList();
 
-            var page = new Uri("https://x/" + pagePath);
             Assert.All(links, href => Assert.True(
-                WrittenRootPages.Append(PublicationProtocol.OfficialPagePath("mayor")).Contains(new Uri(page, href).AbsolutePath[1..]), $"{name}: {href}"));
+                WrittenRootPages.Append(PublicationProtocol.OfficialPagePath("mayor")).Contains(ReleasePath(pagePath, href)), $"{name}: {href}"));
         }
     }
 
@@ -1432,7 +1430,6 @@ public sealed class ReleaseRendererTests
     private static string[] FontPreloads(string html, string pagePath)
     {
         var assets = new ReleaseRenderer(null, null).Assets;
-        var page = new Uri("https://x/" + pagePath);
         var preloads = new HtmlParser().ParseDocument(html).Head!.QuerySelectorAll("link[rel='preload']").ToArray();
         Assert.All(preloads, link =>
         {
@@ -1440,7 +1437,7 @@ public sealed class ReleaseRendererTests
             Assert.Equal("font/woff2", link.GetAttribute("type"));
             Assert.True(link.HasAttribute("crossorigin"));
         });
-        var paths = preloads.Select(link => new Uri(page, link.GetAttribute("href")!).AbsolutePath[1..]).ToArray();
+        var paths = preloads.Select(link => ReleasePath(pagePath, link.GetAttribute("href")!)).ToArray();
         Assert.All(paths, path => Assert.Contains(assets, asset => asset.RelativePath == path));
         return paths;
     }
@@ -1488,13 +1485,11 @@ public sealed class ReleaseRendererTests
             .Select(element => element.GetAttribute("href") ?? element.GetAttribute("src")!)
             .ToArray();
         Assert.Contains(links, link => link.EndsWith("assets/css/public.css", StringComparison.Ordinal));
-        var pageUri = new Uri(new Uri("https://release.test/"), pagePath);
         foreach (var link in links)
-        {
-            var relativePath = new Uri(pageUri, link).AbsolutePath.TrimStart('/');
-            Assert.Contains(renderer.Assets, asset => asset.RelativePath == relativePath);
-        }
+            Assert.Contains(renderer.Assets, asset => asset.RelativePath == ReleasePath(pagePath, link));
     }
+
+    private static string ReleasePath(string pagePath, string href) => new Uri(new Uri("https://x/" + pagePath), href).AbsolutePath[1..];
 
     private static readonly ReleaseFacets NoFacets = new([], []);
 
