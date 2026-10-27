@@ -191,6 +191,8 @@ public sealed class ReleaseRendererTests
         Assert.Contains("Amendment, Suspension of the rules, Passage, Conference report, Veto override, Nomination.", text, StringComparison.Ordinal);
         Assert.Contains($"at least {TalkAndActionProfile.MinimumRecordsForShare} records", text, StringComparison.Ordinal);
         Assert.Contains("Too few records", text, StringComparison.Ordinal);
+        Assert.Contains("A missed vote means the official did not vote on it.", text, StringComparison.Ordinal);
+        Assert.Contains("A roll call that was not published is in neither number.", text, StringComparison.Ordinal);
         Assert.Contains("policy area of the bill in Congress.gov", text, StringComparison.Ordinal);
         Assert.Contains("Some tags can still be wrong", text, StringComparison.Ordinal);
     }

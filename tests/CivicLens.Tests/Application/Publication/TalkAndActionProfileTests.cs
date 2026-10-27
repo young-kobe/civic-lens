@@ -24,14 +24,26 @@ public sealed class TalkAndActionProfileTests
     }
 
     [Fact]
-    public void ANotVotingCastLeavesTheVotesColumnAndShowsInTheNotVotingCount()
+    public void ANotVotingCastLeavesTheVotesColumnWhilePresentAndACandidateNameStayIn()
     {
         var votes = new[] { Vote(1, PublishedVoteKind.Passage, ["housing"]), Vote(2, PublishedVoteKind.Passage, ["housing"]) with { Cast = PublishedOfficialVote.NotVoting },
-            Vote(3, PublishedVoteKind.Passage, ["housing"]) with { Cast = "Present" }, Vote(4, PublishedVoteKind.Cloture, ["housing"]) with { Cast = PublishedOfficialVote.NotVoting } };
+            Vote(3, PublishedVoteKind.Passage, ["housing"]) with { Cast = "Present" }, Vote(4, PublishedVoteKind.Cloture, ["housing"]) with { Cast = PublishedOfficialVote.NotVoting },
+            Vote(5, PublishedVoteKind.Passage, ["housing"]) with { Cast = "Pelosi" } };
 
         var profile = TalkAndActionProfile.Of(119, [], votes);
 
-        Assert.Equal((2, 1, 1), (profile.Votes.CountOf("housing"), profile.NotVotingRolls, profile.ProceduralVotes));
+        Assert.Equal((3, 1), (profile.Votes.CountOf("housing"), profile.ProceduralVotes));
+    }
+
+    [Fact]
+    public void OnlyVoteRowsOfTheCurrentCongressCountAsMissedOrHeld()
+    {
+        var votes = new[] { Vote(1, PublishedVoteKind.Passage, []) with { Cast = PublishedOfficialVote.NotVoting }, Vote(2, PublishedVoteKind.Passage, []) with { Congress = 118, Cast = PublishedOfficialVote.NotVoting },
+            Vote(3, PublishedVoteKind.Cloture, []) with { Cast = PublishedOfficialVote.NotVoting } };
+
+        var missed = Assert.Single(TalkAndActionProfile.Of(119, [], votes).MissedByChamber);
+
+        Assert.Equal((2, 2), (missed.Missed, missed.Held));
     }
 
     [Fact]

@@ -117,6 +117,38 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
+    public async Task TheProfilePanelStatesTheMissedVotesOfEachChamberOnceWithTheMeaningAfterThem()
+    {
+        var day = new DateOnly(2026, 4, 1);
+        var votes = new[] { Vote('a', day) with { Cast = PublishedOfficialVote.NotVoting }, Vote('b', day.AddDays(2)), Vote('c', day.AddDays(1)) with { Chamber = PublishedChamber.Senate } };
+        var page = Current([], votes);
+        page = page with { TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes) };
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        var paragraphs = new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-talk-and-action-in-congress-119'] p.muted")
+            .Select(paragraph => paragraph.TextContent.Trim()).ToArray();
+        Assert.Equal(["Missed 1 of 2 roll call votes held in the House of Representatives while they served, 1 Apr 2026 to 3 Apr 2026 (119th Congress).",
+            "Missed 0 of 1 roll call votes held in the Senate while they served, 2 Apr 2026 to 2 Apr 2026 (119th Congress).",
+            "A missed vote means the official did not vote on it."], paragraphs[..3]);
+    }
+
+    [Fact]
+    public async Task TheMissedVotesSentenceShowsTheShareOnlyAtTheThresholdAndAnOfficialWithNoRowsOfAChamberGetsNoSentenceForIt()
+    {
+        var votes = Enumerable.Range(0, 5).Select(index => Vote((char)('a' + index), new DateOnly(2026, 4, 1)) with
+        { Cast = index == 0 ? PublishedOfficialVote.NotVoting : "Yea" }).ToArray();
+        var page = Current([], votes);
+        page = page with { TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes) };
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        var text = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-talk-and-action-in-congress-119']")!.TextContent;
+        Assert.Contains("Missed 1 of 5 roll call votes (20%) held in the House of Representatives", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("the Senate", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TheProfilePanelShowsCountsAndSharesOrTooFewRecordsAndLinksTheMethodNote()
     {
         PublishedRecordEntry[] statements = [.. Enumerable.Range(1, 5).Select(index => Entry((char)('0' + index), PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)) with { IssueIds = index < 3 ? ["housing", "health"] : ["housing"] })];
@@ -132,7 +164,7 @@ public sealed class PublishedOfficialPageTests
             panel.QuerySelectorAll("tbody tr:nth-child(1) td").Select(cell => cell.TextContent));
         Assert.Equal(["housing", "5 (100%)", "0 (Too few records)", "1 (Too few records)"],
             panel.QuerySelectorAll("tbody tr:nth-child(2) td").Select(cell => cell.TextContent));
-        Assert.Contains("Substantive roll calls marked Not Voting: 1", panel.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("marked Not Voting", panel.TextContent, StringComparison.Ordinal);
         Assert.Contains("Procedural votes left out: 2", panel.TextContent, StringComparison.Ordinal);
         Assert.Equal("../method.html", panel.QuerySelector("a")!.GetAttribute("href"));
     }
