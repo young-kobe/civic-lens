@@ -6,24 +6,24 @@
         <th>Record</th>
         @if (FacetColumns)
         {
-            <th class="hide-narrow">Officials</th>
-            <th class="fit num">Date</th>
+            <th>@PublicColumn.Officials</th>
+            <th class="fit num">@PublicColumn.Date</th>
         }
         else
         {
-            <th class="fit num hide-narrow">First published</th>
+            <th class="fit num">@PublicColumn.FirstPublished</th>
         }
     </Head>
     <Row Context="entry">
         <td><a class="cell-title" href="@(RootPath + PublicationProtocol.RecordPagePath(entry.RecordId))">@entry.Headline</a> <StatusBadge Text="@PublishedRecordLabels.Kind(entry.Kind)" /></td>
         @if (FacetColumns)
         {
-            <td class="hide-narrow">@string.Join(", ", entry.Officials.Select(official => official.Name))</td>
-            <td class="fit num">@Moment.Iso(ReleaseRecordOrder.Day(entry))</td>
+            <td data-label="@PublicColumn.Officials">@string.Join(", ", entry.Officials.Select(official => official.Name))</td>
+            <td class="fit num" data-label="@PublicColumn.Date">@Moment.Iso(ReleaseRecordOrder.Day(entry))</td>
         }
         else
         {
-            <td class="time fit num hide-narrow"><Timestamp Value="entry.FirstPublishedAtUtc" Format="TimestampFormat.Day" /></td>
+            <td class="time fit num" data-label="@PublicColumn.FirstPublished"><Timestamp Value="entry.FirstPublishedAtUtc" Format="TimestampFormat.Day" /></td>
         }
     </Row>
     <Empty><EmptyState Title="No records yet" Text="There are no records here." /></Empty>

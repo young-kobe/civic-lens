@@ -1070,8 +1070,46 @@ public sealed class ReleaseRendererTests
             Note = "Wrong.",
             Corrections = []
         };
-        var profile = new PublishedOfficialProfile { Id = "mayor", Name = "Mayor Example", Terms = [] };
-        var official = new ReleaseOfficialPage(profile, true, 119, true, [], [], []);
+        var profile = new PublishedOfficialProfile
+        {
+            Id = "mayor",
+            Name = "Mayor Example",
+            Terms = [new() { Office = "Representative", Party = "Republican", Start = new DateOnly(2025, 1, 3) }]
+        };
+        PublishedRecordEntry[] entries =
+        [
+            new()
+            {
+                Kind = PublishedRecordKind.Statement,
+                RecordId = new string('1', 64),
+                RevisionNumber = 1,
+                Headline = "A statement",
+                FirstPublishedAtUtc = DateTimeOffset.UnixEpoch,
+                EventDate = new DateOnly(2026, 3, 1),
+                IssueIds = ["housing"],
+                PolicyAreaIds = [],
+                Officials = [new() { Id = "mayor", Name = "Mayor Example" }]
+            }
+        ];
+        PublishedOfficialVote[] votes =
+        [
+            new()
+            {
+                RecordId = new string('3', 64),
+                VotedOn = new DateOnly(2026, 4, 1),
+                Chamber = PublishedChamber.House,
+                Congress = 119,
+                Session = 1,
+                RollCallNumber = 100,
+                BillType = "hr",
+                BillNumber = 7,
+                Cast = "Yea",
+                Headline = "A vote",
+                Kind = PublishedVoteKind.Passage,
+                IssueIds = ["housing"]
+            }
+        ];
+        var official = new ReleaseOfficialPage(profile, true, 119, true, [], [.. entries], [.. votes], TalkAndActionProfile.Of(119, entries, votes));
         var pastOfficial = new ReleaseOfficialPage(profile, true, 118, false, [], [], []);
         return
         [
@@ -1093,6 +1131,37 @@ public sealed class ReleaseRendererTests
             ("method", PublicationProtocol.MethodPagePath, await renderer.RenderMethodAsync(CancellationToken.None), null),
             ("report", PublicationProtocol.ReportPagePath, await renderer.RenderReportAsync(CancellationToken.None), null)
         ];
+    }
+
+    [Fact]
+    public async Task EveryCellOfAPublicTableCarriesItsColumnHeaderAsLabelSoAPhoneReaderSeesWhatEachValueIs()
+    {
+        var labeled = new Dictionary<string, int>();
+        foreach (var (name, _, html, _) in await RenderEveryPageTypeAsync())
+        {
+            foreach (var table in new HtmlParser().ParseDocument(html).QuerySelectorAll("table.table"))
+            {
+                var headers = table.QuerySelectorAll("thead th").Select(header => header.TextContent).ToList();
+                foreach (var row in table.QuerySelectorAll("tbody tr"))
+                {
+                    var cells = row.QuerySelectorAll("td");
+                    var main = Array.FindIndex(cells.ToArray(), cell => cell.ClassList.Contains("cell-main"));
+                    for (var index = 0; index < cells.Length; index++)
+                    {
+                        if (index == Math.Max(main, 0))
+                        {
+                            Assert.True(cells[index].GetAttribute("data-label") is null, $"{name}: main cell of {headers[index]}");
+                            continue;
+                        }
+                        Assert.True(headers[index] == cells[index].GetAttribute("data-label"), $"{name}: column {headers[index]}");
+                        labeled[name] = labeled.GetValueOrDefault(name) + 1;
+                    }
+                }
+            }
+        }
+
+        Assert.True(labeled.GetValueOrDefault("official") >= 10);
+        Assert.True(labeled.Values.Sum() >= 16);
     }
 
     [Fact]

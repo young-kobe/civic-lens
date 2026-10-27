@@ -6,10 +6,10 @@
     <PageHeader Title="Officials" Lede="Each page lists the published records of one official and the votes of the current Congress. The count shows the records other than votes that name the official." />
     <Panel Label="Officials">
         <DataTable Items="Officials" Caption="Officials with published records">
-            <Head><th>Name</th><th class="fit num">Records other than votes</th></Head>
+            <Head><th>Name</th><th class="fit num">@PublicColumn.RecordsOtherThanVotes</th></Head>
             <Row Context="official">
                 <td><a class="cell-title" href="@official.PagePath">@official.Profile.Name</a></td>
-                <td class="fit num">@official.RecordCount</td>
+                <td class="fit num" data-label="@PublicColumn.RecordsOtherThanVotes">@official.RecordCount</td>
             </Row>
             <Empty><EmptyState Title="None yet" Text="No official has a published record." /></Empty>
         </DataTable>

@@ -2,7 +2,7 @@
 @using CivicLens.Publication.Contracts
 
 <DataTable Items="Facets" Caption="@Caption">
-    <Head><th>Name</th><th class="fit num">Records</th></Head>
+    <Head><th>Name</th><th class="fit num">@PublicColumn.Records</th></Head>
     <Row Context="facet">
         <td>
             @if (facet.HasPages)
@@ -14,7 +14,7 @@
                 <span class="cell-title">@facet.Name</span>
             }
         </td>
-        <td class="fit num">@facet.Records.Length</td>
+        <td class="fit num" data-label="@PublicColumn.Records">@facet.Records.Length</td>
     </Row>
     <Empty><EmptyState Title="None yet" Text="No published record has one." /></Empty>
 </DataTable>
