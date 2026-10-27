@@ -410,6 +410,19 @@ public sealed class PublishVoteTests
         Assert.Equal(("Johnson (LA)", null, "Democrat", null, "Johnson (LA)"), (row.Result, row.Totals, row.Party, row.PartyMajority, row.Cast));
     }
 
+    // A stray candidate line beside party totals must not skip the total and party letter checks.
+    [Fact]
+    public async Task AVoteWithPartyTotalsAndACandidateLineKeepsEveryCheckAndRefusesAMismatch()
+    {
+        var scenario = new PublicationScenario();
+        var vote = scenario.AddVote('d', totalLines: ["Party total D: Yea 0, Nay 1, Present 0, Not voting 0", "Candidate total Emmer: 1"]);
+
+        var error = await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote)));
+
+        Assert.Contains("do not add up", error.Message, StringComparison.Ordinal);
+        Assert.Equal(0, scenario.Releases.BeginCount);
+    }
+
     // A party total line with no counts has no ": ", and the failure must name the vote, not crash the whole publish.
     [Fact]
     public async Task APartyTotalLineWithNoCountsRefusesTheVoteBySayingWhichVote()

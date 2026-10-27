@@ -15,6 +15,7 @@ public sealed record PublishedVote
     public const int MaximumParties = 16;
     public const string ResultPrefix = "Result: ";
     public const string CandidateTotalPrefix = "Candidate total ";
+    public const string PartyTotalPrefix = "Party total ";
 
     public required string RecordId { get; init; }
     public required int RevisionNumber { get; init; }
@@ -42,7 +43,14 @@ public sealed record PublishedVote
     public required DateTimeOffset FirstPublishedAtUtc { get; init; }
     public required PublishedCorrection[] Corrections { get; init; }
 
-    private bool HasCandidateTotals => Facts.Any(fact => fact.Text.StartsWith(CandidateTotalPrefix, StringComparison.Ordinal));
+    private bool HasCandidateTotals => IsCandidateVote(Facts.Select(fact => fact.Text));
+
+    public static bool IsCandidateVote(IEnumerable<string> factTexts)
+    {
+        var texts = factTexts.ToArray();
+        return texts.Any(text => text.StartsWith(CandidateTotalPrefix, StringComparison.Ordinal)) &&
+            !texts.Any(text => text.StartsWith(PartyTotalPrefix, StringComparison.Ordinal));
+    }
 
     public PublishedRecordEntry ToEntry() => new()
     {
@@ -111,7 +119,7 @@ public sealed record PublishedVote
     }
 
     private bool IsKnownParty(string? party) =>
-        !string.IsNullOrWhiteSpace(party) && (HasCandidateTotals || PartyMajorities.Any(majority => majority.Party == party));
+        HasCandidateTotals ? PublishedEvidenceRules.IsBoundedText(party) : PartyMajorities.Any(majority => majority.Party == party);
 
     private void ValidateMembers()
     {

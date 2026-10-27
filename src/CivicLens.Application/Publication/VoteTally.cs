@@ -33,7 +33,7 @@ internal sealed class VoteTally
         var lines = membersText.Split('\n').Where(line => line.StartsWith(VoteMemberLine.Prefix, StringComparison.Ordinal))
             .Select(VoteMemberLine.Parse).ToArray();
         var partyBySourceId = lines.ToDictionary(line => line.SourceId, line => parties.PartyOn(line, chamber, day), StringComparer.Ordinal);
-        if (VoteFacts.Find(facts, VoteFactPrefixes.CandidateTotal) is not null) return new(null, [], partyBySourceId);
+        if (PublishedVote.IsCandidateVote(facts.Select(fact => fact.Text))) return new(null, [], partyBySourceId);
 
         var partyTotals = chamber == Chamber.Senate ? SenateTotals(recordId, facts) : HouseTotals(recordId, facts);
         var totals = Sum(partyTotals.Values);

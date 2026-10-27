@@ -323,12 +323,37 @@ public sealed class PublishedVoteTests
         Assert.Throws<InvalidDataException>((Vote() with { Totals = null }).Validate);
     }
 
-    [Fact]
-    public void ACandidateTotalVoteStillNamesTheNonBlankPartyOfEachMember()
+    public static TheoryData<string> UnboundedParties => [" ", new string('R', PublishedRecordEntry.MaximumFilterValueLength + 1)];
+
+    [Theory]
+    [MemberData(nameof(UnboundedParties))]
+    public void ACandidateTotalVoteStillNamesABoundedPartyForEachMember(string party)
     {
         var vote = CandidateVote();
 
-        Assert.Throws<InvalidDataException>((vote with { Members = [vote.Members[0] with { Party = " " }, vote.Members[1]] }).Validate);
+        Assert.Throws<InvalidDataException>((vote with { Members = [vote.Members[0] with { Party = party }, vote.Members[1]] }).Validate);
+    }
+
+    // A stray candidate line beside party totals must not skip the totals, so only a vote with no party totals is a candidate vote.
+    [Fact]
+    public void AVoteWithPartyTotalsAndACandidateLineStillRequiresTotals()
+    {
+        const string party = "Party total R: Yea 1, Nay 0, Present 0, Not voting 0";
+        const string candidate = "Candidate total Emmer: 1";
+        var detail = DetailText + party + "\n" + candidate + "\n";
+        var vote = CandidateVote();
+        var mixed = vote with
+        {
+            Facts =
+            [
+                .. Vote().Facts,
+                new() { Text = party, Citation = Cite(DetailId, detail, party) },
+                new() { Text = candidate, Citation = Cite(DetailId, detail, candidate) }
+            ],
+            Sources = [vote.Sources[0] with { Text = detail }, vote.Sources[1]]
+        };
+
+        Assert.Throws<InvalidDataException>(mixed.Validate);
     }
 
     private static PublishedVote CandidateVote()

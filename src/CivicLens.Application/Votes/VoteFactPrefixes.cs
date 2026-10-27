@@ -9,7 +9,7 @@ public static class VoteFactPrefixes
     public const string Legislation = "Legislation: ";
     public const string Title = "Title: ";
     public const string Result = PublishedVote.ResultPrefix;
-    public const string PartyTotal = "Party total ";
+    public const string PartyTotal = PublishedVote.PartyTotalPrefix;
     public const string Count = "Count: ";
     public const string CandidateTotal = PublishedVote.CandidateTotalPrefix;
 
