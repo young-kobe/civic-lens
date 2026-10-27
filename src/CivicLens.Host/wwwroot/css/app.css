@@ -56,10 +56,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 @keyframes pulse { 50% { opacity: .25; } }
 
 .table-wrap { overflow-x: auto; }
-.table-wrap-scroll { max-height: 420px; overflow: auto; }
 .table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); }
 .table th { position: sticky; top: 0; z-index: 1; padding: 9px var(--s4); border-bottom: 1px solid var(--line); background: var(--surface); color: var(--muted); font-size: var(--t-xs); font-weight: 600; text-align: left; white-space: nowrap; transition: box-shadow var(--fast); }
-.table-wrap.is-scrolled th { box-shadow: var(--shadow-stuck); }
 .table td { padding: 11px var(--s4); border-bottom: 1px solid var(--line); vertical-align: middle; }
 .table tbody tr:last-child td { border-bottom: 0; }
 .table tbody tr { transition: background var(--fast); }

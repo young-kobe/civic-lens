@@ -85,15 +85,15 @@ Pages compose these components. The comparison page, the draft editor, and publi
 - Markup has no style tags or style attributes.
 - There are no `*.razor.css` or `*.cshtml` files.
 - Only `App.razor` and `PublicPage.razor` own `html`, `link`, and `script` tags, and both shells load the same theme.
-- Each shell loads only its own stylesheet and script, after `app.css` and `app.js`. `App.razor` loads `review.css` and `review.js`, and never `public.css` or `public.js`. The release lists `public.css` and `public.js`, and never `review.css` or `review.js`. Enforced by `App.razor`, `PublicPage.razor`, and `PublicAssets`. Test: `PresentationArchitectureTests.EachShellLoadsOnlyItsOwnStylesheetAndScriptAfterTheSharedOnes`.
-- Three scripts hold the behavior, after `theme.js`. `app.js` holds what both surfaces use: the theme toggle, the comparison layout switch, the linked highlight, and the segmented thumb. `public.js` holds search and the reader report form. `review.js` holds tabs, notice dismissal, the dialog focus trap, table scroll shadows, the unsaved changes guard, and the start of Blazor. The scripts share no global. No test, because the repository has no JavaScript test harness.
+- Each shell loads only its own stylesheet and script, after `app.css` and `app.js`. `App.razor` loads `review.css` and `review.js`, and never `public.css` or `public.js`. It loads `blazor.web.js` before `review.js`, because `review.js` starts Blazor. The release lists `public.css` and `public.js`, and never `review.css` or `review.js`. Enforced by `App.razor`, `PublicPage.razor`, and `PublicAssets`. Test: `PresentationArchitectureTests.EachShellLoadsOnlyItsOwnStylesheetAndScriptAfterTheSharedOnes`.
+- Three scripts hold the behavior, after `theme.js`. `app.js` holds what both surfaces use: the theme toggle, the comparison layout switch, the linked highlight, and the segmented thumb. `public.js` holds search and the reader report form. `review.js` holds tabs, notice dismissal, the dialog focus trap, table scroll shadows, the unsaved changes guard, and the start of Blazor. The scripts share no global. A tab switch measures only the tabs, so a segmented switch inside a hidden tab pane keeps its plain fallback style. No pane holds one today. No test, because the repository has no JavaScript test harness.
 - A selector lives in one of `app.css`, `public.css`, and `review.css`. A selector with a `.public-` class lives only in `public.css`. A rendered public page uses no class that only `review.css` defines; see [publication](publication.md#rendering).
 - Only shared components render `del` and `ins`.
 
 ## Storage and contracts
 
 - The Razor component build adds the SDK-managed `Microsoft.AspNetCore.App.Internal.Assets` entry to the Host package lock file.
-- The release copies the shared stylesheets, scripts, and fonts; see [publication](publication.md#rendering).
+- The release copies the shared and public stylesheets and scripts, and the fonts; see [publication](publication.md#rendering).
 
 ## Code map
 

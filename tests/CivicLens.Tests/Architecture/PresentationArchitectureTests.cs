@@ -73,6 +73,7 @@ public sealed class PresentationArchitectureTests
         Assert.InRange(workspace.IndexOf("css/app.css", StringComparison.Ordinal), 0, workspace.IndexOf("css/review.css", StringComparison.Ordinal) - 1);
         Assert.DoesNotContain("public.css", workspace, StringComparison.Ordinal);
         Assert.InRange(workspace.IndexOf("js/app.js", StringComparison.Ordinal), 0, workspace.IndexOf("js/review.js", StringComparison.Ordinal) - 1);
+        Assert.InRange(workspace.IndexOf("_framework/blazor.web.js", StringComparison.Ordinal), 0, workspace.IndexOf("js/review.js", StringComparison.Ordinal) - 1);
         Assert.DoesNotContain("public.js", workspace, StringComparison.Ordinal);
         var publicAssets = File.ReadAllText(Path.Combine(HostRoot, "Publication", "PublicAssets.cs"));
         Assert.InRange(publicAssets.IndexOf("assets/css/app.css", StringComparison.Ordinal), 0, publicAssets.IndexOf("assets/css/public.css", StringComparison.Ordinal) - 1);

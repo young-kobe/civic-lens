@@ -38,6 +38,8 @@ a.stat:hover { background: var(--raised); }
 
 form.inline { display: inline; margin: 0; }
 
+.table-wrap-scroll { max-height: 420px; overflow: auto; }
+.table-wrap.is-scrolled th { box-shadow: var(--shadow-stuck); }
 .table .act { width: 1%; text-align: right; white-space: nowrap; }
 .table .act .btn:not(.btn-primary) { opacity: .75; }
 .table tr:hover .act .btn, .table tr:focus-within .act .btn { opacity: 1; }

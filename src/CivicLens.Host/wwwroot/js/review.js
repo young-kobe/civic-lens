@@ -108,5 +108,5 @@
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
     else init();
 
-    if (window.Blazor?.start) window.Blazor.start({ ssr: { disableDomPreservation: true } });
+    window.Blazor.start({ ssr: { disableDomPreservation: true } });
 })();
