@@ -10,21 +10,21 @@
 
     <Panel Title="Sponsorships" Id="sponsorships-title" Padded="true">
         <p class="muted small">Each quote is exact text from the saved Congress.gov API page as Civic Lens renders it. Each source panel marks the quotes in the full saved text.</p>
-        <DataTable Items="Record.Sponsorships" Caption="Sponsorships of tracked officials">
-            <Head><th>Official</th><th>@PublicColumn.Role</th><th>@PublicColumn.Original</th><th class="fit num">@PublicColumn.Sponsored</th><th class="fit num">@PublicColumn.Withdrawn</th><th>@PublicColumn.Evidence</th></Head>
+        <DataTable Roles="true" Items="Record.Sponsorships" Caption="Sponsorships of tracked officials">
+            <Head><TableCell Header>Official</TableCell><TableCell Header>@PublicColumn.Role</TableCell><TableCell Header>@PublicColumn.Original</TableCell><TableCell Header Class="fit num">@PublicColumn.Sponsored</TableCell><TableCell Header Class="fit num">@PublicColumn.Withdrawn</TableCell><TableCell Header>@PublicColumn.Evidence</TableCell></Head>
             <Row Context="sponsorship">
-                <td><PublishedOfficialName Official="sponsorship.Official" Linked="@(sponsorship.Role == PublishedSponsorshipRole.Sponsor)" /></td>
-                <td data-label="@PublicColumn.Role">@PublishedRecordLabels.Role(sponsorship.Role)</td>
-                <td data-label="@PublicColumn.Original">@(sponsorship.IsOriginal ? "Yes" : "No")</td>
-                <td class="fit num" data-label="@PublicColumn.Sponsored">@Moment.Iso(sponsorship.SponsoredOn)</td>
-                <td class="fit num" data-label="@PublicColumn.Withdrawn">@(sponsorship.WithdrawnOn is { } withdrawn ? Moment.Iso(withdrawn) : "None")</td>
-                <td data-label="@PublicColumn.Evidence">
+                <TableCell Main><PublishedOfficialName Official="sponsorship.Official" Linked="@(sponsorship.Role == PublishedSponsorshipRole.Sponsor)" /></TableCell>
+                <TableCell Label="@PublicColumn.Role">@PublishedRecordLabels.Role(sponsorship.Role)</TableCell>
+                <TableCell Label="@PublicColumn.Original">@(sponsorship.IsOriginal ? "Yes" : "No")</TableCell>
+                <TableCell Class="fit num" Label="@PublicColumn.Sponsored">@Moment.Iso(sponsorship.SponsoredOn)</TableCell>
+                <TableCell Class="fit num" Label="@PublicColumn.Withdrawn">@(sponsorship.WithdrawnOn is { } withdrawn ? Moment.Iso(withdrawn) : "None")</TableCell>
+                <TableCell Label="@PublicColumn.Evidence">
                     @for (var index = 0; index < sponsorship.Citations.Length; index++)
                     {
                         <blockquote class="quote">@EncodedEvidence.Markup(sponsorship.Citations[index].Quote)</blockquote>
                         <a class="small" href="@("#" + PublishedActionView.SponsorshipAnchor(Record, sponsorship, index))">Show in the full source text</a>
                     }
-                </td>
+                </TableCell>
             </Row>
         </DataTable>
     </Panel>

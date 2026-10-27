@@ -45,6 +45,7 @@ public sealed class SourcesPageTests(PostgresCollection postgres) : IAsyncLifeti
         Assert.Contains("example.test/pages/a", row.TextContent);
         Assert.Equal("Not checked yet", row.QuerySelector(".badge")!.TextContent);
         Assert.Contains("1 configured", before.QuerySelector(".panel-aside")!.TextContent);
+        Assert.Null(before.QuerySelector("table[role], table [role]"));
 
         await workspace.EnqueueAsync(Owner, "source", Guid.NewGuid().ToString("N"), default);
         using var response = await Host.Client.GetAsync("/Review/Sources");

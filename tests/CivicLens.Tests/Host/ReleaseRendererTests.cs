@@ -1207,6 +1207,34 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task EveryPublicTableKeepsItsTableRolesSoWebKitReadersKeepRowsAndHeadersWhenCssStacksTheCells()
+    {
+        var tables = 0;
+        foreach (var (name, _, html, _) in await RenderEveryPageTypeAsync())
+        {
+            foreach (var table in new HtmlParser().ParseDocument(html).QuerySelectorAll("table.table"))
+            {
+                tables++;
+                Assert.True(table.GetAttribute("role") == "table", $"{name}: table role");
+                Assert.All(table.QuerySelectorAll("thead, tbody"), group => Assert.Equal("rowgroup", group.GetAttribute("role")));
+                Assert.All(table.QuerySelectorAll("tr"), row => Assert.Equal("row", row.GetAttribute("role")));
+                var headers = table.QuerySelectorAll("thead th").ToList();
+                Assert.All(headers, header => Assert.Equal(("columnheader", "col"), (header.GetAttribute("role"), header.GetAttribute("scope"))));
+                foreach (var row in table.QuerySelectorAll("tbody tr"))
+                {
+                    var cells = row.Children;
+                    Assert.Equal(headers.Count, cells.Length);
+                    Assert.True(cells.Count(cell => cell.GetAttribute("role") == "rowheader") == 1, $"{name}: rowheader count");
+                    Assert.All(cells, cell => Assert.Contains(cell.GetAttribute("role"), new[] { "cell", "rowheader" }));
+                    Assert.All(cells.Where(cell => cell.GetAttribute("role") == "cell"), cell => Assert.NotNull(cell.GetAttribute("data-label")));
+                }
+            }
+        }
+
+        Assert.True(tables >= 10);
+    }
+
+    [Fact]
     public async Task EveryCellOfAPublicTableCarriesItsColumnHeaderAsLabelSoAPhoneReaderSeesWhatEachValueIs()
     {
         var labeled = new Dictionary<string, int>();
@@ -1218,10 +1246,9 @@ public sealed class ReleaseRendererTests
                 foreach (var row in table.QuerySelectorAll("tbody tr"))
                 {
                     var cells = row.QuerySelectorAll("td");
-                    var main = Array.FindIndex(cells.ToArray(), cell => cell.ClassList.Contains("cell-main"));
                     for (var index = 0; index < cells.Length; index++)
                     {
-                        if (index == Math.Max(main, 0))
+                        if (cells[index].GetAttribute("role") == "rowheader")
                         {
                             Assert.True(cells[index].GetAttribute("data-label") is null, $"{name}: main cell of {headers[index]}");
                             continue;

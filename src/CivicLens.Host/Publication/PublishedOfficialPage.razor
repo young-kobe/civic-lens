@@ -8,13 +8,13 @@
     @if (Page.IsCurrent)
     {
         <Panel Title="Offices">
-            <DataTable Items="Page.Profile.Terms" Caption="@($"Offices of {Page.Profile.Name}")">
-                <Head><th>Office</th><th>@PublicColumn.Party</th><th class="fit num">@PublicColumn.From</th><th class="fit num">@PublicColumn.To</th></Head>
+            <DataTable Roles="true" Items="Page.Profile.Terms" Caption="@($"Offices of {Page.Profile.Name}")">
+                <Head><TableCell Header>Office</TableCell><TableCell Header>@PublicColumn.Party</TableCell><TableCell Header Class="fit num">@PublicColumn.From</TableCell><TableCell Header Class="fit num">@PublicColumn.To</TableCell></Head>
                 <Row Context="term">
-                    <td>@PublishedOfficialView.Office(term)</td>
-                    <td data-label="@PublicColumn.Party">@term.Party</td>
-                    <td class="fit num" data-label="@PublicColumn.From">@Moment.Iso(term.Start)</td>
-                    <td class="fit num" data-label="@PublicColumn.To">@(term.End is { } end ? Moment.Iso(end) : "Present")</td>
+                    <TableCell Main>@PublishedOfficialView.Office(term)</TableCell>
+                    <TableCell Label="@PublicColumn.Party">@term.Party</TableCell>
+                    <TableCell Class="fit num" Label="@PublicColumn.From">@Moment.Iso(term.Start)</TableCell>
+                    <TableCell Class="fit num" Label="@PublicColumn.To">@(term.End is { } end ? Moment.Iso(end) : "Present")</TableCell>
                 </Row>
                 <Empty><EmptyState Title="No office on record" Text="@NoOfficeText" /></Empty>
             </DataTable>
@@ -23,10 +23,10 @@
     @if (Page.TalkAndAction is { } profile)
     {
         <Panel Title="@($"Talk and action in Congress {Page.Congress}")">
-            <DataTable Items="profile.IssueIds" Caption="@($"Share of statements, sponsorships, and votes of {Page.Profile.Name} on each issue")">
-                <Head><th>Issue</th><th class="num">@PublicColumn.Statements</th><th class="num">@PublicColumn.Sponsorships</th><th class="num">@PublicColumn.Votes</th></Head>
+            <DataTable Roles="true" Items="profile.IssueIds" Caption="@($"Share of statements, sponsorships, and votes of {Page.Profile.Name} on each issue")">
+                <Head><TableCell Header>Issue</TableCell><TableCell Header Class="num">@PublicColumn.Statements</TableCell><TableCell Header Class="num">@PublicColumn.Sponsorships</TableCell><TableCell Header Class="num">@PublicColumn.Votes</TableCell></Head>
                 <Row Context="issueId">
-                    <td>
+                    <TableCell Main>
                         @{ var issue = PublishedRecordView.IssueLink(issueId, Catalog, Page.RootPath); }
                         @if (issue.Href is not null)
                         {
@@ -36,10 +36,10 @@
                         {
                             <span class="cell-title">@issue.Text</span>
                         }
-                    </td>
-                    <td class="num" data-label="@PublicColumn.Statements">@PublishedOfficialView.Share(profile.Statements, issueId)</td>
-                    <td class="num" data-label="@PublicColumn.Sponsorships">@PublishedOfficialView.Share(profile.Sponsorships, issueId)</td>
-                    <td class="num" data-label="@PublicColumn.Votes">@PublishedOfficialView.Share(profile.Votes, issueId)</td>
+                    </TableCell>
+                    <TableCell Class="num" Label="@PublicColumn.Statements">@PublishedOfficialView.Share(profile.Statements, issueId)</TableCell>
+                    <TableCell Class="num" Label="@PublicColumn.Sponsorships">@PublishedOfficialView.Share(profile.Sponsorships, issueId)</TableCell>
+                    <TableCell Class="num" Label="@PublicColumn.Votes">@PublishedOfficialView.Share(profile.Votes, issueId)</TableCell>
                 </Row>
                 <Empty><EmptyState Title="No tracked issue" Text="No statement, sponsorship, or substantive vote of this Congress has a tracked issue." /></Empty>
             </DataTable>
@@ -51,19 +51,19 @@
         </Panel>
     }
     <Panel Title="Records">
-        <DataTable Items="Rows" Caption="@($"Published records of {Page.Profile.Name}")">
-            <Head><th class="fit num">@PublicColumn.Date</th><th>Record</th><th>@PublicColumn.Cast</th></Head>
+        <DataTable Roles="true" Items="Rows" Caption="@($"Published records of {Page.Profile.Name}")">
+            <Head><TableCell Header Class="fit num">@PublicColumn.Date</TableCell><TableCell Header>Record</TableCell><TableCell Header>@PublicColumn.Cast</TableCell></Head>
             <Row Context="row">
-                <td class="fit num" data-label="@PublicColumn.Date">@Moment.Iso(row.Date)</td>
-                <td class="cell-main">
+                <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Iso(row.Date)</TableCell>
+                <TableCell Main>
                     <a class="cell-title" href="@(Page.RootPath + PublicationProtocol.RecordPagePath(row.RecordId))">@row.Headline</a>
                     <StatusBadge Text="@PublishedRecordLabels.Kind(row.Kind)" />
                     @if (row.Detail is not null)
                     {
                         <div class="muted small">@row.Detail</div>
                     }
-                </td>
-                <td data-label="@PublicColumn.Cast">@row.Cast</td>
+                </TableCell>
+                <TableCell Label="@PublicColumn.Cast">@row.Cast</TableCell>
             </Row>
             <Empty><EmptyState Title="No records yet" Text="There are no records here." /></Empty>
         </DataTable>

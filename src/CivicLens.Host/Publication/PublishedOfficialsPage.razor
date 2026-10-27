@@ -5,11 +5,11 @@
 <PublicPage Section="PublicSection.Officials" Title="Officials" Description="Officials with published records. Each page lists the records and votes that name one official." Crumbs="Crumbs">
     <PageHeader Title="Officials" Lede="Each page lists the published records of one official and the votes of the current Congress. The count shows the records other than votes that name the official." />
     <Panel Label="Officials">
-        <DataTable Items="Officials" Caption="Officials with published records">
-            <Head><th>Name</th><th class="fit num">@PublicColumn.RecordsOtherThanVotes</th></Head>
+        <DataTable Roles="true" Items="Officials" Caption="Officials with published records">
+            <Head><TableCell Header>Name</TableCell><TableCell Header Class="fit num">@PublicColumn.RecordsOtherThanVotes</TableCell></Head>
             <Row Context="official">
-                <td><a class="cell-title" href="@official.PagePath">@official.Profile.Name</a></td>
-                <td class="fit num" data-label="@PublicColumn.RecordsOtherThanVotes">@official.RecordCount</td>
+                <TableCell Main><a class="cell-title" href="@official.PagePath">@official.Profile.Name</a></TableCell>
+                <TableCell Class="fit num" Label="@PublicColumn.RecordsOtherThanVotes">@official.RecordCount</TableCell>
             </Row>
             <Empty><EmptyState Title="None yet" Text="No official has a published record." /></Empty>
         </DataTable>

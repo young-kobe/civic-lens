@@ -1,0 +1,21 @@
+@if (Header)
+{
+    <th scope="col" role="@(Roles ? "columnheader" : null)" class="@Class">@ChildContent</th>
+}
+else
+{
+    <td role="@(Roles ? (Main ? "rowheader" : "cell") : null)" class="@BodyClass" data-label="@Label">@ChildContent</td>
+}
+
+@code {
+    public const string RolesCascade = "TableRoles";
+
+    [CascadingParameter(Name = RolesCascade)] public bool Roles { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public bool Header { get; set; }
+    [Parameter] public bool Main { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? Label { get; set; }
+
+    private string? BodyClass => Main ? string.Join(' ', "cell-main", Class).Trim() : Class;
+}
