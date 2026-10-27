@@ -48,8 +48,8 @@ internal static class PublishedOfficialView
         var sentence = votes.Cast == 0
             ? $"No Yea or Nay cast yet on a split vote in {ChamberName(votes.Chamber)} as a {votes.Party} {inCongress}."
             : $"Voted with most {PartyOf(votes)} on {votes.Matched} of {votes.Cast} split {Votes(votes.Cast)}{share} {inCongress}.";
-        var more = votes.Cast == 0 ? "" : "more ";
-        return votes.NotCast == 0 ? sentence : $"{sentence} They did not cast Yea or Nay on {votes.NotCast} {more}split {Votes(votes.NotCast)}.";
+        var other = votes.Cast == 0 ? "" : "other ";
+        return votes.NotCast == 0 ? sentence : $"{sentence} They did not cast Yea or Nay on {votes.NotCast} {other}split {Votes(votes.NotCast)}.";
     }
 
     public static string PartyOf(VotesWithParty votes) => $"{votes.Chamber} {votes.Party}s";
