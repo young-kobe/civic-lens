@@ -126,6 +126,46 @@ public sealed class PublishOfficialsTests
     }
 
     [Fact]
+    public async Task AMemberGetsTheWebsiteOfTheRoster()
+    {
+        var scenario = new PublicationScenario();
+        scenario.ExternalIds["mayor"] = (Cantwell, null);
+        scenario.RosterMembers = RosterFixtures.Members();
+
+        var summary = await PublishAsync(scenario, scenario.AddStatement('a'));
+
+        Assert.Equal("https://www.cantwell.senate.gov", Assert.Single(OfficialsOf(scenario, summary.DirectoryName).Officials).Website);
+    }
+
+    [Theory]
+    [InlineData("http://www.cantwell.senate.gov")]
+    [InlineData("https://user:secret@www.cantwell.senate.gov")]
+    [InlineData("not a url")]
+    public async Task ARosterUrlThatBreaksTheWebsiteRuleBecomesNoWebsiteAndDoesNotFailThePublish(string url)
+    {
+        var scenario = new PublicationScenario();
+        scenario.ExternalIds["mayor"] = (Cantwell, null);
+        scenario.RosterMembers = [.. RosterFixtures.Members().Select(member => member with { Url = url })];
+
+        var summary = await PublishAsync(scenario, scenario.AddStatement('a'));
+
+        Assert.Null(Assert.Single(OfficialsOf(scenario, summary.DirectoryName).Officials).Website);
+    }
+
+    [Fact]
+    public async Task AnExecutiveGetsTheConfiguredWebsiteBecauseTheExecutiveRosterHasNoUrl()
+    {
+        var scenario = new PublicationScenario();
+        scenario.ExternalIds["mayor"] = (null, Trump);
+        scenario.Websites["mayor"] = "https://www.whitehouse.gov";
+        scenario.ExecutiveOfficials = ExecutiveFixtures.Officials();
+
+        var summary = await PublishAsync(scenario, scenario.AddStatement('a'));
+
+        Assert.Equal("https://www.whitehouse.gov", Assert.Single(OfficialsOf(scenario, summary.DirectoryName).Officials).Website);
+    }
+
+    [Fact]
     public async Task AnExecutiveMatchedByWikidataGetsPresidentTermsWithNoStateOrDistrict()
     {
         var scenario = new PublicationScenario();

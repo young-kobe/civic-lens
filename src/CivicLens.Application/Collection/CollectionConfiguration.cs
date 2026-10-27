@@ -49,6 +49,8 @@ public sealed record CollectionConfiguration
             ValidateOffices(person);
             ValidateExternalId(person, person.BioguideId, "bioguide", BioguideId.IsValid, bioguideIds);
             ValidateExternalId(person, person.WikidataId, "Wikidata", WikidataId.IsValid, wikidataIds);
+            if (person.Website is not null && !PublishedWebsite.IsValid(person.Website))
+                throw new ArgumentException($"Person '{person.Id}' website must be an absolute https URL of at most {PublishedWebsite.MaximumLength} characters with no user info.");
             if (!peopleById.TryAdd(person.Id, person))
                 throw new ArgumentException($"Duplicate person ID '{person.Id}'.");
         }

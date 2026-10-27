@@ -249,6 +249,34 @@ public sealed class ConfigurationTests
     }
 
     [Theory]
+    [InlineData("http://example.gov")]
+    [InlineData("https://user@example.gov")]
+    [InlineData("/relative")]
+    [InlineData("")]
+    public void AWebsiteMustBeAnAbsoluteHttpsUrlWithNoUserInfo(string website)
+    {
+        var person = new PersonConfiguration { Id = "one", Name = "One", Website = website };
+
+        Assert.Throws<ArgumentException>(() => DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }], person).Validate());
+    }
+
+    [Fact]
+    public void AWebsiteOverTheLengthCapIsRefused()
+    {
+        var person = new PersonConfiguration { Id = "one", Name = "One", Website = "https://example.gov/" + new string('a', 600) };
+
+        Assert.Throws<ArgumentException>(() => DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }], person).Validate());
+    }
+
+    [Fact]
+    public void AnHttpsWebsiteIsAccepted()
+    {
+        var person = new PersonConfiguration { Id = "one", Name = "One", Website = "https://example.gov/" };
+
+        DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }], person).Validate();
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("Q22686")]
     [InlineData("Q1")]

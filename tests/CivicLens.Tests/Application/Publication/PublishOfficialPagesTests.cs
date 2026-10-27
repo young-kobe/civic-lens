@@ -245,6 +245,22 @@ public sealed class PublishOfficialPagesTests
     }
 
     [Fact]
+    public async Task AWebsiteChangeRewritesTheOfficialPageBecauseTheProfileChanged()
+    {
+        var scenario = new PublicationScenario();
+        var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('a'))));
+        scenario.Websites["mayor"] = "https://mayor.example.gov";
+        scenario.Releases.WriteOrder.Clear();
+        scenario.Releases.Links.Clear();
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", scenario.AddDraft('c')));
+
+        Assert.Contains(MayorPage, scenario.Releases.WriteOrder);
+        Assert.Contains((first.DirectoryName, PublicationProtocol.OfficialVotesPath("mayor", 119)), scenario.Releases.Links);
+    }
+
+    [Fact]
     public async Task TheCurrentCongressIsTheNewestWithAVoteAndEarlierCongressesGetOnePageEach()
     {
         var scenario = new PublicationScenario();
