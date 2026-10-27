@@ -285,6 +285,26 @@ public sealed class PublishedVoteTests
         Assert.Null(PublishedPartyMajority.Of("Republican", 3, 3).Majority);
     }
 
+    [Theory]
+    [InlineData(2, 1, 1, 2, true)]
+    [InlineData(1, 2, 2, 1, true)]
+    [InlineData(2, 1, 2, 1, false)]
+    [InlineData(1, 1, 1, 2, false)]
+    [InlineData(2, 1, 1, 1, false)]
+    public void AVoteIsSplitOnlyWhenMostDemocratsAndMostRepublicansHaveOppositeMajorities(int demYea, int demNay, int repYea, int repNay, bool split)
+    {
+        var vote = Vote() with { PartyMajorities = [PublishedPartyMajority.Of(PublishedPartyMajority.Democrat, demYea, demNay), PublishedPartyMajority.Of(PublishedPartyMajority.Republican, repYea, repNay)] };
+
+        Assert.Equal(split, vote.IsSplit());
+    }
+
+    [Fact]
+    public void AVoteWithOnlyOneMajorPartyOrCandidateTotalsIsNeverSplit()
+    {
+        Assert.False((Vote() with { PartyMajorities = [PublishedPartyMajority.Of(PublishedPartyMajority.Democrat, 2, 0)] }).IsSplit());
+        Assert.False(CandidateVote().IsSplit());
+    }
+
     [Fact]
     public void RejectsAMajorityThatDoesNotMatchItsCounts()
     {

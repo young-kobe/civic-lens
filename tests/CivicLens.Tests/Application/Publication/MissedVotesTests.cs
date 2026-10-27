@@ -60,6 +60,7 @@ public sealed class MissedVotesTests
         RollCallNumber = id + 1,
         Cast = cast,
         Result = "Passed",
+        SplitVote = false,
         Party = "Republican",
         Headline = $"Vote {id}",
         Kind = PublishedVoteKind.Passage,

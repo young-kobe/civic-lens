@@ -10,7 +10,7 @@ public sealed class PublishedOfficialVotesTests
     {
         var file = PublishedOfficialVotes.Of([Vote('b', new DateOnly(2026, 2, 1), 9)]);
 
-        Assert.Equal("""{"votes":[{"recordId":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","votedOn":"2026-02-01","chamber":"house","congress":119,"session":1,"rollCallNumber":9,"billType":"hr","billNumber":7,"cast":"Yea","result":"Passed","totals":{"yea":218,"nay":210,"present":1,"notVoting":5},"party":"Republican","partyMajority":"Yea","headline":"Vote b","kind":"passage","issueIds":["housing"]}]}""",
+        Assert.Equal("""{"votes":[{"recordId":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","votedOn":"2026-02-01","chamber":"house","congress":119,"session":1,"rollCallNumber":9,"billType":"hr","billNumber":7,"cast":"Yea","result":"Passed","totals":{"yea":218,"nay":210,"present":1,"notVoting":5},"splitVote":false,"party":"Republican","partyMajority":"Yea","headline":"Vote b","kind":"passage","issueIds":["housing"]}]}""",
             JsonSerializer.Serialize(file, PublicationProtocol.JsonOptions));
     }
 
@@ -50,6 +50,7 @@ public sealed class PublishedOfficialVotesTests
                 Headline = long8,
                 Result = long8,
                 Party = long8,
+                SplitVote = true,
                 Cast = new string('€', PublishedVote.MaximumCastLength),
                 BillType = new string('z', PublishedVote.MaximumBillTypeLength),
                 IssueIds = issueIds
@@ -64,6 +65,31 @@ public sealed class PublishedOfficialVotesTests
     public void ARowRefusesAPartyMajorityThatIsNeitherYeaNorNay()
     {
         Assert.Throws<InvalidDataException>(() => PublishedOfficialVotes.Of([Vote('a', new DateOnly(2026, 1, 1), 1) with { PartyMajority = "Present" }]));
+    }
+
+    [Fact]
+    public void ASplitVoteRowWithNoPartyMajorityOrNoTotalsIsRefusedSoThePageNeverShowsABreakAgainstNothing()
+    {
+        var row = Vote('a', new DateOnly(2026, 1, 1), 1) with { SplitVote = true };
+
+        PublishedOfficialVotes.Of([row]);
+        Assert.Throws<InvalidDataException>(() => PublishedOfficialVotes.Of([row with { PartyMajority = null }]));
+        Assert.Throws<InvalidDataException>(() => PublishedOfficialVotes.Of([row with { Totals = null }]));
+    }
+
+    [Theory]
+    [InlineData("Yea", "Yea")]
+    [InlineData("Aye", "Yea")]
+    [InlineData("Nay", "Nay")]
+    [InlineData("No", "Nay")]
+    [InlineData("Present", null)]
+    [InlineData("Not Voting", null)]
+    [InlineData("Pelosi", null)]
+    public void AyeAndNoAreTheYeaAndNaySidesAndEveryOtherCastHasNoSide(string cast, string? side)
+    {
+        var row = Vote('a', new DateOnly(2026, 1, 1), 1) with { Cast = cast };
+
+        Assert.Equal((side, side), (PublishedOfficialVote.SideOf(cast), row.Side));
     }
 
     [Fact]
@@ -138,6 +164,7 @@ public sealed class PublishedOfficialVotesTests
         Cast = "Yea",
         Result = "Passed",
         Totals = new() { Yea = 218, Nay = 210, Present = 1, NotVoting = 5 },
+        SplitVote = false,
         Party = "Republican",
         PartyMajority = PublishedPartyMajority.Yea,
         Headline = $"Vote {id}",

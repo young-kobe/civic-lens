@@ -34,12 +34,27 @@ internal static class PublishedOfficialView
     public static string MissedVotes(MissedVotes missed, int congress)
     {
         var chamber = missed.Chamber == PublishedChamber.Senate ? "the Senate" : "the House of Representatives";
-        var votes = missed.Held == 1 ? "vote" : "votes";
         var share = missed.Share is { } value ? $" ({Percent(value)})" : "";
         var days = missed.First == missed.Last ? $"on {Moment.Day(missed.First)}" : $"{Moment.Day(missed.First)} to {Moment.Day(missed.Last)}";
-        return $"Missed {missed.Missed} of {missed.Held} roll call {votes} of all kinds{share}, including procedural votes, " +
+        return $"Missed {missed.Missed} of {missed.Held} roll call {Votes(missed.Held)} of all kinds{share}, including procedural votes, " +
             $"held in {chamber} while they served, {days} ({CongressCalendar.Ordinal(congress)} Congress).";
     }
+
+    public static readonly string SplitVoteMeaning = $"A split vote is a substantive roll call vote where most {PublishedPartyMajority.Democrat}s and most {PublishedPartyMajority.Republican}s voted on opposite sides.";
+
+    public static string WithParty(VotesWithParty votes, int congress)
+    {
+        var share = votes.Share is { } value ? $" ({Percent(value)})" : "";
+        var sentence = votes.Cast == 0
+            ? $"No split votes with a Yea or Nay cast yet in the {votes.Chamber} in the {CongressCalendar.Ordinal(congress)} Congress."
+            : $"Voted with most {PartyOf(votes)} on {votes.Matched} of {votes.Cast} split {Votes(votes.Cast)}{share}.";
+        var more = votes.Cast == 0 ? "" : "more ";
+        return votes.NotCast == 0 ? sentence : $"{sentence} They did not cast Yea or Nay on {votes.NotCast} {more}split {Votes(votes.NotCast)}.";
+    }
+
+    public static string PartyOf(VotesWithParty votes) => $"{votes.Chamber} {votes.Party}s";
+
+    private static string Votes(int count) => count == 1 ? "vote" : "votes";
 
     private static string Percent(double share) => string.Create(CultureInfo.InvariantCulture, $"{share * 100:0}%");
 

@@ -1,3 +1,5 @@
+using CivicLens.Publication.Contracts;
+
 namespace CivicLens.Application.Publication;
 
 internal enum VoteCastKind { Yea, Nay, Present, NotVoting }
@@ -21,18 +23,21 @@ internal sealed record VoteMemberLine(string SourceId, string SourceParty, strin
 
     public string? SourcePartyName => SourceParty switch
     {
-        "R" => "Republican",
-        "D" => "Democrat",
+        "R" => PublishedPartyMajority.Republican,
+        "D" => PublishedPartyMajority.Democrat,
         "I" => "Independent",
         _ => null
     };
 
-    private static VoteCastKind CastOf(string cast) => cast switch
+    private static VoteCastKind CastOf(string cast) => PublishedOfficialVote.SideOf(cast) switch
     {
-        "Yea" or "Aye" => VoteCastKind.Yea,
-        "Nay" or "No" => VoteCastKind.Nay,
-        "Present" => VoteCastKind.Present,
-        "Not Voting" => VoteCastKind.NotVoting,
-        _ => throw new ArgumentException($"The cast '{cast}' is not Yea, Nay, Present, or Not Voting.")
+        PublishedPartyMajority.Yea => VoteCastKind.Yea,
+        PublishedPartyMajority.Nay => VoteCastKind.Nay,
+        _ => cast switch
+        {
+            "Present" => VoteCastKind.Present,
+            "Not Voting" => VoteCastKind.NotVoting,
+            _ => throw new ArgumentException($"The cast '{cast}' is not Yea, Nay, Present, or Not Voting.")
+        }
     };
 }

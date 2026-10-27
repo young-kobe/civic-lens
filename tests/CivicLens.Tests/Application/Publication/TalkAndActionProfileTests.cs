@@ -24,6 +24,17 @@ public sealed class TalkAndActionProfileTests
     }
 
     [Fact]
+    public void AProceduralSplitVoteNeverCountsAsAVoteWithOrAgainstThePartySoARuleVoteCannotMoveTheShare()
+    {
+        var split = Vote(1, PublishedVoteKind.Passage, []) with { SplitVote = true, PartyMajority = PublishedPartyMajority.Yea };
+        var votes = new[] { split, split with { RecordId = 2.ToString("x64"), Kind = PublishedVoteKind.Cloture, Cast = "Nay" } };
+
+        var entry = Assert.Single(TalkAndActionProfile.Of(119, [], votes).WithPartyByChamber);
+
+        Assert.Equal((1, 0), (entry.Matched, entry.Breaks.Length));
+    }
+
+    [Fact]
     public void ANotVotingCastLeavesTheVotesColumnWhilePresentAndACandidateNameStayIn()
     {
         var votes = new[] { Vote(1, PublishedVoteKind.Passage, ["housing"]), Vote(2, PublishedVoteKind.Passage, ["housing"]) with { Cast = PublishedOfficialVote.NotVoting },
@@ -165,6 +176,7 @@ public sealed class TalkAndActionProfileTests
         Cast = "Yea",
         Result = "Passed",
         Totals = new() { Yea = 218, Nay = 210, Present = 1, NotVoting = 5 },
+        SplitVote = false,
         Party = "Republican",
         Headline = $"Vote {id}",
         Kind = kind,

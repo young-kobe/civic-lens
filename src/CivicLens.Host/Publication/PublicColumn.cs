@@ -14,6 +14,9 @@ public static class PublicColumn
     public const string Sponsorships = "Sponsorships";
     public const string Votes = "Votes";
     public const string Cast = "Cast";
+    public const string Vote = "Vote";
+    public const string TheirVote = "Their vote";
+    public const string Result = "Result";
     public const string Evidence = "Evidence";
     public const string Role = "Role";
     public const string Original = "Original";
