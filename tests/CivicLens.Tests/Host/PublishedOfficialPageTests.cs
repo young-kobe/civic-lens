@@ -221,6 +221,34 @@ public sealed class PublishedOfficialPageTests
         Assert.Null(document.QuerySelector("[aria-labelledby='panel-votes-with-their-party']"));
     }
 
+    [Fact]
+    public async Task OnlyARowOfASplitVoteCastAgainstMostOfTheirPartyIsMarkedAsAgainstTheParty()
+    {
+        var day = new DateOnly(2026, 4, 1);
+        var votes = new[] { Split('a', day, "Nay"), Split('b', day.AddDays(1), "Yea"), Split('c', day.AddDays(2), "Present"),
+            Vote('d', day.AddDays(3)) with { Cast = "Nay", Kind = PublishedVoteKind.Cloture }, Vote('e', day.AddDays(4)) with { Cast = "Nay", PartyMajority = null } };
+
+        var document = await RenderedAsync(votes);
+
+        var marked = document.QuerySelectorAll("[aria-labelledby='panel-records'] tbody tr[data-against-party]");
+        Assert.EndsWith(PublicationProtocol.RecordPagePath(Vote('a', day).RecordId), Assert.Single(marked).QuerySelector("a")!.GetAttribute("href"), StringComparison.Ordinal);
+        Assert.Equal(5, document.QuerySelectorAll("[aria-labelledby='panel-records'] tbody tr").Length);
+    }
+
+    [Fact]
+    public async Task TheRecordsSwitchShowsOnlyWhenTheOfficialHasAVoteAgainstTheirParty()
+    {
+        var day = new DateOnly(2026, 4, 1);
+
+        var withBreak = await RenderedAsync([Split('a', day, "Nay")]);
+        var withoutBreak = await RenderedAsync([Split('a', day, "Yea")]);
+
+        var switchButtons = withBreak.QuerySelectorAll("[aria-labelledby='panel-records'] [data-layout-choice]");
+        Assert.Equal(["All records", "Votes against their party"], switchButtons.Select(button => button.TextContent));
+        Assert.Equal("all", withBreak.QuerySelector("[aria-labelledby='panel-records']")!.GetAttribute("data-layout"));
+        Assert.Null(withoutBreak.QuerySelector("[aria-labelledby='panel-records'] [data-layout-choice]"));
+    }
+
     private static async Task<AngleSharp.Dom.IDocument> RenderedAsync(PublishedOfficialVote[] votes)
     {
         var page = Current([], votes);

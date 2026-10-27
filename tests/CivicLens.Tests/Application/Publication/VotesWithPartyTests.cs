@@ -27,6 +27,16 @@ public sealed class VotesWithPartyTests
         Assert.Equal(1, result.Matched);
     }
 
+    [Theory]
+    [InlineData("Nay", true, true)]
+    [InlineData("No", true, true)]
+    [InlineData("Yea", true, false)]
+    [InlineData("Present", true, false)]
+    [InlineData(PublishedOfficialVote.NotVoting, true, false)]
+    [InlineData("Nay", false, false)]
+    public void OnlyAYeaOrNayAgainstTheMajorityOfASplitVoteIsABreak(string cast, bool split, bool expected) =>
+        Assert.Equal(expected, VotesWithParty.IsBreak(Vote(1, cast) with { SplitVote = split }));
+
     [Fact]
     public void AVoteThatIsNotSplitCountsNowhere()
     {

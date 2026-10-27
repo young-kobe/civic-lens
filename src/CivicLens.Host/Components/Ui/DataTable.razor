@@ -17,7 +17,7 @@ else
                 <tbody role="@RowGroupRole">
                     @foreach (var item in Items)
                     {
-                        <tr class="@RowClass?.Invoke(item)" role="@RowRole">@Row(item)</tr>
+                        <tr class="@RowClass?.Invoke(item)" role="@RowRole" @attributes="RowAttributes?.Invoke(item)">@Row(item)</tr>
                     }
                 </tbody>
             </CascadingValue>
@@ -33,6 +33,7 @@ else
     [Parameter] public string? Caption { get; set; }
     [Parameter] public bool Scroll { get; set; }
     [Parameter] public Func<TItem, string?>? RowClass { get; set; }
+    [Parameter] public Func<TItem, IReadOnlyDictionary<string, object>?>? RowAttributes { get; set; }
     [Parameter] public bool Roles { get; set; }
 
     private string? RowGroupRole => Roles ? "rowgroup" : null;

@@ -19,12 +19,14 @@ public sealed record VotesWithParty(PublishedChamber Chamber, string Party, int 
         .GroupBy(vote => (vote.Chamber, vote.Party)).OrderBy(group => group.Key.Chamber).ThenBy(group => group.Key.Party, StringComparer.Ordinal)
         .Select(group => From(group.Key.Chamber, group.Key.Party, group.Where(vote => vote.SplitVote).ToArray()))];
 
+    public static bool IsBreak(PublishedOfficialVote vote) =>
+        vote.SplitVote && PublishedOfficialVote.SideOf(vote.Cast) is { } side && side != vote.PartyMajority;
+
     private static VotesWithParty From(PublishedChamber chamber, string party, PublishedOfficialVote[] splitVotes)
     {
-        var sided = splitVotes.Select(vote => (Vote: vote, Side: PublishedOfficialVote.SideOf(vote.Cast))).Where(cast => cast.Side is not null)
-            .ToLookup(cast => cast.Side == cast.Vote.PartyMajority, cast => cast.Vote);
-        var breaks = sided[false].OrderByDescending(vote => vote.VotedOn).ThenByDescending(vote => vote.Session)
+        var breaks = splitVotes.Where(IsBreak).OrderByDescending(vote => vote.VotedOn).ThenByDescending(vote => vote.Session)
             .ThenByDescending(vote => vote.RollCallNumber).ToImmutableArray();
-        return new(chamber, party, sided[true].Count(), breaks, splitVotes.Length - sided[true].Count() - breaks.Length);
+        var matched = splitVotes.Count(vote => PublishedOfficialVote.SideOf(vote.Cast) is { } side && side == vote.PartyMajority);
+        return new(chamber, party, matched, breaks, splitVotes.Length - matched - breaks.Length);
     }
 }
