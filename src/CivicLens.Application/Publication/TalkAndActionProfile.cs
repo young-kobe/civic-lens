@@ -23,7 +23,7 @@ public sealed record TalkAndActionProfile(TalkAndActionColumn Statements, TalkAn
         var rolls = allVotes.ToLookup(vote => vote.Kind.IsSubstantive());
         return new(ColumnOf(inCongress, PublishedRecordKind.Statement), ColumnOf(inCongress, PublishedRecordKind.Action),
             TalkAndActionColumn.Of(rolls[true].Where(vote => vote.IsCast).Select(vote => vote.IssueIds)),
-            MissedVotes.Of(allVotes), VotesWithParty.Of(rolls[true]), rolls[false].Count());
+            MissedVotes.Of(allVotes), VotesWithParty.Of(allVotes), rolls[false].Count());
     }
 
     public static double? ShareOf(int count, int of) => of >= MinimumRecordsForShare ? (double)count / of : null;

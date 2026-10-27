@@ -56,7 +56,7 @@ public sealed record PublishedVote
     {
         var democrat = MajorityOf(PublishedPartyMajority.Democrat);
         var republican = MajorityOf(PublishedPartyMajority.Republican);
-        return democrat is not null && republican is not null && democrat != republican;
+        return Kind.IsSubstantive() && democrat is not null && republican is not null && democrat != republican;
     }
 
     public PublishedRecordEntry ToEntry() => new()

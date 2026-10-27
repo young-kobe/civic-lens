@@ -33,11 +33,10 @@ internal static class PublishedOfficialView
 
     public static string MissedVotes(MissedVotes missed, int congress)
     {
-        var chamber = missed.Chamber == PublishedChamber.Senate ? "the Senate" : "the House of Representatives";
         var share = missed.Share is { } value ? $" ({Percent(value)})" : "";
         var days = missed.First == missed.Last ? $"on {Moment.Day(missed.First)}" : $"{Moment.Day(missed.First)} to {Moment.Day(missed.Last)}";
         return $"Missed {missed.Missed} of {missed.Held} roll call {Votes(missed.Held)} of all kinds{share}, including procedural votes, " +
-            $"held in {chamber} while they served, {days} ({CongressCalendar.Ordinal(congress)} Congress).";
+            $"held in {ChamberName(missed.Chamber)} while they served, {days} ({CongressCalendar.Ordinal(congress)} Congress).";
     }
 
     public static readonly string SplitVoteMeaning = $"A split vote is a substantive roll call vote where most {PublishedPartyMajority.Democrat}s and most {PublishedPartyMajority.Republican}s voted on opposite sides.";
@@ -45,14 +44,17 @@ internal static class PublishedOfficialView
     public static string WithParty(VotesWithParty votes, int congress)
     {
         var share = votes.Share is { } value ? $" ({Percent(value)})" : "";
+        var inCongress = $"in the {CongressCalendar.Ordinal(congress)} Congress";
         var sentence = votes.Cast == 0
-            ? $"No split votes with a Yea or Nay cast yet in the {votes.Chamber} in the {CongressCalendar.Ordinal(congress)} Congress."
-            : $"Voted with most {PartyOf(votes)} on {votes.Matched} of {votes.Cast} split {Votes(votes.Cast)}{share}.";
+            ? $"No Yea or Nay cast yet on a split vote in {ChamberName(votes.Chamber)} as a {votes.Party} {inCongress}."
+            : $"Voted with most {PartyOf(votes)} on {votes.Matched} of {votes.Cast} split {Votes(votes.Cast)}{share} {inCongress}.";
         var more = votes.Cast == 0 ? "" : "more ";
         return votes.NotCast == 0 ? sentence : $"{sentence} They did not cast Yea or Nay on {votes.NotCast} {more}split {Votes(votes.NotCast)}.";
     }
 
     public static string PartyOf(VotesWithParty votes) => $"{votes.Chamber} {votes.Party}s";
+
+    private static string ChamberName(PublishedChamber chamber) => chamber == PublishedChamber.Senate ? "the Senate" : "the House of Representatives";
 
     private static string Votes(int count) => count == 1 ? "vote" : "votes";
 

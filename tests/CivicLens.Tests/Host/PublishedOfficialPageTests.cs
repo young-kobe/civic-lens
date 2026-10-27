@@ -170,8 +170,8 @@ public sealed class PublishedOfficialPageTests
         var document = await RenderedAsync(votes);
 
         var panel = document.QuerySelector("[aria-labelledby='panel-votes-with-their-party']")!;
-        Assert.Equal(["Voted with most House Republicans on 1 of 3 split votes. They did not cast Yea or Nay on 1 more split vote.",
-            "Voted with most Senate Democrats on 1 of 1 split vote.",
+        Assert.Equal(["Voted with most House Republicans on 1 of 3 split votes in the 119th Congress. They did not cast Yea or Nay on 1 more split vote.",
+            "Voted with most Senate Democrats on 1 of 1 split vote in the 119th Congress.",
             "A split vote is a substantive roll call vote where most Democrats and most Republicans voted on opposite sides."],
             panel.QuerySelectorAll("p").Select(paragraph => paragraph.TextContent.Trim()));
         var table = panel.QuerySelector("table")!;
@@ -197,12 +197,13 @@ public sealed class PublishedOfficialPageTests
         Assert.Contains("No votes against most of their party.", matchedPanel.TextContent, StringComparison.Ordinal);
         Assert.Null(matchedPanel.QuerySelector("table"));
         var nonePanel = none.QuerySelector("[aria-labelledby='panel-votes-with-their-party']")!;
-        Assert.Contains("No split votes with a Yea or Nay cast yet in the House in the 119th Congress.", nonePanel.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("No votes against most of their party.", nonePanel.TextContent, StringComparison.Ordinal);
+        Assert.Contains("No Yea or Nay cast yet on a split vote in the House of Representatives as a Republican in the 119th Congress.", nonePanel.TextContent, StringComparison.Ordinal);
     }
 
     [Theory]
-    [InlineData(4, "on 3 of 4 split votes.")]
-    [InlineData(5, "on 4 of 5 split votes (80%).")]
+    [InlineData(4, "on 3 of 4 split votes in the 119th Congress.")]
+    [InlineData(5, "on 4 of 5 split votes (80%) in the 119th Congress.")]
     public async Task ThePercentOfVotesWithTheirPartyShowsOnlyAtTheThreshold(int cast, string expected)
     {
         var votes = Enumerable.Range(0, cast).Select(index => Split((char)('a' + index), new DateOnly(2026, 4, 1).AddDays(index), index == 0 ? "Nay" : "Yea"));

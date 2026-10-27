@@ -299,6 +299,15 @@ public sealed class PublishedVoteTests
     }
 
     [Fact]
+    public void AProceduralVoteWithOppositeMajoritiesIsNotSplitSoARuleVoteCannotMoveTheShare()
+    {
+        var opposite = new[] { PublishedPartyMajority.Of(PublishedPartyMajority.Democrat, 2, 1), PublishedPartyMajority.Of(PublishedPartyMajority.Republican, 1, 2) };
+
+        Assert.True((Vote() with { Kind = PublishedVoteKind.Passage, PartyMajorities = opposite }).IsSplit());
+        Assert.False((Vote() with { Kind = PublishedVoteKind.Cloture, PartyMajorities = opposite }).IsSplit());
+    }
+
+    [Fact]
     public void AVoteWithOnlyOneMajorPartyOrCandidateTotalsIsNeverSplit()
     {
         Assert.False((Vote() with { PartyMajorities = [PublishedPartyMajority.Of(PublishedPartyMajority.Democrat, 2, 0)] }).IsSplit());

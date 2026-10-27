@@ -87,9 +87,7 @@ public sealed class PublishedOfficialVotesTests
     [InlineData("Pelosi", null)]
     public void AyeAndNoAreTheYeaAndNaySidesAndEveryOtherCastHasNoSide(string cast, string? side)
     {
-        var row = Vote('a', new DateOnly(2026, 1, 1), 1) with { Cast = cast };
-
-        Assert.Equal((side, side), (PublishedOfficialVote.SideOf(cast), row.Side));
+        Assert.Equal(side, PublishedOfficialVote.SideOf(cast));
     }
 
     [Fact]

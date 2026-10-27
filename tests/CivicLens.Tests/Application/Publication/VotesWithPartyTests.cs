@@ -55,6 +55,16 @@ public sealed class VotesWithPartyTests
         Assert.Equal([(PublishedChamber.House, 1, 1), (PublishedChamber.Senate, 1, 0)], all.Select(entry => (entry.Chamber, entry.Matched, entry.Breaks.Length)));
     }
 
+    [Fact]
+    public void AMemberWhoChangedPartyInOneChamberGetsOneEntryForEachPartyWithItsOwnCounts()
+    {
+        var votes = new[] { Vote(1, "Yea"), Vote(2, "Nay"), Vote(3, "Nay") with { Party = PublishedPartyMajority.Republican, PartyMajority = PublishedPartyMajority.Nay } };
+
+        var all = VotesWithParty.Of(votes);
+
+        Assert.Equal([(PublishedPartyMajority.Democrat, 1, 1), (PublishedPartyMajority.Republican, 1, 0)], all.Select(entry => (entry.Party, entry.Matched, entry.Breaks.Length)));
+    }
+
     [Theory]
     [InlineData("Independent")]
     [InlineData("Libertarian")]
