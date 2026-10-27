@@ -15,7 +15,7 @@
                     <span class="muted small">
                         @PublishedRecordLabels.Kind(other.Kind), @PublishedRecordLabels.RelationshipType(link.Type)@(link.StatementDate is { } date ? ", statement of " + Moment.Iso(date) : "")
                     </span>
-                    <a class="small" href="@PublishedRecordView.RecordLink(link.RecordId)">Why they are linked</a>
+                    <ContextLink Class="small" Href="@PublishedRecordView.RecordLink(link.RecordId)" Text="Why they are linked" Target="@other.Headline" />
                 </li>
             }
         </ul>

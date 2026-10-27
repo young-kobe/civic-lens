@@ -22,7 +22,7 @@
                     @for (var index = 0; index < sponsorship.Citations.Length; index++)
                     {
                         <blockquote class="quote">@EncodedEvidence.Markup(sponsorship.Citations[index].Quote)</blockquote>
-                        <a class="small" href="@("#" + PublishedActionView.SponsorshipAnchor(Record, sponsorship, index))">Show in the full source text</a>
+                        <ContextLink Class="small" Href="@("#" + PublishedActionView.SponsorshipAnchor(Record, sponsorship, index))" Text="Show in the full source text" Target="@($"{sponsorship.Official.Name} quote {index + 1}")" />
                     }
                 </TableCell>
             </Row>
@@ -37,7 +37,7 @@
                 {
                     <li>
                         <CitationQuote Label="Policy area" Quote="@area.Quote">
-                            <a href="@("#" + PublishedActionView.PolicyAreaAnchor(Record))">Show in the full source text</a>
+                            <ContextLink Href="@("#" + PublishedActionView.PolicyAreaAnchor(Record))" Text="Show in the full source text" Target="policy area quote" />
                         </CitationQuote>
                     </li>
                 }
@@ -45,7 +45,7 @@
                 {
                     <li>
                         <CitationQuote Label="CRS summary" Quote="@summary.Quote">
-                            <a href="@("#" + PublishedActionView.SummaryAnchor(Record))">Show in the full source text</a>
+                            <ContextLink Href="@("#" + PublishedActionView.SummaryAnchor(Record))" Text="Show in the full source text" Target="CRS summary quote" />
                         </CitationQuote>
                     </li>
                 }
