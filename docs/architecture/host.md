@@ -14,7 +14,7 @@ The Host is the composition root, the CLI, and the authenticated web workspace. 
 - One restrained identity serves both surfaces through shared design tokens. It is monochrome: charcoal, white, and gray give structure. Semantic color marks evidence changes, status, and keyboard focus.
 - Interface text uses self-hosted Instrument Sans, and reading text uses Newsreader. Both fonts use the OFL.
 - `wwwroot/fonts/newsreader.woff2` is already a Latin subset (262 glyphs, Newsreader 16pt version 1.003, 132000 bytes, axes `wght` and `opsz`). A new subset used the Google Fonts Latin range and Latin Extended-A. fonttools 4.65.0 and brotli 1.2.1 made it, at 128888 bytes. That saves 2.4 percent, so the file stays as it is. Every character of the 43 dev releases is in the font. The size comes from the variable axes. The OFL file names no Reserved Font Name. The release pages preload the fonts; see [publication](publication.md#rendering).
-- Two global stylesheets hold all styles. Markup has no inline styles.
+- Four global stylesheets hold all styles: `theme.css`, `app.css`, `public.css`, and `review.css`. Markup has no inline styles.
 - Production starts on the existing Hetzner CPX21 with containers, Terraform, and CI deployment. Production must run without the developer workstation.
 - Auth0 is the identity provider.
 - AI uses hosted inference first. Evaluation can change the model for each task.
@@ -77,7 +77,7 @@ The shared component library lives in `src/CivicLens.Host/Components`:
 
 Pages compose these components. The comparison page, the draft editor, and published record pages render the same `DocumentComparisonView`.
 
-`wwwroot/css/theme.css` owns color tokens, fonts, and both themes. `wwwroot/css/app.css` owns component styles.
+`wwwroot/css/theme.css` owns color tokens, fonts, and both themes. `wwwroot/css/app.css` owns the styles that both the review UI and the published pages use. `wwwroot/css/public.css` owns the styles that only published pages use. `wwwroot/css/review.css` owns the styles that only the review UI uses. A published page loads `theme.css`, `app.css`, then `public.css`. The review UI loads `theme.css`, `app.css`, then `review.css`. A style that both sides use moves to `app.css`. A style with no user is deleted.
 
 `PresentationArchitectureTests` enforces presentation ownership:
 
@@ -85,6 +85,8 @@ Pages compose these components. The comparison page, the draft editor, and publi
 - Markup has no style tags or style attributes.
 - There are no `*.razor.css` or `*.cshtml` files.
 - Only `App.razor` and `PublicPage.razor` own `html`, `link`, and `script` tags, and both shells load the same theme.
+- Each shell loads only its own stylesheet. `App.razor` loads `review.css` and never `public.css`. The release lists `public.css` and never `review.css`.
+- A selector lives in one of `app.css`, `public.css`, and `review.css`. A selector with a `.public-` class lives only in `public.css`.
 - Only shared components render `del` and `ins`.
 
 ## Storage and contracts
@@ -100,7 +102,7 @@ Pages compose these components. The comparison page, the draft editor, and publi
 | Owner command rules and JSON output | `src/CivicLens.Host/OwnerCommand.cs`, `src/CivicLens.Host/CommandOutput.cs` |
 | App shell and routes | `src/CivicLens.Host/Components/App.razor`, `src/CivicLens.Host/Components/Routes.razor`, `src/CivicLens.Host/Components/Layout/WorkspaceLayout.razor` |
 | Shared evidence components | `src/CivicLens.Host/Components/Evidence/DocumentComparisonView.razor`, `src/CivicLens.Host/Components/Evidence/RecordView.razor`, `src/CivicLens.Host/Components/Evidence/StatementRecord.razor` |
-| Styles and scripts | `src/CivicLens.Host/wwwroot/css/theme.css`, `src/CivicLens.Host/wwwroot/css/app.css`, `src/CivicLens.Host/wwwroot/js/theme.js`, `src/CivicLens.Host/wwwroot/js/app.js` |
+| Styles and scripts | `src/CivicLens.Host/wwwroot/css/theme.css`, `src/CivicLens.Host/wwwroot/css/app.css`, `src/CivicLens.Host/wwwroot/css/public.css`, `src/CivicLens.Host/wwwroot/css/review.css`, `src/CivicLens.Host/wwwroot/js/theme.js`, `src/CivicLens.Host/wwwroot/js/app.js` |
 | Workspace wiring | `src/CivicLens.Host/Review/ReviewWorkspace.cs` |
 | Sources page | `src/CivicLens.Host/Collection/SourcesPage.razor` |
 | Presentation tests | `tests/CivicLens.Tests/Architecture/PresentationArchitectureTests.cs` |

@@ -5,7 +5,7 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublicAssets
 {
-    public static readonly IReadOnlyList<string> Stylesheets = ["assets/css/theme.css", "assets/css/app.css"];
+    public static readonly IReadOnlyList<string> Stylesheets = ["assets/css/theme.css", "assets/css/app.css", "assets/css/public.css"];
 
     public const string ThemeScript = "assets/js/theme.js";
 

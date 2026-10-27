@@ -1401,7 +1401,7 @@ public sealed class ReleaseRendererTests
     {
         var assets = new ReleaseRenderer(null, null).Assets;
 
-        foreach (var path in new[] { "assets/css/theme.css", "assets/css/app.css", "assets/js/theme.js", "assets/js/app.js",
+        foreach (var path in new[] { "assets/css/theme.css", "assets/css/app.css", "assets/css/public.css", "assets/js/theme.js", "assets/js/app.js",
                      "assets/fonts/instrument-sans.woff2", "assets/fonts/newsreader.woff2", "assets/favicon.svg" })
             Assert.Contains(assets, asset => asset.RelativePath == path && asset.Content.Length > 0);
     }
@@ -1443,6 +1443,37 @@ public sealed class ReleaseRendererTests
         var paths = preloads.Select(link => new Uri(page, link.GetAttribute("href")!).AbsolutePath[1..]).ToArray();
         Assert.All(paths, path => Assert.Contains(assets, asset => asset.RelativePath == path));
         return paths;
+    }
+
+    [Fact]
+    public void ReviewStylesStayOutOfTheRelease()
+    {
+        Assert.DoesNotContain(new ReleaseRenderer(null, null).Assets, asset => asset.RelativePath.EndsWith("review.css", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task EveryStylesheetAndScriptAPageLinksIsAReleaseAssetWhetherThePageIsAtTheRootOrInAFolder()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var rootPage = await renderer.RenderMethodAsync(CancellationToken.None);
+        var folderPage = await renderer.RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None);
+
+        AssertLinkedAssetsAreReleaseAssets(renderer, rootPage, "method.html");
+        AssertLinkedAssetsAreReleaseAssets(renderer, folderPage, "records/record.html");
+    }
+
+    private static void AssertLinkedAssetsAreReleaseAssets(ReleaseRenderer renderer, string html, string pagePath)
+    {
+        var links = new HtmlParser().ParseDocument(html).QuerySelectorAll("link[rel=stylesheet], script[src]")
+            .Select(element => element.GetAttribute("href") ?? element.GetAttribute("src")!)
+            .ToArray();
+        Assert.Contains(links, link => link.EndsWith("assets/css/public.css", StringComparison.Ordinal));
+        var pageUri = new Uri(new Uri("https://release.test/"), pagePath);
+        foreach (var link in links)
+        {
+            var relativePath = new Uri(pageUri, link).AbsolutePath.TrimStart('/');
+            Assert.Contains(renderer.Assets, asset => asset.RelativePath == relativePath);
+        }
     }
 
     private static readonly ReleaseFacets NoFacets = new([], []);
