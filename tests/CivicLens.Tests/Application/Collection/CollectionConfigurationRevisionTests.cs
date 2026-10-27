@@ -70,6 +70,7 @@ public sealed class CollectionConfigurationRevisionTests
 
         Assert.Equal(json, revision.Json);
         Assert.DoesNotContain("bioguideId", revision.Json, StringComparison.Ordinal);
+        Assert.DoesNotContain("website", revision.Json, StringComparison.Ordinal);
         Assert.Equal(id, CollectionConfigurationRevision.Create(revision.ReadConfiguration()).Id);
     }
 
@@ -103,6 +104,22 @@ public sealed class CollectionConfigurationRevisionTests
 
         Assert.Contains("\"wikidataId\":\"Q22686\"", revision.Json, StringComparison.Ordinal);
         Assert.Equal("Q22686", revision.ReadConfiguration().People[0].WikidataId);
+    }
+
+    [Fact]
+    public void WebsiteSurvivesRevisionRoundTrip()
+    {
+        var configuration = new CollectionConfiguration
+        {
+            Version = 1,
+            People = [new PersonConfiguration { Id = "person", Name = "Official", Website = "https://www.whitehouse.gov" }],
+            Sources = [Configuration(["person"]).Sources[0]]
+        };
+
+        var revision = CollectionConfigurationRevision.Create(configuration);
+
+        Assert.Contains("\"website\":\"https://www.whitehouse.gov\"", revision.Json, StringComparison.Ordinal);
+        Assert.Equal("https://www.whitehouse.gov", revision.ReadConfiguration().People[0].Website);
     }
 
     [Fact]

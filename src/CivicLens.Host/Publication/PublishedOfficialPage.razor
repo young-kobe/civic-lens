@@ -7,6 +7,10 @@
     <PageHeader Title="@Page.Profile.Name" Lede="@Lede" />
     @if (Page.IsCurrent)
     {
+        @if (Page.Profile.Website is { } website)
+        {
+            <p><a href="@website" rel="noopener noreferrer">Official website (@PublishedOfficialView.WebsiteHost(website))</a></p>
+        }
         <Panel Title="Offices">
             <DataTable Roles="true" Items="Page.Profile.Terms" Caption="@($"Offices of {Page.Profile.Name}")">
                 <Head><TableCell Header>Office</TableCell><TableCell Header>@PublicColumn.Party</TableCell><TableCell Header Class="fit num">@PublicColumn.From</TableCell><TableCell Header Class="fit num">@PublicColumn.To</TableCell></Head>

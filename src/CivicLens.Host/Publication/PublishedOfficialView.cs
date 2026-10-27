@@ -18,6 +18,8 @@ internal static class PublishedOfficialView
         _ => term.Office
     };
 
+    public static string WebsiteHost(string website) => new Uri(website).IdnHost;
+
     public static IReadOnlyList<PublishedOfficialRow> Rows(ReleaseOfficialPage page) =>
     [.. ReleaseRecordOrder.NewestFirst(page.Records.Select(PublishedOfficialRow.Of).Concat(page.Votes.Select(PublishedOfficialRow.Of)),
         row => row.Date, row => row.PublishedAtUtc, row => row.RecordId)];

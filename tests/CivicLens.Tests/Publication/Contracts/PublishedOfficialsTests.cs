@@ -35,6 +35,39 @@ public sealed class PublishedOfficialsTests
         Assert.Equal("Housing", catalogBack.Issues[0].Name);
     }
 
+    [Theory]
+    [InlineData("http://example.gov")]
+    [InlineData("https://user:pw@example.gov")]
+    [InlineData("example.gov")]
+    [InlineData("https:example.gov")]
+    [InlineData(" https://example.gov")]
+    [InlineData("https://example.gov/a b")]
+    public void AProfileWebsiteThatBreaksTheRuleIsRefusedSoTheReaderNeverLinksAnUnsafeUrl(string website)
+    {
+        var profile = new PublishedOfficialProfile { Id = "mayor", Name = "Mayor Example", Website = website, Terms = [] };
+
+        Assert.Throws<InvalidDataException>(profile.Validate);
+    }
+
+    [Fact]
+    public void AProfileWebsiteOverTheLengthCapIsRefused()
+    {
+        var profile = new PublishedOfficialProfile { Id = "mayor", Name = "Mayor Example", Website = "https://example.gov/" + new string('a', 600), Terms = [] };
+
+        Assert.Throws<InvalidDataException>(profile.Validate);
+    }
+
+    [Fact]
+    public void AnHttpsProfileWebsiteKeepsItsValueThroughAJsonRoundTrip()
+    {
+        var profile = new PublishedOfficialProfile { Id = "mayor", Name = "Mayor Example", Website = "https://example.gov/", Terms = [] };
+
+        var back = JsonSerializer.Deserialize<PublishedOfficialProfile>(JsonSerializer.Serialize(profile, PublicationProtocol.JsonOptions), PublicationProtocol.JsonOptions)!;
+        back.Validate();
+
+        Assert.Equal("https://example.gov/", back.Website);
+    }
+
     [Fact]
     public void TheOfficialsAndCatalogJsonMatchPinnedSchemaVersion()
     {
@@ -53,7 +86,7 @@ public sealed class PublishedOfficialsTests
         var catalog = new PublishedCatalog { Issues = [new() { Id = "housing", Name = "Housing" }], PolicyAreas = [] };
 
         Assert.Equal(1, PublicationProtocol.SchemaVersion);
-        Assert.Equal("""{"officials":[{"id":"mayor","name":"Mayor Example","wikidataId":null,"terms":[{"office":"sen","state":"WA","district":null,"party":"Democrat","start":"2025-01-03","end":"2031-01-03"}]}]}""",
+        Assert.Equal("""{"officials":[{"id":"mayor","name":"Mayor Example","wikidataId":null,"website":null,"terms":[{"office":"sen","state":"WA","district":null,"party":"Democrat","start":"2025-01-03","end":"2031-01-03"}]}]}""",
             JsonSerializer.Serialize(officials, PublicationProtocol.JsonOptions));
         Assert.Equal("""{"issues":[{"id":"housing","name":"Housing"}],"policyAreas":[]}""",
             JsonSerializer.Serialize(catalog, PublicationProtocol.JsonOptions));
@@ -69,7 +102,7 @@ public sealed class PublishedOfficialsTests
 
         officials.Validate();
 
-        Assert.Equal("""{"officials":[{"id":"sec","name":"Secretary Example","wikidataId":null,"terms":[{"office":"Secretary of State","state":null,"district":null,"party":null,"start":"2025-01-21","end":null}]}]}""",
+        Assert.Equal("""{"officials":[{"id":"sec","name":"Secretary Example","wikidataId":null,"website":null,"terms":[{"office":"Secretary of State","state":null,"district":null,"party":null,"start":"2025-01-21","end":null}]}]}""",
             JsonSerializer.Serialize(officials, PublicationProtocol.JsonOptions));
     }
 

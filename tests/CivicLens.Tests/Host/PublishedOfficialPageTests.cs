@@ -97,6 +97,26 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
+    public async Task TheCurrentPageLinksTheOfficialWebsiteNamingItsHostWithNoReferrerAndNoOpener()
+    {
+        var page = Current([], []) with { Profile = Profile() with { Website = "https://warren.senate.gov/about" } };
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        var link = new HtmlParser().ParseDocument(html).QuerySelector("a[href='https://warren.senate.gov/about']")!;
+        Assert.Equal("Official website (warren.senate.gov)", link.TextContent);
+        Assert.Equal("noopener noreferrer", link.GetAttribute("rel"));
+    }
+
+    [Fact]
+    public async Task AnOfficialWithNoWebsiteShowsNoWebsiteLink()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([], []), PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.DoesNotContain("Official website", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TheProfilePanelShowsCountsAndSharesOrTooFewRecordsAndLinksTheMethodNote()
     {
         PublishedRecordEntry[] statements = [.. Enumerable.Range(1, 5).Select(index => Entry((char)('0' + index), PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)) with { IssueIds = index < 3 ? ["housing", "health"] : ["housing"] })];
