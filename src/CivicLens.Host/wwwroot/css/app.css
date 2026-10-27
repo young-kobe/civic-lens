@@ -319,3 +319,14 @@ tr.is-new td { animation: row-in 1.6s var(--ease); }
     .page-header h1 { font-size: var(--t-lg); }
     .record-headline { font-size: var(--t-xl); }
 }
+@media (max-width: 600px) {
+    .public-main .table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .public-main .table, .public-main .table tbody { display: block; }
+    .public-main .table tr { display: flex; flex-direction: column; gap: 2px; padding: 11px var(--s4); border-bottom: 1px solid var(--line); }
+    .public-main .panel-padded .table tr { padding-inline: 0; }
+    .public-main .table tbody tr:last-child { border-bottom: 0; }
+    .public-main .table td { display: block; width: auto; max-width: none; padding: 0; border: 0; text-align: left; white-space: normal; }
+    .public-main .table td[data-label]::before { content: attr(data-label) ": "; color: var(--muted); font-weight: 600; }
+    .public-main .table .cell-main { order: -1; }
+    .public-main .table td:empty { display: none; }
+}

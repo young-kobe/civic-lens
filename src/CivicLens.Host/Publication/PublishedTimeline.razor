@@ -2,10 +2,10 @@
 
 <Panel Title="Timeline" Id="timeline-title" Padded="true">
     <DataTable Items="Events" Caption="Dated events of this record">
-        <Head><th class="fit num">Date</th><th>Event</th></Head>
+        <Head><th class="fit num">@PublicColumn.Date</th><th>Event</th></Head>
         <Row Context="item">
-            <td class="fit num">@Moment.Iso(item.Day)</td>
-            <td>@item.Text</td>
+            <td class="fit num" data-label="@PublicColumn.Date">@Moment.Iso(item.Day)</td>
+            <td class="cell-main">@item.Text</td>
         </Row>
     </DataTable>
 </Panel>

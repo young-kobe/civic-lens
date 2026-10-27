@@ -368,7 +368,7 @@ The header of every page links to Officials, Issues, All records, and Search. Th
 
 Every page head comes from `PublicPage` and `PublicHead`. The title has the form "page name | Civic Lens". A paged page adds "page N of M" to its name. A record page uses its headline, cut at a word to 70 characters. The description is plain text of at most 160 characters, cut at a word. It comes from data the page already has. That is the record summary or headline, the official's name and latest office, the issue or policy area name, or a fixed sentence. The head also has `og:title`, `og:description`, `og:type` (`article` for a record page, else `website`), and `og:site_name`. It has no canonical link and no `og:url`, because the site has no base URL setting yet.
 
-A release copies `assets/css/theme.css`, `assets/css/app.css`, `assets/js/theme.js`, `assets/js/app.js`, `assets/favicon.svg`, and the fonts. Pages also work without JavaScript. Shared components are described in [host](host.md#presentation).
+A release copies `assets/css/theme.css`, `assets/css/app.css`, `assets/js/theme.js`, `assets/js/app.js`, `assets/favicon.svg`, and the fonts. Pages also work without JavaScript. On a screen 600 pixels wide or less, each row of a public table becomes a block. The main cell comes first. Each other cell shows its column name before its value. The name comes from `PublicColumn`, which also writes the column header, and the `data-label` attribute of the cell carries it. Test: `ReleaseRendererTests.EveryCellOfAPublicTableCarriesItsColumnHeaderAsLabelSoAPhoneReaderSeesWhatEachValueIs`. Shared components are described in [host](host.md#presentation).
 
 ### Report a problem
 

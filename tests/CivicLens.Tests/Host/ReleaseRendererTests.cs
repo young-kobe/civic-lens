@@ -1096,6 +1096,32 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task EveryCellOfAPublicTableCarriesItsColumnHeaderAsLabelSoAPhoneReaderSeesWhatEachValueIs()
+    {
+        var labeled = 0;
+        foreach (var (name, _, html, _) in await RenderEveryPageTypeAsync())
+        {
+            foreach (var table in new HtmlParser().ParseDocument(html).QuerySelectorAll("table.table"))
+            {
+                var headers = table.QuerySelectorAll("thead th").Select(header => header.TextContent).ToList();
+                foreach (var row in table.QuerySelectorAll("tbody tr"))
+                {
+                    var cells = row.QuerySelectorAll("td");
+                    for (var index = 0; index < cells.Length; index++)
+                    {
+                        if (index == 0 || cells[index].ClassList.Contains("cell-main"))
+                            continue;
+                        Assert.True(headers[index] == cells[index].GetAttribute("data-label"), $"{name}: column {headers[index]}");
+                        labeled++;
+                    }
+                }
+            }
+        }
+
+        Assert.True(labeled >= 8);
+    }
+
+    [Fact]
     public async Task ARecordPageUsesItsHeadlineAsTitleCutAtAWordAndIsAnArticle()
     {
         var headline = string.Join(' ', Enumerable.Repeat("housing", 30));

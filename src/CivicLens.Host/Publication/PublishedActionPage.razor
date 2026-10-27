@@ -10,14 +10,14 @@
     <Panel Title="Sponsorships" Id="sponsorships-title" Padded="true">
         <p class="muted small">Each quote is exact text from the saved Congress.gov API page as Civic Lens renders it. Each source panel marks the quotes in the full saved text.</p>
         <DataTable Items="Record.Sponsorships" Caption="Sponsorships of tracked officials">
-            <Head><th>Official</th><th>Role</th><th>Original</th><th class="fit num">Sponsored</th><th class="fit num">Withdrawn</th><th>Evidence</th></Head>
+            <Head><th>Official</th><th>@PublicColumn.Role</th><th>@PublicColumn.Original</th><th class="fit num">@PublicColumn.Sponsored</th><th class="fit num">@PublicColumn.Withdrawn</th><th>@PublicColumn.Evidence</th></Head>
             <Row Context="sponsorship">
                 <td><PublishedOfficialName Official="sponsorship.Official" Linked="@(sponsorship.Role == PublishedSponsorshipRole.Sponsor)" /></td>
-                <td>@PublishedRecordLabels.Role(sponsorship.Role)</td>
-                <td>@(sponsorship.IsOriginal ? "Yes" : "No")</td>
-                <td class="fit num">@Moment.Iso(sponsorship.SponsoredOn)</td>
-                <td class="fit num">@(sponsorship.WithdrawnOn is { } withdrawn ? Moment.Iso(withdrawn) : "None")</td>
-                <td>
+                <td data-label="@PublicColumn.Role">@PublishedRecordLabels.Role(sponsorship.Role)</td>
+                <td data-label="@PublicColumn.Original">@(sponsorship.IsOriginal ? "Yes" : "No")</td>
+                <td class="fit num" data-label="@PublicColumn.Sponsored">@Moment.Iso(sponsorship.SponsoredOn)</td>
+                <td class="fit num" data-label="@PublicColumn.Withdrawn">@(sponsorship.WithdrawnOn is { } withdrawn ? Moment.Iso(withdrawn) : "None")</td>
+                <td data-label="@PublicColumn.Evidence">
                     @for (var index = 0; index < sponsorship.Citations.Length; index++)
                     {
                         <blockquote class="quote">@EncodedEvidence.Markup(sponsorship.Citations[index].Quote)</blockquote>
