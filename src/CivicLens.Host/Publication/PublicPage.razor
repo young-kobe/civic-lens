@@ -13,12 +13,18 @@
     <meta property="og:type" content="@(IsArticle ? "article" : "website")" />
     <meta property="og:site_name" content="@PublicHead.SiteName" />
     <link rel="icon" type="image/svg+xml" href="@(RootPath + PublicAssets.Favicon)" />
+    <link rel="preload" href="@(RootPath + PublicAssets.InstrumentSansFont)" as="font" type="font/woff2" crossorigin />
+    @if (UsesRecordFont)
+    {
+        <link rel="preload" href="@(RootPath + PublicAssets.NewsreaderFont)" as="font" type="font/woff2" crossorigin />
+    }
     @foreach (var stylesheet in PublicAssets.Stylesheets)
     {
         <link rel="stylesheet" href="@(RootPath + stylesheet)" />
     }
     <script src="@(RootPath + PublicAssets.ThemeScript)"></script>
     <script src="@(RootPath + PublicAssets.Script)" defer></script>
+    <script src="@(RootPath + PublicAssets.PublicScript)" defer></script>
     @if (ExternalScript is not null)
     {
         <script src="@ExternalScript" async defer></script>
@@ -65,6 +71,7 @@
     [Parameter] public int PageCount { get; set; } = 1;
     [Parameter] public PublicSection? Section { get; set; }
     [Parameter] public bool IsArticle { get; set; }
+    [Parameter] public bool UsesRecordFont { get; set; }
     [Parameter] public string? ExternalScript { get; set; }
     [Parameter] public string RootPath { get; set; } = string.Empty;
     [Parameter] public IReadOnlyList<Crumb> Crumbs { get; set; } = [];

@@ -12,4 +12,5 @@ internal sealed class RosterTermRow
     public int? District { get; set; }
     public int? SenateClass { get; set; }
     public string Party { get; set; } = null!;
+    public string? Caucus { get; set; }
 }

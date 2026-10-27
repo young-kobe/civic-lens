@@ -67,6 +67,38 @@ public sealed class PresentationArchitectureTests
     }
 
     [Fact]
+    public void EachShellLoadsOnlyItsOwnStylesheetAndScriptAfterTheSharedOnes()
+    {
+        var workspace = File.ReadAllText(DocumentShells[0]);
+        Assert.InRange(workspace.IndexOf("css/app.css", StringComparison.Ordinal), 0, workspace.IndexOf("css/review.css", StringComparison.Ordinal) - 1);
+        Assert.DoesNotContain("public.css", workspace, StringComparison.Ordinal);
+        Assert.InRange(workspace.IndexOf("js/app.js", StringComparison.Ordinal), 0, workspace.IndexOf("js/review.js", StringComparison.Ordinal) - 1);
+        Assert.InRange(workspace.IndexOf("_framework/blazor.web.js", StringComparison.Ordinal), 0, workspace.IndexOf("js/review.js", StringComparison.Ordinal) - 1);
+        Assert.DoesNotContain("public.js", workspace, StringComparison.Ordinal);
+        var publicAssets = File.ReadAllText(Path.Combine(HostRoot, "Publication", "PublicAssets.cs"));
+        Assert.InRange(publicAssets.IndexOf("assets/css/app.css", StringComparison.Ordinal), 0, publicAssets.IndexOf("assets/css/public.css", StringComparison.Ordinal) - 1);
+        Assert.DoesNotContain("review.css", publicAssets, StringComparison.Ordinal);
+        Assert.DoesNotContain("review.js", publicAssets, StringComparison.Ordinal);
+        var publicPage = File.ReadAllText(Path.Combine(HostRoot, "Publication", "PublicPage.razor"));
+        Assert.InRange(publicPage.IndexOf("PublicAssets.Script", StringComparison.Ordinal), 0, publicPage.IndexOf("PublicAssets.PublicScript", StringComparison.Ordinal) - 1);
+        Assert.DoesNotContain("review.js", publicPage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EachSelectorHasOneStylesheetOwnerAndPublicSelectorsLiveOnlyInThePublicStylesheet()
+    {
+        var owners = new Dictionary<string, string>();
+        foreach (var name in new[] { "app.css", "public.css", "review.css" })
+        {
+            foreach (var selector in HostStyleSheets.Selectors(HostStyleSheets.Read(name)).Distinct())
+            {
+                Assert.True(owners.TryAdd(selector, name), $"'{selector}' is in {owners.GetValueOrDefault(selector)} and {name}.");
+                Assert.True(name == "public.css" || !selector.Contains(".public-", StringComparison.Ordinal), $"'{selector}' must live in public.css.");
+            }
+        }
+    }
+
+    [Fact]
     public void PagesShowChangesThroughTheSharedComparisonComponent()
     {
         foreach (var file in Markup().Where(file => !file.StartsWith(ComponentsRoot, StringComparison.Ordinal)))

@@ -24,6 +24,7 @@ internal sealed class RosterTermRowConfiguration : IEntityTypeConfiguration<Rost
         builder.Property(row => row.District).HasColumnName("district");
         builder.Property(row => row.SenateClass).HasColumnName("senate_class");
         builder.Property(row => row.Party).HasColumnName("party").HasMaxLength(RosterLimits.Party).IsRequired();
+        builder.Property(row => row.Caucus).HasColumnName("caucus").HasMaxLength(RosterLimits.Party);
         builder.HasOne<RosterMemberRow>().WithMany().HasForeignKey(row => new { row.AttemptId, row.BioguideId })
             .OnDelete(DeleteBehavior.Restrict);
     }

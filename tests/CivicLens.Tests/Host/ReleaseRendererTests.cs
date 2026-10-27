@@ -1118,8 +1118,7 @@ public sealed class ReleaseRendererTests
                 .Select(link => link.GetAttribute("href")!).ToList();
 
             Assert.Equal(6, links.Count);
-            var page = new Uri("https://x/" + pagePath);
-            Assert.All(links, href => Assert.True(WrittenRootPages.Contains(new Uri(page, href).AbsolutePath[1..]), $"{name}: {href}"));
+            Assert.All(links, href => Assert.True(WrittenRootPages.Contains(ReleasePath(pagePath, href)), $"{name}: {href}"));
         }
     }
 
@@ -1128,6 +1127,7 @@ public sealed class ReleaseRendererTests
         var renderer = new ReleaseRenderer(null, null);
         var release = ReleaseWithFilters();
         var facets = SearchFacets();
+        var relationship = Relationship(PublishedRecordKind.Action, new string('a', 64), '7');
         var withdrawal = new PublishedWithdrawal
         {
             Kind = PublishedRecordKind.Action,
@@ -1185,6 +1185,7 @@ public sealed class ReleaseRendererTests
             ("statement", PublicationProtocol.RecordPagePath(Statement().RecordId), await renderer.RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None), "All records"),
             ("action", PublicationProtocol.RecordPagePath(Action().RecordId), await renderer.RenderActionAsync(Action(), [], PublicationCatalogs.None, CancellationToken.None), "All records"),
             ("vote", PublicationProtocol.RecordPagePath(Vote().RecordId), await renderer.RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None), "All records"),
+            ("relationship", PublicationProtocol.RecordPagePath(relationship.RecordId), await renderer.RenderRelationshipAsync(relationship, PublicationCatalogs.None, CancellationToken.None), "All records"),
             ("brief", PublicationProtocol.RecordPagePath(Brief().RecordId), await renderer.RenderBriefAsync(Brief(), CancellationToken.None), "All records"),
             ("withdrawal", PublicationProtocol.RecordPagePath(withdrawal.RecordId), await renderer.RenderWithdrawalAsync(withdrawal, CancellationToken.None), "All records"),
             ("home", PublicationProtocol.HomePath, await renderer.RenderHomeAsync(release, null, facets, CancellationToken.None), null),
@@ -1230,9 +1231,8 @@ public sealed class ReleaseRendererTests
             var links = new HtmlParser().ParseDocument(html).QuerySelectorAll("nav[aria-label='Breadcrumb'] a")
                 .Select(link => link.GetAttribute("href")!).ToList();
 
-            var page = new Uri("https://x/" + pagePath);
             Assert.All(links, href => Assert.True(
-                WrittenRootPages.Append(PublicationProtocol.OfficialPagePath("mayor")).Contains(new Uri(page, href).AbsolutePath[1..]), $"{name}: {href}"));
+                WrittenRootPages.Append(PublicationProtocol.OfficialPagePath("mayor")).Contains(ReleasePath(pagePath, href)), $"{name}: {href}"));
         }
     }
 
@@ -1399,10 +1399,100 @@ public sealed class ReleaseRendererTests
     {
         var assets = new ReleaseRenderer(null, null).Assets;
 
-        foreach (var path in new[] { "assets/css/theme.css", "assets/css/app.css", "assets/js/theme.js", "assets/js/app.js",
+        foreach (var path in new[] { "assets/css/theme.css", "assets/css/app.css", "assets/css/public.css", "assets/js/theme.js", "assets/js/app.js", "assets/js/public.js",
                      "assets/fonts/instrument-sans.woff2", "assets/fonts/newsreader.woff2", "assets/favicon.svg" })
             Assert.Contains(assets, asset => asset.RelativePath == path && asset.Content.Length > 0);
     }
+
+    [Fact]
+    public async Task EveryPageTypePreloadsInstrumentSansAndOnlyPagesWithNewsreaderTextAboveTheFoldPreloadNewsreader()
+    {
+        string[] newsreaderPages = ["record", "statement", "action", "vote", "relationship", "brief", "withdrawal"];
+
+        foreach (var (name, pagePath, html, _) in await RenderEveryPageTypeAsync())
+        {
+            string[] expected = newsreaderPages.Contains(name) ? [InstrumentSansFont, NewsreaderFont] : [InstrumentSansFont];
+            Assert.True(expected.SequenceEqual(FontPreloads(html, pagePath)), name);
+        }
+    }
+
+    [Fact]
+    public async Task TheHomePagePreloadsNewsreaderWhenItShowsABriefBecauseTheBriefTextIsSetInNewsreader()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderHomeAsync(ReleaseOf(1), Brief(), NoFacets, CancellationToken.None);
+
+        Assert.Equal([InstrumentSansFont, NewsreaderFont], FontPreloads(html, PublicationProtocol.HomePath));
+    }
+
+    private const string InstrumentSansFont = "assets/fonts/instrument-sans.woff2";
+    private const string NewsreaderFont = "assets/fonts/newsreader.woff2";
+
+    private static string[] FontPreloads(string html, string pagePath)
+    {
+        var assets = new ReleaseRenderer(null, null).Assets;
+        var preloads = new HtmlParser().ParseDocument(html).Head!.QuerySelectorAll("link[rel='preload']").ToArray();
+        Assert.All(preloads, link =>
+        {
+            Assert.Equal("font", link.GetAttribute("as"));
+            Assert.Equal("font/woff2", link.GetAttribute("type"));
+            Assert.True(link.HasAttribute("crossorigin"));
+        });
+        var paths = preloads.Select(link => ReleasePath(pagePath, link.GetAttribute("href")!)).ToArray();
+        Assert.All(paths, path => Assert.Contains(assets, asset => asset.RelativePath == path));
+        return paths;
+    }
+
+    [Fact]
+    public void ReviewStylesAndScriptsStayOutOfTheRelease()
+    {
+        var assets = new ReleaseRenderer(null, null).Assets;
+        Assert.DoesNotContain(assets, asset => asset.RelativePath.EndsWith("review.css", StringComparison.Ordinal));
+        Assert.DoesNotContain(assets, asset => asset.RelativePath.EndsWith("review.js", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task EveryStylesheetAndScriptAPageLinksIsAReleaseAssetWhetherThePageIsAtTheRootOrInAFolder()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var rootPage = await renderer.RenderMethodAsync(CancellationToken.None);
+        var folderPage = await renderer.RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None);
+
+        AssertLinkedAssetsAreReleaseAssets(renderer, rootPage, "method.html");
+        AssertLinkedAssetsAreReleaseAssets(renderer, folderPage, "records/record.html");
+    }
+
+    [Fact]
+    public async Task APublicPageNeverUsesAClassOnlyTheReviewStylesheetDefinesBecauseTheReleaseDoesNotShipIt()
+    {
+        var shipped = HostStyleSheets.ClassNames(HostStyleSheets.Read("app.css"));
+        shipped.UnionWith(HostStyleSheets.ClassNames(HostStyleSheets.Read("public.css")));
+        var reviewOnly = HostStyleSheets.ClassNames(HostStyleSheets.Read("review.css")).Except(shipped).ToHashSet();
+
+        var withForms = new ReleaseRenderer("https://api.example.test", "site-key-1");
+        (string Name, string Html)[] formPages =
+        [
+            ("report form", await withForms.RenderReportAsync(CancellationToken.None)),
+            ("search form", await withForms.RenderSearchAsync(ReleaseWithFilters(), SearchFacets(), CancellationToken.None))
+        ];
+        foreach (var (name, html) in (await RenderEveryPageTypeAsync()).Select(page => (page.Name, page.Html)).Concat(formPages))
+        {
+            var used = new HtmlParser().ParseDocument(html).QuerySelectorAll("[class]").SelectMany(element => element.ClassList).ToHashSet();
+            Assert.Empty(used.Intersect(reviewOnly).Select(className => $"{name} uses .{className}"));
+        }
+    }
+
+    private static void AssertLinkedAssetsAreReleaseAssets(ReleaseRenderer renderer, string html, string pagePath)
+    {
+        var links = new HtmlParser().ParseDocument(html).QuerySelectorAll("link[rel=stylesheet], script[src]")
+            .Select(element => element.GetAttribute("href") ?? element.GetAttribute("src")!)
+            .ToArray();
+        Assert.Contains(links, link => link.EndsWith("assets/css/public.css", StringComparison.Ordinal));
+        Assert.Contains(links, link => link.EndsWith("assets/js/public.js", StringComparison.Ordinal));
+        foreach (var link in links)
+            Assert.Contains(renderer.Assets, asset => asset.RelativePath == ReleasePath(pagePath, link));
+    }
+
+    private static string ReleasePath(string pagePath, string href) => new Uri(new Uri("https://x/" + pagePath), href).AbsolutePath[1..];
 
     private static readonly ReleaseFacets NoFacets = new([], []);
 

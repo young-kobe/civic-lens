@@ -3385,6 +3385,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("term_index");
 
+                    b.Property<string>("Caucus")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("caucus");
+
                     b.Property<string>("Chamber")
                         .IsRequired()
                         .HasMaxLength(3)
