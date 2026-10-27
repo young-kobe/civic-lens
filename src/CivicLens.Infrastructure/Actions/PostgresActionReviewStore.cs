@@ -3,16 +3,13 @@ using System.Data;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
-using CivicLens.Application.Review;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Actions.Persistence;
-using CivicLens.Infrastructure.Analysis;
 using CivicLens.Core.Relationships;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.BillStream;
-using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Votes;
@@ -95,32 +92,15 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
         return new(ToReview(draft, history), extractions.ToImmutableDictionary(StringComparer.Ordinal), names, billVotes);
     }
 
-    public async Task<ActionReviewPage> ListAsync(PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken)
+    public async Task<ActionsNeedingAction> ListNeedingActionAsync(int limit, CancellationToken cancellationToken)
     {
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var page = await ReadPageAsync(db, cursor, limit, filter, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return page;
-    }
-
-    private static async Task<ActionReviewPage> ReadPageAsync(CollectionAttemptDbContext db, PageCursor? cursor, int limit,
-        DraftListFilter filter, CancellationToken cancellationToken)
-    {
-        var slice = await ListedDrafts.PageByTierAsync<ActionDraftRow, ActionAnalysisRow>(db, Records.Drafts(db, filter.Status),
-            ActionDraftTask.Task, nameof(ActionDraftRow.RecordId), cursor, limit, filter, cancellationToken);
-        var drafts = slice.Items.Select(item => item.Draft).ToArray();
+        var (drafts, total) = await Records.ReadNeedingActionAsync(db, limit, row => row.LastRevisedAtUtcTicks, cancellationToken);
         var histories = await Records.ReadHistoriesAsync(db, drafts, cancellationToken);
-        return new([.. drafts.Select(row => ToReview(row, histories[row.RecordId]))], ListedDrafts.PrioritiesOf(slice.Items),
-            slice.NewerCursor, slice.OlderCursor);
-    }
-
-    public async Task<ActionReviewCounts> CountAsync(CancellationToken cancellationToken)
-    {
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var (needsAction, approved) = await Records.CountAsync(db, cancellationToken);
-        return new(needsAction, approved);
+        await transaction.CommitAsync(cancellationToken);
+        return new([.. drafts.Select(row => ToReview(row, histories[row.RecordId]))], total);
     }
 
     public Task<IReadOnlyList<UnpublishedApprovedAction>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken) =>

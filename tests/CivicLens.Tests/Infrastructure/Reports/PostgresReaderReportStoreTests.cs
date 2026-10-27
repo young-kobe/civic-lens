@@ -181,12 +181,12 @@ public sealed class PostgresReaderReportStoreTests(PostgresCollection postgres) 
             VALUES (@id, 2, 0, 'AwaitingReview', 0)
             """,
         PublishedRecordKind.Action => """
-            INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks, review_state_version, review_status)
-            VALUES (@id, 'congress-bills', 119, 'hr', 7, 2, 0, 0, 'AwaitingReview')
+            INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks, last_revised_at_utc_ticks, review_state_version, review_status)
+            VALUES (@id, 'congress-bills', 119, 'hr', 7, 2, 0, 0, 0, 'AwaitingReview')
             """,
         PublishedRecordKind.Vote => """
-            INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number, review_state_version, review_status, created_at_utc_ticks)
-            VALUES (@id, 'congress-house-votes', 'House', 119, 1, 100, 2, 0, 'AwaitingReview', 0)
+            INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number, review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
+            VALUES (@id, 'congress-house-votes', 'House', 119, 1, 100, 2, 0, 'AwaitingReview', 0, 0)
             """,
         PublishedRecordKind.Brief => """
             INSERT INTO brief_drafts (record_id, week_start, current_revision_number, review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)

@@ -22,21 +22,6 @@ public sealed class ActionReviewWorkspaceTests(PostgresCollection postgres) : IA
     public Task DisposeAsync() => host.StopAsync();
 
     [Fact]
-    public async Task TheRailLinksTheActionListWhichCountsEachFilterAsync()
-    {
-        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
-
-        var page = await host.GetDocumentAsync("/Review/Actions");
-
-        Assert.Equal("page", page.QuerySelector(".nav a[href='/Review/Actions']")!.GetAttribute("aria-current"));
-        Assert.Null(page.QuerySelector(".nav a[href='/Review']")!.GetAttribute("aria-current"));
-        Assert.Equal(["0", "0", "0"], page.QuerySelectorAll("[aria-labelledby='drafts'] .segmented-count").Select(count => count.TextContent));
-        Assert.Equal(["/Review/Actions#drafts", "/Review/Actions?drafts=needs-action#drafts", "/Review/Actions?drafts=approved#drafts"],
-            page.QuerySelectorAll("[aria-labelledby='drafts'] a.segmented-item").Select(tab => tab.GetAttribute("href")));
-        Assert.Equal("No action records yet", page.QuerySelector("[aria-labelledby='drafts'] .empty h3")!.TextContent);
-    }
-
-    [Fact]
     public async Task AnUnknownOrMalformedActionRecordIsNotFoundAsync()
     {
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|owner"));
@@ -48,81 +33,89 @@ public sealed class ActionReviewWorkspaceTests(PostgresCollection postgres) : IA
         }
     }
 
-    [Fact]
-    public async Task TheActionListShowsTheTierOfEachRowAndKeepsTheFiltersInItsTabLinksAndFilterForm()
-    {
-        var seeder = new RelationshipWorldSeeder(host.ConnectionString);
-        var paired = RelationshipFixtures.Action(1) with { RecordId = new string('1', 64), CandidateId = new string('1', 64), TrackedIssueIds = [StatementGateFixtures.RentIssue] };
-        var other = RelationshipFixtures.Action(2) with { RecordId = new string('2', 64), CandidateId = new string('2', 64) };
-        var tracked = RelationshipFixtures.Action(3) with { RecordId = new string('3', 64), CandidateId = new string('3', 64) };
-        await seeder.ActionAsync(paired, "AwaitingReview");
-        await seeder.ActionAsync(other, "AwaitingReview");
-        await seeder.ActionAsync(tracked, "AwaitingReview");
-        await seeder.PriorityAsync("action_analysis", paired.CandidateId, ActionDraftTask.Task, 1);
-        await seeder.PriorityAsync("action_analysis", tracked.CandidateId, ActionDraftTask.Task, 2);
-        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
-
-        var all = await host.GetDocumentAsync("/Review/Actions");
-        var filtered = await host.GetDocumentAsync($"/Review/Actions?issue={StatementGateFixtures.RentIssue}&official=warren&from=2025-01-01&to=2025-12-31");
-
-        var rows = all.QuerySelectorAll("[aria-labelledby='drafts'] tbody tr");
-        Assert.Equal(3, rows.Length);
-        Assert.Contains("Pairs with a statement", rows[0].TextContent, StringComparison.Ordinal);
-        Assert.Contains("Tracked issue", rows[1].TextContent, StringComparison.Ordinal);
-        Assert.DoesNotContain("Pairs with", rows[2].TextContent, StringComparison.Ordinal);
-        Assert.DoesNotContain("Tracked issue", rows[2].TextContent, StringComparison.Ordinal);
-        Assert.Single(filtered.QuerySelectorAll("[aria-labelledby='drafts'] tbody tr"));
-        var query = $"issue={StatementGateFixtures.RentIssue}&official=warren&from=2025-01-01&to=2025-12-31";
-        Assert.Equal([$"/Review/Actions?{query}#drafts", $"/Review/Actions?drafts=needs-action&{query}#drafts", $"/Review/Actions?drafts=approved&{query}#drafts"],
-            filtered.QuerySelectorAll("[aria-labelledby='drafts'] a.segmented-item").Select(tab => tab.GetAttribute("href")));
-        Assert.Equal(StatementGateFixtures.RentIssue, filtered.QuerySelector("#filter-issue option[selected]")!.GetAttribute("value"));
-        var official = filtered.QuerySelector("#filter-official option[selected]")!;
-        Assert.Equal(("warren", "Elizabeth Warren"), (official.GetAttribute("value"), official.TextContent));
-        Assert.Equal("2025-01-01", filtered.QuerySelector("#filter-from")!.GetAttribute("value"));
-        Assert.Equal("2025-12-31", filtered.QuerySelector("#filter-to")!.GetAttribute("value"));
-    }
-
     [Theory]
-    [InlineData("issue=not-configured")]
-    [InlineData("official=not-configured")]
-    [InlineData("from=2025-13-40")]
-    [InlineData("to=yesterday")]
-    public async Task AFilterThatIsNotValidShowsTheSameErrorAsABadCursorAndNoRows(string query)
-    {
-        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
-
-        var page = await host.GetDocumentAsync($"/Review/Actions?{query}");
-
-        Assert.Contains("This page link is no longer valid", page.QuerySelector(".notice")!.TextContent, StringComparison.Ordinal);
-        Assert.Null(page.QuerySelector("[aria-labelledby='drafts']"));
-    }
-
-    [Fact]
-    public async Task AReversedDateRangeShowsItsOwnMessage()
-    {
-        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
-
-        var page = await host.GetDocumentAsync("/Review/Actions?from=2025-06-01&to=2025-01-01");
-
-        Assert.Contains("The start date must not be after the end date.", page.QuerySelector(".notice")!.TextContent, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task TheReviewHomeCountsOnlyTheStatementsThatNeedActionBecauseCodeApprovesActionsAndVotes()
+    [InlineData("auth0|friend")]
+    [InlineData("auth0|owner")]
+    public async Task TheReviewHomeListsEachActionAndVoteThatCodeLeftForAPersonAndLinksItsEditorAsync(string subject)
     {
         var seeder = new RelationshipWorldSeeder(host.ConnectionString);
-        await seeder.StatementAsync(RelationshipFixtures.Statement(), "AwaitingReview");
-        await seeder.StatementAsync(RelationshipFixtures.Statement() with { Revision = RelationshipFixtures.Statement().Revision with { CandidateId = new string('2', 64) } }, "Approved");
-        await seeder.ActionAsync(RelationshipFixtures.Action(1), "AwaitingReview");
-        await seeder.ActionAsync(RelationshipFixtures.Action(2) with { RecordId = new string('3', 64), CandidateId = new string('3', 64) }, "ChangesRequested");
-        await seeder.VoteAsync(RelationshipFixtures.Vote(), "AwaitingReview");
+        var refused = RelationshipFixtures.Action(1);
+        var changesRequested = RelationshipFixtures.Action(2) with { RecordId = new string('3', 64), CandidateId = new string('3', 64) };
+        var approved = RelationshipFixtures.Action(4) with { RecordId = new string('4', 64), CandidateId = new string('4', 64) };
+        var refusedVote = RelationshipFixtures.Vote();
+        var approvedVote = RelationshipFixtures.Vote() with { RecordId = new string('5', 64), CandidateId = new string('5', 64), RollCallNumber = 77 };
+        await seeder.ActionAsync(refused, "AwaitingReview");
+        await seeder.ActionAsync(changesRequested, "ChangesRequested");
+        await seeder.ActionAsync(approved, "Approved");
+        await seeder.VoteAsync(refusedVote, "AwaitingReview");
+        await seeder.VoteAsync(approvedVote, "Approved");
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie(subject));
+
+        var home = await host.GetDocumentAsync("/Review");
+
+        var stat = home.QuerySelector("a.stat[href='#fact-exceptions']")!;
+        Assert.Equal(["3", "Actions and votes need action"], stat.Children.Select(child => child.TextContent));
+        var links = home.QuerySelectorAll("[aria-labelledby='fact-exceptions'] tbody a.cell-title").Select(link => link.GetAttribute("href"));
+        Assert.Equivalent(new[] { $"/Review/Actions/{refused.RecordId}", $"/Review/Actions/{changesRequested.RecordId}", $"/Review/Votes/{refusedVote.RecordId}" }, links);
+        Assert.Null(home.QuerySelector($"a[href='/Review/Actions/{approved.RecordId}']"));
+        Assert.Null(home.QuerySelector($"a[href='/Review/Votes/{approvedVote.RecordId}']"));
+        Assert.Null(home.QuerySelector(".nav a[href='/Review/Actions']"));
+        Assert.Null(home.QuerySelector(".nav a[href='/Review/Votes']"));
+    }
+
+    [Fact]
+    public async Task TheReviewHomeShowsNoFactExceptionWhenCodeApprovedEveryActionAndVoteAsync()
+    {
+        var seeder = new RelationshipWorldSeeder(host.ConnectionString);
+        await seeder.ActionAsync(RelationshipFixtures.Action(1), "Approved");
+        await seeder.VoteAsync(RelationshipFixtures.Vote(), "Approved");
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
 
         var home = await host.GetDocumentAsync("/Review");
 
-        var stat = home.QuerySelector("a.stat[href='/Review/Statements?drafts=needs-action']")!;
-        Assert.Equal(["1", "Statements need action"], stat.Children.Select(child => child.TextContent));
-        Assert.Null(home.QuerySelector("a.stat[href='/Review/Actions?drafts=needs-action']"));
-        Assert.Null(home.QuerySelector("a.stat[href='/Review/Votes?drafts=needs-action']"));
+        Assert.Equal("0", home.QuerySelector("a.stat[href='#fact-exceptions']")!.Children[0].TextContent);
+        Assert.Equal("No action or vote needs action", home.QuerySelector("[aria-labelledby='fact-exceptions'] .empty h3")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheReviewHomeShowsOnlyOnePageOfEachKindButCountsEveryRecordAsync()
+    {
+        var seeder = new RelationshipWorldSeeder(host.ConnectionString);
+        for (var index = 0; index < 11; index++)
+        {
+            var id = new string(index.ToString("x")[0], 64);
+            await seeder.ActionAsync(RelationshipFixtures.Action(index + 1) with { RecordId = id, CandidateId = id }, "AwaitingReview", index);
+        }
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+
+        var home = await host.GetDocumentAsync("/Review");
+
+        var panel = home.QuerySelector("[aria-labelledby='fact-exceptions']")!;
+        Assert.Equal(10, panel.QuerySelectorAll("tbody tr").Length);
+        Assert.Contains("11 records", panel.TextContent, StringComparison.Ordinal);
+        Assert.Null(panel.QuerySelector($"a[href='/Review/Actions/{new string('0', 64)}']"));
+    }
+
+    [Fact]
+    public async Task TheReviewHomeMergesActionsAndVotesByLastRevisionNewestFirstAsync()
+    {
+        var seeder = new RelationshipWorldSeeder(host.ConnectionString);
+        var oldAction = RelationshipFixtures.Action(1) with { CreatedAtUtc = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero) };
+        var middleAction = RelationshipFixtures.Action(2) with
+        {
+            RecordId = new string('3', 64),
+            CandidateId = new string('3', 64),
+            CreatedAtUtc = new DateTimeOffset(2025, 3, 1, 0, 0, 0, TimeSpan.Zero)
+        };
+        var newVote = RelationshipFixtures.Vote() with { CreatedAtUtc = new DateTimeOffset(2025, 6, 1, 0, 0, 0, TimeSpan.Zero) };
+        await seeder.ActionAsync(oldAction, "AwaitingReview", oldAction.CreatedAtUtc.UtcTicks);
+        await seeder.ActionAsync(middleAction, "AwaitingReview", middleAction.CreatedAtUtc.UtcTicks);
+        await seeder.VoteAsync(newVote, "AwaitingReview", newVote.CreatedAtUtc.UtcTicks);
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+
+        var home = await host.GetDocumentAsync("/Review");
+
+        Assert.Equal([$"/Review/Votes/{newVote.RecordId}", $"/Review/Actions/{middleAction.RecordId}", $"/Review/Actions/{oldAction.RecordId}"],
+            home.QuerySelectorAll("[aria-labelledby='fact-exceptions'] tbody a.cell-title").Select(link => link.GetAttribute("href")));
     }
 }

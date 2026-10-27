@@ -289,8 +289,7 @@ internal static class ReviewWorkspace
         services.AddScoped<SaveActionDraft>();
         services.AddScoped<DecideActionReview>();
         services.AddScoped<GetActionReview>();
-        services.AddScoped<ListActionReviews>();
-        services.AddScoped<GetActionReviewCounts>();
+        services.AddScoped<ListActionsNeedingAction>();
     }
 
     private static void ConfigureVoteReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)
@@ -299,8 +298,7 @@ internal static class ReviewWorkspace
         services.AddScoped<SaveVoteDraft>();
         services.AddScoped<DecideVoteReview>();
         services.AddScoped<GetVoteReview>();
-        services.AddScoped<ListVoteReviews>();
-        services.AddScoped<GetVoteReviewCounts>();
+        services.AddScoped<ListVotesNeedingAction>();
     }
 
     private static void ConfigureRelationshipReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)

@@ -406,6 +406,31 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
         }
     }
 
+    [Theory]
+    [InlineData("issue=not-configured")]
+    [InlineData("official=not-configured")]
+    [InlineData("from=2025-13-40")]
+    [InlineData("to=yesterday")]
+    public async Task AFilterThatIsNotValidShowsTheSameErrorAsABadCursorAndNoRowsAsync(string query)
+    {
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie(Reviewer));
+
+        var page = await host.GetDocumentAsync($"/Review/Statements?{query}");
+
+        Assert.Contains("This page link is no longer valid", page.QuerySelector(".notice")!.TextContent, StringComparison.Ordinal);
+        Assert.Null(page.QuerySelector("[aria-labelledby='drafts']"));
+    }
+
+    [Fact]
+    public async Task AReversedDateRangeShowsItsOwnMessageAsync()
+    {
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie(Reviewer));
+
+        var page = await host.GetDocumentAsync("/Review/Statements?from=2025-06-01&to=2025-01-01");
+
+        Assert.Contains("The start date must not be after the end date.", page.QuerySelector(".notice")!.TextContent, StringComparison.Ordinal);
+    }
+
     private async Task<string> AiDraftedAsync()
     {
         var candidate = await seeder.SeedAsync($"{Article} Release {++candidateCount}.", $"https://example.test/pages/{candidateCount}");

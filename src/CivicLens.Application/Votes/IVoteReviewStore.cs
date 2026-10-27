@@ -1,7 +1,5 @@
 using System.Collections.Immutable;
-using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
-using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
 
@@ -19,9 +17,7 @@ public interface IVoteReviewStore
 
     Task<VoteReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken);
 
-    Task<VoteReviewPage> ListAsync(PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken);
-
-    Task<VoteReviewCounts> CountAsync(CancellationToken cancellationToken);
+    Task<VotesNeedingAction> ListNeedingActionAsync(int limit, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<UnpublishedApprovedVote>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken);
 

@@ -126,7 +126,7 @@ public sealed partial class PostgresBillStreamTests
         await SettleAsync(candidate, Revision(candidate, 1));
 
         Assert.Empty(await ActionDecisionsAsync());
-        var listed = Assert.Single((await new ListActionReviews(ActionReviews()).ExecuteAsync(Reviewer, null)).Items);
+        var listed = Assert.Single((await new ListActionsNeedingAction(ActionReviews()).ExecuteAsync(Reviewer)).Items);
         Assert.Equal(ReviewStatus.AwaitingReview, listed.CurrentStatus);
     }
 
@@ -139,9 +139,11 @@ public sealed partial class PostgresBillStreamTests
 
         Assert.Single(await ActionDecisionsAsync());
         Assert.Equal("AwaitingReview", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
-        var needsAction = await new ListActionReviews(ActionReviews()).ExecuteAsync(Reviewer, null, filter: new DraftListFilter(DraftStatusFilter.NeedsAction));
+        var needsAction = await new ListActionsNeedingAction(ActionReviews()).ExecuteAsync(Reviewer);
         var item = Assert.Single(needsAction.Items);
         Assert.Equal((2, 1), (item.CurrentRevision.RevisionNumber, item.LastApprovedRevision!.RevisionNumber));
+        Assert.Equal(await ScalarAsync("SELECT max(created_at_utc_ticks) FROM action_revisions"),
+            await ScalarAsync("SELECT last_revised_at_utc_ticks FROM action_drafts"));
     }
 
     [Fact]

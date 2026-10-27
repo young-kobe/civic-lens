@@ -83,7 +83,10 @@ public sealed partial class PostgresHouseVoteTests
 
         Assert.Equal([(1, ReviewAuthor.CodeSubject), (2, ReviewAuthor.CodeSubject)],
             (await VoteDecisionsAsync()).Select(decision => (decision.RevisionNumber, decision.ActorSubject)));
-        Assert.Equal((0, 1), await CountsAsync());
+        Assert.Equal("Approved", await ScalarAsync("SELECT review_status FROM vote_drafts"));
+        Assert.Equal(await ScalarAsync("SELECT max(created_at_utc_ticks) FROM vote_revisions"),
+            await ScalarAsync("SELECT last_revised_at_utc_ticks FROM vote_drafts"));
+        Assert.Equal(0, (await new ListVotesNeedingAction(VoteReviews()).ExecuteAsync(Reviewer)).Total);
     }
 
     [Fact]
@@ -117,7 +120,7 @@ public sealed partial class PostgresHouseVoteTests
         await SettleAsync(candidate, revision with { Facts = [new("Result: Passed", new(new string('f', 64), 0, 5))] });
 
         Assert.Empty(await VoteDecisionsAsync());
-        var listed = Assert.Single((await new ListVoteReviews(VoteReviews()).ExecuteAsync(Reviewer, null)).Items);
+        var listed = Assert.Single((await new ListVotesNeedingAction(VoteReviews()).ExecuteAsync(Reviewer)).Items);
         Assert.Equal(ReviewStatus.AwaitingReview, listed.CurrentStatus);
     }
 
@@ -315,10 +318,4 @@ public sealed partial class PostgresHouseVoteTests
     private Task<VoteDraftRevision> SaveAsync(string recordId, int expected, SuggestionChoice suggestion, string key,
         string headline = "Person headline", string summary = "Person summary.") =>
         new SaveVoteDraft(VoteReviews()).ExecuteAsync(Reviewer, new(recordId, expected, headline, summary, suggestion, key));
-
-    private async Task<(int NeedsAction, int Approved)> CountsAsync()
-    {
-        var counts = await new GetVoteReviewCounts(VoteReviews()).ExecuteAsync(Reviewer);
-        return (counts.NeedsAction, counts.Approved);
-    }
 }

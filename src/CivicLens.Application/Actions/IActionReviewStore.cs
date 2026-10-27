@@ -1,6 +1,4 @@
 using System.Collections.Immutable;
-using CivicLens.Application.Paging;
-using CivicLens.Application.Review;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Review;
 
@@ -20,9 +18,7 @@ public interface IActionReviewStore
 
     Task<ActionReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken);
 
-    Task<ActionReviewPage> ListAsync(PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken);
-
-    Task<ActionReviewCounts> CountAsync(CancellationToken cancellationToken);
+    Task<ActionsNeedingAction> ListNeedingActionAsync(int limit, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<UnpublishedApprovedAction>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken);
 

@@ -100,8 +100,8 @@ public sealed class BriefStalenessTests(PostgresCollection postgres) : IAsyncLif
         await seeder.BriefAsync(Week);
         await seeder.BriefAsync(PriorWeek);
         await seeder.ExecuteAsync($"""
-            INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks, review_state_version, review_status)
-            VALUES ('{A1}', 'congress-bills', 119, 'hr', 7, 1, 0, 1, 'ChangesRequested')
+            INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks, last_revised_at_utc_ticks, review_state_version, review_status)
+            VALUES ('{A1}', 'congress-bills', 119, 'hr', 7, 1, 0, 0, 1, 'ChangesRequested')
             """);
 
         _ = await publications.CommitAsync("auth0|owner", new(3, 2, $"000003-{Guid.NewGuid():N}",

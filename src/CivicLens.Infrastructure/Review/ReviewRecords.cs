@@ -138,6 +138,13 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         (await Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken),
             await Drafts(db, DraftStatusFilter.Approved).CountAsync(cancellationToken));
 
+    public async Task<(TDraftRow[] Drafts, int Total)> ReadNeedingActionAsync(CollectionAttemptDbContext db, int limit,
+        Expression<Func<TDraftRow, long>> revisedOf, CancellationToken cancellationToken)
+    {
+        var slice = await PageAsync(db, null, limit, DraftStatusFilter.NeedsAction, revisedOf, cancellationToken);
+        return ([.. slice.Items], await Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken));
+    }
+
     public Task<KeysetSlice<TDraftRow>> PageAsync(CollectionAttemptDbContext db, PageCursor? cursor, int limit,
         DraftStatusFilter filter, CancellationToken cancellationToken) =>
         PageAsync(db, cursor, limit, filter, row => row.CreatedAtUtcTicks, cancellationToken);

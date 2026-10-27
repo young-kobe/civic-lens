@@ -336,6 +336,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnName("issue_ids")
                         .HasDefaultValueSql("'{}'");
 
+                    b.Property<long>("LastRevisedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_revised_at_utc_ticks");
+
                     b.PrimitiveCollection<string[]>("OfficialIds")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -4291,6 +4295,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("text[]")
                         .HasColumnName("issue_ids")
                         .HasDefaultValueSql("'{}'");
+
+                    b.Property<long>("LastRevisedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_revised_at_utc_ticks");
 
                     b.PrimitiveCollection<string[]>("OfficialIds")
                         .IsRequired()
