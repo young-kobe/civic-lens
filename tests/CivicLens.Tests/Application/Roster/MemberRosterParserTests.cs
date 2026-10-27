@@ -132,16 +132,25 @@ public sealed class MemberRosterParserTests
         Member(term: Term(phone: Text(RosterLimits.Phone + excess))),
         Member(term: Term(url: Text(RosterLimits.Url + excess))),
         Member(term: Term(state: Text(RosterLimits.State + excess))),
-        Member(term: Term(party: Text(RosterLimits.Party + excess)))
+        Member(term: Term(party: Text(RosterLimits.Party + excess))),
+        Member(term: Term(caucus: Text(RosterLimits.Party + excess)))
     };
+
+    [Fact]
+    public void ATermKeepsItsCaucusSoAnIndependentComparesWithTheCaucusParty()
+    {
+        var terms = Parse(Roster(Member(terms: $"{Term(party: "Independent", caucus: "Democrat")},{Term(party: "Independent")}")))[0].Terms;
+
+        Assert.Equal(["Democrat", null], terms.Select(term => term.Caucus));
+    }
 
     private static string Text(int length) => new('x', length);
 
     private static string Roster(params string[] members) => $"[{string.Join(',', members)}]";
 
     private static string Term(string type = "sen", string start = "2025-01-03", string end = "2027-01-03", string state = "AL",
-        string party = "Republican", string office = "", string phone = "", string url = "") =>
-        $$"""{"type":"{{type}}","start":"{{start}}","end":"{{end}}","state":"{{state}}","party":"{{party}}","office":"{{office}}","phone":"{{phone}}","url":"{{url}}"}""";
+        string party = "Republican", string? caucus = null, string office = "", string phone = "", string url = "") =>
+        $$"""{"type":"{{type}}","start":"{{start}}","end":"{{end}}","state":"{{state}}","party":"{{party}}",{{(caucus is null ? "" : $"\"caucus\":\"{caucus}\",")}}"office":"{{office}}","phone":"{{phone}}","url":"{{url}}"}""";
 
     private static string Member(string bioguide = "A000001", string lis = "", string name = """{"official_full":"A"}""",
         string? terms = null, string? term = null) =>

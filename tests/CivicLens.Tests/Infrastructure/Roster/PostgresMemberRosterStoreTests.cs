@@ -46,6 +46,19 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
     }
 
     [Fact]
+    public async Task ATermCaucusRoundTripsSoAnIndependentComparesWithTheCaucusParty()
+    {
+        var attemptId = await ImportAsync('a', 0);
+        var cantwell = RosterFixtures.Members()[0];
+        var independent = cantwell with { Terms = [cantwell.Terms[0], cantwell.Terms[1] with { Caucus = "Democrat" }] };
+
+        await roster.AdmitAsync(attemptId, [independent], default);
+
+        var latest = await roster.ReadLatestAsync(RosterFixtures.SourceId, default);
+        Assert.Equal([null, "Democrat"], latest[0].Terms.Select(term => term.Caucus));
+    }
+
+    [Fact]
     public async Task ASnapshotOfOneSourceIsNotKnownToAnotherSourceThatCapturedTheSameBody()
     {
         var attemptId = await ImportAsync('a', 0);

@@ -35,7 +35,8 @@ public static class MemberRosterParser
         if (wire is not { Start: { } start, End: { } end } || end < start || wire.Type is not (Senate or House) ||
             RosterWire.Capped(wire.State, RosterLimits.State) is not { } state || RosterWire.Capped(wire.Party, RosterLimits.Party) is not { } party)
             throw new InvalidDataException("Every roster term must have a chamber, dates, a state, and a party.");
-        return new RosterTerm(index, wire.Type, start, end, state, wire.District, wire.Class, party);
+        return new RosterTerm(index, wire.Type, start, end, state, wire.District, wire.Class, party,
+            RosterWire.Capped(wire.Caucus, RosterLimits.Party));
     }
 
     private sealed record WireMember(WireId? Id, RosterWire.WireName? Name, WireTerm?[]? Terms);
@@ -43,5 +44,5 @@ public static class MemberRosterParser
     private sealed record WireId(string? Bioguide, string? Lis);
 
     private sealed record WireTerm(string? Type, DateOnly? Start, DateOnly? End, string? State, int? District, int? Class,
-        string? Party, string? Office, string? Phone, string? Url);
+        string? Party, string? Caucus, string? Office, string? Phone, string? Url);
 }
