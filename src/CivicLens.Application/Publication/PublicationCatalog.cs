@@ -17,5 +17,7 @@ public sealed class PublicationCatalog(IReadOnlyDictionary<string, string> offic
 
     public string IssueName(string id) => issueNames.GetValueOrDefault(id, id);
 
+    public bool HasPolicyArea(string id) => policyAreaNames.ContainsKey(id);
+
     public string PolicyAreaName(string id) => policyAreaNames.GetValueOrDefault(id, id);
 }

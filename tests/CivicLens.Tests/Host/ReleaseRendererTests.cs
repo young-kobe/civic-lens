@@ -1196,6 +1196,26 @@ public sealed class ReleaseRendererTests
         }
     }
 
+    [Fact]
+    public async Task AStatementPageAndARelationshipPageShowTheConfiguredPolicyAreaNameLinkedToItsPageAndAnUnconfiguredIdAsPlainText()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var statement = Statement() with { PolicyAreaIds = ["land-use", "mystery"] };
+        var relationship = Relationship(PublishedRecordKind.Action, new string('a', 64), '7') with { PolicyAreaIds = ["land-use", "mystery"] };
+
+        foreach (var html in new[] { await renderer.RenderStatementAsync(statement, [], HousingCatalog, CancellationToken.None),
+                     await renderer.RenderRelationshipAsync(relationship, HousingCatalog, CancellationToken.None) })
+        {
+            var areas = new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts dt")
+                .Single(label => label.TextContent == "Policy areas").NextElementSibling!;
+
+            Assert.Equal("Land use, mystery", Regex.Replace(areas.TextContent, @"\s+", " ").Trim());
+            var link = Assert.Single(areas.QuerySelectorAll("a"));
+            Assert.Equal("../" + PublicationProtocol.PolicyAreaPagePath("land-use", 1), link.GetAttribute("href"));
+            Assert.Equal("Land use", link.TextContent);
+        }
+    }
+
     private static void AssertTrail((string Name, string Path, string Html, string? Section) page, string[] expected)
     {
         var items = new HtmlParser().ParseDocument(page.Html).QuerySelectorAll("nav[aria-label='Breadcrumb'] ol > li").ToList();
