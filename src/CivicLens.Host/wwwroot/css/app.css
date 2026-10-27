@@ -329,5 +329,6 @@ tr.is-new td { animation: row-in 1.6s var(--ease); }
     .public-main .table td { display: block; width: auto; max-width: none; padding: 0; border: 0; text-align: left; white-space: normal; overflow-wrap: anywhere; }
     .public-main .table td[data-label]::before { content: attr(data-label) ": "; content: attr(data-label) ": " / ""; color: var(--muted); font-weight: 600; }
     .public-main .table .cell-main { order: -1; }
-    .public-main .table td:empty { display: none; }
+    .public-main .table td:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .public-main .table td:empty::before { content: none; }
 }

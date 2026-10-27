@@ -1209,12 +1209,12 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task EveryPublicTableKeepsItsTableRolesSoWebKitReadersKeepRowsAndHeadersWhenCssStacksTheCells()
     {
-        var tables = 0;
+        var tables = new Dictionary<string, int>();
         foreach (var (name, _, html, _) in await RenderEveryPageTypeAsync())
         {
             foreach (var table in new HtmlParser().ParseDocument(html).QuerySelectorAll("table.table"))
             {
-                tables++;
+                tables[name] = tables.GetValueOrDefault(name) + 1;
                 Assert.True(table.GetAttribute("role") == "table", $"{name}: table role");
                 Assert.All(table.QuerySelectorAll("thead, tbody"), group => Assert.Equal("rowgroup", group.GetAttribute("role")));
                 Assert.All(table.QuerySelectorAll("tr"), row => Assert.Equal("row", row.GetAttribute("role")));
@@ -1231,7 +1231,22 @@ public sealed class ReleaseRendererTests
             }
         }
 
-        Assert.True(tables >= 10);
+        var expected = new Dictionary<string, int>
+        {
+            ["action"] = 2,
+            ["all records"] = 1,
+            ["brief"] = 1,
+            ["home"] = 3,
+            ["issue"] = 1,
+            ["issues"] = 2,
+            ["official"] = 3,
+            ["officials"] = 1,
+            ["policy area"] = 1,
+            ["record"] = 1,
+            ["statement"] = 1,
+            ["vote"] = 2
+        };
+        Assert.All(expected, page => Assert.True(tables.GetValueOrDefault(page.Key) >= page.Value, $"{page.Key}: tables"));
     }
 
     [Fact]

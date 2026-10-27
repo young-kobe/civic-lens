@@ -17,5 +17,5 @@ else
     [Parameter] public string? Class { get; set; }
     [Parameter] public string? Label { get; set; }
 
-    private string? BodyClass => Main ? string.Join(' ', "cell-main", Class).Trim() : Class;
+    private string? BodyClass => Main ? Class is null ? "cell-main" : $"cell-main {Class}" : Class;
 }
