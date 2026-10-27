@@ -45,7 +45,7 @@ public sealed class PublishedOfficialPageTests
             PublishedAtUtc = published,
             Withdrawals = [],
             Records = [.. entries.Select(entry => entry with { IssueIds = ["housing"] })]
-        }, new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None)).Issues.Single();
+        }, PublicationCatalogs.None).Issues.Single();
 
         var official = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current(entries, []), PublicationCatalogs.None, CancellationToken.None);
         var facetHtml = await new ReleaseRenderer(null, null).RenderFacetPageAsync(facet, 1, CancellationToken.None);

@@ -20,7 +20,7 @@ internal static class PublishedRecordView
         Fact.LinkList(label, [.. officials.Select(official => new FactLink(official.Name, OfficialLink(official.Id)))]);
 
     public static FactLink IssueLink(string issueId, PublicationCatalog catalog, string rootPath) =>
-        catalog.HasIssue(issueId) && PublicationProtocol.IsPathSegment(issueId)
+        catalog.HasIssue(issueId)
             ? new(catalog.IssueName(issueId), rootPath + PublicationProtocol.IssuePagePath(issueId, 1))
             : new(issueId);
 

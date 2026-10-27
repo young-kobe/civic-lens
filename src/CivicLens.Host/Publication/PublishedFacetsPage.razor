@@ -8,7 +8,7 @@
 </PublicPage>
 
 @code {
-    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), new("Issues")];
+    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), new("Issues and policy areas")];
 
     [Parameter, EditorRequired] public ReleaseFacets Facets { get; set; } = default!;
 }

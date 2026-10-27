@@ -747,7 +747,7 @@ public sealed class ReleaseRendererTests
             EventDate = new DateOnly(2026, 1, 1).AddDays(index)
         })]
         };
-        var facet = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None)).PolicyAreas.Single();
+        var facet = ReleaseFacets.From(release, PublicationCatalogs.None).PolicyAreas.Single();
 
         var html = await new ReleaseRenderer(null, null).RenderFacetPageAsync(facet, 2, CancellationToken.None);
 
@@ -788,7 +788,7 @@ public sealed class ReleaseRendererTests
             Entry('d', new DateTimeOffset(2026, 5, 10, 20, 0, 0, TimeSpan.Zero), null, "Ann Roe")
         ]
         };
-        var facet = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None)).Issues.Single();
+        var facet = ReleaseFacets.From(release, PublicationCatalogs.None).Issues.Single();
 
         var html = await new ReleaseRenderer(null, null).RenderFacetPageAsync(facet, 1, CancellationToken.None);
 
@@ -878,7 +878,7 @@ public sealed class ReleaseRendererTests
     public async Task AReleaseWithNoRecordLeftStillRendersItsIndexPagesSoAWithdrawalOfTheLastRecordPublishes()
     {
         var release = ReleaseOf(0);
-        var facets = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None));
+        var facets = ReleaseFacets.From(release, PublicationCatalogs.None);
         var renderer = new ReleaseRenderer(null, null);
 
         Assert.NotEmpty(await renderer.RenderHomeAsync(release, null, facets, CancellationToken.None));
@@ -920,7 +920,7 @@ public sealed class ReleaseRendererTests
     public async Task FacetPageRejectsAPageOutsideTheFacet()
     {
         var release = ReleaseOf(3) with { Records = [.. ReleaseOf(3).Records.Select(entry => entry with { IssueIds = ["housing"] })] };
-        var facet = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None)).Issues.Single();
+        var facet = ReleaseFacets.From(release, PublicationCatalogs.None).Issues.Single();
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => new ReleaseRenderer(null, null).RenderFacetPageAsync(facet, 2, CancellationToken.None));
     }
@@ -930,7 +930,7 @@ public sealed class ReleaseRendererTests
     {
         var renderer = new ReleaseRenderer(null, null);
         var release = ReleaseOf(120) with { Records = [.. ReleaseOf(120).Records.Select(entry => entry with { PolicyAreaIds = ["land-use"] })] };
-        var facet = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None)).PolicyAreas.Single();
+        var facet = ReleaseFacets.From(release, PublicationCatalogs.None).PolicyAreas.Single();
 
         var titles = new List<string>();
         foreach (var page in Enumerable.Range(1, 3))
@@ -1140,7 +1140,8 @@ public sealed class ReleaseRendererTests
         var pages = (await RenderEveryPageTypeAsync()).ToDictionary(page => page.Name);
 
         AssertTrail(pages["all records"], ["Home|index.html", "All records"]);
-        AssertTrail(pages["issues"], ["Home|index.html", "Issues"]);
+        AssertTrail(pages["issues"], ["Home|index.html", "Issues and policy areas"]);
+        AssertTrail(pages["search"], ["Home|index.html", "Search records"]);
         AssertTrail(pages["officials"], ["Home|index.html", "Officials"]);
         AssertTrail(pages["method"], ["Home|index.html", "How the talk and action profile works"]);
         AssertTrail(pages["report"], ["Home|index.html", "Report a problem"]);
@@ -1150,7 +1151,8 @@ public sealed class ReleaseRendererTests
         AssertTrail(pages["official"], ["Home|../index.html", "Officials|../officials.html", "Mayor Example"]);
         AssertTrail(pages["past congress"], ["Home|../../index.html", "Officials|../../officials.html",
             "Mayor Example|../../officials/mayor.html", "Mayor Example, Congress 118"]);
-        Assert.Null(new HtmlParser().ParseDocument(pages["home"].Html).QuerySelector("nav[aria-label='Breadcrumb']"));
+        foreach (var page in pages.Values)
+            Assert.Equal(page.Name != "home", new HtmlParser().ParseDocument(page.Html).QuerySelector("nav[aria-label='Breadcrumb']") is not null);
     }
 
     [Fact]
@@ -1175,9 +1177,14 @@ public sealed class ReleaseRendererTests
         var vote = Vote() with { TrackedIssueIds = ["housing", "mystery"] };
         var statement = Statement() with { IssueIds = ["housing", "mystery"] };
 
+        var change = Record() with { IssueIds = ["housing", "mystery"] };
+        var relationship = Relationship(PublishedRecordKind.Action, new string('a', 64), '7') with { IssueIds = ["housing", "mystery"] };
+
         foreach (var html in new[] { await renderer.RenderActionAsync(action, [], HousingCatalog, CancellationToken.None),
                      await renderer.RenderVoteAsync(vote, null, [], HousingCatalog, CancellationToken.None),
-                     await renderer.RenderStatementAsync(statement, [], HousingCatalog, CancellationToken.None) })
+                     await renderer.RenderStatementAsync(statement, [], HousingCatalog, CancellationToken.None),
+                     await renderer.RenderRecordAsync(change, HousingCatalog, CancellationToken.None),
+                     await renderer.RenderRelationshipAsync(relationship, HousingCatalog, CancellationToken.None) })
         {
             var issues = new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts dt")
                 .Single(label => label.TextContent is "Tracked issues" or "Issues").NextElementSibling!;
