@@ -166,6 +166,33 @@ public sealed class PublishOfficialsTests
     }
 
     [Fact]
+    public async Task AValidRosterUrlWinsOverTheConfiguredWebsiteBecauseTheRosterTracksTheCurrentOffice()
+    {
+        var scenario = new PublicationScenario();
+        scenario.ExternalIds["mayor"] = (Cantwell, null);
+        scenario.Websites["mayor"] = "https://example.gov";
+        scenario.RosterMembers = RosterFixtures.Members();
+
+        var summary = await PublishAsync(scenario, scenario.AddStatement('a'));
+
+        Assert.Equal("https://www.cantwell.senate.gov", Assert.Single(OfficialsOf(scenario, summary.DirectoryName).Officials).Website);
+    }
+
+    [Fact]
+    public async Task AFormerMemberWhoIsNotInTheCurrentRosterTakesTheConfiguredWebsite()
+    {
+        var scenario = new PublicationScenario();
+        scenario.ExternalIds["mayor"] = ("B000444", "Q6279");
+        scenario.Websites["mayor"] = "https://www.whitehouse.gov";
+        scenario.RosterMembers = RosterFixtures.Members();
+        scenario.ExecutiveOfficials = ExecutiveFixtures.Officials();
+
+        var summary = await PublishAsync(scenario, scenario.AddStatement('a'));
+
+        Assert.Equal("https://www.whitehouse.gov", Assert.Single(OfficialsOf(scenario, summary.DirectoryName).Officials).Website);
+    }
+
+    [Fact]
     public async Task AnExecutiveMatchedByWikidataGetsPresidentTermsWithNoStateOrDistrict()
     {
         var scenario = new PublicationScenario();

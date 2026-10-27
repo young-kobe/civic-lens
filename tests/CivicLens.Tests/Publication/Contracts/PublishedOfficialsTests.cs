@@ -39,6 +39,9 @@ public sealed class PublishedOfficialsTests
     [InlineData("http://example.gov")]
     [InlineData("https://user:pw@example.gov")]
     [InlineData("example.gov")]
+    [InlineData("https:example.gov")]
+    [InlineData(" https://example.gov")]
+    [InlineData("https://example.gov/a b")]
     public void AProfileWebsiteThatBreaksTheRuleIsRefusedSoTheReaderNeverLinksAnUnsafeUrl(string website)
     {
         var profile = new PublishedOfficialProfile { Id = "mayor", Name = "Mayor Example", Website = website, Terms = [] };

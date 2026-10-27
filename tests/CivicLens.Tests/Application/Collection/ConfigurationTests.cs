@@ -253,6 +253,8 @@ public sealed class ConfigurationTests
     [InlineData("https://user@example.gov")]
     [InlineData("/relative")]
     [InlineData("")]
+    [InlineData("https:example.gov")]
+    [InlineData("https://example.gov ")]
     public void AWebsiteMustBeAnAbsoluteHttpsUrlWithNoUserInfo(string website)
     {
         var person = new PersonConfiguration { Id = "one", Name = "One", Website = website };
