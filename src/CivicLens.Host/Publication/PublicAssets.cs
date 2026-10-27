@@ -13,10 +13,12 @@ internal static class PublicAssets
 
     public const string Favicon = "assets/favicon.svg";
 
-    private static readonly IReadOnlyList<string> Fonts = ["assets/fonts/instrument-sans.woff2", "assets/fonts/newsreader.woff2"];
+    public const string InstrumentSansFont = "assets/fonts/instrument-sans.woff2";
+
+    public const string NewsreaderFont = "assets/fonts/newsreader.woff2";
 
     public static IReadOnlyList<ReleaseAsset> Load() =>
-        [.. Stylesheets.Append(ThemeScript).Append(Script).Append(Favicon).Concat(Fonts).Select(path => new ReleaseAsset(path, Read(path)))];
+        [.. Stylesheets.Append(ThemeScript).Append(Script).Append(Favicon).Append(InstrumentSansFont).Append(NewsreaderFont).Select(path => new ReleaseAsset(path, Read(path)))];
 
     private static byte[] Read(string path)
     {

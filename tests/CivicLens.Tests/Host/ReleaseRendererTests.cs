@@ -1404,6 +1404,62 @@ public sealed class ReleaseRendererTests
             Assert.Contains(assets, asset => asset.RelativePath == path && asset.Content.Length > 0);
     }
 
+    [Fact]
+    public async Task RecordLikePagesPreloadBothFontsBecauseTheirTextIsSetInNewsreaderAboveTheFold()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var withdrawal = new PublishedWithdrawal
+        {
+            Kind = PublishedRecordKind.Action,
+            RecordId = new string('c', 64),
+            WithdrawnRevisionNumber = 1,
+            FirstPublishedAtUtc = new DateTimeOffset(2026, 2, 1, 8, 0, 0, TimeSpan.Zero),
+            WithdrawnAtUtc = new DateTimeOffset(2026, 2, 9, 9, 30, 0, TimeSpan.Zero),
+            Note = "Wrong bill.",
+            Corrections = []
+        };
+        var pages = new[]
+        {
+            await renderer.RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None),
+            await renderer.RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None),
+            await renderer.RenderActionAsync(Action(), [], PublicationCatalogs.None, CancellationToken.None),
+            await renderer.RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None),
+            await renderer.RenderRelationshipAsync(Relationship(PublishedRecordKind.Action, new string('a', 64), '7'), PublicationCatalogs.None, CancellationToken.None),
+            await renderer.RenderBriefAsync(Brief(), CancellationToken.None),
+            await renderer.RenderWithdrawalAsync(withdrawal, CancellationToken.None)
+        };
+
+        Assert.All(pages, html => Assert.Equal(
+            ["../assets/fonts/instrument-sans.woff2", "../assets/fonts/newsreader.woff2"], FontPreloadHrefs(html, renderer)));
+        Assert.Equal(["assets/fonts/instrument-sans.woff2", "assets/fonts/newsreader.woff2"],
+            FontPreloadHrefs(await renderer.RenderHomeAsync(ReleaseOf(1), Brief(), NoFacets, CancellationToken.None), renderer));
+    }
+
+    [Fact]
+    public async Task ListAndFacetPagesPreloadOnlyInstrumentSansBecauseTheyShowNoNewsreaderText()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var facet = new ReleaseFacet(FacetKind.PolicyArea, "land-use", "Land use", []);
+
+        Assert.Equal(["../assets/fonts/instrument-sans.woff2"], FontPreloadHrefs(await renderer.RenderFacetPageAsync(facet, 1, CancellationToken.None), renderer));
+        Assert.Equal(["assets/fonts/instrument-sans.woff2"], FontPreloadHrefs(await renderer.RenderFacetsAsync(NoFacets, CancellationToken.None), renderer));
+        Assert.Equal(["assets/fonts/instrument-sans.woff2"],
+            FontPreloadHrefs(await renderer.RenderHomeAsync(ReleaseOf(1), null, NoFacets, CancellationToken.None), renderer));
+    }
+
+    private static string[] FontPreloadHrefs(string html, ReleaseRenderer renderer)
+    {
+        var preloads = new HtmlParser().ParseDocument(html).Head!.QuerySelectorAll("link[rel='preload']").ToArray();
+        Assert.All(preloads, link =>
+        {
+            Assert.Equal("font", link.GetAttribute("as"));
+            Assert.Equal("font/woff2", link.GetAttribute("type"));
+            Assert.True(link.HasAttribute("crossorigin"));
+            Assert.Contains(renderer.Assets, asset => asset.RelativePath == link.GetAttribute("href")!.Replace("../", string.Empty, StringComparison.Ordinal));
+        });
+        return [.. preloads.Select(link => link.GetAttribute("href")!)];
+    }
+
     private static readonly ReleaseFacets NoFacets = new([], []);
 
     private static PublicationCatalog HousingCatalog { get; } = new(new Dictionary<string, string>(), IssuesNamed("housing", "Housing costs"));
