@@ -13,7 +13,7 @@ internal static class PublishedActionView
     [
         new("Bill", ActionLabels.Bill(action.Congress, action.BillType, action.BillNumber)),
         new("Title", action.BillTitle),
-        new("Policy area", action.PolicyArea ?? "None"),
+        Fact.LinkList("Policy area", [PublishedRecordView.PolicyAreaLink(action.PolicyAreaId, action.PolicyArea ?? "None", catalog)]),
         PublishedRecordView.Issues("Tracked issues", action.TrackedIssueIds, catalog),
         new("Published", $"From the official record, checked {Moment.Full(action.ApprovedAtUtc)}; first published {Moment.Full(action.FirstPublishedAtUtc)}"),
         .. PublishedRecordLabels.Wording(action.TextOrigin),

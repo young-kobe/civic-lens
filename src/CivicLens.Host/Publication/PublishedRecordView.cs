@@ -23,12 +23,19 @@ internal static class PublishedRecordView
         Fact.LinkList(label, [.. officials.Select(official => new FactLink(official.Name, OfficialLink(official.Id)))]);
 
     public static FactLink IssueLink(string issueId, PublicationCatalog catalog, string rootPath) =>
-        catalog.HasIssue(issueId)
-            ? new(catalog.IssueName(issueId), rootPath + PublicationProtocol.IssuePagePath(issueId, 1))
-            : new(issueId);
+        ConfiguredNameLink(catalog.HasIssue(issueId), catalog.IssueName(issueId),
+            rootPath + PublicationProtocol.IssuePagePath(issueId, 1));
 
     public static Fact Issues(string label, IEnumerable<string> issueIds, PublicationCatalog catalog) =>
         Fact.LinkList(label, [.. issueIds.Select(id => IssueLink(id, catalog, "../"))]);
+
+    public static FactLink PolicyAreaLink(string? policyAreaId, string text, PublicationCatalog catalog) =>
+        policyAreaId is null
+            ? new(text)
+            : ConfiguredNameLink(catalog.HasPolicyArea(policyAreaId), text, "../" + PublicationProtocol.PolicyAreaPagePath(policyAreaId, 1));
+
+    public static Fact PolicyAreas(string label, IEnumerable<string> policyAreaIds, PublicationCatalog catalog) =>
+        Fact.LinkList(label, [.. policyAreaIds.Select(id => PolicyAreaLink(id, catalog.PolicyAreaName(id), catalog))]);
 
     public static ImmutableArray<DocumentComparisonHunk> Hunks(PublishedDocumentChange record) =>
         [.. record.Changes.Select(change => new DocumentComparisonHunk(
@@ -48,6 +55,9 @@ internal static class PublishedRecordView
         return [.. cited.Where(item => item.citation.ExtractionId == version.ExtractionId)
             .Select(item => new CitedRange(item.anchor, item.citation.Start, item.citation.Length))];
     }
+
+    private static FactLink ConfiguredNameLink(bool isConfigured, string text, string href) =>
+        new(text, isConfigured ? href : null);
 
     private static string Slice(string text, int start, int length) => text.Substring(start, length);
 }

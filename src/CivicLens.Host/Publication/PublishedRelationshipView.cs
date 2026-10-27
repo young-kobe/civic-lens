@@ -17,7 +17,7 @@ internal static class PublishedRelationshipView
         };
         if (relationship.StatementDate is { } date) facts.Add(new("Statement date", Moment.Iso(date)));
         facts.Add(PublishedRecordView.Issues("Issues", relationship.IssueIds, catalog));
-        facts.Add(Fact.List("Policy areas", relationship.PolicyAreaIds));
+        facts.Add(PublishedRecordView.PolicyAreas("Policy areas", relationship.PolicyAreaIds, catalog));
         facts.Add(new("Published", $"Approved {Moment.Full(relationship.ApprovedAtUtc)}; first published {Moment.Full(relationship.FirstPublishedAtUtc)}"));
         facts.Add(new("Revision", relationship.RevisionNumber.ToString(CultureInfo.InvariantCulture)));
         return facts;

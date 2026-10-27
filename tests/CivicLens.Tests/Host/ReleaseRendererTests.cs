@@ -1253,14 +1253,46 @@ public sealed class ReleaseRendererTests
                      await renderer.RenderRecordAsync(change, HousingCatalog, CancellationToken.None),
                      await renderer.RenderRelationshipAsync(relationship, HousingCatalog, CancellationToken.None) })
         {
-            var issues = new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts dt")
-                .Single(label => label.TextContent is "Tracked issues" or "Issues").NextElementSibling!;
+            var issues = FactValue(html, "Tracked issues", "Issues");
 
             Assert.Equal("Housing costs, mystery", Regex.Replace(issues.TextContent, @"\s+", " ").Trim());
-            var link = Assert.Single(issues.QuerySelectorAll("a"));
-            Assert.Equal("../" + PublicationProtocol.IssuePagePath("housing", 1), link.GetAttribute("href"));
-            Assert.Equal("Housing costs", link.TextContent);
+            AssertSingleLink(issues, "../" + PublicationProtocol.IssuePagePath("housing", 1), "Housing costs");
         }
+    }
+
+    [Fact]
+    public async Task AnActionStatementAndRelationshipPageShowTheConfiguredPolicyAreaNameLinkedToItsPageAndAnUnconfiguredIdAsPlainText()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var statement = Statement() with { PolicyAreaIds = ["land-use", "mystery"] };
+        var relationship = Relationship(PublishedRecordKind.Action, new string('a', 64), '7') with { PolicyAreaIds = ["land-use", "mystery"] };
+
+        foreach (var html in new[] { await renderer.RenderStatementAsync(statement, [], HousingCatalog, CancellationToken.None),
+                     await renderer.RenderRelationshipAsync(relationship, HousingCatalog, CancellationToken.None) })
+        {
+            var areas = FactValue(html, "Policy areas");
+
+            Assert.Equal("Land use, mystery", Regex.Replace(areas.TextContent, @"\s+", " ").Trim());
+            AssertSingleLink(areas, "../" + PublicationProtocol.PolicyAreaPagePath("land-use", 1), "Land use");
+        }
+
+        var configured = await renderer.RenderActionAsync(Action() with { PolicyAreaId = "land-use" }, [], HousingCatalog, CancellationToken.None);
+        AssertSingleLink(FactValue(configured, "Policy area"), "../" + PublicationProtocol.PolicyAreaPagePath("land-use", 1), "Housing and Community Development");
+
+        var unconfigured = await renderer.RenderActionAsync(Action() with { PolicyAreaId = "mystery" }, [], HousingCatalog, CancellationToken.None);
+        var plain = FactValue(unconfigured, "Policy area");
+        Assert.Equal("Housing and Community Development", plain.TextContent.Trim());
+        Assert.Empty(plain.QuerySelectorAll("a"));
+    }
+
+    private static AngleSharp.Dom.IElement FactValue(string html, params string[] labels) =>
+        new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts dt").Single(term => labels.Contains(term.TextContent)).NextElementSibling!;
+
+    private static void AssertSingleLink(AngleSharp.Dom.IElement scope, string href, string text)
+    {
+        var link = Assert.Single(scope.QuerySelectorAll("a"));
+        Assert.Equal(href, link.GetAttribute("href"));
+        Assert.Equal(text, link.TextContent);
     }
 
     private static void AssertTrail((string Name, string Path, string Html, string? Section) page, string[] expected)
