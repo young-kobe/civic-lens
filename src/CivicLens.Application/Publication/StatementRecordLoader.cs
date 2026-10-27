@@ -32,10 +32,10 @@ internal sealed class StatementRecordLoader(IStatementReviewStore statements)
         RequirePublishable(recordId, revision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
         var record = new PublishedStatementBuilder(build.Rules).Build(addition, build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId), build.Now);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
-            (related, cancellationToken) => build.Renderer.RenderStatementAsync(record, related, cancellationToken));
+            (related, cancellationToken) => build.Renderer.RenderStatementAsync(record, related, build.Catalog, cancellationToken));
     }
 
     public Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
         CancellationToken cancellationToken) =>
-        build.Renderer.RenderStatementAsync(Parse<PublishedStatement>(json), links.Citing(Kind, recordId), cancellationToken);
+        build.Renderer.RenderStatementAsync(Parse<PublishedStatement>(json), links.Citing(Kind, recordId), build.Catalog, cancellationToken);
 }

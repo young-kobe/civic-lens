@@ -1,3 +1,4 @@
+using CivicLens.Application.Publication;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Publication.Contracts;
@@ -8,7 +9,7 @@ internal static class PublishedStatementView
 {
     public const string StatementDateAnchor = "cite-statement-date";
 
-    public static IReadOnlyList<Fact> Facts(PublishedStatement statement)
+    public static IReadOnlyList<Fact> Facts(PublishedStatement statement, PublicationCatalog catalog)
     {
         var facts = new List<Fact>
         {
@@ -16,7 +17,7 @@ internal static class PublishedStatementView
             Fact.List("Other speakers", statement.OtherSpeakers)
         };
         if (statement.StatementDate is { } date) facts.Add(new("Statement date", Moment.Iso(date)));
-        facts.Add(Fact.List("Issues", statement.IssueIds));
+        facts.Add(PublishedRecordView.Issues("Issues", statement.IssueIds, catalog));
         facts.Add(Fact.List("Policy areas", statement.PolicyAreaIds));
         facts.Add(Fact.List("Bill numbers", statement.BillNumbers));
         facts.Add(new("Published", $"Approved {Moment.Full(statement.ApprovedAtUtc)}; first published {Moment.Full(statement.FirstPublishedAtUtc)}"));

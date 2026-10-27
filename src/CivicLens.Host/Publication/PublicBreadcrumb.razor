@@ -1,0 +1,28 @@
+@using CivicLens.Host.Components.Layout
+
+@if (Crumbs.Count > 0)
+{
+    <nav class="public-crumbs" aria-label="Breadcrumb">
+        <ol>
+            @for (var index = 0; index < Crumbs.Count; index++)
+            {
+                var crumb = Crumbs[index];
+                <li>
+                    @if (index == Crumbs.Count - 1)
+                    {
+                        <span aria-current="page">@crumb.Text</span>
+                    }
+                    else
+                    {
+                        <a href="@crumb.Href">@crumb.Text</a>
+                        <span aria-hidden="true">/</span>
+                    }
+                </li>
+            }
+        </ol>
+    </nav>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<Crumb> Crumbs { get; set; } = [];
+}

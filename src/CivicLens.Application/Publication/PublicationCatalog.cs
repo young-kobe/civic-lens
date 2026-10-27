@@ -13,6 +13,8 @@ public sealed class PublicationCatalog(IReadOnlyDictionary<string, string> offic
     public ImmutableDictionary<string, string> OfficialNames { get; } =
         officialNames.ToImmutableDictionary(StringComparer.Ordinal);
 
+    public bool HasIssue(string id) => issueNames.ContainsKey(id);
+
     public string IssueName(string id) => issueNames.GetValueOrDefault(id, id);
 
     public string PolicyAreaName(string id) => policyAreaNames.GetValueOrDefault(id, id);

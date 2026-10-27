@@ -365,18 +365,18 @@ internal sealed class FakeRenderer : IReleaseRenderer
     public List<string>? Events { get; init; }
     public List<ReleaseOfficialPage>? OfficialPages { get; init; }
     public IReadOnlyList<ReleaseAsset> Assets { get; } = [new("assets/site.css", [1, 2, 3])];
-    public Task<string> RenderRecordAsync(PublishedDocumentChange record, CancellationToken cancellationToken) =>
+    public Task<string> RenderRecordAsync(PublishedDocumentChange record, PublicationCatalog catalog, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>{record.RecordId}</html>");
-    public Task<string> RenderStatementAsync(PublishedStatement record, ImmutableArray<PublishedRelationship> related,
+    public Task<string> RenderStatementAsync(PublishedStatement record, ImmutableArray<PublishedRelationship> related, PublicationCatalog catalog,
         CancellationToken cancellationToken) =>
         Logged($"render {record.RecordId[..1]}", $"<html>statement {record.RecordId}{Related(related)}</html>");
-    public Task<string> RenderActionAsync(PublishedAction record, ImmutableArray<PublishedRelationship> related,
+    public Task<string> RenderActionAsync(PublishedAction record, ImmutableArray<PublishedRelationship> related, PublicationCatalog catalog,
         CancellationToken cancellationToken) =>
         Logged($"render {record.RecordId[..1]}", $"<html>action {record.RecordId}{Related(related)}{Corrections(record.Corrections)}</html>");
     public Task<string> RenderVoteAsync(PublishedVote record, string? billActionRecordId, ImmutableArray<PublishedRelationship> related,
-        CancellationToken cancellationToken) =>
+        PublicationCatalog catalog, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>vote {record.RecordId} bill {billActionRecordId}{Related(related)}</html>");
-    public Task<string> RenderRelationshipAsync(PublishedRelationship record, CancellationToken cancellationToken) =>
+    public Task<string> RenderRelationshipAsync(PublishedRelationship record, PublicationCatalog catalog, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>relationship {record.RecordId}</html>");
     public Task<string> RenderBriefAsync(PublishedBrief record, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>brief {record.RecordId}</html>");
@@ -391,7 +391,7 @@ internal sealed class FakeRenderer : IReleaseRenderer
         Task.FromResult($"<html>facet {facet.Name} {page} {string.Join(',', facet.Records.Select(entry => entry.RecordId))}</html>");
     public Task<string> RenderFacetsAsync(ReleaseFacets facets, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>facets {facets.Issues.Length} {facets.PolicyAreas.Length}</html>");
-    public Task<string> RenderOfficialAsync(ReleaseOfficialPage page, CancellationToken cancellationToken)
+    public Task<string> RenderOfficialAsync(ReleaseOfficialPage page, PublicationCatalog catalog, CancellationToken cancellationToken)
     {
         OfficialPages?.Add(page);
         return Task.FromResult($"<html>official {page.Profile.Id} {(page.IsTracked ? "tracked" : "untracked")} {(page.IsCurrent ? "current" : "past")} {page.Congress} past [{string.Join(',', page.PastCongresses)}] records [{string.Join(',', page.Records.Select(entry => entry.RecordId))}] votes [{string.Join(',', page.Votes.Select(vote => vote.RecordId))}]</html>");

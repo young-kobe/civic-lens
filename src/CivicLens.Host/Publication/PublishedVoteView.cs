@@ -1,4 +1,5 @@
 using System.Globalization;
+using CivicLens.Application.Publication;
 using CivicLens.Host.Actions;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Ui;
@@ -8,13 +9,13 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublishedVoteView
 {
-    public static IReadOnlyList<Fact> Facts(PublishedVote vote) =>
+    public static IReadOnlyList<Fact> Facts(PublishedVote vote, PublicationCatalog catalog) =>
     [
         new("Voted on", Moment.Iso(vote.VotedOn)),
         new("Kind", PublishedRecordLabels.VoteKind(vote.Kind)),
         new("Chamber", vote.Chamber.ToString()),
         new("Roll call", $"{vote.RollCallNumber}, Congress {vote.Congress}, session {vote.Session}"),
-        Fact.List("Tracked issues", vote.TrackedIssueIds),
+        PublishedRecordView.Issues("Tracked issues", vote.TrackedIssueIds, catalog),
         new("Published", $"From the official record, checked {Moment.Full(vote.ApprovedAtUtc)}; first published {Moment.Full(vote.FirstPublishedAtUtc)}"),
         .. PublishedRecordLabels.Wording(vote.TextOrigin),
         new("Revision", vote.RevisionNumber.ToString(CultureInfo.InvariantCulture))

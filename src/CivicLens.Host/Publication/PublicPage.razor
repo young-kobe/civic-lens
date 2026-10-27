@@ -1,3 +1,4 @@
+@using CivicLens.Host.Components.Layout
 @using CivicLens.Publication.Contracts
 <!DOCTYPE html>
 <html lang="en">
@@ -35,7 +36,7 @@
         </nav>
         <div class="topbar-tools"><ThemeToggle /></div>
     </header>
-    <main class="public-main" id="main"><div class="content">@ChildContent</div></main>
+    <main class="public-main" id="main"><div class="content"><PublicBreadcrumb Crumbs="Crumbs" />@ChildContent</div></main>
     <footer class="public-footer">
         <p>Each record shows its sources and the exact text it cites.</p>
         <nav class="public-footer-nav" aria-label="Footer">
@@ -66,6 +67,7 @@
     [Parameter] public bool IsArticle { get; set; }
     [Parameter] public string? ExternalScript { get; set; }
     [Parameter] public string RootPath { get; set; } = string.Empty;
+    [Parameter] public IReadOnlyList<Crumb> Crumbs { get; set; } = [];
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
     protected override void OnParametersSet()

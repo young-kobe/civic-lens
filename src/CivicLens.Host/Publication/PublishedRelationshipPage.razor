@@ -1,7 +1,8 @@
 @using CivicLens.Host.Components.Evidence
+@using CivicLens.Application.Publication
 @using CivicLens.Publication.Contracts
 
-<PublishedRecordFrame Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="@Record.Reason" Facts="PublishedRelationshipView.Facts(Record)"
+<PublishedRecordFrame Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="@Record.Reason" Facts="PublishedRelationshipView.Facts(Record, Catalog)"
                       Caveat="A person approved this link between a statement and a record. It states no verdict. It does not say that the statement is true or that it agrees with the record.">
     <PublishedTimeline Events="PublishedTimelineView.For(Record)" />
 
@@ -28,4 +29,5 @@
 
 @code {
     [Parameter, EditorRequired] public PublishedRelationship Record { get; set; } = default!;
+    [Parameter, EditorRequired] public PublicationCatalog Catalog { get; set; } = default!;
 }

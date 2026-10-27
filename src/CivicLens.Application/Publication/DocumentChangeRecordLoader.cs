@@ -26,6 +26,6 @@ internal sealed class DocumentChangeRecordLoader(IDocumentChangeReviewStore revi
         RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
         var record = new PublishedRecordBuilder(build.Rules).Build(addition, build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId), build.Now);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
-            (_, cancellationToken) => build.Renderer.RenderRecordAsync(record, cancellationToken));
+            (_, cancellationToken) => build.Renderer.RenderRecordAsync(record, build.Catalog, cancellationToken));
     }
 }

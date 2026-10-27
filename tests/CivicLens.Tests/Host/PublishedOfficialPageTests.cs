@@ -3,6 +3,7 @@ using AngleSharp.Html.Parser;
 using CivicLens.Application.Publication;
 using CivicLens.Host.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Host;
 
@@ -15,7 +16,7 @@ public sealed class PublishedOfficialPageTests
             [Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)), Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1))],
             [Vote('3', new DateOnly(2026, 4, 1)), Vote('4', new DateOnly(2025, 12, 1))]);
 
-        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
         var records = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-records']")!;
         Assert.Equal([new string('2', 64), new string('3', 64), new string('1', 64), new string('4', 64)],
@@ -46,7 +47,7 @@ public sealed class PublishedOfficialPageTests
             Records = [.. entries.Select(entry => entry with { IssueIds = ["housing"] })]
         }, new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None)).Issues.Single();
 
-        var official = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current(entries, []), CancellationToken.None);
+        var official = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current(entries, []), PublicationCatalogs.None, CancellationToken.None);
         var facetHtml = await new ReleaseRenderer(null, null).RenderFacetPageAsync(facet, 1, CancellationToken.None);
 
         string[] Order(string html) => [.. new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody a.cell-title")
@@ -60,7 +61,7 @@ public sealed class PublishedOfficialPageTests
     {
         var page = Current([Entry('a', PublishedRecordKind.Action, new DateOnly(2026, 5, 2))], [Vote('0', new DateOnly(2026, 5, 2))]);
 
-        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
         Assert.Equal([new string('a', 64), new string('0', 64)], new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody a.cell-title")
             .Select(link => link.GetAttribute("href")!.Replace("../records/", "").Replace(".html", "")));
@@ -83,7 +84,7 @@ public sealed class PublishedOfficialPageTests
             }
         };
 
-        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         Assert.Equal("Mayor Example", document.QuerySelector("h1")!.TextContent);
@@ -104,7 +105,7 @@ public sealed class PublishedOfficialPageTests
             Vote('d', new DateOnly(2026, 4, 4)) with { Kind = PublishedVoteKind.Cloture }]);
         page = page with { TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes) };
 
-        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
         var panel = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-talk-and-action-in-congress-119']")!;
         Assert.Equal(["health", "2 (40%)", "0 (Too few records)", "0 (Too few records)"],
@@ -119,7 +120,7 @@ public sealed class PublishedOfficialPageTests
     [Fact]
     public async Task APageWithNoProfileHasNoProfilePanel()
     {
-        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([], []), CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([], []), PublicationCatalogs.None, CancellationToken.None);
 
         Assert.DoesNotContain("Talk and action", html, StringComparison.Ordinal);
     }
@@ -129,7 +130,7 @@ public sealed class PublishedOfficialPageTests
     {
         var page = Current([], [Vote('3', new DateOnly(2026, 4, 1))]) with { PastCongresses = [118, 117] };
 
-        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
         var links = new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-earlier-congresses'] a");
         Assert.Equal(["../officials/mayor/118.html", "../officials/mayor/117.html"], links.Select(link => link.GetAttribute("href")));
@@ -140,10 +141,12 @@ public sealed class PublishedOfficialPageTests
     {
         var page = new ReleaseOfficialPage(Profile(), true, 118, false, [], [], [Vote('3', new DateOnly(2024, 4, 1)) with { Congress = 118 }]);
 
-        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
-        Assert.Equal("../../officials/mayor.html", document.QuerySelector("a.back-link")!.GetAttribute("href"));
+        Assert.Equal(["../../index.html", "../../officials.html", "../../officials/mayor.html"],
+            document.QuerySelectorAll("nav[aria-label='Breadcrumb'] a").Select(link => link.GetAttribute("href")));
+        Assert.Equal("Mayor Example, Congress 118", document.QuerySelector("nav[aria-label='Breadcrumb'] [aria-current='page']")!.TextContent);
         Assert.Equal(["../../records/" + new string('3', 64) + ".html"], document.QuerySelectorAll("tbody a.cell-title").Select(link => link.GetAttribute("href")));
         Assert.Contains("href=\"../../assets/css/theme.css\"", html, StringComparison.Ordinal);
         Assert.Null(document.QuerySelector("[aria-labelledby='panel-offices']"));
@@ -162,7 +165,7 @@ public sealed class PublishedOfficialPageTests
         };
         var page = new ReleaseOfficialPage(profile, true, congress, false, [], [], []);
 
-        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
         var description = new HtmlParser().ParseDocument(html).QuerySelector("meta[name='description']")!.GetAttribute("content")!;
         Assert.StartsWith(expectedStart, description, StringComparison.Ordinal);
@@ -172,7 +175,7 @@ public sealed class PublishedOfficialPageTests
     public async Task AnOfficialWithNoTermStatesThatTheRostersAndTheConfigurationListNoOffice()
     {
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []),
-            CancellationToken.None);
+            PublicationCatalogs.None, CancellationToken.None);
 
         Assert.Contains("The rosters and the configuration list no dated office for this official.", html, StringComparison.Ordinal);
     }
@@ -181,10 +184,31 @@ public sealed class PublishedOfficialPageTests
     public async Task AnOfficialWhoLeftTheConfigurationSaysThatCivicLensNoLongerTracksThem()
     {
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []) with { IsTracked = false },
-            CancellationToken.None);
+            PublicationCatalogs.None, CancellationToken.None);
 
         Assert.Contains("Civic Lens no longer tracks this official", html, StringComparison.Ordinal);
         Assert.DoesNotContain("The rosters and the configuration list no dated office", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheIssueColumnShowsTheConfiguredNameLinkedToTheIssuePageAndAnUnconfiguredIdAsPlainText()
+    {
+        PublishedRecordEntry[] entries = [Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)) with { IssueIds = ["housing", "mystery"] }];
+        var page = Current(entries, []);
+        page = page with { TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes) };
+        var catalog = new PublicationCatalog(new Dictionary<string, string>(), new IssueConfiguration
+        {
+            PolicyAreas = [new() { Id = "land-use", Name = "Land use" }],
+            Issues = [new() { Id = "housing", Name = "Housing costs", Definition = "d", PolicyAreaIds = ["land-use"] }]
+        });
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, catalog, CancellationToken.None);
+
+        var cells = new HtmlParser().ParseDocument(html)
+            .QuerySelectorAll("[aria-labelledby='panel-talk-and-action-in-congress-119'] tbody tr td:first-child").ToList();
+        Assert.Equal(["Housing costs", "mystery"], cells.Select(cell => cell.TextContent.Trim()));
+        Assert.Equal("../" + PublicationProtocol.IssuePagePath("housing", 1), cells[0].QuerySelector("a")!.GetAttribute("href"));
+        Assert.Null(cells[1].QuerySelector("a"));
     }
 
     [Fact]

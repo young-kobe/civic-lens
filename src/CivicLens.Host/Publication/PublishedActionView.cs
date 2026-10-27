@@ -1,4 +1,5 @@
 using System.Globalization;
+using CivicLens.Application.Publication;
 using CivicLens.Host.Actions;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Ui;
@@ -8,12 +9,12 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublishedActionView
 {
-    public static IReadOnlyList<Fact> Facts(PublishedAction action) =>
+    public static IReadOnlyList<Fact> Facts(PublishedAction action, PublicationCatalog catalog) =>
     [
         new("Bill", ActionLabels.Bill(action.Congress, action.BillType, action.BillNumber)),
         new("Title", action.BillTitle),
         new("Policy area", action.PolicyArea ?? "None"),
-        Fact.List("Tracked issues", action.TrackedIssueIds),
+        PublishedRecordView.Issues("Tracked issues", action.TrackedIssueIds, catalog),
         new("Published", $"From the official record, checked {Moment.Full(action.ApprovedAtUtc)}; first published {Moment.Full(action.FirstPublishedAtUtc)}"),
         .. PublishedRecordLabels.Wording(action.TextOrigin),
         new("Revision", action.RevisionNumber.ToString(CultureInfo.InvariantCulture))

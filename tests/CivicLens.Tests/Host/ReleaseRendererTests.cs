@@ -4,6 +4,7 @@ using AngleSharp.Html.Parser;
 using CivicLens.Application.Publication;
 using CivicLens.Host.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Host;
 
@@ -17,7 +18,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task RecordPageEncodesUntrustedTextAndMarksExactlyTheCitedRanges()
     {
-        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None);
 
         Assert.DoesNotContain("<b>", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<script>", html, StringComparison.Ordinal);
@@ -34,7 +35,7 @@ public sealed class ReleaseRendererTests
     [InlineData("cite-change-date")]
     public async Task CitedTextIsNeverInsideAClosedDetailsElementSoLinksWorkWithoutScript(string anchor)
     {
-        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None);
         var before = html[..html.IndexOf($"id=\"{anchor}\"", StringComparison.Ordinal)];
         var open = new Stack<string>();
         foreach (Match tag in Regex.Matches(before, "<details[^>]*>|</details>"))
@@ -51,7 +52,7 @@ public sealed class ReleaseRendererTests
     {
         var record = Record("\n" + BeforeText, "\n" + AfterText);
 
-        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(record, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(record, PublicationCatalogs.None, CancellationToken.None);
 
         var shown = new HtmlParser().ParseDocument(html).QuerySelectorAll(".doc-text").Select(text => text.TextContent);
         Assert.Equal([record.Before.Text, record.After.Text], shown);
@@ -60,7 +61,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task RecordPageIsPublicStaticAndRelative()
     {
-        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None);
 
         Assert.StartsWith("<!DOCTYPE html>", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("<html lang=\"en\">", html, StringComparison.Ordinal);
@@ -76,9 +77,9 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task RecordPageKeepsObservationDatesApartFromTheChangeDate()
     {
-        var withDate = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), CancellationToken.None);
+        var withDate = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None);
         var withoutDate = await new ReleaseRenderer(null, null).RenderRecordAsync(
-            Record() with { ChangeDate = null, ChangeDateEvidence = null }, CancellationToken.None);
+            Record() with { ChangeDate = null, ChangeDateEvidence = null }, PublicationCatalogs.None, CancellationToken.None);
 
         Assert.Contains("Actual change date", withDate, StringComparison.Ordinal);
         Assert.Contains("2026-03-01", withDate, StringComparison.Ordinal);
@@ -96,7 +97,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task RecordPageShowsChangedPassagesSlicedFromThePublishedTexts()
     {
-        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None);
 
         Assert.Contains("Changed passage 1", html, StringComparison.Ordinal);
         Assert.Contains("hidden", html, StringComparison.Ordinal);
@@ -156,7 +157,7 @@ public sealed class ReleaseRendererTests
     public async Task EveryPublicPageLinksToTheSearchPageAndTheAllRecordsPageHoldsNoBrowserSearch()
     {
         var index = await new ReleaseRenderer(null, null).RenderAllRecordsAsync(ReleaseOf(1), 1, CancellationToken.None);
-        var record = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), CancellationToken.None);
+        var record = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None);
 
         Assert.Contains("href=\"search.html\"", index, StringComparison.Ordinal);
         Assert.Contains("href=\"../search.html\"", record, StringComparison.Ordinal);
@@ -172,8 +173,8 @@ public sealed class ReleaseRendererTests
 
         var pages = new[]
         {
-            (record.RecordId, record.RevisionNumber, await renderer.RenderRecordAsync(record, CancellationToken.None)),
-            (vote.RecordId, vote.RevisionNumber, await renderer.RenderVoteAsync(vote, null, [], CancellationToken.None))
+            (record.RecordId, record.RevisionNumber, await renderer.RenderRecordAsync(record, PublicationCatalogs.None, CancellationToken.None)),
+            (vote.RecordId, vote.RevisionNumber, await renderer.RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None))
         };
 
         foreach (var (recordId, revision, html) in pages)
@@ -283,7 +284,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task StatementPageShowsSpeakersDateEvidenceKindLabelsAndMarksTheCitedSourceText()
     {
-        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(Statement(), [], CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
@@ -315,7 +316,7 @@ public sealed class ReleaseRendererTests
             Speakers = [new() { Id = "o1", Name = "Jane Doe" }, new() { Id = "o2", Name = "Ann Roe" }]
         };
 
-        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(statement, [], CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(statement, [], PublicationCatalogs.None, CancellationToken.None);
 
         var speakers = new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts dd").First(dd => dd.TextContent.Contains("Jane Doe", StringComparison.Ordinal));
         Assert.Equal(["../officials/o1.html", "../officials/o2.html"], speakers.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
@@ -325,7 +326,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task ActionPageLinksTheSponsorButNotACosponsorBecauseOnlyTheSponsorOwnsTheAction()
     {
-        var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action(), [], CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action(), [], PublicationCatalogs.None, CancellationToken.None);
 
         var rows = new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='sponsorships-title'] tbody tr").ToList();
         Assert.Equal("../officials/o1.html", rows.Single(row => row.QuerySelector("td")!.TextContent == "Jane <Doe>")
@@ -336,7 +337,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task VotePageLinksEachTrackedMemberToTheOfficialPage()
     {
-        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote(), null, [], CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None);
 
         var link = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='members-title'] tbody td a")!;
         Assert.Equal("../officials/o1.html", link.GetAttribute("href"));
@@ -347,7 +348,7 @@ public sealed class ReleaseRendererTests
     public async Task StatementPageOmitsTheDateFactAndItsEvidenceWhenTheStatementHasNoEstablishedDate()
     {
         var html = await new ReleaseRenderer(null, null).RenderStatementAsync(
-            Statement() with { StatementDate = null, StatementDateEvidence = null }, [], CancellationToken.None);
+            Statement() with { StatementDate = null, StatementDateEvidence = null }, [], PublicationCatalogs.None, CancellationToken.None);
 
         Assert.DoesNotContain("Statement date", html, StringComparison.Ordinal);
         Assert.DoesNotContain("cite-statement-date", html, StringComparison.Ordinal);
@@ -359,13 +360,13 @@ public sealed class ReleaseRendererTests
         var statement = Statement() with { Quotations = [Statement().Quotations[0] with { Quote = "invented words" }] };
 
         await Assert.ThrowsAsync<InvalidDataException>(() =>
-            new ReleaseRenderer(null, null).RenderStatementAsync(statement, [], CancellationToken.None));
+            new ReleaseRenderer(null, null).RenderStatementAsync(statement, [], PublicationCatalogs.None, CancellationToken.None));
     }
 
     [Fact]
     public async Task ActionPageShowsTheBillTheSponsorshipTableTheCrsSummaryAndTheSources()
     {
-        var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action(), [], CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action(), [], HousingCatalog, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
@@ -373,7 +374,7 @@ public sealed class ReleaseRendererTests
         Assert.Equal("HR 7, Congress 119", facts["Bill"]);
         Assert.Equal("A <housing> bill", facts["Title"]);
         Assert.Equal("Housing and Community Development", facts["Policy area"]);
-        Assert.Equal("housing", facts["Tracked issues"]);
+        Assert.Equal("Housing costs", facts["Tracked issues"]);
         var rows = document.QuerySelectorAll("[aria-labelledby='sponsorships-title'] tbody tr")
             .Select(row => string.Join("|", row.QuerySelectorAll("td").Select(cell => cell.QuerySelector("blockquote")?.TextContent ?? cell.TextContent.Trim())));
         Assert.Equal(["Jane <Doe>|Sponsor|No|2026-01-03|None|Sponsor: D000001", "Ann Roe|Cosponsor|Yes|2026-01-05|2026-01-20|Cosponsor: R000002, original"], rows);
@@ -393,8 +394,8 @@ public sealed class ReleaseRendererTests
     {
         var renderer = new ReleaseRenderer(null, null);
 
-        foreach (var html in new[] { await renderer.RenderActionAsync(Action(), [], CancellationToken.None),
-                     await renderer.RenderVoteAsync(Vote(), null, [], CancellationToken.None) })
+        foreach (var html in new[] { await renderer.RenderActionAsync(Action(), [], PublicationCatalogs.None, CancellationToken.None),
+                     await renderer.RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None) })
         {
             Assert.Contains("From the official record, checked", html, StringComparison.Ordinal);
             Assert.DoesNotContain("Approved 20", html, StringComparison.Ordinal);
@@ -409,10 +410,10 @@ public sealed class ReleaseRendererTests
         var vote = Vote();
         var person = PublishedTextOrigin.Person;
 
-        var model = new[] { await renderer.RenderActionAsync(action, [], CancellationToken.None),
-            await renderer.RenderVoteAsync(vote, null, [], CancellationToken.None) };
-        var written = new[] { await renderer.RenderActionAsync(action with { TextOrigin = person }, [], CancellationToken.None),
-            await renderer.RenderVoteAsync(vote with { TextOrigin = person }, null, [], CancellationToken.None) };
+        var model = new[] { await renderer.RenderActionAsync(action, [], PublicationCatalogs.None, CancellationToken.None),
+            await renderer.RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None) };
+        var written = new[] { await renderer.RenderActionAsync(action with { TextOrigin = person }, [], PublicationCatalogs.None, CancellationToken.None),
+            await renderer.RenderVoteAsync(vote with { TextOrigin = person }, null, [], PublicationCatalogs.None, CancellationToken.None) };
 
         Assert.All(model, html => Assert.Contains("An AI summary of the official record", html, StringComparison.Ordinal));
         Assert.All(written, html => Assert.DoesNotContain("AI summary", html, StringComparison.Ordinal));
@@ -421,7 +422,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task EveryActionQuoteLinksToTheMarkOfTheSameTextInTheSourceAndEachSourceIsLabelledByPosition()
     {
-        var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action(), [], CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action(), [], PublicationCatalogs.None, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         var links = document.QuerySelectorAll("a[href^='#cite-']").ToArray();
@@ -440,13 +441,13 @@ public sealed class ReleaseRendererTests
     {
         var action = Action() with { SummaryCitation = Action().SummaryCitation! with { ExtractionId = new string('9', 64) } };
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => new ReleaseRenderer(null, null).RenderActionAsync(action, [], CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidDataException>(() => new ReleaseRenderer(null, null).RenderActionAsync(action, [], PublicationCatalogs.None, CancellationToken.None));
     }
 
     [Fact]
     public async Task VotePageShowsTheDayTheKindTheResultFactsTheCastOfEachTrackedMemberAndTheSources()
     {
-        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote(), null, [], CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote(), null, [], HousingCatalog, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
@@ -455,7 +456,7 @@ public sealed class ReleaseRendererTests
         Assert.Equal("Passage", facts["Kind"]);
         Assert.Equal("House", facts["Chamber"]);
         Assert.Equal("100, Congress 119, session 1", facts["Roll call"]);
-        Assert.Equal("housing", facts["Tracked issues"]);
+        Assert.Equal("Housing costs", facts["Tracked issues"]);
         var result = document.QuerySelector("[aria-labelledby='result-title']")!;
         Assert.Equal(["Started: 2025-04-10T11:08:00-04:00", "Question: On Passage", "Result: Passed <b>"],
             result.QuerySelectorAll("blockquote").Select(quote => quote.TextContent));
@@ -473,7 +474,7 @@ public sealed class ReleaseRendererTests
     [InlineData(PublishedChamber.Senate, "Senate roll call")]
     public async Task TheVoteCaveatNamesTheSourceOfTheChamberThatHeldTheVote(PublishedChamber chamber, string source)
     {
-        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote() with { Chamber = chamber }, null, [], CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote() with { Chamber = chamber }, null, [], PublicationCatalogs.None, CancellationToken.None);
 
         Assert.Contains(source, new HtmlParser().ParseDocument(html).QuerySelector(".caveat")!.TextContent, StringComparison.Ordinal);
     }
@@ -484,7 +485,7 @@ public sealed class ReleaseRendererTests
     [InlineData(PublishedVoteKind.MotionToProceed, "Motion to proceed")]
     public async Task ASenateVoteKindHasItsPublicLabelOnThePage(PublishedVoteKind kind, string label)
     {
-        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote() with { Kind = kind }, null, [], CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote() with { Kind = kind }, null, [], PublicationCatalogs.None, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
@@ -495,7 +496,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task EveryVoteQuoteLinksToTheMarkOfTheSameTextInTheSource()
     {
-        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote(), null, [], CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         var links = document.QuerySelectorAll("a[href^='#cite-']").ToArray();
@@ -512,8 +513,8 @@ public sealed class ReleaseRendererTests
     {
         var actionId = new string('c', 64);
 
-        var linked = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderVoteAsync(Vote(), actionId, [], CancellationToken.None));
-        var plain = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderVoteAsync(Vote(), null, [], CancellationToken.None));
+        var linked = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderVoteAsync(Vote(), actionId, [], PublicationCatalogs.None, CancellationToken.None));
+        var plain = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None));
 
         var link = Assert.Single(linked.QuerySelectorAll("[aria-labelledby='bill-title'] a"));
         Assert.Equal(($"../records/{actionId}.html", "HR 7, Congress 119"), (link.GetAttribute("href"), link.TextContent));
@@ -524,7 +525,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task AVoteWithoutABillShowsNoBillPanel()
     {
-        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote() with { BillType = null, BillNumber = null }, null, [], CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote() with { BillType = null, BillNumber = null }, null, [], PublicationCatalogs.None, CancellationToken.None);
 
         Assert.Empty(new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='bill-title']"));
     }
@@ -534,7 +535,7 @@ public sealed class ReleaseRendererTests
     {
         var vote = Vote() with { VotedOnCitation = Vote().VotedOnCitation with { ExtractionId = new string('9', 64) } };
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidDataException>(() => new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None));
     }
 
     [Fact]
@@ -547,9 +548,9 @@ public sealed class ReleaseRendererTests
         var voteLink = Relationship(PublishedRecordKind.Vote, vote.RecordId, '8') with { Type = PublishedRelationshipType.StatementAboutVote };
         var renderer = new ReleaseRenderer(null, null);
 
-        var statementPage = new HtmlParser().ParseDocument(await renderer.RenderStatementAsync(statement, [actionLink, voteLink], CancellationToken.None));
-        var actionPage = new HtmlParser().ParseDocument(await renderer.RenderActionAsync(action, [actionLink], CancellationToken.None));
-        var votePage = new HtmlParser().ParseDocument(await renderer.RenderVoteAsync(vote, null, [voteLink], CancellationToken.None));
+        var statementPage = new HtmlParser().ParseDocument(await renderer.RenderStatementAsync(statement, [actionLink, voteLink], PublicationCatalogs.None, CancellationToken.None));
+        var actionPage = new HtmlParser().ParseDocument(await renderer.RenderActionAsync(action, [actionLink], PublicationCatalogs.None, CancellationToken.None));
+        var votePage = new HtmlParser().ParseDocument(await renderer.RenderVoteAsync(vote, null, [voteLink], PublicationCatalogs.None, CancellationToken.None));
 
         var rows = statementPage.QuerySelectorAll("[aria-labelledby='related-title'] li");
         Assert.Equal(2, rows.Length);
@@ -569,11 +570,11 @@ public sealed class ReleaseRendererTests
     {
         var renderer = new ReleaseRenderer(null, null);
 
-        Assert.Empty(new HtmlParser().ParseDocument(await renderer.RenderStatementAsync(Statement(), [], CancellationToken.None))
+        Assert.Empty(new HtmlParser().ParseDocument(await renderer.RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None))
             .QuerySelectorAll("[aria-labelledby='related-title']"));
-        Assert.Empty(new HtmlParser().ParseDocument(await renderer.RenderActionAsync(Action(), [], CancellationToken.None))
+        Assert.Empty(new HtmlParser().ParseDocument(await renderer.RenderActionAsync(Action(), [], PublicationCatalogs.None, CancellationToken.None))
             .QuerySelectorAll("[aria-labelledby='related-title']"));
-        Assert.Empty(new HtmlParser().ParseDocument(await renderer.RenderVoteAsync(Vote(), null, [], CancellationToken.None))
+        Assert.Empty(new HtmlParser().ParseDocument(await renderer.RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None))
             .QuerySelectorAll("[aria-labelledby='related-title']"));
     }
 
@@ -582,7 +583,7 @@ public sealed class ReleaseRendererTests
     {
         var link = Relationship(PublishedRecordKind.Action, new string('a', 64), '7');
 
-        var html = await new ReleaseRenderer(null, null).RenderRelationshipAsync(link, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderRelationshipAsync(link, PublicationCatalogs.None, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         Assert.DoesNotContain("<b>", html, StringComparison.Ordinal);
@@ -602,7 +603,7 @@ public sealed class ReleaseRendererTests
     {
         var link = Relationship(PublishedRecordKind.Action, new string('a', 64), '7') with { Type = PublishedRelationshipType.StatementAboutVote };
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => new ReleaseRenderer(null, null).RenderRelationshipAsync(link, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidDataException>(() => new ReleaseRenderer(null, null).RenderRelationshipAsync(link, PublicationCatalogs.None, CancellationToken.None));
     }
 
     [Fact]
@@ -800,12 +801,12 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task EveryRecordKindListsItsDatedEventsInDateOrderOnATimeline()
     {
-        var statement = await TimelineOf(renderer => renderer.RenderStatementAsync(Statement(), [], CancellationToken.None));
-        var change = await TimelineOf(renderer => renderer.RenderRecordAsync(Record(), CancellationToken.None));
-        var action = await TimelineOf(renderer => renderer.RenderActionAsync(Action(), [], CancellationToken.None));
-        var vote = await TimelineOf(renderer => renderer.RenderVoteAsync(Vote(), null, [], CancellationToken.None));
+        var statement = await TimelineOf(renderer => renderer.RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None));
+        var change = await TimelineOf(renderer => renderer.RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None));
+        var action = await TimelineOf(renderer => renderer.RenderActionAsync(Action(), [], PublicationCatalogs.None, CancellationToken.None));
+        var vote = await TimelineOf(renderer => renderer.RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None));
         var relationship = await TimelineOf(renderer => renderer.RenderRelationshipAsync(
-            Relationship(PublishedRecordKind.Action, new string('a', 64), '7') with { StatementDate = new DateOnly(2026, 2, 3) }, CancellationToken.None));
+            Relationship(PublishedRecordKind.Action, new string('a', 64), '7') with { StatementDate = new DateOnly(2026, 2, 3) }, PublicationCatalogs.None, CancellationToken.None));
         var brief = await TimelineOf(renderer => renderer.RenderBriefAsync(Brief(), CancellationToken.None));
 
         Assert.Equal(["2026-05-01|Statement made", "2026-05-03|Source observed, 2026-05-03 10:45 UTC",
@@ -834,15 +835,15 @@ public sealed class ReleaseRendererTests
         var statement = Statement() with { RevisionNumber = 3, Corrections = corrections };
         var renderer = new ReleaseRenderer(null, null);
 
-        foreach (var html in new[] { await renderer.RenderActionAsync(action, [], CancellationToken.None),
-                     await renderer.RenderStatementAsync(statement, [], CancellationToken.None) })
+        foreach (var html in new[] { await renderer.RenderActionAsync(action, [], PublicationCatalogs.None, CancellationToken.None),
+                     await renderer.RenderStatementAsync(statement, [], PublicationCatalogs.None, CancellationToken.None) })
         {
             var entries = new HtmlParser().ParseDocument(html).QuerySelectorAll("ul.corrections > li")
                 .Select(item => (item.QuerySelector("strong")!.TextContent, item.QuerySelector("p")?.TextContent)).ToArray();
             Assert.Equal(("Correction, 2026-02-04. Replaces revision 2.", "Fixed the <sponsor> date."), entries[0]);
             Assert.Equal(("Updated from the source, 2026-02-02. Replaces revision 1.", null), entries[1]);
         }
-        var timeline = await TimelineOf(renderer => renderer.RenderActionAsync(action, [], CancellationToken.None));
+        var timeline = await TimelineOf(renderer => renderer.RenderActionAsync(action, [], PublicationCatalogs.None, CancellationToken.None));
         Assert.Contains("2026-02-04|Correction, replaces revision 2, 2026-02-04 09:00 UTC", timeline);
         Assert.Contains("2026-02-02|Updated from the source, replaces revision 1, 2026-02-02 09:00 UTC", timeline);
     }
@@ -889,7 +890,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task ARecordWithNoCorrectionsShowsNoCorrectionList()
     {
-        var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action(), [], CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action(), [], PublicationCatalogs.None, CancellationToken.None);
 
         Assert.Empty(new HtmlParser().ParseDocument(html).QuerySelectorAll("ul.corrections"));
     }
@@ -903,7 +904,7 @@ public sealed class ReleaseRendererTests
             FirstPublishedAtUtc = new DateTimeOffset(2026, 1, 22, 8, 0, 0, TimeSpan.Zero)
         };
 
-        var events = await TimelineOf(renderer => renderer.RenderVoteAsync(vote, null, [], CancellationToken.None));
+        var events = await TimelineOf(renderer => renderer.RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None));
 
         Assert.Equal(["2025-04-10|Vote held", "2026-01-22|First published, 2026-01-22 08:00 UTC", "2026-01-22|Approved, 2026-01-22 12:00 UTC"], events);
     }
@@ -980,7 +981,7 @@ public sealed class ReleaseRendererTests
     public async Task ALongSummaryWithNewlinesAndSpaceRunsIsCutAtAWholeWordOnOneLineAndOpenGraphRepeatsIt()
     {
         var summary = string.Join("\n  ", Enumerable.Repeat("housing   rules\nchanged", 20));
-        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record() with { Summary = summary }, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record() with { Summary = summary }, PublicationCatalogs.None, CancellationToken.None);
 
         var head = new HtmlParser().ParseDocument(html).Head!;
         var description = head.QuerySelector("meta[name='description']")!.GetAttribute("content")!;
@@ -994,7 +995,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task AWordlessHeadlineIsNeverCutBetweenTheTwoHalvesOfASurrogatePair()
     {
-        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record() with { Headline = string.Concat(Enumerable.Repeat("😀", 60)) }, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record() with { Headline = string.Concat(Enumerable.Repeat("😀", 60)) }, PublicationCatalogs.None, CancellationToken.None);
 
         var title = TitleOf(html);
         Assert.DoesNotContain('\uFFFD', title);
@@ -1113,10 +1114,10 @@ public sealed class ReleaseRendererTests
         var pastOfficial = new ReleaseOfficialPage(profile, true, 118, false, [], [], []);
         return
         [
-            ("record", PublicationProtocol.RecordPagePath(Record().RecordId), await renderer.RenderRecordAsync(Record(), CancellationToken.None), "All records"),
-            ("statement", PublicationProtocol.RecordPagePath(Statement().RecordId), await renderer.RenderStatementAsync(Statement(), [], CancellationToken.None), "All records"),
-            ("action", PublicationProtocol.RecordPagePath(Action().RecordId), await renderer.RenderActionAsync(Action(), [], CancellationToken.None), "All records"),
-            ("vote", PublicationProtocol.RecordPagePath(Vote().RecordId), await renderer.RenderVoteAsync(Vote(), null, [], CancellationToken.None), "All records"),
+            ("record", PublicationProtocol.RecordPagePath(Record().RecordId), await renderer.RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None), "All records"),
+            ("statement", PublicationProtocol.RecordPagePath(Statement().RecordId), await renderer.RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None), "All records"),
+            ("action", PublicationProtocol.RecordPagePath(Action().RecordId), await renderer.RenderActionAsync(Action(), [], PublicationCatalogs.None, CancellationToken.None), "All records"),
+            ("vote", PublicationProtocol.RecordPagePath(Vote().RecordId), await renderer.RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None), "All records"),
             ("brief", PublicationProtocol.RecordPagePath(Brief().RecordId), await renderer.RenderBriefAsync(Brief(), CancellationToken.None), "All records"),
             ("withdrawal", PublicationProtocol.RecordPagePath(withdrawal.RecordId), await renderer.RenderWithdrawalAsync(withdrawal, CancellationToken.None), "All records"),
             ("home", PublicationProtocol.HomePath, await renderer.RenderHomeAsync(release, null, facets, CancellationToken.None), null),
@@ -1124,13 +1125,78 @@ public sealed class ReleaseRendererTests
             ("issue", facets.Issues[0].PagePath(1), await renderer.RenderFacetPageAsync(facets.Issues[0], 1, CancellationToken.None), "Issues"),
             ("policy area", facets.PolicyAreas[0].PagePath(1), await renderer.RenderFacetPageAsync(facets.PolicyAreas[0], 1, CancellationToken.None), "Issues"),
             ("issues", PublicationProtocol.FacetsPath, await renderer.RenderFacetsAsync(facets, CancellationToken.None), "Issues"),
-            ("official", official.PagePath, await renderer.RenderOfficialAsync(official, CancellationToken.None), "Officials"),
-            ("past congress", pastOfficial.PagePath, await renderer.RenderOfficialAsync(pastOfficial, CancellationToken.None), "Officials"),
+            ("official", official.PagePath, await renderer.RenderOfficialAsync(official, PublicationCatalogs.None, CancellationToken.None), "Officials"),
+            ("past congress", pastOfficial.PagePath, await renderer.RenderOfficialAsync(pastOfficial, PublicationCatalogs.None, CancellationToken.None), "Officials"),
             ("officials", PublicationProtocol.OfficialsPagePath, await renderer.RenderOfficialsAsync([new OfficialListing(profile, 0)], CancellationToken.None), "Officials"),
             ("search", PublicationProtocol.SearchPagePath, await renderer.RenderSearchAsync(release, facets, CancellationToken.None), "Search"),
             ("method", PublicationProtocol.MethodPagePath, await renderer.RenderMethodAsync(CancellationToken.None), null),
             ("report", PublicationProtocol.ReportPagePath, await renderer.RenderReportAsync(CancellationToken.None), null)
         ];
+    }
+
+    [Fact]
+    public async Task ABreadcrumbTrailResolvesFromEachFolderDepthAndMarksOnlyTheLastItemAsTheCurrentPage()
+    {
+        var pages = (await RenderEveryPageTypeAsync()).ToDictionary(page => page.Name);
+
+        AssertTrail(pages["all records"], ["Home|index.html", "All records"]);
+        AssertTrail(pages["issues"], ["Home|index.html", "Issues"]);
+        AssertTrail(pages["officials"], ["Home|index.html", "Officials"]);
+        AssertTrail(pages["method"], ["Home|index.html", "How the talk and action profile works"]);
+        AssertTrail(pages["report"], ["Home|index.html", "Report a problem"]);
+        AssertTrail(pages["issue"], ["Home|../index.html", "Issues|../issues.html", "Housing costs"]);
+        AssertTrail(pages["vote"], ["Home|../index.html", "All records|../all.html", Vote().Headline]);
+        AssertTrail(pages["withdrawal"], ["Home|../index.html", "All records|../all.html", "Withdrawn action: cccccccccccc"]);
+        AssertTrail(pages["official"], ["Home|../index.html", "Officials|../officials.html", "Mayor Example"]);
+        AssertTrail(pages["past congress"], ["Home|../../index.html", "Officials|../../officials.html",
+            "Mayor Example|../../officials/mayor.html", "Mayor Example, Congress 118"]);
+        Assert.Null(new HtmlParser().ParseDocument(pages["home"].Html).QuerySelector("nav[aria-label='Breadcrumb']"));
+    }
+
+    [Fact]
+    public async Task EveryBreadcrumbLinkOfEveryPageTypeLeadsToAPageTheReleaseWritesSoNoReaderReachesA404()
+    {
+        foreach (var (name, pagePath, html, _) in await RenderEveryPageTypeAsync())
+        {
+            var links = new HtmlParser().ParseDocument(html).QuerySelectorAll("nav[aria-label='Breadcrumb'] a")
+                .Select(link => link.GetAttribute("href")!).ToList();
+
+            var page = new Uri("https://x/" + pagePath);
+            Assert.All(links, href => Assert.True(
+                WrittenRootPages.Append(PublicationProtocol.OfficialPagePath("mayor")).Contains(new Uri(page, href).AbsolutePath[1..]), $"{name}: {href}"));
+        }
+    }
+
+    [Fact]
+    public async Task ARecordPageShowsTheConfiguredIssueNameLinkedToItsIssuePageAndAnUnconfiguredIdAsPlainText()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var action = Action() with { TrackedIssueIds = ["housing", "mystery"] };
+        var vote = Vote() with { TrackedIssueIds = ["housing", "mystery"] };
+        var statement = Statement() with { IssueIds = ["housing", "mystery"] };
+
+        foreach (var html in new[] { await renderer.RenderActionAsync(action, [], HousingCatalog, CancellationToken.None),
+                     await renderer.RenderVoteAsync(vote, null, [], HousingCatalog, CancellationToken.None),
+                     await renderer.RenderStatementAsync(statement, [], HousingCatalog, CancellationToken.None) })
+        {
+            var issues = new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts dt")
+                .Single(label => label.TextContent is "Tracked issues" or "Issues").NextElementSibling!;
+
+            Assert.Equal("Housing costs, mystery", Regex.Replace(issues.TextContent, @"\s+", " ").Trim());
+            var link = Assert.Single(issues.QuerySelectorAll("a"));
+            Assert.Equal("../" + PublicationProtocol.IssuePagePath("housing", 1), link.GetAttribute("href"));
+            Assert.Equal("Housing costs", link.TextContent);
+        }
+    }
+
+    private static void AssertTrail((string Name, string Path, string Html, string? Section) page, string[] expected)
+    {
+        var items = new HtmlParser().ParseDocument(page.Html).QuerySelectorAll("nav[aria-label='Breadcrumb'] ol > li").ToList();
+
+        Assert.Equal(expected, items.Select(item => item.QuerySelector("a") is { } link ? $"{link.TextContent}|{link.GetAttribute("href")}" : item.TextContent.Trim()));
+        Assert.Equal(["page"], items.SelectMany(item => item.QuerySelectorAll("[aria-current]")).Select(mark => mark.GetAttribute("aria-current")));
+        Assert.Equal(items[^1].QuerySelector("[aria-current]"), items[^1].Children.Single());
+        Assert.All(items.SelectMany(item => item.QuerySelectorAll("span[aria-hidden]")), mark => Assert.Equal("/", mark.TextContent));
     }
 
     [Fact]
@@ -1168,7 +1234,7 @@ public sealed class ReleaseRendererTests
     public async Task ARecordPageUsesItsHeadlineAsTitleCutAtAWordAndIsAnArticle()
     {
         var headline = string.Join(' ', Enumerable.Repeat("housing", 30));
-        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record() with { Headline = headline }, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record() with { Headline = headline }, PublicationCatalogs.None, CancellationToken.None);
 
         var head = new HtmlParser().ParseDocument(html).Head!;
         var title = head.QuerySelector("title")!.TextContent;
@@ -1191,6 +1257,8 @@ public sealed class ReleaseRendererTests
     }
 
     private static readonly ReleaseFacets NoFacets = new([], []);
+
+    private static PublicationCatalog HousingCatalog { get; } = new(new Dictionary<string, string>(), IssuesNamed("housing", "Housing costs"));
 
     private static IssueConfiguration IssuesNamed(string id, string name) => new()
     {

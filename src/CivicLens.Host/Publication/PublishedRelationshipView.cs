@@ -1,4 +1,5 @@
 using System.Globalization;
+using CivicLens.Application.Publication;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Publication.Contracts;
@@ -7,7 +8,7 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublishedRelationshipView
 {
-    public static IReadOnlyList<Fact> Facts(PublishedRelationship relationship)
+    public static IReadOnlyList<Fact> Facts(PublishedRelationship relationship, PublicationCatalog catalog)
     {
         var facts = new List<Fact>
         {
@@ -15,7 +16,7 @@ internal static class PublishedRelationshipView
             PublishedRecordView.Officials("Speakers", relationship.Officials)
         };
         if (relationship.StatementDate is { } date) facts.Add(new("Statement date", Moment.Iso(date)));
-        facts.Add(Fact.List("Issues", relationship.IssueIds));
+        facts.Add(PublishedRecordView.Issues("Issues", relationship.IssueIds, catalog));
         facts.Add(Fact.List("Policy areas", relationship.PolicyAreaIds));
         facts.Add(new("Published", $"Approved {Moment.Full(relationship.ApprovedAtUtc)}; first published {Moment.Full(relationship.FirstPublishedAtUtc)}"));
         facts.Add(new("Revision", relationship.RevisionNumber.ToString(CultureInfo.InvariantCulture)));
