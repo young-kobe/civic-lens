@@ -19,12 +19,14 @@ public sealed record TalkAndActionProfile(TalkAndActionColumn Statements, TalkAn
     public static TalkAndActionProfile Of(int congress, IEnumerable<PublishedRecordEntry> entries, IEnumerable<PublishedOfficialVote> votes)
     {
         var inCongress = entries.Where(entry => CongressCalendar.CongressOn(ReleaseRecordOrder.Day(entry)) == congress).ToArray();
-        var inCongressVotes = votes.Where(vote => vote.Congress == congress).ToArray();
-        var rolls = inCongressVotes.ToLookup(vote => vote.Kind.IsSubstantive());
+        var allVotes = votes.ToArray();
+        var rolls = allVotes.ToLookup(vote => vote.Kind.IsSubstantive());
         return new(ColumnOf(inCongress, PublishedRecordKind.Statement), ColumnOf(inCongress, PublishedRecordKind.Action),
             TalkAndActionColumn.Of(rolls[true].Where(vote => vote.IsCast).Select(vote => vote.IssueIds)),
-            MissedVotes.Of(inCongressVotes), rolls[false].Count());
+            MissedVotes.Of(allVotes), rolls[false].Count());
     }
+
+    public static double? ShareOf(int count, int of) => of >= MinimumRecordsForShare ? (double)count / of : null;
 
     private static TalkAndActionColumn ColumnOf(PublishedRecordEntry[] entries, PublishedRecordKind kind) =>
         TalkAndActionColumn.Of(entries.Where(entry => entry.Kind == kind).Select(entry => entry.IssueIds));

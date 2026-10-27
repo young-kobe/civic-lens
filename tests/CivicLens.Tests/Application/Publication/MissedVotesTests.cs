@@ -50,7 +50,7 @@ public sealed class MissedVotesTests
         Assert.Equal(showsShare ? 1.0 / held : null, share);
     }
 
-    internal static PublishedOfficialVote Vote(int id, string cast, PublishedChamber chamber = PublishedChamber.House) => new()
+    private static PublishedOfficialVote Vote(int id, string cast, PublishedChamber chamber = PublishedChamber.House) => new()
     {
         RecordId = id.ToString("x64"),
         VotedOn = new DateOnly(2026, 1, 1),

@@ -1,7 +1,7 @@
 using System.Globalization;
 using CivicLens.Application.Publication;
-using CivicLens.Host.Actions;
 using CivicLens.Core.Relationships;
+using CivicLens.Host.Actions;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Publication.Contracts;
 
@@ -34,9 +34,11 @@ internal static class PublishedOfficialView
     public static string MissedVotes(MissedVotes missed, int congress)
     {
         var chamber = missed.Chamber == PublishedChamber.Senate ? "the Senate" : "the House of Representatives";
+        var votes = missed.Held == 1 ? "vote" : "votes";
         var share = missed.Share is { } value ? $" ({Percent(value)})" : "";
-        return $"Missed {missed.Missed} of {missed.Held} roll call votes{share} held in {chamber} while they served, " +
-            $"{Moment.Day(missed.First)} to {Moment.Day(missed.Last)} ({CongressCalendar.Ordinal(congress)} Congress).";
+        var days = missed.First == missed.Last ? $"on {Moment.Day(missed.First)}" : $"{Moment.Day(missed.First)} to {Moment.Day(missed.Last)}";
+        return $"Missed {missed.Missed} of {missed.Held} roll call {votes} of all kinds{share}, including procedural votes, " +
+            $"held in {chamber} while they served, {days} ({CongressCalendar.Ordinal(congress)} Congress).";
     }
 
     private static string Percent(double share) => string.Create(CultureInfo.InvariantCulture, $"{share * 100:0}%");

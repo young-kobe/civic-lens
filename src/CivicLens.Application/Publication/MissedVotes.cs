@@ -9,7 +9,7 @@ namespace CivicLens.Application.Publication;
 /// </summary>
 public sealed record MissedVotes(PublishedChamber Chamber, int Missed, int Held, DateOnly First, DateOnly Last)
 {
-    public double? Share => Held >= TalkAndActionProfile.MinimumRecordsForShare ? (double)Missed / Held : null;
+    public double? Share => TalkAndActionProfile.ShareOf(Missed, Held);
 
     public static ImmutableArray<MissedVotes> Of(IEnumerable<PublishedOfficialVote> votes) =>
     [.. votes.GroupBy(vote => vote.Chamber).OrderBy(chamber => chamber.Key).Select(chamber => new MissedVotes(chamber.Key,

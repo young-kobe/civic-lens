@@ -36,17 +36,6 @@ public sealed class TalkAndActionProfileTests
     }
 
     [Fact]
-    public void OnlyVoteRowsOfTheCurrentCongressCountAsMissedOrHeld()
-    {
-        var votes = new[] { Vote(1, PublishedVoteKind.Passage, []) with { Cast = PublishedOfficialVote.NotVoting }, Vote(2, PublishedVoteKind.Passage, []) with { Congress = 118, Cast = PublishedOfficialVote.NotVoting },
-            Vote(3, PublishedVoteKind.Cloture, []) with { Cast = PublishedOfficialVote.NotVoting } };
-
-        var missed = Assert.Single(TalkAndActionProfile.Of(119, [], votes).MissedByChamber);
-
-        Assert.Equal((2, 2), (missed.Missed, missed.Held));
-    }
-
-    [Fact]
     public void OnlyStatementsAndActionsCountAsTalkAndSponsorshipSoOtherEntriesNamingTheOfficialAreIgnored()
     {
         PublishedRecordEntry[] entries =

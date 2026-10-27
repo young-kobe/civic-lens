@@ -5,11 +5,9 @@ namespace CivicLens.Application.Publication;
 /// <summary>The records of one column of the profile. A record with several issues counts once for each issue.</summary>
 public sealed record TalkAndActionColumn(int WithIssue, int WithoutIssue, ImmutableDictionary<string, int> ByIssue)
 {
-    public bool ShowsShares => WithIssue >= TalkAndActionProfile.MinimumRecordsForShare;
-
     public int CountOf(string issueId) => ByIssue.GetValueOrDefault(issueId);
 
-    public double? ShareOf(string issueId) => ShowsShares ? (double)CountOf(issueId) / WithIssue : null;
+    public double? ShareOf(string issueId) => TalkAndActionProfile.ShareOf(CountOf(issueId), WithIssue);
 
     public static TalkAndActionColumn Of(IEnumerable<string[]> issueIdsOfRecords)
     {
