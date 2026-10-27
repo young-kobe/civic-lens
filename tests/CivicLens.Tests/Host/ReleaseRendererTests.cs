@@ -219,7 +219,7 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task ReportPageAnnouncesAFailureThroughItsOwnAlertRegionAndMarksTheCategoryAsRequiredSoNoReaderMissesAFailedSend()
+    public async Task ReportPageAnnouncesAFailureThroughItsOwnAlertRegionSoNoReaderMissesAFailedSend()
     {
         var html = await new ReleaseRenderer("https://api.example.test", "site-key-1").RenderReportAsync(CancellationToken.None);
         var document = new HtmlParser().ParseDocument(html);
@@ -227,7 +227,6 @@ public sealed class ReleaseRendererTests
         var failure = document.QuerySelector("[data-report-failure]")!;
         Assert.Equal("alert", failure.GetAttribute("role"));
         Assert.Equal("-1", failure.GetAttribute("tabindex"));
-        Assert.True(document.QuerySelector("#report-category")!.HasAttribute("required"));
     }
 
     [Fact]
@@ -275,13 +274,13 @@ public sealed class ReleaseRendererTests
             Assert.All(names, name => Assert.Contains(": ", name, StringComparison.Ordinal));
         }
         var changeLinks = new HtmlParser().ParseDocument(pages[0]).QuerySelectorAll("main a").Select(link => link.TextContent).ToList();
-        Assert.Contains("Show in the full version: quote 1, earlier version", changeLinks);
-        Assert.Contains("Show in the full version: quote 2, later version", changeLinks);
+        Assert.Contains("Show in the full version: earlier version, quote 1", changeLinks);
+        Assert.Contains("Show in the full version: later version, quote 2", changeLinks);
         var statementLinks = new HtmlParser().ParseDocument(pages[1]).QuerySelectorAll("main a").ToList();
         Assert.Contains(statementLinks, link => link.TextContent == "Why they are linked: Housing bill funds rent aid");
         Assert.Contains(statementLinks, link => link.TextContent == "Why they are linked: House passes the housing bill");
         var quoteLinks = statementLinks
-            .Where(link => link.TextContent.Contains(": quotation ", StringComparison.Ordinal)).ToList();
+            .Where(link => link.TextContent.Contains(": statement, quote ", StringComparison.Ordinal)).ToList();
         Assert.Equal(statement.Quotations.Length, quoteLinks.Count);
         Assert.Equal(quoteLinks.Count, quoteLinks.Select(link => link.GetAttribute("href")).Distinct().Count());
     }

@@ -22,7 +22,7 @@
                     @for (var index = 0; index < sponsorship.Citations.Length; index++)
                     {
                         <blockquote class="quote">@EncodedEvidence.Markup(sponsorship.Citations[index].Quote)</blockquote>
-                        <ContextLink Class="small" Href="@("#" + PublishedActionView.SponsorshipAnchor(Record, sponsorship, index))" Text="Show in the full source text" Target="@($"{sponsorship.Official.Name} quote {index + 1}")" />
+                        <ContextLink Class="small" Href="@("#" + PublishedActionView.SponsorshipAnchor(Record, sponsorship, index))" Text="Show in the full source text" Target="@PublishedRecordView.QuoteTarget(sponsorship.Official.Name, index, sponsorship.Citations.Length)" />
                     }
                 </TableCell>
             </Row>
@@ -37,7 +37,7 @@
                 {
                     <li>
                         <CitationQuote Label="Policy area" Quote="@area.Quote">
-                            <ContextLink Href="@("#" + PublishedActionView.PolicyAreaAnchor(Record))" Text="Show in the full source text" Target="policy area quote" />
+                            <ContextLink Href="@("#" + PublishedActionView.PolicyAreaAnchor(Record))" Text="Show in the full source text" Target="@PublishedRecordView.QuoteTarget("policy area")" />
                         </CitationQuote>
                     </li>
                 }
@@ -45,7 +45,7 @@
                 {
                     <li>
                         <CitationQuote Label="CRS summary" Quote="@summary.Quote">
-                            <ContextLink Href="@("#" + PublishedActionView.SummaryAnchor(Record))" Text="Show in the full source text" Target="CRS summary quote" />
+                            <ContextLink Href="@("#" + PublishedActionView.SummaryAnchor(Record))" Text="Show in the full source text" Target="@PublishedRecordView.QuoteTarget("CRS summary")" />
                         </CitationQuote>
                     </li>
                 }

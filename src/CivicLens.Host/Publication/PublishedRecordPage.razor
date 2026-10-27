@@ -18,7 +18,7 @@
             {
                 var citation = Record.Citations[index];
                 var anchor = "#" + PublishedRecordView.CitationAnchor(index);
-                var target = $"quote {index + 1}, {VersionLabel(citation).ToLowerInvariant()}";
+                var target = PublishedRecordView.QuoteTarget(VersionLabel(citation).ToLowerInvariant(), index, Record.Citations.Length);
                 <li>
                     <CitationQuote Label="@VersionLabel(citation)" Quote="@citation.Quote">
                         <ContextLink Href="@anchor" Text="Show in the full version" Target="@target" />
@@ -29,7 +29,7 @@
             {
                 <li>
                     <CitationQuote Label="@($"Evidence for the actual change date, {VersionLabel(evidence).ToLowerInvariant()}")" Quote="@evidence.Quote">
-                        <ContextLink Href="@($"#{PublishedRecordView.ChangeDateAnchor}")" Text="Show in the full version" Target="evidence for the actual change date" />
+                        <ContextLink Href="@($"#{PublishedRecordView.ChangeDateAnchor}")" Text="Show in the full version" Target="@PublishedRecordView.QuoteTarget("actual change date")" />
                     </CitationQuote>
                 </li>
             }
