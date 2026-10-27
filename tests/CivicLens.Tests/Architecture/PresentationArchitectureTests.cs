@@ -70,10 +70,10 @@ public sealed class PresentationArchitectureTests
     public void EachShellLoadsOnlyItsOwnStylesheetAfterTheSharedOnes()
     {
         var workspace = File.ReadAllText(DocumentShells[0]);
-        Assert.Contains("css/review.css", workspace, StringComparison.Ordinal);
+        Assert.InRange(workspace.IndexOf("css/app.css", StringComparison.Ordinal), 0, workspace.IndexOf("css/review.css", StringComparison.Ordinal) - 1);
         Assert.DoesNotContain("public.css", workspace, StringComparison.Ordinal);
         var publicAssets = File.ReadAllText(Path.Combine(HostRoot, "Publication", "PublicAssets.cs"));
-        Assert.Contains("assets/css/public.css", publicAssets, StringComparison.Ordinal);
+        Assert.InRange(publicAssets.IndexOf("assets/css/app.css", StringComparison.Ordinal), 0, publicAssets.IndexOf("assets/css/public.css", StringComparison.Ordinal) - 1);
         Assert.DoesNotContain("review.css", publicAssets, StringComparison.Ordinal);
     }
 
@@ -83,7 +83,7 @@ public sealed class PresentationArchitectureTests
         var owners = new Dictionary<string, string>();
         foreach (var name in new[] { "app.css", "public.css", "review.css" })
         {
-            foreach (var selector in Selectors(File.ReadAllText(Path.Combine(HostRoot, "wwwroot", "css", name))).Distinct())
+            foreach (var selector in HostStyleSheets.Selectors(HostStyleSheets.Read(name)).Distinct())
             {
                 Assert.True(owners.TryAdd(selector, name), $"'{selector}' is in {owners.GetValueOrDefault(selector)} and {name}.");
                 Assert.True(name == "public.css" || !selector.Contains(".public-", StringComparison.Ordinal), $"'{selector}' must live in public.css.");
@@ -109,16 +109,6 @@ public sealed class PresentationArchitectureTests
         Directory.GetFiles(HostRoot, "*.razor", SearchOption.AllDirectories)
             .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal) &&
                            !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
-
-    private static IEnumerable<string> Selectors(string css)
-    {
-        var withoutNoise = Regex.Replace(css, @"/\*.*?\*/|@keyframes\s+[\w-]+\s*\{(?:[^{}]|\{[^{}]*\})*\}", "", RegexOptions.Singleline);
-        return Regex.Matches(withoutNoise, @"([^{};]+)\{")
-            .Select(match => match.Groups[1].Value.Trim())
-            .Where(prelude => !prelude.StartsWith('@'))
-            .SelectMany(prelude => prelude.Split(','))
-            .Select(selector => Regex.Replace(selector.Trim(), @"\s+", " "));
-    }
 
     private static HashSet<string> Tokens(string css) =>
         [.. Regex.Matches(css, @"(--[a-z0-9-]+)\s*:").Select(match => match.Groups[1].Value)];

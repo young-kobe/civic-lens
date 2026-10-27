@@ -103,6 +103,7 @@ a.cell-title:hover { text-decoration: underline; }
 .empty p { max-width: 52ch; color: var(--muted); font-size: var(--t-sm); }
 .empty .btn { justify-self: start; margin-top: var(--s2); }
 
+.form { display: grid; gap: var(--s4); max-width: var(--reading); }
 .field { display: grid; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0; }
 .field-label, .field legend { padding: 0; font-size: var(--t-sm); font-weight: 600; }
 .field-optional { color: var(--muted); font-weight: 400; }

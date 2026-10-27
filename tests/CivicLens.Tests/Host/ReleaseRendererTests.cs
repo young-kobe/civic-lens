@@ -1462,6 +1462,21 @@ public sealed class ReleaseRendererTests
         AssertLinkedAssetsAreReleaseAssets(renderer, folderPage, "records/record.html");
     }
 
+    [Fact]
+    public async Task APublicPageNeverUsesAClassOnlyTheReviewStylesheetDefinesBecauseTheReleaseDoesNotShipIt()
+    {
+        var shipped = HostStyleSheets.ClassNames(HostStyleSheets.Read("app.css"));
+        shipped.UnionWith(HostStyleSheets.ClassNames(HostStyleSheets.Read("public.css")));
+        var reviewOnly = HostStyleSheets.ClassNames(HostStyleSheets.Read("review.css")).Except(shipped).ToHashSet();
+
+        var reportWithForm = await new ReleaseRenderer("https://api.example.test", "site-key-1").RenderReportAsync(CancellationToken.None);
+        foreach (var (name, html) in (await RenderEveryPageTypeAsync()).Select(page => (page.Name, page.Html)).Append(("report form", reportWithForm)))
+        {
+            var used = new HtmlParser().ParseDocument(html).QuerySelectorAll("[class]").SelectMany(element => element.ClassList).ToHashSet();
+            Assert.Empty(used.Intersect(reviewOnly).Select(className => $"{name} uses .{className}"));
+        }
+    }
+
     private static void AssertLinkedAssetsAreReleaseAssets(ReleaseRenderer renderer, string html, string pagePath)
     {
         var links = new HtmlParser().ParseDocument(html).QuerySelectorAll("link[rel=stylesheet], script[src]")

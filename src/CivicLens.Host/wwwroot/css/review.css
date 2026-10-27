@@ -79,7 +79,6 @@ tr.is-new td { animation: row-in 1.6s var(--ease); }
 .feed-time { color: var(--muted); font-size: var(--t-xs); }
 .feed-flush { padding: 0; }
 
-.form { display: grid; gap: var(--s4); max-width: var(--reading); }
 .field textarea.plain { min-height: 72px; font-family: var(--ui); font-size: var(--t-base); }
 .field input.headline { font-family: var(--read); font-size: var(--t-lg); font-weight: 500; }
 .field-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s4); }

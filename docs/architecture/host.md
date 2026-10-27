@@ -85,8 +85,8 @@ Pages compose these components. The comparison page, the draft editor, and publi
 - Markup has no style tags or style attributes.
 - There are no `*.razor.css` or `*.cshtml` files.
 - Only `App.razor` and `PublicPage.razor` own `html`, `link`, and `script` tags, and both shells load the same theme.
-- Each shell loads only its own stylesheet. `App.razor` loads `review.css` and never `public.css`. The release lists `public.css` and never `review.css`.
-- A selector lives in one of `app.css`, `public.css`, and `review.css`. A selector with a `.public-` class lives only in `public.css`.
+- Each shell loads only its own stylesheet, after `app.css`. `App.razor` loads `review.css` and never `public.css`. The release lists `public.css` and never `review.css`.
+- A selector lives in one of `app.css`, `public.css`, and `review.css`. A selector with a `.public-` class lives only in `public.css`. A rendered public page uses no class that only `review.css` defines; see [publication](publication.md#rendering).
 - Only shared components render `del` and `ins`.
 
 ## Storage and contracts
