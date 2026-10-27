@@ -1,6 +1,6 @@
 @using CivicLens.Publication.Contracts
 
-<PublicPage Title="@Headline" Description="@(string.IsNullOrWhiteSpace(Summary) ? Headline : Summary)" IsArticle="true" RootPath="../">
+<PublicPage Section="PublicSection.AllRecords" Title="@Headline" Description="@(string.IsNullOrWhiteSpace(Summary) ? Headline : Summary)" IsArticle="true" RootPath="../">
     <a class="back-link" href="@("../" + PublicationProtocol.AllRecordsPagePath(1))">All records</a>
     <RecordView HeadingLevel="1" Headline="@Headline" Summary="@Summary" Significance="@Significance"
                 Limits="@Limits" Facts="Facts" />

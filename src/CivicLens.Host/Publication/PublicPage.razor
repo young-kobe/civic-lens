@@ -27,15 +27,34 @@
     <a class="skip" href="#main">Skip to content</a>
     <header class="public-header">
         <a class="public-brand" href="@(RootPath + PublicationProtocol.HomePath)"><BrandMark />Civic Lens</a>
-        <nav class="public-nav" aria-label="Site"><a href="@(RootPath + PublicationProtocol.SearchPagePath)">Search</a></nav>
+        <nav class="public-nav" aria-label="Site">
+            @foreach (var link in SectionLinks)
+            {
+                <a href="@(RootPath + link.Path)" aria-current="@(link.Section == Section ? "page" : null)">@link.Label</a>
+            }
+        </nav>
         <div class="topbar-tools"><ThemeToggle /></div>
     </header>
     <main class="public-main" id="main"><div class="content">@ChildContent</div></main>
-    <footer class="public-footer">Each record shows its sources and the exact text it cites.</footer>
+    <footer class="public-footer">
+        <p>Each record shows its sources and the exact text it cites.</p>
+        <nav class="public-footer-nav" aria-label="Footer">
+            <a href="@(RootPath + PublicationProtocol.MethodPagePath)">Method</a>
+            <a href="@(RootPath + PublicationProtocol.ReportPagePath)">Report a problem</a>
+        </nav>
+    </footer>
 </body>
 </html>
 
 @code {
+    private static readonly (PublicSection Section, string Label, string Path)[] SectionLinks =
+    [
+        (PublicSection.Officials, "Officials", PublicationProtocol.OfficialsPagePath),
+        (PublicSection.Issues, "Issues", PublicationProtocol.FacetsPath),
+        (PublicSection.AllRecords, "All records", PublicationProtocol.AllRecordsPagePath(1)),
+        (PublicSection.Search, "Search", PublicationProtocol.SearchPagePath)
+    ];
+
     private string documentTitle = string.Empty;
     private string description = string.Empty;
 
@@ -43,6 +62,7 @@
     [Parameter, EditorRequired] public string Description { get; set; } = string.Empty;
     [Parameter] public int Page { get; set; } = 1;
     [Parameter] public int PageCount { get; set; } = 1;
+    [Parameter] public PublicSection? Section { get; set; }
     [Parameter] public bool IsArticle { get; set; }
     [Parameter] public string? ExternalScript { get; set; }
     [Parameter] public string RootPath { get; set; } = string.Empty;
