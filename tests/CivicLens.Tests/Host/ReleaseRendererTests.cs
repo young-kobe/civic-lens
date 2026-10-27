@@ -1136,7 +1136,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task EveryCellOfAPublicTableCarriesItsColumnHeaderAsLabelSoAPhoneReaderSeesWhatEachValueIs()
     {
-        var labeled = 0;
+        var labeled = new Dictionary<string, int>();
         foreach (var (name, _, html, _) in await RenderEveryPageTypeAsync())
         {
             foreach (var table in new HtmlParser().ParseDocument(html).QuerySelectorAll("table.table"))
@@ -1154,13 +1154,14 @@ public sealed class ReleaseRendererTests
                             continue;
                         }
                         Assert.True(headers[index] == cells[index].GetAttribute("data-label"), $"{name}: column {headers[index]}");
-                        labeled++;
+                        labeled[name] = labeled.GetValueOrDefault(name) + 1;
                     }
                 }
             }
         }
 
-        Assert.True(labeled >= 16);
+        Assert.True(labeled.GetValueOrDefault("official") >= 10);
+        Assert.True(labeled.Values.Sum() >= 16);
     }
 
     [Fact]
