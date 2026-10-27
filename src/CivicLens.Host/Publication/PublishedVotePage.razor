@@ -50,15 +50,15 @@
     </Panel>
 
     <Panel Title="Tracked members" Id="members-title" Padded="true">
-        <DataTable Items="Record.Members" Caption="Votes of tracked members">
-            <Head><th>Official</th><th>@PublicColumn.Cast</th><th>@PublicColumn.Evidence</th></Head>
+        <DataTable Roles="true" Items="Record.Members" Caption="Votes of tracked members">
+            <Head><TableCell Header>Official</TableCell><TableCell Header>@PublicColumn.Cast</TableCell><TableCell Header>@PublicColumn.Evidence</TableCell></Head>
             <Row Context="member">
-                <td><PublishedOfficialName Official="member.Official" /></td>
-                <td data-label="@PublicColumn.Cast">@member.Cast</td>
-                <td data-label="@PublicColumn.Evidence">
+                <TableCell Main><PublishedOfficialName Official="member.Official" /></TableCell>
+                <TableCell Label="@PublicColumn.Cast">@member.Cast</TableCell>
+                <TableCell Label="@PublicColumn.Evidence">
                     <blockquote class="quote">@EncodedEvidence.Markup(member.Citation.Quote)</blockquote>
                     <a class="small" href="@("#" + PublishedVoteView.Anchor(Record, member.Citation))">Show in the full source text</a>
-                </td>
+                </TableCell>
             </Row>
         </DataTable>
     </Panel>

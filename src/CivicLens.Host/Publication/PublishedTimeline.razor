@@ -1,11 +1,11 @@
 @using CivicLens.Host.Components.Ui
 
 <Panel Title="Timeline" Id="timeline-title" Padded="true">
-    <DataTable Items="Events" Caption="Dated events of this record">
-        <Head><th class="fit num">@PublicColumn.Date</th><th>Event</th></Head>
+    <DataTable Roles="true" Items="Events" Caption="Dated events of this record">
+        <Head><TableCell Header Class="fit num">@PublicColumn.Date</TableCell><TableCell Header>Event</TableCell></Head>
         <Row Context="item">
-            <td class="fit num" data-label="@PublicColumn.Date">@Moment.Iso(item.Day)</td>
-            <td class="cell-main">@item.Text</td>
+            <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Iso(item.Day)</TableCell>
+            <TableCell Main>@item.Text</TableCell>
         </Row>
     </DataTable>
 </Panel>

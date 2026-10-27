@@ -35,6 +35,17 @@ public sealed class SourcesPageTests(PostgresCollection postgres) : IAsyncLifeti
         if (host is not null) await host.StopAsync();
     }
 
+    // Only public tables set Roles. A review table with roles would change how a screen reader reads the review UI.
+    [Fact]
+    public async Task ReviewTablesCarryNoTableRolesBecauseOnlyPublicTablesOptIn()
+    {
+        await StartAsync("auth0|owner");
+        var document = await Host.GetDocumentAsync("/Review/Sources");
+
+        Assert.NotNull(document.QuerySelector("table"));
+        Assert.Null(document.QuerySelector("table[role], table [role]"));
+    }
+
     // The page is interactive, so its first response must already hold the real sources and their health.
     [Fact]
     public async Task PrerenderedPageShowsConfiguredSourcesAndTheirHealth()

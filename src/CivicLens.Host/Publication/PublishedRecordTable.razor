@@ -1,29 +1,29 @@
 @using CivicLens.Application.Publication
 @using CivicLens.Publication.Contracts
 
-<DataTable Items="Records" Caption="@Caption">
+<DataTable Roles="true" Items="Records" Caption="@Caption">
     <Head>
-        <th>Record</th>
+        <TableCell Header>Record</TableCell>
         @if (FacetColumns)
         {
-            <th>@PublicColumn.Officials</th>
-            <th class="fit num">@PublicColumn.Date</th>
+            <TableCell Header>@PublicColumn.Officials</TableCell>
+            <TableCell Header Class="fit num">@PublicColumn.Date</TableCell>
         }
         else
         {
-            <th class="fit num">@PublicColumn.FirstPublished</th>
+            <TableCell Header Class="fit num">@PublicColumn.FirstPublished</TableCell>
         }
     </Head>
     <Row Context="entry">
-        <td><a class="cell-title" href="@(RootPath + PublicationProtocol.RecordPagePath(entry.RecordId))">@entry.Headline</a> <StatusBadge Text="@PublishedRecordLabels.Kind(entry.Kind)" /></td>
+        <TableCell Main><a class="cell-title" href="@(RootPath + PublicationProtocol.RecordPagePath(entry.RecordId))">@entry.Headline</a> <StatusBadge Text="@PublishedRecordLabels.Kind(entry.Kind)" /></TableCell>
         @if (FacetColumns)
         {
-            <td data-label="@PublicColumn.Officials">@string.Join(", ", entry.Officials.Select(official => official.Name))</td>
-            <td class="fit num" data-label="@PublicColumn.Date">@Moment.Iso(ReleaseRecordOrder.Day(entry))</td>
+            <TableCell Label="@PublicColumn.Officials">@string.Join(", ", entry.Officials.Select(official => official.Name))</TableCell>
+            <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Iso(ReleaseRecordOrder.Day(entry))</TableCell>
         }
         else
         {
-            <td class="time fit num" data-label="@PublicColumn.FirstPublished"><Timestamp Value="entry.FirstPublishedAtUtc" Format="TimestampFormat.Day" /></td>
+            <TableCell Class="time fit num" Label="@PublicColumn.FirstPublished"><Timestamp Value="entry.FirstPublishedAtUtc" Format="TimestampFormat.Day" /></TableCell>
         }
     </Row>
     <Empty><EmptyState Title="No records yet" Text="There are no records here." /></Empty>
