@@ -68,13 +68,14 @@ public sealed class PublishedOfficialVotesTests
     }
 
     [Fact]
-    public void ASplitVoteRowWithNoPartyMajorityOrNoTotalsIsRefusedSoThePageNeverShowsABreakAgainstNothing()
+    public void ASplitVoteRowThatIsProceduralOrHasNoPartyMajorityOrNoTotalsIsRefusedSoThePageNeverCountsIt()
     {
         var row = Vote('a', new DateOnly(2026, 1, 1), 1) with { SplitVote = true };
 
         PublishedOfficialVotes.Of([row]);
         Assert.Throws<InvalidDataException>(() => PublishedOfficialVotes.Of([row with { PartyMajority = null }]));
         Assert.Throws<InvalidDataException>(() => PublishedOfficialVotes.Of([row with { Totals = null }]));
+        Assert.Throws<InvalidDataException>(() => PublishedOfficialVotes.Of([row with { Kind = PublishedVoteKind.Cloture }]));
     }
 
     [Theory]

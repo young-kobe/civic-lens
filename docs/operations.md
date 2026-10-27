@@ -849,7 +849,7 @@ docker rm -f civic-lens-search-db
 
 Release numbers restart at 1 after this reset.
 
-A release contract change can add a required field to a published file. Old files then do not read. On the dev machine, repeat steps 1 to 5, then publish a fresh release with `releases publish` as in [Publish a static release](#publish-a-static-release). Production has no older files.
+A release contract change can add a required field to a published file. Old files then do not read, and the next publish fails. On the dev machine, repeat steps 1 to 5. These steps delete all captures and records, not only the releases. Collect again and let code approve the facts, then publish a fresh release with `releases publish` as in [Publish a static release](#publish-a-static-release). Production has no release yet, so it has no older files.
 
 ## Runtime data
 
