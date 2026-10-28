@@ -47,7 +47,7 @@
                         @bills.Length
                         @if (!bills.IsEmpty)
                         {
-                            <ul>
+                            <ul class="choices">
                                 @foreach (var bill in bills)
                                 {
                                     <li><a href="@(Page.RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))">@bill.BillTitle</a></li>
@@ -59,12 +59,12 @@
                 </Row>
                 <Empty><EmptyState Title="No tracked issue" Text="None of their statements, sponsored bills, or votes in this Congress is on a tracked issue." /></Empty>
             </DataTable>
-            <p class="muted small">Each count is for this Congress. Votes they cast counts only substantive votes. A statement or bill on several issues counts once for each issue. <a href="@(Page.RootPath + PublicationProtocol.MethodPagePath)">How these counts work</a></p>
+            <p class="muted small">Each count is for this Congress. "Votes they cast" counts only substantive votes. A statement, bill, or vote on several issues counts once for each issue. <a href="@(Page.RootPath + PublicationProtocol.MethodPagePath)">How these counts work</a></p>
         </Panel>
         <Panel Title="@($"Missed votes in Congress {Page.Congress}")" Padded="true">
             @foreach (var missed in profile.MissedByChamber)
             {
-                <p class="muted small">@PublishedOfficialView.MissedVotes(missed, Page.Congress!.Value)</p>
+                <p>@PublishedOfficialView.MissedVotes(missed, Page.Congress!.Value)</p>
             }
             <p class="muted small">@PublishedOfficialView.MissedVoteMeaning</p>
         </Panel>

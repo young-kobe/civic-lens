@@ -1280,7 +1280,7 @@ public sealed class ReleaseRendererTests
         AssertTrail(pages["issues"], ["Home|index.html", "Issues and policy areas"]);
         AssertTrail(pages["search"], ["Home|index.html", "Search records"]);
         AssertTrail(pages["officials"], ["Home|index.html", "Officials"]);
-        AssertTrail(pages["method"], ["Home|index.html", "How the talk and action profile works"]);
+        AssertTrail(pages["method"], ["Home|index.html", "How the official page counts work"]);
         AssertTrail(pages["report"], ["Home|index.html", "Report a problem"]);
         AssertTrail(pages["issue"], ["Home|../index.html", "Issues|../issues.html", "Housing costs"]);
         AssertTrail(pages["vote"], ["Home|../index.html", "All records|../all.html", Vote().Headline]);

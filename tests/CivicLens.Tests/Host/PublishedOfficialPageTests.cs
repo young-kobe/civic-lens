@@ -126,11 +126,12 @@ public sealed class PublishedOfficialPageTests
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
-        var paragraphs = new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-missed-votes-in-congress-119'] p.muted")
+        var paragraphs = new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-missed-votes-in-congress-119'] p")
             .Select(paragraph => paragraph.TextContent.Trim()).ToArray();
         Assert.Equal(["Missed 1 of 2 roll call votes of all kinds, including procedural votes, held in the House of Representatives while they served, 1 Apr 2026 to 3 Apr 2026 (119th Congress).",
             "Missed 0 of 1 roll call vote of all kinds, including procedural votes, held in the Senate while they served, on 2 Apr 2026 (119th Congress).",
             "A missed vote means the official did not vote on it."], paragraphs[..3]);
+        Assert.Equal(["muted small"], new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-missed-votes-in-congress-119'] p.muted").Select(paragraph => paragraph.ClassName!));
     }
 
     [Fact]
@@ -295,6 +296,7 @@ public sealed class PublishedOfficialPageTests
         Assert.Equal("../" + PublicationProtocol.RecordPagePath(new string('a', 64)), housing[2].QuerySelector("a")!.GetAttribute("href"));
         Assert.DoesNotContain("%", panel.TextContent, StringComparison.Ordinal);
         Assert.Equal("../method.html", panel.QuerySelector("p a")!.GetAttribute("href"));
+        Assert.Contains("\"Votes they cast\" counts only substantive votes. A statement, bill, or vote on several issues counts once for each issue.", panel.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -307,6 +309,7 @@ public sealed class PublishedOfficialPageTests
 
         var panel = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-issues-they-work-on']")!;
         Assert.Null(panel.QuerySelector("table"));
+        Assert.Contains("No tracked issue", panel.TextContent, StringComparison.Ordinal);
         Assert.Contains("None of their statements, sponsored bills, or votes in this Congress is on a tracked issue.", panel.TextContent, StringComparison.Ordinal);
     }
 
