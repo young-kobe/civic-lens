@@ -54,6 +54,9 @@ internal sealed class PublicationScenario
     public Dictionary<string, string> Websites { get; } = [];
     public RosterMember[] RosterMembers { get; set; } = [];
     public ExecutiveOfficial[] ExecutiveOfficials { get; set; } = [];
+    public OfficialPhoto[] Photos { get; set; } = [];
+    public PhotoCaptures Captures { get; } = new();
+    public int PhotoReads { get; private set; }
 
     private CollectionConfiguration Collection() => RosterFixtures.Configuration() with
     {
@@ -76,7 +79,8 @@ internal sealed class PublicationScenario
     public IssueConfiguration Issues { get; set; } = IssueConfiguration.None;
 
     public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events, OfficialPages = OfficialPages }, Loaders(),
-        new PublicationCatalog(OfficialNames, Issues), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers), new FixedExecutiveRoster(ExecutiveOfficials)), Clock);
+        new PublicationCatalog(OfficialNames, Issues), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, null, Photos, () => PhotoReads++), new FixedExecutiveRoster(ExecutiveOfficials)),
+        Captures.Photos("artifacts"), Clock);
 
     public BlockedPublishedRecords Blocked() => new(Publications);
 

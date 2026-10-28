@@ -42,6 +42,40 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
+    public async Task PublishingRefusesToStartWithoutTheArtifactDirectoryBecauseANewPhotoNeedsItsCapture()
+    {
+        var folder = Directory.CreateTempSubdirectory("release-command").FullName;
+        try
+        {
+            var collection = Path.Combine(folder, "sources.json");
+            var issues = Path.Combine(folder, "issues.json");
+            await File.WriteAllTextAsync(collection, """{"version":1,"people":[],"sources":[]}""");
+            await File.WriteAllTextAsync(issues, System.Text.Json.JsonSerializer.Serialize(
+                CivicLens.Application.Issues.IssueConfiguration.None, CivicLens.Collection.Contracts.CollectionProtocol.JsonOptions));
+            var environment = new Dictionary<string, string>
+            {
+                ["CIVIC_LENS_REVIEW_OWNER"] = "auth0|owner",
+                ["CIVIC_LENS_RELEASE_DIRECTORY"] = Path.Combine(folder, "releases"),
+                ["CIVIC_LENS_COLLECTION_CONFIG"] = collection,
+                ["CIVIC_LENS_ISSUES_CONFIG"] = issues
+            };
+            const string unreachable = "Host=127.0.0.1;Port=1;Database=none;Username=none;Password=none;Timeout=2";
+            string[] publish = ["releases", "publish", "key", "statement:" + new string('a', 64)];
+
+            var without = await HostProcess.RunWithEnvironmentAsync(unreachable, null, environment, publish);
+            environment["CIVIC_LENS_ARTIFACT_DIRECTORY"] = Path.Combine(folder, "captures");
+            var with = await HostProcess.RunWithEnvironmentAsync(unreachable, null, environment, publish);
+
+            Assert.Equal(2, without.ExitCode);
+            Assert.Equal(1, with.ExitCode);
+        }
+        finally
+        {
+            Directory.Delete(folder, true);
+        }
+    }
+
+    [Fact]
     public async Task OutOfRangeListLimitShowsTheHandlerRuleToTheOwner()
     {
         var owner = new ReviewActor("auth0|owner", ReviewRole.Owner);

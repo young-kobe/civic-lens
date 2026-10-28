@@ -109,6 +109,53 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
+    public async Task TheCurrentPageShowsThePortraitFromTheReleaseRootWithItsSizeAltTextAndCredit()
+    {
+        var hash = new string('c', 64);
+        var photo = new PublishedPhoto
+        {
+            Path = PublicationProtocol.PhotoPath(hash),
+            Credit = "Official portrait. Public domain.",
+            SourceUrl = "https://example.gov/images/mayor.jpg",
+            Width = 225,
+            Height = 275
+        };
+        var page = Current([], []) with { Profile = Profile() with { Photo = photo } };
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        var figure = new HtmlParser().ParseDocument(html).QuerySelector("figure.portrait")!;
+        var image = figure.QuerySelector("img")!;
+        Assert.Equal($"../photos/{hash}.jpg", image.GetAttribute("src"));
+        Assert.Equal(("225", "275", "eager"), (image.GetAttribute("width"), image.GetAttribute("height"), image.GetAttribute("loading")));
+        Assert.Equal("Official portrait of Mayor Example", image.GetAttribute("alt"));
+        Assert.Equal("Official portrait. Public domain.", figure.QuerySelector("figcaption")!.TextContent);
+        Assert.Null(figure.QuerySelector("svg"));
+    }
+
+    [Fact]
+    public async Task AnOfficialWithNoPhotoShowsAHiddenPlaceholderInTheSameFrameAndSaysSo()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([], []), PublicationCatalogs.None, CancellationToken.None);
+
+        var figure = new HtmlParser().ParseDocument(html).QuerySelector("figure.portrait")!;
+        Assert.Null(figure.QuerySelector("img"));
+        var placeholder = figure.QuerySelector("svg")!;
+        Assert.Equal(("true", "0 0 225 275"), (placeholder.GetAttribute("aria-hidden"), placeholder.GetAttribute("viewBox")));
+        Assert.Equal("No portrait is on file for this official.", figure.QuerySelector("figcaption")!.TextContent);
+    }
+
+    [Fact]
+    public async Task APastCongressPageShowsNoPortraitBecauseOnlyTheCurrentPageHasOne()
+    {
+        var past = new ReleaseOfficialPage(Profile(), true, 118, false, [], [], []);
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(past, PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.Null(new HtmlParser().ParseDocument(html).QuerySelector("figure.portrait"));
+    }
+
+    [Fact]
     public async Task AnOfficialWithNoWebsiteShowsNoWebsiteLink()
     {
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([], []), PublicationCatalogs.None, CancellationToken.None);

@@ -121,6 +121,32 @@ public sealed class PostgresMemberPhotoStoreTests(PostgresCollection postgres) :
         Assert.Equal(["a-person", "another-person"], (await ReadRowsAsync()).Select(row => row.PersonId).Order());
     }
 
+    [Fact]
+    public async Task TheNewestPhotoOfAPersonIsTheRowOfItsLatestAttemptEvenWhenAnEarlierBodyReturned()
+    {
+        var first = await ImportAsync('a', 0);
+        var changed = await ImportAsync('b', 30);
+        var returned = await ImportAsync('a', 60);
+        foreach (var attemptId in new[] { first, changed, returned }) await roster.AdmitPhotoAsync(Photo(attemptId), default);
+
+        var photo = Assert.Single(await roster.ReadNewestPhotosAsync(["a-person"], default));
+
+        Assert.Equal(new OfficialPhoto("a-person", MemberPhotoFixtures.PhotoUrl(), MemberPhoto.MemberGuideCredit, returned, new string('a', 64)), photo);
+    }
+
+    [Fact]
+    public async Task OnlyTheNamedPeopleAreReadSoAnotherPersonOrAPersonWithNoRowAddsNothing()
+    {
+        await roster.AdmitPhotoAsync(Photo(await ImportAsync('a', 0)), default);
+        await roster.AdmitPhotoAsync(Photo(await MemberPhotoFixtures.ImportCaptureAsync(attempts, new string('b', 64), Morning, "B000002"),
+            "another-person", "B000002"), default);
+
+        var photos = await roster.ReadNewestPhotosAsync(["another-person", "no-photo-person"], default);
+
+        Assert.Equal(["another-person"], photos.Select(photo => photo.PersonId));
+        Assert.Empty(await roster.ReadNewestPhotosAsync([], default));
+    }
+
     private static MemberPhoto Photo(string attemptId, string personId = "a-person", string bioguideId = MemberPhotoFixtures.Bioguide) =>
         new(attemptId, personId, MemberPhotoFixtures.PhotoUrl(bioguideId), MemberPhoto.MemberGuideCredit);
 

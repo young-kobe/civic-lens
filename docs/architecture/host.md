@@ -14,6 +14,7 @@ The Host is the composition root, the CLI, and the authenticated web workspace. 
 - One restrained identity serves both surfaces through shared design tokens. It is monochrome: charcoal, white, and gray give structure. Semantic color marks evidence changes, status, and keyboard focus.
 - Interface text uses self-hosted Instrument Sans, and reading text uses Newsreader. Both fonts use the OFL.
 - `wwwroot/fonts/newsreader.woff2` is already a Latin subset (262 glyphs, Newsreader 16pt version 1.003, 132000 bytes, axes `wght` and `opsz`). A new subset used the Google Fonts Latin range and Latin Extended-A. fonttools 4.65.0 and brotli 1.2.1 made it, at 128888 bytes. That saves 2.4 percent, so the file stays as it is. Every character of the 43 dev releases is in the font. The size comes from the variable axes. The OFL file names no Reserved Font Name. The release pages preload the fonts; see [publication](publication.md#rendering).
+- `OfficialPortrait` is the one component that shows the portrait of an official. It takes the profile and the release root path. It shows a figure with the image at its size, the alt text "Official portrait of {name}", and the credit. With no photo it shows an inline placeholder of the same frame and a line that says no portrait is on file. The frame is in `public.css`, with theme tokens only and no filter in dark mode. The page uses it on the current Congress page only.
 - Four global stylesheets hold all styles: `theme.css`, `app.css`, `public.css`, and `review.css`. Markup has no inline styles.
 - Production starts on the existing Hetzner CPX21 with containers, Terraform, and CI deployment. Production must run without the developer workstation.
 - Auth0 is the identity provider.
@@ -102,6 +103,7 @@ Pages compose these components. The comparison page, the draft editor, and publi
 | Entry point and commands | `src/CivicLens.Host/Program.cs` |
 | Owner command rules and JSON output | `src/CivicLens.Host/OwnerCommand.cs`, `src/CivicLens.Host/CommandOutput.cs` |
 | App shell and routes | `src/CivicLens.Host/Components/App.razor`, `src/CivicLens.Host/Components/Routes.razor`, `src/CivicLens.Host/Components/Layout/WorkspaceLayout.razor` |
+| Public portrait | `src/CivicLens.Host/Publication/OfficialPortrait.razor` |
 | Shared evidence components | `src/CivicLens.Host/Components/Evidence/DocumentComparisonView.razor`, `src/CivicLens.Host/Components/Evidence/RecordView.razor`, `src/CivicLens.Host/Components/Evidence/StatementRecord.razor` |
 | Styles and scripts | `src/CivicLens.Host/wwwroot/css/theme.css`, `src/CivicLens.Host/wwwroot/css/app.css`, `src/CivicLens.Host/wwwroot/css/public.css`, `src/CivicLens.Host/wwwroot/css/review.css`, `src/CivicLens.Host/wwwroot/js/theme.js`, `src/CivicLens.Host/wwwroot/js/app.js`, `src/CivicLens.Host/wwwroot/js/public.js`, `src/CivicLens.Host/wwwroot/js/review.js` |
 | Workspace wiring | `src/CivicLens.Host/Review/ReviewWorkspace.cs` |

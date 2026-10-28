@@ -69,11 +69,8 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
         await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.CollectionJobs, cancellationToken);
         var captureSha256 = (await db.Attempts.AsNoTracking().SingleOrDefaultAsync(attempt => attempt.AttemptId == photo.AttemptId, cancellationToken))
             ?.CaptureSha256 ?? throw new InvalidOperationException("A member photo needs an imported captured attempt.");
-        var newestCaptureSha256 = await (from row in db.Set<OfficialPhotoRow>().AsNoTracking()
-                                         where row.PersonId == photo.PersonId
-                                         join attempt in db.Attempts.AsNoTracking() on row.AttemptId equals attempt.AttemptId
-                                         orderby attempt.ObservedAtUtcTicks descending, attempt.AttemptId descending
-                                         select attempt.CaptureSha256).FirstOrDefaultAsync(cancellationToken);
+        var newestCaptureSha256 = await NewestPhotosFirst(db, [photo.PersonId]).Select(newest => newest.CaptureSha256)
+            .FirstOrDefaultAsync(cancellationToken);
         if (newestCaptureSha256 == captureSha256 ||
             await db.Set<OfficialPhotoRow>().AnyAsync(row => row.AttemptId == photo.AttemptId, cancellationToken))
             return;
@@ -81,6 +78,23 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<OfficialPhoto>> ReadNewestPhotosAsync(IReadOnlyCollection<string> personIds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(personIds);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var newestFirst = await NewestPhotosFirst(db, personIds).ToListAsync(cancellationToken);
+        return [.. newestFirst.DistinctBy(photo => photo.PersonId, StringComparer.Ordinal)];
+    }
+
+    private static IQueryable<OfficialPhoto> NewestPhotosFirst(CollectionAttemptDbContext db, IReadOnlyCollection<string> personIds) =>
+        from row in db.Set<OfficialPhotoRow>().AsNoTracking()
+        where personIds.Contains(row.PersonId)
+        join attempt in db.Attempts.AsNoTracking() on row.AttemptId equals attempt.AttemptId
+        where attempt.CaptureSha256 != null
+        orderby attempt.ObservedAtUtcTicks descending, attempt.AttemptId descending
+        select new OfficialPhoto(row.PersonId, row.SourceUrl, row.Credit, row.AttemptId, attempt.CaptureSha256!);
 
     public async Task<IReadOnlyList<RosterMember>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken)
     {

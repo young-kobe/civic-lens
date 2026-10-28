@@ -202,7 +202,7 @@ try
         await using var relationshipDraftingWakeup = relationshipDrafting.Wakeup;
         var briefDrafting = BriefDraftComposition.Create(analysisContexts, connectionString, workerConfiguration, loggers);
         await using var briefDraftingWakeup = briefDrafting.Wakeup;
-        var factPublishing = FactPublishingComposition.Create(connectionString, workerConfiguration, issueConfiguration, loggers);
+        var factPublishing = FactPublishingComposition.Create(connectionString, workerConfiguration, issueConfiguration, artifactRoot, loggers);
         await using var factPublishingWakeup = factPublishing?.Wakeup;
         var reportPull = ReportPullComposition.Create(analysisContexts, connectionString, loggers);
         await using var reportPullWakeup = reportPull?.Wakeup;
@@ -335,11 +335,13 @@ try
         var issueConfiguration = args is ["releases", "publish", ..]
             ? PublicationComposition.RequireIssues(ConfigurationFile.ReadIssuesFromEnvironment())
             : IssueConfiguration.None;
+        var artifactRoot = args is ["releases", "publish", ..] ? PublicationComposition.RequireArtifactRoot() : string.Empty;
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
         var releases = new FileReleaseDirectory(releaseRoot);
-        var (publish, _) = PublicationComposition.Create(connectionString, publications, releases, publishConfiguration, issueConfiguration);
-        executing = true;
         using var loggers = CreateLoggers();
+        var (publish, _) = PublicationComposition.Create(connectionString, publications, releases, publishConfiguration, issueConfiguration,
+            artifactRoot, loggers);
+        executing = true;
         var blocked = new BlockedPublishedRecords(publications);
         return await ReleaseCommand.ExecuteAsync(args, publish, new ListPublicationReleases(publications, releases),
             new ListBlockedPublished(publications, releases, blocked),

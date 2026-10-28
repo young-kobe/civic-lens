@@ -1,0 +1,22 @@
+@using CivicLens.Publication.Contracts
+
+<figure class="portrait">
+    @if (Profile.Photo is { } photo)
+    {
+        <img src="@(RootPath + photo.Path)" width="@photo.Width" height="@photo.Height" alt="Official portrait of @Profile.Name" loading="eager" decoding="async" />
+        <figcaption>@photo.Credit</figcaption>
+    }
+    else
+    {
+        <svg class="portrait-placeholder" viewBox="0 0 225 275" aria-hidden="true" focusable="false">
+            <circle cx="112.5" cy="105" r="40" />
+            <path d="M32 275C32 205 80 170 112.5 170S193 205 193 275Z" />
+        </svg>
+        <figcaption>No portrait is on file for this official.</figcaption>
+    }
+</figure>
+
+@code {
+    [Parameter, EditorRequired] public PublishedOfficialProfile Profile { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+}

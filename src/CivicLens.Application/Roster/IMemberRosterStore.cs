@@ -14,6 +14,9 @@ public interface IMemberRosterStore
 
     Task AdmitPhotoAsync(MemberPhoto photo, CancellationToken cancellationToken);
 
+    /// <summary>Reads the newest photo of each named person who has one. The newest photo is the one of the latest captured attempt.</summary>
+    Task<IReadOnlyList<OfficialPhoto>> ReadNewestPhotosAsync(IReadOnlyCollection<string> personIds, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<RosterMember>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<SenatorLisId>> ReadSenatorLisIdsAsync(string sourceId, CancellationToken cancellationToken);

@@ -637,6 +637,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         {
             ["CIVIC_LENS_REVIEW_OWNER"] = Owner,
             ["CIVIC_LENS_RELEASE_DIRECTORY"] = host.ReleaseDirectory,
+            ["CIVIC_LENS_ARTIFACT_DIRECTORY"] = host.ArtifactDirectory,
             ["CIVIC_LENS_COLLECTION_CONFIG"] = Path.Combine(host.KeyDirectory, "sources.json"),
             ["CIVIC_LENS_ISSUES_CONFIG"] = Path.Combine(host.KeyDirectory, "issues.json")
         };

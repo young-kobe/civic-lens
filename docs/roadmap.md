@@ -38,6 +38,7 @@ The first deploy is a complete product within the product direction. Its path is
 - R-39: An `analyses redraft --stale` owner command requeues finished drafts whose last run used an older task, prompt, or schema version. It covers document changes, statements, actions, votes, and briefs. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-29: Check each policy area name against the Congress.gov API. Depends on: none stated. [Configuration](architecture/configuration.md#limits-and-planned-work)
 - R-30: Fix the remaining format and parser limits that the federal coverage found. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
+- R-44: A takedown for one member photo. A withhold flag on `PersonConfiguration` makes the publish leave the photo out of the profile, and the next publish replaces the pages. Depends on: none stated. [Roster](architecture/roster.md#limits-and-planned-work)
 
 ### Later
 
