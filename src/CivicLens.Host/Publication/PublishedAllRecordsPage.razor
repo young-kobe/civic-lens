@@ -1,7 +1,7 @@
 @using CivicLens.Host.Components.Layout
 @using CivicLens.Publication.Contracts
 
-<PublicPage Section="PublicSection.AllRecords" Title="All published records" Page="Page" PageCount="PageCount" Description="@($"All {Release.Records.Length} published records of Civic Lens, newest first. Each record shows its sources and the exact text it cites.")" Crumbs="Crumbs">
+<PublicPage Section="PublicSection.AllRecords" Title="All published records" CanonicalPath="@PublicationProtocol.AllRecordsPagePath(Page)" Page="Page" PageCount="PageCount" Description="@($"All {Release.Records.Length} published records of Civic Lens, newest first. Each record shows its sources and the exact text it cites.")" Crumbs="Crumbs">
     <PageHeader Title="All published records" Lede="@($"Release {Release.ReleaseNumber}, published {Moment.Full(Release.PublishedAtUtc)}.")" />
     <Panel Label="Records">
         <PublishedRecordTable Records="PageRecords" Caption="Published records" />

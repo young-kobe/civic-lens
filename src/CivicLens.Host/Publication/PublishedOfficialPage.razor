@@ -3,7 +3,7 @@
 @using CivicLens.Host.Components.Layout
 @using CivicLens.Publication.Contracts
 
-<PublicPage Section="PublicSection.Officials" Title="@Title" Description="@Description" RootPath="@Page.RootPath" Crumbs="Crumbs">
+<PublicPage Section="PublicSection.Officials" CanonicalPath="@Page.PagePath" Title="@Title" Description="@Description" RootPath="@Page.RootPath" Crumbs="Crumbs">
     <PageHeader Title="@Page.Profile.Name" Lede="@Lede" />
     @if (Page.IsCurrent)
     {

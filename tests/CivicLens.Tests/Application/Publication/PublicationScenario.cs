@@ -80,7 +80,9 @@ internal sealed class PublicationScenario
 
     public IssueConfiguration Issues { get; set; } = IssueConfiguration.None;
 
-    public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events, OfficialPages = OfficialPages }, Loaders(),
+    public PublicBaseUrl? BaseUrl { get; set; }
+
+    public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events, OfficialPages = OfficialPages, PublicBaseUrl = BaseUrl }, Loaders(),
         new PublicationCatalog(OfficialNames, Issues), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, null, Photos, () => PhotoReads++), new FixedExecutiveRoster(ExecutiveOfficials)),
         Captures.Photos("artifacts"), Clock);
 
@@ -379,6 +381,8 @@ internal sealed class FakeRenderer : IReleaseRenderer
     public List<string>? Events { get; init; }
     public List<ReleaseOfficialPage>? OfficialPages { get; init; }
     public IReadOnlyList<ReleaseAsset> Assets { get; } = [new("assets/site.css", [1, 2, 3])];
+    public PublicBaseUrl? PublicBaseUrl { get; init; }
+    public Task<string> RenderNotFoundAsync(CancellationToken cancellationToken) => Task.FromResult("<html>not found</html>");
     public Task<string> RenderRecordAsync(PublishedDocumentChange record, PublicationCatalog catalog, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>{record.RecordId}</html>");
     public Task<string> RenderStatementAsync(PublishedStatement record, ImmutableArray<PublishedRelationship> related, PublicationCatalog catalog,

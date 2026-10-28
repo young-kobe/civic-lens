@@ -423,6 +423,7 @@ This is the only navigation index.
 | Issue panel and `method.html` | [Publication](architecture/publication.md#issue-panel) | `src/CivicLens.Application/Publication/TalkAndActionProfile.cs` |
 | Officials and catalog files of a release | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/PublicationOfficials.cs` |
 | Official pages, officials list, and vote files of an official | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/ReleaseOfficialPages.cs` |
+| Canonical addresses, sitemap, robots file, and not found page | [Publication](architecture/publication.md#public-base-url) | `src/CivicLens.Application/Publication/ReleaseSite.cs` |
 | Public filter pages | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/ReleaseFacets.cs` |
 | Pending work, decisions, MVP criteria | [Roadmap](roadmap.md) | none |
 | Commands and procedures | [Operations](operations.md) | `src/CivicLens.Host/Program.cs` |

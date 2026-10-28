@@ -2,7 +2,7 @@
 @using CivicLens.Host.Components.Layout
 @using CivicLens.Publication.Contracts
 
-<PublicPage Section="PublicSection.Issues" Title="@Facet.Name" Page="Page" PageCount="Facet.PageCount" Description="@($"{KindLabel} {Facet.Name}: {Facet.Records.Length} published records that name it, newest event date first.")" RootPath="../" Crumbs="Crumbs">
+<PublicPage Section="PublicSection.Issues" Title="@Facet.Name" CanonicalPath="@Facet.PagePath(Page)" Page="Page" PageCount="Facet.PageCount" Description="@($"{KindLabel} {Facet.Name}: {Facet.Records.Length} published records that name it, newest event date first.")" RootPath="../" Crumbs="Crumbs">
     <PageHeader Title="@Facet.Name" Lede="@($"{KindLabel}. {Facet.Records.Length} published records, newest event date first. A record with no event date uses its first publication day.")" />
     <Panel Label="Records">
         <PublishedRecordTable Records="Facet.RecordsOnPage(Page)" Caption="@Facet.Name" RootPath="../" FacetColumns="true" />

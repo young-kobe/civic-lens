@@ -2,7 +2,7 @@
 @using CivicLens.Host.Components.Layout
 @using CivicLens.Publication.Contracts
 
-<PublicPage Section="PublicSection.Issues" Title="Issues and policy areas" Description="Issues and policy areas with published records. Each page lists the records that name the issue or policy area." Crumbs="Crumbs">
+<PublicPage Section="PublicSection.Issues" CanonicalPath="@PublicationProtocol.FacetsPath" Title="Issues and policy areas" Description="Issues and policy areas with published records. Each page lists the records that name the issue or policy area." Crumbs="Crumbs">
     <PageHeader Title="Issues and policy areas" Lede="Each page lists the published records that name the issue or policy area." />
     <PublishedFacetBrowser Facets="Facets" />
 </PublicPage>
