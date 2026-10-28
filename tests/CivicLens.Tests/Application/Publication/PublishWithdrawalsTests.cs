@@ -50,18 +50,21 @@ public sealed class PublishWithdrawalsTests
     }
 
     [Fact]
-    public async Task ALaterPublishCarriesTheNoticeForwardAndNeverBringsTheWithdrawnFileBack()
+    public async Task ALaterPublishWritesTheNoticeAgainSoItHasTheCurrentHeadAndNeverBringsTheWithdrawnFileBack()
     {
         var (scenario, action) = await PublishedActionAsync();
         var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong bill."));
         scenario.Releases.Links.Clear();
+        scenario.BaseUrl = PublicBaseUrl.Parse("https://civic.example", "V");
         var statement = scenario.AddStatement('b');
 
         var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("k3", new PublishedRecordReference(PublishedRecordKind.Statement, statement)));
 
         Assert.Equal(action, Assert.Single(ReadManifest(scenario, third.DirectoryName).Withdrawals).RecordId);
-        Assert.Contains((second.DirectoryName, PublicationProtocol.RecordPagePath(action)), scenario.Releases.Links);
+        Assert.DoesNotContain((second.DirectoryName, PublicationProtocol.RecordPagePath(action)), scenario.Releases.Links);
+        Assert.Equal($"<html>withdrawn {action} Wrong bill.https://civic.example/</html>",
+            Encoding.UTF8.GetString(scenario.Releases.Directories[third.DirectoryName][PublicationProtocol.RecordPagePath(action)]));
         Assert.DoesNotContain(PublicationProtocol.RecordDataPath(action), scenario.Releases.Directories[third.DirectoryName].Keys);
     }
 

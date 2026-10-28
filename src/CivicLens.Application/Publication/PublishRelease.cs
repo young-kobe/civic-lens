@@ -176,7 +176,7 @@ public sealed class PublishRelease
                 Encoding.UTF8.GetBytes(pages[addition.RecordId]), cancellationToken);
         }
 
-        await WriteWithdrawalPagesAsync(staging, previous, withdrawals, cancellationToken);
+        await WriteWithdrawalPagesAsync(staging, withdrawals, cancellationToken);
         foreach (var asset in renderer.Assets)
             await staging.WriteFileAsync(asset.RelativePath, asset.Content, cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestGzipPath,
@@ -194,18 +194,12 @@ public sealed class PublishRelease
         return (await staging.CompleteAsync(number, cancellationToken), entries);
     }
 
-    private async Task WriteWithdrawalPagesAsync(IReleaseStaging staging, PreviousRelease previous,
-        List<PublishedWithdrawal> withdrawals, CancellationToken cancellationToken)
+    private async Task WriteWithdrawalPagesAsync(IReleaseStaging staging, List<PublishedWithdrawal> withdrawals,
+        CancellationToken cancellationToken)
     {
         foreach (var withdrawal in withdrawals)
-        {
-            var path = PublicationProtocol.RecordPagePath(withdrawal.RecordId);
-            if (previous.IsWithdrawn(withdrawal.RecordId))
-                await staging.LinkFileAsync(previous.DirectoryName!, path, cancellationToken);
-            else
-                await staging.WriteFileAsync(path, Encoding.UTF8.GetBytes(await renderer.RenderWithdrawalAsync(withdrawal, cancellationToken)),
-                    cancellationToken);
-        }
+            await staging.WriteFileAsync(PublicationProtocol.RecordPagePath(withdrawal.RecordId),
+                Encoding.UTF8.GetBytes(await renderer.RenderWithdrawalAsync(withdrawal, cancellationToken)), cancellationToken);
     }
 
     private static byte[] Compress(byte[] content, Func<Stream, Stream> compressor)
