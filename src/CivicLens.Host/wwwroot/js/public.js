@@ -36,11 +36,24 @@
         };
         const failure = response => response.status === 429 ? "Too many searches. Try again in a minute."
             : response.status === 404 ? "This release is not indexed yet."
+            : response.status === 400 ? "This search link has words or filters that search cannot use. Change them and search again."
             : "Search is not available now. Try again later.";
-        const run = async append => {
+        const formParams = () => {
             const params = new URLSearchParams();
             for (const [name, value] of new FormData(form)) if (value) params.set(name, value);
-            if (append) params.set("cursor", nextCursor);
+            return params;
+        };
+        const dropCursor = () => {
+            nextCursor = null;
+            more.hidden = true;
+        };
+        const reset = () => {
+            dropCursor();
+            results.replaceChildren();
+        };
+        const run = async append => {
+            const params = formParams();
+            if (append) params.set("cursor", nextCursor); else reset();
             const mine = ++running;
             status.textContent = "Searching.";
             let response;
@@ -56,9 +69,30 @@
             more.hidden = nextCursor === null;
             status.textContent = results.children.length === 0 ? "No records match." : `Showing ${results.children.length} records from release ${page.release}.`;
         };
+        let address = location.search;
+        const writeAddress = (params, replace) => {
+            const text = params.toString();
+            const search = text ? `?${text}` : "";
+            if (replace || search === location.search) history.replaceState(null, "", location.pathname + search + location.hash);
+            else history.pushState(null, "", location.pathname + search + location.hash);
+            address = search;
+        };
+        const restoreFromAddress = () => {
+            address = location.search;
+            const query = new URLSearchParams(address);
+            for (const field of Array.from(form.elements).filter(element => element.name)) {
+                field.value = query.get(field.name) ?? "";
+                if (field instanceof HTMLSelectElement && field.selectedIndex === -1) field.value = "";
+            }
+            if (formParams().toString() !== "") run(false);
+            else { running++; reset(); status.textContent = ""; }
+        };
         form.closest("section").hidden = false;
-        form.addEventListener("submit", event => { event.preventDefault(); run(false); });
-        form.addEventListener("input", () => { nextCursor = null; more.hidden = true; });
+        restoreFromAddress();
+        writeAddress(formParams(), true);
+        window.addEventListener("popstate", () => { if (location.search !== address) restoreFromAddress(); });
+        form.addEventListener("submit", event => { event.preventDefault(); writeAddress(formParams()); run(false); });
+        form.addEventListener("input", dropCursor);
         more.addEventListener("click", () => run(true));
     };
 
