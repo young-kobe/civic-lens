@@ -22,7 +22,7 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
             : [];
 
     internal async Task<IReadOnlyList<OfficialPhoto>> ReadPhotosAsync(CancellationToken cancellationToken) =>
-        await members.ReadNewestPhotosAsync([.. configuration.People.Select(person => person.Id)], cancellationToken);
+        await members.ReadNewestPhotosAsync([.. configuration.People.Where(person => !person.WithholdPhoto).Select(person => person.Id)], cancellationToken);
 
     internal async Task<PublishedOfficials> ResolveAsync(IReadOnlySet<string> officialIds, IReadOnlyDictionary<string, string> recordNames,
         IReadOnlyList<RosterMember> roster, IReadOnlyDictionary<string, PublishedPhoto> photos, CancellationToken cancellationToken)

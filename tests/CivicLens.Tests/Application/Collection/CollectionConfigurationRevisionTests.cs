@@ -123,6 +123,19 @@ public sealed class CollectionConfigurationRevisionTests
     }
 
     [Fact]
+    public void WithholdPhotoSurvivesRevisionRoundTripAndAnAbsentFlagLeavesTheSnapshotUnchanged()
+    {
+        var configuration = Configuration(["person"]);
+        var withheld = configuration with { People = [new PersonConfiguration { Id = "person", Name = "Official", WithholdPhoto = true }] };
+
+        var revision = CollectionConfigurationRevision.Create(withheld);
+
+        Assert.Contains("\"withholdPhoto\":true", revision.Json, StringComparison.Ordinal);
+        Assert.True(revision.ReadConfiguration().People[0].WithholdPhoto);
+        Assert.DoesNotContain("withholdPhoto", CollectionConfigurationRevision.Create(configuration).Json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void OfficesSurviveRevisionRoundTripAndAbsentOfficesLeaveTheSnapshotUnchanged()
     {
         var configuration = Configuration(["person"]);

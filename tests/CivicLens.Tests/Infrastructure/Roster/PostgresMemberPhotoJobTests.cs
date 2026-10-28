@@ -44,6 +44,17 @@ public sealed class PostgresMemberPhotoJobTests(PostgresCollection postgres) : I
     }
 
     [Fact]
+    public async Task AWithheldPersonStillGetsAPhotoJobSoRemovingTheFlagRestoresTheNewestPhoto()
+    {
+        var people = People().Select(person => person.Id == "cantwell" ? person with { WithholdPhoto = true } : person).ToArray();
+
+        await roster.AdmitAsync(await ImportRosterAsync('a', 0), RosterFixtures.Members(),
+            new ConfiguredCollectionSource(MemberPhotoFixtures.Configuration(people), MemberPhotoFixtures.SourceId), default);
+
+        Assert.Contains(await ReadPhotoJobsAsync(), job => job.IdempotencyKey.Contains("/C000127/", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task AJobBindsToItsPhotoUrlAndResourceSoTheWorkerCanLeaseIt()
     {
         await roster.AdmitAsync(await ImportRosterAsync('a', 0), RosterFixtures.Members(), Photos(), default);

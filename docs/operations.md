@@ -702,6 +702,12 @@ Enable the source `member-photos` to capture one portrait for each configured me
 
 The output lists the members to add and the configured people who left the roster. Edit the configuration by hand and commit it. Press sources of a new member are a manual step. See [roster](architecture/roster.md#proposals).
 
+### Take down a member photo
+
+Set `"withholdPhoto": true` on the person in the collection configuration and commit it. Then publish. The new release shows no photo for the person, and the official page shows the neutral line "No portrait is shown for this official." Collection continues, so removing the flag and publishing again restores the newest photo.
+
+The flag does not remove files from old releases. An old release directory keeps the photo file until release retention ([R-24](roadmap.md#later)) removes it, or until a withdrawal. Purge the file from the CDN if it must leave at once. See [roster](architecture/roster.md#limits-and-planned-work).
+
 ## Automatic publication of facts
 
 The `worker` command can publish code-approved actions and votes. [Publication](architecture/publication.md#automatic-publication-of-facts) holds the rules. A person still publishes statements, relationships, briefs, and document changes. The stage is off by default. It runs when the variable below is `1`. Any other value stops the worker with exit code 2.
