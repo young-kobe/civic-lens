@@ -71,7 +71,7 @@ public sealed record CollectionConfiguration
 
         ValidatePacingGroups();
 
-        if (Sources.Where(source => IsRosterFile(source?.ApiParser)).GroupBy(source => source.ApiParser).Any(kind => kind.Count() > 1))
+        if (Sources.Where(source => CoversNoPeople(source?.ApiParser)).GroupBy(source => source.ApiParser).Any(kind => kind.Count() > 1))
             throw new ArgumentException("A configuration may have only one roster source of each kind.");
 
         var sourceUrls = new HashSet<Uri>();

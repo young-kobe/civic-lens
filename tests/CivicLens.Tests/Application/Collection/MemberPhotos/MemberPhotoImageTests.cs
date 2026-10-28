@@ -54,6 +54,30 @@ public sealed class MemberPhotoImageTests
     }
 
     [Fact]
+    public void AProgressiveFrameIsReadLikeABaselineFrame()
+    {
+        var body = MemberPhotoFixtures.Jpeg();
+        body[21] = 0xC2;
+
+        Assert.True(MemberPhotoImage.IsValid("image/jpeg", body));
+    }
+
+    [Fact]
+    public void ATableSegmentBeforeTheFrameIsSkippedEvenWhenItsBytesLookLikeTheRightSize()
+    {
+        byte[] table = [0xFF, 0xC4, 0x00, 0x0B, 0x00, 0x01, 0x13, 0x00, 0xE1, 0x00, 0x00, 0x00, 0x00];
+
+        Assert.False(MemberPhotoImage.IsValid("image/jpeg", Insert(MemberPhotoFixtures.Jpeg(100, 100), table)));
+        Assert.True(MemberPhotoImage.IsValid("image/jpeg", Insert(MemberPhotoFixtures.Jpeg(), table)));
+    }
+
+    [Fact]
+    public void FillBytesBeforeAMarkerAreSkipped() =>
+        Assert.True(MemberPhotoImage.IsValid("image/jpeg", Insert(MemberPhotoFixtures.Jpeg(), [0xFF, 0xFF])));
+
+    private static byte[] Insert(byte[] body, byte[] segment) => [.. body[..20], .. segment, .. body[20..]];
+
+    [Fact]
     public void AJpegWithNoFrameHeaderBeforeTheScanIsInvalid()
     {
         byte[] body = [0xFF, 0xD8, 0xFF, 0xDA, 0x00, 0x02, 0x00, 0x00, 0xFF, 0xD9];

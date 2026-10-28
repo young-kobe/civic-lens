@@ -37,7 +37,9 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
         ArgumentException.ThrowIfNullOrWhiteSpace(attemptId);
         ArgumentNullException.ThrowIfNull(members);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.CollectionJobs, cancellationToken);
+        await using var transaction = photos is null
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.CollectionJobs, cancellationToken);
         if (photos is not null) await AddPhotoJobsAsync(db, photos, cancellationToken);
         RosterSnapshotRules.AddHeader(db, attemptId);
         foreach (var member in members)
@@ -64,6 +66,7 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
     {
         ArgumentNullException.ThrowIfNull(photo);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.CollectionJobs, cancellationToken);
         var captureSha256 = (await db.Attempts.AsNoTracking().SingleOrDefaultAsync(attempt => attempt.AttemptId == photo.AttemptId, cancellationToken))
             ?.CaptureSha256 ?? throw new InvalidOperationException("A member photo needs an imported captured attempt.");
         var newestCaptureSha256 = await (from row in db.Set<OfficialPhotoRow>().AsNoTracking()
@@ -76,6 +79,7 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
             return;
         db.Add(new OfficialPhotoRow { AttemptId = photo.AttemptId, PersonId = photo.PersonId, SourceUrl = photo.SourceUrl, Credit = photo.Credit });
         await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<RosterMember>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken)

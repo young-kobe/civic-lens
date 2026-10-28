@@ -29,7 +29,6 @@ public sealed class JobPreparation(
     IssueConfigurationRevision? issues)
 {
     private const string NotModified = "notModified";
-    private const string InvalidData = "invalidData";
     private const string ApiResourceMissing = "apiResourceMissing";
     private const string IssuesConfigurationUnavailable = "issuesConfigurationUnavailable";
     private readonly IssueConfiguration? issueConfiguration = issues?.ReadConfiguration();
@@ -259,9 +258,9 @@ public sealed class JobPreparation(
             ?? throw new InvalidDataException("Member photo job names a person who is not configured.");
         var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
         if (!MemberPhotoImage.IsValid(response.Captured.Response.ContentType, response.Body))
-            return JobPreparationResult.Blocked(InvalidData);
+            throw new InvalidDataException("Member photo is not a JPEG of the published size.");
         await roster.AdmitPhotoAsync(new MemberPhoto(response.Captured.AttemptId, person.Id, job.Definition.Url,
-            MemberPhotoUrl.Credit), cancellationToken);
+            MemberPhoto.MemberGuideCredit), cancellationToken);
         return JobPreparationResult.Prepared();
     }
 

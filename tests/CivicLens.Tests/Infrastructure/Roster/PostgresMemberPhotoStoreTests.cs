@@ -1,4 +1,3 @@
-using CivicLens.Application.Collection.MemberPhotos;
 using CivicLens.Application.Roster;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Roster;
@@ -34,7 +33,7 @@ public sealed class PostgresMemberPhotoStoreTests(PostgresCollection postgres) :
         await roster.AdmitPhotoAsync(Photo(attemptId), default);
 
         var row = Assert.Single(await ReadRowsAsync());
-        Assert.Equal((attemptId, "a-person", MemberPhotoFixtures.PhotoUrl(), MemberPhotoUrl.Credit, new string('a', 64)),
+        Assert.Equal((attemptId, "a-person", MemberPhotoFixtures.PhotoUrl(), MemberPhoto.MemberGuideCredit, new string('a', 64)),
             (row.AttemptId, row.PersonId, row.SourceUrl, row.Credit, row.CaptureSha256));
     }
 
@@ -91,6 +90,17 @@ public sealed class PostgresMemberPhotoStoreTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task TwoConcurrentPreparationsOfTheSameUnchangedBodyForOnePersonAddOneRowBecauseTheJobLockSerializesThem()
+    {
+        var first = await ImportAsync('a', 0);
+        var second = await ImportAsync('a', 1);
+
+        await Task.WhenAll(roster.AdmitPhotoAsync(Photo(first), default), roster.AdmitPhotoAsync(Photo(second), default));
+
+        Assert.Single(await ReadRowsAsync());
+    }
+
+    [Fact]
     public async Task TwoPeopleWithTheSameImageBytesEachGetTheirOwnRow()
     {
         var first = await ImportAsync('a', 0);
@@ -99,11 +109,11 @@ public sealed class PostgresMemberPhotoStoreTests(PostgresCollection postgres) :
         await roster.AdmitPhotoAsync(Photo(first), default);
         await roster.AdmitPhotoAsync(Photo(second, "another-person", "B000002"), default);
 
-        Assert.Equal(["a-person", "another-person"], (await ReadRowsAsync()).Select(row => row.PersonId));
+        Assert.Equal(["a-person", "another-person"], (await ReadRowsAsync()).Select(row => row.PersonId).Order());
     }
 
     private static MemberPhoto Photo(string attemptId, string personId = "a-person", string bioguideId = MemberPhotoFixtures.Bioguide) =>
-        new(attemptId, personId, MemberPhotoFixtures.PhotoUrl(bioguideId), MemberPhotoUrl.Credit);
+        new(attemptId, personId, MemberPhotoFixtures.PhotoUrl(bioguideId), MemberPhoto.MemberGuideCredit);
 
     private Task<string> ImportAsync(char body, int day) =>
         MemberPhotoFixtures.ImportCaptureAsync(attempts, new string(body, 64), Morning.AddDays(day));

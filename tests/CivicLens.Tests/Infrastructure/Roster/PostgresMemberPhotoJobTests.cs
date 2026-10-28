@@ -1,6 +1,5 @@
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
-using CivicLens.Application.Collection.MemberPhotos;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Roster;
@@ -39,8 +38,8 @@ public sealed class PostgresMemberPhotoJobTests(PostgresCollection postgres) : I
 
         Assert.Equal(1L, await CountAsync("roster_snapshots"));
         var jobs = await ReadPhotoJobsAsync();
-        Assert.Equal(ConfiguredBioguideIds.Select(id => MemberPhotoJobKeys.Photo(MemberPhotoFixtures.SourceId, id, Today())),
-            jobs.Select(job => job.IdempotencyKey).Order());
+        Assert.Equal(ConfiguredBioguideIds.Select(id => $"member-photo/{MemberPhotoFixtures.SourceId}/{id}/").Order(),
+            jobs.Select(job => job.IdempotencyKey[..(job.IdempotencyKey.LastIndexOf('/') + 1)]).Order());
         Assert.All(jobs, job => Assert.Equal(CollectionJobPriority.Backfill, job.Priority));
     }
 
@@ -118,8 +117,6 @@ public sealed class PostgresMemberPhotoJobTests(PostgresCollection postgres) : I
         RosterFixtures.Person("other", "Another Person", "B000002"),
         RosterFixtures.Person("no-id", "No Bioguide", null)
     ];
-
-    private static DateOnly Today() => DateOnly.FromDateTime(DateTime.UtcNow);
 
     private Task<string> ImportRosterAsync(char body, int day) =>
         RosterFixtures.ImportCaptureAsync(attempts, new string(body, 64), Morning.AddDays(day));

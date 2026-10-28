@@ -139,6 +139,15 @@ public sealed class MemberPhotoSourceTests
     }
 
     [Fact]
+    public void ASecondPhotoSourceIsRejectedBecauseTheRosterJobsReadOneSource()
+    {
+        var second = MemberPhotoFixtures.Source() with { Id = "second", Url = MemberPhotoFixtures.SourceUrl + "copy/" };
+        var configuration = RosterFixtures.Configuration() with { Sources = [MemberPhotoFixtures.Source(), second] };
+
+        Assert.Throws<ArgumentException>(configuration.Validate);
+    }
+
+    [Fact]
     public void ThePhotoSourceMakesNoScheduledRootJobBecauseTheRosterJobCreatesThePhotoJobs()
     {
         var source = new ConfiguredCollectionSource(MemberPhotoFixtures.Configuration(), MemberPhotoFixtures.SourceId, Today);

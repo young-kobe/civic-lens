@@ -499,7 +499,7 @@ public sealed class JobPreparationTests
         var result = await Prepare(ApiResource.MemberPhoto, MemberPhotoFixtures.PhotoUrl(), "", null);
 
         Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
-        Assert.Equal(new MemberPhoto("attempt", "a-person", MemberPhotoFixtures.PhotoUrl(), MemberPhotoUrl.Credit),
+        Assert.Equal(new MemberPhoto("attempt", "a-person", MemberPhotoFixtures.PhotoUrl(), MemberPhoto.MemberGuideCredit),
             Assert.Single(roster.Photos));
     }
 
@@ -509,16 +509,15 @@ public sealed class JobPreparationTests
     [InlineData("image/jpeg", 200, 275, false)]
     [InlineData("image/jpeg", 225, 300, false)]
     [InlineData("image/jpeg", 225, 275, true)]
-    public async Task APhotoThatIsNotAJpegOfThePublishedSizeIsBlockedAsInvalidDataAndWritesNoRow(string contentType,
+    public async Task APhotoThatIsNotAJpegOfThePublishedSizeEndsFailedAsInvalidDataAndWritesNoRow(string contentType,
         int width, int height, bool breakSignature)
     {
         var bytes = MemberPhotoFixtures.Jpeg(width, height);
         if (breakSignature) bytes[2] = 0x00;
 
-        var result = await Prepare(ApiResource.MemberPhoto, MemberPhotoFixtures.PhotoUrl(), "", null, bytes: bytes, contentType: contentType);
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            Prepare(ApiResource.MemberPhoto, MemberPhotoFixtures.PhotoUrl(), "", null, bytes: bytes, contentType: contentType));
 
-        Assert.Equal(EvidenceStatus.Blocked, result!.Status);
-        Assert.Equal("invalidData", result.ErrorCode);
         Assert.Empty(roster.Photos);
     }
 

@@ -2,7 +2,6 @@ namespace CivicLens.Application.Collection.MemberPhotos;
 
 public static class MemberPhotoUrl
 {
-    public const string Credit = "Official portrait from the GPO Member Guide, via unitedstates/images. Public domain.";
     private const string Extension = ".jpg";
 
     public static string Photo(string sourceUrl, string bioguideId) => $"{Prefix(sourceUrl)}{bioguideId}{Extension}";
