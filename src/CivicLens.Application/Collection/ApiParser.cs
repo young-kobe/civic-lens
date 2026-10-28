@@ -6,5 +6,6 @@ public enum ApiParser
     CongressHouseVoteList,
     SenateVoteList,
     CongressLegislators,
-    CongressLegislatorsExecutive
+    CongressLegislatorsExecutive,
+    MemberPhotos
 }

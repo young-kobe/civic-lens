@@ -123,14 +123,14 @@ public sealed record CollectionConfiguration
     }
 
     public bool IsActiveOn(WatchedSourceConfiguration source, DateOnly asOf) =>
-        IsRosterFile(source.ApiParser) || CoveredPersonIdsOf(source, asOf).Length > 0;
+        CoversNoPeople(source.ApiParser) || CoveredPersonIdsOf(source, asOf).Length > 0;
 
     public string[] CoveredPersonIdsOf(WatchedSourceConfiguration source, DateOnly asOf)
     {
         IEnumerable<string> ids = source.ApiParser switch
         {
             ApiParser.CongressBillList or ApiParser.CongressHouseVoteList or ApiParser.SenateVoteList => asOf < source.BackfillFrom ? [] : BioguidePersonIds(),
-            ApiParser.CongressLegislators or ApiParser.CongressLegislatorsExecutive => [],
+            ApiParser.CongressLegislators or ApiParser.CongressLegislatorsExecutive or ApiParser.MemberPhotos => [],
             null => source.Coverage!.Where(coverage => new DateRange(coverage.StartsOn, coverage.EndsBefore).Contains(asOf))
                 .Select(coverage => coverage.PersonId),
             _ => throw new ArgumentOutOfRangeException(nameof(source))
@@ -178,22 +178,25 @@ public sealed record CollectionConfiguration
                 break;
             case ApiParser.CongressLegislators:
             case ApiParser.CongressLegislatorsExecutive:
-                ValidateRosterFileSource(source);
+            case ApiParser.MemberPhotos:
+                ValidatePublicFileSource(source);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(source));
         }
     }
 
+    private static bool CoversNoPeople(ApiParser? parser) => IsRosterFile(parser) || parser == ApiParser.MemberPhotos;
+
     private static bool IsRosterFile(ApiParser? parser) =>
         parser is ApiParser.CongressLegislators or ApiParser.CongressLegislatorsExecutive;
 
-    private static void ValidateRosterFileSource(WatchedSourceConfiguration source)
+    private static void ValidatePublicFileSource(WatchedSourceConfiguration source)
     {
         if (source.Credential is not null)
             throw new ArgumentException($"Source '{source.Id}' reads a public file and cannot set a credential.");
         if (source.ETag is not null || source.LastModified is not null)
-            throw new ArgumentException($"Source '{source.Id}' downloads its file each day and cannot set validators.");
+            throw new ArgumentException($"Source '{source.Id}' downloads its whole file on every check and cannot set validators.");
         if (source.Coverage is not null || source.MinimumCongress is not null || source.BackfillFrom is not null)
             throw new ArgumentException($"Source '{source.Id}' covers no people and sets no Congress options.");
     }

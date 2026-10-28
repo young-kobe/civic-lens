@@ -1,5 +1,6 @@
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.HouseVotes;
+using CivicLens.Application.Collection.MemberPhotos;
 using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Collection.Contracts;
 using System.Text.Json.Serialization;
@@ -113,6 +114,7 @@ public sealed record CollectionJobDefinition
             ApiParser.SenateVoteList => MatchesSenateVoteResource(resource, source.Url, url),
             ApiParser.CongressLegislators => resource == Collection.ApiResource.MemberRoster && url == source.Url,
             ApiParser.CongressLegislatorsExecutive => resource == Collection.ApiResource.ExecutiveRoster && url == source.Url,
+            ApiParser.MemberPhotos => resource == Collection.ApiResource.MemberPhoto && MemberPhotoUrl.TryReadBioguideId(source.Url, url) is not null,
             _ => false
         };
 
