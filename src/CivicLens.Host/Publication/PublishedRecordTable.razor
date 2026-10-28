@@ -9,17 +9,27 @@
             <TableCell Header>@PublicColumn.Officials</TableCell>
             <TableCell Header Class="fit num">@PublicColumn.Date</TableCell>
         }
+        else if (WeekColumn)
+        {
+            <TableCell Header Class="fit num">@PublicColumn.WeekOf</TableCell>
+            <TableCell Header Class="fit num">@PublicColumn.FirstPublished</TableCell>
+        }
         else
         {
             <TableCell Header Class="fit num">@PublicColumn.FirstPublished</TableCell>
         }
     </Head>
     <Row Context="entry">
-        <TableCell Main><a class="cell-title" href="@(RootPath + PublicationProtocol.RecordPagePath(entry.RecordId))">@entry.Headline</a> <StatusBadge Text="@PublishedRecordLabels.Kind(entry.Kind)" /></TableCell>
+        <TableCell Main><a class="cell-title" href="@(RootPath + PublicationProtocol.RecordPagePath(entry.RecordId))">@entry.Headline</a>@if (!WeekColumn) {@(" ")<StatusBadge Text="@PublishedRecordLabels.Kind(entry.Kind)" />}</TableCell>
         @if (FacetColumns)
         {
             <TableCell Label="@PublicColumn.Officials">@string.Join(", ", entry.Officials.Select(official => official.Name))</TableCell>
             <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Iso(ReleaseRecordOrder.Day(entry))</TableCell>
+        }
+        else if (WeekColumn)
+        {
+            <TableCell Class="fit num" Label="@PublicColumn.WeekOf">@Moment.Iso(ReleaseRecordOrder.Day(entry))</TableCell>
+            <TableCell Class="time fit num" Label="@PublicColumn.FirstPublished"><Timestamp Value="entry.FirstPublishedAtUtc" Format="TimestampFormat.Day" /></TableCell>
         }
         else
         {
@@ -34,4 +44,5 @@
     [Parameter, EditorRequired] public string Caption { get; set; } = string.Empty;
     [Parameter] public string RootPath { get; set; } = string.Empty;
     [Parameter] public bool FacetColumns { get; set; }
+    [Parameter] public bool WeekColumn { get; set; }
 }

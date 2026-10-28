@@ -23,7 +23,7 @@ public sealed class PublishSiteFilesTests
         Assert.Contains((first.DirectoryName, PublicationProtocol.OfficialPagePath("mayor")), scenario.Releases.Links);
         Assert.Equal(
         [
-            $"{Base}/", $"{Base}/all.html", $"{Base}/issues.html", $"{Base}/issues/housing.html", $"{Base}/method.html",
+            $"{Base}/", $"{Base}/about.html", $"{Base}/all.html", $"{Base}/briefs.html", $"{Base}/issues.html", $"{Base}/issues/housing.html", $"{Base}/method.html",
             $"{Base}/officials.html", $"{Base}/officials/chair.html", $"{Base}/officials/mayor.html",
             $"{Base}/policy-areas/land-use.html",
             .. new[] { 'a', 'b', 'c' }.Select(id => $"{Base}/records/{new string(id, 64)}.html")

@@ -12,6 +12,7 @@
         <Panel Title="@Brief.Headline" Padded="true">
             <PublishedBriefText Record="Brief" BriefHref="@PublicationProtocol.RecordPagePath(Brief.RecordId)" />
             <p><a href="@PublicationProtocol.RecordPagePath(Brief.RecordId)">Read the brief with its cited records</a></p>
+            <p><a href="@PublicationProtocol.BriefsPagePath(1)">All weekly briefs</a></p>
         </Panel>
     }
     <Panel Title="Newest records" Aside="@AllRecordsLink">

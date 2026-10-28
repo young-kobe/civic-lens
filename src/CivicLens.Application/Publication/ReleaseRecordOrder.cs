@@ -8,6 +8,10 @@ public static class ReleaseRecordOrder
     public static DateOnly Day(PublishedRecordEntry entry) =>
         entry.EventDate ?? DateOnly.FromDateTime(entry.FirstPublishedAtUtc.UtcDateTime);
 
+    /// <summary>The weekly brief entries of a release, newest week first. Each week has one brief.</summary>
+    public static PublishedRecordEntry[] BriefsNewestFirst(PublicationRelease release) =>
+        [.. release.Records.Where(entry => entry.Kind == PublishedRecordKind.Brief).OrderByDescending(Day)];
+
     public static IEnumerable<T> NewestFirst<T>(IEnumerable<T> rows, Func<T, DateOnly> dayOf, Func<T, DateTimeOffset> publishedOf,
         Func<T, string> recordIdOf) =>
         rows.OrderByDescending(dayOf).ThenByDescending(publishedOf).ThenBy(recordIdOf, StringComparer.Ordinal);

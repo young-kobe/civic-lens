@@ -405,6 +405,8 @@ internal sealed class FakeRenderer : IReleaseRenderer
         Task.FromResult($"<html>home {release.Records.Length} brief {brief?.RecordId}</html>");
     public Task<string> RenderAllRecordsAsync(PublicationRelease release, int page, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>index {page} {release.Records.Length}</html>");
+    public Task<string> RenderBriefsAsync(PublicationRelease release, int page, CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>briefs {page} {ReleaseRecordOrder.BriefsNewestFirst(release).Length}</html>");
     public Task<string> RenderFacetPageAsync(ReleaseFacet facet, int page, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>facet {facet.Name} {page} {string.Join(',', facet.Records.Select(entry => entry.RecordId))}</html>");
     public Task<string> RenderFacetsAsync(ReleaseFacets facets, CancellationToken cancellationToken) =>
@@ -420,6 +422,8 @@ internal sealed class FakeRenderer : IReleaseRenderer
         Task.FromResult("<html>report</html>");
     public Task<string> RenderMethodAsync(CancellationToken cancellationToken) =>
         Task.FromResult("<html>method</html>");
+    public Task<string> RenderAboutAsync(CancellationToken cancellationToken) =>
+        Task.FromResult("<html>about</html>");
     public Task<string> RenderSearchAsync(PublicationRelease release, ReleaseFacets facets, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>search {release.Records.Length} {facets.Issues.Length}</html>");
 

@@ -114,6 +114,35 @@ public sealed class PublishIndexPagesTests
         Assert.Equal("<html>home 1 brief </html>", PageText(scenario, summary.DirectoryName, PublicationProtocol.HomePath));
     }
 
+    [Fact]
+    public async Task EveryPublishWritesTheBriefsListAndTheAboutPageSoNeitherLinkInTheNavigationEverBreaks()
+    {
+        var scenario = new PublicationScenario();
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k", scenario.AddDraft('a')));
+
+        Assert.Equal("<html>briefs 1 0</html>", PageText(scenario, summary.DirectoryName, PublicationProtocol.BriefsPagePath(1)));
+        Assert.Equal("<html>about</html>", PageText(scenario, summary.DirectoryName, PublicationProtocol.AboutPagePath));
+    }
+
+    [Fact]
+    public async Task TheBriefsListKeepsEveryWeekOnLaterPublishesSoAnOlderBriefStaysReachable()
+    {
+        var scenario = new PublicationScenario();
+        var statement = scenario.AddStatement('c');
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Statement, statement)));
+        var brief = scenario.AddBrief(new DateOnly(2026, 5, 4), [new(PublishedRecordKind.Statement, statement, 1)]);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k2", new PublishedRecordReference(PublishedRecordKind.Brief, brief)));
+
+        var carried = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k3", scenario.AddDraft('a')));
+
+        Assert.Equal("<html>briefs 1 1</html>", PageText(scenario, carried.DirectoryName, PublicationProtocol.BriefsPagePath(1)));
+    }
+
     private static string PageText(PublicationScenario scenario, string directory, string path) =>
         Encoding.UTF8.GetString(scenario.Releases.Directories[directory][path]);
 

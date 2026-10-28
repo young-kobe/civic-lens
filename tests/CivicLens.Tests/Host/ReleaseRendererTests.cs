@@ -848,6 +848,90 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task HomeLinksTheListOfAllWeeklyBriefsOnlyWhenABriefExistsSoNoLinkLeadsToAnEmptyList()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+
+        var withBrief = new HtmlParser().ParseDocument(await renderer.RenderHomeAsync(ReleaseOf(1), Brief(), NoFacets, CancellationToken.None));
+        var without = new HtmlParser().ParseDocument(await renderer.RenderHomeAsync(ReleaseOf(1), null, NoFacets, CancellationToken.None));
+
+        Assert.Equal("All weekly briefs", withBrief.QuerySelector("main a[href='briefs.html']")!.TextContent);
+        Assert.Null(without.QuerySelector("main a[href='briefs.html']"));
+    }
+
+    [Fact]
+    public async Task BriefsPageListsTheNewestWeekFirstWithTheWeekAndALinkToEachBriefPage()
+    {
+        var release = ReleaseOfBriefs(3);
+
+        var html = await new ReleaseRenderer(null, null).RenderBriefsAsync(release, 1, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var rows = document.QuerySelectorAll("tbody tr").ToList();
+        Assert.Equal(new[] { 2, 1, 0 }.Select(index => $"records/{index:x64}.html"), rows.Select(row => row.QuerySelector("a.cell-title")!.GetAttribute("href")));
+        Assert.Equal(["Brief 2", "Brief 1", "Brief 0"], rows.Select(row => row.QuerySelector("a.cell-title")!.TextContent));
+        Assert.Equal(["2026-01-19", "2026-01-12", "2026-01-05"], rows.Select(row => row.QuerySelector("td[data-label='Week of']")!.TextContent.Trim()));
+        Assert.Equal(["Record", "Week of", "First published"], document.QuerySelectorAll("thead th").Select(header => header.TextContent.Trim()));
+        Assert.Empty(document.QuerySelectorAll("tbody .badge"));
+    }
+
+    [Fact]
+    public async Task BriefsPageListsOnlyBriefsSoOtherRecordKindsNeverAppearAsWeeks()
+    {
+        var release = ReleaseOfBriefs(1) with { Records = [.. ReleaseOf(3).Records, .. ReleaseOfBriefs(1).Records] };
+
+        var html = await new ReleaseRenderer(null, null).RenderBriefsAsync(release, 1, CancellationToken.None);
+
+        Assert.Single(new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody tr"));
+    }
+
+    [Fact]
+    public async Task BriefsPageSaysThereAreNoBriefsAndOffersAllRecordsWhenTheReleaseHasNone()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderBriefsAsync(ReleaseOf(2), 1, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.Equal("No weekly briefs yet", document.QuerySelector("main .empty h3")!.TextContent.Trim());
+        Assert.Equal("all.html", document.QuerySelector("main a[href='all.html']")!.GetAttribute("href"));
+        Assert.Empty(document.QuerySelectorAll("table"));
+    }
+
+    [Theory]
+    [InlineData(1, 50, "Page 1 of 2", "briefs-2.html")]
+    [InlineData(2, 5, "Page 2 of 2", null)]
+    public async Task BriefsPagePagesPastFiftyBriefsWithPagerLinksWhereTheyApply(int page, int expectedCount, string label, string? next)
+    {
+        var html = await new ReleaseRenderer(null, null).RenderBriefsAsync(ReleaseOfBriefs(55), page, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.Equal(expectedCount, document.QuerySelectorAll("tbody tr").Length);
+        Assert.Contains(label, html, StringComparison.Ordinal);
+        Assert.Equal(next, document.QuerySelector("a[rel='next']")?.GetAttribute("href"));
+        Assert.Equal(page == 2 ? "briefs.html" : null, document.QuerySelector("a[rel='prev']")?.GetAttribute("href"));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    public async Task BriefsPageRejectsAPageOutsideTheList(int page)
+    {
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            new ReleaseRenderer(null, null).RenderBriefsAsync(ReleaseOfBriefs(3), page, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task AboutPageLinksToTheMethodAndReportPagesAndNamesTheWordingLabelItPromises()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderAboutAsync(CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.NotNull(document.QuerySelector("main a[href='method.html']"));
+        Assert.NotNull(document.QuerySelector("main a[href='report.html']"));
+        Assert.Contains("An AI summary of the official record", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("unreviewed", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task HomeAndTheFacetListLinkOnlyFacetsThatHavePagesAndShowNamesAndCounts()
     {
         var release = ReleaseOf(3) with { Records = [.. ReleaseOf(3).Records.Select(entry => entry with { IssueIds = ["housing", "Not A Path"] })] };
@@ -1244,8 +1328,8 @@ public sealed class ReleaseRendererTests
     private static readonly string[] WrittenRootPages =
     [
         PublicationProtocol.HomePath, PublicationProtocol.OfficialsPagePath, PublicationProtocol.FacetsPath,
-        PublicationProtocol.AllRecordsPagePath(1), PublicationProtocol.SearchPagePath, PublicationProtocol.MethodPagePath,
-        PublicationProtocol.ReportPagePath
+        PublicationProtocol.AllRecordsPagePath(1), PublicationProtocol.BriefsPagePath(1), PublicationProtocol.SearchPagePath,
+        PublicationProtocol.MethodPagePath, PublicationProtocol.AboutPagePath, PublicationProtocol.ReportPagePath
     ];
 
     [Fact]
@@ -1268,7 +1352,7 @@ public sealed class ReleaseRendererTests
             var links = document.QuerySelectorAll("nav[aria-label='Site'] a, nav[aria-label='Footer'] a")
                 .Select(link => link.GetAttribute("href")!).ToList();
 
-            Assert.Equal(6, links.Count);
+            Assert.Equal(8, links.Count);
             Assert.All(links, href => Assert.True(WrittenRootPages.Contains(ReleasePath(pagePath, href)), $"{name}: {href}"));
         }
     }
@@ -1341,10 +1425,11 @@ public sealed class ReleaseRendererTests
             ("action", PublicationProtocol.RecordPagePath(Action().RecordId), await renderer.RenderActionAsync(Action(), [], PublicationCatalogs.None, CancellationToken.None), "All records"),
             ("vote", PublicationProtocol.RecordPagePath(Vote().RecordId), await renderer.RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None), "All records"),
             ("relationship", PublicationProtocol.RecordPagePath(relationship.RecordId), await renderer.RenderRelationshipAsync(relationship, PublicationCatalogs.None, CancellationToken.None), "All records"),
-            ("brief", PublicationProtocol.RecordPagePath(Brief().RecordId), await renderer.RenderBriefAsync(Brief(), CancellationToken.None), "All records"),
+            ("brief", PublicationProtocol.RecordPagePath(Brief().RecordId), await renderer.RenderBriefAsync(Brief(), CancellationToken.None), "Briefs"),
             ("withdrawal", PublicationProtocol.RecordPagePath(withdrawal.RecordId), await renderer.RenderWithdrawalAsync(withdrawal, CancellationToken.None), "All records"),
             ("home", PublicationProtocol.HomePath, await renderer.RenderHomeAsync(release, null, facets, CancellationToken.None), null),
             ("all records", PublicationProtocol.AllRecordsPagePath(1), await renderer.RenderAllRecordsAsync(release, 1, CancellationToken.None), "All records"),
+            ("briefs", PublicationProtocol.BriefsPagePath(1), await renderer.RenderBriefsAsync(ReleaseOfBriefs(2), 1, CancellationToken.None), "Briefs"),
             ("issue", facets.Issues[0].PagePath(1), await renderer.RenderFacetPageAsync(facets.Issues[0], 1, CancellationToken.None), "Issues"),
             ("policy area", facets.PolicyAreas[0].PagePath(1), await renderer.RenderFacetPageAsync(facets.PolicyAreas[0], 1, CancellationToken.None), "Issues"),
             ("issues", PublicationProtocol.FacetsPath, await renderer.RenderFacetsAsync(facets, CancellationToken.None), "Issues"),
@@ -1353,6 +1438,7 @@ public sealed class ReleaseRendererTests
             ("officials", PublicationProtocol.OfficialsPagePath, await renderer.RenderOfficialsAsync([new OfficialListing(profile, 0)], DateTimeOffset.UnixEpoch, CancellationToken.None), "Officials"),
             ("search", PublicationProtocol.SearchPagePath, await renderer.RenderSearchAsync(release, facets, CancellationToken.None), "Search"),
             ("method", PublicationProtocol.MethodPagePath, await renderer.RenderMethodAsync(CancellationToken.None), null),
+            ("about", PublicationProtocol.AboutPagePath, await renderer.RenderAboutAsync(CancellationToken.None), null),
             ("report", PublicationProtocol.ReportPagePath, await renderer.RenderReportAsync(CancellationToken.None), null)
         ];
     }
@@ -1368,6 +1454,9 @@ public sealed class ReleaseRendererTests
         AssertTrail(pages["officials"], ["Home|index.html", "Officials"]);
         AssertTrail(pages["method"], ["Home|index.html", "How the official page counts work"]);
         AssertTrail(pages["report"], ["Home|index.html", "Report a problem"]);
+        AssertTrail(pages["briefs"], ["Home|index.html", "Briefs"]);
+        AssertTrail(pages["about"], ["Home|index.html", "About"]);
+        AssertTrail(pages["brief"], ["Home|../index.html", "Briefs|../briefs.html", Brief().Headline]);
         AssertTrail(pages["issue"], ["Home|../index.html", "Issues|../issues.html", "Housing costs"]);
         AssertTrail(pages["vote"], ["Home|../index.html", "All records|../all.html", Vote().Headline]);
         AssertTrail(pages["withdrawal"], ["Home|../index.html", "All records|../all.html", "Withdrawn action: cccccccccccc"]);
@@ -1490,6 +1579,7 @@ public sealed class ReleaseRendererTests
             ["action"] = 2,
             ["all records"] = 1,
             ["brief"] = 1,
+            ["briefs"] = 1,
             ["home"] = 3,
             ["issue"] = 1,
             ["issues"] = 2,
@@ -1710,6 +1800,22 @@ public sealed class ReleaseRendererTests
             RevisionNumber = 1,
             Headline = $"Headline {index}",
             FirstPublishedAtUtc = new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero).AddMinutes(-index)
+        })]
+    };
+
+    private static PublicationRelease ReleaseOfBriefs(int count) => ReleaseOf(0) with
+    {
+        Records = [.. Enumerable.Range(0, count).Select(index => new PublishedRecordEntry
+        {
+            IssueIds = [],
+            Kind = PublishedRecordKind.Brief,
+            Officials = [],
+            PolicyAreaIds = [],
+            RecordId = index.ToString("x64"),
+            RevisionNumber = 1,
+            Headline = $"Brief {index}",
+            EventDate = new DateOnly(2026, 1, 5).AddDays(7 * index),
+            FirstPublishedAtUtc = new DateTimeOffset(2026, 1, 12, 8, 0, 0, TimeSpan.Zero).AddDays(7 * index)
         })]
     };
 
