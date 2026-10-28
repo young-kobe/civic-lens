@@ -263,6 +263,7 @@ public sealed class PostgresBriefPublicationTests(PostgresCollection postgres) :
             RecordId = binding.RecordId,
             RevisionNumber = binding.RevisionNumber,
             Headline = $"Headline of {binding.RecordId[..4]}",
+            BillTitle = binding.Kind == PublishedRecordKind.Action ? $"Title of {binding.RecordId[..4]}" : null,
             FirstPublishedAtUtc = InWeek
         }).ToArray();
         var manifest = new PublicationRelease
