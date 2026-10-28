@@ -514,8 +514,8 @@ public sealed class PublishedOfficialPageTests
     public async Task TheLatestTermByStartDecidesTheOfficeAndKindSoASenatorWhoWasARepresentativeIsASenator()
     {
         var profile = Profile("a", "Ann Able",
-            Term("rep", "MA", "Democratic") with { Start = new DateOnly(2015, 1, 3) },
-            Term("sen", "MA", "Democratic") with { Start = new DateOnly(2021, 1, 3) });
+            Term("sen", "MA", "Democratic") with { Start = new DateOnly(2021, 1, 3) },
+            Term("rep", "MA", "Democratic") with { Start = new DateOnly(2015, 1, 3) });
 
         var card = (await ListAsync(new OfficialListing(profile, 1))).QuerySelector("ul.officials > li")!;
 
@@ -532,6 +532,16 @@ public sealed class PublishedOfficialPageTests
 
         Assert.Equal("Former Representative for MA, district 4", card.QuerySelector(".cell-sub")!.TextContent);
         Assert.Equal("representative", card.GetAttribute("data-office"));
+    }
+
+    [Fact]
+    public async Task ATermEndsByTheReleaseDateNotTheRenderClockSoAListPublishedBeforeTheEndShowsTheOfficeAsCurrent()
+    {
+        var term = Term("rep", "MA", "Democratic") with { District = 4, End = new DateOnly(2025, 1, 3) };
+
+        var page = await ListAsync(new DateTimeOffset(2025, 1, 2, 23, 0, 0, TimeSpan.Zero), new OfficialListing(Profile("a", "Ann Able", term), 1));
+
+        Assert.Equal("Representative for MA, district 4", page.QuerySelector("ul.officials > li .cell-sub")!.TextContent);
     }
 
     [Fact]
@@ -796,8 +806,12 @@ public sealed class PublishedOfficialPageTests
         }
     };
 
-    private static async Task<AngleSharp.Dom.IDocument> ListAsync(params OfficialListing[] officials) =>
-        new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialsAsync(officials, CancellationToken.None));
+    private static readonly DateTimeOffset ListPublishedAtUtc = new(2026, 6, 1, 0, 0, 0, TimeSpan.Zero);
+
+    private static Task<AngleSharp.Dom.IDocument> ListAsync(params OfficialListing[] officials) => ListAsync(ListPublishedAtUtc, officials);
+
+    private static async Task<AngleSharp.Dom.IDocument> ListAsync(DateTimeOffset publishedAtUtc, params OfficialListing[] officials) =>
+        new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialsAsync(officials, publishedAtUtc, CancellationToken.None));
 
     private static ReleaseOfficialPage Current(PublishedRecordEntry[] entries, PublishedOfficialVote[] votes) =>
         new(Profile(), true, 119, true, [], [.. entries], [.. votes]);

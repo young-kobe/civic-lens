@@ -159,12 +159,14 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
         });
     }
 
-    public Task<string> RenderOfficialsAsync(IReadOnlyList<OfficialListing> officials, CancellationToken cancellationToken)
+    public Task<string> RenderOfficialsAsync(IReadOnlyList<OfficialListing> officials, DateTimeOffset publishedAtUtc,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(officials);
         return RenderAsync<PublishedOfficialsPage>(new Dictionary<string, object?>
         {
-            [nameof(PublishedOfficialsPage.Officials)] = officials
+            [nameof(PublishedOfficialsPage.Officials)] = officials,
+            [nameof(PublishedOfficialsPage.PublishedAtUtc)] = publishedAtUtc
         });
     }
 

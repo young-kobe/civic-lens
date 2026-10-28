@@ -1,5 +1,6 @@
 using System.Globalization;
 using CivicLens.Application.Publication;
+using CivicLens.Application.Roster;
 using CivicLens.Core.Relationships;
 using CivicLens.Host.Actions;
 using CivicLens.Host.Components.Ui;
@@ -9,23 +10,18 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublishedOfficialView
 {
-    private const string Senate = "sen";
-    private const string House = "rep";
-    private const string President = "prez";
-    private const string VicePresident = "viceprez";
-
     public static string Office(PublishedOfficeTerm term) => term.Office switch
     {
-        Senate => $"Senator for {term.State}",
-        House when term.District is { } district => $"Representative for {term.State}, district {district}",
-        House => $"Representative for {term.State}",
-        President => "President",
-        VicePresident => "Vice President",
+        MemberRosterParser.Senate => $"Senator for {term.State}",
+        MemberRosterParser.House when term.District is { } district => $"Representative for {term.State}, district {district}",
+        MemberRosterParser.House => $"Representative for {term.State}",
+        ExecutiveRosterParser.President => "President",
+        ExecutiveRosterParser.VicePresident => "Vice President",
         _ => term.Office
     };
 
-    public static string CardOffice(PublishedOfficeTerm term) =>
-        term.End is { } end && end < DateOnly.FromDateTime(DateTime.UtcNow) ? $"Former {Office(term)}" : Office(term);
+    public static string CardOffice(PublishedOfficeTerm term, DateTimeOffset publishedAtUtc) =>
+        term.End is { } end && end < DateOnly.FromDateTime(publishedAtUtc.UtcDateTime) ? $"Former {Office(term)}" : Office(term);
 
     public static string PartyLine(string party, string? caucus) =>
         caucus is null || caucus == party ? $"Party: {party}" : $"Party: {party}, caucuses with {Members(caucus)}";
@@ -34,9 +30,9 @@ internal static class PublishedOfficialView
 
     public static string OfficeKind(PublishedOfficeTerm? term) => term?.Office switch
     {
-        Senate => "senator",
-        House => "representative",
-        President or VicePresident => "executive",
+        MemberRosterParser.Senate => "senator",
+        MemberRosterParser.House => "representative",
+        ExecutiveRosterParser.President or ExecutiveRosterParser.VicePresident => "executive",
         _ => "other"
     };
 

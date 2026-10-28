@@ -36,7 +36,7 @@
                             <a class="cell-title" href="@card.Official.PagePath">@card.Official.Profile.Name</a>
                             @if (card.Term is { } term)
                             {
-                                <span class="cell-sub">@PublishedOfficialView.CardOffice(term)</span>
+                                <span class="cell-sub">@PublishedOfficialView.CardOffice(term, PublishedAtUtc)</span>
                                 @if (term.Party is { } party)
                                 {
                                     <span class="cell-sub">@PublishedOfficialView.PartyLine(party, term.Caucus)</span>
@@ -61,6 +61,7 @@
     private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), new("Officials")];
 
     [Parameter, EditorRequired] public IReadOnlyList<OfficialListing> Officials { get; set; } = [];
+    [Parameter, EditorRequired] public DateTimeOffset PublishedAtUtc { get; set; }
 
     private IReadOnlyList<Card>? cards;
 
