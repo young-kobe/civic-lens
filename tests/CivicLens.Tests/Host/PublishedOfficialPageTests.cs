@@ -502,6 +502,90 @@ public sealed class PublishedOfficialPageTests
     private static LinkedPair Pair(char statement, char target, PublishedRelationshipType type, PublishedRecordKind kind, DateOnly? day, string? cast) =>
         new(day, new string(statement, 64), $"Statement {statement}", type, kind, new string(target, 64), $"Official title {target}", cast);
 
+    [Fact]
+    public async Task EachCountButtonNamesTheRowsItFiltersAndTheNumberShownEqualsTheCountClicked()
+    {
+        var document = await RenderedWithCountsAsync();
+
+        var counts = document.QuerySelectorAll("[aria-labelledby='panel-issues-they-work-on'] [data-count-filter]").ToArray();
+        Assert.Equal(["statement:health", "statement:housing", "bill:housing", "vote:housing"], counts.Select(count => count.GetAttribute("data-count-filter")));
+        foreach (var count in counts)
+        {
+            var rows = document.QuerySelectorAll("[data-records] tbody tr").Where(row => row.GetAttribute("data-counted-in")!.Split(' ').Contains(count.GetAttribute("data-count-filter"))).ToArray();
+            Assert.Equal(int.Parse(count.TextContent), rows.Length);
+            Assert.EndsWith($": {rows.Length} {(rows.Length == 1 ? "record" : "records")}", count.GetAttribute("data-filter-shows"), StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task OnlyARowInTheCurrentCongressCarriesAStatementOrBillMarkerAndOnlyASubstantiveCastVoteCarriesAVoteMarker()
+    {
+        var document = await RenderedWithCountsAsync();
+
+        var marked = document.QuerySelectorAll("[data-records] tbody tr").ToDictionary(row => row.QuerySelector("a.cell-title")!.TextContent, row => row.GetAttribute("data-counted-in"));
+        Assert.Equal("statement:health statement:housing", marked["Entry 1"]);
+        Assert.Equal("", marked["Entry 5"]);
+        Assert.Equal("", marked["Entry 6"]);
+        Assert.Equal("bill:housing", marked["Entry d"]);
+        Assert.Equal("vote:housing", marked["Vote a"]);
+        Assert.Equal("", marked["Vote b"]);
+        Assert.Equal("", marked["Vote c"]);
+    }
+
+    [Fact]
+    public async Task ACountOfZeroIsPlainTextAndWithoutScriptEveryCountIsPlainTextAndEveryRecordShows()
+    {
+        var document = await RenderedWithCountsAsync();
+
+        var health = document.QuerySelectorAll("[aria-labelledby='panel-issues-they-work-on'] tbody tr:nth-child(1) td").Select(cell => cell.TextContent.Trim()).ToArray();
+        Assert.Equal(["health", "1", "0", "0"], health);
+        Assert.Equal(4, document.QuerySelectorAll("[data-count-filter]").Length);
+        Assert.Empty(document.QuerySelectorAll("[data-count-filter] button"));
+        Assert.Empty(document.QuerySelectorAll("[data-records] tbody tr[hidden]"));
+        Assert.Equal(9, document.QuerySelectorAll("[data-records] tbody tr").Length);
+    }
+
+    [Fact]
+    public async Task TheFilterNoticeStatesWhatIsShownInPlainWordsAndOffersToShowAllRecords()
+    {
+        var document = await RenderedWithCountsAsync();
+
+        var notice = document.QuerySelector("[data-records] [data-filter-notice][role='status'][hidden]")!;
+        Assert.Equal("Show all records", notice.QuerySelector("button[data-filter-clear]")!.TextContent);
+        var counts = document.QuerySelectorAll("[data-count-filter]").ToArray();
+        Assert.Equal(["Showing their statements on health in the 119th Congress: 1 record",
+            "Showing their statements on housing in the 119th Congress: 3 records",
+            "Showing bills they sponsored on housing in the 119th Congress: 1 record",
+            "Showing their substantive votes on housing in the 119th Congress: 1 record"], counts.Select(count => count.GetAttribute("data-filter-shows")));
+        Assert.Equal("Show bills they sponsored on housing", counts[2].GetAttribute("data-filter-label"));
+    }
+
+    [Fact]
+    public async Task APageWithNoProfileHasNoRecordsFilterMarkup()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([], []), PublicationCatalogs.None, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.Null(document.QuerySelector("[data-records]"));
+        Assert.Null(document.QuerySelector("[data-filter-notice]"));
+        Assert.Null(document.QuerySelector("tbody tr[data-counted-in]"));
+    }
+
+    private static async Task<AngleSharp.Dom.IDocument> RenderedWithCountsAsync()
+    {
+        PublishedRecordEntry[] entries =
+        [.. Enumerable.Range(1, 3).Select(index => Entry((char)('0' + index), PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)) with { IssueIds = index == 1 ? ["housing", "health"] : ["housing"] }),
+            Entry('5', PublishedRecordKind.Statement, new DateOnly(2024, 3, 1)) with { IssueIds = ["housing"] },
+            Entry('6', PublishedRecordKind.Action, new DateOnly(2024, 3, 1)) with { IssueIds = ["housing"] },
+            Entry('d', PublishedRecordKind.Action, new DateOnly(2026, 5, 1)) with { IssueIds = ["housing"], BillTitle = "Home Act" }];
+        var page = Current(entries, [Vote('a', new DateOnly(2026, 4, 1)) with { IssueIds = ["housing"] },
+            Vote('b', new DateOnly(2026, 4, 2)) with { Kind = PublishedVoteKind.Cloture, IssueIds = ["housing"] },
+            Vote('c', new DateOnly(2026, 4, 3)) with { IssueIds = ["housing"], Cast = PublishedOfficialVote.NotVoting }]);
+        page = page with { TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes) };
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+        return new HtmlParser().ParseDocument(html);
+    }
+
     private static PublishedOfficialProfile Profile() => new() { Id = "mayor", Name = "Mayor Example", Terms = [] };
 
     private static ReleaseOfficialPage Current(PublishedRecordEntry[] entries, PublishedOfficialVote[] votes) =>
