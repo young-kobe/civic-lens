@@ -2,6 +2,8 @@ using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.MemberPhotos;
 using CivicLens.Collection.Contracts;
+using System.Text.Json;
+using CivicLens.Application.Configuration;
 using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Collection.MemberPhotos;
@@ -142,6 +144,22 @@ public sealed class MemberPhotoSourceTests
         var source = new ConfiguredCollectionSource(MemberPhotoFixtures.Configuration(), MemberPhotoFixtures.SourceId, Today);
 
         Assert.Null(source.CreateScheduledJobDefinition(DateTimeOffset.UtcNow, null));
+    }
+
+    [Fact]
+    public void TheShippedPhotoSourceIsOffByDefaultAndItsPolicyHoldsAJobForEveryConfiguredBioguideId()
+    {
+        var shipped = JsonSerializer.Deserialize<CollectionConfiguration>(
+            File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "config", "federal-coverage.json")), ConfigurationJson.Options)!;
+        var source = shipped.Sources.Single(candidate => candidate.ApiParser == ApiParser.MemberPhotos);
+        shipped.Validate();
+        Assert.False(source.Enabled);
+
+        var enabled = shipped with { Sources = [.. shipped.Sources.Select(item => item == source ? source with { Enabled = true } : item)] };
+        var batch = new ConfiguredCollectionSource(enabled, source.Id, Today).CreateMemberPhotoBatch(Today);
+
+        Assert.Equal(shipped.People.Count(person => person.BioguideId is not null), batch.Jobs.Count);
+        Assert.True(batch.Policy.CanReserve(batch.Template, batch.Jobs.Count));
     }
 
     private static CollectionConfiguration WithPhotoSource(WatchedSourceConfiguration source) =>
