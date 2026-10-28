@@ -202,7 +202,7 @@ try
         await using var relationshipDraftingWakeup = relationshipDrafting.Wakeup;
         var briefDrafting = BriefDraftComposition.Create(analysisContexts, connectionString, workerConfiguration, loggers);
         await using var briefDraftingWakeup = briefDrafting.Wakeup;
-        var factPublishing = FactPublishingComposition.Create(connectionString, workerConfiguration, issueConfiguration, loggers);
+        var factPublishing = FactPublishingComposition.Create(connectionString, workerConfiguration, issueConfiguration, artifactRoot, loggers);
         await using var factPublishingWakeup = factPublishing?.Wakeup;
         var reportPull = ReportPullComposition.Create(analysisContexts, connectionString, loggers);
         await using var reportPullWakeup = reportPull?.Wakeup;
@@ -337,7 +337,8 @@ try
             : IssueConfiguration.None;
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
         var releases = new FileReleaseDirectory(releaseRoot);
-        var (publish, _) = PublicationComposition.Create(connectionString, publications, releases, publishConfiguration, issueConfiguration);
+        var (publish, _) = PublicationComposition.Create(connectionString, publications, releases, publishConfiguration, issueConfiguration,
+            PublicationComposition.ArtifactRootFromEnvironment());
         executing = true;
         using var loggers = CreateLoggers();
         var blocked = new BlockedPublishedRecords(publications);

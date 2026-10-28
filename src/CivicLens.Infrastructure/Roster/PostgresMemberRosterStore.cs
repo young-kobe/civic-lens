@@ -82,6 +82,21 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
         await transaction.CommitAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<OfficialPhoto>> ReadNewestPhotosAsync(IReadOnlyCollection<string> personIds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(personIds);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var newestFirst = await (from row in db.Set<OfficialPhotoRow>().AsNoTracking()
+                                 where personIds.Contains(row.PersonId)
+                                 join attempt in db.Attempts.AsNoTracking() on row.AttemptId equals attempt.AttemptId
+                                 where attempt.CaptureSha256 != null
+                                 orderby attempt.ObservedAtUtcTicks descending, attempt.AttemptId descending
+                                 select new OfficialPhoto(row.PersonId, row.SourceUrl, row.Credit, row.AttemptId, attempt.CaptureSha256!))
+            .ToListAsync(cancellationToken);
+        return [.. newestFirst.DistinctBy(photo => photo.PersonId, StringComparer.Ordinal)];
+    }
+
     public async Task<IReadOnlyList<RosterMember>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);

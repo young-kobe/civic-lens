@@ -15,7 +15,7 @@ internal sealed record FactPublishingComposition(AnalysisStage Stage, IWorkerWak
     private const string EnabledVariable = "CIVIC_LENS_FACT_PUBLISHING";
 
     public static FactPublishingComposition? Create(string connectionString, CollectionConfiguration collection, IssueConfiguration? issues,
-        ILoggerFactory loggers)
+        string artifactRoot, ILoggerFactory loggers)
     {
         var setting = Environment.GetEnvironmentVariable(EnabledVariable);
         if (string.IsNullOrWhiteSpace(setting)) return null;
@@ -25,7 +25,7 @@ internal sealed record FactPublishingComposition(AnalysisStage Stage, IWorkerWak
             throw new ArgumentException("Fact publishing needs CIVIC_LENS_RELEASE_DIRECTORY.");
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
         var (publish, loaders) = PublicationComposition.Create(connectionString, publications, new FileReleaseDirectory(releaseRoot),
-            collection, PublicationComposition.RequireIssues(issues));
+            collection, PublicationComposition.RequireIssues(issues), artifactRoot);
         var wakeup = PostgresIntervalWakeup.FromConnectionString(connectionString, "civic_lens_fact_publishing", TimeSpan.FromHours(1));
         var publishFacts = new PublishCodeApprovedFacts(publish, publications, loaders, loggers.CreateLogger<PublishCodeApprovedFacts>());
         var worker = new StageWorker(StageName, publishFacts.ExecuteAsync, wakeup, loggers.CreateLogger<StageWorker>());

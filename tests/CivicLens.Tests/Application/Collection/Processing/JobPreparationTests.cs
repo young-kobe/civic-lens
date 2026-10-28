@@ -825,6 +825,9 @@ public sealed class JobPreparationTests
             return Task.CompletedTask;
         }
 
+        public Task<IReadOnlyList<CivicLens.Application.Roster.OfficialPhoto>> ReadNewestPhotosAsync(IReadOnlyCollection<string> personIds,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
         public Task<IReadOnlyList<CivicLens.Application.Roster.RosterMember>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 

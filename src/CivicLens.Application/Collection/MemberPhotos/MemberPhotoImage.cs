@@ -3,8 +3,8 @@ namespace CivicLens.Application.Collection.MemberPhotos;
 /// <summary>Checks that a captured body is a JPEG portrait of the one size the source publishes.</summary>
 public static class MemberPhotoImage
 {
-    private const int Width = 225;
-    private const int Height = 275;
+    public const int Width = 225;
+    public const int Height = 275;
     private const string MediaType = "image/jpeg";
     private const byte Marker = 0xFF;
     private const byte StartOfImage = 0xD8;

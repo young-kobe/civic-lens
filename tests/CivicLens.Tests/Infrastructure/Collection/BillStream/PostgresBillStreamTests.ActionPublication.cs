@@ -141,7 +141,7 @@ public sealed partial class PostgresBillStreamTests
                 PostgresStatementReviewStore.FromConnectionString(connectionString), ActionReviews(),
                 PostgresVoteReviewStore.FromConnectionString(connectionString),
                 new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)), new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString))),
-            new PublicationCatalog(names, IssueConfiguration.None), FixedRosters.NamedOnly(names.Keys), TimeProvider.System);
+            new PublicationCatalog(names, IssueConfiguration.None), FixedRosters.NamedOnly(names.Keys), PhotoCaptures.None(), TimeProvider.System);
 
         var summary = await publisher.ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("publish", new PublishedRecordReference(PublishedRecordKind.Action, RecordId)));
