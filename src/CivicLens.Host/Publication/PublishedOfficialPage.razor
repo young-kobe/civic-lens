@@ -7,6 +7,7 @@
     <PageHeader Title="@Page.Profile.Name" Lede="@Lede" />
     @if (Page.IsCurrent)
     {
+        <OfficialPortrait Profile="Page.Profile" RootPath="@Page.RootPath" />
         @if (Page.Profile.Website is { } website)
         {
             <p><a href="@website" rel="noopener noreferrer">Official website (@PublishedOfficialView.WebsiteHost(website))</a></p>
