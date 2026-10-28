@@ -143,7 +143,7 @@ a.cell-title:hover { text-decoration: underline; }
 [data-layout="against-party"] tbody tr:not(.against-party) { display: none; }
 .count-filter { padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: 650; text-decoration: underline; text-underline-offset: .2em; cursor: pointer; }
 .count-filter:hover { text-decoration-thickness: 2px; }
-.count-filter[aria-pressed="true"] { text-decoration-thickness: 3px; }
+.count-filter[aria-pressed="true"] { padding: 0 4px; border-radius: 3px; background: var(--info-bg); text-decoration-thickness: 3px; }
 [data-link] { border-radius: 3px; transition: box-shadow var(--fast), background var(--fast); }
 .is-linked:not(.choice) { box-shadow: 0 0 0 2px var(--ink); }
 

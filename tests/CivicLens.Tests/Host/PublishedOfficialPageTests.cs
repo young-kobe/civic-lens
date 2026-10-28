@@ -511,7 +511,7 @@ public sealed class PublishedOfficialPageTests
         Assert.Equal(["statement:health", "statement:housing", "bill:housing", "vote:housing"], counts.Select(count => count.GetAttribute("data-count-filter")));
         foreach (var count in counts)
         {
-            var rows = document.QuerySelectorAll("[data-records] tbody tr").Where(row => row.GetAttribute("data-counted-in")!.Split(' ').Contains(count.GetAttribute("data-count-filter"))).ToArray();
+            var rows = document.QuerySelectorAll("[data-records] tbody tr").Where(row => row.GetAttribute("data-filter-keys")!.Split(' ').Contains(count.GetAttribute("data-count-filter"))).ToArray();
             Assert.Equal(int.Parse(count.TextContent), rows.Length);
             Assert.EndsWith($": {rows.Length} {(rows.Length == 1 ? "record" : "records")}", count.GetAttribute("data-filter-shows"), StringComparison.Ordinal);
         }
@@ -522,7 +522,7 @@ public sealed class PublishedOfficialPageTests
     {
         var document = await RenderedWithCountsAsync();
 
-        var marked = document.QuerySelectorAll("[data-records] tbody tr").ToDictionary(row => row.QuerySelector("a.cell-title")!.TextContent, row => row.GetAttribute("data-counted-in"));
+        var marked = document.QuerySelectorAll("[data-records] tbody tr").ToDictionary(row => row.QuerySelector("a.cell-title")!.TextContent, row => row.GetAttribute("data-filter-keys"));
         Assert.Equal("statement:health statement:housing", marked["Entry 1"]);
         Assert.Equal("", marked["Entry 5"]);
         Assert.Equal("", marked["Entry 6"]);
@@ -533,7 +533,7 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task ACountOfZeroIsPlainTextAndWithoutScriptEveryCountIsPlainTextAndEveryRecordShows()
+    public async Task TheServerHtmlHasPlainCountsWithAZeroNeverAButtonAndEveryRowVisible()
     {
         var document = await RenderedWithCountsAsync();
 
@@ -550,14 +550,16 @@ public sealed class PublishedOfficialPageTests
     {
         var document = await RenderedWithCountsAsync();
 
-        var notice = document.QuerySelector("[data-records] [data-filter-notice][role='status'][hidden]")!;
+        var notice = document.QuerySelector("[data-records] [data-filter-notice][hidden]")!;
         Assert.Equal("Show all records", notice.QuerySelector("button[data-filter-clear]")!.TextContent);
         var counts = document.QuerySelectorAll("[data-count-filter]").ToArray();
         Assert.Equal(["Showing their statements on health in the 119th Congress: 1 record",
             "Showing their statements on housing in the 119th Congress: 3 records",
             "Showing bills they sponsored on housing in the 119th Congress: 1 record",
             "Showing their substantive votes on housing in the 119th Congress: 1 record"], counts.Select(count => count.GetAttribute("data-filter-shows")));
-        Assert.Equal("Show bills they sponsored on housing", counts[2].GetAttribute("data-filter-label"));
+        Assert.Equal("1: show bills they sponsored on housing", counts[2].GetAttribute("data-filter-label"));
+        Assert.Equal("", document.QuerySelector("[data-records] [data-filter-status][role='status']")!.TextContent);
+        Assert.False(document.QuerySelector("[data-filter-status]")!.HasAttribute("hidden"));
     }
 
     [Fact]
@@ -568,7 +570,7 @@ public sealed class PublishedOfficialPageTests
         var document = new HtmlParser().ParseDocument(html);
         Assert.Null(document.QuerySelector("[data-records]"));
         Assert.Null(document.QuerySelector("[data-filter-notice]"));
-        Assert.Null(document.QuerySelector("tbody tr[data-counted-in]"));
+        Assert.Null(document.QuerySelector("tbody tr[data-filter-keys]"));
     }
 
     private static async Task<AngleSharp.Dom.IDocument> RenderedWithCountsAsync()

@@ -45,11 +45,11 @@
                         }
                     </TableCell>
                     <TableCell Class="num" Label="@PublicColumn.TheirStatements"><CountFilter Count="profile.Statements.CountOf(issueId)" Key="@TalkAndActionProfile.CountKey(TalkAndActionProfile.StatementCount, issueId)"
-                        Label="@PublishedOfficialView.CountFilterLabel(PublishedOfficialView.StatementsSubject, issue.Text)"
+                        Label="@PublishedOfficialView.CountFilterLabel(profile.Statements.CountOf(issueId), PublishedOfficialView.StatementsSubject, issue.Text)"
                         Notice="@PublishedOfficialView.CountFilterNotice(PublishedOfficialView.StatementsSubject, issue.Text, Page.Congress!.Value, profile.Statements.CountOf(issueId))" /></TableCell>
                     <TableCell Label="@PublicColumn.BillsTheySponsored">
                         <CountFilter Count="bills.Length" Key="@TalkAndActionProfile.CountKey(TalkAndActionProfile.BillCount, issueId)"
-                            Label="@PublishedOfficialView.CountFilterLabel(PublishedOfficialView.BillsSubject, issue.Text)"
+                            Label="@PublishedOfficialView.CountFilterLabel(bills.Length, PublishedOfficialView.BillsSubject, issue.Text)"
                             Notice="@PublishedOfficialView.CountFilterNotice(PublishedOfficialView.BillsSubject, issue.Text, Page.Congress!.Value, bills.Length)" />
                         @if (!bills.IsEmpty)
                         {
@@ -62,7 +62,7 @@
                         }
                     </TableCell>
                     <TableCell Class="num" Label="@PublicColumn.VotesTheyCast"><CountFilter Count="profile.Votes.CountOf(issueId)" Key="@TalkAndActionProfile.CountKey(TalkAndActionProfile.VoteCount, issueId)"
-                        Label="@PublishedOfficialView.CountFilterLabel(PublishedOfficialView.VotesSubject, issue.Text)"
+                        Label="@PublishedOfficialView.CountFilterLabel(profile.Votes.CountOf(issueId), PublishedOfficialView.VotesSubject, issue.Text)"
                         Notice="@PublishedOfficialView.CountFilterNotice(PublishedOfficialView.VotesSubject, issue.Text, Page.Congress!.Value, profile.Votes.CountOf(issueId))" /></TableCell>
                 </Row>
                 <Empty><EmptyState Title="No tracked issue" Text="None of their statements, sponsored bills, or votes in this Congress is on a tracked issue." /></Empty>
@@ -127,12 +127,13 @@
     <Panel Title="Records" Aside="@RecordFilter" data-layout="@(RecordFilter is null ? null : PublishedOfficialView.RecordFilters[0].Value)" data-records="@(Page.TalkAndAction is null ? null : "")">
         @if (Page.TalkAndAction is not null)
         {
-            <div class="notice" role="status" data-filter-notice hidden>
+            <div class="visually-hidden" role="status" data-filter-status></div>
+            <div class="notice" data-filter-notice hidden>
                 <span data-filter-text></span>
                 <button class="btn" type="button" data-filter-clear>@PublishedOfficialView.ShowAllRecords</button>
             </div>
         }
-        <DataTable Roles="true" Items="Rows" RowClass="@(row => row.AgainstParty ? "against-party" : null)" RowCountedIn="@(row => row.CountedIn)" Caption="@($"Published records of {Page.Profile.Name}")">
+        <DataTable Roles="true" Items="Rows" RowClass="@(row => row.AgainstParty ? "against-party" : null)" RowFilterKeys="@(row => row.FilterKeys)" Caption="@($"Published records of {Page.Profile.Name}")">
             <Head><TableCell Header Class="fit num">@PublicColumn.Date</TableCell><TableCell Header>Record</TableCell><TableCell Header>@PublicColumn.Cast</TableCell></Head>
             <Row Context="row">
                 <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Iso(row.Date)</TableCell>

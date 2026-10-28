@@ -25,7 +25,7 @@ internal static class PublishedOfficialView
     {
         var countKeys = page.TalkAndAction?.CountKeysByRecord();
         return [.. ReleaseRecordOrder.NewestFirst(page.Records.Select(PublishedOfficialRow.Of).Concat(page.Votes.Select(PublishedOfficialRow.Of))
-            .Select(row => row with { CountedIn = countKeys is null ? null : string.Join(' ', countKeys[row.RecordId].Order(StringComparer.Ordinal)) }),
+            .Select(row => row with { FilterKeys = countKeys is null ? null : string.Join(' ', countKeys[row.RecordId].Order(StringComparer.Ordinal)) }),
             row => row.Date, row => row.PublishedAtUtc, row => row.RecordId)];
     }
 
@@ -39,7 +39,7 @@ internal static class PublishedOfficialView
 
     public const string VotesSubject = "their substantive votes";
 
-    public static string CountFilterLabel(string subject, string issueName) => $"Show {subject} on {issueName}";
+    public static string CountFilterLabel(int count, string subject, string issueName) => $"{count}: show {subject} on {issueName}";
 
     public static string CountFilterNotice(string subject, string issueName, int congress, int count) =>
         $"Showing {subject} on {issueName} in the {CongressCalendar.Ordinal(congress)} Congress: {count} {(count == 1 ? "record" : "records")}";
@@ -97,7 +97,7 @@ internal static class PublishedOfficialView
 }
 
 internal sealed record PublishedOfficialRow(DateOnly Date, string RecordId, string Headline, PublishedRecordKind Kind, string? Detail, string? Cast,
-    DateTimeOffset PublishedAtUtc, bool AgainstParty, string? CountedIn = null)
+    DateTimeOffset PublishedAtUtc, bool AgainstParty, string? FilterKeys = null)
 {
     public static PublishedOfficialRow Of(PublishedRecordEntry entry) => new(
         ReleaseRecordOrder.Day(entry), entry.RecordId, entry.Headline, entry.Kind, null, null, entry.FirstPublishedAtUtc, false);

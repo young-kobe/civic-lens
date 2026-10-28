@@ -52,13 +52,15 @@
     const showRecords = (panel, source) => {
         const key = source?.dataset.countFilter;
         all("tbody tr", panel).forEach(row => {
-            row.hidden = key !== undefined && !(row.dataset.countedIn ?? "").split(" ").includes(key);
+            row.hidden = key !== undefined && !(row.dataset.filterKeys ?? "").split(" ").includes(key);
         });
         all("[data-count-filter] button").forEach(button =>
             button.setAttribute("aria-pressed", String(button.parentElement === source)));
+        const shows = source?.dataset.filterShows ?? "";
         const notice = panel.querySelector("[data-filter-notice]");
-        notice.querySelector("[data-filter-text]").textContent = source?.dataset.filterShows ?? "";
+        notice.querySelector("[data-filter-text]").textContent = shows;
         notice.hidden = !source;
+        panel.querySelector("[data-filter-status]").textContent = shows;
     };
 
     const makeCountButtons = () => all("[data-count-filter]").forEach(count => {
@@ -97,7 +99,6 @@
             const clear = count.querySelector("button").getAttribute("aria-pressed") === "true";
             if ("layout" in panel.dataset) setLayout(panel, "all");
             showRecords(panel, clear ? null : count);
-            measureAll();
         } else if (target?.closest("[data-filter-clear]") && panel) {
             const pressed = document.querySelector("[data-count-filter] button[aria-pressed='true']");
             showRecords(panel, null);
