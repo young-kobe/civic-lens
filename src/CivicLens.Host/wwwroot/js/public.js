@@ -43,9 +43,12 @@
             for (const [name, value] of new FormData(form)) if (value) params.set(name, value);
             return params;
         };
-        const reset = () => {
+        const dropCursor = () => {
             nextCursor = null;
             more.hidden = true;
+        };
+        const reset = () => {
+            dropCursor();
             results.replaceChildren();
         };
         const run = async append => {
@@ -70,8 +73,8 @@
         const writeAddress = (params, replace) => {
             const text = params.toString();
             const search = text ? `?${text}` : "";
-            if (replace || search === location.search) history.replaceState(null, "", location.pathname + search);
-            else history.pushState(null, "", location.pathname + search);
+            if (replace || search === location.search) history.replaceState(null, "", location.pathname + search + location.hash);
+            else history.pushState(null, "", location.pathname + search + location.hash);
             address = search;
         };
         const restoreFromAddress = () => {
@@ -89,7 +92,7 @@
         writeAddress(formParams(), true);
         window.addEventListener("popstate", () => { if (location.search !== address) restoreFromAddress(); });
         form.addEventListener("submit", event => { event.preventDefault(); writeAddress(formParams()); run(false); });
-        form.addEventListener("input", () => { nextCursor = null; more.hidden = true; });
+        form.addEventListener("input", dropCursor);
         more.addEventListener("click", () => run(true));
     };
 
