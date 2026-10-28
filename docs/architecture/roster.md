@@ -35,7 +35,7 @@ The feature also captures one official portrait for each configured member. A ph
 - Preparation accepts only a JPEG of exactly 225 by 275 pixels. A small parser reads the size from the frame header, because Application takes no image package.
 - The credit is the constant `MemberPhoto.MemberGuideCredit`. Each photo row copies the text. A later change to the constant never rewrites provenance. Configured executive photos will take their credit from `PersonConfiguration.photo`.
 - A photo row holds no image bytes. The capture holds them.
-- A missing photo is not stored. A 404 ends the job `Failed` with no retry. A person with no row has no photo. A later 404 keeps the last good photo. A takedown goes through the report page.
+- A missing photo is not stored. A 404 ends the job `Failed` with no retry. A person with no row has no photo. A later 404 keeps the last good photo. A takedown has no mechanism yet; see the limits.
 - The roster feature writes photo rows. A later change owns the reader and the publication of photos.
 
 ## Invariants
@@ -122,7 +122,7 @@ A person edits the configuration by hand and commits it. Exit codes are 0 for su
 - `executive_officials` has one row for each official and snapshot. The key is the attempt ID and the GovTrack ID. It holds the Wikidata ID, which can be null, and the full name.
 - `executive_terms` has one row for each term. The key is the attempt ID, the GovTrack ID, and the term index. It holds the office, the start and end dates, and the party.
 - `official_photos` has one row for each stored photo. The key is the attempt ID, which references `collection_attempts`. It holds the configured person ID, the source URL, and the credit text. The bytes stay in the capture that the attempt names. The newest row of a person, by the observation time of its attempt, is the live photo.
-- `IMemberRosterStore` and `IExecutiveRosterStore` are the ports. Both have `ReadLatestAsync`. `PostgresMemberRosterStore` and `PostgresExecutiveRosterStore` implement them. Both use `RosterSnapshotRules`. `IMemberRosterStore` also has `ReadSenatorLisIdsAsync`, which reads every snapshot of the source. It also has `AdmitPhotoJobsAsync` and `AdmitPhotoAsync` for the photo jobs and the photo rows. It has no photo reader yet.
+- `IMemberRosterStore` and `IExecutiveRosterStore` are the ports. Both have `ReadLatestAsync`. `PostgresMemberRosterStore` and `PostgresExecutiveRosterStore` implement them. Both use `RosterSnapshotRules`. `IMemberRosterStore` also has `ReadSenatorLisIdsAsync`, which reads every snapshot of the source. It also has `AdmitPhotoJobsAsync` and `AdmitPhotoAsync` for the photo jobs and the photo rows. `ReadNewestPhotosAsync` reads the newest row of each named person, with the capture hash, in one query with no lock. Publish calls it once. Tests: `PostgresMemberPhotoStoreTests`. It has no photo reader yet.
 
 ## Code map
 
@@ -135,7 +135,7 @@ The join of a configured person to roster terms is in [publication](publication.
 | Preparation | `src/CivicLens.Application/Collection/Processing/JobPreparation.cs` |
 | Eligibility and validation | `src/CivicLens.Application/Collection/CollectionConfiguration.cs` |
 | Store and rows | `src/CivicLens.Infrastructure/Roster/PostgresMemberRosterStore.cs`, `src/CivicLens.Infrastructure/Roster/PostgresExecutiveRosterStore.cs`, `src/CivicLens.Infrastructure/Roster/RosterSnapshotRules.cs`, `src/CivicLens.Infrastructure/Roster/Persistence/RosterSnapshotRow.cs`, `src/CivicLens.Infrastructure/Roster/Persistence/RosterMemberRow.cs`, `src/CivicLens.Infrastructure/Roster/Persistence/RosterTermRow.cs`, `src/CivicLens.Infrastructure/Roster/Persistence/ExecutiveOfficialRow.cs`, `src/CivicLens.Infrastructure/Roster/Persistence/ExecutiveTermRow.cs` |
-| Photo jobs and validation | `src/CivicLens.Application/Collection/MemberPhotos/MemberPhotoUrl.cs`, `src/CivicLens.Application/Collection/MemberPhotos/MemberPhotoJobKeys.cs`, `src/CivicLens.Application/Collection/MemberPhotos/MemberPhotoImage.cs`, `src/CivicLens.Application/Roster/MemberPhoto.cs`, `src/CivicLens.Application/Collection/ConfiguredCollectionSource.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ApiJobs.cs` |
+| Photo jobs and validation | `src/CivicLens.Application/Collection/MemberPhotos/MemberPhotoUrl.cs`, `src/CivicLens.Application/Collection/MemberPhotos/MemberPhotoJobKeys.cs`, `src/CivicLens.Application/Collection/MemberPhotos/MemberPhotoImage.cs`, `src/CivicLens.Application/Roster/MemberPhoto.cs`, `src/CivicLens.Application/Roster/OfficialPhoto.cs`, `src/CivicLens.Application/Collection/ConfiguredCollectionSource.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ApiJobs.cs` |
 | Photo rows | `src/CivicLens.Infrastructure/Roster/Persistence/OfficialPhotoRow.cs`, `src/CivicLens.Infrastructure/Roster/Persistence/OfficialPhotoRowConfiguration.cs` |
 | Command | `src/CivicLens.Host/Roster/RosterCommand.cs` |
 | Sources | `config/federal-coverage.json` |
@@ -147,10 +147,10 @@ The join of a configured person to roster terms is in [publication](publication.
 - Senate votes match members through the `lis` ID. `ReadSenatorLisIdsAsync` returns each `lis` ID that any snapshot of the source gives to a person with a Senate term. A person with two `lis` IDs is a conflict, and the vote reader blocks the draft. A senator who left before the first snapshot has no row. A new member snapshot requeues the blocked Senate drafts, so a newly seated senator matches at the next draft; see [votes](votes.md#invariants).
 - Bill and vote coverage is not term aware. A member who leaves stays covered until a person edits the configuration.
 - Names are not dated. The command proposes the current official name only.
-- Nothing reads `official_photos` yet. Planned work adds the reader, copies the bytes from the capture, and publishes photos to releases and pages with their credit.
+- Publish reads the newest photo of each person with `ReadNewestPhotosAsync` and writes it into the release; see [publication](publication.md#release-content). Cards on the officials list do not show it yet.
 - Configured executive photos are planned. They reuse the resource `memberPhoto` and its preparation. Each executive photo has its own source with the exact URL. The credit comes from `PersonConfiguration.photo`. The job match rule then compares the exact URL.
-- Officials list cards will show the photo.
 - API mode sends `Accept: application/json` on image requests too. GitHub Pages ignores it.
 - Photos are never used in ads.
 - A person with no row has no photo. The no-photo state is derived and never stored.
-- A person does not review a photo. The source is a public domain portrait set. A takedown goes through the report page.
+- A person does not review a photo. The source is a public domain portrait set.
+- A takedown has no mechanism yet. PR 15 adds a withhold flag on `PersonConfiguration`. Until then, a bad photo stays in each release that holds it, and only a new publish with a changed photo replaces it.
