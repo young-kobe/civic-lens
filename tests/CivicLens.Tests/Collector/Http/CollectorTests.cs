@@ -73,6 +73,27 @@ public sealed class CollectorTests
     }
 
     [Fact]
+    public async Task EveryRequestNamesTheProjectSiteAndNoEmailSoOperatorsCanFindUsWithoutPrivateContact()
+    {
+        var userAgents = new List<string>();
+        var fromHeaders = new List<bool>();
+        HttpResponseMessage Record(HttpRequestMessage request, HttpResponseMessage response)
+        {
+            userAgents.Add(request.Headers.UserAgent.ToString());
+            fromHeaders.Add(request.Headers.From is not null);
+            return response;
+        }
+        using var directory = new TemporaryDirectory();
+        using var collector = new HttpCollector(new QueueHandler(
+            request => Record(request, Response(HttpStatusCode.OK, "User-agent: *\n")),
+            request => Record(request, Response(HttpStatusCode.OK, "body"))));
+        var result = await collector.FetchAsync(Request(directory.Path));
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.Equal(["CivicLens/0.1 (civic-lens.info)", "CivicLens/0.1 (civic-lens.info)"], userAgents);
+        Assert.DoesNotContain(true, fromHeaders);
+    }
+
+    [Fact]
     public async Task FeedModeParsesScopedRssLinksAndKeepsRawCapture()
     {
         using var directory = new TemporaryDirectory();

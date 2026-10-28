@@ -10,6 +10,7 @@ namespace CivicLens.Collector.Http;
 
 public sealed class HttpCollector : IDisposable
 {
+    private const string UserAgent = "CivicLens/0.1 (civic-lens.info)";
     private const int MaximumRobotsDecodedStageBytes = 10_000_000;
     private const int MaximumRobotsContentEncodings = 16;
     private readonly HttpClient client;
@@ -65,7 +66,7 @@ public sealed class HttpCollector : IDisposable
                 EnsureBudget(request, requests);
                 if (!request.Allows(target)) return Result(CollectionOutcome.Failed, CollectionFailureCode.OutOfScope);
                 using var message = new HttpRequestMessage(HttpMethod.Get, target);
-                message.Headers.UserAgent.ParseAdd("CivicLens/0.1");
+                message.Headers.UserAgent.ParseAdd(UserAgent);
                 if (request.Mode == CollectionMode.Api) message.Headers.Accept.ParseAdd("application/json");
                 if (apiKey is not null && SameOrigin(new Uri(request.AllowedOrigin), target)) message.Headers.Add("X-Api-Key", apiKey);
                 if (target == requestedUri)
@@ -291,7 +292,7 @@ public sealed class HttpCollector : IDisposable
         {
             count();
             using var robotRequest = new HttpRequestMessage(HttpMethod.Get, target);
-            robotRequest.Headers.UserAgent.ParseAdd("CivicLens/0.1");
+            robotRequest.Headers.UserAgent.ParseAdd(UserAgent);
             robotRequest.Headers.AcceptEncoding.ParseAdd("gzip, deflate, br");
             using var response = await client.SendAsync(robotRequest, HttpCompletionOption.ResponseHeadersRead, token);
             if (response.StatusCode == HttpStatusCode.NotFound) return new FetchedRobots(RobotsRules.Empty, "", NotFound: true);
