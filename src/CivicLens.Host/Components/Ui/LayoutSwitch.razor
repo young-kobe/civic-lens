@@ -1,0 +1,11 @@
+<div class="segmented" role="group" aria-label="@Label" data-layout-switch hidden>
+    @for (var index = 0; index < Choices.Count; index++)
+    {
+        <button class="segmented-item" type="button" data-layout-choice="@Choices[index].Value" aria-pressed="@(index == 0 ? "true" : "false")">@Choices[index].Text</button>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyList<(string Value, string Text)> Choices { get; set; } = [];
+}

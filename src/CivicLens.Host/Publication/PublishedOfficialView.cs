@@ -29,6 +29,8 @@ internal static class PublishedOfficialView
         ? $"{column.CountOf(issueId)} ({Percent(share)})"
         : $"{column.CountOf(issueId)} (Too few records)";
 
+    public static readonly IReadOnlyList<(string Value, string Text)> RecordFilters = [("all", "All records"), ("against-party", "Votes against their party")];
+
     public const string MissedVoteMeaning = "A missed vote means the official did not vote on it.";
 
     public static string MissedVotes(MissedVotes missed, int congress)
@@ -68,11 +70,11 @@ internal static class PublishedOfficialView
 }
 
 internal sealed record PublishedOfficialRow(DateOnly Date, string RecordId, string Headline, PublishedRecordKind Kind, string? Detail, string? Cast,
-    DateTimeOffset PublishedAtUtc)
+    DateTimeOffset PublishedAtUtc, bool AgainstParty)
 {
     public static PublishedOfficialRow Of(PublishedRecordEntry entry) => new(
-        ReleaseRecordOrder.Day(entry), entry.RecordId, entry.Headline, entry.Kind, null, null, entry.FirstPublishedAtUtc);
+        ReleaseRecordOrder.Day(entry), entry.RecordId, entry.Headline, entry.Kind, null, null, entry.FirstPublishedAtUtc, false);
 
     public static PublishedOfficialRow Of(PublishedOfficialVote vote) => new(
-        vote.VotedOn, vote.RecordId, vote.Headline, PublishedRecordKind.Vote, $"{PublishedOfficialView.RollCall(vote)}. Result of the vote: {vote.Result}", vote.Cast, DateTimeOffset.MinValue);
+        vote.VotedOn, vote.RecordId, vote.Headline, PublishedRecordKind.Vote, $"{PublishedOfficialView.RollCall(vote)}. Result of the vote: {vote.Result}", vote.Cast, DateTimeOffset.MinValue, VotesWithParty.IsBreak(vote));
 }

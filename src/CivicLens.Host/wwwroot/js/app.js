@@ -56,7 +56,7 @@
         if (theme) { setTheme(theme.dataset.themeChoice); return; }
         const layout = target?.closest("[data-layout-choice]");
         if (layout) {
-            const view = layout.closest(".comparison");
+            const view = layout.closest("[data-layout]");
             view.dataset.layout = layout.dataset.layoutChoice;
             all("[data-layout-choice]", view).forEach(button =>
                 button.setAttribute("aria-pressed", String(button === layout)));

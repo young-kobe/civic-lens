@@ -1,17 +1,14 @@
 @using System.Collections.Immutable
 @using CivicLens.Core.Documents
 
-<div class="comparison" data-layout="redline">
+<div class="comparison" data-layout="@LayoutChoices[0].Value">
     @if (Heading is not null || ShowLayoutSwitch)
     {
         <div class="comparison-head">
             @Heading
             @if (ShowLayoutSwitch)
             {
-                <div class="segmented" role="group" aria-label="Comparison layout" data-layout-switch hidden>
-                    <button class="segmented-item" type="button" data-layout-choice="redline" aria-pressed="true">Redline</button>
-                    <button class="segmented-item" type="button" data-layout-choice="side" aria-pressed="false">Side by side</button>
-                </div>
+                <LayoutSwitch Label="Comparison layout" Choices="LayoutChoices" />
             }
         </div>
     }
@@ -59,6 +56,8 @@
     [Parameter] public int MaximumPassages { get; set; } = int.MaxValue;
     [Parameter] public bool ShowLayoutSwitch { get; set; } = true;
     [Parameter] public RenderFragment? Heading { get; set; }
+
+    private static readonly IReadOnlyList<(string Value, string Text)> LayoutChoices = [("redline", "Redline"), ("side", "Side by side")];
 
     private int Shown => Math.Min(Hunks.Length, MaximumPassages);
 
