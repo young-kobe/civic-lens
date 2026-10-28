@@ -13,8 +13,11 @@ using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Roster;
 using CivicLens.Infrastructure.Statements;
 using CivicLens.Infrastructure.Votes;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Host.Publication;
+
+internal sealed record PublicationParts(PublishRelease Publish, PublishedRecordLoaders Loaders);
 
 internal static class PublicationComposition
 {
@@ -26,9 +29,9 @@ internal static class PublicationComposition
     public static IssueConfiguration RequireIssues(IssueConfiguration? issues) =>
         issues ?? throw new ArgumentException("Publishing requires CIVIC_LENS_ISSUES_CONFIG.");
 
-    public static (PublishRelease Publish, PublishedRecordLoaders Loaders) Create(string connectionString,
+    public static PublicationParts Create(string connectionString,
         PostgresPublicationStore publications, FileReleaseDirectory releases, CollectionConfiguration collection, IssueConfiguration issues,
-        string? artifactRoot)
+        string? artifactRoot, ILoggerFactory loggers)
     {
         var loaders = new PublishedRecordLoaders(
             PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
@@ -41,8 +44,9 @@ internal static class PublicationComposition
             new PublicationCatalog(ReviewOfficials.From(collection).Names, issues),
             new PublicationOfficials(collection, PostgresMemberRosterStore.FromConnectionString(connectionString),
                 PostgresExecutiveRosterStore.FromConnectionString(connectionString)),
-            new ReleasePhotos(PostgresCollectionAttemptStore.FromConnectionString(connectionString), new CaptureBodyReader(), artifactRoot),
+            new ReleasePhotos(PostgresCollectionAttemptStore.FromConnectionString(connectionString), new CaptureBodyReader(), artifactRoot,
+                loggers.CreateLogger<ReleasePhotos>()),
             TimeProvider.System);
-        return (publish, loaders);
+        return new(publish, loaders);
     }
 }

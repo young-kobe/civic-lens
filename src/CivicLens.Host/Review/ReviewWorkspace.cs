@@ -340,11 +340,11 @@ internal static class ReviewWorkspace
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
         var releases = new FileReleaseDirectory(releaseRoot);
         services.AddScoped(_ => new ListPublicationReleases(publications, releases));
-        var (publish, loaders) = PublicationComposition.Create(connectionString, publications, releases, collection, issues,
-            PublicationComposition.ArtifactRootFromEnvironment());
-        services.AddSingleton(loaders);
-        services.AddSingleton(publish);
-        services.AddScoped(_ => new ListPublishable(loaders, publications, releases));
+        services.AddSingleton(provider => PublicationComposition.Create(connectionString, publications, releases, collection, issues,
+            PublicationComposition.ArtifactRootFromEnvironment(), provider.GetRequiredService<ILoggerFactory>()));
+        services.AddSingleton(provider => provider.GetRequiredService<PublicationParts>().Loaders);
+        services.AddSingleton(provider => provider.GetRequiredService<PublicationParts>().Publish);
+        services.AddScoped(provider => new ListPublishable(provider.GetRequiredService<PublishedRecordLoaders>(), publications, releases));
         services.AddScoped(_ => new ListBlockedPublished(publications, releases, new BlockedPublishedRecords(publications)));
     }
 

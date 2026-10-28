@@ -36,7 +36,7 @@ The feature also captures one official portrait for each configured member. A ph
 - The credit is the constant `MemberPhoto.MemberGuideCredit`. Each photo row copies the text. A later change to the constant never rewrites provenance. Configured executive photos will take their credit from `PersonConfiguration.photo`.
 - A photo row holds no image bytes. The capture holds them.
 - A missing photo is not stored. A 404 ends the job `Failed` with no retry. A person with no row has no photo. A later 404 keeps the last good photo. A takedown has no mechanism yet; see the limits.
-- The roster feature writes photo rows. A later change owns the reader and the publication of photos.
+- The roster feature writes photo rows and reads the newest row of each person for publication. Publication owns the photo files; see [publication](publication.md#release-content).
 
 ## Invariants
 
@@ -122,7 +122,7 @@ A person edits the configuration by hand and commits it. Exit codes are 0 for su
 - `executive_officials` has one row for each official and snapshot. The key is the attempt ID and the GovTrack ID. It holds the Wikidata ID, which can be null, and the full name.
 - `executive_terms` has one row for each term. The key is the attempt ID, the GovTrack ID, and the term index. It holds the office, the start and end dates, and the party.
 - `official_photos` has one row for each stored photo. The key is the attempt ID, which references `collection_attempts`. It holds the configured person ID, the source URL, and the credit text. The bytes stay in the capture that the attempt names. The newest row of a person, by the observation time of its attempt, is the live photo.
-- `IMemberRosterStore` and `IExecutiveRosterStore` are the ports. Both have `ReadLatestAsync`. `PostgresMemberRosterStore` and `PostgresExecutiveRosterStore` implement them. Both use `RosterSnapshotRules`. `IMemberRosterStore` also has `ReadSenatorLisIdsAsync`, which reads every snapshot of the source. It also has `AdmitPhotoJobsAsync` and `AdmitPhotoAsync` for the photo jobs and the photo rows. `ReadNewestPhotosAsync` reads the newest row of each named person, with the capture hash, in one query with no lock. Publish calls it once. Tests: `PostgresMemberPhotoStoreTests`. It has no photo reader yet.
+- `IMemberRosterStore` and `IExecutiveRosterStore` are the ports. Both have `ReadLatestAsync`. `PostgresMemberRosterStore` and `PostgresExecutiveRosterStore` implement them. Both use `RosterSnapshotRules`. `IMemberRosterStore` also has `ReadSenatorLisIdsAsync`, which reads every snapshot of the source. It also has `AdmitPhotoJobsAsync` and `AdmitPhotoAsync` for the photo jobs and the photo rows. `ReadNewestPhotosAsync` reads the newest row of each named person, with the capture hash, in one query with no lock. Publish calls it once. Tests: `PostgresMemberPhotoStoreTests`.
 
 ## Code map
 
@@ -153,4 +153,4 @@ The join of a configured person to roster terms is in [publication](publication.
 - Photos are never used in ads.
 - A person with no row has no photo. The no-photo state is derived and never stored.
 - A person does not review a photo. The source is a public domain portrait set.
-- A takedown has no mechanism yet. PR 15 adds a withhold flag on `PersonConfiguration`. Until then, a bad photo stays in each release that holds it, and only a new publish with a changed photo replaces it.
+- A takedown has no mechanism yet; see [R-44](../roadmap.md#later). Until then, a bad photo stays in each release that holds it, and only a new publish with a changed photo replaces it.

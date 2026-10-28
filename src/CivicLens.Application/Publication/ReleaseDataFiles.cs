@@ -10,7 +10,7 @@ internal sealed class ReleaseDataFiles(IReleaseDirectory releases, VoteRecordLoa
 {
     public async Task<PublishedOfficials> WriteAsync(IReleaseStaging staging, PublicationRelease manifest, ReleaseFacets facets,
         IReadOnlyList<PendingRecord> additions, PreviousRelease previous, IReadOnlyList<RosterMember> roster,
-        ReleasePhotoSet photos, CancellationToken cancellationToken)
+        IReadOnlyDictionary<string, PublishedPhoto> photos, CancellationToken cancellationToken)
     {
         var members = await votes.MembersAsync(manifest.Records, cancellationToken);
         var entryNames = manifest.Records.SelectMany(entry => entry.Officials).DistinctBy(official => official.Id)

@@ -57,6 +57,7 @@ internal sealed class PublicationScenario
     public OfficialPhoto[] Photos { get; set; } = [];
     public PhotoCaptures Captures { get; } = new();
     public string? ArtifactRoot { get; set; } = "artifacts";
+    public int PhotoReads { get; private set; }
 
     private CollectionConfiguration Collection() => RosterFixtures.Configuration() with
     {
@@ -69,7 +70,7 @@ internal sealed class PublicationScenario
             Offices = Offices.GetValueOrDefault(name.Key),
             Website = Websites.GetValueOrDefault(name.Key)
         })],
-        Sources = [RosterFixtures.Source(), ExecutiveFixtures.Source(), MemberPhotoFixtures.Source()]
+        Sources = [RosterFixtures.Source(), ExecutiveFixtures.Source()]
     };
 
     public PublicationScenario() => Releases = new() { Events = Events };
@@ -79,7 +80,7 @@ internal sealed class PublicationScenario
     public IssueConfiguration Issues { get; set; } = IssueConfiguration.None;
 
     public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events, OfficialPages = OfficialPages }, Loaders(),
-        new PublicationCatalog(OfficialNames, Issues), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, null, Photos), new FixedExecutiveRoster(ExecutiveOfficials)),
+        new PublicationCatalog(OfficialNames, Issues), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, null, Photos, () => PhotoReads++), new FixedExecutiveRoster(ExecutiveOfficials)),
         Captures.Photos(ArtifactRoot), Clock);
 
     public BlockedPublishedRecords Blocked() => new(Publications);

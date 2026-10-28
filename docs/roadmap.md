@@ -41,6 +41,7 @@ The first deploy is a complete product within the product direction. Its path is
 
 ### Later
 
+- R-44: A takedown for one member photo. A withhold flag on `PersonConfiguration` makes the publish leave the photo out of the profile, and the next publish replaces the pages. Depends on: none stated. [Roster](architecture/roster.md#limits-and-planned-work)
 - R-25: Public MCP over published releases, and source health. Depends on: R-24. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-38: The shared language insight. Code finds the same or nearly the same sentences in releases from different offices, and publishes a method note. A person reviews each finding before publication. Depends on: R-24. [Statements](architecture/statements.md#limits-and-planned-work)
 - R-21: Process view of collection and AI stages from retained state. Depends on: R-24. [Host](architecture/host.md#limits-and-planned-work)

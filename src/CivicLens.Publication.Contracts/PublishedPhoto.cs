@@ -1,6 +1,6 @@
 namespace CivicLens.Publication.Contracts;
 
-/// <summary>The portrait of an official. The path names a file in the release, and its name is the SHA-256 hash of the captured image.</summary>
+/// <summary>The portrait of an official. The path names a file in the release, and its name is the SHA-256 hash of the capture, not of the decoded image bytes.</summary>
 public sealed record PublishedPhoto
 {
     public const int MaximumDimension = 1000;

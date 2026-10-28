@@ -71,7 +71,7 @@ public sealed class PublishRelease
         var newWithdrawals = PublicationWithdrawals.Create(previous, corrections, now, withdrawalNotes);
         var returned = ImmutableArray.CreateRange(references.Where(reference => previous.IsWithdrawn(reference.RecordId)));
         var roster = await officials.ReadRosterAsync(cancellationToken);
-        var photos = await officials.ReadPhotosAsync(cancellationToken);
+        var photos = await releasePhotos.LoadAsync(await officials.ReadPhotosAsync(cancellationToken), previous, cancellationToken);
         var build = new PublicationBuild(previous, now, rules, renderer, catalog, corrections, roster).WithRemoved(withdrawn).WithReturned(returned);
         var additions = await LoadAdditionsAsync(references, build, cancellationToken);
         var released = build.WithAdded(additions);
@@ -142,7 +142,7 @@ public sealed class PublishRelease
     private async Task<(string Directory, List<PublishedRecordEntry> Entries)> StageAsync(int number, DateTimeOffset now,
         PreviousRelease previous, List<PublishedRecordEntry> carried, List<PendingRecord> additions,
         List<PublishedRecordEntry> removed, List<PublishedWithdrawal> withdrawals, IReadOnlyDictionary<string, string> pages, IReadOnlyList<RosterMember> roster,
-        ReleasePhotoSet photos, CancellationToken cancellationToken)
+        ReleasePhotoFiles photos, CancellationToken cancellationToken)
     {
         List<PublishedRecordEntry> entries = [.. carried, .. additions.Select(addition => addition.Entry)];
         var manifest = new PublicationRelease
@@ -185,7 +185,7 @@ public sealed class PublishRelease
             Compress(manifestJson, stream => new BrotliStream(stream, CompressionLevel.Optimal)), cancellationToken);
         var facets = ReleaseFacets.From(manifest, catalog);
         await indexPages.WriteAsync(staging, manifest, facets, additions, previous, cancellationToken);
-        var officials = await dataFiles.WriteAsync(staging, manifest, facets, additions, previous, roster, photos, cancellationToken);
+        var officials = await dataFiles.WriteAsync(staging, manifest, facets, additions, previous, roster, photos.Profiles, cancellationToken);
         await releasePhotos.WriteAsync(staging, officials, photos, previous, cancellationToken);
         await officialPages.WriteAsync(staging, manifest, officials, additions, removed, previous, cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestPath, manifestJson, cancellationToken);

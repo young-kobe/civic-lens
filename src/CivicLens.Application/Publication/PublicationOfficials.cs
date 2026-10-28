@@ -1,5 +1,4 @@
 using CivicLens.Application.Collection;
-using CivicLens.Application.Collection.MemberPhotos;
 using CivicLens.Application.Roster;
 using CivicLens.Publication.Contracts;
 
@@ -7,7 +6,7 @@ namespace CivicLens.Application.Publication;
 
 /// <summary>
 /// Builds the profile of each official that a record names. A configured person matches roster terms by bioguide ID, else by
-/// Wikidata ID, else gets the configured offices. The website is the valid roster URL of a member, else the configured website. The photo is the newest stored photo of the person. A person who left the configuration keeps the name that the records hold, and has no terms.
+/// Wikidata ID, else gets the configured offices. The website is the valid roster URL of a member, else the configured website. A person who left the configuration keeps the name that the records hold, and has no terms.
 /// </summary>
 public sealed class PublicationOfficials(CollectionConfiguration configuration, IMemberRosterStore members, IExecutiveRosterStore executives)
 {
@@ -22,15 +21,11 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
             ? await members.ReadLatestAsync(source.Id, cancellationToken)
             : [];
 
-    internal async Task<ReleasePhotoSet> ReadPhotosAsync(CancellationToken cancellationToken)
-    {
-        if (configuration.RosterSourceOf(ApiParser.MemberPhotos) is not { } source) return ReleasePhotoSet.None;
-        var personIds = configuration.People.Where(person => person.BioguideId is not null).Select(person => person.Id).ToArray();
-        return new(await members.ReadNewestPhotosAsync(personIds, cancellationToken), source.MaxBytes);
-    }
+    internal async Task<IReadOnlyList<OfficialPhoto>> ReadPhotosAsync(CancellationToken cancellationToken) =>
+        await members.ReadNewestPhotosAsync([.. configuration.People.Select(person => person.Id)], cancellationToken);
 
     internal async Task<PublishedOfficials> ResolveAsync(IReadOnlySet<string> officialIds, IReadOnlyDictionary<string, string> recordNames,
-        IReadOnlyList<RosterMember> roster, ReleasePhotoSet photos, CancellationToken cancellationToken)
+        IReadOnlyList<RosterMember> roster, IReadOnlyDictionary<string, PublishedPhoto> photos, CancellationToken cancellationToken)
     {
         var people = configuration.People.Where(person => officialIds.Contains(person.Id)).ToArray();
         var memberFacts = people.Any(person => person.BioguideId is not null) ? MemberFactsOf(roster) : [];
@@ -82,13 +77,13 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
             : throw new InvalidDataException($"Official {id} is named by a record but no record holds a name for the official.");
 
     private static PublishedOfficialProfile ToProfile(PersonConfiguration person, Dictionary<string, MemberFacts> memberFacts,
-        Dictionary<string, PublishedOfficeTerm[]> executiveTerms, ReleasePhotoSet photos) => new()
+        Dictionary<string, PublishedOfficeTerm[]> executiveTerms, IReadOnlyDictionary<string, PublishedPhoto> photos) => new()
         {
             Id = person.Id,
             Name = person.Name,
             WikidataId = person.WikidataId,
             Website = WebsiteOf(person, memberFacts),
-            Photo = PhotoOf(person, photos),
+            Photo = photos.GetValueOrDefault(person.Id),
             Terms = TermsOf(person, memberFacts, executiveTerms)
         };
 
@@ -113,18 +108,6 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
 
     private static string? WebsiteOf(PersonConfiguration person, Dictionary<string, MemberFacts> memberFacts) =>
         person.BioguideId is not null && memberFacts.TryGetValue(person.BioguideId, out var facts) && facts.Website is { } website ? website : person.Website;
-
-    private static PublishedPhoto? PhotoOf(PersonConfiguration person, ReleasePhotoSet photos) =>
-        photos.ByPerson.TryGetValue(person.Id, out var photo)
-            ? new()
-            {
-                Path = PublicationProtocol.PhotoPath(photo.CaptureSha256),
-                Credit = photo.Credit,
-                SourceUrl = photo.SourceUrl,
-                Width = MemberPhotoImage.Width,
-                Height = MemberPhotoImage.Height
-            }
-            : null;
 
     private static string? ValidWebsite(string? url) => PublishedWebsite.IsValid(url) ? url : null;
 
