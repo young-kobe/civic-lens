@@ -19,6 +19,7 @@ public sealed record PublishedRelationship
     public required string Quote { get; init; }
     public required string TargetFact { get; init; }
     public DateOnly? StatementDate { get; init; }
+    public required string MatchedOfficialId { get; init; }
     public required PublishedOfficial[] Officials { get; init; }
     public required string[] IssueIds { get; init; }
     public required string[] PolicyAreaIds { get; init; }
@@ -36,7 +37,12 @@ public sealed record PublishedRelationship
         Officials = Officials,
         IssueIds = IssueIds,
         PolicyAreaIds = PolicyAreaIds,
-        EventDate = StatementDate
+        EventDate = StatementDate,
+        LinkType = Type,
+        StatementRecordId = Statement.RecordId,
+        TargetKind = Target.Kind,
+        TargetRecordId = Target.RecordId,
+        MatchedOfficialId = MatchedOfficialId
     };
 
     public static bool IsCitedKind(PublishedRecordKind kind) => kind == PublishedRecordKind.Statement || IsTargetKind(kind);
@@ -54,16 +60,21 @@ public sealed record PublishedRelationship
         RequireText(Quote, MaximumQuoteLength);
         RequireText(TargetFact, MaximumFactLength);
         ValidateCitations();
-        if (!Enum.IsDefined(Type) || (Target.Kind == PublishedRecordKind.Vote) != (Type == PublishedRelationshipType.StatementAboutVote))
+        if (!Enum.IsDefined(Type) || !TypeFits(Type, Target.Kind))
             throw new InvalidDataException("The published relationship type does not fit the kind of the target.");
         if (Officials is null || IssueIds is null || PolicyAreaIds is null ||
             Officials.Any(official => official is null || string.IsNullOrWhiteSpace(official.Name)) ||
             !PublishedEvidenceRules.AreDistinctAndNotBlank(Officials.Select(official => official.Id)) ||
             !PublishedEvidenceRules.AreDistinctAndNotBlank(IssueIds) || !PublishedEvidenceRules.AreDistinctAndNotBlank(PolicyAreaIds))
             throw new InvalidDataException("Published relationship officials, issues, and policy areas must be distinct and not blank.");
+        if (!Officials.Any(official => official.Id == MatchedOfficialId))
+            throw new InvalidDataException("The matched official of a published relationship must be one of its officials.");
     }
 
-    private static bool IsTargetKind(PublishedRecordKind kind) => kind is PublishedRecordKind.Action or PublishedRecordKind.Vote;
+    internal static bool IsTargetKind(PublishedRecordKind kind) => kind is PublishedRecordKind.Action or PublishedRecordKind.Vote;
+
+    internal static bool TypeFits(PublishedRelationshipType type, PublishedRecordKind targetKind) =>
+        (targetKind == PublishedRecordKind.Vote) == (type == PublishedRelationshipType.StatementAboutVote);
 
     private void ValidateCitations()
     {

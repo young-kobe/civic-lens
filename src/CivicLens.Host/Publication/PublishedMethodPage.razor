@@ -2,14 +2,16 @@
 @using CivicLens.Host.Components.Layout
 @using CivicLens.Publication.Contracts
 
-<PublicPage Title="How the talk and action profile works" Description="How Civic Lens builds the talk and action profile of each official. Code builds the profile from published records. No model is used." Crumbs="Crumbs">
-    <PageHeader Title="How the talk and action profile works" Lede="Code builds the profile on each official page. No model is used." />
-    <Panel Title="What each column counts" Padded="true">
+<PublicPage Title="How the official page counts work" Description="How Civic Lens builds the counts on each official page. Code builds them from published records. No model is used." Crumbs="Crumbs">
+    <PageHeader Title="How the official page counts work" Lede="Code builds the profile on each official page. No model is used." />
+    <Panel Title="What the issue counts mean" Padded="true">
+        <p>The panel "Issues they work on" has one row for each tracked issue. Each row has three counts.</p>
         <ul>
-            <li>Statements: the published statements of the official. A statement counts in the Congress of its day. The day is the statement day, or the first publication day when the statement has no day.</li>
-            <li>Sponsorships: the published bills that name the official as sponsor. Cosponsors do not count. A bill counts in the Congress of its latest sponsorship day.</li>
-            <li>Votes: the roll call votes of the official, with a substantive kind, where the official cast a vote. A roll call counts once. A cast of Not Voting does not count. Any other cast counts.</li>
+            <li>Their statements: the published statements of the official on the issue. A statement counts in the Congress of its day. The day is the statement day, or the first publication day when the statement has no day.</li>
+            <li>Bills they sponsored: the published bills on the issue that name the official as sponsor. The row lists the official title of each bill. Cosponsors do not count. A bill counts in the Congress of its latest sponsorship day.</li>
+            <li>Votes they cast: the substantive roll call votes on the issue where the official cast a vote. A roll call counts once. A cast of Not Voting does not count. Any other cast counts.</li>
         </ul>
+        <p>Each count is a number of records. It is not a share, a rank, or a measure of how much the official cares about the issue. A record on several issues counts once for each issue. A record with no tracked issue is in no row.</p>
     </Panel>
     <Panel Title="Missed votes" Padded="true">
         <p>@PublishedOfficialView.MissedVoteMeaning The count covers all roll calls of the current Congress, in each chamber where the official has votes. It includes procedural roll calls.</p>
@@ -22,25 +24,24 @@
         <p>A cast of Present or Not Voting is not in either number. The page states how many split votes it left out. It shows a percent only when the official cast Yea or Nay on at least @TalkAndActionProfile.MinimumRecordsForShare split votes.</p>
         <p>The page leaves out votes that the official cast while in a party other than @PublishedPartyMajority.Democrat or @PublishedPartyMajority.Republican.</p>
     </Panel>
+    <Panel Title="What a link is" Padded="true">
+        <p>A link joins one statement to one bill or one vote. A reviewer approved each link. The reviewer read the statement and the bill or vote, and judged that the statement is about it.</p>
+        <p>There are four kinds of link. "Describes own bill" means the statement describes a bill that the speaker sponsors or cosponsors. "States position on" means the statement says what the speaker thinks or wants about a bill. "Claims credit for" means the statement says the speaker caused or achieved a bill, or part of it. "Statement about a vote" means the statement is about a roll call vote.</p>
+        <p>A link is not a verdict. It does not say that the vote or the bill matches the statement. The page shows the vote of the official next to the link and leaves the judgment to the reader. A link belongs to the Congress of the day of its statement. A statement with no day belongs to the Congress of its bill or vote.</p>
+    </Panel>
     <Panel Title="The window" Padded="true">
-        <p>All three columns use the current Congress. The current Congress of an official is the newest Congress with a published vote of that official.</p>
+        <p>All three counts use the current Congress. The current Congress of an official is the newest Congress with a published vote of that official.</p>
     </Panel>
     <Panel Title="Substantive votes" Padded="true">
-        <p>These vote kinds count: @SubstantiveKinds. The profile leaves out all other kinds, such as rules, cloture, and motions. These are procedural votes. Each official page shows how many it left out.</p>
+        <p>A vote is substantive when its kind is one of these: @SubstantiveKinds. The count of votes they cast leaves out all other kinds, such as rules, cloture, and motions. These are procedural votes.</p>
     </Panel>
     <Panel Title="Where the issues come from" Padded="true">
         <p>A person reviews the issue tags of a statement and approves them. Some tags can still be wrong. The issues of a sponsorship and of a vote come from the policy area of the bill in Congress.gov.</p>
     </Panel>
-    <Panel Title="How a share is computed" Padded="true">
-        <p>The share of an issue in a column is the number of records in that column with the issue. It is divided by the number of records in that column with at least one tracked issue.</p>
-        <p>A record with several issues counts once for each issue. The shares of a column can therefore add up to more than 100%.</p>
-        <p>A record with no tracked issue is not in the share. Each page shows the count of these records for each column.</p>
-        <p>Each page always shows the counts. It shows a share only when the column has at least @TalkAndActionProfile.MinimumRecordsForShare records with an issue. Otherwise it shows "Too few records".</p>
-    </Panel>
 </PublicPage>
 
 @code {
-    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), new("How the talk and action profile works")];
+    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), new("How the official page counts work")];
 
     private static string SubstantiveKinds => string.Join(", ", Enum.GetValues<PublishedVoteKind>()
         .Where(kind => kind.IsSubstantive()).Select(PublishedRecordLabels.VoteKind));

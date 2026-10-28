@@ -207,6 +207,7 @@ public sealed class PublicationReleaseTests
         RecordId = id,
         RevisionNumber = 1,
         Headline = "Headline",
-        FirstPublishedAtUtc = DateTimeOffset.UnixEpoch
+        FirstPublishedAtUtc = DateTimeOffset.UnixEpoch,
+        BillTitle = kind == PublishedRecordKind.Action ? "A bill" : null
     };
 }

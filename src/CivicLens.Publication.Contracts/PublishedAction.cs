@@ -5,6 +5,7 @@ public sealed record PublishedAction
     public const int MaximumSponsorships = 600;
     public const int MaximumCitationsPerSponsorship = 2;
     public const int MaximumSources = 8;
+    public const int MaximumBillTitleLength = 4_000;
 
     public required string RecordId { get; init; }
     public required int RevisionNumber { get; init; }
@@ -37,6 +38,7 @@ public sealed record PublishedAction
         IssueIds = TrackedIssueIds,
         PolicyAreaIds = PolicyAreaId is null ? [] : [PolicyAreaId],
         SourceHost = Sources[0].Host,
+        BillTitle = BillTitle,
         EventDate = Sponsorships.Max(item => item.LatestDate)
     };
 
@@ -46,7 +48,8 @@ public sealed record PublishedAction
         if (!PublicationProtocol.IsRecordId(PublishedRecordKind.Action, RecordId) || RevisionNumber < 1 ||
             string.IsNullOrWhiteSpace(Headline) || string.IsNullOrWhiteSpace(Summary))
             throw new InvalidDataException("Published record identity or wording is invalid.");
-        if (Congress < 1 || BillNumber < 1 || string.IsNullOrWhiteSpace(BillType) || string.IsNullOrWhiteSpace(BillTitle))
+        if (Congress < 1 || BillNumber < 1 || string.IsNullOrWhiteSpace(BillType) || string.IsNullOrWhiteSpace(BillTitle) ||
+            BillTitle.Length > MaximumBillTitleLength)
             throw new InvalidDataException("Published action requires a bill identity and title.");
         PublishedEvidenceRules.RequireSources(Sources, MaximumSources, "action");
         if (Sponsorships is null || Sponsorships.Length is 0 or > MaximumSponsorships)

@@ -73,7 +73,6 @@ Derived insights are product goals. They make Civic Lens more than a connector t
 
 1. Changed record: detect deleted press releases, rewritten quotations, and positions removed from issue pages. Show both versions and their timing next to votes and events. This needs deletion detection and the document-change gate.
 2. Shared language: find the same or nearly the same sentences in releases from different offices. Show coordinated messaging, how it spreads, and who uses it first.
-3. Talk and action profile: for each official, show the share of statements on each issue next to the share of sponsorships and votes on it.
 
 ## Deferred
 

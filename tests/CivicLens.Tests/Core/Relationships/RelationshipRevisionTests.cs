@@ -12,7 +12,7 @@ public sealed class RelationshipRevisionTests
         new string('f', 64), 1, ReviewAuthor.AnalysisSubject, RelationshipFixtures.Created,
         new(RelationshipRecordKind.Statement, RelationshipFixtures.StatementId, 2), new(target, RelationshipFixtures.ActionId, 3),
         new(RelationshipMatchBasis.BillNumber, RelationshipFixtures.Span(RelationshipFixtures.BillWords)), type, "She says she introduced it.",
-        RelationshipFixtures.Span(RelationshipFixtures.BillSentence), "F2");
+        RelationshipFixtures.Span(RelationshipFixtures.BillSentence), "F2", "warren");
 
     [Fact]
     public void AValidRevisionPasses() => Revision().ValidateShape();
@@ -93,11 +93,31 @@ public sealed class RelationshipRevisionTests
             edit with { Statement = first.Statement with { RevisionNumber = 9 } },
             edit with { Target = first.Target with { RecordId = new string('9', 64) } },
             edit with { Match = first.Match with { Basis = RelationshipMatchBasis.BillTitle } },
+            edit with { OfficialId = "other" },
             edit with { RecordId = new string('e', 64) },
             edit with { AuthorSubject = ReviewAuthor.AnalysisSubject },
             edit with { RevisionNumber = 3 }
         })
             Assert.Throws<ArgumentException>(() => forged.ValidatePersonEditOf(first));
+    }
+
+    [Fact]
+    public void ARevisionNamesTheMatchedOfficialWithinTheLimit()
+    {
+        Revision().ValidateShape();
+
+        Assert.Throws<ArgumentException>((Revision() with { OfficialId = " " }).ValidateShape);
+        Assert.Throws<ArgumentException>((Revision() with { OfficialId = new string('o', RelationshipRevision.MaximumOfficialIdLength + 1) }).ValidateShape);
+    }
+
+    [Fact]
+    public void APersonRevisionStaysOnlyForTheSameCitationsAndTheSameOfficial()
+    {
+        var edit = Revision() with { AuthorSubject = "auth0|reviewer" };
+
+        Assert.True(edit.IsPersonRevisionCiting(edit.Statement, edit.Target, edit.OfficialId));
+        Assert.False(edit.IsPersonRevisionCiting(edit.Statement, edit.Target, "another-official"));
+        Assert.False(Revision().IsPersonRevisionCiting(edit.Statement, edit.Target, edit.OfficialId));
     }
 
     [Fact]

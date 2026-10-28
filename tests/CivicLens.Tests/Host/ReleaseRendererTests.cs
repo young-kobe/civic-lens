@@ -194,20 +194,34 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task TheMethodPageNamesTheSubstantiveVoteKindsAndTheThresholdFromTheirOwners()
+    public async Task TheMethodPageNamesTheSubstantiveVoteKindsAndTheThreeIssueCountsFromTheirOwners()
     {
         var html = await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None);
 
         var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
         Assert.Contains("Amendment, Suspension of the rules, Passage, Conference report, Veto override, Nomination.", text, StringComparison.Ordinal);
-        Assert.Contains($"at least {TalkAndActionProfile.MinimumRecordsForShare} records", text, StringComparison.Ordinal);
-        Assert.Contains("Too few records", text, StringComparison.Ordinal);
+        Assert.Contains("A vote is substantive when its kind is one of these:", text, StringComparison.Ordinal);
+        Assert.Contains("Votes they cast: the substantive roll call votes on the issue", text, StringComparison.Ordinal);
+        Assert.Contains("Their statements: ", text, StringComparison.Ordinal);
+        Assert.Contains("Bills they sponsored: ", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Too few records", text, StringComparison.Ordinal);
         Assert.Contains("A missed vote means the official did not vote on it.", text, StringComparison.Ordinal);
         Assert.Contains("A roll call that was not published is in neither number.", text, StringComparison.Ordinal);
         Assert.Contains("A split vote is a substantive roll call vote where most Democrats and most Republicans voted on opposite sides.", text, StringComparison.Ordinal);
         Assert.Contains($"on at least {TalkAndActionProfile.MinimumRecordsForShare} split votes", text, StringComparison.Ordinal);
         Assert.Contains("policy area of the bill in Congress.gov", text, StringComparison.Ordinal);
         Assert.Contains("Some tags can still be wrong", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheMethodPageExplainsALinkWithTheFourPublicLinkWordsAndSaysThatALinkIsNotAVerdict()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None);
+
+        var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
+        foreach (var type in Enum.GetValues<PublishedRelationshipType>())
+            Assert.Contains($"\"{PublishedRecordLabels.RelationshipType(type)}\" means", text, StringComparison.Ordinal);
+        Assert.Contains("A link is not a verdict.", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1266,7 +1280,7 @@ public sealed class ReleaseRendererTests
         AssertTrail(pages["issues"], ["Home|index.html", "Issues and policy areas"]);
         AssertTrail(pages["search"], ["Home|index.html", "Search records"]);
         AssertTrail(pages["officials"], ["Home|index.html", "Officials"]);
-        AssertTrail(pages["method"], ["Home|index.html", "How the talk and action profile works"]);
+        AssertTrail(pages["method"], ["Home|index.html", "How the official page counts work"]);
         AssertTrail(pages["report"], ["Home|index.html", "Report a problem"]);
         AssertTrail(pages["issue"], ["Home|../index.html", "Issues|../issues.html", "Housing costs"]);
         AssertTrail(pages["vote"], ["Home|../index.html", "All records|../all.html", Vote().Headline]);
@@ -1634,6 +1648,7 @@ public sealed class ReleaseRendererTests
         Quote = "<b>a rent cap</b>",
         TargetFact = "Title: A housing bill",
         StatementDate = new DateOnly(2026, 5, 1),
+        MatchedOfficialId = "o1",
         Officials = [new PublishedOfficial { Id = "o1", Name = "Jane <Doe>" }],
         IssueIds = ["housing"],
         PolicyAreaIds = [],

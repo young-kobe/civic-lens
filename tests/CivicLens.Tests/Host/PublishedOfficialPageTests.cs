@@ -126,11 +126,12 @@ public sealed class PublishedOfficialPageTests
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
-        var paragraphs = new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-talk-and-action-in-congress-119'] p.muted")
+        var paragraphs = new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-missed-votes-in-congress-119'] p")
             .Select(paragraph => paragraph.TextContent.Trim()).ToArray();
         Assert.Equal(["Missed 1 of 2 roll call votes of all kinds, including procedural votes, held in the House of Representatives while they served, 1 Apr 2026 to 3 Apr 2026 (119th Congress).",
             "Missed 0 of 1 roll call vote of all kinds, including procedural votes, held in the Senate while they served, on 2 Apr 2026 (119th Congress).",
             "A missed vote means the official did not vote on it."], paragraphs[..3]);
+        Assert.Equal(["muted small"], new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-missed-votes-in-congress-119'] p.muted").Select(paragraph => paragraph.ClassName!));
     }
 
     [Fact]
@@ -143,7 +144,7 @@ public sealed class PublishedOfficialPageTests
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
-        var text = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-talk-and-action-in-congress-119']")!.TextContent;
+        var text = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-missed-votes-in-congress-119']")!.TextContent;
         Assert.Contains("Missed 1 of 5 roll call votes of all kinds (20%), including procedural votes, held in the House of Representatives", text, StringComparison.Ordinal);
         Assert.DoesNotContain("the Senate", text, StringComparison.Ordinal);
     }
@@ -157,7 +158,7 @@ public sealed class PublishedOfficialPageTests
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
-        var text = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-talk-and-action-in-congress-119']")!.TextContent;
+        var text = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-missed-votes-in-congress-119']")!.TextContent;
         Assert.Contains("Missed 5 of 5 roll call votes of all kinds (100%), including procedural votes", text, StringComparison.Ordinal);
     }
 
@@ -182,7 +183,7 @@ public sealed class PublishedOfficialPageTests
         Assert.EndsWith(PublicationProtocol.RecordPagePath(new string('b', 64)), first[1].QuerySelector("a")!.GetAttribute("href"));
         Assert.Single(panel.QuerySelectorAll("table"));
         var titles = document.QuerySelectorAll("h2").Select(title => title.TextContent.Trim()).ToArray();
-        Assert.True(Array.IndexOf(titles, "Talk and action in Congress 119") < Array.IndexOf(titles, "Votes with their party"));
+        Assert.True(Array.IndexOf(titles, "Missed votes in Congress 119") < Array.IndexOf(titles, "Votes with their party"));
         Assert.True(Array.IndexOf(titles, "Votes with their party") < Array.IndexOf(titles, "Records"));
     }
 
@@ -276,24 +277,40 @@ public sealed class PublishedOfficialPageTests
         Vote(id, date) with { SplitVote = true, PartyMajority = PublishedPartyMajority.Yea, Cast = cast };
 
     [Fact]
-    public async Task TheProfilePanelShowsCountsAndSharesOrTooFewRecordsAndLinksTheMethodNote()
+    public async Task TheIssuePanelShowsPlainCountsAndTheTitlesOfTheSponsoredBillsAndLeavesOutProceduralVotes()
     {
-        PublishedRecordEntry[] statements = [.. Enumerable.Range(1, 5).Select(index => Entry((char)('0' + index), PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)) with { IssueIds = index < 3 ? ["housing", "health"] : ["housing"] })];
-        var page = Current(statements, [Vote('a', new DateOnly(2026, 4, 1)) with { IssueIds = ["housing"] }, Vote('b', new DateOnly(2026, 4, 2)) with { Kind = PublishedVoteKind.Cloture },
-            Vote('c', new DateOnly(2026, 4, 3)) with { IssueIds = ["health"], Cast = PublishedOfficialVote.NotVoting },
-            Vote('d', new DateOnly(2026, 4, 4)) with { Kind = PublishedVoteKind.Cloture }]);
+        PublishedRecordEntry[] entries = [.. Enumerable.Range(1, 3).Select(index => Entry((char)('0' + index), PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)) with { IssueIds = index < 3 ? ["housing", "health"] : ["housing"] }),
+            Entry('a', PublishedRecordKind.Action, new DateOnly(2026, 5, 1)) with { IssueIds = ["housing"], BillTitle = "Home Act" }];
+        var page = Current(entries, [Vote('a', new DateOnly(2026, 4, 1)) with { IssueIds = ["housing"] }, Vote('b', new DateOnly(2026, 4, 2)) with { Kind = PublishedVoteKind.Cloture, IssueIds = ["housing"] },
+            Vote('c', new DateOnly(2026, 4, 3)) with { IssueIds = ["health"], Cast = PublishedOfficialVote.NotVoting }]);
         page = page with { TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes) };
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
-        var panel = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-talk-and-action-in-congress-119']")!;
-        Assert.Equal(["health", "2 (40%)", "0 (Too few records)", "0 (Too few records)"],
-            panel.QuerySelectorAll("tbody tr:nth-child(1) td").Select(cell => cell.TextContent));
-        Assert.Equal(["housing", "5 (100%)", "0 (Too few records)", "1 (Too few records)"],
-            panel.QuerySelectorAll("tbody tr:nth-child(2) td").Select(cell => cell.TextContent));
-        Assert.DoesNotContain("marked Not Voting", panel.TextContent, StringComparison.Ordinal);
-        Assert.Contains("Procedural votes left out: 2", panel.TextContent, StringComparison.Ordinal);
-        Assert.Equal("../method.html", panel.QuerySelector("a")!.GetAttribute("href"));
+        var panel = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-issues-they-work-on']")!;
+        Assert.Equal(["Issue", "Their statements", "Bills they sponsored", "Votes they cast"], panel.QuerySelectorAll("th").Select(cell => cell.TextContent.Trim()));
+        Assert.Equal(["health", "2", "0", "0"], panel.QuerySelectorAll("tbody tr:nth-child(1) td").Select(cell => cell.TextContent.Trim()));
+        var housing = panel.QuerySelectorAll("tbody tr:nth-child(2) td").ToArray();
+        Assert.Equal(["housing", "3", "1", "1"], new[] { housing[0], housing[1], housing[2].FirstChild!, housing[3] }.Select(cell => cell.TextContent.Trim()));
+        Assert.Equal(["Home Act"], housing[2].QuerySelectorAll("li").Select(item => item.TextContent));
+        Assert.Equal("../" + PublicationProtocol.RecordPagePath(new string('a', 64)), housing[2].QuerySelector("a")!.GetAttribute("href"));
+        Assert.DoesNotContain("%", panel.TextContent, StringComparison.Ordinal);
+        Assert.Equal("../method.html", panel.QuerySelector("p a")!.GetAttribute("href"));
+        Assert.Contains("\"Votes they cast\" counts only substantive votes. A statement, bill, or vote on several issues counts once for each issue.", panel.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnOfficialWithNoRecordOnATrackedIssueGetsAPlainSentenceInPlaceOfTheIssueTable()
+    {
+        var page = Current([], [Vote('a', new DateOnly(2026, 4, 1))]);
+        page = page with { TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes) };
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        var panel = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-issues-they-work-on']")!;
+        Assert.Null(panel.QuerySelector("table"));
+        Assert.Contains("No tracked issue", panel.TextContent, StringComparison.Ordinal);
+        Assert.Contains("None of their statements, sponsored bills, or votes in this Congress is on a tracked issue.", panel.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -301,7 +318,7 @@ public sealed class PublishedOfficialPageTests
     {
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([], []), PublicationCatalogs.None, CancellationToken.None);
 
-        Assert.DoesNotContain("Talk and action", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Issues they work on", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -384,7 +401,7 @@ public sealed class PublishedOfficialPageTests
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, catalog, CancellationToken.None);
 
         var cells = new HtmlParser().ParseDocument(html)
-            .QuerySelectorAll("[aria-labelledby='panel-talk-and-action-in-congress-119'] tbody tr td:first-child").ToList();
+            .QuerySelectorAll("[aria-labelledby='panel-issues-they-work-on'] tbody tr td:first-child").ToList();
         Assert.Equal(["Housing costs", "mystery"], cells.Select(cell => cell.TextContent.Trim()));
         Assert.Equal("../" + PublicationProtocol.IssuePagePath("housing", 1), cells[0].QuerySelector("a")!.GetAttribute("href"));
         Assert.Null(cells[1].QuerySelector("a"));
@@ -399,6 +416,176 @@ public sealed class PublishedOfficialPageTests
         Assert.Equal("officials/mayor.html", row.QuerySelector("a")!.GetAttribute("href"));
         Assert.Equal("2", row.QuerySelector("td.num")!.TextContent);
         Assert.Equal("Records other than votes", new HtmlParser().ParseDocument(html).QuerySelector("thead th.num")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheLinkedPairsPanelComesBeforeTheVotesWithTheirPartyPanelAndListsEachPairWithTheLinkWordsTheTitleAndTheCast()
+    {
+        var page = Current([], [Split('a', new DateOnly(2026, 4, 1), "Nay")]);
+        page = page with
+        {
+            TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes),
+            Pairs = [Pair('2', 'a', PublishedRelationshipType.StatementAboutVote, PublishedRecordKind.Vote, new DateOnly(2026, 4, 5), "Nay"),
+                Pair('1', 'b', PublishedRelationshipType.StatesPositionOn, PublishedRecordKind.Action, new DateOnly(2026, 3, 1), null)]
+        };
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var panels = document.QuerySelectorAll("section[aria-labelledby]").Select(panel => panel.GetAttribute("aria-labelledby")).ToArray();
+        Assert.True(Array.IndexOf(panels, "panel-what-they-said-and-what-they-did") + 1 == Array.IndexOf(panels, "panel-votes-with-their-party"));
+        var panel = document.QuerySelector("[aria-labelledby='panel-what-they-said-and-what-they-did']")!;
+        Assert.Equal(["Statement date", "What they said", "Link", "What they did", "Their vote"], panel.QuerySelectorAll("thead th").Select(cell => cell.TextContent.Trim()));
+        var rows = panel.QuerySelectorAll("tbody tr").Select(row => row.QuerySelectorAll("td").Select(cell => cell.TextContent.Trim()).ToArray()).ToArray();
+        Assert.Equal(["2026-04-05", "Statement 2", "Statement about a vote", "Official title a", "Nay"], rows[0]);
+        Assert.Equal(["2026-03-01", "Statement 1", "States position on", "Official title b", "Not a vote"], rows[1]);
+        Assert.Equal([$"../records/{new string('2', 64)}.html", $"../records/{new string('a', 64)}.html"],
+            panel.QuerySelectorAll("tbody tr")[0].QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
+        Assert.Contains("A reviewer approved each link. A link does not mean the vote or bill matches the statement.", panel.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AVoteLinkWithNoCastRowOfTheOfficialSaysSoInsteadOfLeavingTheCellEmpty()
+    {
+        var page = Current([], []);
+        page = page with
+        {
+            TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes),
+            Pairs = [Pair('1', 'a', PublishedRelationshipType.StatementAboutVote, PublishedRecordKind.Vote, new DateOnly(2026, 4, 5), null)]
+        };
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        var cells = new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-what-they-said-and-what-they-did'] tbody td");
+        Assert.Equal("No vote on record", cells[^1].TextContent.Trim());
+    }
+
+    [Fact]
+    public async Task AnUndatedStatementShowsNoDateInsteadOfAnInventedDay()
+    {
+        var page = Current([], []);
+        page = page with
+        {
+            TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes),
+            Pairs = [Pair('1', 'b', PublishedRelationshipType.StatesPositionOn, PublishedRecordKind.Action, null, null)]
+        };
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        var cells = new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-what-they-said-and-what-they-did'] tbody td");
+        Assert.Equal("No date", cells[0].TextContent.Trim());
+    }
+
+    [Fact]
+    public async Task AnOfficialWithNoPairKeepsThePanelWithOneLineThatSaysThereIsNoLinkYet()
+    {
+        var page = Current([], []);
+        page = page with { TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes) };
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        var panel = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-what-they-said-and-what-they-did']")!;
+        Assert.Contains("No reviewed links between their statements and their bills or votes yet.", panel.TextContent, StringComparison.Ordinal);
+        Assert.Null(panel.QuerySelector("table"));
+    }
+
+    [Fact]
+    public async Task AnEarlierCongressPageHasNoLinkedPairsPanel()
+    {
+        var page = new ReleaseOfficialPage(Profile(), true, 118, false, [], [], [Vote('3', new DateOnly(2024, 4, 1)) with { Congress = 118 }]);
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.DoesNotContain("What they said and what they did", html, StringComparison.Ordinal);
+    }
+
+    private static LinkedPair Pair(char statement, char target, PublishedRelationshipType type, PublishedRecordKind kind, DateOnly? day, string? cast) =>
+        new(day, new string(statement, 64), $"Statement {statement}", type, kind, new string(target, 64), $"Official title {target}", cast);
+
+    [Fact]
+    public async Task EachCountButtonNamesTheRowsItFiltersAndTheNumberShownEqualsTheCountClicked()
+    {
+        var document = await RenderedWithCountsAsync();
+
+        var counts = document.QuerySelectorAll("[aria-labelledby='panel-issues-they-work-on'] [data-count-filter]").ToArray();
+        Assert.Equal(["statement:health", "statement:housing", "bill:housing", "vote:housing"], counts.Select(count => count.GetAttribute("data-count-filter")));
+        foreach (var count in counts)
+        {
+            var rows = document.QuerySelectorAll("[data-records] tbody tr").Where(row => row.GetAttribute("data-filter-keys")!.Split(' ').Contains(count.GetAttribute("data-count-filter"))).ToArray();
+            Assert.Equal(int.Parse(count.TextContent), rows.Length);
+            Assert.EndsWith($": {rows.Length} {(rows.Length == 1 ? "record" : "records")}", count.GetAttribute("data-filter-shows"), StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task OnlyARowInTheCurrentCongressCarriesAStatementOrBillMarkerAndOnlyASubstantiveCastVoteCarriesAVoteMarker()
+    {
+        var document = await RenderedWithCountsAsync();
+
+        var marked = document.QuerySelectorAll("[data-records] tbody tr").ToDictionary(row => row.QuerySelector("a.cell-title")!.TextContent, row => row.GetAttribute("data-filter-keys"));
+        Assert.Equal("statement:health statement:housing", marked["Entry 1"]);
+        Assert.Equal("", marked["Entry 5"]);
+        Assert.Equal("", marked["Entry 6"]);
+        Assert.Equal("bill:housing", marked["Entry d"]);
+        Assert.Equal("vote:housing", marked["Vote a"]);
+        Assert.Equal("", marked["Vote b"]);
+        Assert.Equal("", marked["Vote c"]);
+    }
+
+    [Fact]
+    public async Task TheServerHtmlHasPlainCountsWithAZeroNeverAButtonAndEveryRowVisible()
+    {
+        var document = await RenderedWithCountsAsync();
+
+        var health = document.QuerySelectorAll("[aria-labelledby='panel-issues-they-work-on'] tbody tr:nth-child(1) td").Select(cell => cell.TextContent.Trim()).ToArray();
+        Assert.Equal(["health", "1", "0", "0"], health);
+        Assert.Equal(4, document.QuerySelectorAll("[data-count-filter]").Length);
+        Assert.Empty(document.QuerySelectorAll("[data-count-filter] button"));
+        Assert.Empty(document.QuerySelectorAll("[data-records] tbody tr[hidden]"));
+        Assert.Equal(9, document.QuerySelectorAll("[data-records] tbody tr").Length);
+    }
+
+    [Fact]
+    public async Task TheFilterNoticeStatesWhatIsShownInPlainWordsAndOffersToShowAllRecords()
+    {
+        var document = await RenderedWithCountsAsync();
+
+        var notice = document.QuerySelector("[data-records] [data-filter-notice][hidden]")!;
+        Assert.Equal("Show all records", notice.QuerySelector("button[data-filter-clear]")!.TextContent);
+        var counts = document.QuerySelectorAll("[data-count-filter]").ToArray();
+        Assert.Equal(["Showing their statements on health in the 119th Congress: 1 record",
+            "Showing their statements on housing in the 119th Congress: 3 records",
+            "Showing bills they sponsored on housing in the 119th Congress: 1 record",
+            "Showing their substantive votes on housing in the 119th Congress: 1 record"], counts.Select(count => count.GetAttribute("data-filter-shows")));
+        Assert.Equal("1: show bills they sponsored on housing", counts[2].GetAttribute("data-filter-label"));
+        Assert.Equal("", document.QuerySelector("[data-records] [data-filter-status][role='status']")!.TextContent);
+        Assert.False(document.QuerySelector("[data-filter-status]")!.HasAttribute("hidden"));
+    }
+
+    [Fact]
+    public async Task APageWithNoProfileHasNoRecordsFilterMarkup()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([], []), PublicationCatalogs.None, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.Null(document.QuerySelector("[data-records]"));
+        Assert.Null(document.QuerySelector("[data-filter-notice]"));
+        Assert.Null(document.QuerySelector("tbody tr[data-filter-keys]"));
+    }
+
+    private static async Task<AngleSharp.Dom.IDocument> RenderedWithCountsAsync()
+    {
+        PublishedRecordEntry[] entries =
+        [.. Enumerable.Range(1, 3).Select(index => Entry((char)('0' + index), PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)) with { IssueIds = index == 1 ? ["housing", "health"] : ["housing"] }),
+            Entry('5', PublishedRecordKind.Statement, new DateOnly(2024, 3, 1)) with { IssueIds = ["housing"] },
+            Entry('6', PublishedRecordKind.Action, new DateOnly(2024, 3, 1)) with { IssueIds = ["housing"] },
+            Entry('d', PublishedRecordKind.Action, new DateOnly(2026, 5, 1)) with { IssueIds = ["housing"], BillTitle = "Home Act" }];
+        var page = Current(entries, [Vote('a', new DateOnly(2026, 4, 1)) with { IssueIds = ["housing"] },
+            Vote('b', new DateOnly(2026, 4, 2)) with { Kind = PublishedVoteKind.Cloture, IssueIds = ["housing"] },
+            Vote('c', new DateOnly(2026, 4, 3)) with { IssueIds = ["housing"], Cast = PublishedOfficialVote.NotVoting }]);
+        page = page with { TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes) };
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+        return new HtmlParser().ParseDocument(html);
     }
 
     private static PublishedOfficialProfile Profile() => new() { Id = "mayor", Name = "Mayor Example", Terms = [] };

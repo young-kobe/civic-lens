@@ -26,12 +26,15 @@
     }
     @if (Page.TalkAndAction is { } profile)
     {
-        <Panel Title="@($"Talk and action in Congress {Page.Congress}")">
-            <DataTable Roles="true" Items="profile.IssueIds" Caption="@($"Share of statements, sponsorships, and votes of {Page.Profile.Name} on each issue")">
-                <Head><TableCell Header>Issue</TableCell><TableCell Header Class="num">@PublicColumn.Statements</TableCell><TableCell Header Class="num">@PublicColumn.Sponsorships</TableCell><TableCell Header Class="num">@PublicColumn.Votes</TableCell></Head>
+        <Panel Title="Issues they work on">
+            <DataTable Roles="true" Items="profile.IssueIds" Caption="@($"Statements, sponsored bills, and votes of {Page.Profile.Name} on each tracked issue in Congress {Page.Congress}")">
+                <Head><TableCell Header>Issue</TableCell><TableCell Header Class="num">@PublicColumn.TheirStatements</TableCell><TableCell Header>@PublicColumn.BillsTheySponsored</TableCell><TableCell Header Class="num">@PublicColumn.VotesTheyCast</TableCell></Head>
                 <Row Context="issueId">
+                    @{
+                        var issue = PublishedRecordView.IssueLink(issueId, Catalog, Page.RootPath);
+                        var bills = profile.SponsoredOn(issueId);
+                    }
                     <TableCell Main>
-                        @{ var issue = PublishedRecordView.IssueLink(issueId, Catalog, Page.RootPath); }
                         @if (issue.Href is not null)
                         {
                             <a class="cell-title" href="@issue.Href">@issue.Text</a>
@@ -41,22 +44,57 @@
                             <span class="cell-title">@issue.Text</span>
                         }
                     </TableCell>
-                    <TableCell Class="num" Label="@PublicColumn.Statements">@PublishedOfficialView.Share(profile.Statements, issueId)</TableCell>
-                    <TableCell Class="num" Label="@PublicColumn.Sponsorships">@PublishedOfficialView.Share(profile.Sponsorships, issueId)</TableCell>
-                    <TableCell Class="num" Label="@PublicColumn.Votes">@PublishedOfficialView.Share(profile.Votes, issueId)</TableCell>
+                    <TableCell Class="num" Label="@PublicColumn.TheirStatements"><CountFilter Count="profile.Statements.CountOf(issueId)" Key="@TalkAndActionProfile.CountKey(TalkAndActionProfile.StatementCount, issueId)"
+                        Label="@PublishedOfficialView.CountFilterLabel(profile.Statements.CountOf(issueId), PublishedOfficialView.StatementsSubject, issue.Text)"
+                        Notice="@PublishedOfficialView.CountFilterNotice(PublishedOfficialView.StatementsSubject, issue.Text, Page.Congress!.Value, profile.Statements.CountOf(issueId))" /></TableCell>
+                    <TableCell Label="@PublicColumn.BillsTheySponsored">
+                        <CountFilter Count="bills.Length" Key="@TalkAndActionProfile.CountKey(TalkAndActionProfile.BillCount, issueId)"
+                            Label="@PublishedOfficialView.CountFilterLabel(bills.Length, PublishedOfficialView.BillsSubject, issue.Text)"
+                            Notice="@PublishedOfficialView.CountFilterNotice(PublishedOfficialView.BillsSubject, issue.Text, Page.Congress!.Value, bills.Length)" />
+                        @if (!bills.IsEmpty)
+                        {
+                            <ul class="choices">
+                                @foreach (var bill in bills)
+                                {
+                                    <li><a href="@(Page.RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))">@bill.BillTitle</a></li>
+                                }
+                            </ul>
+                        }
+                    </TableCell>
+                    <TableCell Class="num" Label="@PublicColumn.VotesTheyCast"><CountFilter Count="profile.Votes.CountOf(issueId)" Key="@TalkAndActionProfile.CountKey(TalkAndActionProfile.VoteCount, issueId)"
+                        Label="@PublishedOfficialView.CountFilterLabel(profile.Votes.CountOf(issueId), PublishedOfficialView.VotesSubject, issue.Text)"
+                        Notice="@PublishedOfficialView.CountFilterNotice(PublishedOfficialView.VotesSubject, issue.Text, Page.Congress!.Value, profile.Votes.CountOf(issueId))" /></TableCell>
                 </Row>
-                <Empty><EmptyState Title="No tracked issue" Text="No statement, sponsorship, or substantive vote of this Congress has a tracked issue." /></Empty>
+                <Empty><EmptyState Title="No tracked issue" Text="None of their statements, sponsored bills, or votes in this Congress is on a tracked issue." /></Empty>
             </DataTable>
+            <p class="muted small">Each count is for this Congress. "Votes they cast" counts only substantive votes. A statement, bill, or vote on several issues counts once for each issue. <a href="@(Page.RootPath + PublicationProtocol.MethodPagePath)">How these counts work</a></p>
+        </Panel>
+        <Panel Title="@($"Missed votes in Congress {Page.Congress}")" Padded="true">
             @foreach (var missed in profile.MissedByChamber)
             {
-                <p class="muted small">@PublishedOfficialView.MissedVotes(missed, Page.Congress!.Value)</p>
+                <p>@PublishedOfficialView.MissedVotes(missed, Page.Congress!.Value)</p>
             }
             <p class="muted small">@PublishedOfficialView.MissedVoteMeaning</p>
-            <p class="muted small">
-                Records with no tracked issue: @profile.Statements.WithoutIssue statements, @profile.Sponsorships.WithoutIssue sponsorships,
-                @profile.Votes.WithoutIssue votes. Procedural votes left out: @profile.ProceduralVotes.
-                <a href="@(Page.RootPath + PublicationProtocol.MethodPagePath)">How the profile works</a>
-            </p>
+        </Panel>
+        <Panel Title="What they said and what they did" Padded="true">
+            <p class="muted small">@PublishedOfficialView.LinkMeaning <a href="@(Page.RootPath + PublicationProtocol.MethodPagePath)">What a link is</a></p>
+            @if (Page.Pairs.IsDefaultOrEmpty)
+            {
+                <p>@PublishedOfficialView.NoLinks</p>
+            }
+            else
+            {
+                <DataTable Roles="true" Items="Page.Pairs" Caption="@($"Reviewed links between statements of {Page.Profile.Name} and their bills or votes")">
+                    <Head><TableCell Header Class="fit num">@PublicColumn.StatementDate</TableCell><TableCell Header>@PublicColumn.WhatTheySaid</TableCell><TableCell Header>@PublicColumn.Link</TableCell><TableCell Header>@PublicColumn.WhatTheyDid</TableCell><TableCell Header>@PublicColumn.TheirVote</TableCell></Head>
+                    <Row Context="pair">
+                        <TableCell Class="fit num" Label="@PublicColumn.StatementDate">@PublishedOfficialView.StatementDay(pair)</TableCell>
+                        <TableCell Main><a class="cell-title" href="@(Page.RootPath + PublicationProtocol.RecordPagePath(pair.StatementRecordId))">@pair.StatementHeadline</a></TableCell>
+                        <TableCell Label="@PublicColumn.Link">@PublishedRecordLabels.RelationshipType(pair.Type)</TableCell>
+                        <TableCell Label="@PublicColumn.WhatTheyDid"><a href="@(Page.RootPath + PublicationProtocol.RecordPagePath(pair.TargetRecordId))">@pair.TargetTitle</a></TableCell>
+                        <TableCell Label="@PublicColumn.TheirVote">@PublishedOfficialView.TheirVote(pair)</TableCell>
+                    </Row>
+                </DataTable>
+            }
         </Panel>
         @if (!profile.WithPartyByChamber.IsEmpty)
         {
@@ -86,8 +124,16 @@
             </Panel>
         }
     }
-    <Panel Title="Records" Aside="@RecordFilter" data-layout="@(RecordFilter is null ? null : PublishedOfficialView.RecordFilters[0].Value)">
-        <DataTable Roles="true" Items="Rows" RowClass="@(row => row.AgainstParty ? "against-party" : null)" Caption="@($"Published records of {Page.Profile.Name}")">
+    <Panel Title="Records" Aside="@RecordFilter" data-layout="@(RecordFilter is null ? null : PublishedOfficialView.RecordFilters[0].Value)" data-records="@(Page.TalkAndAction is null ? null : "")">
+        @if (Page.TalkAndAction is not null)
+        {
+            <div class="visually-hidden" role="status" data-filter-status></div>
+            <div class="notice" data-filter-notice hidden>
+                <span data-filter-text></span>
+                <button class="btn" type="button" data-filter-clear>@PublishedOfficialView.ShowAllRecords</button>
+            </div>
+        }
+        <DataTable Roles="true" Items="Rows" RowClass="@(row => row.AgainstParty ? "against-party" : null)" RowFilterKeys="@(row => row.FilterKeys)" Caption="@($"Published records of {Page.Profile.Name}")">
             <Head><TableCell Header Class="fit num">@PublicColumn.Date</TableCell><TableCell Header>Record</TableCell><TableCell Header>@PublicColumn.Cast</TableCell></Head>
             <Row Context="row">
                 <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Iso(row.Date)</TableCell>
@@ -134,7 +180,9 @@
         ? @<LayoutSwitch Label="Show records" Choices="PublishedOfficialView.RecordFilters" />
         : null;
 
-    private IReadOnlyList<PublishedOfficialRow> Rows => PublishedOfficialView.Rows(Page);
+    private IReadOnlyList<PublishedOfficialRow>? rows;
+
+    private IReadOnlyList<PublishedOfficialRow> Rows => rows ??= PublishedOfficialView.Rows(Page);
 
     private string Title => Page.IsCurrent ? Page.Profile.Name : $"{Page.Profile.Name}, Congress {Page.Congress}";
 

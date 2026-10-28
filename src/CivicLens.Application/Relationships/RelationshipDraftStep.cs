@@ -56,7 +56,7 @@ public sealed class RelationshipDraftStep(IRelationshipDraftStore store, IRelati
     }
 
     private static bool KeepsPersonRevision(RelationshipDraftEvidence evidence, RelationshipPair pair) =>
-        evidence.Current?.IsPersonRevisionCiting(pair.StatementCitation, pair.Target.Citation) == true;
+        evidence.Current?.IsPersonRevisionCiting(pair.StatementCitation, pair.Target.Citation, pair.OfficialId) == true;
 
     private static bool CanRecite(RelationshipRevision current, RelationshipPair pair) =>
         ReviewAuthor.KindOf(current.AuthorSubject) == ReviewAuthorKind.Analysis && current.Statement == pair.StatementCitation &&

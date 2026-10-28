@@ -61,6 +61,31 @@ public sealed class PublishedActionTests
         Assert.Equal(new DateOnly(2026, 1, 20), entry.EventDate);
         Assert.Equal(["housing-area"], entry.PolicyAreaIds);
         Assert.Equal("api.congress.gov", entry.SourceHost);
+        Assert.Equal("A housing bill", entry.BillTitle);
+    }
+
+    [Fact]
+    public void TheBillTitleIsBoundedInTheRecordAndInItsEntryAtTheLimitOfTheReviewSoTheTwoNeverDisagree()
+    {
+        Assert.Equal(ActionDraftRevision.MaximumTitleLength, PublishedAction.MaximumBillTitleLength);
+        var atLimit = Action() with { BillTitle = new string('t', PublishedAction.MaximumBillTitleLength) };
+        var tooLong = Action() with { BillTitle = new string('t', PublishedAction.MaximumBillTitleLength + 1) };
+
+        atLimit.Validate();
+        atLimit.ToEntry().Validate();
+        Assert.Throws<InvalidDataException>(tooLong.Validate);
+        Assert.Throws<InvalidDataException>(tooLong.ToEntry().Validate);
+        Assert.Throws<InvalidDataException>((Action().ToEntry() with { BillTitle = " " }).Validate);
+    }
+
+    [Fact]
+    public void AnActionEntryRequiresABillTitleAndEveryOtherKindRefusesOneBecauseOnlyAnActionHasAnOfficialTitle()
+    {
+        var entry = Action().ToEntry();
+
+        Assert.Throws<InvalidDataException>((entry with { BillTitle = null }).Validate);
+        Assert.Throws<InvalidDataException>((entry with { Kind = PublishedRecordKind.Statement, RecordId = new string('1', 64) }).Validate);
+        (entry with { Kind = PublishedRecordKind.Statement, RecordId = new string('1', 64), BillTitle = null }).Validate();
     }
 
     // The quote is exact text of the other source, so only a check against the named source finds the wrong name.

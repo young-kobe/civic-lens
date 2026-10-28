@@ -6,10 +6,11 @@ namespace CivicLens.Core.Relationships;
 
 public sealed record RelationshipRevision(string RecordId, int RevisionNumber, string AuthorSubject, DateTimeOffset CreatedAtUtc,
     RelationshipCitation Statement, RelationshipCitation Target, RelationshipMatch Match, RelationshipType Type, string Reason,
-    SourceSpan StatementQuote, string TargetFactId) : IReviewRevision
+    SourceSpan StatementQuote, string TargetFactId, string OfficialId) : IReviewRevision
 {
     public const int MaximumReasonLength = 400;
     public const int MaximumFactIdLength = 16;
+    public const int MaximumOfficialIdLength = 256;
 
     public void ValidateShape()
     {
@@ -26,6 +27,8 @@ public sealed record RelationshipRevision(string RecordId, int RevisionNumber, s
             throw new ArgumentException("The reason is one sentence on one line.", nameof(Reason));
         if (string.IsNullOrWhiteSpace(TargetFactId) || TargetFactId.Length > MaximumFactIdLength)
             throw new ArgumentException("A relationship names one fact of its target.", nameof(TargetFactId));
+        if (string.IsNullOrWhiteSpace(OfficialId) || OfficialId.Length > MaximumOfficialIdLength)
+            throw new ArgumentException("A relationship names the official that its pair matched.", nameof(OfficialId));
     }
 
     public void ValidateForApproval() => ValidateShape();
@@ -45,12 +48,13 @@ public sealed record RelationshipRevision(string RecordId, int RevisionNumber, s
         ValidateShape();
         if (ReviewAuthor.KindOf(AuthorSubject) != ReviewAuthorKind.Person || RevisionNumber != previous.RevisionNumber + 1)
             throw new ArgumentException("A person revision follows the current revision.");
-        if (RecordId != previous.RecordId || Statement != previous.Statement || Target != previous.Target || Match != previous.Match)
+        if (RecordId != previous.RecordId || Statement != previous.Statement || Target != previous.Target || Match != previous.Match ||
+            OfficialId != previous.OfficialId)
             throw new ArgumentException("A person edits only the type, the reason, the quote, and the fact.");
     }
 
-    public bool IsPersonRevisionCiting(RelationshipCitation statement, RelationshipCitation target) =>
-        ReviewAuthor.KindOf(AuthorSubject) == ReviewAuthorKind.Person && Statement == statement && Target == target;
+    public bool IsPersonRevisionCiting(RelationshipCitation statement, RelationshipCitation target, string officialId) =>
+        ReviewAuthor.KindOf(AuthorSubject) == ReviewAuthorKind.Person && Statement == statement && Target == target && OfficialId == officialId;
 
     private void ValidateCitations()
     {
