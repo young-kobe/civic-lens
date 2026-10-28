@@ -35,7 +35,7 @@ The feature also captures one official portrait for each configured member. A ph
 - Preparation accepts only a JPEG of exactly 225 by 275 pixels. A small parser reads the size from the frame header, because Application takes no image package.
 - The credit is the constant `MemberPhoto.MemberGuideCredit`. Each photo row copies the text. A later change to the constant never rewrites provenance. Configured executive photos will take their credit from `PersonConfiguration.photo`.
 - A photo row holds no image bytes. The capture holds them.
-- A missing photo is not stored. A 404 ends the job `Failed` with no retry. A person with no row has no photo. A later 404 keeps the last good photo. A takedown has no mechanism yet; see the limits.
+- A missing photo is not stored. A 404 ends the job `Failed` with no retry. A person with no row has no photo. A later 404 keeps the last good photo. A person with `withholdPhoto` gets no photo in a release; see [operations](../operations.md#take-down-a-member-photo).
 - The roster feature writes photo rows and reads the newest row of each person without `withholdPhoto` for publication. Publication owns the photo files; see [publication](publication.md#release-content).
 
 ## Invariants
