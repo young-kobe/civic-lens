@@ -114,6 +114,74 @@ public sealed class PublishIndexPagesTests
         Assert.Equal("<html>home 1 brief </html>", PageText(scenario, summary.DirectoryName, PublicationProtocol.HomePath));
     }
 
+    [Fact]
+    public async Task EveryPublishWritesTheBriefsListAndTheAboutPageSoNeitherLinkInTheNavigationEverBreaks()
+    {
+        var scenario = new PublicationScenario();
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k", scenario.AddDraft('a')));
+
+        Assert.Equal("<html>briefs 1 </html>", PageText(scenario, summary.DirectoryName, PublicationProtocol.BriefsPagePath(1)));
+        Assert.Equal("<html>about</html>", PageText(scenario, summary.DirectoryName, PublicationProtocol.AboutPagePath));
+    }
+
+    [Fact]
+    public async Task TheBriefsListKeepsEveryWeekOnLaterPublishesSoAnOlderBriefStaysReachable()
+    {
+        var scenario = new PublicationScenario();
+        var statement = scenario.AddStatement('c');
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Statement, statement)));
+        var brief = scenario.AddBrief(new DateOnly(2026, 5, 4), [new(PublishedRecordKind.Statement, statement, 1)]);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k2", new PublishedRecordReference(PublishedRecordKind.Brief, brief)));
+
+        var carried = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k3", scenario.AddDraft('a')));
+
+        Assert.Equal($"<html>briefs 1 {brief}</html>", PageText(scenario, carried.DirectoryName, PublicationProtocol.BriefsPagePath(1)));
+    }
+
+    [Fact]
+    public async Task TheBriefsListOrdersTheNewestWeekFirstEvenWhenAnOlderWeekIsPublishedLater()
+    {
+        var scenario = new PublicationScenario();
+        var statement = scenario.AddStatement('c');
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Statement, statement)));
+        var newer = scenario.AddBrief(new DateOnly(2026, 5, 11), [new(PublishedRecordKind.Statement, statement, 1)]);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k2", new PublishedRecordReference(PublishedRecordKind.Brief, newer)));
+        var older = scenario.AddBrief(new DateOnly(2026, 5, 4), [new(PublishedRecordKind.Statement, statement, 1)]);
+        scenario.Clock.Now = scenario.Clock.Now.AddDays(1);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k3", new PublishedRecordReference(PublishedRecordKind.Brief, older)));
+
+        Assert.Equal($"<html>briefs 1 {newer},{older}</html>", PageText(scenario, summary.DirectoryName, PublicationProtocol.BriefsPagePath(1)));
+    }
+
+    [Fact]
+    public async Task TheBriefsListGetsOnePagePerFiftyBriefsSoThePageCountIsBounded()
+    {
+        var scenario = new PublicationScenario();
+        var statement = scenario.AddStatement('c');
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k0", new PublishedRecordReference(PublishedRecordKind.Statement, statement)));
+        var start = new DateOnly(2025, 1, 6);
+        var briefs = Enumerable.Range(0, 51)
+            .Select(week => scenario.AddBrief(start.AddDays(7 * week), [new(PublishedRecordKind.Statement, statement, 1)])).ToList();
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            [.. briefs.Select(brief => new PublishedRecordReference(PublishedRecordKind.Brief, brief))]));
+
+        var files = scenario.Releases.Directories[summary.DirectoryName];
+        Assert.StartsWith($"<html>briefs 1 {briefs[50]},", PageText(scenario, summary.DirectoryName, "briefs.html"), StringComparison.Ordinal);
+        Assert.StartsWith($"<html>briefs 2 {briefs[50]},", PageText(scenario, summary.DirectoryName, "briefs-2.html"), StringComparison.Ordinal);
+        Assert.DoesNotContain("briefs-3.html", files.Keys);
+    }
+
     private static string PageText(PublicationScenario scenario, string directory, string path) =>
         Encoding.UTF8.GetString(scenario.Releases.Directories[directory][path]);
 

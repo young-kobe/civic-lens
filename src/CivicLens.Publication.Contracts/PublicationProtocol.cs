@@ -24,6 +24,7 @@ public static class PublicationProtocol
     public const string OfficialsPath = "officials.json";
     public const string CatalogPath = "catalog.json";
     public const string OfficialsPagePath = "officials.html";
+    public const string AboutPagePath = "about.html";
     public const string SitemapPath = "sitemap.xml";
     public const string RobotsPath = "robots.txt";
     public const string NotFoundPagePath = "404.html";
@@ -32,6 +33,7 @@ public static class PublicationProtocol
     private const string PhotoExtension = ".jpg";
 
     public static string AllRecordsPagePath(int page) => page == 1 ? "all.html" : $"all-{page}.html";
+    public static string BriefsPagePath(int page) => page == 1 ? "briefs.html" : $"briefs-{page}.html";
     public static string IssuePagePath(string issueId, int page) => FacetPagePath("issues", issueId, page);
     public static string PolicyAreaPagePath(string policyAreaId, int page) => FacetPagePath("policy-areas", policyAreaId, page);
     public static int PageCount(int recordCount) => Math.Max(1, (recordCount + PageSize - 1) / PageSize);

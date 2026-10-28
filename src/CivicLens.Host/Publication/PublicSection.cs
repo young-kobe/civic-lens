@@ -4,6 +4,7 @@ public enum PublicSection
 {
     Officials,
     Issues,
+    Briefs,
     AllRecords,
     Search
 }

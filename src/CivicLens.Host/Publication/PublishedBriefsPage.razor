@@ -1,0 +1,41 @@
+@using CivicLens.Host.Components.Layout
+@using CivicLens.Publication.Contracts
+
+<PublicPage Section="PublicSection.Briefs" Title="Weekly briefs" CanonicalPath="@PublicationProtocol.BriefsPagePath(Page)" Page="Page" PageCount="PageCount" Description="@Description" Crumbs="Crumbs">
+    <PageHeader Title="Weekly briefs" Lede="@($"Release {Release.ReleaseNumber}, published {Moment.Full(Release.PublishedAtUtc)}.")" />
+    @if (Briefs.Length == 0)
+    {
+        <Panel Label="Weekly briefs" Padded="true">
+            <EmptyState Title="No weekly briefs yet" Text="Civic Lens has not published a weekly brief. Browse the published records instead.">
+                <Action><Button Href="@PublicationProtocol.AllRecordsPagePath(1)">All records</Button></Action>
+            </EmptyState>
+        </Panel>
+    }
+    else
+    {
+        <Panel Label="Weekly briefs">
+            <PublishedRecordTable Records="PageBriefs" Caption="Weekly briefs" Columns="RecordTableColumns.Week" />
+            <Pager Label="Pages" Summary="@($"Page {Page} of {PageCount}")" NewerText="Previous" OlderText="Next"
+                   NewerHref="@(Page > 1 ? PublicationProtocol.BriefsPagePath(Page - 1) : null)"
+                   OlderHref="@(Page < PageCount ? PublicationProtocol.BriefsPagePath(Page + 1) : null)" />
+        </Panel>
+    }
+</PublicPage>
+
+@code {
+    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), new("Briefs")];
+
+    [Parameter, EditorRequired] public PublicationRelease Release { get; set; } = default!;
+    [Parameter, EditorRequired] public int Page { get; set; }
+
+    [Parameter, EditorRequired] public PublishedRecordEntry[] Briefs { get; set; } = [];
+
+    private int PageCount => PublicationProtocol.PageCount(Briefs.Length);
+
+    private IReadOnlyList<PublishedRecordEntry> PageBriefs =>
+        [.. Briefs.Skip((Page - 1) * PublicationProtocol.PageSize).Take(PublicationProtocol.PageSize)];
+
+    private string Description => Briefs.Length == 0
+        ? "Civic Lens has not published a weekly brief yet."
+        : $"All {Briefs.Length} weekly briefs of Civic Lens, newest week first. Each brief cites the records behind it.";
+}

@@ -1,6 +1,6 @@
 @using CivicLens.Publication.Contracts
 
-<PublishedRecordFrame Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="" Facts="PublishedBriefView.Facts(Record)"
+<PublishedRecordFrame Section="PublicSection.Briefs" Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="" Facts="PublishedBriefView.Facts(Record)"
                       Caveat="@PublishedBriefView.Sample(Record)">
     <PublishedTimeline Events="PublishedTimelineView.For(Record)" />
 

@@ -131,6 +131,21 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
         });
     }
 
+    public Task<string> RenderBriefsAsync(PublicationRelease release, PublishedRecordEntry[] briefs, int page,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(release);
+        ArgumentNullException.ThrowIfNull(briefs);
+        ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(page, PublicationProtocol.PageCount(briefs.Length));
+        return RenderAsync<PublishedBriefsPage>(new Dictionary<string, object?>
+        {
+            [nameof(PublishedBriefsPage.Release)] = release,
+            [nameof(PublishedBriefsPage.Briefs)] = briefs,
+            [nameof(PublishedBriefsPage.Page)] = page
+        });
+    }
+
     public Task<string> RenderFacetPageAsync(ReleaseFacet facet, int page, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(facet);
@@ -191,6 +206,9 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
 
     public Task<string> RenderMethodAsync(CancellationToken cancellationToken) =>
         RenderAsync<PublishedMethodPage>(new Dictionary<string, object?>());
+
+    public Task<string> RenderAboutAsync(CancellationToken cancellationToken) =>
+        RenderAsync<PublishedAboutPage>(new Dictionary<string, object?>());
 
     public Task<string> RenderSearchAsync(PublicationRelease release, ReleaseFacets facets, CancellationToken cancellationToken)
     {

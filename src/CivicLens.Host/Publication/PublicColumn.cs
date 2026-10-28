@@ -4,6 +4,7 @@ public static class PublicColumn
 {
     public const string Officials = "Officials";
     public const string Date = "Date";
+    public const string WeekOf = "Week of";
     public const string FirstPublished = "First published";
     public const string Records = "Records";
     public const string Party = "Party";

@@ -57,6 +57,7 @@
         <p>Each record shows its sources and the exact text it cites.</p>
         <nav class="public-footer-nav" aria-label="Footer">
             <a href="@(RootPath + PublicationProtocol.MethodPagePath)">Method</a>
+            <a href="@(RootPath + PublicationProtocol.AboutPagePath)">About</a>
             <a href="@(RootPath + PublicationProtocol.ReportPagePath)">Report a problem</a>
         </nav>
     </footer>
@@ -68,6 +69,7 @@
     [
         (PublicSection.Officials, "Officials", PublicationProtocol.OfficialsPagePath),
         (PublicSection.Issues, "Issues", PublicationProtocol.FacetsPath),
+        (PublicSection.Briefs, "Briefs", PublicationProtocol.BriefsPagePath(1)),
         (PublicSection.AllRecords, "All records", PublicationProtocol.AllRecordsPagePath(1)),
         (PublicSection.Search, "Search", PublicationProtocol.SearchPagePath)
     ];
