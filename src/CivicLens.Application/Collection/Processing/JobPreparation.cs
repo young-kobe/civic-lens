@@ -1,6 +1,7 @@
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
+using CivicLens.Application.Collection.MemberPhotos;
 using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Votes;
@@ -28,6 +29,7 @@ public sealed class JobPreparation(
     IssueConfigurationRevision? issues)
 {
     private const string NotModified = "notModified";
+    private const string InvalidData = "invalidData";
     private const string ApiResourceMissing = "apiResourceMissing";
     private const string IssuesConfigurationUnavailable = "issuesConfigurationUnavailable";
     private readonly IssueConfiguration? issueConfiguration = issues?.ReadConfiguration();
@@ -99,6 +101,7 @@ public sealed class JobPreparation(
             ApiResource.SenateVote => AdmitSenateVoteAsync(job, artifactRoot, cancellationToken),
             ApiResource.MemberRoster => AdmitMemberRosterAsync(job, artifactRoot, cancellationToken),
             ApiResource.ExecutiveRoster => AdmitExecutiveRosterAsync(job, artifactRoot, cancellationToken),
+            ApiResource.MemberPhoto => AdmitMemberPhotoAsync(job, artifactRoot, cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(job))
         };
 
@@ -241,6 +244,21 @@ public sealed class JobPreparation(
         var attemptId = response.Captured.AttemptId;
         if (!await executives.HasSnapshotOfCaptureAsync(attemptId, cancellationToken))
             await executives.AdmitAsync(attemptId, ExecutiveRosterParser.Parse(response.Body), cancellationToken);
+        return JobPreparationResult.Prepared();
+    }
+
+    private async Task<JobPreparationResult> AdmitMemberPhotoAsync(CollectionJobRecord job, string artifactRoot,
+        CancellationToken cancellationToken)
+    {
+        var configured = ConfiguredSourceOf(job);
+        var bioguideId = MemberPhotoUrl.ReadBioguideId(configured.SourceUrl, job.Definition.Url);
+        var person = configured.Revision.Configuration.People.SingleOrDefault(candidate => candidate.BioguideId == bioguideId)
+            ?? throw new InvalidDataException("Member photo job names a person who is not configured.");
+        var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
+        if (!MemberPhotoImage.IsValid(response.Captured.Response.ContentType, response.Body))
+            return JobPreparationResult.Blocked(InvalidData);
+        await roster.AdmitPhotoAsync(new MemberPhoto(response.Captured.AttemptId, person.Id, job.Definition.Url,
+            MemberPhotoUrl.Credit), cancellationToken);
         return JobPreparationResult.Prepared();
     }
 

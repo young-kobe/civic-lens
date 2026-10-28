@@ -2,6 +2,8 @@ using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.MemberPhotos;
 using CivicLens.Collection.Contracts;
+using CivicLens.Infrastructure.Collection;
+using static CivicLens.Tests.Fixtures.CollectionFixtures;
 
 namespace CivicLens.Tests.Fixtures;
 
@@ -39,4 +41,24 @@ internal static class MemberPhotoFixtures
         0x03, 0x01, 0x22, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01,
         0xFF, 0xD9
     ];
+
+    public static async Task<string> ImportCaptureAsync(PostgresCollectionAttemptStore attempts, string captureSha256,
+        DateTimeOffset observedAt, string bioguideId = Bioguide)
+    {
+        var attemptId = Guid.NewGuid().ToString("N");
+        var request = Request() with
+        {
+            SourceId = SourceId,
+            Url = PhotoUrl(bioguideId),
+            AllowedOrigin = "https://unitedstates.github.io",
+            AllowedPathPrefix = "/images/congress/225x275/"
+        };
+        var result = Receipt(request) with
+        {
+            ObservedAt = observedAt,
+            Capture = new CaptureArtifact { Sha256 = captureSha256, RelativePath = captureSha256 + ".gz", ByteLength = 4 }
+        };
+        await attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport(attemptId, request, result), CancellationToken.None);
+        return attemptId;
+    }
 }

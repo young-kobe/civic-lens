@@ -11,6 +11,8 @@ internal sealed class FixedMemberRoster(RosterMember[] members, SenatorLisId[]? 
     public Task AdmitAsync(string attemptId, IReadOnlyList<RosterMember> roster, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
+    public Task AdmitPhotoAsync(MemberPhoto photo, CancellationToken cancellationToken) => throw new NotSupportedException();
+
     public Task<IReadOnlyList<RosterMember>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<RosterMember>>(members);
 

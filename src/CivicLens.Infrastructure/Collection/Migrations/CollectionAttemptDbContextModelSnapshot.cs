@@ -3314,6 +3314,37 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Roster.Persistence.OfficialPhotoRow", b =>
+                {
+                    b.Property<string>("AttemptId")
+                        .HasColumnType("text")
+                        .HasColumnName("attempt_id");
+
+                    b.Property<string>("Credit")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("credit");
+
+                    b.Property<string>("PersonId")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("person_id");
+
+                    b.Property<string>("SourceUrl")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("source_url");
+
+                    b.HasKey("AttemptId");
+
+                    b.HasIndex("PersonId");
+
+                    b.ToTable("official_photos", (string)null);
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Roster.Persistence.RosterMemberRow", b =>
                 {
                     b.Property<string>("AttemptId")
@@ -4911,6 +4942,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Roster.Persistence.ExecutiveOfficialRow", null)
                         .WithMany()
                         .HasForeignKey("AttemptId", "GovtrackId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Roster.Persistence.OfficialPhotoRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Collection.Persistence.AttemptRow", null)
+                        .WithMany()
+                        .HasForeignKey("AttemptId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

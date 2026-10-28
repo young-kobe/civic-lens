@@ -46,6 +46,24 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
         await transaction.CommitAsync(cancellationToken);
     }
 
+    public async Task AdmitPhotoAsync(MemberPhoto photo, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(photo);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var captureSha256 = (await db.Attempts.AsNoTracking().SingleOrDefaultAsync(attempt => attempt.AttemptId == photo.AttemptId, cancellationToken))
+            ?.CaptureSha256 ?? throw new InvalidOperationException("A member photo needs an imported captured attempt.");
+        var newestCaptureSha256 = await (from row in db.Set<OfficialPhotoRow>().AsNoTracking()
+                                         where row.PersonId == photo.PersonId
+                                         join attempt in db.Attempts.AsNoTracking() on row.AttemptId equals attempt.AttemptId
+                                         orderby attempt.ObservedAtUtcTicks descending, attempt.AttemptId descending
+                                         select attempt.CaptureSha256).FirstOrDefaultAsync(cancellationToken);
+        if (newestCaptureSha256 == captureSha256 ||
+            await db.Set<OfficialPhotoRow>().AnyAsync(row => row.AttemptId == photo.AttemptId, cancellationToken))
+            return;
+        db.Add(new OfficialPhotoRow { AttemptId = photo.AttemptId, PersonId = photo.PersonId, SourceUrl = photo.SourceUrl, Credit = photo.Credit });
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<RosterMember>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
