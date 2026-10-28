@@ -112,8 +112,6 @@ Pages compose these components. The comparison page, the draft editor, and publi
 
 ## Limits and planned work
 
-Precise public layouts are not built yet. The temporary HTML prototype shows the direction with fictional content and simulated decisions. Its switch between public and private views is a demonstration aid, not a public deployment feature.
-
 Production hosting is agreed but not implemented. The [roadmap](../roadmap.md) holds the order. The agreed design:
 
 - Containers host the application, the collection and background jobs, and PostgreSQL with persistent storage.

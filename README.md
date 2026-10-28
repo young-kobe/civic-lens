@@ -6,6 +6,8 @@ The approved product direction serves regular citizens seeking transparency in U
 
 **Current state:** A durable worker collects configured official sources, the Congress.gov bill list, the Congress.gov House vote list, and the Senate vote files. A separate bounded collector fetches them. The worker stores immutable captures, extracts text, and compares versions in Postgres. Checked-in EF migrations apply schema changes.
 
+Each release holds the public pages: officials, official profiles, issues, weekly briefs, all records, about, method, reader reports, and photos. A person can withdraw a record, and the worker keeps a member roster with photos.
+
 Claude drafts document-change accounts and statement records inside daily token limits. A person edits, approves, and publishes each draft in an authenticated review workspace. Approved records publish as immutable static releases. A separate search service, `src/CivicLens.PublicApi`, reads each published release into its own Postgres database. It serves full-text search and a read API, and it takes reader reports; see [search](docs/architecture/search.md). The worker pulls those reports into a review queue, and a person resolves each one; see [review](docs/architecture/review.md#reader-reports).
 
 The worker drafts one action record for each tracked Congress.gov bill. Each record lists every tracked official's sponsorship and cosponsorship. Code approves each action record after it checks the citations. A person can edit or withdraw a record, and the owner publishes.
@@ -24,7 +26,7 @@ Immutable document text extraction is also available: local commands verify impo
 
 The separate `review [port]` command provides an Auth0-protected review dashboard and draft editor with immutable revisions, exact evidence bindings, version-checked review decisions, and explicit concern resolution. It requires an HTTPS reverse proxy and configured identities; publishing uses the separate `releases` command.
 
-The workspace uses Blazor static server-side rendering with a shared Razor component library. Only the owner Sources page is interactive. The release builder renders the same components to standalone static HTML from published release data. Light and dark themes follow the system setting, and a toggle overrides it per browser. Eligible comparisons can start a private review draft directly. Architecture tests enforce presentation ownership; the temporary mockups remain design references, not production pages.
+The workspace uses Blazor static server-side rendering with a shared Razor component library. Only the owner Sources page is interactive. The release builder renders the same components to standalone static HTML from published release data. Light and dark themes follow the system setting, and a toggle overrides it per browser. Eligible comparisons can start a private review draft directly. Architecture tests enforce presentation ownership.
 
 [The federal pilot](docs/operations.md#federal-source-pilot) configures official Senate sources for Elizabeth Warren and Ted Cruz. Collection can be managed through CLI jobs or the owner-only Sources page. Captured pages and readable extractions are separate outcomes; a first observation establishes a baseline, not a document change.
 

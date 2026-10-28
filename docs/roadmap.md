@@ -4,7 +4,7 @@ This page holds pending work only. Current behavior and agreed designs are in th
 
 ## MVP definition
 
-The MVP delivers the full product: officials' statements, authoritative actions, substantive document changes, and evidence-backed weekly briefs. A release with document changes only is a milestone, not the MVP. Coverage may start small, but all four record kinds must work end to end. Each one collects evidence, keeps exact inspectable provenance, gets human review, and publishes in a static release. AI drafts every record kind. Code approves action and House vote records after it checks their citations (D-15, accepted on 2026-10-19). People edit and approve the other kinds, and the owner publishes. Review must handle a large volume of statements, relationships, briefs, and document changes. The dev box reaches the features, correctness, and citizen and reviewer UI of the first deploy before the first cloud deployment. Public MCP, the shared language insight, and the document-change criterion are checked after that deployment.
+The MVP delivers the full product: officials' statements, authoritative actions, substantive document changes, and evidence-backed weekly briefs. A release with document changes only is a milestone, not the MVP. Coverage may start small, but all four record kinds must work end to end. Each one collects evidence, keeps exact inspectable provenance, gets human review, and publishes in a static release. AI drafts every record kind. Code approves action and vote records after it checks their citations (D-15, accepted on 2026-10-19). People edit and approve the other kinds, and the owner publishes. Review must handle a large volume of statements, relationships, briefs, and document changes. The dev box reaches the features, correctness, and citizen and reviewer UI of the first deploy before the first cloud deployment. Public MCP, the shared language insight, and the document-change criterion are checked after that deployment.
 
 Exit criteria for the first deploy:
 
@@ -14,10 +14,10 @@ Exit criteria for the first deploy:
 - [ ] Statements and actions support reviewed relationships and timelines.
 - [ ] A weekly brief publishes with verified citation links, an explicit sample and cutoff, and versioned editorial decisions.
 - [ ] Readers search and filter all published records from the public pages.
-- [ ] Readers can report a problem with a published record, and each report reaches a person in the review queue.
+- [x] Readers can report a problem with a published record, and each report reaches a person in the review queue.
 - [x] A person can publish a correction or a withdrawal of any record kind. Corrections use the confirm step of the Review page. Withdrawal uses the CLI.
-- [ ] House and Senate votes both publish.
-- [ ] The talk and action profile publishes with a method note.
+- [x] House and Senate votes both publish.
+- [x] The talk and action profile publishes with a method note.
 - [ ] The acceptance checklists in the linked feature docs pass, except the public MCP acceptance checklist.
 
 After the first deploy:
@@ -65,7 +65,7 @@ The first deploy is a complete product within the product direction. Its path is
 
 ## Product direction
 
-The audience is regular citizens who want transparency in U.S. national politics. State and local coverage are possible future extensions. Readers start with reviewed accounts and can inspect the evidence behind them. The editorial flow and the restrained monochrome identity are agreed; detailed public layouts are still to build.
+The audience is regular citizens who want transparency in U.S. national politics. State and local coverage are possible future extensions. Readers start with reviewed accounts and can inspect the evidence behind them. The editorial flow and the restrained monochrome identity are agreed.
 
 Design for scale. Each record carries rich detail, and coverage of officials, sources, and issues is broad. Automate every step that does not need human judgment.
 
