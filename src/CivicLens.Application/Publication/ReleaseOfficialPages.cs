@@ -8,7 +8,7 @@ namespace CivicLens.Application.Publication;
 /// <summary>
 /// Writes the vote files and pages of the officials, and the page that lists the officials. A publish rebuilds the files of an
 /// official only when the official is touched, and links every other file from the previous release. An official who left the configuration is always touched. The current Congress of an
-/// official is the newest Congress with a vote file of that official. A change to a bill or a vote also touches the speakers of the links that cite it.
+/// official is the newest Congress with a vote file of that official. A change to a bill or a vote also touches the matched official of each link that cites it.
 /// </summary>
 internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, PublicationOfficials officials, IReleaseRenderer renderer,
     PublicationCatalog catalog)
@@ -51,8 +51,7 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
         return [.. additions.Select(addition => addition.Entry)
             .Concat(previous.Entries.Where(entry => added.Contains((entry.Kind, entry.RecordId))))
             .Concat(removed)
-            .SelectMany(entry => entry.Officials.Concat(linksByTarget[entry.RecordId].SelectMany(link => link.Officials)))
-            .Select(official => official.Id)];
+            .SelectMany(entry => entry.Officials.Select(official => official.Id).Concat(linksByTarget[entry.RecordId].Select(link => link.MatchedOfficialId!)))];
     }
 
     private async Task LinkAsync(IReleaseStaging staging, string officialId, PreviousRelease previous, CancellationToken cancellationToken)
@@ -109,7 +108,7 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
         var talkAndAction = current is null ? null : TalkAndActionProfile.Of(current.Value, entries, currentRows);
         await WriteAsync(staging, PublicationProtocol.OfficialPagePath(profile.Id), await renderer.RenderOfficialAsync(
             new(profile, tracked, current, true, past, entries, currentRows, talkAndAction,
-                current is { } newestCongress ? LinkedPair.In(newestCongress, entries, release, currentRows) : []), catalog, cancellationToken), cancellationToken);
+                current is { } newestCongress ? LinkedPair.In(profile.Id, newestCongress, entries, release, currentRows) : []), catalog, cancellationToken), cancellationToken);
     }
 
     private static Task WriteAsync(IReleaseStaging staging, string path, string html, CancellationToken cancellationToken) =>

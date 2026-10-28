@@ -15,7 +15,7 @@ public sealed class LinkedPairTests
         var old = Link('a', BillId, PublishedRecordKind.Action, new DateOnly(2026, 2, 1));
         var recent = Link('b', VoteId, PublishedRecordKind.Vote, new DateOnly(2026, 3, 1));
 
-        var pairs = LinkedPair.In(119, [old, recent], Release(old, recent), [Vote("Nay")]);
+        var pairs = LinkedPair.In("mayor", 119, [old, recent], Release(old, recent), [Vote("Nay")]);
 
         Assert.Equal([VoteId, BillId], pairs.Select(pair => pair.TargetRecordId));
         Assert.Equal(("Nay", "Official bill title"), (pairs[0].Cast, pairs[1].TargetTitle));
@@ -28,7 +28,7 @@ public sealed class LinkedPairTests
     {
         var link = Link('a', VoteId, PublishedRecordKind.Vote, new DateOnly(2026, 3, 1));
 
-        var pairs = LinkedPair.In(119, [link], Release(link), [Vote("Yea") with { RecordId = new string('9', 64) }]);
+        var pairs = LinkedPair.In("mayor", 119, [link], Release(link), [Vote("Yea") with { RecordId = new string('9', 64) }]);
 
         Assert.Null(Assert.Single(pairs).Cast);
     }
@@ -38,7 +38,7 @@ public sealed class LinkedPairTests
     {
         var link = Link('a', VoteId, PublishedRecordKind.Vote, new DateOnly(2026, 3, 1));
 
-        Assert.Equal("Vote headline", Assert.Single(LinkedPair.In(119, [link], Release(link), [])).TargetTitle);
+        Assert.Equal("Vote headline", Assert.Single(LinkedPair.In("mayor", 119, [link], Release(link), [])).TargetTitle);
     }
 
     [Fact]
@@ -49,11 +49,20 @@ public sealed class LinkedPairTests
         var release = Release(dated, undatedVote);
         release[(PublishedRecordKind.Vote, VoteId)] = release[(PublishedRecordKind.Vote, VoteId)] with { EventDate = new DateOnly(2026, 5, 1) };
 
-        var pairs = LinkedPair.In(119, [undatedVote, dated], release, []);
+        var pairs = LinkedPair.In("mayor", 119, [undatedVote, dated], release, []);
 
         Assert.Equal([BillId, VoteId], pairs.Select(pair => pair.TargetRecordId));
         Assert.Null(pairs[1].StatementDay);
-        Assert.Empty(LinkedPair.In(118, [undatedVote], release, []));
+        Assert.Empty(LinkedPair.In("mayor", 118, [undatedVote], release, []));
+    }
+
+    [Fact]
+    public void AJointStatementShowsItsPairOnlyOnThePageOfTheOfficialThatThePairMatchedSoACoSpeakerWhoSponsorsNothingGetsNoRow()
+    {
+        var link = Link('a', BillId, PublishedRecordKind.Action, new DateOnly(2026, 3, 1));
+
+        Assert.Single(LinkedPair.In("mayor", 119, [link], Release(link), []));
+        Assert.Empty(LinkedPair.In("chair", 119, [link], Release(link), []));
     }
 
     [Fact]
@@ -61,7 +70,7 @@ public sealed class LinkedPairTests
     {
         var link = Link('a', BillId, PublishedRecordKind.Action, new DateOnly(2024, 3, 1));
 
-        Assert.Empty(LinkedPair.In(119, [link], Release(link), []));
+        Assert.Empty(LinkedPair.In("mayor", 119, [link], Release(link), []));
     }
 
     [Fact]
@@ -73,8 +82,8 @@ public sealed class LinkedPairTests
         var noStatement = Release(link);
         noStatement.Remove((PublishedRecordKind.Statement, StatementId));
 
-        Assert.Empty(LinkedPair.In(119, [link], noTarget, []));
-        Assert.Empty(LinkedPair.In(119, [link], noStatement, []));
+        Assert.Empty(LinkedPair.In("mayor", 119, [link], noTarget, []));
+        Assert.Empty(LinkedPair.In("mayor", 119, [link], noStatement, []));
     }
 
     [Fact]
@@ -82,7 +91,7 @@ public sealed class LinkedPairTests
     {
         var statement = Entry(PublishedRecordKind.Statement, StatementId, new DateOnly(2026, 3, 1));
 
-        Assert.Empty(LinkedPair.In(119, [statement], Release(), []));
+        Assert.Empty(LinkedPair.In("mayor", 119, [statement], Release(), []));
     }
 
     private static Dictionary<(PublishedRecordKind Kind, string RecordId), PublishedRecordEntry> Release(params PublishedRecordEntry[] links) => new[]
@@ -98,7 +107,8 @@ public sealed class LinkedPairTests
             LinkType = targetKind == PublishedRecordKind.Vote ? PublishedRelationshipType.StatementAboutVote : PublishedRelationshipType.StatesPositionOn,
             StatementRecordId = StatementId,
             TargetKind = targetKind,
-            TargetRecordId = targetId
+            TargetRecordId = targetId,
+            MatchedOfficialId = "mayor"
         };
 
     private static PublishedRecordEntry Entry(PublishedRecordKind kind, string recordId, DateOnly? day) => new()
@@ -108,7 +118,7 @@ public sealed class LinkedPairTests
         RevisionNumber = 1,
         Headline = "Headline",
         FirstPublishedAtUtc = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero),
-        Officials = [new() { Id = "mayor", Name = "Mayor Example" }],
+        Officials = [new() { Id = "mayor", Name = "Mayor Example" }, new() { Id = "chair", Name = "Chair Example" }],
         IssueIds = [],
         PolicyAreaIds = [],
         EventDate = day

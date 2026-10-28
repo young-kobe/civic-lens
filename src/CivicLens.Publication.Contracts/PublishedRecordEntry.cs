@@ -20,6 +20,7 @@ public sealed record PublishedRecordEntry
     public string? StatementRecordId { get; init; }
     public PublishedRecordKind? TargetKind { get; init; }
     public string? TargetRecordId { get; init; }
+    public string? MatchedOfficialId { get; init; }
 
     public void Validate()
     {
@@ -38,11 +39,13 @@ public sealed record PublishedRecordEntry
 
     private bool HasValidBillTitle => !string.IsNullOrWhiteSpace(BillTitle) && BillTitle.Length <= PublishedAction.MaximumBillTitleLength;
 
-    private bool HasAnyLink => LinkType is not null || StatementRecordId is not null || TargetKind is not null || TargetRecordId is not null;
+    private bool HasAnyLink => LinkType is not null || StatementRecordId is not null || TargetKind is not null || TargetRecordId is not null ||
+        MatchedOfficialId is not null;
 
     private bool HasValidLink => LinkType is { } type && Enum.IsDefined(type) && TargetKind is { } target &&
         PublishedRelationship.IsTargetKind(target) && PublishedRelationship.TypeFits(type, target) &&
-        PublicationProtocol.IsRecordId(PublishedRecordKind.Statement, StatementRecordId) && PublicationProtocol.IsRecordId(target, TargetRecordId);
+        PublicationProtocol.IsRecordId(PublishedRecordKind.Statement, StatementRecordId) && PublicationProtocol.IsRecordId(target, TargetRecordId) &&
+        Officials.Any(official => official.Id == MatchedOfficialId);
 
     internal static bool AreFilterValues(IEnumerable<string?>? values)
     {

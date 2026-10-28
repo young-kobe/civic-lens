@@ -27,6 +27,7 @@ internal sealed class PublishedRelationshipBuilder(PublishedRecordRules rules)
             TargetFact = target.Facts.FirstOrDefault(fact => fact.Id == revision.TargetFactId)?.Text
                 ?? throw new InvalidDataException($"Relationship {review.RecordId} names a fact that its target does not list."),
             StatementDate = statement.StatementDate,
+            MatchedOfficialId = revision.OfficialId,
             Officials = rules.MapOfficials(review.RecordId, statement.SpeakerOfficialIds),
             IssueIds = [.. statement.IssueIds.Union(target.IssueIds, StringComparer.Ordinal)],
             PolicyAreaIds = [.. statement.PolicyAreaIds.Union(target.PolicyAreaIds, StringComparer.Ordinal)],

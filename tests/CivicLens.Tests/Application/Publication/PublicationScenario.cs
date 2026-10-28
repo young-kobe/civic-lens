@@ -332,7 +332,7 @@ internal sealed class PublicationScenario
             new(RelationshipRecordKind.Statement, statementId, statementRevision), new(Enum.Parse<RelationshipRecordKind>(targetKind.ToString()), targetId, targetRevision),
             new(RelationshipMatchBasis.BillNumber, quote),
             targetKind == PublishedRecordKind.Action ? RelationshipType.DescribesOwnBill : RelationshipType.StatementAboutVote,
-            $"Statement {id} describes the record.", quote, "F2");
+            $"Statement {id} describes the record.", quote, "F2", statementRevisionRecord.SpeakerOfficialIds[0]);
         var all = ImmutableArray.Create(Decision(recordId, 1, decision, revisionNumber));
         var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
         var review = new RelationshipReview(recordId, revision, [revision], 1, ReviewPolicy.GetCurrentStatus(revisionNumber, all, concerns), all,

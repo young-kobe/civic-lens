@@ -1645,6 +1645,7 @@ public sealed class ReleaseRendererTests
         Quote = "<b>a rent cap</b>",
         TargetFact = "Title: A housing bill",
         StatementDate = new DateOnly(2026, 5, 1),
+        MatchedOfficialId = "o1",
         Officials = [new PublishedOfficial { Id = "o1", Name = "Jane <Doe>" }],
         IssueIds = ["housing"],
         PolicyAreaIds = [],

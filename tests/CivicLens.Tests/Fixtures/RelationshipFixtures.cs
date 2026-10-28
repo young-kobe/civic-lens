@@ -80,7 +80,7 @@ internal static class RelationshipFixtures
         var chosen = pair ?? ActionPair();
         return new(chosen.PairId, 1, CivicLens.Core.Review.ReviewAuthor.AnalysisSubject, Created,
             new(RelationshipRecordKind.Statement, chosen.Statement.RecordId, chosen.Statement.Revision.RevisionNumber), chosen.Target.Citation,
-            chosen.Match, RelationshipType.DescribesOwnBill, "Warren says she introduced the bill.", Span(BillWords), "F2");
+            chosen.Match, RelationshipType.DescribesOwnBill, "Warren says she introduced the bill.", Span(BillWords), "F2", chosen.OfficialId);
     }
 
     public static RelationshipDraftContext Context(RelationshipPair pair, RelationshipRevision? current = null, string? settledFingerprint = null) =>

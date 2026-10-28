@@ -337,6 +337,29 @@ public sealed class PublishRelationshipTests
     }
 
     [Fact]
+    public async Task AJointStatementPutsItsPairOnTheMatchedOfficialAndAReplacedBillTouchesOnlyThatOfficial()
+    {
+        var scenario = new PublicationScenario();
+        var statement = scenario.AddStatement('c', statementDate: StatementDate, speakerIds: ["chair", "mayor"]);
+        var action = scenario.AddAction('d', sponsorId: "chair");
+        var vote = scenario.AddVote('a', memberIds: ["chair"]);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            Reference(PublishedRecordKind.Statement, statement), Reference(PublishedRecordKind.Action, action), Reference(PublishedRecordKind.Vote, vote)));
+        var relationship = scenario.AddRelationship('e', statement, action);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", relationship));
+        Assert.Single(scenario.OfficialPages.Last(page => page.Profile.Id == "chair" && page.IsCurrent).Pairs);
+        Assert.Empty(scenario.OfficialPages.Last(page => page.Profile.Id == "mayor" && page.IsCurrent).Pairs);
+        scenario.Releases.WriteOrder.Clear();
+        scenario.ReviseAction(action, 2);
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.WithNotesFor(
+            PublicationScenario.Request("k3", Reference(PublishedRecordKind.Action, action)), Reference(PublishedRecordKind.Action, action)));
+
+        Assert.Contains(PublicationProtocol.OfficialPagePath("chair"), scenario.Releases.WriteOrder);
+        Assert.DoesNotContain(PublicationProtocol.OfficialPagePath("mayor"), scenario.Releases.WriteOrder);
+    }
+
+    [Fact]
     public async Task AVoteThatIsReplacedTouchesTheOfficialPageOfASpeakerWhoIsNotAMemberOfItsChamber()
     {
         var scenario = new PublicationScenario();

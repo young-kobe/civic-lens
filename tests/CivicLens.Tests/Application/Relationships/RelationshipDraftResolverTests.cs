@@ -22,6 +22,7 @@ public sealed class RelationshipDraftResolverTests
             new[] { revision.Statement, revision.Target }.Select(citation => (citation.Kind, citation.RecordId, citation.RevisionNumber)));
         Assert.Equal(BillSentence, Article.Substring(revision.StatementQuote.Start, revision.StatementQuote.Length));
         Assert.Equal(BillWords, Article.Substring(revision.Match.Span.Start, revision.Match.Span.Length));
+        Assert.Equal(ActionPair().OfficialId, revision.OfficialId);
     }
 
     [Fact]

@@ -18,7 +18,7 @@ public sealed class PublishedRelationshipTests
         var json = JsonSerializer.Serialize(Link(), PublicationProtocol.JsonOptions);
 
         Assert.Equal(1, PublicationProtocol.SchemaVersion);
-        Assert.True(json == $$"""{"recordId":"{{LinkId}}","revisionNumber":1,"headline":"Doe on rent and A housing bill","statement":{"kind":"statement","recordId":"{{StatementId}}","revisionNumber":2,"headline":"Doe on rent"},"target":{"kind":"action","recordId":"{{ActionId}}","revisionNumber":3,"headline":"A housing bill"},"type":"describesOwnBill","reason":"Doe says the bill is hers.","quote":"I introduced the bill.","targetFact":"Title: A housing bill","statementDate":"2026-05-01","officials":[{"id":"o1","name":"Jane Doe"}],"issueIds":["housing"],"policyAreaIds":["land-use"],"approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00","corrections":[]}""",
+        Assert.True(json == $$"""{"recordId":"{{LinkId}}","revisionNumber":1,"headline":"Doe on rent and A housing bill","statement":{"kind":"statement","recordId":"{{StatementId}}","revisionNumber":2,"headline":"Doe on rent"},"target":{"kind":"action","recordId":"{{ActionId}}","revisionNumber":3,"headline":"A housing bill"},"type":"describesOwnBill","reason":"Doe says the bill is hers.","quote":"I introduced the bill.","targetFact":"Title: A housing bill","statementDate":"2026-05-01","matchedOfficialId":"o1","officials":[{"id":"o1","name":"Jane Doe"}],"issueIds":["housing"],"policyAreaIds":["land-use"],"approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00","corrections":[]}""",
             "The published relationship JSON changed. Bump PublicationProtocol.SchemaVersion if a reader would break, update the version table " +
             "in docs/architecture.md, then update this test. Actual: " + json);
     }
@@ -42,6 +42,7 @@ public sealed class PublishedRelationshipTests
         Assert.Null(entry.SourceHost);
         Assert.Equal((PublishedRelationshipType.DescribesOwnBill, StatementId, PublishedRecordKind.Action, ActionId),
             (entry.LinkType, entry.StatementRecordId, entry.TargetKind, entry.TargetRecordId));
+        Assert.Equal("o1", entry.MatchedOfficialId);
         entry.Validate();
     }
 
@@ -51,7 +52,7 @@ public sealed class PublishedRelationshipTests
         var entry = Link().ToEntry();
 
         foreach (var missing in new[] { entry with { LinkType = null }, entry with { StatementRecordId = null },
-                     entry with { TargetKind = null }, entry with { TargetRecordId = null } })
+                     entry with { TargetKind = null }, entry with { TargetRecordId = null }, entry with { MatchedOfficialId = null } })
             Assert.Throws<InvalidDataException>(missing.Validate);
     }
 
@@ -64,6 +65,8 @@ public sealed class PublishedRelationshipTests
         Assert.Throws<InvalidDataException>((entry with { TargetKind = PublishedRecordKind.Vote }).Validate);
         Assert.Throws<InvalidDataException>((entry with { LinkType = PublishedRelationshipType.StatementAboutVote }).Validate);
         Assert.Throws<InvalidDataException>((entry with { LinkType = (PublishedRelationshipType)99 }).Validate);
+        Assert.Throws<InvalidDataException>((entry with { MatchedOfficialId = "other" }).Validate);
+        Assert.Throws<InvalidDataException>((Link() with { MatchedOfficialId = "other" }).Validate);
         Assert.Throws<InvalidDataException>((entry with { StatementRecordId = "short" }).Validate);
         Assert.Throws<InvalidDataException>((entry with { TargetRecordId = "short" }).Validate);
     }
@@ -72,11 +75,11 @@ public sealed class PublishedRelationshipTests
     public void AnEntryOfAnotherKindRefusesEveryLinkFieldBecauseOnlyARelationshipHasAPair()
     {
         var statement = Link().ToEntry() with { Kind = PublishedRecordKind.Statement, RecordId = StatementId };
-        statement = statement with { LinkType = null, StatementRecordId = null, TargetKind = null, TargetRecordId = null };
+        statement = statement with { LinkType = null, StatementRecordId = null, TargetKind = null, TargetRecordId = null, MatchedOfficialId = null };
         statement.Validate();
 
         foreach (var filled in new[] { statement with { LinkType = PublishedRelationshipType.DescribesOwnBill }, statement with { StatementRecordId = StatementId },
-                     statement with { TargetKind = PublishedRecordKind.Action }, statement with { TargetRecordId = ActionId } })
+                     statement with { TargetKind = PublishedRecordKind.Action }, statement with { TargetRecordId = ActionId }, statement with { MatchedOfficialId = "o1" } })
             Assert.Throws<InvalidDataException>(filled.Validate);
     }
 
@@ -164,6 +167,7 @@ public sealed class PublishedRelationshipTests
             Reason = escaped(PublishedRelationship.MaximumReasonLength),
             Quote = escaped(PublishedRelationship.MaximumQuoteLength),
             TargetFact = escaped(PublishedRelationship.MaximumFactLength),
+            MatchedOfficialId = names[0],
             Officials = [.. names.Select(name => new PublishedOfficial { Id = name, Name = name })],
             IssueIds = names,
             PolicyAreaIds = names
@@ -186,6 +190,7 @@ public sealed class PublishedRelationshipTests
         Quote = "I introduced the bill.",
         TargetFact = "Title: A housing bill",
         StatementDate = new DateOnly(2026, 5, 1),
+        MatchedOfficialId = "o1",
         Officials = [new() { Id = "o1", Name = "Jane Doe" }],
         IssueIds = ["housing"],
         PolicyAreaIds = ["land-use"],

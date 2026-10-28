@@ -19,6 +19,7 @@ public sealed record PublishedRelationship
     public required string Quote { get; init; }
     public required string TargetFact { get; init; }
     public DateOnly? StatementDate { get; init; }
+    public required string MatchedOfficialId { get; init; }
     public required PublishedOfficial[] Officials { get; init; }
     public required string[] IssueIds { get; init; }
     public required string[] PolicyAreaIds { get; init; }
@@ -40,7 +41,8 @@ public sealed record PublishedRelationship
         LinkType = Type,
         StatementRecordId = Statement.RecordId,
         TargetKind = Target.Kind,
-        TargetRecordId = Target.RecordId
+        TargetRecordId = Target.RecordId,
+        MatchedOfficialId = MatchedOfficialId
     };
 
     public static bool IsCitedKind(PublishedRecordKind kind) => kind == PublishedRecordKind.Statement || IsTargetKind(kind);
@@ -65,6 +67,8 @@ public sealed record PublishedRelationship
             !PublishedEvidenceRules.AreDistinctAndNotBlank(Officials.Select(official => official.Id)) ||
             !PublishedEvidenceRules.AreDistinctAndNotBlank(IssueIds) || !PublishedEvidenceRules.AreDistinctAndNotBlank(PolicyAreaIds))
             throw new InvalidDataException("Published relationship officials, issues, and policy areas must be distinct and not blank.");
+        if (!Officials.Any(official => official.Id == MatchedOfficialId))
+            throw new InvalidDataException("The matched official of a published relationship must be one of its officials.");
     }
 
     internal static bool IsTargetKind(PublishedRecordKind kind) => kind is PublishedRecordKind.Action or PublishedRecordKind.Vote;

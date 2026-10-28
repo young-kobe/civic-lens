@@ -27,10 +27,12 @@ public static class RelationshipDraftResolver
         CheckFact(output.TargetFactId, pair.Target, errors, citationErrors);
         var quote = LocateQuote(output.StatementQuote, pair, errors, citationErrors);
         if (errors.Count > 0) return AnalysisResolution<RelationshipRevision?>.Reject(Bound(errors), citationErrors.Count > 0);
+        if (!pair.Statement.Revision.SpeakerOfficialIds.Contains(pair.OfficialId))
+            throw new InvalidOperationException("The matched official of a pair must be a speaker of its statement.");
         var current = context.Evidence.Current;
         var revision = new RelationshipRevision(pair.PairId, (current?.RevisionNumber ?? 0) + 1, ReviewAuthor.AnalysisSubject, createdAtUtc,
             pair.StatementCitation, pair.Target.Citation,
-            pair.Match, type!.Value, output.Reason, quote!, output.TargetFactId!);
+            pair.Match, type!.Value, output.Reason, quote!, output.TargetFactId!, pair.OfficialId);
         revision.ValidateAsAnalysisRevision(current);
         return AnalysisResolution<RelationshipRevision?>.Accept(revision);
     }
