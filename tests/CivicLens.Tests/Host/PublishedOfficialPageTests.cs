@@ -465,7 +465,7 @@ public sealed class PublishedOfficialPageTests
 
         Assert.Equal(3, cards.Count);
         Assert.Equal("officials/warren.html", cards[0].QuerySelector("a")!.GetAttribute("href"));
-        Assert.Equal(["Senator for MA", "Democratic", "12 records other than votes"], cards[0].QuerySelectorAll(".cell-sub").Select(line => line.TextContent));
+        Assert.Equal(["Senator for MA", "Party: Democratic", "12 records other than votes"], cards[0].QuerySelectorAll(".cell-sub").Select(line => line.TextContent));
         Assert.Contains("0 records other than votes", cards[1].TextContent, StringComparison.Ordinal);
         Assert.Contains("Representative for TX, district 3", cards[1].TextContent, StringComparison.Ordinal);
         Assert.Contains("1 record other than votes", cards[2].TextContent, StringComparison.Ordinal);
@@ -501,13 +501,68 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task TheFilterControlsAreHiddenInTheStaticPageSoNoScriptReaderSeesNoDeadControlsAndEveryCard()
+    public async Task TheFilterControlsAreHiddenInTheStaticPageSoAReaderWithoutScriptSeesEveryCardAndNoDeadControl()
     {
         var page = await ListAsync(new OfficialListing(Profile("a", "Ann Able", Term("sen", "MA", "Democratic")), 1));
 
         Assert.True(page.QuerySelector("[data-officials-filters]")!.HasAttribute("hidden"));
         Assert.False(page.QuerySelector("ul.officials > li")!.HasAttribute("hidden"));
         Assert.Equal("status", page.QuerySelector("[data-officials-status]")!.GetAttribute("role"));
+    }
+
+    [Fact]
+    public async Task TheLatestTermByStartDecidesTheOfficeAndKindSoASenatorWhoWasARepresentativeIsASenator()
+    {
+        var profile = Profile("a", "Ann Able",
+            Term("rep", "MA", "Democratic") with { Start = new DateOnly(2015, 1, 3) },
+            Term("sen", "MA", "Democratic") with { Start = new DateOnly(2021, 1, 3) });
+
+        var card = (await ListAsync(new OfficialListing(profile, 1))).QuerySelector("ul.officials > li")!;
+
+        Assert.Contains("Senator for MA", card.TextContent, StringComparison.Ordinal);
+        Assert.Equal("senator", card.GetAttribute("data-office"));
+    }
+
+    [Fact]
+    public async Task AnEndedLatestTermReadsFormerButStillGroupsUnderItsOfficeSoTheReaderKnowsTheOfficialLeft()
+    {
+        var term = Term("rep", "MA", "Democratic") with { District = 4, End = new DateOnly(2025, 1, 3) };
+
+        var card = (await ListAsync(new OfficialListing(Profile("a", "Ann Able", term), 1))).QuerySelector("ul.officials > li")!;
+
+        Assert.Equal("Former Representative for MA, district 4", card.QuerySelector(".cell-sub")!.TextContent);
+        Assert.Equal("representative", card.GetAttribute("data-office"));
+    }
+
+    [Fact]
+    public async Task ACaucusThatDiffersFromThePartyIsNamedSoAnIndependentShowsWhoseCaucusTheyJoin()
+    {
+        var independent = Term("sen", "VT", "Independent") with { Caucus = "Democrat" };
+        var same = Term("sen", "TX", "Republican") with { Caucus = "Republican" };
+
+        var cards = (await ListAsync(new OfficialListing(Profile("a", "Ann Able", independent), 1), new OfficialListing(Profile("b", "Bob Baker", same), 1)))
+            .QuerySelectorAll("ul.officials > li").ToList();
+
+        Assert.Equal("Party: Independent, caucuses with Democrats", cards[0].QuerySelectorAll(".cell-sub")[1].TextContent);
+        Assert.Equal("Party: Republican", cards[1].QuerySelectorAll(".cell-sub")[1].TextContent);
+    }
+
+    [Fact]
+    public async Task AnOfficialWithNoTermIsInTheOtherOfficialsTabAndAllOfficialsOnly()
+    {
+        var page = await ListAsync(new OfficialListing(Profile("a", "Ann Able", Term("sen", "MA", "Democratic")), 1), new OfficialListing(Profile("b", "No Term"), 1));
+
+        Assert.Equal("other", page.QuerySelectorAll("ul.officials > li")[1].GetAttribute("data-office"));
+        Assert.Equal(["All officials (2)", "Senators (1)", "Other officials (1)"],
+            page.QuerySelectorAll("[data-officials-filters] button").Select(button => button.TextContent.Trim()));
+    }
+
+    [Fact]
+    public async Task TheCardListKeepsItsListRoleBecauseListStyleNoneDropsItInSafari()
+    {
+        var page = await ListAsync(new OfficialListing(Profile("a", "Ann Able"), 1));
+
+        Assert.Equal("list", page.QuerySelector("ul.officials")!.GetAttribute("role"));
     }
 
     [Fact]
@@ -520,6 +575,7 @@ public sealed class PublishedOfficialPageTests
         Assert.Equal(("lazy", "225", "275"), (image.GetAttribute("loading"), image.GetAttribute("width"), image.GetAttribute("height")));
         Assert.Null(cards[1].QuerySelector("img"));
         Assert.NotNull(cards[1].QuerySelector("svg.portrait-placeholder"));
+        Assert.Null(cards[1].QuerySelector("figcaption"));
     }
 
     [Fact]

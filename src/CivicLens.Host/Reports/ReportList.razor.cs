@@ -56,8 +56,8 @@ public sealed partial class ReportList
 
     private IReadOnlyList<FilterTab> ReportTabs =>
     [
-        new("Open", Href(null, null), Filter == ReaderReportFilter.Open, openCount),
-        new("Resolved", Href(ReportRoutes.ResolvedFilter, null), Filter == ReaderReportFilter.Resolved)
+        FilterTab.Link("Open", Href(null, null), Filter == ReaderReportFilter.Open, openCount),
+        FilterTab.Link("Resolved", Href(ReportRoutes.ResolvedFilter, null), Filter == ReaderReportFilter.Resolved)
     ];
 
     private string? ReportsHref(string? cursor) =>

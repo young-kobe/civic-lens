@@ -1,21 +1,26 @@
-@if (Tabs.Any(tab => tab.Href is null))
+@if (Tabs.Any(tab => !tab.IsLink))
 {
-    <div class="segmented" role="group" aria-label="@Label" @attributes="AdditionalAttributes">@Items</div>
+    <div class="segmented" role="group" aria-label="@Label">@Items</div>
 }
 else
 {
-    <nav class="segmented" aria-label="@Label" @attributes="AdditionalAttributes">@Items</nav>
+    <nav class="segmented" aria-label="@Label">@Items</nav>
 }
 
 @code {
     [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
     [Parameter, EditorRequired] public IReadOnlyList<FilterTab> Tabs { get; set; } = [];
-    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Tabs.Select(tab => tab.IsLink).Distinct().Count() > 1)
+            throw new ArgumentException("Filter tabs must be all links or all buttons.", nameof(Tabs));
+    }
 
     private RenderFragment Items => @<text>
         @foreach (var tab in Tabs)
         {
-            if (tab.Href is null)
+            if (!tab.IsLink)
             {
                 <button class="segmented-item" type="button" data-filter-value="@tab.Value" aria-pressed="@(tab.Selected ? "true" : "false")">@Content(tab)</button>
             }

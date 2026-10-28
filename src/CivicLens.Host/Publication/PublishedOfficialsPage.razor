@@ -27,7 +27,7 @@
                 </Field>
             </div>
             <p role="status" data-officials-status></p>
-            <ul class="officials" data-officials>
+            <ul class="officials" role="list" data-officials>
                 @foreach (var card in Cards)
                 {
                     <li class="official-card" data-name="@card.Official.Profile.Name" data-office="@card.Kind" data-state="@card.Term?.State">
@@ -36,10 +36,10 @@
                             <a class="cell-title" href="@card.Official.PagePath">@card.Official.Profile.Name</a>
                             @if (card.Term is { } term)
                             {
-                                <span class="cell-sub">@PublishedOfficialView.Office(term)</span>
+                                <span class="cell-sub">@PublishedOfficialView.CardOffice(term)</span>
                                 @if (term.Party is { } party)
                                 {
-                                    <span class="cell-sub">@party</span>
+                                    <span class="cell-sub">@PublishedOfficialView.PartyLine(party, term.Caucus)</span>
                                 }
                             }
                             <span class="cell-sub">@PublishedOfficialView.RecordCount(card.Official.RecordCount)</span>
@@ -49,7 +49,7 @@
             </ul>
             @if (SharedCredit && Credits.FirstOrDefault() is { } credit)
             {
-                <p class="caveat">Credit for every portrait on this page: @credit</p>
+                <Caveat>Credit for every portrait on this page: @credit</Caveat>
             }
         }
     </Panel>
@@ -79,9 +79,9 @@
     private IReadOnlyList<string> States => [.. Cards.Select(card => card.Term?.State).OfType<string>().Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
 
     private IReadOnlyList<FilterTab> OfficeTabs => [
-        new($"All officials ({Cards.Count})", null, true, Value: ""),
+        FilterTab.Button($"All officials ({Cards.Count})", "", selected: true),
         .. PublishedOfficialView.OfficeKinds
             .Select(kind => (kind.Kind, kind.Plural, Count: Cards.Count(card => card.Kind == kind.Kind)))
             .Where(kind => kind.Count > 0)
-            .Select(kind => new FilterTab($"{kind.Plural} ({kind.Count})", null, false, Value: kind.Kind))];
+            .Select(kind => FilterTab.Button($"{kind.Plural} ({kind.Count})", kind.Kind, selected: false))];
 }

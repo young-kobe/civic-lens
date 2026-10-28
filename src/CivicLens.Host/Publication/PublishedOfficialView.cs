@@ -9,23 +9,34 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublishedOfficialView
 {
+    private const string Senate = "sen";
+    private const string House = "rep";
+    private const string President = "prez";
+    private const string VicePresident = "viceprez";
+
     public static string Office(PublishedOfficeTerm term) => term.Office switch
     {
-        "sen" => $"Senator for {term.State}",
-        "rep" when term.District is { } district => $"Representative for {term.State}, district {district}",
-        "rep" => $"Representative for {term.State}",
-        "prez" => "President",
-        "viceprez" => "Vice President",
+        Senate => $"Senator for {term.State}",
+        House when term.District is { } district => $"Representative for {term.State}, district {district}",
+        House => $"Representative for {term.State}",
+        President => "President",
+        VicePresident => "Vice President",
         _ => term.Office
     };
+
+    public static string CardOffice(PublishedOfficeTerm term) =>
+        term.End is { } end && end < DateOnly.FromDateTime(DateTime.UtcNow) ? $"Former {Office(term)}" : Office(term);
+
+    public static string PartyLine(string party, string? caucus) =>
+        caucus is null || caucus == party ? $"Party: {party}" : $"Party: {party}, caucuses with {Members(caucus)}";
 
     public static PublishedOfficeTerm? LatestTerm(IEnumerable<PublishedOfficeTerm> terms) => terms.OrderBy(term => term.Start).LastOrDefault();
 
     public static string OfficeKind(PublishedOfficeTerm? term) => term?.Office switch
     {
-        "sen" => "senator",
-        "rep" => "representative",
-        "prez" or "viceprez" => "executive",
+        Senate => "senator",
+        House => "representative",
+        President or VicePresident => "executive",
         _ => "other"
     };
 
@@ -96,7 +107,9 @@ internal static class PublishedOfficialView
         return votes.NotCast == 0 ? sentence : $"{sentence} They did not cast Yea or Nay on {votes.NotCast} {other}split {Votes(votes.NotCast)}.";
     }
 
-    public static string PartyOf(VotesWithParty votes) => $"{votes.Chamber} {votes.Party}s";
+    public static string PartyOf(VotesWithParty votes) => $"{votes.Chamber} {Members(votes.Party)}";
+
+    private static string Members(string party) => $"{party}s";
 
     private static string ChamberName(PublishedChamber chamber) => chamber == PublishedChamber.Senate ? "the Senate" : "the House of Representatives";
 
