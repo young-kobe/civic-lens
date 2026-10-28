@@ -24,6 +24,9 @@ public static class PublicationProtocol
     public const string OfficialsPath = "officials.json";
     public const string CatalogPath = "catalog.json";
     public const string OfficialsPagePath = "officials.html";
+    public const string SitemapPath = "sitemap.xml";
+    public const string RobotsPath = "robots.txt";
+    public const string NotFoundPagePath = "404.html";
     public const int MaximumOfficialFiles = 512;
     private const string PhotoFolder = "photos/";
     private const string PhotoExtension = ".jpg";

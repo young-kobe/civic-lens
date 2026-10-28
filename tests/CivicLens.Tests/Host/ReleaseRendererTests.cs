@@ -1226,7 +1226,7 @@ public sealed class ReleaseRendererTests
         Assert.NotEmpty(addresses);
         Assert.All(addresses, address => Assert.StartsWith(BaseUrl + "/", address, StringComparison.Ordinal));
         Assert.Equal("Page not found | Civic Lens", document.QuerySelector("title")!.TextContent);
-        Assert.Contains("does not exist in this release", document.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("does not exist on Civic Lens", document.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
         Assert.Contains($"{BaseUrl}/index.html", addresses);
         Assert.Contains($"{BaseUrl}/officials.html", addresses);
         Assert.Contains($"{BaseUrl}/search.html", addresses);

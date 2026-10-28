@@ -45,19 +45,43 @@ public sealed class PublishSiteFilesTests
         Assert.Contains(PublicationProtocol.RecordPagePath(action), files.Keys);
         var urls = Urls(scenario, second.DirectoryName);
         Assert.Contains($"{Base}/records/{statement}.html", urls);
-        Assert.DoesNotContain(urls, url => url.EndsWith("/search.html", StringComparison.Ordinal) || url.EndsWith("/report.html", StringComparison.Ordinal)
-            || url.EndsWith("/404.html", StringComparison.Ordinal) || url.Contains(action, StringComparison.Ordinal));
+        Assert.DoesNotContain(urls, url => url.EndsWith($"/{PublicationProtocol.SearchPagePath}", StringComparison.Ordinal) || url.EndsWith($"/{PublicationProtocol.ReportPagePath}", StringComparison.Ordinal)
+            || url.EndsWith($"/{PublicationProtocol.NotFoundPagePath}", StringComparison.Ordinal) || url.Contains(action, StringComparison.Ordinal));
         Assert.DoesNotContain(urls, url => url.Contains('?', StringComparison.Ordinal));
     }
 
     [Fact]
-    public async Task TheSitemapIsTheSameForTheSameReleaseSoACrawlerSeesNoNoise()
+    public async Task TheSitemapListsAFacetPageBeyondTheFirstAndAPastCongressPageOfAnOfficialSoSearchEnginesFindDeepPages()
     {
-        var first = await SitemapTextAsync('a', 'b');
-        var second = await SitemapTextAsync('b', 'a');
+        var scenario = new PublicationScenario { BaseUrl = PublicBaseUrl.Parse(Base, "V") };
+        scenario.SeedRelease(withFiles: true, [.. Enumerable.Range(0, PublicationProtocol.PageSize + 1).Select(index => new PublishedRecordEntry
+        {
+            Kind = PublishedRecordKind.DocumentChange,
+            Officials = [],
+            RecordId = index.ToString("x32"),
+            RevisionNumber = 1,
+            Headline = "Seeded",
+            FirstPublishedAtUtc = PublicationScenario.ApprovedAt.AddMinutes(-index - 10),
+            IssueIds = ["housing"],
+            PolicyAreaIds = []
+        })]);
+        var older = scenario.AddVote('a', congress: 118);
+        var newer = scenario.AddVote('b');
 
-        Assert.Equal(first, second);
-        var locations = first.Split('\n').Where(line => line.StartsWith("<url>", StringComparison.Ordinal)).ToList();
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k",
+            new PublishedRecordReference(PublishedRecordKind.Vote, older), new PublishedRecordReference(PublishedRecordKind.Vote, newer)));
+
+        var urls = Urls(scenario, summary.DirectoryName);
+        Assert.Contains($"{Base}/{PublicationProtocol.IssuePagePath("housing", 2)}", urls);
+        Assert.Contains($"{Base}/{PublicationProtocol.OfficialCongressPagePath("mayor", 118)}", urls);
+    }
+
+    [Fact]
+    public async Task TheSitemapAddressesAreSortedSoTheSameReleaseAlwaysGivesTheSameFile()
+    {
+        var text = await SitemapTextAsync('b', 'a', 'c');
+
+        var locations = text.Split('\n').Where(line => line.StartsWith("<url>", StringComparison.Ordinal)).ToList();
         Assert.Equal(locations.Order(StringComparer.Ordinal), locations);
     }
 
@@ -68,8 +92,8 @@ public sealed class PublishSiteFilesTests
 
         var summary = await PublishAsync(scenario, "k", Statement(scenario.AddStatement('a')));
 
-        Assert.Equal($"User-agent: *\nAllow: /\nSitemap: {Base}/sitemap.xml\n", Text(scenario, summary.DirectoryName, "robots.txt"));
-        Assert.Equal("<html>not found</html>", Text(scenario, summary.DirectoryName, "404.html"));
+        Assert.Equal($"User-agent: *\nAllow: /\nSitemap: {Base}/{PublicationProtocol.SitemapPath}\n", Text(scenario, summary.DirectoryName, PublicationProtocol.RobotsPath));
+        Assert.Equal("<html>not found</html>", Text(scenario, summary.DirectoryName, PublicationProtocol.NotFoundPagePath));
     }
 
     [Fact]
@@ -80,7 +104,7 @@ public sealed class PublishSiteFilesTests
         var summary = await PublishAsync(scenario, "k", Statement(scenario.AddStatement('a')));
 
         var files = scenario.Releases.Directories[summary.DirectoryName].Keys;
-        Assert.DoesNotContain(files, path => path is "sitemap.xml" or "robots.txt" or "404.html");
+        Assert.DoesNotContain(files, path => path is PublicationProtocol.SitemapPath or PublicationProtocol.RobotsPath or PublicationProtocol.NotFoundPagePath);
     }
 
     [Fact]
@@ -111,7 +135,7 @@ public sealed class PublishSiteFilesTests
     {
         var scenario = new PublicationScenario { BaseUrl = PublicBaseUrl.Parse(Base, "V") };
         var summary = await PublishAsync(scenario, "k", [.. ids.Select(id => Statement(scenario.AddStatement(id)))]);
-        return Text(scenario, summary.DirectoryName, "sitemap.xml");
+        return Text(scenario, summary.DirectoryName, PublicationProtocol.SitemapPath);
     }
 
     private static PublishedRecordReference Statement(string id) => new(PublishedRecordKind.Statement, id);
@@ -120,7 +144,7 @@ public sealed class PublishSiteFilesTests
         scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request(key, records));
 
     private static string[] Urls(PublicationScenario scenario, string directory) =>
-        [.. XDocument.Parse(Text(scenario, directory, "sitemap.xml")).Root!.Elements(Sitemap + "url").Select(url => url.Element(Sitemap + "loc")!.Value)];
+        [.. XDocument.Parse(Text(scenario, directory, PublicationProtocol.SitemapPath)).Root!.Elements(Sitemap + "url").Select(url => url.Element(Sitemap + "loc")!.Value)];
 
     private static string Text(PublicationScenario scenario, string directory, string path) =>
         Encoding.UTF8.GetString(scenario.Releases.Directories[directory][path]);

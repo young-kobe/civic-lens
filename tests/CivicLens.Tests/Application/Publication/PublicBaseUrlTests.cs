@@ -11,7 +11,12 @@ public sealed class PublicBaseUrlTests
     [InlineData("https://civic.example:8443", "https://civic.example:8443")]
     [InlineData("http://localhost:8080", "http://localhost:8080")]
     [InlineData("http://127.0.0.1", "http://127.0.0.1")]
-    public void ABareOriginIsAcceptedAndStoredWithoutATrailingSlashSoEveryJoinHasOneSlash(string value, string expectedOrigin)
+    [InlineData("https://civic.example/.", "https://civic.example")]
+    [InlineData("HTTPS://Civic.Example", "https://civic.example")]
+    [InlineData("https://civic.example:443", "https://civic.example")]
+    [InlineData("http://localhost:80", "http://localhost")]
+    [InlineData("https://m\u00fcnchen.example", "https://xn--mnchen-3ya.example")]
+    public void ABareOriginIsAcceptedAndStoredAsTheNormalOriginWithoutATrailingSlashSoEveryJoinHasOneSlash(string value, string expectedOrigin)
     {
         var url = PublicBaseUrl.Parse(value, "VARIABLE");
 
@@ -40,6 +45,9 @@ public sealed class PublicBaseUrlTests
     [InlineData("https://civic.example?")]
     [InlineData("https://civic.example#top")]
     [InlineData("https://civic.example#")]
+    [InlineData("https://civic.example\\")]
+    [InlineData("http://[::1]")]
+    [InlineData("https://[::1]:8443")]
     public void AnythingBeyondAnHttpsOriginIsRefusedAndTheMessageNamesTheVariableSoTheOwnerCanFixIt(string value)
     {
         var failure = Assert.Throws<ArgumentException>(() => PublicBaseUrl.Parse(value, "CIVIC_LENS_PUBLIC_BASE_URL"));

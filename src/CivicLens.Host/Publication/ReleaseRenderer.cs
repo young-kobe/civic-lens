@@ -177,7 +177,10 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
     public static ReleaseRenderer FromEnvironment() => new(
         Environment.GetEnvironmentVariable(PublicApiUrlVariable)?.TrimEnd('/') is { Length: > 0 } url ? url : null,
         Environment.GetEnvironmentVariable(TurnstileSiteKeyVariable)?.Trim() is { Length: > 0 } siteKey ? siteKey : null,
-        PublicBaseUrl.Parse(Environment.GetEnvironmentVariable(PublicBaseUrlVariable), PublicBaseUrlVariable));
+        PublicBaseUrlFromEnvironment());
+
+    public static PublicBaseUrl? PublicBaseUrlFromEnvironment() =>
+        PublicBaseUrl.Parse(Environment.GetEnvironmentVariable(PublicBaseUrlVariable), PublicBaseUrlVariable);
 
     public Task<string> RenderReportAsync(CancellationToken cancellationToken) =>
         RenderAsync<PublishedReportPage>(new Dictionary<string, object?>

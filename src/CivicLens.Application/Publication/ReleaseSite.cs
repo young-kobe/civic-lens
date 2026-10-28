@@ -7,9 +7,6 @@ namespace CivicLens.Application.Publication;
 /// <summary>Passes every file to the staging directory and remembers the page paths, so the sitemap lists exactly the pages that the release holds.</summary>
 internal sealed class ReleaseSite(IReleaseStaging staging, IReleaseRenderer renderer) : IReleaseStaging
 {
-    private const string SitemapPath = "sitemap.xml";
-    private const string RobotsPath = "robots.txt";
-    private const string NotFoundPath = "404.html";
     private const int MaximumSitemapUrls = 50_000;
     private const int MaximumSitemapBytes = 50 * 1024 * 1024;
 
@@ -37,9 +34,9 @@ internal sealed class ReleaseSite(IReleaseStaging staging, IReleaseRenderer rend
     public async Task WriteSiteFilesAsync(PublicationRelease manifest, CancellationToken cancellationToken)
     {
         if (renderer.PublicBaseUrl is not { } baseUrl) return;
-        await WriteTextAsync(NotFoundPath, await renderer.RenderNotFoundAsync(cancellationToken), cancellationToken);
-        await WriteTextAsync(SitemapPath, Sitemap(baseUrl, manifest), cancellationToken);
-        await WriteTextAsync(RobotsPath, $"User-agent: *\nAllow: /\nSitemap: {baseUrl.Join(SitemapPath)}\n", cancellationToken);
+        await WriteTextAsync(PublicationProtocol.NotFoundPagePath, await renderer.RenderNotFoundAsync(cancellationToken), cancellationToken);
+        await WriteTextAsync(PublicationProtocol.SitemapPath, Sitemap(baseUrl, manifest), cancellationToken);
+        await WriteTextAsync(PublicationProtocol.RobotsPath, $"User-agent: *\nAllow: /\nSitemap: {baseUrl.Join(PublicationProtocol.SitemapPath)}\n", cancellationToken);
     }
 
     private void Remember(string relativePath)
@@ -53,7 +50,7 @@ internal sealed class ReleaseSite(IReleaseStaging staging, IReleaseRenderer rend
     private string Sitemap(PublicBaseUrl baseUrl, PublicationRelease manifest)
     {
         var excluded = manifest.Withdrawals.Select(withdrawal => PublicationProtocol.RecordPagePath(withdrawal.RecordId))
-            .Append(PublicationProtocol.SearchPagePath).Append(PublicationProtocol.ReportPagePath).Append(NotFoundPath)
+            .Append(PublicationProtocol.SearchPagePath).Append(PublicationProtocol.ReportPagePath).Append(PublicationProtocol.NotFoundPagePath)
             .ToHashSet(StringComparer.Ordinal);
         var urls = pagePaths.Where(path => !excluded.Contains(path))
             .Select(path => baseUrl.Join(path == PublicationProtocol.HomePath ? string.Empty : path))
