@@ -31,6 +31,14 @@ internal static class PublishedOfficialView
 
     public static readonly IReadOnlyList<(string Value, string Text)> RecordFilters = [("all", "All records"), ("against-party", "Votes against their party")];
 
+    public const string LinkMeaning = "A reviewer approved each link. A link does not mean the vote or bill matches the statement.";
+
+    public const string NoLinks = "No reviewed links between their statements and their bills or votes yet.";
+
+    public const string NoVoteOnRecord = "No vote on record";
+
+    public static string? TheirVote(LinkedPair pair) => pair.TargetKind == PublishedRecordKind.Vote ? pair.Cast ?? NoVoteOnRecord : null;
+
     public const string MissedVoteMeaning = "A missed vote means the official did not vote on it.";
 
     public static string MissedVotes(MissedVotes missed, int congress)

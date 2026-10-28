@@ -401,6 +401,74 @@ public sealed class PublishedOfficialPageTests
         Assert.Equal("Records other than votes", new HtmlParser().ParseDocument(html).QuerySelector("thead th.num")!.TextContent);
     }
 
+    [Fact]
+    public async Task TheLinkedPairsPanelComesBeforeTheVotesWithTheirPartyPanelAndListsEachPairWithTheLinkWordsTheTitleAndTheCast()
+    {
+        var page = Current([], [Split('a', new DateOnly(2026, 4, 1), "Nay")]);
+        page = page with
+        {
+            TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes),
+            Pairs = [Pair('2', 'a', PublishedRelationshipType.StatementAboutVote, PublishedRecordKind.Vote, new DateOnly(2026, 4, 5), "Nay"),
+                Pair('1', 'b', PublishedRelationshipType.StatesPositionOn, PublishedRecordKind.Action, new DateOnly(2026, 3, 1), null)]
+        };
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var panels = document.QuerySelectorAll("section[aria-labelledby]").Select(panel => panel.GetAttribute("aria-labelledby")).ToArray();
+        Assert.True(Array.IndexOf(panels, "panel-what-they-said-and-what-they-did") + 1 == Array.IndexOf(panels, "panel-votes-with-their-party"));
+        var panel = document.QuerySelector("[aria-labelledby='panel-what-they-said-and-what-they-did']")!;
+        Assert.Equal(["Date", "What they said", "Link", "What they did", "Their vote"], panel.QuerySelectorAll("thead th").Select(cell => cell.TextContent.Trim()));
+        var rows = panel.QuerySelectorAll("tbody tr").Select(row => row.QuerySelectorAll("td").Select(cell => cell.TextContent.Trim()).ToArray()).ToArray();
+        Assert.Equal(["2026-04-05", "Statement 2", "Statement about a vote", "Official title a", "Nay"], rows[0]);
+        Assert.Equal(["2026-03-01", "Statement 1", "States position on", "Official title b", ""], rows[1]);
+        Assert.Equal([$"../records/{new string('2', 64)}.html", $"../records/{new string('a', 64)}.html"],
+            panel.QuerySelectorAll("tbody tr")[0].QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
+        Assert.Contains("A reviewer approved each link. A link does not mean the vote or bill matches the statement.", panel.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AVoteLinkWithNoCastRowOfTheOfficialSaysSoInsteadOfLeavingTheCellEmpty()
+    {
+        var page = Current([], []);
+        page = page with
+        {
+            TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes),
+            Pairs = [Pair('1', 'a', PublishedRelationshipType.StatementAboutVote, PublishedRecordKind.Vote, new DateOnly(2026, 4, 5), null)]
+        };
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        var cells = new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-what-they-said-and-what-they-did'] tbody td");
+        Assert.Equal("No vote on record", cells[^1].TextContent.Trim());
+    }
+
+    [Fact]
+    public async Task AnOfficialWithNoPairKeepsThePanelWithOneLineThatSaysThereIsNoLinkYet()
+    {
+        var page = Current([], []);
+        page = page with { TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes) };
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        var panel = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-what-they-said-and-what-they-did']")!;
+        Assert.Contains("No reviewed links between their statements and their bills or votes yet.", panel.TextContent, StringComparison.Ordinal);
+        Assert.Null(panel.QuerySelector("table"));
+    }
+
+    [Fact]
+    public async Task AnEarlierCongressPageHasNoLinkedPairsPanel()
+    {
+        var page = new ReleaseOfficialPage(Profile(), true, 118, false, [], [], [Vote('3', new DateOnly(2024, 4, 1)) with { Congress = 118 }]);
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.DoesNotContain("What they said and what they did", html, StringComparison.Ordinal);
+    }
+
+    private static LinkedPair Pair(char statement, char target, PublishedRelationshipType type, PublishedRecordKind kind, DateOnly day, string? cast) =>
+        new(day, new string(statement, 64), $"Statement {statement}", type, kind, new string(target, 64), $"Official title {target}", cast);
+
     private static PublishedOfficialProfile Profile() => new() { Id = "mayor", Name = "Mayor Example", Terms = [] };
 
     private static ReleaseOfficialPage Current(PublishedRecordEntry[] entries, PublishedOfficialVote[] votes) =>

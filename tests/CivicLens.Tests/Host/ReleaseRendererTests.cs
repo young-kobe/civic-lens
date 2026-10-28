@@ -211,6 +211,17 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task TheMethodPageExplainsALinkWithTheFourPublicLinkWordsAndSaysThatALinkIsNotAVerdict()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None);
+
+        var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
+        foreach (var type in Enum.GetValues<PublishedRelationshipType>())
+            Assert.Contains($"\"{PublishedRecordLabels.RelationshipType(type)}\" means", text, StringComparison.Ordinal);
+        Assert.Contains("A link is not a verdict.", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ReportPageHoldsEveryProtocolCategoryWithALabelAndPostsToTheConfiguredServiceWithTheSiteKey()
     {
         var html = await new ReleaseRenderer("https://api.example.test", "site-key-1").RenderReportAsync(CancellationToken.None);

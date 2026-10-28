@@ -15,6 +15,11 @@ public sealed record PublishedRecordEntry
     public required string[] PolicyAreaIds { get; init; }
     public string? SourceHost { get; init; }
     public DateOnly? EventDate { get; init; }
+    public string? BillTitle { get; init; }
+    public PublishedRelationshipType? LinkType { get; init; }
+    public string? StatementRecordId { get; init; }
+    public PublishedRecordKind? TargetKind { get; init; }
+    public string? TargetRecordId { get; init; }
 
     public void Validate()
     {
@@ -25,7 +30,17 @@ public sealed record PublishedRecordEntry
             !AreFilterValues(PolicyAreaIds) || (SourceHost is not null && !IsFilterValue(SourceHost)))
             throw new InvalidDataException(
                 $"Release manifest filters allow {MaximumFilterValues} distinct values of up to {MaximumFilterValueLength} characters each.");
+        if (BillTitle is not null && (string.IsNullOrWhiteSpace(BillTitle) || BillTitle.Length > PublishedAction.MaximumBillTitleLength))
+            throw new InvalidDataException($"A bill title in the release manifest has 1 to {PublishedAction.MaximumBillTitleLength} characters.");
+        if (Kind == PublishedRecordKind.Relationship ? !HasValidLink : HasAnyLink)
+            throw new InvalidDataException("A relationship manifest entry names its link type, statement, and target. Other entries name none.");
     }
+
+    private bool HasAnyLink => LinkType is not null || StatementRecordId is not null || TargetKind is not null || TargetRecordId is not null;
+
+    private bool HasValidLink => LinkType is { } type && Enum.IsDefined(type) && TargetKind is { } target &&
+        PublishedRelationship.IsTargetKind(target) && PublishedRelationship.TypeFits(type, target) &&
+        PublicationProtocol.IsRecordId(PublishedRecordKind.Statement, StatementRecordId) && PublicationProtocol.IsRecordId(target, TargetRecordId);
 
     internal static bool AreFilterValues(IEnumerable<string?>? values)
     {

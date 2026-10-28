@@ -40,7 +40,44 @@ public sealed class PublishedRelationshipTests
         Assert.Equal(["housing"], entry.IssueIds);
         Assert.Equal(["land-use"], entry.PolicyAreaIds);
         Assert.Null(entry.SourceHost);
+        Assert.Equal((PublishedRelationshipType.DescribesOwnBill, StatementId, PublishedRecordKind.Action, ActionId),
+            (entry.LinkType, entry.StatementRecordId, entry.TargetKind, entry.TargetRecordId));
         entry.Validate();
+    }
+
+    [Fact]
+    public void ARelationshipEntryRequiresItsLinkTypeStatementAndTargetBecauseTheOfficialPageListsThePairFromTheManifestAlone()
+    {
+        var entry = Link().ToEntry();
+
+        foreach (var missing in new[] { entry with { LinkType = null }, entry with { StatementRecordId = null },
+                     entry with { TargetKind = null }, entry with { TargetRecordId = null } })
+            Assert.Throws<InvalidDataException>(missing.Validate);
+    }
+
+    [Fact]
+    public void ARelationshipEntryRefusesALinkThatIsNotOneStatementAndOneBillOrVote()
+    {
+        var entry = Link().ToEntry();
+
+        Assert.Throws<InvalidDataException>((entry with { TargetKind = PublishedRecordKind.Statement }).Validate);
+        Assert.Throws<InvalidDataException>((entry with { TargetKind = PublishedRecordKind.Vote }).Validate);
+        Assert.Throws<InvalidDataException>((entry with { LinkType = PublishedRelationshipType.StatementAboutVote }).Validate);
+        Assert.Throws<InvalidDataException>((entry with { LinkType = (PublishedRelationshipType)99 }).Validate);
+        Assert.Throws<InvalidDataException>((entry with { StatementRecordId = "short" }).Validate);
+        Assert.Throws<InvalidDataException>((entry with { TargetRecordId = "short" }).Validate);
+    }
+
+    [Fact]
+    public void AnEntryOfAnotherKindRefusesEveryLinkFieldBecauseOnlyARelationshipHasAPair()
+    {
+        var statement = Link().ToEntry() with { Kind = PublishedRecordKind.Statement, RecordId = StatementId };
+        statement = statement with { LinkType = null, StatementRecordId = null, TargetKind = null, TargetRecordId = null };
+        statement.Validate();
+
+        foreach (var filled in new[] { statement with { LinkType = PublishedRelationshipType.DescribesOwnBill }, statement with { StatementRecordId = StatementId },
+                     statement with { TargetKind = PublishedRecordKind.Action }, statement with { TargetRecordId = ActionId } })
+            Assert.Throws<InvalidDataException>(filled.Validate);
     }
 
     [Fact]

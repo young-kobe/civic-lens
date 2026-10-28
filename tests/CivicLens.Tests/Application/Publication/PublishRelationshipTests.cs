@@ -25,6 +25,61 @@ public sealed class PublishRelationshipTests
         Assert.Equal(["housing"], entry.IssueIds);
         Assert.Equal(["land-use", "housing-development"], entry.PolicyAreaIds);
         Assert.Null(entry.SourceHost);
+        Assert.Equal((PublishedRelationshipType.DescribesOwnBill, statement, PublishedRecordKind.Action, action),
+            (entry.LinkType, entry.StatementRecordId, entry.TargetKind, entry.TargetRecordId));
+    }
+
+    [Fact]
+    public async Task TheActionEntryCarriesTheOfficialBillTitleSoALinkedBillShowsItWithoutReadingTheActionFile()
+    {
+        var scenario = new PublicationScenario();
+        var (statement, action, _) = await PublishRecordsAsync(scenario);
+        var relationship = scenario.AddRelationship('e', statement, action);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", relationship));
+
+        var entry = ReadManifest(scenario, summary.DirectoryName).Records.Single(candidate => candidate.RecordId == action);
+
+        Assert.Equal("A housing bill", entry.BillTitle);
+    }
+
+    [Fact]
+    public async Task TheOfficialPageListsEachLinkOfAStatementOfTheOfficialWithTheBillTitleAndTheCastOfTheOfficial()
+    {
+        var scenario = new PublicationScenario();
+        var (statement, action, _) = await PublishRecordsAsync(scenario);
+        var vote = scenario.AddVote('a');
+        var toBill = scenario.AddRelationship('e', statement, action);
+        var toVote = scenario.AddRelationship('f', statement, vote, PublishedRecordKind.Vote);
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
+            Reference(PublishedRecordKind.Vote, vote), Reference(PublishedRecordKind.Relationship, toBill), Reference(PublishedRecordKind.Relationship, toVote)));
+
+        var pairs = scenario.OfficialPages.Last(page => page.Profile.Id == "mayor" && page.IsCurrent).Pairs;
+        Assert.Equal(2, pairs.Length);
+        var bill = pairs.Single(pair => pair.TargetRecordId == action);
+        Assert.Equal(("A housing bill", null), (bill.TargetTitle, bill.Cast));
+        Assert.Equal("Yea", pairs.Single(pair => pair.TargetRecordId == vote).Cast);
+        Assert.All(pairs, pair => Assert.Equal((statement, "Statement c", StatementDate), (pair.StatementRecordId, pair.StatementHeadline, pair.StatementDay)));
+    }
+
+    [Fact]
+    public async Task ABillThatTheOfficialDoesNotSponsorStillTouchesTheOfficialPageWhenItIsReplacedBecauseThePairShowsItsTitle()
+    {
+        var scenario = new PublicationScenario();
+        var statement = scenario.AddStatement('c', statementDate: StatementDate);
+        var action = scenario.AddAction('d', sponsorId: "chair");
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            Reference(PublishedRecordKind.Statement, statement), Reference(PublishedRecordKind.Action, action)));
+        var relationship = scenario.AddRelationship('e', statement, action);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", relationship));
+        scenario.Releases.WriteOrder.Clear();
+        scenario.ReviseAction(action, 2);
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.WithNotesFor(
+            PublicationScenario.Request("k3", Reference(PublishedRecordKind.Action, action)), Reference(PublishedRecordKind.Action, action)));
+
+        Assert.Contains(PublicationProtocol.OfficialPagePath("mayor"), scenario.Releases.WriteOrder);
     }
 
     [Fact]

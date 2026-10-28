@@ -36,7 +36,11 @@ public sealed record PublishedRelationship
         Officials = Officials,
         IssueIds = IssueIds,
         PolicyAreaIds = PolicyAreaIds,
-        EventDate = StatementDate
+        EventDate = StatementDate,
+        LinkType = Type,
+        StatementRecordId = Statement.RecordId,
+        TargetKind = Target.Kind,
+        TargetRecordId = Target.RecordId
     };
 
     public static bool IsCitedKind(PublishedRecordKind kind) => kind == PublishedRecordKind.Statement || IsTargetKind(kind);
@@ -54,7 +58,7 @@ public sealed record PublishedRelationship
         RequireText(Quote, MaximumQuoteLength);
         RequireText(TargetFact, MaximumFactLength);
         ValidateCitations();
-        if (!Enum.IsDefined(Type) || (Target.Kind == PublishedRecordKind.Vote) != (Type == PublishedRelationshipType.StatementAboutVote))
+        if (!Enum.IsDefined(Type) || !TypeFits(Type, Target.Kind))
             throw new InvalidDataException("The published relationship type does not fit the kind of the target.");
         if (Officials is null || IssueIds is null || PolicyAreaIds is null ||
             Officials.Any(official => official is null || string.IsNullOrWhiteSpace(official.Name)) ||
@@ -63,7 +67,10 @@ public sealed record PublishedRelationship
             throw new InvalidDataException("Published relationship officials, issues, and policy areas must be distinct and not blank.");
     }
 
-    private static bool IsTargetKind(PublishedRecordKind kind) => kind is PublishedRecordKind.Action or PublishedRecordKind.Vote;
+    internal static bool IsTargetKind(PublishedRecordKind kind) => kind is PublishedRecordKind.Action or PublishedRecordKind.Vote;
+
+    internal static bool TypeFits(PublishedRelationshipType type, PublishedRecordKind targetKind) =>
+        (targetKind == PublishedRecordKind.Vote) == (type == PublishedRelationshipType.StatementAboutVote);
 
     private void ValidateCitations()
     {
