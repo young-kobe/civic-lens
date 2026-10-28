@@ -1203,10 +1203,12 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task OnlyTheNotFoundPageAsksSearchEnginesToSkipIt()
+    public async Task OnlyPagesThatAReaderShouldNotLandOnFromASearchEngineAskToBeSkipped()
     {
-        foreach (var (_, _, html, _) in await RenderEveryPageTypeAsync(PublicBaseUrl.Parse(BaseUrl, "V")))
-            Assert.Null(new HtmlParser().ParseDocument(html).Head!.QuerySelector("meta[name='robots']"));
+        string[] skipped = ["withdrawal", "search", "report"];
+        foreach (var (name, _, html, _) in await RenderEveryPageTypeAsync(PublicBaseUrl.Parse(BaseUrl, "V")))
+            Assert.Equal(skipped.Contains(name) ? "noindex" : null,
+                new HtmlParser().ParseDocument(html).Head!.QuerySelector("meta[name='robots']")?.GetAttribute("content"));
 
         var notFound = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null, PublicBaseUrl.Parse(BaseUrl, "V"))
             .RenderNotFoundAsync(CancellationToken.None));

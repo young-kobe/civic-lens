@@ -1,7 +1,7 @@
 @using CivicLens.Host.Components.Layout
 @using CivicLens.Publication.Contracts
 
-<PublicPage CanonicalPath="@PublicationProtocol.ReportPagePath" Title="Report a problem" Description="Tell Civic Lens what is wrong with a published record. A person checks each report." ExternalScript="@(IsAvailable ? TurnstileScript : null)" Crumbs="Crumbs">
+<PublicPage CanonicalPath="@PublicationProtocol.ReportPagePath" NoIndex="true" Title="Report a problem" Description="Tell Civic Lens what is wrong with a published record. A person checks each report." ExternalScript="@(IsAvailable ? TurnstileScript : null)" Crumbs="Crumbs">
     <PageHeader Title="Report a problem" Lede="Tell us what is wrong with a published record. A person checks each report." />
     @if (!IsAvailable)
     {
