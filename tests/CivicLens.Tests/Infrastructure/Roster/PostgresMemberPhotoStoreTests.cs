@@ -11,6 +11,8 @@ namespace CivicLens.Tests.Infrastructure.Roster;
 [Trait("Category", "Postgres")]
 public sealed class PostgresMemberPhotoStoreTests(PostgresCollection postgres) : IAsyncLifetime
 {
+    private const string JobLockKey = "civic-lens-collection-jobs";
+
     private static readonly DateTimeOffset Morning = new(2026, 10, 28, 6, 0, 0, TimeSpan.Zero);
     private string connectionString = null!;
     private PostgresCollectionAttemptStore attempts = null!;
@@ -95,7 +97,14 @@ public sealed class PostgresMemberPhotoStoreTests(PostgresCollection postgres) :
         var first = await ImportAsync('a', 0);
         var second = await ImportAsync('a', 1);
 
-        await Task.WhenAll(roster.AdmitPhotoAsync(Photo(first), default), roster.AdmitPhotoAsync(Photo(second), default));
+        Task writes;
+        await using (var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, JobLockKey))
+        {
+            writes = Task.WhenAll(roster.AdmitPhotoAsync(Photo(first), default), roster.AdmitPhotoAsync(Photo(second), default));
+            await HeldAdvisoryLock.WaitForWaiterAsync(connectionString, JobLockKey);
+            Assert.False(writes.IsCompleted);
+        }
+        await writes;
 
         Assert.Single(await ReadRowsAsync());
     }

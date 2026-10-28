@@ -100,7 +100,7 @@ The photo source sets `mode` `api`, `apiParser` `memberPhotos`, `maxRequests` 2,
 
 Preparation of each member roster job asks for the enabled photo source. When one exists, the member store writes one job for each configured person with a bioguide ID. The job URL is the source URL, the bioguide ID, and `.jpg`. The key is `member-photo/{sourceId}/{bioguideId}/{period}`. The period is the number of whole 30 day blocks since the Unix epoch.
 
-With a photo source, the store takes the collection job lock first, as every other job writer does. Without one, it uses a plain transaction. It then writes the jobs and the snapshot in one transaction. When the roster body is known, it writes only the jobs.
+With a photo source, the store takes the collection job lock first, as every other job writer does. It then writes the jobs and the snapshot in one transaction. Without a photo source, it takes no job lock and writes only the snapshot. When the roster body is known, it writes only the jobs.
 
 Preparation of a photo job reads the bioguide ID from the job URL and finds the configured person. It checks the captured media type, the JPEG signature `FF D8 FF`, and the size in the frame header. Then `AdmitPhotoAsync` compares the capture hash with the newest row of the person. It adds a row only when the hash differs.
 
