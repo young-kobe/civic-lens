@@ -414,7 +414,7 @@ The reader takes the `lis` IDs of the senators from `IMemberRosterStore.ReadSena
 - A voted bill from a congress before `minimumCongress` of the bill source would wait forever. No such vote exists today, because the vote sweep starts in 2025.
 - Measured on 2026-10-16 with 147 drafts: no headline contradicts the result in 74 checked drafts. But 23 of the 74 summaries say the facts do not describe the measure. 28 explain House procedure from model knowledge.
 - Measured on 2026-10-16 over 676 roll calls: 145 are procedural, 96 are amendments, and 324 pass a bill.
-- The talk and action profile counts only the substantive vote kinds, which `PublishedVoteKindExtensions.IsSubstantive` lists; see [publication](publication.md#issue-panel).
+- The issue panel counts only the substantive vote kinds, which `PublishedVoteKindExtensions.IsSubstantive` lists; see [publication](publication.md#issue-panel).
 - Measured on 2026-10-17 over 676 roll calls in the development data: 266 passage, 157 suspension, 90 amendment, 70 motion to recommit, and 61 previous question. Also 2 veto override and 30 other.
 - No rule and no conference report occur in that data yet. The 79 roll calls on a House resolution still wait for their bill title, so they count as passage until the title arrives.
 - The other kind holds motions to table, discharge, adjourn, refer, instruct, and reconsider. It also holds the consideration of a resolution and the division votes. It also holds the Speaker election and the quorum calls.
