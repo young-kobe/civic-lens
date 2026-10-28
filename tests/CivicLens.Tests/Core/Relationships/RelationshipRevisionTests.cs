@@ -111,6 +111,16 @@ public sealed class RelationshipRevisionTests
     }
 
     [Fact]
+    public void APersonRevisionStaysOnlyForTheSameCitationsAndTheSameOfficial()
+    {
+        var edit = Revision() with { AuthorSubject = "auth0|reviewer" };
+
+        Assert.True(edit.IsPersonRevisionCiting(edit.Statement, edit.Target, edit.OfficialId));
+        Assert.False(edit.IsPersonRevisionCiting(edit.Statement, edit.Target, "another-official"));
+        Assert.False(Revision().IsPersonRevisionCiting(edit.Statement, edit.Target, edit.OfficialId));
+    }
+
+    [Fact]
     public void ASpanCoversAnotherSpanOnlyInTheSameExtractionAndInsideItsOwnRange()
     {
         var outer = new SourceSpan(RelationshipFixtures.ExtractionId, 10, 20);

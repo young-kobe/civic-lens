@@ -60,7 +60,7 @@ public sealed class RelationshipDraftStep(IRelationshipDraftStore store, IRelati
 
     private static bool CanRecite(RelationshipRevision current, RelationshipPair pair) =>
         ReviewAuthor.KindOf(current.AuthorSubject) == ReviewAuthorKind.Analysis && current.Statement == pair.StatementCitation &&
-        current.Match == pair.Match && current.OfficialId == pair.OfficialId;
+        current.Match == pair.Match;
 
     private async Task<bool> DraftAsync(IAnalysisAttempt<RelationshipDraftRun> attempt, RelationshipDraftContext context,
         CancellationToken cancellationToken)
