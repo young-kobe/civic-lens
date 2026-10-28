@@ -10,14 +10,12 @@ namespace CivicLens.Tests.Host;
 public sealed class ReleaseCommandTests
 {
     [Theory]
-    [InlineData("releases", "publish", "key")]
     [InlineData("releases", "publish", "key", "abc")]
     [InlineData("releases", "publish", "key", "draft:abc")]
     [InlineData("releases", "publish", "key", "statement:")]
     [InlineData("releases", "publish", "key", "Statement:abc")]
     [InlineData("releases", "publish", "key", "--note")]
     [InlineData("releases", "publish", "key", "--note", "statement:abc")]
-    [InlineData("releases", "publish", "key", "--note", "statement:abc", "text")]
     [InlineData("releases", "publish", "key", "statement:abc", "--note", "draft:abc", "text")]
     [InlineData("releases", "publish", "key", "statement:abc", "--note", "statement:abc")]
     [InlineData("releases", "publish", "key", "--withdraw")]
