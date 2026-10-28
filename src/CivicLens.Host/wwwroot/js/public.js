@@ -43,9 +43,14 @@
             for (const [name, value] of new FormData(form)) if (value) params.set(name, value);
             return params;
         };
+        const reset = () => {
+            nextCursor = null;
+            more.hidden = true;
+            results.replaceChildren();
+        };
         const run = async append => {
             const params = formParams();
-            if (append) params.set("cursor", nextCursor);
+            if (append) params.set("cursor", nextCursor); else reset();
             const mine = ++running;
             status.textContent = "Searching.";
             let response;
@@ -61,31 +66,28 @@
             more.hidden = nextCursor === null;
             status.textContent = results.children.length === 0 ? "No records match." : `Showing ${results.children.length} records from release ${page.release}.`;
         };
-        const clear = () => {
-            running++;
-            nextCursor = null;
-            results.replaceChildren();
-            status.textContent = "";
-            more.hidden = true;
-        };
-        const writeAddress = (params, write) => {
+        let address = location.search;
+        const writeAddress = (params, replace) => {
             const text = params.toString();
             const search = text ? `?${text}` : "";
-            history[write ?? (search === location.search ? "replaceState" : "pushState")](null, "", location.pathname + search);
+            if (replace || search === location.search) history.replaceState(null, "", location.pathname + search);
+            else history.pushState(null, "", location.pathname + search);
+            address = search;
         };
         const restoreFromAddress = () => {
-            const query = new URLSearchParams(location.search);
+            address = location.search;
+            const query = new URLSearchParams(address);
             for (const field of Array.from(form.elements).filter(element => element.name)) {
                 field.value = query.get(field.name) ?? "";
-                if (field.selectedIndex === -1) field.value = "";
+                if (field instanceof HTMLSelectElement && field.selectedIndex === -1) field.value = "";
             }
-            if (formParams().toString() === "") { clear(); return false; }
-            run(false);
-            return true;
+            if (formParams().toString() !== "") run(false);
+            else { running++; reset(); status.textContent = ""; }
         };
         form.closest("section").hidden = false;
-        if (restoreFromAddress()) writeAddress(formParams(), "replaceState");
-        window.addEventListener("popstate", restoreFromAddress);
+        restoreFromAddress();
+        writeAddress(formParams(), true);
+        window.addEventListener("popstate", () => { if (location.search !== address) restoreFromAddress(); });
         form.addEventListener("submit", event => { event.preventDefault(); writeAddress(formParams()); run(false); });
         form.addEventListener("input", () => { nextCursor = null; more.hidden = true; });
         more.addEventListener("click", () => run(true));
