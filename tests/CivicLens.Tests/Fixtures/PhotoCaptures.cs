@@ -17,9 +17,9 @@ internal sealed class PhotoCaptures : ICollectionAttemptStore, ICaptureBodyReade
 
     public CapturingLogger<ReleasePhotos> Log { get; } = new();
 
-    public static ReleasePhotos None() => new(new PhotoCaptures(), new PhotoCaptures(), null, new CapturingLogger<ReleasePhotos>());
+    public static ReleasePhotos None() => new(new PhotoCaptures(), new PhotoCaptures(), "artifacts", new CapturingLogger<ReleasePhotos>());
 
-    public ReleasePhotos Photos(string? artifactRoot) => new(this, this, artifactRoot, Log);
+    public ReleasePhotos Photos(string artifactRoot) => new(this, this, artifactRoot, Log);
 
     public void Add(string attemptId, byte[] image) => images[attemptId] = image;
 

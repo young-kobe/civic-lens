@@ -23,15 +23,17 @@ internal static class PublicationComposition
 {
     private const string ArtifactDirectoryVariable = "CIVIC_LENS_ARTIFACT_DIRECTORY";
 
-    public static string? ArtifactRootFromEnvironment() =>
-        Environment.GetEnvironmentVariable(ArtifactDirectoryVariable) is { Length: > 0 } root ? Path.GetFullPath(root) : null;
+    public static string RequireArtifactRoot() =>
+        Environment.GetEnvironmentVariable(ArtifactDirectoryVariable) is { Length: > 0 } root
+            ? Path.GetFullPath(root)
+            : throw new ArgumentException($"Publishing requires {ArtifactDirectoryVariable}.");
 
     public static IssueConfiguration RequireIssues(IssueConfiguration? issues) =>
         issues ?? throw new ArgumentException("Publishing requires CIVIC_LENS_ISSUES_CONFIG.");
 
     public static PublicationParts Create(string connectionString,
         PostgresPublicationStore publications, FileReleaseDirectory releases, CollectionConfiguration collection, IssueConfiguration issues,
-        string? artifactRoot, ILoggerFactory loggers)
+        string artifactRoot, ILoggerFactory loggers)
     {
         var loaders = new PublishedRecordLoaders(
             PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),

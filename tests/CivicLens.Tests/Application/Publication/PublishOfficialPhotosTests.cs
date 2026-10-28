@@ -103,18 +103,6 @@ public sealed class PublishOfficialPhotosTests
     }
 
     [Fact]
-    public async Task AnUnchangedPhotoNeedsNoArtifactDirectoryBecauseNoCaptureIsRead()
-    {
-        var scenario = ScenarioWith(("mayor", "attempt-1", FirstHash, "first"));
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", Vote(scenario, 'a')));
-        scenario.ArtifactRoot = null;
-
-        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", scenario.AddDraft('c')));
-
-        Assert.Contains(PublicationProtocol.PhotoPath(FirstHash), scenario.Releases.Directories[second.DirectoryName].Keys);
-    }
-
-    [Fact]
     public async Task APreviousReleaseThatLacksTheLinkedFileFailsThePublishInsteadOfDroppingThePhoto()
     {
         var scenario = ScenarioWith(("mayor", "attempt-1", FirstHash, "first"));
@@ -137,19 +125,6 @@ public sealed class PublishOfficialPhotosTests
         Assert.Single(scenario.Captures.Reads);
         var officials = Officials(scenario.Releases.Directories[summary.DirectoryName]).Officials;
         Assert.All(officials, profile => Assert.Equal(PublicationProtocol.PhotoPath(FirstHash), profile.Photo!.Path));
-    }
-
-    [Fact]
-    public async Task ANewPhotoWithNoArtifactDirectoryFailsWithItsMessageAndWritesNoRelease()
-    {
-        var scenario = ScenarioWith(("mayor", "attempt-1", FirstHash, "first"));
-        scenario.ArtifactRoot = null;
-
-        var failure = await Assert.ThrowsAsync<ArgumentException>(() =>
-            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", Vote(scenario, 'a'))));
-
-        Assert.Equal("The new photo of mayor needs the artifact directory to read its capture, and no artifact directory is set.", failure.Message);
-        Assert.Empty(scenario.Releases.Directories);
     }
 
     [Fact]

@@ -331,17 +331,18 @@ internal static class ReviewWorkspace
         services.AddScoped<GetBriefReviewCounts>();
     }
 
-    // The owner publish section needs a release directory and the configured official, issue, and policy area names.
+    // The owner publish section needs a release directory, an artifact directory, and the configured official, issue, and policy area names.
     private static void ConfigurePublication(IServiceCollection services, string connectionString, CollectionConfiguration collection,
         IssueConfiguration issues)
     {
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
         if (releaseRoot is null) return;
+        var artifactRoot = PublicationComposition.RequireArtifactRoot();
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
         var releases = new FileReleaseDirectory(releaseRoot);
         services.AddScoped(_ => new ListPublicationReleases(publications, releases));
         services.AddSingleton(provider => PublicationComposition.Create(connectionString, publications, releases, collection, issues,
-            PublicationComposition.ArtifactRootFromEnvironment(), provider.GetRequiredService<ILoggerFactory>()));
+            artifactRoot, provider.GetRequiredService<ILoggerFactory>()));
         services.AddSingleton(provider => provider.GetRequiredService<PublicationParts>().Loaders);
         services.AddSingleton(provider => provider.GetRequiredService<PublicationParts>().Publish);
         services.AddScoped(provider => new ListPublishable(provider.GetRequiredService<PublishedRecordLoaders>(), publications, releases));

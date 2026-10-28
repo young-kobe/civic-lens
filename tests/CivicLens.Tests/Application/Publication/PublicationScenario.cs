@@ -56,7 +56,6 @@ internal sealed class PublicationScenario
     public ExecutiveOfficial[] ExecutiveOfficials { get; set; } = [];
     public OfficialPhoto[] Photos { get; set; } = [];
     public PhotoCaptures Captures { get; } = new();
-    public string? ArtifactRoot { get; set; } = "artifacts";
     public int PhotoReads { get; private set; }
 
     private CollectionConfiguration Collection() => RosterFixtures.Configuration() with
@@ -81,7 +80,7 @@ internal sealed class PublicationScenario
 
     public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events, OfficialPages = OfficialPages }, Loaders(),
         new PublicationCatalog(OfficialNames, Issues), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, null, Photos, () => PhotoReads++), new FixedExecutiveRoster(ExecutiveOfficials)),
-        Captures.Photos(ArtifactRoot), Clock);
+        Captures.Photos("artifacts"), Clock);
 
     public BlockedPublishedRecords Blocked() => new(Publications);
 

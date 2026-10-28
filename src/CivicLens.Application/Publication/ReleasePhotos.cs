@@ -12,7 +12,7 @@ namespace CivicLens.Application.Publication;
 /// linked, and its capture is not read. A new photo reads its capture once, and two officials with one capture share one file.
 /// A new photo that cannot be read keeps the photo of the previous profile, else the official has no photo. Both cases log an error.
 /// </summary>
-public sealed class ReleasePhotos(ICollectionAttemptStore attempts, ICaptureBodyReader bodies, string? artifactRoot,
+public sealed class ReleasePhotos(ICollectionAttemptStore attempts, ICaptureBodyReader bodies, string artifactRoot,
     ILogger<ReleasePhotos> logger)
 {
     internal async Task<ReleasePhotoFiles> LoadAsync(IReadOnlyList<OfficialPhoto> rows, PreviousRelease previous,
@@ -71,8 +71,6 @@ public sealed class ReleasePhotos(ICollectionAttemptStore attempts, ICaptureBody
 
     private async Task<byte[]> ReadAsync(OfficialPhoto row, CancellationToken cancellationToken)
     {
-        if (artifactRoot is null)
-            throw new ArgumentException($"The new photo of {row.PersonId} needs the artifact directory to read its capture, and no artifact directory is set.");
         var stored = await attempts.GetAsync(row.AttemptId, cancellationToken);
         if (stored?.AttemptResult is not CapturedAttemptResult captured)
             throw new InvalidDataException("The photo attempt has no captured response.");

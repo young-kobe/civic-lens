@@ -153,4 +153,4 @@ The join of a configured person to roster terms is in [publication](publication.
 - Photos are never used in ads.
 - A person with no row has no photo. The no-photo state is derived and never stored.
 - A person does not review a photo. The source is a public domain portrait set.
-- A takedown has no mechanism yet; see [R-44](../roadmap.md#later). Until then, a bad photo stays in each release that holds it, and only a new publish with a changed photo replaces it.
+- A takedown has no mechanism yet; see [R-44](../roadmap.md#next). Until then, a bad photo stays in each release that holds it, and only a new publish with a changed photo replaces it.

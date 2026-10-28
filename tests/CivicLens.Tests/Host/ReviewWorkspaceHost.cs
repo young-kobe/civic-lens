@@ -36,6 +36,7 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
     public HttpClient Client { get; } = new(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }) { Timeout = TimeSpan.FromSeconds(15) };
     public string KeyDirectory { get; } = Path.Combine(Path.GetTempPath(), "civic-review-keys-" + Guid.NewGuid().ToString("N"));
     public string ReleaseDirectory => Path.Combine(KeyDirectory, "releases");
+    public string ArtifactDirectory => Path.Combine(KeyDirectory, "captures");
     private Process? process;
     private Task<string>? output;
     private readonly StringBuilder errors = new();
@@ -92,7 +93,11 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
                "allowedPathPrefix":"/pages","documentProfileId":"main"}]}
             """);
         start.Environment["CIVIC_LENS_COLLECTION_CONFIG"] = collectionPath;
-        if (Publishing) start.Environment["CIVIC_LENS_RELEASE_DIRECTORY"] = ReleaseDirectory;
+        if (Publishing)
+        {
+            start.Environment["CIVIC_LENS_RELEASE_DIRECTORY"] = ReleaseDirectory;
+            start.Environment["CIVIC_LENS_ARTIFACT_DIRECTORY"] = ArtifactDirectory;
+        }
         var issues = Issues ?? (IssuesFile ? IssueConfiguration.None : null);
         if (issues is not null)
         {
