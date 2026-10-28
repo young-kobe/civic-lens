@@ -12,19 +12,30 @@ public sealed record TalkAndActionProfile(TalkAndActionColumn Statements, Immuta
     TalkAndActionColumn Votes, ImmutableArray<MissedVotes> MissedByChamber, ImmutableArray<VotesWithParty> WithPartyByChamber)
 {
     public const int MinimumRecordsForShare = 5;
+    public const string StatementCount = "statement";
+    public const string BillCount = "bill";
+    public const string VoteCount = "vote";
 
-    public ImmutableArray<string> IssueIds => [.. new[] { Statements, Votes }.SelectMany(column => column.ByIssue.Keys)
+    public ImmutableArray<string> IssueIds => [.. new[] { Statements, Votes }.SelectMany(column => column.RecordIdsByIssue.Keys)
         .Concat(SponsoredBills.SelectMany(bill => bill.IssueIds)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
 
     public ImmutableArray<PublishedRecordEntry> SponsoredOn(string issueId) => [.. SponsoredBills.Where(bill => bill.IssueIds.Contains(issueId))];
+
+    public static string CountKey(string countName, string issueId) => $"{countName}:{issueId}";
+
+    public ILookup<string, string> CountKeysByRecord() =>
+        Statements.Counted().Select(pair => (pair.RecordId, Key: CountKey(StatementCount, pair.IssueId)))
+            .Concat(SponsoredBills.SelectMany(bill => bill.IssueIds.Select(issueId => (bill.RecordId, Key: CountKey(BillCount, issueId)))))
+            .Concat(Votes.Counted().Select(pair => (pair.RecordId, Key: CountKey(VoteCount, pair.IssueId))))
+            .ToLookup(pair => pair.RecordId, pair => pair.Key, StringComparer.Ordinal);
 
     public static TalkAndActionProfile Of(int congress, IEnumerable<PublishedRecordEntry> entries, IEnumerable<PublishedOfficialVote> votes)
     {
         var inCongress = entries.Where(entry => CongressCalendar.CongressOn(ReleaseRecordOrder.Day(entry)) == congress).ToLookup(entry => entry.Kind);
         var allVotes = votes.ToArray();
-        return new(TalkAndActionColumn.Of(inCongress[PublishedRecordKind.Statement].Select(entry => entry.IssueIds)),
+        return new(TalkAndActionColumn.Of(inCongress[PublishedRecordKind.Statement].Select(entry => (entry.RecordId, entry.IssueIds))),
             [.. inCongress[PublishedRecordKind.Action]],
-            TalkAndActionColumn.Of(allVotes.Where(vote => vote.Kind.IsSubstantive() && vote.IsCast).Select(vote => vote.IssueIds)),
+            TalkAndActionColumn.Of(allVotes.Where(vote => vote.Kind.IsSubstantive() && vote.IsCast).Select(vote => (vote.RecordId, vote.IssueIds))),
             MissedVotes.Of(allVotes), VotesWithParty.Of(allVotes));
     }
 

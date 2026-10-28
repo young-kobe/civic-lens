@@ -116,6 +116,28 @@ public sealed class TalkAndActionProfileTests
         Assert.Equal(["defense", "health", "housing", "tax"], profile.IssueIds.ToArray());
     }
 
+    [Fact]
+    public void TheCountKeysOfTheRecordsMatchTheCountsSoAFilteredListCannotDifferFromItsCount()
+    {
+        PublishedRecordEntry[] entries =
+        [
+            Entry(1, PublishedRecordKind.Statement, InCongress, ["housing", "health"]),
+            Entry(2, PublishedRecordKind.Action, InCongress, ["housing"]),
+            Entry(3, PublishedRecordKind.Statement, new DateOnly(2024, 1, 1), ["housing"])
+        ];
+        var votes = new[] { Vote(4, PublishedVoteKind.Passage, ["housing"]), Vote(5, PublishedVoteKind.Cloture, ["housing"]),
+            Vote(6, PublishedVoteKind.Passage, ["housing"]) with { Cast = PublishedOfficialVote.NotVoting } };
+
+        var profile = TalkAndActionProfile.Of(119, entries, votes);
+
+        var byKey = profile.CountKeysByRecord().SelectMany(group => group.Select(key => (key, recordId: group.Key))).ToLookup(pair => pair.key, pair => pair.recordId);
+        Assert.Equal(profile.Statements.CountOf("housing"), byKey[TalkAndActionProfile.CountKey(TalkAndActionProfile.StatementCount, "housing")].Count());
+        Assert.Equal(profile.Statements.CountOf("health"), byKey[TalkAndActionProfile.CountKey(TalkAndActionProfile.StatementCount, "health")].Count());
+        Assert.Equal(profile.SponsoredOn("housing").Length, byKey[TalkAndActionProfile.CountKey(TalkAndActionProfile.BillCount, "housing")].Count());
+        Assert.Equal(profile.Votes.CountOf("housing"), byKey[TalkAndActionProfile.CountKey(TalkAndActionProfile.VoteCount, "housing")].Count());
+        Assert.Equal([4.ToString("x64")], byKey[TalkAndActionProfile.CountKey(TalkAndActionProfile.VoteCount, "housing")]);
+    }
+
     private static PublishedRecordEntry Entry(int id, PublishedRecordKind kind, DateOnly day, string[] issueIds) => new()
     {
         Officials = [],
