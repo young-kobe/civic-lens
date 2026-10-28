@@ -539,7 +539,9 @@
     {"id":"glenn-grothman","name":"Glenn Grothman","bioguideId":"G000576"},
     {"id":"thomas-tiffany","name":"Thomas Tiffany","bioguideId":"T000165"},
     {"id":"tony-wied","name":"Tony Wied","bioguideId":"W000829"},
-    {"id":"harriet-hageman","name":"Harriet Hageman","bioguideId":"H001096"}
+    {"id":"harriet-hageman","name":"Harriet Hageman","bioguideId":"H001096"},
+    {"id":"donald-trump","name":"Donald Trump","wikidataId":"Q22686","offices":[{"title":"President","startsOn":"2025-01-20","endsOn":"2029-01-20"}]},
+    {"id":"jd-vance","name":"J.D. Vance","bioguideId":"V000137","wikidataId":"Q28935729","offices":[{"title":"Vice President","startsOn":"2025-01-20","endsOn":"2029-01-20"}]}
   ],
   "sources": [
     {"id":"angela-d-alsobrooks-press","coverage":[{"personId":"angela-d-alsobrooks","startsOn":"2026-10-10"}],"url":"https://www.alsobrooks.senate.gov/newsroom/press-releases/","allowedOrigin":"https://www.alsobrooks.senate.gov","allowedPathPrefix":"/","mode":"html","maxCandidates":100,"enabled":true,"maxRequests":5,"maxBytes":2000000,"timeoutSeconds":60,"minDelayMilliseconds":1500,"jobPolicy":{"maxAttempts":2,"initialRetryDelaySeconds":60,"maximumRetryDelaySeconds":3600},"admissionPolicy":{"maxJobs":2,"maxTotalRequests":20,"maxTotalBytes":8000000,"maxTotalTimeoutSeconds":240},"documentProfileId":"wp-elementor-single"},

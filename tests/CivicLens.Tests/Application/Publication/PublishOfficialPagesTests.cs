@@ -331,6 +331,18 @@ public sealed class PublishOfficialPagesTests
     }
 
     [Fact]
+    public async Task APersonWithABioguideIdAndNoMemberTermShowsTheConfiguredOffice()
+    {
+        var scenario = new PublicationScenario();
+        scenario.ExternalIds["mayor"] = ("M000001", null);
+        scenario.Offices["mayor"] = [new() { Title = "Vice President", StartsOn = new(2025, 1, 20) }];
+
+        var summary = await PublishAsync(scenario, "k", PublishedRecordKind.Statement, scenario.AddStatement('a'));
+
+        Assert.Equal(["Vice President"], Assert.Single(Officials(scenario.Releases.Directories[summary.DirectoryName]).Officials).Terms.Select(term => term.Office));
+    }
+
+    [Fact]
     public async Task RosterTermsWinOverConfiguredOfficesWhenBothExistForAPerson()
     {
         var scenario = new PublicationScenario();

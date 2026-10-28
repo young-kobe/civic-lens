@@ -295,8 +295,6 @@ public sealed record CollectionConfiguration
     {
         if (person.Offices is null)
             return;
-        if (person.BioguideId is not null)
-            throw new ArgumentException($"Person '{person.Id}' has a bioguide ID, so the roster gives the offices.");
         if (person.Offices.Length > OfficeConfiguration.MaximumPerPerson)
             throw new ArgumentException($"Person '{person.Id}' has more than {OfficeConfiguration.MaximumPerPerson} offices.");
         foreach (var office in person.Offices)
