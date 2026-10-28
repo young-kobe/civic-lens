@@ -67,4 +67,4 @@ Projects define architectural layers; feature folders group related code within 
 - [Remaining implementation phases](docs/roadmap.md)
 - [Contributor and agent rules](AGENTS.md)
 
-The project uses AGPL-3.0; see [LICENSE](LICENSE). Documentation describes the current implementation and clearly marks planned behavior. Git holds history.
+The code uses AGPL-3.0; see [LICENSE](LICENSE). Published record text and data files use CC BY 4.0. Documentation describes the current implementation and clearly marks planned behavior. Git holds history.
