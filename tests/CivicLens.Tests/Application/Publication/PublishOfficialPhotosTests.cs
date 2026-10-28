@@ -2,7 +2,6 @@ using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Roster;
-using CivicLens.Host.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using Microsoft.Extensions.Logging;
@@ -164,17 +163,15 @@ public sealed class PublishOfficialPhotosTests
     }
 
     [Fact]
-    public async Task APublishWithOnlyAKeyAfterAWithholdFlagMakesAReleaseWithNoPhotoSoATakedownNeedsNoNewRecord()
+    public async Task APublishWithNoRecordAfterAWithholdFlagMakesAReleaseWithNoPhotoSoATakedownNeedsNoNewRecord()
     {
         var scenario = ScenarioWith(("mayor", "attempt-1", FirstHash, "first"));
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", Vote(scenario, 'a')));
         scenario.WithheldPhotos.Add("mayor");
 
-        var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2"], scenario.Publisher(), null!, null!, null!,
-            PublicationScenario.Owner, CancellationToken.None);
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2"));
 
-        Assert.Equal(0, exit);
-        var files = scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName];
+        var files = scenario.Releases.Directories[summary.DirectoryName];
         Assert.Null(Officials(files).Officials.Single(profile => profile.Id == "mayor").Photo);
         Assert.DoesNotContain(files.Keys, path => path.StartsWith("photos/", StringComparison.Ordinal));
     }

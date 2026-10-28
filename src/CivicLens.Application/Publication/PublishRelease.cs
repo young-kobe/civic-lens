@@ -63,7 +63,7 @@ public sealed class PublishRelease
         var state = await publications.GetStateAsync(cancellationToken);
         var previous = await PreviousRelease.LoadAsync(releases, state.Active, cancellationToken);
         if (previous.DirectoryName is null && references.IsEmpty && request.Withdrawals.IsEmpty)
-            throw new ArgumentException("A publish with no record needs an active release.", nameof(request));
+            throw new ArgumentException("A publish with no record needs an active release.");
         PublicationWithdrawals.RequireNoReturnByCode(previous, references, byCode);
         var withdrawn = ImmutableArray.CreateRange(withdrawalNotes.Keys);
         var corrections = await PublicationCorrections.LoadAsync(releases, previous, now, byCode, notes, [.. references, .. withdrawn],
@@ -187,7 +187,7 @@ public sealed class PublishRelease
         await indexPages.WriteAsync(staging, manifest, facets, additions, previous, cancellationToken);
         var officials = await dataFiles.WriteAsync(staging, manifest, facets, additions, previous, roster, photos, cancellationToken);
         if (additions.Count == 0 && removed.Count == 0 && !ReleaseOfficialPages.ChangesProfiles(previous, officials))
-            throw new ArgumentException("Nothing to publish: no record and no official changed.", nameof(additions));
+            throw new ArgumentException("Nothing to publish: no record and no official changed.");
         await officialPages.WriteAsync(staging, manifest, officials, additions, removed, previous, cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestPath, manifestJson, cancellationToken);
         return (await staging.CompleteAsync(number, cancellationToken), entries);
