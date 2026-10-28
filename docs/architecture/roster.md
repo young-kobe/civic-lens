@@ -35,8 +35,8 @@ The feature also captures one official portrait for each configured member. A ph
 - Preparation accepts only a JPEG of exactly 225 by 275 pixels. A small parser reads the size from the frame header, because Application takes no image package.
 - The credit is the constant `MemberPhoto.MemberGuideCredit`. Each photo row copies the text. A later change to the constant never rewrites provenance. Configured executive photos will take their credit from `PersonConfiguration.photo`.
 - A photo row holds no image bytes. The capture holds them.
-- A missing photo is not stored. A 404 ends the job `Failed` with no retry. A person with no row has no photo. A later 404 keeps the last good photo. A takedown has no mechanism yet; see the limits.
-- The roster feature writes photo rows and reads the newest row of each person for publication. Publication owns the photo files; see [publication](publication.md#release-content).
+- A missing photo is not stored. A 404 ends the job `Failed` with no retry. A person with no row has no photo. A later 404 keeps the last good photo. A person with `withholdPhoto` gets no photo in a release; see [operations](../operations.md#take-down-a-member-photo).
+- The roster feature writes photo rows and reads the newest row of each person without `withholdPhoto` for publication. Publication owns the photo files; see [publication](publication.md#release-content).
 
 ## Invariants
 
@@ -65,6 +65,7 @@ Each line gives the rule, what enforces it, and the test that protects it.
 - A photo job fetches one photo URL under the source prefix, with the photo resource, and no other URL. Enforced by `CollectionJobDefinition` and `MemberPhotoUrl`. Tests: `MemberPhotoSourceTests.AMemberPhotoJobIsBoundToAPhotoUrlUnderTheSourcePrefixAndToNoOtherUrlOrResource`, `MemberPhotoSourceTests.TheRosterSourceRejectsAPhotoUrlSoOnlyThePhotoSourceFetchesPhotos`, `MemberPhotoSourceTests.AUrlThatIsNotAPhotoOfABioguideIdUnderTheSourceReadsAsNone`.
 - The photo source makes no scheduled root job. Enforced by `ConfiguredCollectionSource.FixedApiTarget`. Test: `MemberPhotoSourceTests.ThePhotoSourceMakesNoScheduledRootJobBecauseTheRosterJobCreatesThePhotoJobs`.
 - A roster job makes one backfill photo job for each configured person with a bioguide ID, and none for other people. Enforced by `ConfiguredCollectionSource.CreateMemberPhotoBatch`. Tests: `MemberPhotoSourceTests.TheBatchHoldsOneBackfillJobForEachConfiguredPersonWithABioguideIdAndNoOtherPerson`, `PostgresMemberPhotoJobTests.ASnapshotAndOneBackfillPhotoJobForEachConfiguredPersonWithABioguideIdAreWrittenTogether`.
+- A person with `withholdPhoto` still gets photo jobs and keeps photo rows, so removing the flag restores the newest photo. Publish drops the photo; see [publication](publication.md#invariants). Enforced by `ConfiguredCollectionSource.CreateMemberPhotoBatch`, which does not read the flag. Test: `PostgresMemberPhotoJobTests.AWithheldPersonStillGetsAPhotoJobSoRemovingTheFlagRestoresTheNewestPhoto`.
 - A person gets at most one photo job in each 30 day period, and a new period adds one. Enforced by `MemberPhotoJobKeys` and the unique idempotency key. Tests: `MemberPhotoSourceTests.AKeyChangesEveryThirtyDaysFromTheUnixEpochSoEachPersonGetsOneJobForEachPeriod`, `PostgresMemberPhotoJobTests.ARepeatedRosterJobInTheSamePeriodAddsNoPhotoJobSoTheUniqueKeyMakesTheEnqueueIdempotent`, `PostgresMemberPhotoJobTests.ANewPeriodAddsOneJobForEachPersonSoPhotosAreRecheckedEveryThirtyDays`.
 - A roster job enqueues photo jobs also when its body is known. Enforced by `JobPreparation`. Tests: `JobPreparationTests.ANewRosterBodyPassesTheEnabledPhotoSourceSoTheSnapshotAndItsPhotoJobsShareOneTransaction`, `JobPreparationTests.AKnownRosterBodyStillEnqueuesPhotoJobsSoEachDailyCheckRefreshesTheMonthlyPhotoWindow`.
 - With no enabled photo source, no photo job exists. Enforced by `JobPreparation.EnabledPhotoSourceOf`. Tests: `JobPreparationTests.WithoutAnEnabledPhotoSourceTheRosterJobEnqueuesNoPhotoJobs`, `PostgresMemberPhotoJobTests.ARosterBodyWithoutAPhotoSourceWritesTheSnapshotAndNoJob`.
@@ -147,10 +148,10 @@ The join of a configured person to roster terms is in [publication](publication.
 - Senate votes match members through the `lis` ID. `ReadSenatorLisIdsAsync` returns each `lis` ID that any snapshot of the source gives to a person with a Senate term. A person with two `lis` IDs is a conflict, and the vote reader blocks the draft. A senator who left before the first snapshot has no row. A new member snapshot requeues the blocked Senate drafts, so a newly seated senator matches at the next draft; see [votes](votes.md#invariants).
 - Bill and vote coverage is not term aware. A member who leaves stays covered until a person edits the configuration.
 - Names are not dated. The command proposes the current official name only.
-- Publish reads the newest photo of each person with `ReadNewestPhotosAsync` and writes it into the release; see [publication](publication.md#release-content). Cards on the officials list do not show it yet.
+- Publish reads the newest photo of each person without `withholdPhoto` with `ReadNewestPhotosAsync` and writes it into the release; see [publication](publication.md#release-content). Cards on the officials list do not show it yet.
 - Configured executive photos are planned. They reuse the resource `memberPhoto` and its preparation. Each executive photo has its own source with the exact URL. The credit comes from `PersonConfiguration.photo`. The job match rule then compares the exact URL.
 - API mode sends `Accept: application/json` on image requests too. GitHub Pages ignores it.
 - Photos are never used in ads.
 - A person with no row has no photo. The no-photo state is derived and never stored.
 - A person does not review a photo. The source is a public domain portrait set.
-- A takedown has no mechanism yet; see [R-44](../roadmap.md#next). Until then, a bad photo stays in each release that holds it, and only a new publish with a changed photo replaces it.
+- A takedown of one photo uses the `withholdPhoto` flag of the person. Old release directories keep the file; see [operations](../operations.md#take-down-a-member-photo).

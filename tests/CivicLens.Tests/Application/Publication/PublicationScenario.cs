@@ -52,6 +52,7 @@ internal sealed class PublicationScenario
     public Dictionary<string, (string? BioguideId, string? WikidataId)> ExternalIds { get; } = [];
     public Dictionary<string, OfficeConfiguration[]> Offices { get; } = [];
     public Dictionary<string, string> Websites { get; } = [];
+    public HashSet<string> WithheldPhotos { get; } = [];
     public RosterMember[] RosterMembers { get; set; } = [];
     public ExecutiveOfficial[] ExecutiveOfficials { get; set; } = [];
     public OfficialPhoto[] Photos { get; set; } = [];
@@ -67,7 +68,8 @@ internal sealed class PublicationScenario
             BioguideId = ExternalIds.GetValueOrDefault(name.Key).BioguideId,
             WikidataId = ExternalIds.GetValueOrDefault(name.Key).WikidataId,
             Offices = Offices.GetValueOrDefault(name.Key),
-            Website = Websites.GetValueOrDefault(name.Key)
+            Website = Websites.GetValueOrDefault(name.Key),
+            WithholdPhoto = WithheldPhotos.Contains(name.Key)
         })],
         Sources = [RosterFixtures.Source(), ExecutiveFixtures.Source()]
     };

@@ -38,6 +38,10 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
             cancellationToken);
     }
 
+    public static bool ChangesProfiles(PreviousRelease previous, PublishedOfficials published) =>
+        published.Officials.Length != previous.Officials.Count ||
+        published.Officials.Any(profile => !SameProfile(previous.Officials.GetValueOrDefault(profile.Id), profile));
+
     private static bool SameProfile(PublishedOfficialProfile? earlier, PublishedOfficialProfile profile) =>
         earlier is not null && JsonSerializer.SerializeToUtf8Bytes(earlier, PublicationProtocol.JsonOptions)
             .AsSpan().SequenceEqual(JsonSerializer.SerializeToUtf8Bytes(profile, PublicationProtocol.JsonOptions));

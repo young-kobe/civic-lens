@@ -114,6 +114,128 @@ public sealed class PublishOfficialPhotosTests
     }
 
     [Fact]
+    public async Task AWithheldPersonHasNoPhotoAndNoCaptureIsRead()
+    {
+        var scenario = ScenarioWith(("mayor", "attempt-1", FirstHash, "first"));
+        scenario.WithheldPhotos.Add("mayor");
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", Vote(scenario, 'a')));
+
+        var files = scenario.Releases.Directories[summary.DirectoryName];
+        Assert.Null(Officials(files).Officials.Single(profile => profile.Id == "mayor").Photo);
+        Assert.Empty(scenario.Captures.Reads);
+        Assert.DoesNotContain(files.Keys, path => path.StartsWith("photos/", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task APhotoThatThePreviousReleaseHeldIsNotLinkedForwardOnceWithheld()
+    {
+        var scenario = ScenarioWith(("mayor", "attempt-1", FirstHash, "first"));
+        var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", Vote(scenario, 'a')));
+        scenario.WithheldPhotos.Add("mayor");
+        scenario.Releases.Links.Clear();
+
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", scenario.AddDraft('c')));
+
+        Assert.Contains(PublicationProtocol.PhotoPath(FirstHash), scenario.Releases.Directories[first.DirectoryName].Keys);
+        Assert.DoesNotContain(PublicationProtocol.PhotoPath(FirstHash), scenario.Releases.Directories[second.DirectoryName].Keys);
+        Assert.DoesNotContain(scenario.Releases.Links, link => link.RelativePath == PublicationProtocol.PhotoPath(FirstHash));
+    }
+
+    [Fact]
+    public async Task WithholdingRewritesTheOfficialPageAndRemovingTheFlagRestoresThePhoto()
+    {
+        var scenario = ScenarioWith(("mayor", "attempt-1", FirstHash, "first"));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", Vote(scenario, 'a')));
+        scenario.WithheldPhotos.Add("mayor");
+        scenario.Releases.WriteOrder.Clear();
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", scenario.AddDraft('c')));
+        Assert.Contains(MayorPage, scenario.Releases.WriteOrder);
+        scenario.WithheldPhotos.Clear();
+        scenario.Releases.WriteOrder.Clear();
+
+        var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", scenario.AddDraft('d')));
+
+        Assert.Contains(MayorPage, scenario.Releases.WriteOrder);
+        var files = scenario.Releases.Directories[third.DirectoryName];
+        Assert.Equal(PublicationProtocol.PhotoPath(FirstHash), Officials(files).Officials.Single(profile => profile.Id == "mayor").Photo!.Path);
+        Assert.Equal(Image("first"), files[PublicationProtocol.PhotoPath(FirstHash)]);
+    }
+
+    [Fact]
+    public async Task APublishWithNoRecordAfterAWithholdFlagMakesAReleaseWithNoPhotoSoATakedownNeedsNoNewRecord()
+    {
+        var scenario = ScenarioWith(("mayor", "attempt-1", FirstHash, "first"));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", Vote(scenario, 'a')));
+        scenario.WithheldPhotos.Add("mayor");
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2"));
+
+        var files = scenario.Releases.Directories[summary.DirectoryName];
+        Assert.Null(Officials(files).Officials.Single(profile => profile.Id == "mayor").Photo);
+        Assert.DoesNotContain(files.Keys, path => path.StartsWith("photos/", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task APublishWithNoRecordAndNoChangedProfileIsRefusedAndLeavesNoReleaseOrStagedDirectory()
+    {
+        var scenario = ScenarioWith(("mayor", "attempt-1", FirstHash, "first"));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", Vote(scenario, 'a')));
+        var discarded = scenario.Releases.DiscardedStagings;
+
+        var error = await Assert.ThrowsAsync<ArgumentException>(() =>
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2")));
+
+        Assert.Contains("Nothing to publish: no record and no official changed.", error.Message, StringComparison.Ordinal);
+        Assert.Single(scenario.Publications.Committed);
+        Assert.Single(scenario.Releases.Directories);
+        Assert.Equal(discarded + 1, scenario.Releases.DiscardedStagings);
+    }
+
+    [Fact]
+    public async Task APublishWithNoRecordAndNoActiveReleaseIsRefusedBecauseThereIsNothingToCarryForward()
+    {
+        var scenario = ScenarioWith(("mayor", "attempt-1", FirstHash, "first"));
+
+        var error = await Assert.ThrowsAsync<ArgumentException>(() =>
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k1")));
+
+        Assert.Contains("needs an active release", error.Message, StringComparison.Ordinal);
+        Assert.Empty(scenario.Publications.Committed);
+        Assert.Equal(0, scenario.Releases.BeginCount);
+    }
+
+    [Fact]
+    public async Task AChangedProfileAloneIsEnoughToPublishWithNoRecord()
+    {
+        var scenario = ScenarioWith(("mayor", "attempt-1", FirstHash, "first"));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", Vote(scenario, 'a')));
+        scenario.OfficialNames["mayor"] = "Mayor Renamed";
+
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2"));
+
+        var files = scenario.Releases.Directories[second.DirectoryName];
+        Assert.Equal("Mayor Renamed", Officials(files).Officials.Single(profile => profile.Id == "mayor").Name);
+    }
+
+    [Fact]
+    public async Task AWithheldPersonWithAnUnreadableNewPhotoDoesNotRestoreThePreviousPhoto()
+    {
+        var scenario = ScenarioWith(("mayor", "attempt-1", FirstHash, "first"));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", Vote(scenario, 'a')));
+        scenario.Photos = [PhotoRow("mayor", "attempt-2", SecondHash)];
+        scenario.Captures.AddCorrupt("attempt-2");
+        scenario.WithheldPhotos.Add("mayor");
+
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", scenario.AddDraft('c')));
+
+        var files = scenario.Releases.Directories[second.DirectoryName];
+        Assert.Null(Officials(files).Officials.Single(profile => profile.Id == "mayor").Photo);
+        Assert.DoesNotContain(files.Keys, path => path.StartsWith("photos/", StringComparison.Ordinal));
+        Assert.DoesNotContain("attempt-2", scenario.Captures.Reads);
+    }
+
+    [Fact]
     public async Task TwoOfficialsWithOneCaptureShareOneFileSoTheFileIsWrittenAndReadOnce()
     {
         var scenario = ScenarioWith(("mayor", "attempt-1", FirstHash, "shared"), ("chair", "attempt-2", FirstHash, "shared"));

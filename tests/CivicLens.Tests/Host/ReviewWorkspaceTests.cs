@@ -519,6 +519,30 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
+    public async Task AConfirmWithAKeyAndNoRecordsIsInvalidAndMakesNoReleaseAsync()
+    {
+        await SaveComparisonAsync("Fee: 10 dollars.\n", "Fee: 12 dollars.\n");
+        SignIn(Owner);
+        var draftUrl = await StartFirstDraftAsync();
+        await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars");
+        using var approved = await DecideAsync(draftUrl, "Approve");
+        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+        var summary = await host.GetDocumentAsync($"/Review?publish=documentChange:{draftUrl[("/Review/".Length)..]}");
+        var fields = Fields(summary.QuerySelector("#publish-confirm")!);
+        using var published = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(fields));
+        Assert.Equal("/Review?status=published&release=1", PathOf(published).Split('#')[0]);
+        fields.RemoveAll(field => field.Key == "records");
+        fields.RemoveAll(field => field.Key == "idempotencyKey");
+        fields.Add(new("idempotencyKey", "empty-publish"));
+
+        using var empty = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(fields));
+
+        Assert.Equal("/Review?status=publish-invalid", PathOf(empty).Split('#')[0]);
+        var publications = PostgresPublicationStore.FromConnectionString(host.ConnectionString);
+        Assert.Equal(1, (await publications.GetStateAsync(default)).LatestReleaseNumber);
+    }
+
+    [Fact]
     public async Task NewerAndOlderLinksVisitEveryRowOnceAndKeepTheOtherListInPlaceAsync()
     {
         var comparisons = new List<string>();

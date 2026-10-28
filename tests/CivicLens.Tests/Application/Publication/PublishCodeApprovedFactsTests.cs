@@ -33,6 +33,18 @@ public sealed class PublishCodeApprovedFactsTests
     }
 
     [Fact]
+    public async Task TheCodeSubjectCannotPublishAnEmptyRequestBecauseTheWorkerPublishesFactRecordsOnly()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('a', ApprovedByCode('a'));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, action)], "k1"));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => scenario.Publisher().ExecuteAsync(Code, new([], "k2")));
+
+        Assert.Single(scenario.Publications.Committed);
+    }
+
+    [Fact]
     public async Task TheCodeSubjectCanPublishActionsAndVotes()
     {
         var scenario = new PublicationScenario();

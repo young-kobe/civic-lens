@@ -6,7 +6,7 @@ namespace CivicLens.Application.Publication;
 
 /// <summary>
 /// Builds the profile of each official that a record names. A configured person matches roster terms by bioguide ID, else by
-/// Wikidata ID, else gets the configured offices. The website is the valid roster URL of a member, else the configured website. A person who left the configuration keeps the name that the records hold, and has no terms.
+/// Wikidata ID, else gets the configured offices. A person with `WithholdPhoto` gets no photo. The website is the valid roster URL of a member, else the configured website. A person who left the configuration keeps the name that the records hold, and has no terms.
 /// </summary>
 public sealed class PublicationOfficials(CollectionConfiguration configuration, IMemberRosterStore members, IExecutiveRosterStore executives)
 {
@@ -22,7 +22,7 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
             : [];
 
     internal async Task<IReadOnlyList<OfficialPhoto>> ReadPhotosAsync(CancellationToken cancellationToken) =>
-        await members.ReadNewestPhotosAsync([.. configuration.People.Select(person => person.Id)], cancellationToken);
+        await members.ReadNewestPhotosAsync([.. configuration.People.Where(person => !person.WithholdPhoto).Select(person => person.Id)], cancellationToken);
 
     internal async Task<PublishedOfficials> ResolveAsync(IReadOnlySet<string> officialIds, IReadOnlyDictionary<string, string> recordNames,
         IReadOnlyList<RosterMember> roster, IReadOnlyDictionary<string, PublishedPhoto> photos, CancellationToken cancellationToken)

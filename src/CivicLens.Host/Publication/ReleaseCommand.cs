@@ -21,7 +21,7 @@ public static class ReleaseCommand
             {
                 switch (args)
                 {
-                    case ["releases", "publish", var key, .. { Length: > 0 } arguments]:
+                    case ["releases", "publish", var key, .. var arguments]:
                         CommandOutput.Write(await publish.ExecuteAsync(owner, ParsePublish(key, arguments), cancellationToken));
                         return 0;
                     case ["releases", "list"]:
@@ -67,8 +67,6 @@ public static class ReleaseCommand
             (option == NoteOption ? notes : withdrawals).Add(new(reference.Kind, reference.RecordId, arguments[index + 2]));
             index += 2;
         }
-        if (records.Count == 0 && withdrawals.Count == 0)
-            throw new ArgumentException($"Name at least one record as <kind>:<id>, or give {WithdrawOption}.");
         return new PublishReleaseRequest([.. records], key) { Notes = [.. notes], Withdrawals = [.. withdrawals] };
     }
 

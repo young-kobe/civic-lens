@@ -1,23 +1,23 @@
 using System.Text.Json;
 using CivicLens.Application.Publication;
+using CivicLens.Application.Roster;
 using CivicLens.Core.Review;
 using CivicLens.Host.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Application.Publication;
+using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Host;
 
 public sealed class ReleaseCommandTests
 {
     [Theory]
-    [InlineData("releases", "publish", "key")]
     [InlineData("releases", "publish", "key", "abc")]
     [InlineData("releases", "publish", "key", "draft:abc")]
     [InlineData("releases", "publish", "key", "statement:")]
     [InlineData("releases", "publish", "key", "Statement:abc")]
     [InlineData("releases", "publish", "key", "--note")]
     [InlineData("releases", "publish", "key", "--note", "statement:abc")]
-    [InlineData("releases", "publish", "key", "--note", "statement:abc", "text")]
     [InlineData("releases", "publish", "key", "statement:abc", "--note", "draft:abc", "text")]
     [InlineData("releases", "publish", "key", "statement:abc", "--note", "statement:abc")]
     [InlineData("releases", "publish", "key", "--withdraw")]
@@ -143,6 +143,43 @@ public sealed class ReleaseCommandTests
             scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName][PublicationProtocol.RecordDataPath(action)],
             PublicationProtocol.JsonOptions)!;
         Assert.Equal("Fixed the issue.", Assert.Single(record.Corrections).Note);
+    }
+
+    [Fact]
+    public async Task PublishWithOnlyAKeyAfterAWithholdFlagMakesAReleaseWithNoPhotoSoATakedownNeedsNoNewRecord()
+    {
+        var scenario = new PublicationScenario();
+        scenario.Captures.Add("attempt-1", [.. MemberPhotoFixtures.Jpeg(), 1]);
+        scenario.Photos = [new("mayor", MemberPhotoFixtures.PhotoUrl(), MemberPhoto.MemberGuideCredit, "attempt-1", new string('a', 64))];
+        var vote = $"vote:{scenario.AddVote('a')}";
+        await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", vote], scenario.Publisher(), null!, null!, null!,
+            PublicationScenario.Owner, CancellationToken.None);
+        scenario.WithheldPhotos.Add("mayor");
+
+        var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2"], scenario.Publisher(), null!, null!, null!,
+            PublicationScenario.Owner, CancellationToken.None);
+
+        Assert.Equal(0, exit);
+        var files = scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName];
+        var officials = JsonSerializer.Deserialize<PublishedOfficials>(files[PublicationProtocol.OfficialsPath], PublicationProtocol.JsonOptions)!;
+        Assert.Null(officials.Officials.Single(profile => profile.Id == "mayor").Photo);
+    }
+
+    [Fact]
+    public async Task ANoteWithNoRecordExitsWithTwoAndMakesNoReleaseBecauseTheNoteHasNoRecordToDescribe()
+    {
+        var scenario = new PublicationScenario();
+        scenario.Captures.Add("attempt-1", [.. MemberPhotoFixtures.Jpeg(), 1]);
+        scenario.Photos = [new("mayor", MemberPhotoFixtures.PhotoUrl(), MemberPhoto.MemberGuideCredit, "attempt-1", new string('a', 64))];
+        await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", $"vote:{scenario.AddVote('a')}"], scenario.Publisher(), null!, null!, null!,
+            PublicationScenario.Owner, CancellationToken.None);
+        scenario.WithheldPhotos.Add("mayor");
+
+        var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "key", "--note", "statement:abc", "text"],
+            scenario.Publisher(), null!, null!, null!, PublicationScenario.Owner, CancellationToken.None);
+
+        Assert.Equal(2, exit);
+        Assert.Single(scenario.Publications.Committed);
     }
 
     [Fact]

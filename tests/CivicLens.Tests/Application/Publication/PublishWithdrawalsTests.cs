@@ -161,14 +161,12 @@ public sealed class PublishWithdrawalsTests
     }
 
     [Fact]
-    public async Task TwoWithdrawalsOfOneRecordAndAnEmptyRequestAreRefused()
+    public async Task TwoWithdrawalsOfOneRecordAndANullWithdrawalListAreRefused()
     {
         var (scenario, action) = await PublishedActionAsync();
 
         await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             new PublishReleaseRequest([], "k2") { Withdrawals = [Note(action, "One."), Note(action, "Two.")] }));
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k3")));
         await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             new PublishReleaseRequest([], "k4") { Withdrawals = default }));
     }

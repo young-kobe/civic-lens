@@ -142,7 +142,7 @@ public sealed class PublishedOfficialPageTests
         Assert.Null(figure.QuerySelector("img"));
         var placeholder = figure.QuerySelector("svg")!;
         Assert.Equal(("true", "0 0 225 275"), (placeholder.GetAttribute("aria-hidden"), placeholder.GetAttribute("viewBox")));
-        Assert.Equal("No portrait is on file for this official.", figure.QuerySelector("figcaption")!.TextContent);
+        Assert.Equal("No portrait is shown for this official.", figure.QuerySelector("figcaption")!.TextContent);
     }
 
     [Fact]

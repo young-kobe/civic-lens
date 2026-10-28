@@ -62,6 +62,8 @@ public sealed class PublishRelease
         var now = clock.GetUtcNow();
         var state = await publications.GetStateAsync(cancellationToken);
         var previous = await PreviousRelease.LoadAsync(releases, state.Active, cancellationToken);
+        if (previous.DirectoryName is null && references.IsEmpty && request.Withdrawals.IsEmpty)
+            throw new ArgumentException("A publish with no record needs an active release.");
         PublicationWithdrawals.RequireNoReturnByCode(previous, references, byCode);
         var withdrawn = ImmutableArray.CreateRange(withdrawalNotes.Keys);
         var corrections = await PublicationCorrections.LoadAsync(releases, previous, now, byCode, notes, [.. references, .. withdrawn],
@@ -117,8 +119,8 @@ public sealed class PublishRelease
         if (request.Notes.Any(note => note is null) || request.Withdrawals.Any(withdrawal => withdrawal is null))
             throw new ArgumentException("Notes and withdrawals must not hold null.", nameof(request));
         var named = records.Concat(request.Withdrawals.Select(withdrawal => withdrawal.Reference)).ToArray();
-        if (named.Length is 0 or > MaximumRecords)
-            throw new ArgumentException($"Select 1 to {MaximumRecords} records to publish or withdraw.", nameof(request));
+        if (named.Length > MaximumRecords)
+            throw new ArgumentException($"Select at most {MaximumRecords} records to publish or withdraw.", nameof(request));
         foreach (var record in named) loaders.For(record.Kind).ValidateId(record.RecordId);
         if (named.ToHashSet().Count != named.Length)
             throw new ArgumentException("Selected records must be distinct.", nameof(request));
@@ -184,6 +186,8 @@ public sealed class PublishRelease
         var facets = ReleaseFacets.From(manifest, catalog);
         await indexPages.WriteAsync(staging, manifest, facets, additions, previous, cancellationToken);
         var officials = await dataFiles.WriteAsync(staging, manifest, facets, additions, previous, roster, photos, cancellationToken);
+        if (additions.Count == 0 && removed.Count == 0 && !ReleaseOfficialPages.ChangesProfiles(previous, officials))
+            throw new ArgumentException("Nothing to publish: no record and no official changed.");
         await officialPages.WriteAsync(staging, manifest, officials, additions, removed, previous, cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestPath, manifestJson, cancellationToken);
         return (await staging.CompleteAsync(number, cancellationToken), entries);
