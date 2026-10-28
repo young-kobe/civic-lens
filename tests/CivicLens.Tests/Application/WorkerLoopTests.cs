@@ -84,11 +84,11 @@ public sealed class WorkerLoopTests
         {
             if (!first) await Task.Delay(Timeout.Infinite, token);
             first = false;
-            await Task.Delay(Lease / 2, token);
+            await Task.Delay(FailureTolerantLease / 2, token);
             return true;
-        }, Lease, ownership).WaitAsync(HangGuard);
+        }, FailureTolerantLease, ownership).WaitAsync(HangGuard);
 
-        var sentAt = Lease / 3;
-        Assert.InRange(started.Elapsed, sentAt + Lease * 0.9, sentAt + Lease + Lease / 4);
+        var sentAt = FailureTolerantLease / 3;
+        Assert.InRange(started.Elapsed, sentAt + FailureTolerantLease * 0.9, sentAt + FailureTolerantLease + FailureTolerantLease / 4);
     }
 }
