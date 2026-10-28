@@ -10,9 +10,9 @@ public static class PublicColumn
     public const string Party = "Party";
     public const string From = "From";
     public const string To = "To";
-    public const string Statements = "Statements";
-    public const string Sponsorships = "Sponsorships";
-    public const string Votes = "Votes";
+    public const string TheirStatements = "Their statements";
+    public const string BillsTheySponsored = "Bills they sponsored";
+    public const string VotesTheyCast = "Votes they cast";
     public const string Cast = "Cast";
     public const string Vote = "Vote";
     public const string StatementDate = "Statement date";

@@ -8,7 +8,7 @@ public sealed class TalkAndActionProfileTests
     private static readonly DateOnly InCongress = new(2026, 1, 1);
 
     [Fact]
-    public void OnlySubstantiveVoteKindsCountAndTheOthersAreCountedAsProcedural()
+    public void OnlySubstantiveVoteKindsCountSoAProceduralVoteNeverRaisesTheVotesTheyCast()
     {
         PublishedVoteKind[] substantive =
             [PublishedVoteKind.Passage, PublishedVoteKind.Suspension, PublishedVoteKind.Amendment, PublishedVoteKind.ConferenceReport,
@@ -19,7 +19,6 @@ public sealed class TalkAndActionProfileTests
         var profile = TalkAndActionProfile.Of(119, [], votes);
 
         Assert.Equal(substantive.Length, profile.Votes.CountOf("housing"));
-        Assert.Equal(procedural.Length, profile.ProceduralVotes);
         Assert.Equal(substantive.Order(), Enum.GetValues<PublishedVoteKind>().Where(kind => kind.IsSubstantive()).Order());
     }
 
@@ -32,7 +31,7 @@ public sealed class TalkAndActionProfileTests
 
         var profile = TalkAndActionProfile.Of(119, [], votes);
 
-        Assert.Equal((3, 1), (profile.Votes.CountOf("housing"), profile.ProceduralVotes));
+        Assert.Equal(3, profile.Votes.CountOf("housing"));
     }
 
     [Fact]
@@ -50,7 +49,7 @@ public sealed class TalkAndActionProfileTests
 
         var profile = TalkAndActionProfile.Of(119, entries, []);
 
-        Assert.Equal((1, 1, 0), (profile.Statements.WithIssue, profile.Sponsorships.WithIssue, profile.Votes.WithIssue));
+        Assert.Equal((1, 1, 0), (profile.Statements.CountOf("housing"), profile.SponsoredOn("housing").Length, profile.Votes.CountOf("housing")));
     }
 
     [Fact]
@@ -68,7 +67,7 @@ public sealed class TalkAndActionProfileTests
 
         var profile = TalkAndActionProfile.Of(119, entries, []);
 
-        Assert.Equal((2, 0), (profile.Statements.WithIssue, profile.Sponsorships.WithIssue));
+        Assert.Equal((2, 0), (profile.Statements.CountOf("housing"), profile.SponsoredOn("housing").Length));
     }
 
     [Fact]
@@ -80,56 +79,32 @@ public sealed class TalkAndActionProfileTests
             FirstPublishedAtUtc = new DateTimeOffset(2026, 3, 1, 0, 0, 0, TimeSpan.Zero)
         };
 
-        Assert.Equal(1, TalkAndActionProfile.Of(119, [entry], []).Statements.WithIssue);
-        Assert.Equal(0, TalkAndActionProfile.Of(118, [entry], []).Statements.WithIssue);
+        Assert.Equal(1, TalkAndActionProfile.Of(119, [entry], []).Statements.CountOf("housing"));
+        Assert.Equal(0, TalkAndActionProfile.Of(118, [entry], []).Statements.CountOf("housing"));
     }
 
     [Fact]
-    public void ARecordWithSeveralIssuesCountsOncePerIssueAndTheShareDividesByRecordsWithAnIssueSoSharesCanPassOneHundredPercent()
+    public void ARecordWithSeveralIssuesCountsOncePerIssueAndARecordWithNoIssueCountsOnNoIssue()
     {
-        var entries = Enumerable.Range(0, 5).Select(index => Entry(index, PublishedRecordKind.Statement, InCongress,
-            index < 3 ? ["housing", "health"] : ["housing"])).ToArray();
+        var entries = new[] { Entry(1, PublishedRecordKind.Statement, InCongress, ["housing", "health"]), Entry(2, PublishedRecordKind.Statement, InCongress, ["housing"]),
+            Entry(3, PublishedRecordKind.Statement, InCongress, []) };
 
         var column = TalkAndActionProfile.Of(119, entries, []).Statements;
 
-        Assert.Equal(5, column.WithIssue);
-        Assert.Equal(1.0, column.ShareOf("housing"));
-        Assert.Equal(0.6, column.ShareOf("health"));
+        Assert.Equal((2, 1, 0), (column.CountOf("housing"), column.CountOf("health"), column.CountOf("tax")));
     }
 
     [Fact]
-    public void ARecordWithNoTrackedIssueIsCountedApartAndStaysOutOfTheShareDenominator()
+    public void ASponsoredBillIsListedOnEachOfItsIssuesWithItsBillTitleInTheCurrentCongressOnly()
     {
-        var entries = Enumerable.Range(0, 5).Select(index => Entry(index, PublishedRecordKind.Statement, InCongress, ["housing"]))
-            .Concat([Entry(7, PublishedRecordKind.Statement, InCongress, []), Entry(8, PublishedRecordKind.Statement, InCongress, [])]);
-        var votes = new[] { Vote(1, PublishedVoteKind.Passage, []), Vote(2, PublishedVoteKind.Passage, ["housing"]) };
+        var bill = Entry(1, PublishedRecordKind.Action, InCongress, ["housing", "health"]) with { BillTitle = "Home Act" };
+        var older = Entry(2, PublishedRecordKind.Action, new DateOnly(2023, 5, 1), ["housing"]) with { BillTitle = "Old Act" };
 
-        var profile = TalkAndActionProfile.Of(119, entries, votes);
+        var profile = TalkAndActionProfile.Of(119, [bill, older], []);
 
-        Assert.Equal((5, 2), (profile.Statements.WithIssue, profile.Statements.WithoutIssue));
-        Assert.Equal(1.0, profile.Statements.ShareOf("housing"));
-        Assert.Equal((1, 1), (profile.Votes.WithIssue, profile.Votes.WithoutIssue));
-    }
-
-    [Theory]
-    [InlineData(4, false)]
-    [InlineData(5, true)]
-    public void ASharePassesTheThresholdOnlyWithEnoughRecordsThatHaveAnIssueWhileTheCountIsAlwaysThere(int records, bool showsShare)
-    {
-        var entries = Enumerable.Range(0, records).Select(index => Entry(index, PublishedRecordKind.Statement, InCongress, ["housing"]));
-
-        var column = TalkAndActionProfile.Of(119, entries, []).Statements;
-
-        Assert.Equal(records, column.CountOf("housing"));
-        Assert.Equal(showsShare, column.ShareOf("housing") is not null);
-    }
-
-    [Fact]
-    public void RecordsWithNoIssueDoNotLiftAColumnOverTheThreshold()
-    {
-        var entries = Enumerable.Range(0, 10).Select(index => Entry(index, PublishedRecordKind.Statement, InCongress, index < 4 ? ["housing"] : []));
-
-        Assert.Null(TalkAndActionProfile.Of(119, entries, []).Statements.ShareOf("housing"));
+        Assert.Equal(["Home Act"], profile.SponsoredOn("housing").Select(entry => entry.BillTitle));
+        Assert.Equal(["Home Act"], profile.SponsoredOn("health").Select(entry => entry.BillTitle));
+        Assert.Empty(profile.SponsoredOn("tax"));
     }
 
     [Fact]

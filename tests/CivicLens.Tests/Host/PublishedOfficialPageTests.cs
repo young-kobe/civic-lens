@@ -126,7 +126,7 @@ public sealed class PublishedOfficialPageTests
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
-        var paragraphs = new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-talk-and-action-in-congress-119'] p.muted")
+        var paragraphs = new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-missed-votes-in-congress-119'] p.muted")
             .Select(paragraph => paragraph.TextContent.Trim()).ToArray();
         Assert.Equal(["Missed 1 of 2 roll call votes of all kinds, including procedural votes, held in the House of Representatives while they served, 1 Apr 2026 to 3 Apr 2026 (119th Congress).",
             "Missed 0 of 1 roll call vote of all kinds, including procedural votes, held in the Senate while they served, on 2 Apr 2026 (119th Congress).",
@@ -143,7 +143,7 @@ public sealed class PublishedOfficialPageTests
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
-        var text = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-talk-and-action-in-congress-119']")!.TextContent;
+        var text = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-missed-votes-in-congress-119']")!.TextContent;
         Assert.Contains("Missed 1 of 5 roll call votes of all kinds (20%), including procedural votes, held in the House of Representatives", text, StringComparison.Ordinal);
         Assert.DoesNotContain("the Senate", text, StringComparison.Ordinal);
     }
@@ -157,7 +157,7 @@ public sealed class PublishedOfficialPageTests
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
-        var text = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-talk-and-action-in-congress-119']")!.TextContent;
+        var text = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-missed-votes-in-congress-119']")!.TextContent;
         Assert.Contains("Missed 5 of 5 roll call votes of all kinds (100%), including procedural votes", text, StringComparison.Ordinal);
     }
 
@@ -182,7 +182,7 @@ public sealed class PublishedOfficialPageTests
         Assert.EndsWith(PublicationProtocol.RecordPagePath(new string('b', 64)), first[1].QuerySelector("a")!.GetAttribute("href"));
         Assert.Single(panel.QuerySelectorAll("table"));
         var titles = document.QuerySelectorAll("h2").Select(title => title.TextContent.Trim()).ToArray();
-        Assert.True(Array.IndexOf(titles, "Talk and action in Congress 119") < Array.IndexOf(titles, "Votes with their party"));
+        Assert.True(Array.IndexOf(titles, "Missed votes in Congress 119") < Array.IndexOf(titles, "Votes with their party"));
         Assert.True(Array.IndexOf(titles, "Votes with their party") < Array.IndexOf(titles, "Records"));
     }
 
@@ -276,24 +276,38 @@ public sealed class PublishedOfficialPageTests
         Vote(id, date) with { SplitVote = true, PartyMajority = PublishedPartyMajority.Yea, Cast = cast };
 
     [Fact]
-    public async Task TheProfilePanelShowsCountsAndSharesOrTooFewRecordsAndLinksTheMethodNote()
+    public async Task TheIssuePanelShowsPlainCountsAndTheTitlesOfTheSponsoredBillsAndLeavesOutProceduralVotes()
     {
-        PublishedRecordEntry[] statements = [.. Enumerable.Range(1, 5).Select(index => Entry((char)('0' + index), PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)) with { IssueIds = index < 3 ? ["housing", "health"] : ["housing"] })];
-        var page = Current(statements, [Vote('a', new DateOnly(2026, 4, 1)) with { IssueIds = ["housing"] }, Vote('b', new DateOnly(2026, 4, 2)) with { Kind = PublishedVoteKind.Cloture },
-            Vote('c', new DateOnly(2026, 4, 3)) with { IssueIds = ["health"], Cast = PublishedOfficialVote.NotVoting },
-            Vote('d', new DateOnly(2026, 4, 4)) with { Kind = PublishedVoteKind.Cloture }]);
+        PublishedRecordEntry[] entries = [.. Enumerable.Range(1, 3).Select(index => Entry((char)('0' + index), PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)) with { IssueIds = index < 3 ? ["housing", "health"] : ["housing"] }),
+            Entry('a', PublishedRecordKind.Action, new DateOnly(2026, 5, 1)) with { IssueIds = ["housing"], BillTitle = "Home Act" }];
+        var page = Current(entries, [Vote('a', new DateOnly(2026, 4, 1)) with { IssueIds = ["housing"] }, Vote('b', new DateOnly(2026, 4, 2)) with { Kind = PublishedVoteKind.Cloture, IssueIds = ["housing"] },
+            Vote('c', new DateOnly(2026, 4, 3)) with { IssueIds = ["health"], Cast = PublishedOfficialVote.NotVoting }]);
         page = page with { TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes) };
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
-        var panel = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-talk-and-action-in-congress-119']")!;
-        Assert.Equal(["health", "2 (40%)", "0 (Too few records)", "0 (Too few records)"],
-            panel.QuerySelectorAll("tbody tr:nth-child(1) td").Select(cell => cell.TextContent));
-        Assert.Equal(["housing", "5 (100%)", "0 (Too few records)", "1 (Too few records)"],
-            panel.QuerySelectorAll("tbody tr:nth-child(2) td").Select(cell => cell.TextContent));
-        Assert.DoesNotContain("marked Not Voting", panel.TextContent, StringComparison.Ordinal);
-        Assert.Contains("Procedural votes left out: 2", panel.TextContent, StringComparison.Ordinal);
-        Assert.Equal("../method.html", panel.QuerySelector("a")!.GetAttribute("href"));
+        var panel = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-issues-they-work-on']")!;
+        Assert.Equal(["Issue", "Their statements", "Bills they sponsored", "Votes they cast"], panel.QuerySelectorAll("th").Select(cell => cell.TextContent.Trim()));
+        Assert.Equal(["health", "2", "0", "0"], panel.QuerySelectorAll("tbody tr:nth-child(1) td").Select(cell => cell.TextContent.Trim()));
+        var housing = panel.QuerySelectorAll("tbody tr:nth-child(2) td").ToArray();
+        Assert.Equal(["housing", "3", "1", "1"], new[] { housing[0], housing[1], housing[2].FirstChild!, housing[3] }.Select(cell => cell.TextContent.Trim()));
+        Assert.Equal(["Home Act"], housing[2].QuerySelectorAll("li").Select(item => item.TextContent));
+        Assert.Equal("../" + PublicationProtocol.RecordPagePath(new string('a', 64)), housing[2].QuerySelector("a")!.GetAttribute("href"));
+        Assert.DoesNotContain("%", panel.TextContent, StringComparison.Ordinal);
+        Assert.Equal("../method.html", panel.QuerySelector("p a")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task AnOfficialWithNoRecordOnATrackedIssueGetsAPlainSentenceInPlaceOfTheIssueTable()
+    {
+        var page = Current([], [Vote('a', new DateOnly(2026, 4, 1))]);
+        page = page with { TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes) };
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        var panel = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-issues-they-work-on']")!;
+        Assert.Null(panel.QuerySelector("table"));
+        Assert.Contains("None of their statements, sponsored bills, or votes in this Congress is on a tracked issue.", panel.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -301,7 +315,7 @@ public sealed class PublishedOfficialPageTests
     {
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([], []), PublicationCatalogs.None, CancellationToken.None);
 
-        Assert.DoesNotContain("Talk and action", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Issues they work on", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -384,7 +398,7 @@ public sealed class PublishedOfficialPageTests
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, catalog, CancellationToken.None);
 
         var cells = new HtmlParser().ParseDocument(html)
-            .QuerySelectorAll("[aria-labelledby='panel-talk-and-action-in-congress-119'] tbody tr td:first-child").ToList();
+            .QuerySelectorAll("[aria-labelledby='panel-issues-they-work-on'] tbody tr td:first-child").ToList();
         Assert.Equal(["Housing costs", "mystery"], cells.Select(cell => cell.TextContent.Trim()));
         Assert.Equal("../" + PublicationProtocol.IssuePagePath("housing", 1), cells[0].QuerySelector("a")!.GetAttribute("href"));
         Assert.Null(cells[1].QuerySelector("a"));

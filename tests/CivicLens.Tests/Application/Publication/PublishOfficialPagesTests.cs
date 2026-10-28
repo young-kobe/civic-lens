@@ -369,7 +369,7 @@ public sealed class PublishOfficialPagesTests
         var page = scenario.OfficialPages.Single(page => page.Profile.Id == "mayor" && page.IsCurrent);
         var profile = page.TalkAndAction!;
         Assert.Equal(119, page.Congress);
-        Assert.Equal([1, 1, 1], new[] { profile.Statements, profile.Sponsorships, profile.Votes }.Select(column => column.CountOf("housing")));
+        Assert.Equal([1, 1, 1], [profile.Statements.CountOf("housing"), profile.SponsoredOn("housing").Length, profile.Votes.CountOf("housing")]);
         Assert.DoesNotContain(scenario.OfficialPages, page => page.Profile.Id == "chair");
     }
 

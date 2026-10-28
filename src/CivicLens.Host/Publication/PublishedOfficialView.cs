@@ -25,10 +25,6 @@ internal static class PublishedOfficialView
     [.. ReleaseRecordOrder.NewestFirst(page.Records.Select(PublishedOfficialRow.Of).Concat(page.Votes.Select(PublishedOfficialRow.Of)),
         row => row.Date, row => row.PublishedAtUtc, row => row.RecordId)];
 
-    public static string Share(TalkAndActionColumn column, string issueId) => column.ShareOf(issueId) is { } share
-        ? $"{column.CountOf(issueId)} ({Percent(share)})"
-        : $"{column.CountOf(issueId)} (Too few records)";
-
     public static readonly IReadOnlyList<(string Value, string Text)> RecordFilters = [("all", "All records"), ("against-party", "Votes against their party")];
 
     public const string LinkMeaning = "A reviewer approved each link. A link does not mean the vote or bill matches the statement.";

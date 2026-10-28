@@ -26,9 +26,9 @@
     }
     @if (Page.TalkAndAction is { } profile)
     {
-        <Panel Title="@($"Talk and action in Congress {Page.Congress}")">
-            <DataTable Roles="true" Items="profile.IssueIds" Caption="@($"Share of statements, sponsorships, and votes of {Page.Profile.Name} on each issue")">
-                <Head><TableCell Header>Issue</TableCell><TableCell Header Class="num">@PublicColumn.Statements</TableCell><TableCell Header Class="num">@PublicColumn.Sponsorships</TableCell><TableCell Header Class="num">@PublicColumn.Votes</TableCell></Head>
+        <Panel Title="Issues they work on">
+            <DataTable Roles="true" Items="profile.IssueIds" Caption="@($"Statements, sponsored bills, and votes of {Page.Profile.Name} on each tracked issue in Congress {Page.Congress}")">
+                <Head><TableCell Header>Issue</TableCell><TableCell Header Class="num">@PublicColumn.TheirStatements</TableCell><TableCell Header>@PublicColumn.BillsTheySponsored</TableCell><TableCell Header Class="num">@PublicColumn.VotesTheyCast</TableCell></Head>
                 <Row Context="issueId">
                     <TableCell Main>
                         @{ var issue = PublishedRecordView.IssueLink(issueId, Catalog, Page.RootPath); }
@@ -41,22 +41,32 @@
                             <span class="cell-title">@issue.Text</span>
                         }
                     </TableCell>
-                    <TableCell Class="num" Label="@PublicColumn.Statements">@PublishedOfficialView.Share(profile.Statements, issueId)</TableCell>
-                    <TableCell Class="num" Label="@PublicColumn.Sponsorships">@PublishedOfficialView.Share(profile.Sponsorships, issueId)</TableCell>
-                    <TableCell Class="num" Label="@PublicColumn.Votes">@PublishedOfficialView.Share(profile.Votes, issueId)</TableCell>
+                    <TableCell Class="num" Label="@PublicColumn.TheirStatements">@profile.Statements.CountOf(issueId)</TableCell>
+                    <TableCell Label="@PublicColumn.BillsTheySponsored">
+                        @{ var bills = profile.SponsoredOn(issueId); }
+                        @bills.Length
+                        @if (!bills.IsEmpty)
+                        {
+                            <ul>
+                                @foreach (var bill in bills)
+                                {
+                                    <li><a href="@(Page.RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))">@bill.BillTitle</a></li>
+                                }
+                            </ul>
+                        }
+                    </TableCell>
+                    <TableCell Class="num" Label="@PublicColumn.VotesTheyCast">@profile.Votes.CountOf(issueId)</TableCell>
                 </Row>
-                <Empty><EmptyState Title="No tracked issue" Text="No statement, sponsorship, or substantive vote of this Congress has a tracked issue." /></Empty>
+                <Empty><EmptyState Title="No tracked issue" Text="None of their statements, sponsored bills, or votes in this Congress is on a tracked issue." /></Empty>
             </DataTable>
+            <p class="muted small">Each count is for this Congress. Votes they cast counts only substantive votes. A statement or bill on several issues counts once for each issue. <a href="@(Page.RootPath + PublicationProtocol.MethodPagePath)">How these counts work</a></p>
+        </Panel>
+        <Panel Title="@($"Missed votes in Congress {Page.Congress}")" Padded="true">
             @foreach (var missed in profile.MissedByChamber)
             {
                 <p class="muted small">@PublishedOfficialView.MissedVotes(missed, Page.Congress!.Value)</p>
             }
             <p class="muted small">@PublishedOfficialView.MissedVoteMeaning</p>
-            <p class="muted small">
-                Records with no tracked issue: @profile.Statements.WithoutIssue statements, @profile.Sponsorships.WithoutIssue sponsorships,
-                @profile.Votes.WithoutIssue votes. Procedural votes left out: @profile.ProceduralVotes.
-                <a href="@(Page.RootPath + PublicationProtocol.MethodPagePath)">How the profile works</a>
-            </p>
         </Panel>
         <Panel Title="What they said and what they did" Padded="true">
             <p class="muted small">@PublishedOfficialView.LinkMeaning <a href="@(Page.RootPath + PublicationProtocol.MethodPagePath)">What a link is</a></p>
