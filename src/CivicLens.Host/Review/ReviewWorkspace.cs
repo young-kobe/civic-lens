@@ -50,10 +50,11 @@ internal static class ReviewWorkspace
             connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")
                 ?? throw new ArgumentException("CIVIC_LENS_DATABASE is required.");
             _ = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
+            if (Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY") is not null) PublicationComposition.RequireArtifactRoot();
         }
         catch (ArgumentException)
         {
-            Console.Error.WriteLine("Invalid review workspace configuration. Configure the database, HTTPS origin, Auth0 credentials, authorized subjects, and persistent key directory. See docs/operations.md.");
+            Console.Error.WriteLine("Invalid review workspace configuration. Configure the database, HTTPS origin, Auth0 credentials, authorized subjects, persistent key directory, and the artifact directory when the release directory is set. See docs/operations.md.");
             return 2;
         }
 

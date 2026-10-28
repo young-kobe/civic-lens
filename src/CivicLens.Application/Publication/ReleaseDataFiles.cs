@@ -5,23 +5,28 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
-/// <summary>Writes the data files built from the manifest: the officials with a published record, and the issue and policy area names.</summary>
-internal sealed class ReleaseDataFiles(IReleaseDirectory releases, VoteRecordLoader votes, PublicationOfficials officials)
+/// <summary>
+/// Writes the data files built from the manifest: the officials with a published record, their photos, and the issue and policy area names.
+/// Only the photos of those officials are loaded, so a configured person with no published record causes no capture read.
+/// </summary>
+internal sealed class ReleaseDataFiles(IReleaseDirectory releases, VoteRecordLoader votes, PublicationOfficials officials, ReleasePhotos photos)
 {
     public async Task<PublishedOfficials> WriteAsync(IReleaseStaging staging, PublicationRelease manifest, ReleaseFacets facets,
         IReadOnlyList<PendingRecord> additions, PreviousRelease previous, IReadOnlyList<RosterMember> roster,
-        IReadOnlyDictionary<string, PublishedPhoto> photos, CancellationToken cancellationToken)
+        IReadOnlyList<OfficialPhoto> photoRows, CancellationToken cancellationToken)
     {
         var members = await votes.MembersAsync(manifest.Records, cancellationToken);
         var entryNames = manifest.Records.SelectMany(entry => entry.Officials).DistinctBy(official => official.Id)
             .ToDictionary(official => official.Id, official => official.Name, StringComparer.Ordinal);
         var ids = entryNames.Keys.Concat(members.Select(member => member.PersonId)).ToHashSet(StringComparer.Ordinal);
         var recordNames = await RecordNamesAsync(manifest, ids, entryNames, members, additions, previous, cancellationToken);
-        var published = await officials.ResolveAsync(ids, recordNames, roster, photos, cancellationToken);
+        var photoFiles = await photos.LoadAsync([.. photoRows.Where(row => ids.Contains(row.PersonId))], previous, cancellationToken);
+        var published = await officials.ResolveAsync(ids, recordNames, roster, photoFiles.Profiles, cancellationToken);
         var officialsJson = JsonSerializer.SerializeToUtf8Bytes(published, PublicationProtocol.JsonOptions);
         if (officialsJson.Length > PublishedOfficials.MaximumBytes)
             throw new ArgumentException("The officials file would exceed its size limit.", nameof(manifest));
         await staging.WriteFileAsync(PublicationProtocol.OfficialsPath, officialsJson, cancellationToken);
+        await photos.WriteAsync(staging, published, photoFiles, previous, cancellationToken);
         await WriteAsync(staging, PublicationProtocol.CatalogPath, CatalogOf(facets), cancellationToken);
         return published;
     }

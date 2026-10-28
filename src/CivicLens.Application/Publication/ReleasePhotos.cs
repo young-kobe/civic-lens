@@ -21,10 +21,11 @@ public sealed class ReleasePhotos(ICollectionAttemptStore attempts, ICaptureBody
         var inPrevious = previous.Officials.Values.Select(profile => profile.Photo?.Path).OfType<string>().ToHashSet(StringComparer.Ordinal);
         var profiles = new Dictionary<string, PublishedPhoto>(StringComparer.Ordinal);
         var newFiles = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        var unreadable = new Dictionary<string, Exception>(StringComparer.Ordinal);
         foreach (var row in rows)
         {
             var photo = ToPublished(row);
-            if (!inPrevious.Contains(photo.Path) && !newFiles.ContainsKey(photo.Path))
+            if (!inPrevious.Contains(photo.Path) && !newFiles.ContainsKey(photo.Path) && !unreadable.ContainsKey(photo.Path))
             {
                 try
                 {
@@ -32,9 +33,11 @@ public sealed class ReleasePhotos(ICollectionAttemptStore attempts, ICaptureBody
                 }
                 catch (Exception exception) when (exception is IOException or InvalidDataException or NotSupportedException)
                 {
-                    photo = KeptPhoto(row, previous, exception);
+                    unreadable[photo.Path] = exception;
                 }
             }
+            if (unreadable.TryGetValue(photo.Path, out var failure))
+                photo = KeptPhoto(row, previous, failure);
             if (photo is not null) profiles[row.PersonId] = photo;
         }
         return new(profiles, newFiles);

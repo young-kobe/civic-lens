@@ -128,6 +128,33 @@ public sealed class PublishOfficialPhotosTests
     }
 
     [Fact]
+    public async Task APersonWithNoPublishedRecordHasNoCaptureReadSoAnUnlistedPhotoCostsNothingAtEachPublish()
+    {
+        var scenario = ScenarioWith(("mayor", "attempt-1", FirstHash, "first"), ("chair", "attempt-2", SecondHash, "second"));
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", Vote(scenario, 'a')));
+
+        Assert.Equal(["attempt-1"], scenario.Captures.Reads);
+        Assert.DoesNotContain(PublicationProtocol.PhotoPath(SecondHash), scenario.Releases.Directories[summary.DirectoryName].Keys);
+    }
+
+    [Fact]
+    public async Task TwoOfficialsWithOneUnreadableCaptureReadItOnceAndEachLogsAnError()
+    {
+        var scenario = ScenarioWith();
+        scenario.Photos = [PhotoRow("mayor", "attempt-1", FirstHash), PhotoRow("chair", "attempt-2", FirstHash)];
+        scenario.Captures.AddCorrupt("attempt-1");
+        scenario.Captures.AddCorrupt("attempt-2");
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", Vote(scenario, 'a'),
+            new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('b', speakerIds: ["chair"]))));
+
+        Assert.Single(scenario.Captures.Reads);
+        Assert.All(Officials(scenario.Releases.Directories[summary.DirectoryName]).Officials, profile => Assert.Null(profile.Photo));
+        Assert.Equal(2, scenario.Captures.Log.Entries.Count(entry => entry.Level == LogLevel.Error));
+    }
+
+    [Fact]
     public async Task AnUnreadableNewPhotoKeepsThePhotoOfThePreviousReleaseAndLogsAnError()
     {
         var scenario = ScenarioWith(("mayor", "attempt-1", FirstHash, "first"));

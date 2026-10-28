@@ -24,14 +24,12 @@ public sealed class PublishRelease
     private readonly ReleaseOfficialPages officialPages;
     private readonly PublishedRecordRules rules;
     private readonly PublicationOfficials officials;
-    private readonly ReleasePhotos releasePhotos;
     private readonly TimeProvider clock;
 
     public PublishRelease(IPublicationStore publications, IReleaseDirectory releases, IReleaseRenderer renderer,
         PublishedRecordLoaders loaders, PublicationCatalog catalog, PublicationOfficials officials, ReleasePhotos releasePhotos, TimeProvider clock)
     {
         this.officials = officials;
-        this.releasePhotos = releasePhotos;
         this.publications = publications;
         this.releases = releases;
         this.renderer = renderer;
@@ -39,7 +37,7 @@ public sealed class PublishRelease
         releasePages = new ReleasePages(releases, loaders);
         this.catalog = catalog;
         indexPages = new ReleaseIndexPages(releases, renderer);
-        dataFiles = new ReleaseDataFiles(releases, loaders.Votes, officials);
+        dataFiles = new ReleaseDataFiles(releases, loaders.Votes, officials, releasePhotos);
         officialPages = new ReleaseOfficialPages(new ReleaseOfficialVotes(releases, loaders.Votes), officials, renderer, catalog);
         this.clock = clock;
         rules = new PublishedRecordRules(catalog);
@@ -71,7 +69,7 @@ public sealed class PublishRelease
         var newWithdrawals = PublicationWithdrawals.Create(previous, corrections, now, withdrawalNotes);
         var returned = ImmutableArray.CreateRange(references.Where(reference => previous.IsWithdrawn(reference.RecordId)));
         var roster = await officials.ReadRosterAsync(cancellationToken);
-        var photos = await releasePhotos.LoadAsync(await officials.ReadPhotosAsync(cancellationToken), previous, cancellationToken);
+        var photos = await officials.ReadPhotosAsync(cancellationToken);
         var build = new PublicationBuild(previous, now, rules, renderer, catalog, corrections, roster).WithRemoved(withdrawn).WithReturned(returned);
         var additions = await LoadAdditionsAsync(references, build, cancellationToken);
         var released = build.WithAdded(additions);
@@ -142,7 +140,7 @@ public sealed class PublishRelease
     private async Task<(string Directory, List<PublishedRecordEntry> Entries)> StageAsync(int number, DateTimeOffset now,
         PreviousRelease previous, List<PublishedRecordEntry> carried, List<PendingRecord> additions,
         List<PublishedRecordEntry> removed, List<PublishedWithdrawal> withdrawals, IReadOnlyDictionary<string, string> pages, IReadOnlyList<RosterMember> roster,
-        ReleasePhotoFiles photos, CancellationToken cancellationToken)
+        IReadOnlyList<OfficialPhoto> photos, CancellationToken cancellationToken)
     {
         List<PublishedRecordEntry> entries = [.. carried, .. additions.Select(addition => addition.Entry)];
         var manifest = new PublicationRelease
@@ -185,8 +183,7 @@ public sealed class PublishRelease
             Compress(manifestJson, stream => new BrotliStream(stream, CompressionLevel.Optimal)), cancellationToken);
         var facets = ReleaseFacets.From(manifest, catalog);
         await indexPages.WriteAsync(staging, manifest, facets, additions, previous, cancellationToken);
-        var officials = await dataFiles.WriteAsync(staging, manifest, facets, additions, previous, roster, photos.Profiles, cancellationToken);
-        await releasePhotos.WriteAsync(staging, officials, photos, previous, cancellationToken);
+        var officials = await dataFiles.WriteAsync(staging, manifest, facets, additions, previous, roster, photos, cancellationToken);
         await officialPages.WriteAsync(staging, manifest, officials, additions, removed, previous, cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestPath, manifestJson, cancellationToken);
         return (await staging.CompleteAsync(number, cancellationToken), entries);
