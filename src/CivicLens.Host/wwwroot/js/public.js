@@ -36,10 +36,15 @@
         };
         const failure = response => response.status === 429 ? "Too many searches. Try again in a minute."
             : response.status === 404 ? "This release is not indexed yet."
+            : response.status === 400 ? "This search link has words or filters that search cannot use. Change them and search again."
             : "Search is not available now. Try again later.";
-        const run = async append => {
+        const formParams = () => {
             const params = new URLSearchParams();
             for (const [name, value] of new FormData(form)) if (value) params.set(name, value);
+            return params;
+        };
+        const run = async append => {
+            const params = formParams();
             if (append) params.set("cursor", nextCursor);
             const mine = ++running;
             status.textContent = "Searching.";
@@ -56,8 +61,32 @@
             more.hidden = nextCursor === null;
             status.textContent = results.children.length === 0 ? "No records match." : `Showing ${results.children.length} records from release ${page.release}.`;
         };
+        const clear = () => {
+            running++;
+            nextCursor = null;
+            results.replaceChildren();
+            status.textContent = "";
+            more.hidden = true;
+        };
+        const writeAddress = (params, write) => {
+            const text = params.toString();
+            const search = text ? `?${text}` : "";
+            history[write ?? (search === location.search ? "replaceState" : "pushState")](null, "", location.pathname + search);
+        };
+        const restoreFromAddress = () => {
+            const query = new URLSearchParams(location.search);
+            for (const field of Array.from(form.elements).filter(element => element.name)) {
+                field.value = query.get(field.name) ?? "";
+                if (field.selectedIndex === -1) field.value = "";
+            }
+            if (formParams().toString() === "") { clear(); return false; }
+            run(false);
+            return true;
+        };
         form.closest("section").hidden = false;
-        form.addEventListener("submit", event => { event.preventDefault(); run(false); });
+        if (restoreFromAddress()) writeAddress(formParams(), "replaceState");
+        window.addEventListener("popstate", restoreFromAddress);
+        form.addEventListener("submit", event => { event.preventDefault(); writeAddress(formParams()); run(false); });
         form.addEventListener("input", () => { nextCursor = null; more.hidden = true; });
         more.addEventListener("click", () => run(true));
     };

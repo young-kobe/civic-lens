@@ -438,7 +438,7 @@ Every release holds `method.html`, rendered by `PublishedMethodPage`. It states 
 
 ### Search
 
-Every release holds `search.html`, rendered by `PublishedSearchPage`. Every public page links to it. The page fills the kind, official, issue, policy area, and source filters from the manifest and the catalog names. A script on the page calls the [search](search.md) service at `CIVIC_LENS_PUBLIC_API_URL`, which publish reads. The form stays hidden until `public.js` runs, because search needs JavaScript. Without the variable, the page says that search is not available. A method note on the page states the source text limit.
+Every release holds `search.html`, rendered by `PublishedSearchPage`. Every public page links to it. The page fills the kind, official, issue, policy area, and source filters from the manifest and the catalog names. A script on the page calls the [search](search.md) service at `CIVIC_LENS_PUBLIC_API_URL`, which publish reads. The form stays hidden until `public.js` runs, because search needs JavaScript. The page address holds `q` and the seven filters, never a cursor or a release, so a reader can share a search. A submit writes browser history; typing does not. See [search](search.md#search-page). Without the variable, the page says that search is not available. A method note on the page states the source text limit.
 
 ## Storage and contracts
 
