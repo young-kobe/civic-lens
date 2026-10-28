@@ -1135,7 +1135,7 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task EveryPageTypeHasABoundedDescriptionThatOpenGraphRepeatsAndNoCanonicalLink()
+    public async Task EveryPageTypeHasABoundedDescriptionThatOpenGraphRepeats()
     {
         var pages = (await RenderEveryPageTypeAsync()).Select(page => page.Html);
 
@@ -1149,9 +1149,93 @@ public sealed class ReleaseRendererTests
             Assert.Equal(head.QuerySelector("title")!.TextContent, head.QuerySelector("meta[property='og:title']")!.GetAttribute("content"));
             Assert.Equal("Civic Lens", head.QuerySelector("meta[property='og:site_name']")!.GetAttribute("content"));
             Assert.Contains("favicon.svg", head.QuerySelector("link[rel='icon']")!.GetAttribute("href"), StringComparison.Ordinal);
-            Assert.Null(head.QuerySelector("link[rel='canonical']"));
-            Assert.Null(head.QuerySelector("meta[property='og:url']"));
         }
+    }
+
+    private const string BaseUrl = "https://civic.example";
+
+    [Fact]
+    public async Task EveryPageTypeNamesItsOwnAddressAsCanonicalAndOpenGraphUrlSoSearchEnginesKeepOneAddressForEachPage()
+    {
+        foreach (var (_, path, html, _) in await RenderEveryPageTypeAsync(PublicBaseUrl.Parse(BaseUrl, "V")))
+        {
+            var head = new HtmlParser().ParseDocument(html).Head!;
+            var expected = path == PublicationProtocol.HomePath ? BaseUrl + "/" : $"{BaseUrl}/{path}";
+
+            Assert.Equal(expected, head.QuerySelector("link[rel='canonical']")!.GetAttribute("href"));
+            Assert.Equal(expected, head.QuerySelector("meta[property='og:url']")!.GetAttribute("content"));
+            Assert.Equal(1, head.QuerySelectorAll("link[rel='canonical']").Length);
+        }
+    }
+
+    [Fact]
+    public async Task TheSearchPageNamesTheBarePageAsCanonicalSoAQueryInTheAddressNeverBecomesAnotherPage()
+    {
+        var page = (await RenderEveryPageTypeAsync(PublicBaseUrl.Parse(BaseUrl, "V"))).Single(page => page.Name == "search");
+
+        var head = new HtmlParser().ParseDocument(page.Html).Head!;
+
+        Assert.Equal(BaseUrl + "/search.html", head.QuerySelector("link[rel='canonical']")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task APagePastTheFirstNamesItsOwnPageAsCanonicalSoPagesAreNotMergedIntoTheFirst()
+    {
+        var renderer = new ReleaseRenderer(null, null, PublicBaseUrl.Parse(BaseUrl, "V"));
+        var facet = SearchFacets().Issues[0];
+        var paged = facet with { Records = [.. Enumerable.Repeat(facet.Records[0], PublicationProtocol.PageSize + 1)] };
+
+        var html = await renderer.RenderFacetPageAsync(paged, 2, CancellationToken.None);
+
+        Assert.Equal($"{BaseUrl}/{paged.PagePath(2)}",
+            new HtmlParser().ParseDocument(html).QuerySelector("link[rel='canonical']")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task WithoutABaseUrlNoPageHasACanonicalOrOpenGraphUrlSoNoPageNamesAnAddressThatMayBeWrong()
+    {
+        foreach (var (name, _, html, _) in await RenderEveryPageTypeAsync())
+        {
+            var head = new HtmlParser().ParseDocument(html).Head!;
+
+            Assert.True(head.QuerySelector("link[rel='canonical']") is null && head.QuerySelector("meta[property='og:url']") is null, name);
+        }
+    }
+
+    [Fact]
+    public async Task OnlyTheNotFoundPageAsksSearchEnginesToSkipIt()
+    {
+        foreach (var (_, _, html, _) in await RenderEveryPageTypeAsync(PublicBaseUrl.Parse(BaseUrl, "V")))
+            Assert.Null(new HtmlParser().ParseDocument(html).Head!.QuerySelector("meta[name='robots']"));
+
+        var notFound = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null, PublicBaseUrl.Parse(BaseUrl, "V"))
+            .RenderNotFoundAsync(CancellationToken.None));
+        Assert.Equal("noindex", notFound.Head!.QuerySelector("meta[name='robots']")!.GetAttribute("content"));
+        Assert.Null(notFound.Head.QuerySelector("link[rel='canonical']"));
+        Assert.Null(notFound.Head.QuerySelector("meta[property='og:url']"));
+    }
+
+    [Fact]
+    public async Task EveryAssetNavigationAndFooterLinkOfTheNotFoundPageIsAbsoluteBecauseTheCdnServesItAtAnyMissingPath()
+    {
+        var html = await new ReleaseRenderer(null, null, PublicBaseUrl.Parse(BaseUrl, "V")).RenderNotFoundAsync(CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var addresses = document.QuerySelectorAll("[href], [src]").Select(element => element.GetAttribute("href") ?? element.GetAttribute("src")!)
+            .Where(address => !address.StartsWith('#')).ToList();
+        Assert.NotEmpty(addresses);
+        Assert.All(addresses, address => Assert.StartsWith(BaseUrl + "/", address, StringComparison.Ordinal));
+        Assert.Equal("Page not found | Civic Lens", document.QuerySelector("title")!.TextContent);
+        Assert.Contains("does not exist on Civic Lens", document.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains($"{BaseUrl}/index.html", addresses);
+        Assert.Contains($"{BaseUrl}/officials.html", addresses);
+        Assert.Contains($"{BaseUrl}/search.html", addresses);
+    }
+
+    [Fact]
+    public async Task TheNotFoundPageNeedsABaseUrlBecauseItCannotFindItsAssetsWithoutOne()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new ReleaseRenderer(null, null).RenderNotFoundAsync(CancellationToken.None));
     }
 
     // Written by ReleaseIndexPages and ReleaseOfficialPages. PublishReleaseTests pins them.
@@ -1187,9 +1271,9 @@ public sealed class ReleaseRendererTests
         }
     }
 
-    private static async Task<(string Name, string Path, string Html, string? Section)[]> RenderEveryPageTypeAsync()
+    private static async Task<(string Name, string Path, string Html, string? Section)[]> RenderEveryPageTypeAsync(PublicBaseUrl? baseUrl = null)
     {
-        var renderer = new ReleaseRenderer(null, null);
+        var renderer = new ReleaseRenderer(null, null, baseUrl);
         var release = ReleaseWithFilters();
         var facets = SearchFacets();
         var relationship = Relationship(PublishedRecordKind.Action, new string('a', 64), '7');

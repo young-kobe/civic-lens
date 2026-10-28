@@ -25,5 +25,9 @@ public interface IReleaseRenderer
     Task<string> RenderMethodAsync(CancellationToken cancellationToken);
     Task<string> RenderSearchAsync(PublicationRelease release, ReleaseFacets facets, CancellationToken cancellationToken);
 
+    Task<string> RenderNotFoundAsync(CancellationToken cancellationToken);
+
     IReadOnlyList<ReleaseAsset> Assets { get; }
+
+    PublicBaseUrl? PublicBaseUrl { get; }
 }

@@ -160,7 +160,7 @@ public sealed class PublishRelease
         if (manifestJson.Length > PublicationProtocol.MaximumManifestBytes)
             throw new ArgumentException("The release manifest would exceed the manifest size limit.", nameof(additions));
 
-        await using var staging = await releases.BeginAsync(cancellationToken);
+        await using var staging = new ReleaseSite(await releases.BeginAsync(cancellationToken), renderer);
         foreach (var entry in carried)
         {
             await staging.LinkFileAsync(previous.DirectoryName!, PublicationProtocol.RecordDataPath(entry.RecordId), cancellationToken);
@@ -189,6 +189,7 @@ public sealed class PublishRelease
         if (additions.Count == 0 && removed.Count == 0 && !ReleaseOfficialPages.ChangesProfiles(previous, officials))
             throw new ArgumentException("Nothing to publish: no record and no official changed.");
         await officialPages.WriteAsync(staging, manifest, officials, additions, removed, previous, cancellationToken);
+        await staging.WriteSiteFilesAsync(manifest, cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestPath, manifestJson, cancellationToken);
         return (await staging.CompleteAsync(number, cancellationToken), entries);
     }

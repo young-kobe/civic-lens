@@ -10,14 +10,18 @@ namespace CivicLens.Host.Publication;
 
 /// <param name="publicApiUrl">The address of the search service. The search page and the report page need it, and say that they are not available without it.</param>
 /// <param name="turnstileSiteKey">The public Turnstile site key. The report page needs it, and says that reporting is not available without it.</param>
-public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteKey) : IReleaseRenderer
+/// <param name="publicBaseUrl">The public origin of the site. Without it, pages have no canonical address and a release has no sitemap, robots file, or not found page.</param>
+public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteKey, PublicBaseUrl? publicBaseUrl = null) : IReleaseRenderer
 {
     public const string PublicApiUrlVariable = "CIVIC_LENS_PUBLIC_API_URL";
     public const string TurnstileSiteKeyVariable = "CIVIC_LENS_TURNSTILE_SITE_KEY";
+    public const string PublicBaseUrlVariable = "CIVIC_LENS_PUBLIC_BASE_URL";
 
-    private static readonly ServiceProvider Services = new ServiceCollection().BuildServiceProvider();
+    private readonly ServiceProvider services = PageServices(publicBaseUrl);
 
     public IReadOnlyList<ReleaseAsset> Assets { get; } = PublicAssets.Load();
+
+    public PublicBaseUrl? PublicBaseUrl => publicBaseUrl;
 
     public Task<string> RenderRecordAsync(PublishedDocumentChange record, PublicationCatalog catalog, CancellationToken cancellationToken)
     {
@@ -172,7 +176,11 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
 
     public static ReleaseRenderer FromEnvironment() => new(
         Environment.GetEnvironmentVariable(PublicApiUrlVariable)?.TrimEnd('/') is { Length: > 0 } url ? url : null,
-        Environment.GetEnvironmentVariable(TurnstileSiteKeyVariable)?.Trim() is { Length: > 0 } siteKey ? siteKey : null);
+        Environment.GetEnvironmentVariable(TurnstileSiteKeyVariable)?.Trim() is { Length: > 0 } siteKey ? siteKey : null,
+        PublicBaseUrlFromEnvironment());
+
+    public static PublicBaseUrl? PublicBaseUrlFromEnvironment() =>
+        PublicBaseUrl.Parse(Environment.GetEnvironmentVariable(PublicBaseUrlVariable), PublicBaseUrlVariable);
 
     public Task<string> RenderReportAsync(CancellationToken cancellationToken) =>
         RenderAsync<PublishedReportPage>(new Dictionary<string, object?>
@@ -196,10 +204,26 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
         });
     }
 
-    private static async Task<string> RenderAsync<TComponent>(Dictionary<string, object?> parameters)
+    public Task<string> RenderNotFoundAsync(CancellationToken cancellationToken)
+    {
+        if (publicBaseUrl is null) throw new InvalidOperationException($"The not found page needs {PublicBaseUrlVariable}.");
+        return RenderAsync<PublishedNotFoundPage>(new Dictionary<string, object?>
+        {
+            [nameof(PublishedNotFoundPage.RootPath)] = publicBaseUrl.Join(string.Empty)
+        });
+    }
+
+    private static ServiceProvider PageServices(PublicBaseUrl? publicBaseUrl)
+    {
+        var services = new ServiceCollection();
+        if (publicBaseUrl is not null) services.AddSingleton(publicBaseUrl);
+        return services.BuildServiceProvider();
+    }
+
+    private async Task<string> RenderAsync<TComponent>(Dictionary<string, object?> parameters)
         where TComponent : IComponent
     {
-        await using var renderer = new HtmlRenderer(Services, NullLoggerFactory.Instance);
+        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
         return await renderer.Dispatcher.InvokeAsync(async () =>
         {
             var output = await renderer.RenderComponentAsync<TComponent>(ParameterView.FromDictionary(parameters));
