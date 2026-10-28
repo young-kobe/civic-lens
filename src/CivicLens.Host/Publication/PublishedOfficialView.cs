@@ -19,6 +19,21 @@ internal static class PublishedOfficialView
         _ => term.Office
     };
 
+    public static PublishedOfficeTerm? LatestTerm(IEnumerable<PublishedOfficeTerm> terms) => terms.OrderBy(term => term.Start).LastOrDefault();
+
+    public static string OfficeKind(PublishedOfficeTerm? term) => term?.Office switch
+    {
+        "sen" => "senator",
+        "rep" => "representative",
+        "prez" or "viceprez" => "executive",
+        _ => "other"
+    };
+
+    public static readonly IReadOnlyList<(string Kind, string Plural)> OfficeKinds =
+        [("senator", "Senators"), ("representative", "Representatives"), ("executive", "Executives"), ("other", "Other officials")];
+
+    public static string RecordCount(int count) => $"{count} {(count == 1 ? "record" : "records")} other than votes";
+
     public static string WebsiteHost(string website) => new Uri(website).IdnHost;
 
     public static IReadOnlyList<PublishedOfficialRow> Rows(ReleaseOfficialPage page)

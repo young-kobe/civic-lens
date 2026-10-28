@@ -1408,7 +1408,6 @@ public sealed class ReleaseRendererTests
             ["issue"] = 1,
             ["issues"] = 2,
             ["official"] = 3,
-            ["officials"] = 1,
             ["policy area"] = 1,
             ["record"] = 1,
             ["statement"] = 1,

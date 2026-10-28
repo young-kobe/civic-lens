@@ -1,17 +1,36 @@
-<nav class="segmented" aria-label="@Label">
-    @foreach (var tab in Tabs)
-    {
-        <a class="segmented-item" href="@tab.Href" aria-current="@(tab.Selected ? "true" : null)">
-            @tab.Label
-            @if (tab.Count is { } count)
-            {
-                <span class="segmented-count">@count</span>
-            }
-        </a>
-    }
-</nav>
+@if (Tabs.Any(tab => tab.Href is null))
+{
+    <div class="segmented" role="group" aria-label="@Label" @attributes="AdditionalAttributes">@Items</div>
+}
+else
+{
+    <nav class="segmented" aria-label="@Label" @attributes="AdditionalAttributes">@Items</nav>
+}
 
 @code {
     [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
     [Parameter, EditorRequired] public IReadOnlyList<FilterTab> Tabs { get; set; } = [];
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private RenderFragment Items => @<text>
+        @foreach (var tab in Tabs)
+        {
+            if (tab.Href is null)
+            {
+                <button class="segmented-item" type="button" data-filter-value="@tab.Value" aria-pressed="@(tab.Selected ? "true" : "false")">@Content(tab)</button>
+            }
+            else
+            {
+                <a class="segmented-item" href="@tab.Href" aria-current="@(tab.Selected ? "true" : null)">@Content(tab)</a>
+            }
+        }
+    </text>;
+
+    private static RenderFragment Content(FilterTab tab) => @<text>
+        @tab.Label
+        @if (tab.Count is { } count)
+        {
+            <span class="segmented-count">@count</span>
+        }
+    </text>;
 }
