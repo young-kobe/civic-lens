@@ -519,7 +519,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
-    public async Task APublishWithAKeyAndNoRecordsIsInvalidBecauseTheWorkspaceCannotCheckForAProfileChangeAsync()
+    public async Task AConfirmWithAKeyAndNoRecordsIsInvalidAndMakesNoReleaseAsync()
     {
         await SaveComparisonAsync("Fee: 10 dollars.\n", "Fee: 12 dollars.\n");
         SignIn(Owner);

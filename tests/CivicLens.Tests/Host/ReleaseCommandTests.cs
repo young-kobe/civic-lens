@@ -169,8 +169,11 @@ public sealed class ReleaseCommandTests
     public async Task ANoteWithNoRecordExitsWithTwoAndMakesNoReleaseBecauseTheNoteHasNoRecordToDescribe()
     {
         var scenario = new PublicationScenario();
+        scenario.Captures.Add("attempt-1", [.. MemberPhotoFixtures.Jpeg(), 1]);
+        scenario.Photos = [new("mayor", MemberPhotoFixtures.PhotoUrl(), MemberPhoto.MemberGuideCredit, "attempt-1", new string('a', 64))];
         await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", $"vote:{scenario.AddVote('a')}"], scenario.Publisher(), null!, null!, null!,
             PublicationScenario.Owner, CancellationToken.None);
+        scenario.WithheldPhotos.Add("mayor");
 
         var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "key", "--note", "statement:abc", "text"],
             scenario.Publisher(), null!, null!, null!, PublicationScenario.Owner, CancellationToken.None);
