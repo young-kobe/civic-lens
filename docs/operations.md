@@ -849,6 +849,8 @@ docker rm -f civic-lens-search-db
 
 Release numbers restart at 1 after this reset.
 
+A release contract change can add a required field to a published file. Old files then do not read, and the next publish fails. On the dev machine, repeat steps 1 to 5. These steps delete all captures and records, not only the releases. Collect again and let code approve the facts, then publish a fresh release with `releases publish` as in [Publish a static release](#publish-a-static-release). Production has no release yet, so it has no older files.
+
 ## Runtime data
 
 Runtime data belongs in ignored .runtime/. Generated publication and evaluation artifacts belong in ignored artifacts/. Never commit credentials or copy operational directories from the legacy repository. There is no deploy command and no public endpoint yet. Published releases live under the configured release directory, not in the repository. Production backup and restore and MCP runbooks will come here when they exist.

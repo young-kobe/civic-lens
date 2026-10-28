@@ -215,6 +215,20 @@ public sealed class PublishVoteTests
             record.PartyMajorities.Select(party => (party.Party, party.YeaCount, party.NayCount, party.Majority)));
         var row = Assert.Single(ReadOfficialVotes(scenario, summary, "mayor").Votes);
         Assert.Equal(("Passed", "Democrat", "Yea", 3), (row.Result, row.Party, row.PartyMajority, row.Totals!.Yea));
+        Assert.False(row.SplitVote);
+    }
+
+    [Fact]
+    public async Task TheOfficialRowIsFlaggedSplitWhenMostDemocratsAndMostRepublicansVotedOnOppositeSides()
+    {
+        var scenario = new PublicationScenario();
+        scenario.RosterMembers = [Member("M000001", Term("Democrat")), Member("R1", Term("Republican"))];
+        var vote = scenario.AddVote('d', totalLines: [PublicationScenario.DefaultPartyTotal, "Party total R: Yea 0, Nay 1, Present 0, Not voting 0"],
+            otherMemberLines: ["Member: R1, A, R, AL, Nay"]);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
+
+        Assert.True(Assert.Single(ReadOfficialVotes(scenario, summary, "mayor").Votes).SplitVote);
     }
 
     [Fact]
@@ -240,7 +254,8 @@ public sealed class PublishVoteTests
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
 
-        Assert.Null(Assert.Single(ReadOfficialVotes(scenario, summary, "mayor").Votes).PartyMajority);
+        var row = Assert.Single(ReadOfficialVotes(scenario, summary, "mayor").Votes);
+        Assert.Equal((null, false), (row.PartyMajority, row.SplitVote));
     }
 
     // The source gives a bare "I" for an Independent, but the member votes with a party caucus.
@@ -407,7 +422,7 @@ public sealed class PublishVoteTests
         var member = Assert.Single(record.Members);
         Assert.Equal(("Democrat", "Johnson (LA)"), (member.Party, member.Cast));
         var row = Assert.Single(ReadOfficialVotes(scenario, summary, "mayor").Votes);
-        Assert.Equal(("Johnson (LA)", null, "Democrat", null, "Johnson (LA)"), (row.Result, row.Totals, row.Party, row.PartyMajority, row.Cast));
+        Assert.Equal(("Johnson (LA)", null, "Democrat", null, "Johnson (LA)", false), (row.Result, row.Totals, row.Party, row.PartyMajority, row.Cast, row.SplitVote));
     }
 
     // A stray candidate line beside party totals must not skip the total and party letter checks.

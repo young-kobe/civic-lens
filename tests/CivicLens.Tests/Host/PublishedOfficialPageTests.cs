@@ -162,6 +162,77 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
+    public async Task TheVotesWithTheirPartyPanelStatesEachChamberOnceAndListsEveryBreakNewestFirstBetweenTheProfileAndTheRecords()
+    {
+        var day = new DateOnly(2026, 4, 1);
+        var votes = new[] { Split('a', day, "Yea"), Split('b', day.AddDays(2), "Nay"), Split('c', day.AddDays(1), "No"), Split('d', day.AddDays(3), "Present"),
+            Split('e', day, "Nay") with { Chamber = PublishedChamber.Senate, Party = PublishedPartyMajority.Democrat, PartyMajority = "Nay" } };
+        var document = await RenderedAsync(votes);
+
+        var panel = document.QuerySelector("[aria-labelledby='panel-votes-with-their-party']")!;
+        Assert.Equal(["Voted with most House Republicans on 1 of 3 split votes in the 119th Congress. They did not cast Yea or Nay on 1 other split vote.",
+            "Voted with most Senate Democrats on 1 of 1 split vote in the 119th Congress.",
+            "A split vote is a substantive roll call vote where most Democrats and most Republicans voted on opposite sides."],
+            panel.QuerySelectorAll("p").Select(paragraph => paragraph.TextContent.Trim()));
+        var table = panel.QuerySelector("table")!;
+        Assert.Equal(["Date", "Vote", "Their vote", "Most House Republicans", "Result"], table.QuerySelectorAll("th").Select(cell => cell.TextContent.Trim()));
+        Assert.Equal(["2026-04-03", "2026-04-02"], table.QuerySelectorAll("tbody tr").Select(row => row.QuerySelector("td")!.TextContent.Trim()));
+        var first = table.QuerySelector("tbody tr")!.QuerySelectorAll("td");
+        Assert.Equal(["Vote b", "Nay", "Yea", "Passed"], first.Skip(1).Select(cell => cell.TextContent.Trim()));
+        Assert.EndsWith(PublicationProtocol.RecordPagePath(new string('b', 64)), first[1].QuerySelector("a")!.GetAttribute("href"));
+        Assert.Single(panel.QuerySelectorAll("table"));
+        var titles = document.QuerySelectorAll("h2").Select(title => title.TextContent.Trim()).ToArray();
+        Assert.True(Array.IndexOf(titles, "Talk and action in Congress 119") < Array.IndexOf(titles, "Votes with their party"));
+        Assert.True(Array.IndexOf(titles, "Votes with their party") < Array.IndexOf(titles, "Records"));
+    }
+
+    [Fact]
+    public async Task AnOfficialWhoNeverBrokeWithThePartyGetsOneLineAndNoTableAndAnOfficialWithNoSplitVoteGetsAPlainSentence()
+    {
+        var day = new DateOnly(2026, 4, 1);
+        var matched = await RenderedAsync([Split('a', day, "Yea")]);
+        var none = await RenderedAsync([Vote('a', day)]);
+
+        var matchedPanel = matched.QuerySelector("[aria-labelledby='panel-votes-with-their-party']")!;
+        Assert.Contains("No votes against most of their party.", matchedPanel.TextContent, StringComparison.Ordinal);
+        Assert.Null(matchedPanel.QuerySelector("table"));
+        var nonePanel = none.QuerySelector("[aria-labelledby='panel-votes-with-their-party']")!;
+        Assert.DoesNotContain("No votes against most of their party.", nonePanel.TextContent, StringComparison.Ordinal);
+        Assert.Contains("No Yea or Nay cast yet on a split vote in the House of Representatives as a Republican in the 119th Congress.", nonePanel.TextContent, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(4, "on 3 of 4 split votes in the 119th Congress.")]
+    [InlineData(5, "on 4 of 5 split votes (80%) in the 119th Congress.")]
+    public async Task ThePercentOfVotesWithTheirPartyShowsOnlyAtTheThreshold(int cast, string expected)
+    {
+        var votes = Enumerable.Range(0, cast).Select(index => Split((char)('a' + index), new DateOnly(2026, 4, 1).AddDays(index), index == 0 ? "Nay" : "Yea"));
+
+        var document = await RenderedAsync([.. votes]);
+
+        Assert.Contains(expected, document.QuerySelector("[aria-labelledby='panel-votes-with-their-party']")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnOfficialWhoseRowsNameNeitherMajorPartyGetsNoVotesWithTheirPartyPanel()
+    {
+        var document = await RenderedAsync([Split('a', new DateOnly(2026, 4, 1), "Yea") with { Party = "Independent" }]);
+
+        Assert.Null(document.QuerySelector("[aria-labelledby='panel-votes-with-their-party']"));
+    }
+
+    private static async Task<AngleSharp.Dom.IDocument> RenderedAsync(PublishedOfficialVote[] votes)
+    {
+        var page = Current([], votes);
+        page = page with { TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes) };
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+        return new HtmlParser().ParseDocument(html);
+    }
+
+    private static PublishedOfficialVote Split(char id, DateOnly date, string cast) =>
+        Vote(id, date) with { SplitVote = true, PartyMajority = PublishedPartyMajority.Yea, Cast = cast };
+
+    [Fact]
     public async Task TheProfilePanelShowsCountsAndSharesOrTooFewRecordsAndLinksTheMethodNote()
     {
         PublishedRecordEntry[] statements = [.. Enumerable.Range(1, 5).Select(index => Entry((char)('0' + index), PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)) with { IssueIds = index < 3 ? ["housing", "health"] : ["housing"] })];
@@ -318,6 +389,7 @@ public sealed class PublishedOfficialPageTests
         Cast = "Yea",
         Result = "Passed",
         Totals = new() { Yea = 218, Nay = 210, Present = 1, NotVoting = 5 },
+        SplitVote = false,
         Party = "Republican",
         Headline = $"Vote {id}",
         Kind = PublishedVoteKind.Passage,

@@ -52,6 +52,13 @@ public sealed record PublishedVote
             !texts.Any(text => text.StartsWith(PartyTotalPrefix, StringComparison.Ordinal));
     }
 
+    public bool IsSplit()
+    {
+        var democrat = MajorityOf(PublishedPartyMajority.Democrat);
+        var republican = MajorityOf(PublishedPartyMajority.Republican);
+        return Kind.IsSubstantive() && democrat is not null && republican is not null && democrat != republican;
+    }
+
     public PublishedRecordEntry ToEntry() => new()
     {
         Kind = PublishedRecordKind.Vote,
@@ -117,6 +124,8 @@ public sealed record PublishedVote
             PartyMajorities.Sum(party => party.YeaCount) != Totals.Yea || PartyMajorities.Sum(party => party.NayCount) != Totals.Nay)
             throw new InvalidDataException("Published party majorities must name distinct parties and add up to the vote totals.");
     }
+
+    private string? MajorityOf(string party) => PartyMajorities.SingleOrDefault(majority => majority.Party == party)?.Majority;
 
     private bool IsKnownParty(string? party) =>
         HasCandidateTotals ? PublishedEvidenceRules.IsBoundedText(party) : PartyMajorities.Any(majority => majority.Party == party);

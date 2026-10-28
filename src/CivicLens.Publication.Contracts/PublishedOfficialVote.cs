@@ -18,6 +18,7 @@ public sealed record PublishedOfficialVote
     public required string Cast { get; init; }
     public required string Result { get; init; }
     public PublishedVoteTotals? Totals { get; init; }
+    public required bool SplitVote { get; init; }
     public required string Party { get; init; }
     public string? PartyMajority { get; init; }
     public required string Headline { get; init; }
@@ -26,6 +27,13 @@ public sealed record PublishedOfficialVote
 
     [JsonIgnore]
     public bool IsCast => Cast != NotVoting;
+
+    public static string? SideOf(string cast) => cast switch
+    {
+        "Yea" or "Aye" => PublishedPartyMajority.Yea,
+        "Nay" or "No" => PublishedPartyMajority.Nay,
+        _ => null
+    };
 
     public static PublishedOfficialVote Of(PublishedVote vote, PublishedMemberVote member) => new()
     {
@@ -40,6 +48,7 @@ public sealed record PublishedOfficialVote
         Cast = member.Cast,
         Result = vote.Result,
         Totals = vote.Totals,
+        SplitVote = vote.IsSplit(),
         Party = member.Party,
         PartyMajority = vote.PartyMajorities.SingleOrDefault(majority => majority.Party == member.Party)?.Majority,
         Headline = vote.Headline,
@@ -52,7 +61,7 @@ public sealed record PublishedOfficialVote
         if (!PublicationProtocol.IsRecordId(PublishedRecordKind.Vote, RecordId) || !Enum.IsDefined(Chamber) || Congress < 1 || Session is not (1 or 2) ||
             RollCallNumber < 1 || !Enum.IsDefined(Kind) || !PublishedRecordEntry.AreFilterValues(IssueIds) || !IsText(Cast, PublishedVote.MaximumCastLength) || !IsText(Headline, PublishedVote.MaximumHeadlineLength) ||
             !IsText(Result, PublishedVote.MaximumHeadlineLength) || !IsText(Party, PublishedVote.MaximumHeadlineLength) || PartyMajority is not (null or PublishedPartyMajority.Yea or PublishedPartyMajority.Nay) ||
-            (BillType is null) != (BillNumber is null) || BillType is not null && (!IsText(BillType, PublishedVote.MaximumBillTypeLength) || BillNumber < 1))
+            SplitVote && (!Kind.IsSubstantive() || PartyMajority is null || Totals is null) || (BillType is null) != (BillNumber is null) || BillType is not null && (!IsText(BillType, PublishedVote.MaximumBillTypeLength) || BillNumber < 1))
             throw new InvalidDataException("Published official vote is invalid.");
         Totals?.Validate();
     }

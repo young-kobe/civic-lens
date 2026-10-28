@@ -8,6 +8,8 @@ public sealed record PublishedPartyMajority
 {
     public const string Yea = "Yea";
     public const string Nay = "Nay";
+    public const string Democrat = "Democrat";
+    public const string Republican = "Republican";
     public const string UnknownParty = "Unknown";
 
     public required string Party { get; init; }

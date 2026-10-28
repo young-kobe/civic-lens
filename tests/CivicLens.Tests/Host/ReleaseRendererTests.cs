@@ -193,6 +193,8 @@ public sealed class ReleaseRendererTests
         Assert.Contains("Too few records", text, StringComparison.Ordinal);
         Assert.Contains("A missed vote means the official did not vote on it.", text, StringComparison.Ordinal);
         Assert.Contains("A roll call that was not published is in neither number.", text, StringComparison.Ordinal);
+        Assert.Contains("A split vote is a substantive roll call vote where most Democrats and most Republicans voted on opposite sides.", text, StringComparison.Ordinal);
+        Assert.Contains($"on at least {TalkAndActionProfile.MinimumRecordsForShare} split votes", text, StringComparison.Ordinal);
         Assert.Contains("policy area of the bill in Congress.gov", text, StringComparison.Ordinal);
         Assert.Contains("Some tags can still be wrong", text, StringComparison.Ordinal);
     }
@@ -1212,6 +1214,7 @@ public sealed class ReleaseRendererTests
                 Cast = "Yea",
                 Result = "Passed",
                 Totals = new() { Yea = 218, Nay = 210, Present = 1, NotVoting = 5 },
+                SplitVote = false,
                 Party = "Republican",
                 Headline = "A vote",
                 Kind = PublishedVoteKind.Passage,

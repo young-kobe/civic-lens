@@ -16,6 +16,12 @@
         <p>The total is the number of published roll calls that the chamber held while the official served. A roll call that was not published is in neither number.</p>
         <p>The page shows a share only when the total is at least @TalkAndActionProfile.MinimumRecordsForShare roll calls.</p>
     </Panel>
+    <Panel Title="Votes with their party" Padded="true">
+        <p>@PublishedOfficialView.SplitVoteMeaning The majority of a party is the Yea or Nay cast that more of its members made. A party with equal Yea and Nay counts has no majority, so its roll call is not a split vote. A vote for a candidate, such as the election of the Speaker, is never a split vote.</p>
+        <p>The page counts only split votes where the official cast Yea or Nay. Aye counts as Yea and No counts as Nay. The official votes with the party when the cast equals the majority of the official party in the same chamber. The party is the party of the official on the day of the vote.</p>
+        <p>A cast of Present or Not Voting is not in either number. The page states how many split votes it left out. It shows a percent only when the official cast Yea or Nay on at least @TalkAndActionProfile.MinimumRecordsForShare split votes.</p>
+        <p>The page leaves out votes that the official cast while in a party other than @PublishedPartyMajority.Democrat or @PublishedPartyMajority.Republican.</p>
+    </Panel>
     <Panel Title="The window" Padded="true">
         <p>All three columns use the current Congress. The current Congress of an official is the newest Congress with a published vote of that official.</p>
     </Panel>

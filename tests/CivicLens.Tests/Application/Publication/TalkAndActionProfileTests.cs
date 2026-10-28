@@ -165,6 +165,7 @@ public sealed class TalkAndActionProfileTests
         Cast = "Yea",
         Result = "Passed",
         Totals = new() { Yea = 218, Nay = 210, Present = 1, NotVoting = 5 },
+        SplitVote = false,
         Party = "Republican",
         Headline = $"Vote {id}",
         Kind = kind,
