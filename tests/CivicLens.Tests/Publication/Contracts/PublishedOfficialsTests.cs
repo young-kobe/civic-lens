@@ -86,7 +86,7 @@ public sealed class PublishedOfficialsTests
         var catalog = new PublishedCatalog { Issues = [new() { Id = "housing", Name = "Housing" }], PolicyAreas = [] };
 
         Assert.Equal(1, PublicationProtocol.SchemaVersion);
-        Assert.Equal("""{"officials":[{"id":"mayor","name":"Mayor Example","wikidataId":null,"website":null,"terms":[{"office":"sen","state":"WA","district":null,"party":"Democrat","caucus":null,"start":"2025-01-03","end":"2031-01-03"}]}]}""",
+        Assert.Equal("""{"officials":[{"id":"mayor","name":"Mayor Example","wikidataId":null,"website":null,"photo":null,"terms":[{"office":"sen","state":"WA","district":null,"party":"Democrat","caucus":null,"start":"2025-01-03","end":"2031-01-03"}]}]}""",
             JsonSerializer.Serialize(officials, PublicationProtocol.JsonOptions));
         Assert.Equal("""{"issues":[{"id":"housing","name":"Housing"}],"policyAreas":[]}""",
             JsonSerializer.Serialize(catalog, PublicationProtocol.JsonOptions));
@@ -102,7 +102,7 @@ public sealed class PublishedOfficialsTests
 
         officials.Validate();
 
-        Assert.Equal("""{"officials":[{"id":"sec","name":"Secretary Example","wikidataId":null,"website":null,"terms":[{"office":"Secretary of State","state":null,"district":null,"party":null,"caucus":null,"start":"2025-01-21","end":null}]}]}""",
+        Assert.Equal("""{"officials":[{"id":"sec","name":"Secretary Example","wikidataId":null,"website":null,"photo":null,"terms":[{"office":"Secretary of State","state":null,"district":null,"party":null,"caucus":null,"start":"2025-01-21","end":null}]}]}""",
             JsonSerializer.Serialize(officials, PublicationProtocol.JsonOptions));
     }
 
@@ -163,5 +163,87 @@ public sealed class PublishedOfficialsTests
 
         Assert.Throws<InvalidDataException>(new PublishedCatalog { Issues = [entry, entry], PolicyAreas = [] }.Validate);
         Assert.Throws<InvalidDataException>(new PublishedCatalog { Issues = [entry with { Name = " " }], PolicyAreas = [] }.Validate);
+    }
+
+    private static readonly string PhotoHash = new('a', 64);
+
+    private static PublishedPhoto Photo(Func<PublishedPhoto, PublishedPhoto>? change = null)
+    {
+        var photo = new PublishedPhoto
+        {
+            Path = PublicationProtocol.PhotoPath(PhotoHash),
+            Credit = "Official portrait. Public domain.",
+            SourceUrl = "https://example.gov/images/mayor.jpg",
+            Width = 225,
+            Height = 275
+        };
+        return change?.Invoke(photo) ?? photo;
+    }
+
+    [Fact]
+    public void AProfilePhotoKeepsItsFieldsThroughAJsonRoundTrip()
+    {
+        var profile = new PublishedOfficialProfile { Id = "mayor", Name = "Mayor Example", Photo = Photo(), Terms = [] };
+
+        var back = JsonSerializer.Deserialize<PublishedOfficialProfile>(JsonSerializer.Serialize(profile, PublicationProtocol.JsonOptions), PublicationProtocol.JsonOptions)!;
+        back.Validate();
+
+        Assert.Equal(Photo(), back.Photo);
+    }
+
+    [Fact]
+    public void AProfileWithNoPhotoIsValidSoAReleaseBeforePhotosStillReads()
+    {
+        var back = JsonSerializer.Deserialize<PublishedOfficialProfile>(
+            """{"id":"mayor","name":"Mayor Example","terms":[]}""", PublicationProtocol.JsonOptions)!;
+
+        back.Validate();
+
+        Assert.Null(back.Photo);
+    }
+
+    [Theory]
+    [InlineData("photos/Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.jpg")]
+    [InlineData("photos/aaaa.jpg")]
+    [InlineData("../photos/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.jpg")]
+    [InlineData("photos/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png")]
+    [InlineData("records/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.jpg")]
+    public void APhotoPathThatIsNotAHashedFileInThePhotosFolderIsRefusedSoAProfileCannotNameAnotherFile(string path)
+    {
+        Assert.Throws<InvalidDataException>(Photo(photo => photo with { Path = path }).Validate);
+    }
+
+    [Theory]
+    [InlineData("http://example.gov/a.jpg")]
+    [InlineData("https://user:pw@example.gov/a.jpg")]
+    public void APhotoSourceUrlThatIsNotAPlainHttpsUrlIsRefused(string url)
+    {
+        Assert.Throws<InvalidDataException>(Photo(photo => photo with { SourceUrl = url }).Validate);
+    }
+
+    [Theory]
+    [InlineData(0, 275)]
+    [InlineData(225, 0)]
+    [InlineData(PublishedPhoto.MaximumDimension + 1, 275)]
+    [InlineData(225, PublishedPhoto.MaximumDimension + 1)]
+    public void APhotoSizeThatIsNotPositiveAndBoundedIsRefused(int width, int height)
+    {
+        Assert.Throws<InvalidDataException>(Photo(photo => photo with { Width = width, Height = height }).Validate);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ABlankPhotoCreditIsRefusedSoEveryPhotoNamesItsSource(string credit)
+    {
+        Assert.Throws<InvalidDataException>(Photo(photo => photo with { Credit = credit }).Validate);
+    }
+
+    [Fact]
+    public void AnInvalidPhotoMakesTheProfileInvalid()
+    {
+        var profile = new PublishedOfficialProfile { Id = "mayor", Name = "Mayor Example", Photo = Photo(photo => photo with { Width = 0 }), Terms = [] };
+
+        Assert.Throws<InvalidDataException>(profile.Validate);
     }
 }

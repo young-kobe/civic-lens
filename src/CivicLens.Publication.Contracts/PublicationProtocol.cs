@@ -25,6 +25,8 @@ public static class PublicationProtocol
     public const string CatalogPath = "catalog.json";
     public const string OfficialsPagePath = "officials.html";
     public const int MaximumOfficialFiles = 512;
+    private const string PhotoFolder = "photos/";
+    private const string PhotoExtension = ".jpg";
 
     public static string AllRecordsPagePath(int page) => page == 1 ? "all.html" : $"all-{page}.html";
     public static string IssuePagePath(string issueId, int page) => FacetPagePath("issues", issueId, page);
@@ -36,6 +38,10 @@ public static class PublicationProtocol
     public static string OfficialCongressPagePath(string officialId, int congress) => $"officials/{officialId}/{congress}.html";
     public static string OfficialVotesPath(string officialId, int congress) => $"officials/{officialId}/votes-{congress}.json";
     public static string OfficialFolder(string officialId) => $"officials/{officialId}";
+    public static string PhotoPath(string captureSha256) => $"{PhotoFolder}{captureSha256}{PhotoExtension}";
+    public static bool IsPhotoPath(string? path) =>
+        path is not null && path.StartsWith(PhotoFolder, StringComparison.Ordinal) && path.EndsWith(PhotoExtension, StringComparison.Ordinal) &&
+        IsSha256(path[PhotoFolder.Length..^PhotoExtension.Length]);
     public static int? VotesCongressOf(string path) => CongressIn(path, "/votes-", ".json");
     public static int? CongressPageOf(string path) => CongressIn(path, "/", ".html");
     public static string RecordDataPath(string recordId) => $"records/{recordId}.json";

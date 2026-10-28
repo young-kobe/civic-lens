@@ -6,6 +6,7 @@ public sealed record PublishedOfficialProfile
     public required string Name { get; init; }
     public string? WikidataId { get; init; }
     public string? Website { get; init; }
+    public PublishedPhoto? Photo { get; init; }
     public required PublishedOfficeTerm[] Terms { get; init; }
 
     public void Validate()
@@ -15,6 +16,7 @@ public sealed record PublishedOfficialProfile
             Terms is null || Terms.Length > PublishedOfficials.MaximumTerms || Terms.Any(term => term is null))
             throw new InvalidDataException("Published official is invalid.");
         foreach (var term in Terms) term.Validate();
+        Photo?.Validate();
     }
 
 }
