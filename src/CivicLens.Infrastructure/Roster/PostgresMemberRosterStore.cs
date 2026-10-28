@@ -1,7 +1,9 @@
+using CivicLens.Application.Collection;
 using CivicLens.Application.Roster;
 using CivicLens.Application.Votes;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Roster.Persistence;
 using CivicLens.Infrastructure.Votes;
 using CivicLens.Infrastructure.Votes.Persistence;
@@ -29,12 +31,14 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
         return await RosterSnapshotRules.HasSnapshotOfCaptureAsync(db, attemptId, cancellationToken);
     }
 
-    public async Task AdmitAsync(string attemptId, IReadOnlyList<RosterMember> members, CancellationToken cancellationToken)
+    public async Task AdmitAsync(string attemptId, IReadOnlyList<RosterMember> members, ConfiguredCollectionSource? photos,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(attemptId);
         ArgumentNullException.ThrowIfNull(members);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.CollectionJobs, cancellationToken);
+        if (photos is not null) await AddPhotoJobsAsync(db, photos, cancellationToken);
         RosterSnapshotRules.AddHeader(db, attemptId);
         foreach (var member in members)
         {
@@ -42,6 +46,16 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
             db.AddRange(member.Terms.Select(term => ToRow(attemptId, member.BioguideId, term)));
         }
         _ = await VoteDraftStaleness.RequeueSenateUnmatchedAsync(voteQueue, db, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task AdmitPhotoJobsAsync(ConfiguredCollectionSource photos, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(photos);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.CollectionJobs, cancellationToken);
+        await AddPhotoJobsAsync(db, photos, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
@@ -86,6 +100,16 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
             .Select(member => new { member.BioguideId, member.LisId }).Distinct()
             .OrderBy(member => member.BioguideId).ThenBy(member => member.LisId).ToListAsync(cancellationToken);
         return [.. rows.Select(row => new SenatorLisId(row.BioguideId, row.LisId))];
+    }
+
+    private static async Task AddPhotoJobsAsync(CollectionAttemptDbContext db, ConfiguredCollectionSource photos,
+        CancellationToken cancellationToken)
+    {
+        var now = (await DatabaseClock.ReadAsync(db, cancellationToken)).Offset;
+        var batch = photos.CreateMemberPhotoBatch(DateOnly.FromDateTime(now.UtcDateTime));
+        var (result, _) = await PostgresCollectionJobStore.AdmitApiJobsAsync(db, batch, int.MaxValue, now, cancellationToken);
+        if (result.DeferredCount > 0)
+            throw new InvalidDataException($"Source '{photos.SourceId}' admission policy cannot hold every member photo job.");
     }
 
     private static RosterMemberRow ToRow(string attemptId, RosterMember member) => new()

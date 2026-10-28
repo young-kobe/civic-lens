@@ -57,7 +57,7 @@ public sealed class PostgresExecutiveRosterStoreTests(PostgresCollection postgre
     {
         var congress = await RosterFixtures.ImportCaptureAsync(attempts, new string('a', 64), Morning);
         var executive = await ImportExecutiveAsync('b', 1);
-        await members.AdmitAsync(congress, RosterFixtures.Members(), default);
+        await members.AdmitAsync(congress, RosterFixtures.Members(), null, default);
         await executives.AdmitAsync(executive, ExecutiveFixtures.Officials(), default);
         var executiveWithCongressBody = await ImportExecutiveAsync('a', 2);
         var congressWithExecutiveBody = await RosterFixtures.ImportCaptureAsync(attempts, new string('b', 64), Morning.AddDays(3));

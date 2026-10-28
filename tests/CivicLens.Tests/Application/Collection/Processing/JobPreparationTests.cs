@@ -419,6 +419,48 @@ public sealed class JobPreparationTests
     }
 
     [Fact]
+    public async Task ANewRosterBodyPassesTheEnabledPhotoSourceSoTheSnapshotAndItsPhotoJobsShareOneTransaction()
+    {
+        var configuration = MemberPhotoFixtures.Configuration();
+
+        _ = await Prepare(ApiResource.MemberRoster, RosterFixtures.SourceUrl, RosterFixtures.Json, null, rosterConfiguration: configuration);
+
+        Assert.Equal(MemberPhotoFixtures.SourceId, Assert.Single(roster.PhotoSourcesOfAdmissions)!.SourceId);
+        Assert.Empty(roster.PhotoJobAdmissions);
+    }
+
+    [Fact]
+    public async Task AKnownRosterBodyStillEnqueuesPhotoJobsSoEachDailyCheckRefreshesTheMonthlyPhotoWindow()
+    {
+        roster.Known = true;
+
+        _ = await Prepare(ApiResource.MemberRoster, RosterFixtures.SourceUrl, "not json at all", null,
+            rosterConfiguration: MemberPhotoFixtures.Configuration());
+
+        Assert.Equal(MemberPhotoFixtures.SourceId, Assert.Single(roster.PhotoJobAdmissions).SourceId);
+        Assert.Empty(roster.Admissions);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task WithoutAnEnabledPhotoSourceTheRosterJobEnqueuesNoPhotoJobs(bool known, bool sourceDisabled)
+    {
+        roster.Known = known;
+        var configuration = sourceDisabled
+            ? MemberPhotoFixtures.Configuration() with { Sources = [RosterFixtures.Source(), MemberPhotoFixtures.Source() with { Enabled = false }] }
+            : RosterFixtures.Configuration();
+
+        _ = await Prepare(ApiResource.MemberRoster, RosterFixtures.SourceUrl, known ? "not json at all" : RosterFixtures.Json, null,
+            rosterConfiguration: configuration);
+
+        Assert.Empty(roster.PhotoJobAdmissions);
+        Assert.All(roster.PhotoSourcesOfAdmissions, photos => Assert.Null(photos));
+    }
+
+    [Fact]
     public async Task AKnownRosterCaptureIsNotParsedAndWritesNothing()
     {
         roster.Known = true;
@@ -518,7 +560,8 @@ public sealed class JobPreparationTests
     }
 
     private async Task<JobPreparationResult?> Prepare(ApiResource? resource, string url, string body,
-        IssueConfigurationRevision? issues, string? fragmentText = null, byte[]? bytes = null, string? contentType = null)
+        IssueConfigurationRevision? issues, string? fragmentText = null, byte[]? bytes = null, string? contentType = null,
+        CollectionConfiguration? rosterConfiguration = null)
     {
         var isPhoto = resource == ApiResource.MemberPhoto;
         bytes ??= isPhoto ? MemberPhotoFixtures.Jpeg() : Encoding.UTF8.GetBytes(body);
@@ -526,7 +569,7 @@ public sealed class JobPreparationTests
         var textExtractor = new FakeTextExtractor(fragmentText);
         var configured = resource switch
         {
-            ApiResource.MemberRoster => new ConfiguredCollectionSource(RosterFixtures.Configuration(), RosterFixtures.SourceId, Backfill),
+            ApiResource.MemberRoster => new ConfiguredCollectionSource(rosterConfiguration ?? RosterFixtures.Configuration(), RosterFixtures.SourceId, Backfill),
             ApiResource.ExecutiveRoster => new ConfiguredCollectionSource(ExecutiveFixtures.Configuration(), ExecutiveFixtures.SourceId, Backfill),
             ApiResource.MemberPhoto => new ConfiguredCollectionSource(
                 MemberPhotoFixtures.Configuration(RosterFixtures.Person("a-person", "A Person", MemberPhotoFixtures.Bioguide)),
@@ -765,9 +808,21 @@ public sealed class JobPreparationTests
             return Task.CompletedTask;
         }
 
-        public Task AdmitAsync(string attemptId, IReadOnlyList<CivicLens.Application.Roster.RosterMember> members, CancellationToken cancellationToken)
+        public List<ConfiguredCollectionSource?> PhotoSourcesOfAdmissions { get; } = [];
+
+        public List<ConfiguredCollectionSource> PhotoJobAdmissions { get; } = [];
+
+        public Task AdmitAsync(string attemptId, IReadOnlyList<CivicLens.Application.Roster.RosterMember> members,
+            ConfiguredCollectionSource? photos, CancellationToken cancellationToken)
         {
             Admissions.Add((attemptId, members));
+            PhotoSourcesOfAdmissions.Add(photos);
+            return Task.CompletedTask;
+        }
+
+        public Task AdmitPhotoJobsAsync(ConfiguredCollectionSource photos, CancellationToken cancellationToken)
+        {
+            PhotoJobAdmissions.Add(photos);
             return Task.CompletedTask;
         }
 

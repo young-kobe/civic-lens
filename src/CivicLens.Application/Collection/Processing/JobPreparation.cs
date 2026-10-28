@@ -232,8 +232,11 @@ public sealed class JobPreparation(
     {
         var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
         var attemptId = response.Captured.AttemptId;
+        var photos = EnabledPhotoSourceOf(job);
         if (!await roster.HasSnapshotOfCaptureAsync(attemptId, cancellationToken))
-            await roster.AdmitAsync(attemptId, MemberRosterParser.Parse(response.Body), cancellationToken);
+            await roster.AdmitAsync(attemptId, MemberRosterParser.Parse(response.Body), photos, cancellationToken);
+        else if (photos is not null)
+            await roster.AdmitPhotoJobsAsync(photos, cancellationToken);
         return JobPreparationResult.Prepared();
     }
 
@@ -266,6 +269,11 @@ public sealed class JobPreparation(
         ApiResource resource) =>
         BillPageUrl.TryRead(configured.SourceUrl, resource, job.Definition.Url)?.Bill
         ?? throw new InvalidDataException("Bill page job URL is not a page of its bill resource.");
+
+    private static ConfiguredCollectionSource? EnabledPhotoSourceOf(CollectionJobRecord job) =>
+        job.Definition.ConfigurationRevision!.Configuration.RosterSourceOf(ApiParser.MemberPhotos) is { Enabled: true } source
+            ? new ConfiguredCollectionSource(job.Definition.ConfigurationRevision, source.Id, job.Definition.CoverageAsOf)
+            : null;
 
     private static ConfiguredCollectionSource ConfiguredSourceOf(CollectionJobRecord job) =>
         new(job.Definition.ConfigurationRevision!, job.Definition.SourceId, job.Definition.CoverageAsOf);

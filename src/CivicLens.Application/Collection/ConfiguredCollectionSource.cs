@@ -2,6 +2,7 @@ using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Application.Collection.MemberPhotos;
 using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Application.Collection.Votes;
 using CivicLens.Collection.Contracts;
@@ -168,6 +169,22 @@ public sealed class ConfiguredCollectionSource
             nextMenu is null ? [.. votes] : [.. votes, nextMenu]);
     }
 
+    public ApiJobBatch CreateMemberPhotoBatch(DateOnly currentDate)
+    {
+        var source = ReadMemberPhotoSource();
+        var template = PrepareDefinition(source, currentDate, null, article: false);
+        var photos = Revision.Configuration.People
+            .Where(person => person.BioguideId is not null)
+            .Select(person => new ApiJob(MemberPhotoJobKeys.Photo(SourceId, person.BioguideId!, currentDate),
+                template with
+                {
+                    ApiResource = ApiResource.MemberPhoto,
+                    Url = MemberPhotoUrl.Photo(source.Url, person.BioguideId!),
+                    Priority = CollectionJobPriority.Backfill
+                }));
+        return new ApiJobBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), template, [.. photos]);
+    }
+
     public ApiJobBatch CreateApiBatch(IReadOnlyList<ApiJob> jobs, DateOnly currentDate)
     {
         var source = ReadApiSource();
@@ -252,6 +269,11 @@ public sealed class ConfiguredCollectionSource
         ReadSource() is { ApiParser: ApiParser.SenateVoteList } source
             ? source
             : throw new ArgumentException("Senate vote admission requires a configured Senate vote source.");
+
+    private WatchedSourceConfiguration ReadMemberPhotoSource() =>
+        ReadSource() is { ApiParser: ApiParser.MemberPhotos } source
+            ? source
+            : throw new ArgumentException("Member photo admission requires a configured member photo source.");
 
     private WatchedSourceConfiguration ReadApiSource() =>
         ReadSource() is { ApiParser: not null } source

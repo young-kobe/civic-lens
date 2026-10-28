@@ -102,6 +102,8 @@ public sealed record CollectionConfiguration
                 ValidateListAdmissionCapacity(source, ApiPageQuery.PageLimit + 1);
             if (source.ApiParser == ApiParser.SenateVoteList)
                 ValidateListAdmissionCapacity(source, SenateVoteMenuParser.MaximumVotes + 1);
+            if (source.ApiParser == ApiParser.MemberPhotos)
+                ValidateListAdmissionCapacity(source, People.Count(person => person.BioguideId is not null));
             if (source.CheckIntervalSeconds is { } interval && interval is
                 < WatchedSourceConfiguration.MinimumCheckIntervalSeconds or
                 > WatchedSourceConfiguration.MaximumCheckIntervalSeconds)
@@ -227,7 +229,7 @@ public sealed record CollectionConfiguration
     {
         var policy = source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy();
         if (!policy.CanReserve(CollectionJobDefinition.FromSource(source), jobs))
-            throw new ArgumentException($"Source '{source.Id}' admission policy must hold a full list page and its next-page job.");
+            throw new ArgumentException($"Source '{source.Id}' admission policy must hold every job of one admission.");
     }
 
     private static void ValidateCoverageShape(WatchedSourceConfiguration source)

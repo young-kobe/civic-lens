@@ -8,7 +8,10 @@ internal sealed class FixedMemberRoster(RosterMember[] members, SenatorLisId[]? 
 {
     public Task<bool> HasSnapshotOfCaptureAsync(string attemptId, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-    public Task AdmitAsync(string attemptId, IReadOnlyList<RosterMember> roster, CancellationToken cancellationToken) =>
+    public Task AdmitAsync(string attemptId, IReadOnlyList<RosterMember> roster, ConfiguredCollectionSource? photos,
+        CancellationToken cancellationToken) => throw new NotSupportedException();
+
+    public Task AdmitPhotoJobsAsync(ConfiguredCollectionSource photos, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
     public Task AdmitPhotoAsync(MemberPhoto photo, CancellationToken cancellationToken) => throw new NotSupportedException();

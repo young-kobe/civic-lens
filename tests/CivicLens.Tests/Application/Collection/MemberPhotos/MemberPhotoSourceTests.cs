@@ -88,6 +88,55 @@ public sealed class MemberPhotoSourceTests
         Assert.Throws<ArgumentException>(() => WithPhotoSource(MemberPhotoFixtures.Source() with { Mode = mode }).Validate());
 
     [Fact]
+    public void APolicyThatCannotHoldOneJobForEachPersonWithABioguideIdIsRejectedSoTheFirstAdmissionCannotFailLate()
+    {
+        PersonConfiguration[] people =
+        [
+            RosterFixtures.Person("a", "A", "A000001"),
+            RosterFixtures.Person("b", "B", "B000002"),
+            RosterFixtures.Person("c", "C", null)
+        ];
+        var holdsTwo = MemberPhotoFixtures.Source() with { AdmissionPolicy = new() { MaxJobs = 2, MaxTotalRequests = 12 } };
+        var holdsOne = MemberPhotoFixtures.Source() with { AdmissionPolicy = new() { MaxJobs = 1, MaxTotalRequests = 12 } };
+
+        (RosterFixtures.Configuration(people) with { Sources = [holdsTwo] }).Validate();
+        Assert.Throws<ArgumentException>((RosterFixtures.Configuration(people) with { Sources = [holdsOne] }).Validate);
+    }
+
+    [Theory]
+    [InlineData(0, 0, true)]
+    [InlineData(0, 29, true)]
+    [InlineData(0, 30, false)]
+    [InlineData(990, 1019, true)]
+    public void AKeyChangesEveryThirtyDaysFromTheUnixEpochSoEachPersonGetsOneJobForEachPeriod(int firstDay, int secondDay, bool sameKey)
+    {
+        var epoch = new DateOnly(1970, 1, 1);
+
+        var first = MemberPhotoJobKeys.Photo("member-photos", "A000001", epoch.AddDays(firstDay));
+        var second = MemberPhotoJobKeys.Photo("member-photos", "A000001", epoch.AddDays(secondDay));
+
+        Assert.Equal(sameKey, first == second);
+        Assert.StartsWith("member-photo/member-photos/A000001/", first);
+    }
+
+    [Fact]
+    public void TheBatchHoldsOneBackfillJobForEachConfiguredPersonWithABioguideIdAndNoOtherPerson()
+    {
+        PersonConfiguration[] people =
+        [
+            RosterFixtures.Person("a", "A", "A000001"),
+            RosterFixtures.Person("c", "C", null)
+        ];
+        var source = new ConfiguredCollectionSource(MemberPhotoFixtures.Configuration(people), MemberPhotoFixtures.SourceId, Today);
+
+        var batch = source.CreateMemberPhotoBatch(Today);
+
+        var job = Assert.Single(batch.Jobs);
+        Assert.Equal((ApiResource.MemberPhoto, MemberPhotoFixtures.PhotoUrl("A000001"), CollectionJobPriority.Backfill),
+            (job.Definition.ApiResource, job.Definition.Url, job.Definition.Priority));
+    }
+
+    [Fact]
     public void ThePhotoSourceMakesNoScheduledRootJobBecauseTheRosterJobCreatesThePhotoJobs()
     {
         var source = new ConfiguredCollectionSource(MemberPhotoFixtures.Configuration(), MemberPhotoFixtures.SourceId, Today);

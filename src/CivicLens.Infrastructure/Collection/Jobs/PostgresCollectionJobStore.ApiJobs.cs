@@ -11,12 +11,12 @@ public sealed partial class PostgresCollectionJobStore
 {
     private const int ApiJobSaveBatchSize = 10;
 
-    private sealed record AdmittedApiJob(ApiJob Job, string JobId);
+    internal sealed record AdmittedApiJob(ApiJob Job, string JobId);
 
     private static string HashIdentity(string identity) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
 
-    private static async Task<(DiscoveryAdmissionResult Result, IReadOnlyList<AdmittedApiJob> Admitted)>
+    internal static async Task<(DiscoveryAdmissionResult Result, IReadOnlyList<AdmittedApiJob> Admitted)>
         AdmitApiJobsAsync(CollectionAttemptDbContext db, ApiJobBatch batch, int saveBatchSize,
             DateTimeOffset now, CancellationToken cancellationToken)
     {

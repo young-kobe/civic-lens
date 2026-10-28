@@ -34,7 +34,7 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
     {
         var attemptId = await ImportAsync('a', 0);
 
-        await roster.AdmitAsync(attemptId, RosterFixtures.Members(), default);
+        await roster.AdmitAsync(attemptId, RosterFixtures.Members(), null, default);
 
         var latest = await roster.ReadLatestAsync(RosterFixtures.SourceId, default);
         Assert.Equal(["C000127", "N000147", "W000832"], latest.Select(member => member.BioguideId));
@@ -52,7 +52,7 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
         var cantwell = RosterFixtures.Members()[0];
         var independent = cantwell with { Terms = [cantwell.Terms[0], cantwell.Terms[1] with { Caucus = "Democrat" }] };
 
-        await roster.AdmitAsync(attemptId, [independent], default);
+        await roster.AdmitAsync(attemptId, [independent], null, default);
 
         var latest = await roster.ReadLatestAsync(RosterFixtures.SourceId, default);
         Assert.Equal([null, "Democrat"], latest[0].Terms.Select(term => term.Caucus));
@@ -62,7 +62,7 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
     public async Task ASnapshotOfOneSourceIsNotKnownToAnotherSourceThatCapturedTheSameBody()
     {
         var attemptId = await ImportAsync('a', 0);
-        await roster.AdmitAsync(attemptId, RosterFixtures.Members(), default);
+        await roster.AdmitAsync(attemptId, RosterFixtures.Members(), null, default);
         var otherSource = await RosterFixtures.ImportCaptureAsync(attempts, new string('a', 64), Morning.AddDays(1), "other-members");
 
         Assert.False(await roster.HasSnapshotOfCaptureAsync(otherSource, default));
@@ -86,8 +86,8 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
     {
         var a = await ImportAsync('a', 0);
         var b = await ImportAsync('b', 1);
-        await roster.AdmitAsync(a, RosterFixtures.Members(), default);
-        await roster.AdmitAsync(b, [.. RosterFixtures.Members().Take(2)], default);
+        await roster.AdmitAsync(a, RosterFixtures.Members(), null, default);
+        await roster.AdmitAsync(b, [.. RosterFixtures.Members().Take(2)], null, default);
         var aAgain = await ImportAsync('a', 2);
         var newBody = await ImportAsync('c', 3);
 
@@ -99,7 +99,7 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
     public async Task AReplayOfAnAdmittedAttemptMustSkipOrItHitsAPrimaryKeyConflictAndEndsFailed()
     {
         var attemptId = await ImportAsync('a', 0);
-        await roster.AdmitAsync(attemptId, RosterFixtures.Members(), default);
+        await roster.AdmitAsync(attemptId, RosterFixtures.Members(), null, default);
 
         Assert.True(await roster.HasSnapshotOfCaptureAsync(attemptId, default));
     }
@@ -110,11 +110,11 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
         var a = await ImportAsync('a', 0);
         var b = await ImportAsync('b', 1);
         var aAgain = await ImportAsync('a', 2);
-        await roster.AdmitAsync(a, RosterFixtures.Members(), default);
+        await roster.AdmitAsync(a, RosterFixtures.Members(), null, default);
         Assert.Equal(3, (await roster.ReadLatestAsync(RosterFixtures.SourceId, default)).Count);
         Assert.True(await roster.HasSnapshotOfCaptureAsync(aAgain, default));
 
-        await roster.AdmitAsync(b, [.. RosterFixtures.Members().Take(2)], default);
+        await roster.AdmitAsync(b, [.. RosterFixtures.Members().Take(2)], null, default);
 
         Assert.Equal(3, (await roster.ReadLatestAsync(RosterFixtures.SourceId, default)).Count);
     }
@@ -124,8 +124,8 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
     {
         var a = await ImportAsync('a', 0);
         var b = await ImportAsync('b', 1);
-        await roster.AdmitAsync(a, RosterFixtures.Members(), default);
-        await roster.AdmitAsync(b, [.. RosterFixtures.Members().Take(2)], default);
+        await roster.AdmitAsync(a, RosterFixtures.Members(), null, default);
+        await roster.AdmitAsync(b, [.. RosterFixtures.Members().Take(2)], null, default);
         Assert.Equal(2, (await roster.ReadLatestAsync(RosterFixtures.SourceId, default)).Count);
         var aAgain = await ImportAsync('a', 2);
 
@@ -138,8 +138,8 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
     {
         var first = await ImportAsync('a', 0);
         var raced = await ImportAsync('a', 1);
-        await roster.AdmitAsync(raced, [.. RosterFixtures.Members().Take(1)], default);
-        await roster.AdmitAsync(first, RosterFixtures.Members(), default);
+        await roster.AdmitAsync(raced, [.. RosterFixtures.Members().Take(1)], null, default);
+        await roster.AdmitAsync(first, RosterFixtures.Members(), null, default);
 
         Assert.Equal(3, (await roster.ReadLatestAsync(RosterFixtures.SourceId, default)).Count);
     }
@@ -149,9 +149,9 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
     {
         var first = await ImportAsync('a', 0);
         var changed = await ImportAsync('b', 1);
-        await roster.AdmitAsync(first, RosterFixtures.Members(), default);
+        await roster.AdmitAsync(first, RosterFixtures.Members(), null, default);
 
-        await roster.AdmitAsync(changed, [.. RosterFixtures.Members().Take(2)], default);
+        await roster.AdmitAsync(changed, [.. RosterFixtures.Members().Take(2)], null, default);
 
         Assert.Equal(2, (await roster.ReadLatestAsync(RosterFixtures.SourceId, default)).Count);
         Assert.Equal(3, await CountAsync("roster_members", first));
@@ -165,7 +165,7 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
         var broken = members[1] with { Terms = [members[1].Terms[0] with { Chamber = "gov" }] };
         await SeedBlockedVoteAsync('1', "Senate", "evidenceUnavailable");
 
-        await Assert.ThrowsAsync<DbUpdateException>(() => roster.AdmitAsync(attemptId, [members[0], broken], default));
+        await Assert.ThrowsAsync<DbUpdateException>(() => roster.AdmitAsync(attemptId, [members[0], broken], null, default));
 
         Assert.Equal(["Blocked"], await StatusesAsync());
 
@@ -178,8 +178,8 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
     {
         var first = await ImportAsync('a', 0);
         var later = await ImportAsync('b', 1);
-        await roster.AdmitAsync(first, RosterFixtures.Members(), default);
-        await roster.AdmitAsync(later, [.. RosterFixtures.Members().Skip(1)], default);
+        await roster.AdmitAsync(first, RosterFixtures.Members(), null, default);
+        await roster.AdmitAsync(later, [.. RosterFixtures.Members().Skip(1)], null, default);
 
         var senators = await roster.ReadSenatorLisIdsAsync(RosterFixtures.SourceId, default);
 
@@ -193,8 +193,8 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
         var first = await ImportAsync('a', 0);
         var later = await ImportAsync('b', 1);
         var members = RosterFixtures.Members();
-        await roster.AdmitAsync(first, members, default);
-        await roster.AdmitAsync(later, [members[0] with { LisId = "S999" }], default);
+        await roster.AdmitAsync(first, members, null, default);
+        await roster.AdmitAsync(later, [members[0] with { LisId = "S999" }], null, default);
 
         var senators = await roster.ReadSenatorLisIdsAsync(RosterFixtures.SourceId, default);
 
@@ -206,7 +206,7 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
     {
         var attemptId = await ImportAsync('a', 0);
         var members = RosterFixtures.Members();
-        await roster.AdmitAsync(attemptId, [members[0] with { LisId = null }], default);
+        await roster.AdmitAsync(attemptId, [members[0] with { LisId = null }], null, default);
 
         Assert.Equal([new SenatorLisId("C000127", null)], await roster.ReadSenatorLisIdsAsync(RosterFixtures.SourceId, default));
     }
@@ -215,7 +215,7 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
     public async Task SenatorLisIdsOfOneSourceExcludeTheSnapshotsOfAnotherSource()
     {
         var attemptId = await ImportAsync('a', 0);
-        await roster.AdmitAsync(attemptId, RosterFixtures.Members(), default);
+        await roster.AdmitAsync(attemptId, RosterFixtures.Members(), null, default);
 
         Assert.Empty(await roster.ReadSenatorLisIdsAsync("other-members", default));
     }
@@ -253,7 +253,7 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
         await SeedBlockedVoteAsync('2', "House", "evidenceUnavailable");
         await SeedBlockedVoteAsync('3', "Senate", "tooManyMembers");
 
-        await roster.AdmitAsync(await ImportAsync('a', 0), RosterFixtures.Members(), default);
+        await roster.AdmitAsync(await ImportAsync('a', 0), RosterFixtures.Members(), null, default);
 
         Assert.Equal(["Pending", "Blocked", "Blocked"], await StatusesAsync());
     }
