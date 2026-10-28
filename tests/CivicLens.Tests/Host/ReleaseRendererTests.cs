@@ -860,11 +860,11 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task BriefsPageListsTheNewestWeekFirstWithTheWeekAndALinkToEachBriefPage()
+    public async Task BriefsPageListsTheBriefsInTheGivenOrderWithTheWeekAndALinkToEachBriefPage()
     {
-        var release = ReleaseOfBriefs(3);
+        var release = ReleaseOfBriefs(3) with { Records = [.. ReleaseOfBriefs(3).Records.Reverse()] };
 
-        var html = await new ReleaseRenderer(null, null).RenderBriefsAsync(release, 1, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderBriefsAsync(release, release.Records, 1, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         var rows = document.QuerySelectorAll("tbody tr").ToList();
@@ -876,19 +876,9 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task BriefsPageListsOnlyBriefsSoOtherRecordKindsNeverAppearAsWeeks()
-    {
-        var release = ReleaseOfBriefs(1) with { Records = [.. ReleaseOf(3).Records, .. ReleaseOfBriefs(1).Records] };
-
-        var html = await new ReleaseRenderer(null, null).RenderBriefsAsync(release, 1, CancellationToken.None);
-
-        Assert.Single(new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody tr"));
-    }
-
-    [Fact]
     public async Task BriefsPageSaysThereAreNoBriefsAndOffersAllRecordsWhenTheReleaseHasNone()
     {
-        var html = await new ReleaseRenderer(null, null).RenderBriefsAsync(ReleaseOf(2), 1, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderBriefsAsync(ReleaseOf(2), [], 1, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         Assert.Equal("No weekly briefs yet", document.QuerySelector("main .empty h3")!.TextContent.Trim());
@@ -901,7 +891,7 @@ public sealed class ReleaseRendererTests
     [InlineData(2, 5, "Page 2 of 2", null)]
     public async Task BriefsPagePagesPastFiftyBriefsWithPagerLinksWhereTheyApply(int page, int expectedCount, string label, string? next)
     {
-        var html = await new ReleaseRenderer(null, null).RenderBriefsAsync(ReleaseOfBriefs(55), page, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderBriefsAsync(ReleaseOfBriefs(55), ReleaseOfBriefs(55).Records, page, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         Assert.Equal(expectedCount, document.QuerySelectorAll("tbody tr").Length);
@@ -916,7 +906,7 @@ public sealed class ReleaseRendererTests
     public async Task BriefsPageRejectsAPageOutsideTheList(int page)
     {
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
-            new ReleaseRenderer(null, null).RenderBriefsAsync(ReleaseOfBriefs(3), page, CancellationToken.None));
+            new ReleaseRenderer(null, null).RenderBriefsAsync(ReleaseOfBriefs(3), ReleaseOfBriefs(3).Records, page, CancellationToken.None));
     }
 
     [Fact]
@@ -1429,7 +1419,7 @@ public sealed class ReleaseRendererTests
             ("withdrawal", PublicationProtocol.RecordPagePath(withdrawal.RecordId), await renderer.RenderWithdrawalAsync(withdrawal, CancellationToken.None), "All records"),
             ("home", PublicationProtocol.HomePath, await renderer.RenderHomeAsync(release, null, facets, CancellationToken.None), null),
             ("all records", PublicationProtocol.AllRecordsPagePath(1), await renderer.RenderAllRecordsAsync(release, 1, CancellationToken.None), "All records"),
-            ("briefs", PublicationProtocol.BriefsPagePath(1), await renderer.RenderBriefsAsync(ReleaseOfBriefs(2), 1, CancellationToken.None), "Briefs"),
+            ("briefs", PublicationProtocol.BriefsPagePath(1), await renderer.RenderBriefsAsync(ReleaseOfBriefs(2), ReleaseOfBriefs(2).Records, 1, CancellationToken.None), "Briefs"),
             ("issue", facets.Issues[0].PagePath(1), await renderer.RenderFacetPageAsync(facets.Issues[0], 1, CancellationToken.None), "Issues"),
             ("policy area", facets.PolicyAreas[0].PagePath(1), await renderer.RenderFacetPageAsync(facets.PolicyAreas[0], 1, CancellationToken.None), "Issues"),
             ("issues", PublicationProtocol.FacetsPath, await renderer.RenderFacetsAsync(facets, CancellationToken.None), "Issues"),

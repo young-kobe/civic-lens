@@ -131,14 +131,17 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
         });
     }
 
-    public Task<string> RenderBriefsAsync(PublicationRelease release, int page, CancellationToken cancellationToken)
+    public Task<string> RenderBriefsAsync(PublicationRelease release, PublishedRecordEntry[] briefs, int page,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(release);
+        ArgumentNullException.ThrowIfNull(briefs);
         ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(page, PublicationProtocol.PageCount(ReleaseRecordOrder.BriefsNewestFirst(release).Length));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(page, PublicationProtocol.PageCount(briefs.Length));
         return RenderAsync<PublishedBriefsPage>(new Dictionary<string, object?>
         {
             [nameof(PublishedBriefsPage.Release)] = release,
+            [nameof(PublishedBriefsPage.Briefs)] = briefs,
             [nameof(PublishedBriefsPage.Page)] = page
         });
     }

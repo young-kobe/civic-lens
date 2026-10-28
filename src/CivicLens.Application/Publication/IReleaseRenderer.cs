@@ -17,7 +17,7 @@ public interface IReleaseRenderer
     Task<string> RenderWithdrawalAsync(PublishedWithdrawal withdrawal, CancellationToken cancellationToken);
     Task<string> RenderHomeAsync(PublicationRelease release, PublishedBrief? brief, ReleaseFacets facets, CancellationToken cancellationToken);
     Task<string> RenderAllRecordsAsync(PublicationRelease release, int page, CancellationToken cancellationToken);
-    Task<string> RenderBriefsAsync(PublicationRelease release, int page, CancellationToken cancellationToken);
+    Task<string> RenderBriefsAsync(PublicationRelease release, PublishedRecordEntry[] briefs, int page, CancellationToken cancellationToken);
     Task<string> RenderFacetPageAsync(ReleaseFacet facet, int page, CancellationToken cancellationToken);
     Task<string> RenderFacetsAsync(ReleaseFacets facets, CancellationToken cancellationToken);
     Task<string> RenderOfficialAsync(ReleaseOfficialPage page, PublicationCatalog catalog, CancellationToken cancellationToken);

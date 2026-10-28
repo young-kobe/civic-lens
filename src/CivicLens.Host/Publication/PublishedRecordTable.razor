@@ -4,36 +4,36 @@
 <DataTable Roles="true" Items="Records" Caption="@Caption">
     <Head>
         <TableCell Header>Record</TableCell>
-        @if (FacetColumns)
+        @switch (Columns)
         {
-            <TableCell Header>@PublicColumn.Officials</TableCell>
-            <TableCell Header Class="fit num">@PublicColumn.Date</TableCell>
-        }
-        else if (WeekColumn)
-        {
-            <TableCell Header Class="fit num">@PublicColumn.WeekOf</TableCell>
-            <TableCell Header Class="fit num">@PublicColumn.FirstPublished</TableCell>
-        }
-        else
-        {
-            <TableCell Header Class="fit num">@PublicColumn.FirstPublished</TableCell>
+            case RecordTableColumns.Facet:
+                <TableCell Header>@PublicColumn.Officials</TableCell>
+                <TableCell Header Class="fit num">@PublicColumn.Date</TableCell>
+                break;
+            case RecordTableColumns.Week:
+                <TableCell Header Class="fit num">@PublicColumn.WeekOf</TableCell>
+                <TableCell Header Class="fit num">@PublicColumn.FirstPublished</TableCell>
+                break;
+            default:
+                <TableCell Header Class="fit num">@PublicColumn.FirstPublished</TableCell>
+                break;
         }
     </Head>
     <Row Context="entry">
-        <TableCell Main><a class="cell-title" href="@(RootPath + PublicationProtocol.RecordPagePath(entry.RecordId))">@entry.Headline</a>@if (!WeekColumn) {@(" ")<StatusBadge Text="@PublishedRecordLabels.Kind(entry.Kind)" />}</TableCell>
-        @if (FacetColumns)
+        <TableCell Main><a class="cell-title" href="@(RootPath + PublicationProtocol.RecordPagePath(entry.RecordId))">@entry.Headline</a>@if (Columns != RecordTableColumns.Week) {@(" ")<StatusBadge Text="@PublishedRecordLabels.Kind(entry.Kind)" />}</TableCell>
+        @switch (Columns)
         {
-            <TableCell Label="@PublicColumn.Officials">@string.Join(", ", entry.Officials.Select(official => official.Name))</TableCell>
-            <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Iso(ReleaseRecordOrder.Day(entry))</TableCell>
-        }
-        else if (WeekColumn)
-        {
-            <TableCell Class="fit num" Label="@PublicColumn.WeekOf">@Moment.Iso(ReleaseRecordOrder.Day(entry))</TableCell>
-            <TableCell Class="time fit num" Label="@PublicColumn.FirstPublished"><Timestamp Value="entry.FirstPublishedAtUtc" Format="TimestampFormat.Day" /></TableCell>
-        }
-        else
-        {
-            <TableCell Class="time fit num" Label="@PublicColumn.FirstPublished"><Timestamp Value="entry.FirstPublishedAtUtc" Format="TimestampFormat.Day" /></TableCell>
+            case RecordTableColumns.Facet:
+                <TableCell Label="@PublicColumn.Officials">@string.Join(", ", entry.Officials.Select(official => official.Name))</TableCell>
+                <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Iso(ReleaseRecordOrder.Day(entry))</TableCell>
+                break;
+            case RecordTableColumns.Week:
+                <TableCell Class="fit num" Label="@PublicColumn.WeekOf">@Moment.Iso(ReleaseRecordOrder.Day(entry))</TableCell>
+                <TableCell Class="time fit num" Label="@PublicColumn.FirstPublished"><Timestamp Value="entry.FirstPublishedAtUtc" Format="TimestampFormat.Day" /></TableCell>
+                break;
+            default:
+                <TableCell Class="time fit num" Label="@PublicColumn.FirstPublished"><Timestamp Value="entry.FirstPublishedAtUtc" Format="TimestampFormat.Day" /></TableCell>
+                break;
         }
     </Row>
     <Empty><EmptyState Title="No records yet" Text="There are no records here." /></Empty>
@@ -43,6 +43,5 @@
     [Parameter, EditorRequired] public IReadOnlyList<PublishedRecordEntry> Records { get; set; } = [];
     [Parameter, EditorRequired] public string Caption { get; set; } = string.Empty;
     [Parameter] public string RootPath { get; set; } = string.Empty;
-    [Parameter] public bool FacetColumns { get; set; }
-    [Parameter] public bool WeekColumn { get; set; }
+    [Parameter] public RecordTableColumns Columns { get; set; }
 }

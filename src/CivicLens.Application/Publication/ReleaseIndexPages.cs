@@ -12,9 +12,10 @@ internal sealed class ReleaseIndexPages(IReleaseDirectory releases, IReleaseRend
         for (var page = 1; page <= PublicationProtocol.PageCount(manifest.Records.Length); page++)
             await WriteAsync(staging, PublicationProtocol.AllRecordsPagePath(page),
                 await renderer.RenderAllRecordsAsync(manifest, page, cancellationToken), cancellationToken);
-        for (var page = 1; page <= PublicationProtocol.PageCount(ReleaseRecordOrder.BriefsNewestFirst(manifest).Length); page++)
+        var briefs = BriefsNewestFirst(manifest);
+        for (var page = 1; page <= PublicationProtocol.PageCount(briefs.Length); page++)
             await WriteAsync(staging, PublicationProtocol.BriefsPagePath(page),
-                await renderer.RenderBriefsAsync(manifest, page, cancellationToken), cancellationToken);
+                await renderer.RenderBriefsAsync(manifest, briefs, page, cancellationToken), cancellationToken);
         foreach (var facet in facets.All.Where(facet => facet.HasPages))
             for (var page = 1; page <= facet.PageCount; page++)
                 await WriteAsync(staging, facet.PagePath(page),
@@ -24,18 +25,21 @@ internal sealed class ReleaseIndexPages(IReleaseDirectory releases, IReleaseRend
         await WriteAsync(staging, PublicationProtocol.ReportPagePath, await renderer.RenderReportAsync(cancellationToken), cancellationToken);
         await WriteAsync(staging, PublicationProtocol.MethodPagePath, await renderer.RenderMethodAsync(cancellationToken), cancellationToken);
         await WriteAsync(staging, PublicationProtocol.AboutPagePath, await renderer.RenderAboutAsync(cancellationToken), cancellationToken);
-        var brief = await LoadLatestBriefAsync(manifest, additions, previous, cancellationToken);
+        var brief = await LoadLatestBriefAsync(briefs.FirstOrDefault(), additions, previous, cancellationToken);
         await WriteAsync(staging, PublicationProtocol.HomePath,
             await renderer.RenderHomeAsync(manifest, brief, facets, cancellationToken), cancellationToken);
     }
 
+    private static PublishedRecordEntry[] BriefsNewestFirst(PublicationRelease manifest) =>
+        [.. ReleaseRecordOrder.NewestFirst(manifest.Records.Where(entry => entry.Kind == PublishedRecordKind.Brief),
+            ReleaseRecordOrder.Day, entry => entry.FirstPublishedAtUtc, entry => entry.RecordId)];
+
     private static Task WriteAsync(IReleaseStaging staging, string path, string html, CancellationToken cancellationToken) =>
         staging.WriteFileAsync(path, Encoding.UTF8.GetBytes(html), cancellationToken);
 
-    private async Task<PublishedBrief?> LoadLatestBriefAsync(PublicationRelease manifest, IReadOnlyList<PendingRecord> additions,
+    private async Task<PublishedBrief?> LoadLatestBriefAsync(PublishedRecordEntry? latest, IReadOnlyList<PendingRecord> additions,
         PreviousRelease previous, CancellationToken cancellationToken)
     {
-        var latest = ReleaseRecordOrder.BriefsNewestFirst(manifest).FirstOrDefault();
         if (latest is null) return null;
         var brief = await ReleaseRecordFiles.ReadAsync<PublishedBrief>(releases, latest, additions, previous, cancellationToken);
         brief.Validate();
