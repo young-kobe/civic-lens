@@ -46,6 +46,8 @@ public sealed class PublicBaseUrlTests
     [InlineData("https://civic.example#top")]
     [InlineData("https://civic.example#")]
     [InlineData("https://civic.example\\")]
+    [InlineData("https://civic.example.")]
+    [InlineData("https://civic.example./")]
     [InlineData("http://[::1]")]
     [InlineData("https://[::1]:8443")]
     public void AnythingBeyondAnHttpsOriginIsRefusedAndTheMessageNamesTheVariableSoTheOwnerCanFixIt(string value)

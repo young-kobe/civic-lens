@@ -13,7 +13,7 @@ public sealed class PublicBaseUrl
         if (!Uri.TryCreate(text, UriKind.Absolute, out var uri) || !IsBareOrigin(uri) || !IsAllowedScheme(uri))
             throw new ArgumentException(
                 $"{variableName} must be a bare origin such as https://example.org, with no user, path, query, or fragment. " +
-                "Use a host name, not an IPv6 address. Only localhost and 127.0.0.1 may use http.");
+                "Use a host name that does not end with a dot, not an IPv6 address. Only localhost and 127.0.0.1 may use http.");
         return new(Origin(uri));
     }
 
@@ -23,7 +23,7 @@ public sealed class PublicBaseUrl
     public string Join(string releasePath) => $"{origin}/{releasePath}";
 
     private static bool IsBareOrigin(Uri uri) =>
-        uri.Host.Length > 0 && uri.HostNameType != UriHostNameType.IPv6 && uri.UserInfo.Length == 0 && uri.Query.Length == 0 && uri.Fragment.Length == 0 && uri.AbsolutePath == "/"
+        uri.Host.Length > 0 && !uri.Host.EndsWith('.') && uri.HostNameType != UriHostNameType.IPv6 && uri.UserInfo.Length == 0 && uri.Query.Length == 0 && uri.Fragment.Length == 0 && uri.AbsolutePath == "/"
         && !uri.OriginalString.Contains('?') && !uri.OriginalString.Contains('#');
 
     private static bool IsAllowedScheme(Uri uri) =>
