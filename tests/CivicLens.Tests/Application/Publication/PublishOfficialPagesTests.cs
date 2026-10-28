@@ -343,10 +343,25 @@ public sealed class PublishOfficialPagesTests
     }
 
     [Fact]
+    public async Task ExecutiveTermsWinOverConfiguredOfficesForAFormerMemberAbsentFromTheMemberSnapshot()
+    {
+        var scenario = new PublicationScenario();
+        scenario.ExternalIds["mayor"] = ("V000137", "Q22686");
+        scenario.RosterMembers = RosterFixtures.Members();
+        scenario.ExecutiveOfficials = ExecutiveFixtures.Officials();
+        scenario.Offices["mayor"] = [new() { Title = "Secretary of State", StartsOn = new(2025, 1, 21) }];
+
+        var summary = await PublishAsync(scenario, "k", PublishedRecordKind.Statement, scenario.AddStatement('a'));
+
+        Assert.Equal(["prez", "prez"], Assert.Single(Officials(scenario.Releases.Directories[summary.DirectoryName]).Officials).Terms.Select(term => term.Office));
+    }
+
+    [Fact]
     public async Task RosterTermsWinOverConfiguredOfficesWhenBothExistForAPerson()
     {
         var scenario = new PublicationScenario();
         scenario.ExternalIds["mayor"] = (null, "Q22686");
+        scenario.RosterMembers = RosterFixtures.Members();
         scenario.ExecutiveOfficials = ExecutiveFixtures.Officials();
         scenario.Offices["mayor"] = [new() { Title = "Secretary of State", StartsOn = new(2025, 1, 21) }];
 
