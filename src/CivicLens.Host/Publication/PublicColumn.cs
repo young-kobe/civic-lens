@@ -15,6 +15,7 @@ public static class PublicColumn
     public const string Votes = "Votes";
     public const string Cast = "Cast";
     public const string Vote = "Vote";
+    public const string StatementDate = "Statement date";
     public const string TheirVote = "Their vote";
     public const string WhatTheySaid = "What they said";
     public const string Link = "Link";

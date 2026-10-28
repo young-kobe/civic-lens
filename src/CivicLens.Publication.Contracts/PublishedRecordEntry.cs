@@ -30,11 +30,13 @@ public sealed record PublishedRecordEntry
             !AreFilterValues(PolicyAreaIds) || (SourceHost is not null && !IsFilterValue(SourceHost)))
             throw new InvalidDataException(
                 $"Release manifest filters allow {MaximumFilterValues} distinct values of up to {MaximumFilterValueLength} characters each.");
-        if (BillTitle is not null && (string.IsNullOrWhiteSpace(BillTitle) || BillTitle.Length > PublishedAction.MaximumBillTitleLength))
-            throw new InvalidDataException($"A bill title in the release manifest has 1 to {PublishedAction.MaximumBillTitleLength} characters.");
+        if (Kind == PublishedRecordKind.Action ? !HasValidBillTitle : BillTitle is not null)
+            throw new InvalidDataException($"An action manifest entry holds a bill title of 1 to {PublishedAction.MaximumBillTitleLength} characters. Other entries hold none.");
         if (Kind == PublishedRecordKind.Relationship ? !HasValidLink : HasAnyLink)
             throw new InvalidDataException("A relationship manifest entry names its link type, statement, and target. Other entries name none.");
     }
+
+    private bool HasValidBillTitle => !string.IsNullOrWhiteSpace(BillTitle) && BillTitle.Length <= PublishedAction.MaximumBillTitleLength;
 
     private bool HasAnyLink => LinkType is not null || StatementRecordId is not null || TargetKind is not null || TargetRecordId is not null;
 

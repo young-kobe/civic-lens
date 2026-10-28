@@ -418,10 +418,10 @@ public sealed class PublishedOfficialPageTests
         var panels = document.QuerySelectorAll("section[aria-labelledby]").Select(panel => panel.GetAttribute("aria-labelledby")).ToArray();
         Assert.True(Array.IndexOf(panels, "panel-what-they-said-and-what-they-did") + 1 == Array.IndexOf(panels, "panel-votes-with-their-party"));
         var panel = document.QuerySelector("[aria-labelledby='panel-what-they-said-and-what-they-did']")!;
-        Assert.Equal(["Date", "What they said", "Link", "What they did", "Their vote"], panel.QuerySelectorAll("thead th").Select(cell => cell.TextContent.Trim()));
+        Assert.Equal(["Statement date", "What they said", "Link", "What they did", "Their vote"], panel.QuerySelectorAll("thead th").Select(cell => cell.TextContent.Trim()));
         var rows = panel.QuerySelectorAll("tbody tr").Select(row => row.QuerySelectorAll("td").Select(cell => cell.TextContent.Trim()).ToArray()).ToArray();
         Assert.Equal(["2026-04-05", "Statement 2", "Statement about a vote", "Official title a", "Nay"], rows[0]);
-        Assert.Equal(["2026-03-01", "Statement 1", "States position on", "Official title b", ""], rows[1]);
+        Assert.Equal(["2026-03-01", "Statement 1", "States position on", "Official title b", "Not a vote"], rows[1]);
         Assert.Equal([$"../records/{new string('2', 64)}.html", $"../records/{new string('a', 64)}.html"],
             panel.QuerySelectorAll("tbody tr")[0].QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
         Assert.Contains("A reviewer approved each link. A link does not mean the vote or bill matches the statement.", panel.TextContent, StringComparison.Ordinal);
@@ -441,6 +441,22 @@ public sealed class PublishedOfficialPageTests
 
         var cells = new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-what-they-said-and-what-they-did'] tbody td");
         Assert.Equal("No vote on record", cells[^1].TextContent.Trim());
+    }
+
+    [Fact]
+    public async Task AnUndatedStatementShowsNoDateInsteadOfAnInventedDay()
+    {
+        var page = Current([], []);
+        page = page with
+        {
+            TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes),
+            Pairs = [Pair('1', 'b', PublishedRelationshipType.StatesPositionOn, PublishedRecordKind.Action, null, null)]
+        };
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        var cells = new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-what-they-said-and-what-they-did'] tbody td");
+        Assert.Equal("No date", cells[0].TextContent.Trim());
     }
 
     [Fact]
@@ -466,7 +482,7 @@ public sealed class PublishedOfficialPageTests
         Assert.DoesNotContain("What they said and what they did", html, StringComparison.Ordinal);
     }
 
-    private static LinkedPair Pair(char statement, char target, PublishedRelationshipType type, PublishedRecordKind kind, DateOnly day, string? cast) =>
+    private static LinkedPair Pair(char statement, char target, PublishedRelationshipType type, PublishedRecordKind kind, DateOnly? day, string? cast) =>
         new(day, new string(statement, 64), $"Statement {statement}", type, kind, new string(target, 64), $"Official title {target}", cast);
 
     private static PublishedOfficialProfile Profile() => new() { Id = "mayor", Name = "Mayor Example", Terms = [] };

@@ -11,4 +11,9 @@ public static class ReleaseRecordOrder
     public static IEnumerable<T> NewestFirst<T>(IEnumerable<T> rows, Func<T, DateOnly> dayOf, Func<T, DateTimeOffset> publishedOf,
         Func<T, string> recordIdOf) =>
         rows.OrderByDescending(dayOf).ThenByDescending(publishedOf).ThenBy(recordIdOf, StringComparer.Ordinal);
+
+    /// <summary>The same order for rows that can lack a day: a row with no day comes last.</summary>
+    public static IEnumerable<T> NewestFirstUndatedLast<T>(IEnumerable<T> rows, Func<T, DateOnly?> dayOf, Func<T, DateTimeOffset> publishedOf,
+        Func<T, string> recordIdOf) =>
+        rows.OrderBy(row => dayOf(row) is null).ThenByDescending(dayOf).ThenByDescending(publishedOf).ThenBy(recordIdOf, StringComparer.Ordinal);
 }

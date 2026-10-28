@@ -78,6 +78,16 @@ public sealed class PublishedActionTests
         Assert.Throws<InvalidDataException>((Action().ToEntry() with { BillTitle = " " }).Validate);
     }
 
+    [Fact]
+    public void AnActionEntryRequiresABillTitleAndEveryOtherKindRefusesOneBecauseOnlyAnActionHasAnOfficialTitle()
+    {
+        var entry = Action().ToEntry();
+
+        Assert.Throws<InvalidDataException>((entry with { BillTitle = null }).Validate);
+        Assert.Throws<InvalidDataException>((entry with { Kind = PublishedRecordKind.Statement, RecordId = new string('1', 64) }).Validate);
+        (entry with { Kind = PublishedRecordKind.Statement, RecordId = new string('1', 64), BillTitle = null }).Validate();
+    }
+
     // The quote is exact text of the other source, so only a check against the named source finds the wrong name.
     [Fact]
     public void RejectsACitationWhoseQuoteMatchesAnotherSourceButNotTheOneItNames()

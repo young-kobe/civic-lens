@@ -37,7 +37,13 @@ internal static class PublishedOfficialView
 
     public const string NoVoteOnRecord = "No vote on record";
 
-    public static string? TheirVote(LinkedPair pair) => pair.TargetKind == PublishedRecordKind.Vote ? pair.Cast ?? NoVoteOnRecord : null;
+    public const string NotAVote = "Not a vote";
+
+    public const string NoStatementDate = "No date";
+
+    public static string TheirVote(LinkedPair pair) => pair.TargetKind == PublishedRecordKind.Vote ? pair.Cast ?? NoVoteOnRecord : NotAVote;
+
+    public static string StatementDay(LinkedPair pair) => pair.StatementDay is { } day ? Moment.Iso(day) : NoStatementDate;
 
     public const string MissedVoteMeaning = "A missed vote means the official did not vote on it.";
 

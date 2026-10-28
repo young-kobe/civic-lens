@@ -60,16 +60,16 @@
         </Panel>
         <Panel Title="What they said and what they did" Padded="true">
             <p class="muted small">@PublishedOfficialView.LinkMeaning <a href="@(Page.RootPath + PublicationProtocol.MethodPagePath)">What a link is</a></p>
-            @if (Page.Pairs.IsEmpty)
+            @if (Page.Pairs.IsDefaultOrEmpty)
             {
                 <p>@PublishedOfficialView.NoLinks</p>
             }
             else
             {
                 <DataTable Roles="true" Items="Page.Pairs" Caption="@($"Reviewed links between statements of {Page.Profile.Name} and their bills or votes")">
-                    <Head><TableCell Header Class="fit num">@PublicColumn.Date</TableCell><TableCell Header>@PublicColumn.WhatTheySaid</TableCell><TableCell Header>@PublicColumn.Link</TableCell><TableCell Header>@PublicColumn.WhatTheyDid</TableCell><TableCell Header>@PublicColumn.TheirVote</TableCell></Head>
+                    <Head><TableCell Header Class="fit num">@PublicColumn.StatementDate</TableCell><TableCell Header>@PublicColumn.WhatTheySaid</TableCell><TableCell Header>@PublicColumn.Link</TableCell><TableCell Header>@PublicColumn.WhatTheyDid</TableCell><TableCell Header>@PublicColumn.TheirVote</TableCell></Head>
                     <Row Context="pair">
-                        <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Iso(pair.StatementDay)</TableCell>
+                        <TableCell Class="fit num" Label="@PublicColumn.StatementDate">@PublishedOfficialView.StatementDay(pair)</TableCell>
                         <TableCell Main><a class="cell-title" href="@(Page.RootPath + PublicationProtocol.RecordPagePath(pair.StatementRecordId))">@pair.StatementHeadline</a></TableCell>
                         <TableCell Label="@PublicColumn.Link">@PublishedRecordLabels.RelationshipType(pair.Type)</TableCell>
                         <TableCell Label="@PublicColumn.WhatTheyDid"><a href="@(Page.RootPath + PublicationProtocol.RecordPagePath(pair.TargetRecordId))">@pair.TargetTitle</a></TableCell>

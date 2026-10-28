@@ -108,8 +108,8 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
         var currentRows = current is { } newest ? await RowsAsync(newest) : [];
         var talkAndAction = current is null ? null : TalkAndActionProfile.Of(current.Value, entries, currentRows);
         await WriteAsync(staging, PublicationProtocol.OfficialPagePath(profile.Id), await renderer.RenderOfficialAsync(
-            new(profile, tracked, current, true, past, entries, currentRows, talkAndAction)
-            { Pairs = current is { } newestCongress ? LinkedPair.In(newestCongress, entries, release, currentRows) : [] }, catalog, cancellationToken), cancellationToken);
+            new(profile, tracked, current, true, past, entries, currentRows, talkAndAction,
+                current is { } newestCongress ? LinkedPair.In(newestCongress, entries, release, currentRows) : []), catalog, cancellationToken), cancellationToken);
     }
 
     private static Task WriteAsync(IReleaseStaging staging, string path, string html, CancellationToken cancellationToken) =>

@@ -336,6 +336,25 @@ public sealed class PublishRelationshipTests
             await Assert.ThrowsAsync<InvalidDataException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k" + relationship[0], relationship)));
     }
 
+    [Fact]
+    public async Task AVoteThatIsReplacedTouchesTheOfficialPageOfASpeakerWhoIsNotAMemberOfItsChamber()
+    {
+        var scenario = new PublicationScenario();
+        var statement = scenario.AddStatement('c', statementDate: StatementDate);
+        var vote = scenario.AddVote('a', memberIds: ["chair"]);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            Reference(PublishedRecordKind.Statement, statement), Reference(PublishedRecordKind.Vote, vote)));
+        var relationship = scenario.AddRelationship('e', statement, vote, PublishedRecordKind.Vote);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", relationship));
+        scenario.Releases.WriteOrder.Clear();
+        scenario.ReviseVote(vote, 2);
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.WithNotesFor(
+            PublicationScenario.Request("k3", Reference(PublishedRecordKind.Vote, vote)), Reference(PublishedRecordKind.Vote, vote)));
+
+        Assert.Contains(PublicationProtocol.OfficialPagePath("mayor"), scenario.Releases.WriteOrder);
+    }
+
     private static async Task<(string Statement, string Action, string Other)> PublishRecordsAsync(PublicationScenario scenario)
     {
         var statement = scenario.AddStatement('c', statementDate: StatementDate);

@@ -34,15 +34,26 @@ public sealed class LinkedPairTests
     }
 
     [Fact]
-    public void ABillNeverHasACastAndShowsItsHeadlineWhenItsEntryHasNoOfficialTitle()
+    public void AVoteTargetShowsItsHeadlineBecauseOnlyAnActionEntryHoldsAnOfficialTitle()
     {
-        var link = Link('a', BillId, PublishedRecordKind.Action, new DateOnly(2026, 3, 1));
-        var untitled = Release(link);
-        untitled[(PublishedRecordKind.Action, BillId)] = untitled[(PublishedRecordKind.Action, BillId)] with { BillTitle = null };
+        var link = Link('a', VoteId, PublishedRecordKind.Vote, new DateOnly(2026, 3, 1));
 
-        var pair = Assert.Single(LinkedPair.In(119, [link], untitled, [Vote("Yea") with { RecordId = BillId }]));
+        Assert.Equal("Vote headline", Assert.Single(LinkedPair.In(119, [link], Release(link), [])).TargetTitle);
+    }
 
-        Assert.Equal(("Action headline", null), (pair.TargetTitle, pair.Cast));
+    [Fact]
+    public void AnUndatedStatementBelongsToTheCongressOfItsTargetAndItsRowComesLast()
+    {
+        var dated = Link('a', BillId, PublishedRecordKind.Action, new DateOnly(2026, 2, 1));
+        var undatedVote = Link('b', VoteId, PublishedRecordKind.Vote, null);
+        var release = Release(dated, undatedVote);
+        release[(PublishedRecordKind.Vote, VoteId)] = release[(PublishedRecordKind.Vote, VoteId)] with { EventDate = new DateOnly(2026, 5, 1) };
+
+        var pairs = LinkedPair.In(119, [undatedVote, dated], release, []);
+
+        Assert.Equal([BillId, VoteId], pairs.Select(pair => pair.TargetRecordId));
+        Assert.Null(pairs[1].StatementDay);
+        Assert.Empty(LinkedPair.In(118, [undatedVote], release, []));
     }
 
     [Fact]
@@ -81,7 +92,7 @@ public sealed class LinkedPairTests
         Entry(PublishedRecordKind.Vote, VoteId, new DateOnly(2026, 1, 1)) with { Headline = "Vote headline" }
     }.Concat(links).ToDictionary(entry => (entry.Kind, entry.RecordId));
 
-    private static PublishedRecordEntry Link(char id, string targetId, PublishedRecordKind targetKind, DateOnly statementDay) =>
+    private static PublishedRecordEntry Link(char id, string targetId, PublishedRecordKind targetKind, DateOnly? statementDay) =>
         Entry(PublishedRecordKind.Relationship, new string(id, 64), statementDay) with
         {
             LinkType = targetKind == PublishedRecordKind.Vote ? PublishedRelationshipType.StatementAboutVote : PublishedRelationshipType.StatesPositionOn,
@@ -90,7 +101,7 @@ public sealed class LinkedPairTests
             TargetRecordId = targetId
         };
 
-    private static PublishedRecordEntry Entry(PublishedRecordKind kind, string recordId, DateOnly day) => new()
+    private static PublishedRecordEntry Entry(PublishedRecordKind kind, string recordId, DateOnly? day) => new()
     {
         Kind = kind,
         RecordId = recordId,

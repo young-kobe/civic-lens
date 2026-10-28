@@ -10,10 +10,8 @@ namespace CivicLens.Application.Publication;
 /// </summary>
 public sealed record ReleaseOfficialPage(PublishedOfficialProfile Profile, bool IsTracked, int? Congress, bool IsCurrent,
     ImmutableArray<int> PastCongresses, ImmutableArray<PublishedRecordEntry> Records, ImmutableArray<PublishedOfficialVote> Votes,
-    TalkAndActionProfile? TalkAndAction = null)
+    TalkAndActionProfile? TalkAndAction = null, ImmutableArray<LinkedPair> Pairs = default)
 {
-    public ImmutableArray<LinkedPair> Pairs { get; init; } = [];
-
     public string PagePath => IsCurrent
         ? PublicationProtocol.OfficialPagePath(Profile.Id)
         : PublicationProtocol.OfficialCongressPagePath(Profile.Id, Congress!.Value);

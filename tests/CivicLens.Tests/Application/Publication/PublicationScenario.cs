@@ -107,7 +107,8 @@ internal sealed class PublicationScenario
         Kind = PublishedRecordKind.Action,
         Officials = [new() { Id = "mayor", Name = "Mayor Example" }],
         PolicyAreaIds = ["Civil Rights and Liberties, Minority Issues"],
-        SourceHost = "api.congress.gov"
+        SourceHost = "api.congress.gov",
+        BillTitle = new string('t', 250)
     };
 
     public void SeedRelease(int recordCount, bool withFiles) =>
