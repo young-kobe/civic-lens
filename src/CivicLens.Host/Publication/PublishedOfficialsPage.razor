@@ -2,22 +2,87 @@
 @using CivicLens.Host.Components.Layout
 @using CivicLens.Publication.Contracts
 
-<PublicPage Section="PublicSection.Officials" Title="Officials" Description="Officials with published records. Each page lists the records and votes that name one official." Crumbs="Crumbs">
-    <PageHeader Title="Officials" Lede="Each page lists the published records of one official and the votes of the current Congress. The count shows the records other than votes that name the official." />
-    <Panel Label="Officials">
-        <DataTable Roles="true" Items="Officials" Caption="Officials with published records">
-            <Head><TableCell Header>Name</TableCell><TableCell Header Class="fit num">@PublicColumn.RecordsOtherThanVotes</TableCell></Head>
-            <Row Context="official">
-                <TableCell Main><a class="cell-title" href="@official.PagePath">@official.Profile.Name</a></TableCell>
-                <TableCell Class="fit num" Label="@PublicColumn.RecordsOtherThanVotes">@official.RecordCount</TableCell>
-            </Row>
-            <Empty><EmptyState Title="None yet" Text="No official has a published record." /></Empty>
-        </DataTable>
+<PublicPage Section="PublicSection.Officials" Title="Officials" Description="Every official with a published record or vote. Each page lists the records and votes that name one official." Crumbs="Crumbs">
+    <PageHeader Title="Officials" Lede="Each page lists the published records of one official and the votes of the current Congress. Each card counts the records other than votes that name the official. An official with none can still have votes." />
+    <Panel Label="Officials" Padded="true">
+        @if (Cards.Count == 0)
+        {
+            <EmptyState Title="None yet" Text="No official has a published record." />
+        }
+        else
+        {
+            <div class="officials-filters" data-officials-filters hidden>
+                <FilterTabs Label="Show officials by office" Tabs="OfficeTabs" />
+                <Field Label="State (two-letter code)" For="officials-state">
+                    <select id="officials-state" data-officials-state>
+                        <option value="">All states</option>
+                        @foreach (var state in States)
+                        {
+                            <option value="@state">@state</option>
+                        }
+                    </select>
+                </Field>
+                <Field Label="Name" For="officials-name">
+                    <input id="officials-name" class="search" type="search" data-officials-name placeholder="Search by name" autocomplete="off" />
+                </Field>
+            </div>
+            <p role="status" data-officials-status></p>
+            <ul class="officials" role="list" data-officials>
+                @foreach (var card in Cards)
+                {
+                    <li class="official-card" data-name="@card.Official.Profile.Name" data-office="@card.Kind" data-state="@card.Term?.State">
+                        <OfficialPortrait Profile="card.Official.Profile" RootPath="" Compact="true" ShowCredit="@(!SharedCredit)" />
+                        <div class="official-card-text">
+                            <a class="cell-title" href="@card.Official.PagePath">@card.Official.Profile.Name</a>
+                            @if (card.Term is { } term)
+                            {
+                                <span class="cell-sub">@PublishedOfficialView.CardOffice(term, PublishedAtUtc)</span>
+                                @if (term.Party is { } party)
+                                {
+                                    <span class="cell-sub">@PublishedOfficialView.PartyLine(party, term.Caucus)</span>
+                                }
+                            }
+                            <span class="cell-sub">@PublishedOfficialView.RecordCount(card.Official.RecordCount)</span>
+                        </div>
+                    </li>
+                }
+            </ul>
+            @if (SharedCredit && Credits.FirstOrDefault() is { } credit)
+            {
+                <Caveat>Credit for every portrait on this page: @credit</Caveat>
+            }
+        }
     </Panel>
 </PublicPage>
 
 @code {
+    private sealed record Card(OfficialListing Official, PublishedOfficeTerm? Term, string Kind);
+
     private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), new("Officials")];
 
     [Parameter, EditorRequired] public IReadOnlyList<OfficialListing> Officials { get; set; } = [];
+    [Parameter, EditorRequired] public DateTimeOffset PublishedAtUtc { get; set; }
+
+    private IReadOnlyList<Card>? cards;
+
+    private IReadOnlyList<Card> Cards => cards ??= [.. Officials.Select(official =>
+    {
+        var term = PublishedOfficialView.LatestTerm(official.Profile.Terms);
+        return new Card(official, term, PublishedOfficialView.OfficeKind(term));
+    })];
+
+    private IReadOnlyList<string>? credits;
+
+    private IReadOnlyList<string> Credits => credits ??= [.. Officials.Select(official => official.Profile.Photo?.Credit).OfType<string>().Distinct(StringComparer.Ordinal)];
+
+    private bool SharedCredit => Credits.Count == 1;
+
+    private IReadOnlyList<string> States => [.. Cards.Select(card => card.Term?.State).OfType<string>().Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
+
+    private IReadOnlyList<FilterTab> OfficeTabs => [
+        FilterTab.Button($"All officials ({Cards.Count})", "", selected: true),
+        .. PublishedOfficialView.OfficeKinds
+            .Select(kind => (kind.Kind, kind.Plural, Count: Cards.Count(card => card.Kind == kind.Kind)))
+            .Where(kind => kind.Count > 0)
+            .Select(kind => FilterTab.Button($"{kind.Plural} ({kind.Count})", kind.Kind, selected: false))];
 }

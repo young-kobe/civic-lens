@@ -4,8 +4,8 @@ namespace CivicLens.Application.Roster;
 
 public static class ExecutiveRosterParser
 {
-    private const string President = "prez";
-    private const string VicePresident = "viceprez";
+    public const string President = "prez";
+    public const string VicePresident = "viceprez";
 
     public static ExecutiveOfficial[] Parse(ReadOnlySpan<byte> json)
     {

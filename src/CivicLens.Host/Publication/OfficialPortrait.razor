@@ -1,10 +1,13 @@
 @using CivicLens.Publication.Contracts
 
-<figure class="portrait">
+<figure class="@(Compact ? "portrait portrait-compact" : "portrait")">
     @if (Profile.Photo is { } photo)
     {
-        <img src="@(RootPath + photo.Path)" width="@photo.Width" height="@photo.Height" alt="Official portrait of @Profile.Name" loading="eager" decoding="async" />
-        <figcaption>@photo.Credit</figcaption>
+        <img src="@(RootPath + photo.Path)" width="@photo.Width" height="@photo.Height" alt="Official portrait of @Profile.Name" loading="@(Compact ? "lazy" : "eager")" decoding="async" />
+        @if (ShowCredit)
+        {
+            <figcaption>@photo.Credit</figcaption>
+        }
     }
     else
     {
@@ -12,11 +15,16 @@
             <circle cx="112.5" cy="105" r="40" />
             <path d="M32 275C32 205 80 170 112.5 170S193 205 193 275Z" />
         </svg>
-        <figcaption>No portrait is shown for this official.</figcaption>
+        @if (!Compact)
+        {
+            <figcaption>No portrait is shown for this official.</figcaption>
+        }
     }
 </figure>
 
 @code {
     [Parameter, EditorRequired] public PublishedOfficialProfile Profile { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+    [Parameter] public bool Compact { get; set; }
+    [Parameter] public bool ShowCredit { get; set; } = true;
 }

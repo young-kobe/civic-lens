@@ -115,6 +115,36 @@
         panel.hidden = false;
     };
 
+    const initOfficialsFilter = controls => {
+        const list = document.querySelector("[data-officials]");
+        const cards = Array.from(list.children);
+        const buttons = Array.from(controls.querySelectorAll("[data-filter-value]"));
+        const state = controls.querySelector("[data-officials-state]");
+        const name = controls.querySelector("[data-officials-name]");
+        const status = document.querySelector("[data-officials-status]");
+        const plain = text => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+        let office = "";
+        const apply = () => {
+            const wanted = plain(name.value.trim());
+            let shown = 0;
+            for (const card of cards) {
+                card.hidden = (office !== "" && card.dataset.office !== office)
+                    || (state.value !== "" && card.dataset.state !== state.value)
+                    || !plain(card.dataset.name).includes(wanted);
+                if (!card.hidden) shown++;
+            }
+            for (const button of buttons) button.setAttribute("aria-pressed", String(button.dataset.filterValue === office));
+            status.textContent = shown === 0 ? "No officials match. Change the office, the state, or the name."
+                : `Showing ${shown} of ${cards.length} officials`;
+        };
+        for (const button of buttons) button.addEventListener("click", () => { office = button.dataset.filterValue; apply(); });
+        state.addEventListener("change", apply);
+        name.addEventListener("input", apply);
+        controls.hidden = false;
+        apply();
+    };
+
+    document.querySelectorAll("[data-officials-filters]").forEach(initOfficialsFilter);
     document.querySelectorAll("[data-search-api]").forEach(initSearchService);
     document.querySelectorAll("[data-report-api]").forEach(initReportForm);
 })();

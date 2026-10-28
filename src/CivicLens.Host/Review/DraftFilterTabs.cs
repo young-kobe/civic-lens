@@ -14,5 +14,5 @@ internal static class DraftFilterTabs
 
     private static FilterTab Tab(string label, DraftStatusFilter filter, DraftStatusFilter selected,
         Func<string?, string> hrefOf, int? count) =>
-        new(label, hrefOf(DraftFilterNames.NameOf(filter)), filter == selected, count);
+        FilterTab.Link(label, hrefOf(DraftFilterNames.NameOf(filter)), filter == selected, count);
 }

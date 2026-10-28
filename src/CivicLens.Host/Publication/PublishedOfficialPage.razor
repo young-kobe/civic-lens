@@ -192,7 +192,7 @@
         : $"{Page.Profile.Name}. {Lede}";
 
     private PublishedOfficeTerm? OfficeInPage() =>
-        Page.Profile.Terms.OrderBy(term => term.Start).LastOrDefault(term => Page.Congress is not { } congress || HeldIn(term, congress));
+        PublishedOfficialView.LatestTerm(Page.Profile.Terms.Where(term => Page.Congress is not { } congress || HeldIn(term, congress)));
 
     private static bool HeldIn(PublishedOfficeTerm term, int congress) =>
         term.Start < CongressCalendar.StartOf(congress + 1) && (term.End is not { } end || end > CongressCalendar.StartOf(congress));

@@ -455,14 +455,166 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task TheOfficialListLinksEachPageAndShowsTheCountOfRecordsOtherThanVotesThatNameTheOfficial()
+    public async Task TheOfficialListShowsOneCardForEveryOfficialWithTheLinkOfficeAndPartyAndAFullSentenceCount()
     {
-        var html = await new ReleaseRenderer(null, null).RenderOfficialsAsync([new OfficialListing(Profile(), 2)], CancellationToken.None);
+        var senator = Profile("warren", "Elizabeth Warren", Term("sen", "MA", "Democratic"));
+        var quiet = Profile("quiet", "Quiet Member", Term("rep", "TX", "Republican") with { District = 3 });
 
-        var row = new HtmlParser().ParseDocument(html).QuerySelector("tbody tr")!;
-        Assert.Equal("officials/mayor.html", row.QuerySelector("a")!.GetAttribute("href"));
-        Assert.Equal("2", row.QuerySelector("td.num")!.TextContent);
-        Assert.Equal("Records other than votes", new HtmlParser().ParseDocument(html).QuerySelector("thead th.num")!.TextContent);
+        var cards = (await ListAsync(new OfficialListing(senator, 12), new OfficialListing(quiet, 0), new OfficialListing(Profile("one", "One Record"), 1)))
+            .QuerySelectorAll("ul.officials > li").ToList();
+
+        Assert.Equal(3, cards.Count);
+        Assert.Equal("officials/warren.html", cards[0].QuerySelector("a")!.GetAttribute("href"));
+        Assert.Equal(["Senator for MA", "Party: Democratic", "12 records other than votes"], cards[0].QuerySelectorAll(".cell-sub").Select(line => line.TextContent));
+        Assert.Contains("0 records other than votes", cards[1].TextContent, StringComparison.Ordinal);
+        Assert.Contains("Representative for TX, district 3", cards[1].TextContent, StringComparison.Ordinal);
+        Assert.Contains("1 record other than votes", cards[2].TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnExecutiveCardShowsTheOfficeWithNoStateBecauseAnExecutiveHasNone()
+    {
+        var executive = Profile("pres", "Pat President", Term("prez", null, "Independent"));
+
+        var card = (await ListAsync(new OfficialListing(executive, 4))).QuerySelector("ul.officials > li")!;
+
+        Assert.Equal("President", card.QuerySelector(".cell-sub")!.TextContent);
+        Assert.Null(card.GetAttribute("data-state"));
+        Assert.Equal("executive", card.GetAttribute("data-office"));
+    }
+
+    [Fact]
+    public async Task TheCardsCarryTheDataTheBrowserFiltersOnAndTheTabsSayWhoAndHowMany()
+    {
+        var page = await ListAsync(
+            new OfficialListing(Profile("a", "Ann Able", Term("sen", "MA", "Democratic")), 1),
+            new OfficialListing(Profile("b", "Bob Baker", Term("sen", "TX", "Republican")), 1),
+            new OfficialListing(Profile("c", "Cy Cole", Term("rep", "MA", "Democratic")), 1));
+
+        var cards = page.QuerySelectorAll("ul.officials > li").ToList();
+        Assert.Equal([("Ann Able", "senator", "MA"), ("Bob Baker", "senator", "TX"), ("Cy Cole", "representative", "MA")],
+            cards.Select(card => (card.GetAttribute("data-name")!, card.GetAttribute("data-office")!, card.GetAttribute("data-state")!)));
+        Assert.Equal(["All officials (3)", "Senators (2)", "Representatives (1)"],
+            page.QuerySelectorAll("[data-officials-filters] button").Select(button => button.TextContent.Trim()));
+        Assert.Equal(["All states", "MA", "TX"], page.QuerySelectorAll("[data-officials-state] option").Select(option => option.TextContent));
+        Assert.Equal(["true", "false", "false"], page.QuerySelectorAll("[data-officials-filters] button").Select(button => button.GetAttribute("aria-pressed")));
+    }
+
+    [Fact]
+    public async Task TheFilterControlsAreHiddenInTheStaticPageSoAReaderWithoutScriptSeesEveryCardAndNoDeadControl()
+    {
+        var page = await ListAsync(new OfficialListing(Profile("a", "Ann Able", Term("sen", "MA", "Democratic")), 1));
+
+        Assert.True(page.QuerySelector("[data-officials-filters]")!.HasAttribute("hidden"));
+        Assert.False(page.QuerySelector("ul.officials > li")!.HasAttribute("hidden"));
+        Assert.Equal("status", page.QuerySelector("[data-officials-status]")!.GetAttribute("role"));
+    }
+
+    [Fact]
+    public async Task TheLatestTermByStartDecidesTheOfficeAndKindSoASenatorWhoWasARepresentativeIsASenator()
+    {
+        var profile = Profile("a", "Ann Able",
+            Term("sen", "MA", "Democratic") with { Start = new DateOnly(2021, 1, 3) },
+            Term("rep", "MA", "Democratic") with { Start = new DateOnly(2015, 1, 3) });
+
+        var card = (await ListAsync(new OfficialListing(profile, 1))).QuerySelector("ul.officials > li")!;
+
+        Assert.Contains("Senator for MA", card.TextContent, StringComparison.Ordinal);
+        Assert.Equal("senator", card.GetAttribute("data-office"));
+    }
+
+    [Fact]
+    public async Task AnEndedLatestTermReadsFormerButStillGroupsUnderItsOfficeSoTheReaderKnowsTheOfficialLeft()
+    {
+        var term = Term("rep", "MA", "Democratic") with { District = 4, End = new DateOnly(2025, 1, 3) };
+
+        var card = (await ListAsync(new OfficialListing(Profile("a", "Ann Able", term), 1))).QuerySelector("ul.officials > li")!;
+
+        Assert.Equal("Former Representative for MA, district 4", card.QuerySelector(".cell-sub")!.TextContent);
+        Assert.Equal("representative", card.GetAttribute("data-office"));
+    }
+
+    [Fact]
+    public async Task ATermEndsByTheReleaseDateNotTheRenderClockSoAListPublishedBeforeTheEndShowsTheOfficeAsCurrent()
+    {
+        var term = Term("rep", "MA", "Democratic") with { District = 4, End = new DateOnly(2025, 1, 3) };
+
+        var page = await ListAsync(new DateTimeOffset(2025, 1, 2, 23, 0, 0, TimeSpan.Zero), new OfficialListing(Profile("a", "Ann Able", term), 1));
+
+        Assert.Equal("Representative for MA, district 4", page.QuerySelector("ul.officials > li .cell-sub")!.TextContent);
+    }
+
+    [Fact]
+    public async Task ACaucusThatDiffersFromThePartyIsNamedSoAnIndependentShowsWhoseCaucusTheyJoin()
+    {
+        var independent = Term("sen", "VT", "Independent") with { Caucus = "Democrat" };
+        var same = Term("sen", "TX", "Republican") with { Caucus = "Republican" };
+
+        var cards = (await ListAsync(new OfficialListing(Profile("a", "Ann Able", independent), 1), new OfficialListing(Profile("b", "Bob Baker", same), 1)))
+            .QuerySelectorAll("ul.officials > li").ToList();
+
+        Assert.Equal("Party: Independent, caucuses with Democrats", cards[0].QuerySelectorAll(".cell-sub")[1].TextContent);
+        Assert.Equal("Party: Republican", cards[1].QuerySelectorAll(".cell-sub")[1].TextContent);
+    }
+
+    [Fact]
+    public async Task AnOfficialWithNoTermIsInTheOtherOfficialsTabAndAllOfficialsOnly()
+    {
+        var page = await ListAsync(new OfficialListing(Profile("a", "Ann Able", Term("sen", "MA", "Democratic")), 1), new OfficialListing(Profile("b", "No Term"), 1));
+
+        Assert.Equal("other", page.QuerySelectorAll("ul.officials > li")[1].GetAttribute("data-office"));
+        Assert.Equal(["All officials (2)", "Senators (1)", "Other officials (1)"],
+            page.QuerySelectorAll("[data-officials-filters] button").Select(button => button.TextContent.Trim()));
+    }
+
+    [Fact]
+    public async Task TheCardListKeepsItsListRoleBecauseListStyleNoneDropsItInSafari()
+    {
+        var page = await ListAsync(new OfficialListing(Profile("a", "Ann Able"), 1));
+
+        Assert.Equal("list", page.QuerySelector("ul.officials")!.GetAttribute("role"));
+    }
+
+    [Fact]
+    public async Task CardPortraitsLoadLazilyAndACardWithNoPhotoShowsThePlaceholder()
+    {
+        var page = await ListAsync(new OfficialListing(WithPhoto("a", "Ann Able", "Public domain."), 1), new OfficialListing(Profile("b", "Bob Baker"), 1));
+
+        var cards = page.QuerySelectorAll("ul.officials > li").ToList();
+        var image = cards[0].QuerySelector("img")!;
+        Assert.Equal(("lazy", "225", "275"), (image.GetAttribute("loading"), image.GetAttribute("width"), image.GetAttribute("height")));
+        Assert.Null(cards[1].QuerySelector("img"));
+        Assert.NotNull(cards[1].QuerySelector("svg.portrait-placeholder"));
+        Assert.Null(cards[1].QuerySelector("figcaption"));
+    }
+
+    [Fact]
+    public async Task TheCreditShowsOnceBelowTheListWhenEveryPhotoHasTheSameCredit()
+    {
+        var page = await ListAsync(new OfficialListing(WithPhoto("a", "Ann Able", "Public domain."), 1), new OfficialListing(WithPhoto("b", "Bob Baker", "Public domain."), 1));
+
+        Assert.Empty(page.QuerySelectorAll("ul.officials figcaption"));
+        Assert.Single(page.QuerySelectorAll(".caveat"));
+        Assert.Contains("Public domain.", page.QuerySelector(".caveat")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheCreditShowsOnEachCardWhenCreditsDifferSoNoLicenseTextIsHidden()
+    {
+        var page = await ListAsync(new OfficialListing(WithPhoto("a", "Ann Able", "Public domain."), 1), new OfficialListing(WithPhoto("b", "Bob Baker", "Used with permission."), 1));
+
+        Assert.Equal(["Public domain.", "Used with permission."], page.QuerySelectorAll("ul.officials figcaption").Select(caption => caption.TextContent));
+        Assert.Empty(page.QuerySelectorAll(".caveat"));
+    }
+
+    [Fact]
+    public async Task TheProfilePortraitStaysEagerBecauseItIsTheFirstThingOnThePage()
+    {
+        var page = Current([], []) with { Profile = WithPhoto("mayor", "Mayor Example", "Public domain.") };
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.Equal("eager", new HtmlParser().ParseDocument(html).QuerySelector("figure.portrait img")!.GetAttribute("loading"));
     }
 
     [Fact]
@@ -636,6 +788,30 @@ public sealed class PublishedOfficialPageTests
     }
 
     private static PublishedOfficialProfile Profile() => new() { Id = "mayor", Name = "Mayor Example", Terms = [] };
+
+    private static PublishedOfficialProfile Profile(string id, string name, params PublishedOfficeTerm[] terms) => new() { Id = id, Name = name, Terms = terms };
+
+    private static PublishedOfficeTerm Term(string office, string? state, string party) =>
+        new() { Office = office, State = state, Party = party, Start = new DateOnly(2025, 1, 3) };
+
+    private static PublishedOfficialProfile WithPhoto(string id, string name, string credit) => Profile(id, name) with
+    {
+        Photo = new PublishedPhoto
+        {
+            Path = PublicationProtocol.PhotoPath(new string('c', 64)),
+            Credit = credit,
+            SourceUrl = "https://example.gov/a.jpg",
+            Width = 225,
+            Height = 275
+        }
+    };
+
+    private static readonly DateTimeOffset ListPublishedAtUtc = new(2026, 6, 1, 0, 0, 0, TimeSpan.Zero);
+
+    private static Task<AngleSharp.Dom.IDocument> ListAsync(params OfficialListing[] officials) => ListAsync(ListPublishedAtUtc, officials);
+
+    private static async Task<AngleSharp.Dom.IDocument> ListAsync(DateTimeOffset publishedAtUtc, params OfficialListing[] officials) =>
+        new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialsAsync(officials, publishedAtUtc, CancellationToken.None));
 
     private static ReleaseOfficialPage Current(PublishedRecordEntry[] entries, PublishedOfficialVote[] votes) =>
         new(Profile(), true, 119, true, [], [.. entries], [.. votes]);

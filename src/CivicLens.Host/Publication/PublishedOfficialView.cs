@@ -1,5 +1,6 @@
 using System.Globalization;
 using CivicLens.Application.Publication;
+using CivicLens.Application.Roster;
 using CivicLens.Core.Relationships;
 using CivicLens.Host.Actions;
 using CivicLens.Host.Components.Ui;
@@ -11,13 +12,34 @@ internal static class PublishedOfficialView
 {
     public static string Office(PublishedOfficeTerm term) => term.Office switch
     {
-        "sen" => $"Senator for {term.State}",
-        "rep" when term.District is { } district => $"Representative for {term.State}, district {district}",
-        "rep" => $"Representative for {term.State}",
-        "prez" => "President",
-        "viceprez" => "Vice President",
+        MemberRosterParser.Senate => $"Senator for {term.State}",
+        MemberRosterParser.House when term.District is { } district => $"Representative for {term.State}, district {district}",
+        MemberRosterParser.House => $"Representative for {term.State}",
+        ExecutiveRosterParser.President => "President",
+        ExecutiveRosterParser.VicePresident => "Vice President",
         _ => term.Office
     };
+
+    public static string CardOffice(PublishedOfficeTerm term, DateTimeOffset publishedAtUtc) =>
+        term.End is { } end && end < DateOnly.FromDateTime(publishedAtUtc.UtcDateTime) ? $"Former {Office(term)}" : Office(term);
+
+    public static string PartyLine(string party, string? caucus) =>
+        caucus is null || caucus == party ? $"Party: {party}" : $"Party: {party}, caucuses with {Members(caucus)}";
+
+    public static PublishedOfficeTerm? LatestTerm(IEnumerable<PublishedOfficeTerm> terms) => terms.OrderBy(term => term.Start).LastOrDefault();
+
+    public static string OfficeKind(PublishedOfficeTerm? term) => term?.Office switch
+    {
+        MemberRosterParser.Senate => "senator",
+        MemberRosterParser.House => "representative",
+        ExecutiveRosterParser.President or ExecutiveRosterParser.VicePresident => "executive",
+        _ => "other"
+    };
+
+    public static readonly IReadOnlyList<(string Kind, string Plural)> OfficeKinds =
+        [("senator", "Senators"), ("representative", "Representatives"), ("executive", "Executives"), ("other", "Other officials")];
+
+    public static string RecordCount(int count) => $"{count} {(count == 1 ? "record" : "records")} other than votes";
 
     public static string WebsiteHost(string website) => new Uri(website).IdnHost;
 
@@ -81,7 +103,9 @@ internal static class PublishedOfficialView
         return votes.NotCast == 0 ? sentence : $"{sentence} They did not cast Yea or Nay on {votes.NotCast} {other}split {Votes(votes.NotCast)}.";
     }
 
-    public static string PartyOf(VotesWithParty votes) => $"{votes.Chamber} {votes.Party}s";
+    public static string PartyOf(VotesWithParty votes) => $"{votes.Chamber} {Members(votes.Party)}";
+
+    private static string Members(string party) => $"{party}s";
 
     private static string ChamberName(PublishedChamber chamber) => chamber == PublishedChamber.Senate ? "the Senate" : "the House of Representatives";
 
