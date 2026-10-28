@@ -154,6 +154,7 @@ public sealed class PublishIndexPagesTests
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("k2", new PublishedRecordReference(PublishedRecordKind.Brief, newer)));
         var older = scenario.AddBrief(new DateOnly(2026, 5, 4), [new(PublishedRecordKind.Statement, statement, 1)]);
+        scenario.Clock.Now = scenario.Clock.Now.AddDays(1);
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("k3", new PublishedRecordReference(PublishedRecordKind.Brief, older)));

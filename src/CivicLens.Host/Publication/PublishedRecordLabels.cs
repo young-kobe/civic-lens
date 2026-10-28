@@ -30,8 +30,10 @@ public static class PublishedRecordLabels
     public static string Quotation(PublishedQuotationKind kind) =>
         kind == PublishedQuotationKind.DirectQuotation ? "Direct quotation" : "Release text";
 
+    public const string ModelWording = "An AI summary of the official record";
+
     public static IEnumerable<Fact> Wording(PublishedTextOrigin origin) =>
-        origin == PublishedTextOrigin.Model ? [new("Wording", "An AI summary of the official record")] : [];
+        origin == PublishedTextOrigin.Model ? [new("Wording", ModelWording)] : [];
 
     public static string Role(PublishedSponsorshipRole role) => role switch
     {

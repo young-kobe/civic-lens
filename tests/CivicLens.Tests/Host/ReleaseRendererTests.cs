@@ -917,7 +917,7 @@ public sealed class ReleaseRendererTests
         var document = new HtmlParser().ParseDocument(html);
         Assert.NotNull(document.QuerySelector("main a[href='method.html']"));
         Assert.NotNull(document.QuerySelector("main a[href='report.html']"));
-        Assert.Contains("An AI summary of the official record", html, StringComparison.Ordinal);
+        Assert.Contains(PublishedRecordLabels.ModelWording, html, StringComparison.Ordinal);
         Assert.DoesNotContain("unreviewed", html, StringComparison.OrdinalIgnoreCase);
     }
 

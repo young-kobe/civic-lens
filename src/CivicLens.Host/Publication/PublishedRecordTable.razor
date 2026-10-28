@@ -14,7 +14,7 @@
                 <TableCell Header Class="fit num">@PublicColumn.WeekOf</TableCell>
                 <TableCell Header Class="fit num">@PublicColumn.FirstPublished</TableCell>
                 break;
-            default:
+            case RecordTableColumns.FirstPublished:
                 <TableCell Header Class="fit num">@PublicColumn.FirstPublished</TableCell>
                 break;
         }
@@ -31,7 +31,7 @@
                 <TableCell Class="fit num" Label="@PublicColumn.WeekOf">@Moment.Iso(ReleaseRecordOrder.Day(entry))</TableCell>
                 <TableCell Class="time fit num" Label="@PublicColumn.FirstPublished"><Timestamp Value="entry.FirstPublishedAtUtc" Format="TimestampFormat.Day" /></TableCell>
                 break;
-            default:
+            case RecordTableColumns.FirstPublished:
                 <TableCell Class="time fit num" Label="@PublicColumn.FirstPublished"><Timestamp Value="entry.FirstPublishedAtUtc" Format="TimestampFormat.Day" /></TableCell>
                 break;
         }
