@@ -6,7 +6,7 @@ The approved product direction serves regular citizens seeking transparency in U
 
 **Current state:** A durable worker collects configured official sources, the Congress.gov bill list, the Congress.gov House vote list, and the Senate vote files. A separate bounded collector fetches them. The worker stores immutable captures, extracts text, and compares versions in Postgres. Checked-in EF migrations apply schema changes.
 
-Each release holds the public pages: officials, official profiles, issues, weekly briefs, all records, about, method, reader reports, and photos. A person can withdraw a record, and the worker keeps a member roster with photos.
+Each release holds the public pages: officials, official profiles, issues, weekly briefs, all records, about, method, reader reports, and photos. The owner can withdraw a published record from the CLI. The worker keeps a member roster with photos.
 
 Claude drafts document-change accounts and statement records inside daily token limits. A person edits, approves, and publishes each draft in an authenticated review workspace. Approved records publish as immutable static releases. A separate search service, `src/CivicLens.PublicApi`, reads each published release into its own Postgres database. It serves full-text search and a read API, and it takes reader reports; see [search](docs/architecture/search.md). The worker pulls those reports into a review queue, and a person resolves each one; see [review](docs/architecture/review.md#reader-reports).
 
