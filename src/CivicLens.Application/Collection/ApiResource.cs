@@ -17,7 +17,8 @@ public enum ApiResource
     SenateVoteMenu,
     SenateVote,
     MemberRoster,
-    ExecutiveRoster
+    ExecutiveRoster,
+    MemberPhoto
 }
 
 public sealed class ApiResourceJsonConverter : JsonStringEnumConverter<ApiResource>

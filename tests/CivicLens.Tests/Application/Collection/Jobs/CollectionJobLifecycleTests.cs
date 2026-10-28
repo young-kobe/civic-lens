@@ -1,4 +1,6 @@
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Collection.Contracts;
+using static CivicLens.Tests.Fixtures.CollectionFixtures;
 
 namespace CivicLens.Tests.Application.Collection.Jobs;
 
@@ -17,6 +19,27 @@ public sealed class CollectionJobLifecycleTests
     {
         Assert.Equal(expected, CollectionJobLifecycle.Transition(CollectionJobState.Running, outcome,
             cancellationRequested: false, attemptsExhausted: exhausted));
+    }
+
+    [Theory]
+    [InlineData(404, CollectionJobAttemptOutcome.PermanentFailure, CollectionJobState.Failed)]
+    [InlineData(503, CollectionJobAttemptOutcome.RetryableFailure, CollectionJobState.WaitingToRetry)]
+    public void APhotoThatIsMissingEndsTheJobFailedWithNoRetryWhileAServerErrorRetries(int status,
+        CollectionJobAttemptOutcome outcome, CollectionJobState state)
+    {
+        var receipt = Receipt(Request()) with
+        {
+            Outcome = CollectionOutcome.Failed,
+            Capture = null,
+            FailureCode = CollectionFailureCode.HttpError,
+            Response = new HttpResponseMetadata { StatusCode = status, ContentEncodings = [] }
+        };
+
+        var resolution = CollectionJobLifecycle.Resolve(receipt);
+
+        Assert.Equal(outcome, resolution.Outcome);
+        Assert.Equal(state, CollectionJobLifecycle.Transition(CollectionJobState.Running, resolution.Outcome,
+            cancellationRequested: false, attemptsExhausted: false));
     }
 
     [Fact]

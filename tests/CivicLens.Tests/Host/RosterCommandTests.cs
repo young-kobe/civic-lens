@@ -82,7 +82,7 @@ public sealed class RosterCommandTests(PostgresCollection postgres) : IAsyncLife
     {
         var attempts = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
         var attemptId = await RosterFixtures.ImportCaptureAsync(attempts, new string('a', 64), DateTimeOffset.UtcNow);
-        await PostgresMemberRosterStore.FromConnectionString(connectionString).AdmitAsync(attemptId, RosterFixtures.Members(), default);
+        await PostgresMemberRosterStore.FromConnectionString(connectionString).AdmitAsync(attemptId, RosterFixtures.Members(), null, default);
     }
 
     private void WriteConfiguration(params PersonConfiguration[] people) =>

@@ -1,6 +1,7 @@
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
+using CivicLens.Application.Collection.MemberPhotos;
 using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Votes;
@@ -99,6 +100,7 @@ public sealed class JobPreparation(
             ApiResource.SenateVote => AdmitSenateVoteAsync(job, artifactRoot, cancellationToken),
             ApiResource.MemberRoster => AdmitMemberRosterAsync(job, artifactRoot, cancellationToken),
             ApiResource.ExecutiveRoster => AdmitExecutiveRosterAsync(job, artifactRoot, cancellationToken),
+            ApiResource.MemberPhoto => AdmitMemberPhotoAsync(job, artifactRoot, cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(job))
         };
 
@@ -229,8 +231,11 @@ public sealed class JobPreparation(
     {
         var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
         var attemptId = response.Captured.AttemptId;
+        var photos = EnabledPhotoSourceOf(job);
         if (!await roster.HasSnapshotOfCaptureAsync(attemptId, cancellationToken))
-            await roster.AdmitAsync(attemptId, MemberRosterParser.Parse(response.Body), cancellationToken);
+            await roster.AdmitAsync(attemptId, MemberRosterParser.Parse(response.Body), photos, cancellationToken);
+        else if (photos is not null)
+            await roster.AdmitPhotoJobsAsync(photos, cancellationToken);
         return JobPreparationResult.Prepared();
     }
 
@@ -244,10 +249,30 @@ public sealed class JobPreparation(
         return JobPreparationResult.Prepared();
     }
 
+    private async Task<JobPreparationResult> AdmitMemberPhotoAsync(CollectionJobRecord job, string artifactRoot,
+        CancellationToken cancellationToken)
+    {
+        var configured = ConfiguredSourceOf(job);
+        var bioguideId = MemberPhotoUrl.ReadBioguideId(configured.SourceUrl, job.Definition.Url);
+        var person = configured.Revision.Configuration.People.SingleOrDefault(candidate => candidate.BioguideId == bioguideId)
+            ?? throw new InvalidDataException("Member photo job names a person who is not configured.");
+        var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
+        if (!MemberPhotoImage.IsValid(response.Captured.Response.ContentType, response.Body))
+            throw new InvalidDataException("Member photo is not a JPEG of the published size.");
+        await roster.AdmitPhotoAsync(new MemberPhoto(response.Captured.AttemptId, person.Id, job.Definition.Url,
+            MemberPhoto.MemberGuideCredit), cancellationToken);
+        return JobPreparationResult.Prepared();
+    }
+
     private static CongressBillListItem ReadPageBill(ConfiguredCollectionSource configured, CollectionJobRecord job,
         ApiResource resource) =>
         BillPageUrl.TryRead(configured.SourceUrl, resource, job.Definition.Url)?.Bill
         ?? throw new InvalidDataException("Bill page job URL is not a page of its bill resource.");
+
+    private static ConfiguredCollectionSource? EnabledPhotoSourceOf(CollectionJobRecord job) =>
+        job.Definition.ConfigurationRevision!.Configuration.RosterSourceOf(ApiParser.MemberPhotos) is { Enabled: true } source
+            ? new ConfiguredCollectionSource(job.Definition.ConfigurationRevision, source.Id, job.Definition.CoverageAsOf)
+            : null;
 
     private static ConfiguredCollectionSource ConfiguredSourceOf(CollectionJobRecord job) =>
         new(job.Definition.ConfigurationRevision!, job.Definition.SourceId, job.Definition.CoverageAsOf);

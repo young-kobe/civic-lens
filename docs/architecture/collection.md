@@ -108,6 +108,8 @@ A 429 returns `deferred`, with Retry-After when the server supplies it. Host can
 
 **API mode.** The collector fetches one JSON or XML resource with HTTP GET and sends `Accept: application/json`. It returns a capture with no discovery result. It knows nothing about any specific API. An Application parser reads the capture later. The Senate vote files are XML and need no credential. The senate.gov server returns `text/xml` for the JSON Accept value. The collector does not check the content type. API mode makes no robots request, so `robotsRequestCount` is 0 and no crawl delay is declared.
 
+**User-Agent.** Every request, also a robots request, sends `User-Agent: CivicLens/0.1 (civic-lens.info)`. The collector sets no `From` header and puts no email address in any request. `HttpCollector` owns the value. Test: `CollectorTests.EveryRequestNamesTheProjectSiteAndNoEmailSoOperatorsCanFindUsWithoutPrivateContact`.
+
 API mode still honors 429 with Retry-After, `minDelayMilliseconds` pacing, the budgets, scope checks on redirects, and conditional validators. Its receipt limit is the page receipt limit. Configuration requires an `apiParser` in API mode.
 
 **Credentials.** An API request may name a `credential` from the closed list in `CollectionCredentials`. The only name is `congressGov`, which maps to the environment variable `CIVIC_LENS_CONGRESS_API_KEY`. The manifest, receipt, capture metadata, and diagnostics carry the name only, never the key.
@@ -489,6 +491,7 @@ Provider exception details are not printed, because they can hold connection val
 | Domain results and import policy | `src/CivicLens.Core/Collection/CollectionAttemptResult.cs`, `src/CivicLens.Core/Collection/CollectionImportPolicy.cs`, `src/CivicLens.Core/Collection/CollectionImportDecision.cs`, `src/CivicLens.Core/Collection/CollectionResponse.cs` |
 | Import handler and ports | `src/CivicLens.Application/Collection/CollectionAttemptImporter.cs`, `src/CivicLens.Application/Collection/ICollectorProcess.cs`, `src/CivicLens.Application/Collection/ICollectionAttemptStore.cs`, `src/CivicLens.Application/Collection/StoredCollectionAttempt.cs` |
 | Handoff and replay | `src/CivicLens.Application/Collection/PendingCollectionHandoff.cs`, `src/CivicLens.Application/Collection/RecoverCollectionAttempts.cs`, `src/CivicLens.Infrastructure/Collection/FileCollectionReceiptHandoffStore.cs` |
+| Member photo resource | `src/CivicLens.Application/Collection/ApiResource.cs`, `src/CivicLens.Application/Collection/MemberPhotos/MemberPhotoUrl.cs`, `src/CivicLens.Application/Collection/Jobs/CollectionJobDefinition.cs`; behavior in [roster](roster.md#member-photos) |
 | Prepared attempts | `src/CivicLens.Application/Collection/PreparedCollectionAttempt.cs`, `src/CivicLens.Application/Collection/ConfiguredCollectionSource.cs` |
 | Pacing groups | `src/CivicLens.Application/Collection/PacingGroupConfiguration.cs`, `src/CivicLens.Application/Collection/CollectionConfiguration.cs` |
 | Discovery admission | `src/CivicLens.Application/Collection/Discovery/DiscoveryAdmissionPolicy.cs`, `src/CivicLens.Application/Collection/Discovery/DiscoveryAdmissionBudget.cs`, `src/CivicLens.Application/Collection/Discovery/IDiscoveryAdmissionStore.cs` |
