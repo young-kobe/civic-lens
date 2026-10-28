@@ -36,7 +36,7 @@ The feature also captures one official portrait for each configured member. A ph
 - The credit is the constant `MemberPhoto.MemberGuideCredit`. Each photo row copies the text. A later change to the constant never rewrites provenance. Configured executive photos will take their credit from `PersonConfiguration.photo`.
 - A photo row holds no image bytes. The capture holds them.
 - A missing photo is not stored. A 404 ends the job `Failed` with no retry. A person with no row has no photo. A later 404 keeps the last good photo. A takedown has no mechanism yet; see the limits.
-- The roster feature writes photo rows and reads the newest row of each person for publication. Publication owns the photo files; see [publication](publication.md#release-content).
+- The roster feature writes photo rows and reads the newest row of each person without `withholdPhoto` for publication. Publication owns the photo files; see [publication](publication.md#release-content).
 
 ## Invariants
 
@@ -148,7 +148,7 @@ The join of a configured person to roster terms is in [publication](publication.
 - Senate votes match members through the `lis` ID. `ReadSenatorLisIdsAsync` returns each `lis` ID that any snapshot of the source gives to a person with a Senate term. A person with two `lis` IDs is a conflict, and the vote reader blocks the draft. A senator who left before the first snapshot has no row. A new member snapshot requeues the blocked Senate drafts, so a newly seated senator matches at the next draft; see [votes](votes.md#invariants).
 - Bill and vote coverage is not term aware. A member who leaves stays covered until a person edits the configuration.
 - Names are not dated. The command proposes the current official name only.
-- Publish reads the newest photo of each person with `ReadNewestPhotosAsync` and writes it into the release; see [publication](publication.md#release-content). Cards on the officials list do not show it yet.
+- Publish reads the newest photo of each person without `withholdPhoto` with `ReadNewestPhotosAsync` and writes it into the release; see [publication](publication.md#release-content). Cards on the officials list do not show it yet.
 - Configured executive photos are planned. They reuse the resource `memberPhoto` and its preparation. Each executive photo has its own source with the exact URL. The credit comes from `PersonConfiguration.photo`. The job match rule then compares the exact URL.
 - API mode sends `Accept: application/json` on image requests too. GitHub Pages ignores it.
 - Photos are never used in ads.
