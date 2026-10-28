@@ -9,17 +9,21 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace CivicLens.PublicApi;
 
 public static class PublicApiApp
 {
-    /// <summary>Builds the service. A test passes a handler that serves the release files in place of the network, and one that answers the bot check.</summary>
+    /// <summary>Builds the service. A test passes a handler that serves the release files in place of the network, one that answers the bot check, and a log provider.
+    /// The service lowers the request logs of ASP.NET Core to warnings, because an information log holds the request address with the search words.</summary>
     public static WebApplication Build(PublicApiOptions options, string[] args, HttpMessageHandler? releaseHandler = null,
-        HttpMessageHandler? turnstileHandler = null)
+        HttpMessageHandler? turnstileHandler = null, ILoggerProvider? logProvider = null)
     {
         var builder = WebApplication.CreateBuilder(args);
+        builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
+        if (logProvider is not null) builder.Logging.AddProvider(logProvider);
         var writer = NpgsqlDataSource.Create(options.Database);
         var reader = NpgsqlDataSource.Create(options.ReaderDatabase);
         var feed = new ReleaseFeed(new HttpClient(releaseHandler ?? new SocketsHttpHandler { AutomaticDecompression = DecompressionMethods.All })

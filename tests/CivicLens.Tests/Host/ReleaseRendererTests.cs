@@ -937,8 +937,8 @@ public sealed class ReleaseRendererTests
 
         var table = Assert.Single(document.QuerySelectorAll("table"), candidate => candidate.QuerySelector("caption")!.TextContent == "What we keep and who else sees it");
         Assert.Equal(["When you", "What we keep", "Who else sees it"], table.QuerySelectorAll("thead th").Select(cell => cell.TextContent));
-        Assert.Equal(["Read a page", "Pick light or dark", "Report a problem", "Email us"], table.QuerySelectorAll("tbody tr").Select(row => row.FirstElementChild!.TextContent));
-        Assert.Contains($"more than {ReaderReportProtocol.PurgeAfterDays} days old", document.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
+        Assert.Equal(["Read a page", "Pick light or dark", "Search", "Report a problem", "Email us"], table.QuerySelectorAll("tbody tr").Select(row => row.FirstElementChild!.TextContent));
+        Assert.Contains($"deleted after {ReaderReportProtocol.PurgeAfterDays} days", document.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
         Assert.NotNull(document.QuerySelector("main a[href='https://www.cloudflare.com/privacypolicy/']"));
     }
 
@@ -947,6 +947,9 @@ public sealed class ReleaseRendererTests
     {
         var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderAboutAsync(CancellationToken.None));
 
+        var table = Assert.Single(document.QuerySelectorAll("table"), candidate => candidate.QuerySelector("caption")!.TextContent == "Terms for each kind of material");
+        Assert.Equal(["Our records, summaries and weekly briefs", "Our data files", "Words we quote from officials and Congress", "Official portraits", "Source code"],
+            table.QuerySelectorAll("tbody tr").Select(row => row.FirstElementChild!.TextContent));
         var license = document.QuerySelector("main a[href='https://creativecommons.org/licenses/by/4.0/']");
         Assert.Equal("CC BY 4.0", license!.TextContent);
         Assert.Equal("noopener noreferrer", license.GetAttribute("rel"));

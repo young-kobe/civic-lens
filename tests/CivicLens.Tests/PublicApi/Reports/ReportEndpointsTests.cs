@@ -65,6 +65,17 @@ public sealed class ReportEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task AReportAnswerSetsNoCookieBecauseTheAboutPageToldReadersThatNoCookieIsSet()
+    {
+        await using var host = await StartAsync(new FakeTurnstile());
+
+        using var response = await PostAsync(host);
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.False(response.Headers.Contains("Set-Cookie"));
+    }
+
+    [Fact]
     public async Task ADuplicateReportGetsTheSameAnswerAsTheFirstAndIsNotStoredTwiceSoARetryCostsNothing()
     {
         await using var host = await StartAsync(new FakeTurnstile());
