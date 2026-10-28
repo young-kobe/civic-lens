@@ -518,7 +518,7 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - A withdrawn record still answers with its notice page and status 200. A static 410 needs a Cloudflare rule, which comes with [R-24](../roadmap.md#later). The search service has the same limit; see [search](search.md). The notice page has `noindex`, so search engines drop it.
 - The withdrawal check of citations reads every carried brief file when the request withdraws a statement, a document change, or an action. The cost grows with the number of briefs.
 - Old release directories keep the withdrawn content until [R-24](../roadmap.md#later) adds retention. A pinned search release can still find the record; see [search](search.md).
-- The privacy table of `about.html` says "Nothing" for a page read. That stays true only while the Caddy and CDN deploy keeps no page access logs. [R-24](../roadmap.md#later) must set that.
+- The privacy table of `about.html` says "Nothing" for a page read. Its search row says "Nothing" too. Both stay true only while the Caddy and CDN deploy keeps no access logs for page reads or search requests. [R-24](../roadmap.md#later) must set that.
 - A replacement reads the record file of each replaced record in the active release, to copy its corrections. The cost grows with the number of replaced records, at most 64.
 - A record keeps at most 20 corrections with a note. A person cannot publish a 21st correction of one record yet. Code updates still publish.
 - A rollback followed by a publish drops the rolled-back revision and its note from the history. The list copies forward from the active release. A rollback to a release before a withdrawal restores the record. A publish from there drops the withdrawal history.
