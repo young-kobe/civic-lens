@@ -13,7 +13,7 @@ public static partial class VoteviewParser
     private const string RollCallsName = "Voteview roll call file";
     private const string VotesName = "Voteview vote file";
     private const string MembersName = "Voteview member file";
-    private const int PresidentIcpsr = 99912;
+    private const string PresidentChamber = "President";
     private const string DayFormat = "yyyy-MM-dd";
 
     public static IReadOnlyList<VoteviewRollCall> ParseRollCalls(ReadOnlySpan<byte> body, int congress)
@@ -36,21 +36,25 @@ public static partial class VoteviewParser
         })];
     }
 
-    public static IReadOnlyDictionary<int, VoteviewMember> ParseMembers(ReadOnlySpan<byte> body, int congress)
+    public static VoteviewMemberFile ParseMembers(ReadOnlySpan<byte> body, int congress)
     {
         var csv = VoteviewCsv.Read(body, MembersName, "congress", "chamber", "icpsr", "state_abbrev", "party_code", "bioname", "bioguide_id");
-        var members = new Dictionary<int, VoteviewMember>();
-        foreach (var row in csv.Rows.Where(row => csv.Number(row, "icpsr") != PresidentIcpsr))
+        var senators = new Dictionary<int, VoteviewMember>();
+        var presidents = new HashSet<int>();
+        foreach (var row in csv.Rows)
         {
+            if (csv.Required(row, "chamber") == PresidentChamber)
+            {
+                presidents.Add(csv.Number(row, "icpsr"));
+                continue;
+            }
             RequireSenateOf(csv, row, congress, MembersName);
             var member = new VoteviewMember(csv.Number(row, "icpsr"), csv.Required(row, "bioguide_id"), csv.Required(row, "bioname"),
                 PartyOf(csv.Number(row, "party_code")), csv.Required(row, "state_abbrev"));
-            if (!members.TryAdd(member.Icpsr, member)) throw new InvalidDataException($"{MembersName} lists a member twice.");
+            if (!senators.TryAdd(member.Icpsr, member)) throw new InvalidDataException($"{MembersName} lists a member twice.");
         }
-        return members;
+        return new VoteviewMemberFile(senators, presidents);
     }
-
-    public static bool IsPresident(VoteviewCast cast) => cast.Icpsr == PresidentIcpsr;
 
     private static VoteviewRollCall ReadRollCall(VoteviewCsv csv, string[] row, int congress)
     {

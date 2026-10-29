@@ -3,10 +3,10 @@ namespace CivicLens.Application.Collection.VoteviewVotes;
 public sealed record VoteviewRoll(VoteviewRollCall RollCall, IReadOnlyList<VoteviewMemberVote> Votes)
 {
     public static IReadOnlyList<VoteviewRoll> Join(IReadOnlyList<VoteviewRollCall> rollCalls, IReadOnlyList<VoteviewCast> casts,
-        IReadOnlyDictionary<int, VoteviewMember> members)
+        VoteviewMemberFile members)
     {
-        var castsByPart = casts.Where(cast => !VoteviewParser.IsPresident(cast)).ToLookup(cast => cast.Part);
-        return [.. rollCalls.Select(rollCall => new VoteviewRoll(rollCall, VotesOf(castsByPart[rollCall.Part], members)))
+        var castsByPart = casts.Where(cast => !members.PresidentIcpsrs.Contains(cast.Icpsr)).ToLookup(cast => cast.Part);
+        return [.. rollCalls.Select(rollCall => new VoteviewRoll(rollCall, VotesOf(castsByPart[rollCall.Part], members.Senators)))
             .Where(roll => roll.CountsAgree())];
     }
 

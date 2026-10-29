@@ -51,6 +51,18 @@ public sealed class VoteviewRollTests
     }
 
     [Fact]
+    public void ThePresidentOfAnotherTermIsLeftOutByChamberNotByAFixedIcpsrSoANewPresidentNeedsNoCodeChange()
+    {
+        var members = VoteviewVoteFixtures.DefaultMembers.Replace("119,President,99912", "119,President,99913");
+        var votes = VoteviewVoteFixtures.DefaultVotes.Replace("119,Senate,1,99912,", "119,Senate,1,99913,");
+
+        var roll = Join(votes: votes, members: members).Single(item => item.RollCall.Part == 1);
+
+        Assert.DoesNotContain(roll.Votes, vote => vote.Member.Icpsr == 99913);
+        Assert.Equal(4, roll.Count(VoteviewCast.Yea));
+    }
+
+    [Fact]
     public void ASenateMemberWithNoBioguideIdIsRefusedBecauseTheRecordCouldNotName()
     {
         var members = VoteviewVoteFixtures.DefaultMembers.Replace("T000278", "");
