@@ -74,6 +74,13 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
         });
     }
 
+    public Task<string> RenderExecutiveActionAsync(PublishedExecutiveAction record, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        record.Validate();
+        return RenderAsync<PublishedExecutiveActionPage>(new Dictionary<string, object?> { [nameof(PublishedExecutiveActionPage.Record)] = record });
+    }
+
     public Task<string> RenderRelationshipAsync(PublishedRelationship record, PublicationCatalog catalog, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(record);

@@ -159,6 +159,20 @@ WHERE g.decision = 'Passed'
 ORDER BY g.congress, g.bill_type, g.bill_number;
 ```
 
+### Federal Register stream
+
+The source `federal-register-documents` in `config/federal-coverage.json` follows the presidential documents of the Federal Register. It ships with `enabled: false`. It needs no key and no roster. [Executive actions](architecture/executive-actions.md) holds the design. To enable it:
+
+1. Check that the configuration holds a person for each President whose documents the window covers. The shipped file holds Joe Biden, from 2021-01-20 to 2025-01-20, and Donald Trump from 2025-01-20. A document with no configured President blocks its job.
+2. Set `enabled` to `true` for `federal-register-documents` and restart the worker. A restart reads the configuration again.
+3. Deploy the search service before the publisher. The search service of an older version refuses a release that holds an executive action.
+
+To stop the source, set `enabled` to `false` and restart the worker.
+
+The first run lists every document from `backfillFrom` 2024-10-29. It admits one job for each document, about 340 in the first year. Each check after that runs every 6 hours and lists from 2 days before the newest stored publication date. Run `jobs list` and `jobs get` as in [managed collection jobs](#managed-collection-jobs) to see progress. A blocked job names its reason.
+
+To withdraw a record, open `/Review/ExecutiveActions/{id}` and withdraw approval. Then publish the withdrawal as for any record.
+
 ### Congress.gov House vote stream
 
 The source `congress-house-votes` in `config/federal-coverage.json` and `config/federal-pilot.json` follows the House roll-call votes of the Congress.gov `house-vote` API. It ships with `enabled: false`. To enable it:
@@ -718,7 +732,7 @@ The flag does not remove files from old releases. A kept release directory keeps
 
 ## Automatic publication of facts
 
-The `worker` command can publish code-approved actions and votes. [Publication](architecture/publication.md#automatic-publication-of-facts) holds the rules. A person still publishes statements, relationships, briefs, and document changes. The stage is off by default. It runs when the variable below is `1`. Any other value stops the worker with exit code 2. Code approves an action or a vote only after a model drafts its headline and summary. So the stage publishes nothing until you also set `CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS` and `CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS`.
+The `worker` command can publish code-approved actions, votes, and executive actions. [Publication](architecture/publication.md#automatic-publication-of-facts) holds the rules. A person still publishes statements, relationships, briefs, and document changes. The stage is off by default. It runs when the variable below is `1`. Any other value stops the worker with exit code 2. Code approves an action or a vote only after a model drafts its headline and summary. So the stage publishes nothing until you also set `CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS` and `CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS`.
 
 | Variable | Meaning |
 |---|---|
@@ -951,7 +965,7 @@ This section is for the temporary production machine, a Jetson with Docker Compo
 1. Install Docker with Compose v2. Clone the repository to `/opt/civic-lens` and check out the commit to deploy. The systemd units use this path. It must be on the root filesystem, because systemd loads the linked units at boot, before other disks mount.
 2. Run `sudo deploy/scripts/install.sh`. It creates the directories under `/srv/civic-lens` and the env files from the templates.
 3. Fill in the env files in `/srv/civic-lens/env`, and put `collection.json` and `issues.json` in `/srv/civic-lens/config`.
-   The `api` sources in `config/federal-coverage.json` ship with `enabled: false`. Without them the site has no bills, votes, roster, or photos, so nothing publishes. Set `enabled` to `true` for `congress-members`, `congress-bills`, `congress-house-votes`, `senate-votes`, `member-photos`, and `executive-officials`. The two Congress.gov sources need `CIVIC_LENS_CONGRESS_API_KEY` in `host.secret.env`. See [Congress.gov bill stream](#congressgov-bill-stream) and [Member roster](#member-roster). The Host refuses a configuration file over 1 MB, and added indentation can push this file past that limit. So save it compact.
+   The `api` sources in `config/federal-coverage.json` ship with `enabled: false`. Without them the site has no bills, votes, roster, or photos, so nothing publishes. Set `enabled` to `true` for `congress-members`, `congress-bills`, `congress-house-votes`, `senate-votes`, `member-photos`, `executive-officials`, and `federal-register-documents`. The two Congress.gov sources need `CIVIC_LENS_CONGRESS_API_KEY` in `host.secret.env`. See [Congress.gov bill stream](#congressgov-bill-stream) and [Member roster](#member-roster). The Host refuses a configuration file over 1 MB, and added indentation can push this file past that limit. So save it compact.
 4. Create the tunnel (see [Tunnel](#tunnel)) and the restic password file and repository (see [Backups](#backups)).
 5. Run `sudo deploy/scripts/update.sh <full-commit-sha>`.
 6. Set up Tailscale for the review workspace (see [Review workspace access](#review-workspace-access)).

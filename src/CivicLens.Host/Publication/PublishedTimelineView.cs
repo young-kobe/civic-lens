@@ -37,6 +37,10 @@ internal static class PublishedTimelineView
     public static IReadOnlyList<TimelineEvent> For(PublishedVote record) =>
         WithPublication([new(record.VotedOn, "Vote held")], record.ApprovedAtUtc, record.FirstPublishedAtUtc, record.Corrections);
 
+    public static IReadOnlyList<TimelineEvent> For(PublishedExecutiveAction record) =>
+        WithPublication([new(record.SignedOn, "Signed by the President"), new(record.PublishedOn, "Published in the Federal Register")],
+            record.ApprovedAtUtc, record.FirstPublishedAtUtc, record.Corrections);
+
     public static IReadOnlyList<TimelineEvent> For(PublishedRelationship record)
     {
         List<TimelineEvent> events = [];

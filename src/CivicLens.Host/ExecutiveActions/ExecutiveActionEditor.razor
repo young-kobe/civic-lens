@@ -1,0 +1,85 @@
+@page "/Review/ExecutiveActions/{RecordId}"
+@inherits ReviewRecordPage
+@using CivicLens.Core.Review
+@using CivicLens.Host.Review
+
+@if (detail is null)
+{
+    <TopBarTitle Crumbs="Crumbs" />
+    <div class="content">
+        @if (error is not null)
+        {
+            <Notice Tone="Tone.Bad">@error</Notice>
+        }
+        @if (notFound)
+        {
+            <Panel Label="Executive action not found">
+                <EmptyState Title="Executive action not found" Text="This executive action record does not exist, or its link is not valid.">
+                    <Action><Button Href="/Review">Go to Review</Button></Action>
+                </EmptyState>
+            </Panel>
+            <form @formname="decide" @onsubmit="DecideAsync" hidden></form>
+        }
+    </div>
+}
+else
+{
+    var review = detail.Review;
+    var revision = review.CurrentRevision;
+    var concerns = review.UnresolvedConcerns;
+    <TopBarTitle Crumbs="Crumbs" />
+    <div class="content">
+        <PageHeader Title="@revision.Title" Meta="HeaderMeta(review.CurrentStatus, concerns.Length)" />
+
+        @if (error is not null)
+        {
+            <Notice Tone="Tone.Bad">@error</Notice>
+        }
+        @if (statusMessage is not null)
+        {
+            <Notice Tone="@(isConflict ? Tone.Warn : Tone.Ok)" Dismissible="@(!isConflict)">@statusMessage</Notice>
+        }
+        <Notice Tone="Tone.Neutral">Code wrote this record from the Federal Register and approved it. No person edits it. Withdraw approval here to take it off the public site.</Notice>
+        @if (concerns.Length > 0)
+        {
+            <Notice Tone="Tone.Warn">Approval is blocked. @(concerns.Length == 1 ? "Resolve the open concern below first." : $"Resolve the {concerns.Length} open concerns below first.")</Notice>
+        }
+
+        <div class="split">
+            <Panel Label="Executive action" Padded="true">
+                <RecordView Id="saved-approval-target" Headline="@revision.Title" Facts="FactsOf(revision)" />
+            </Panel>
+
+            <Panel Title="Evidence" Id="evidence" Padded="true" Raised="true" Class="split-sticky">
+                <p class="small muted">Code built each citation from the saved Federal Register record.</p>
+                <p class="small"><a href="@revision.DocumentUrl" rel="noopener noreferrer">Document in the Federal Register</a></p>
+                <ul class="choices">
+                    @foreach (var fact in revision.Facts)
+                    {
+                        <li><CitationQuote Label="@fact.Label" Quote="@(fact.Citation.QuoteIn(detail.Extractions))" /></li>
+                    }
+                </ul>
+            </Panel>
+        </div>
+
+        <ReviewDecisionPanel RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="review.CurrentStatus"
+                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" OnDecide="DecideAsync">
+            <Checklist>
+                <ul class="checklist">
+                    <li>Does the title match the Federal Register page?</li>
+                    <li>Is the President the one who signed on that date?</li>
+                </ul>
+            </Checklist>
+        </ReviewDecisionPanel>
+
+        <ReviewHistoryPanel Entries="History" ViewerSubject="@actor.Subject" />
+    </div>
+}
+
+@code {
+    private RenderFragment HeaderMeta(ReviewStatus status, int concerns) =>
+        @<text>
+            <StatusBadge Tone="DraftStatusDisplay.Tone(status)" Text="@DraftStatusDisplay.Label(status, concerns)" />
+            <span class="muted small">Revision @Revision.RevisionNumber, saved @Moment.Full(Revision.CreatedAtUtc)</span>
+        </text>;
+}

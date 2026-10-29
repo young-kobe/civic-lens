@@ -1,3 +1,4 @@
+using CivicLens.Infrastructure.ExecutiveActions;
 using Microsoft.Extensions.Logging.Abstractions;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Application.Issues;
@@ -142,7 +143,8 @@ public sealed partial class PostgresBillStreamTests
             new PublishedRecordLoaders(PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
                 PostgresStatementReviewStore.FromConnectionString(connectionString), ActionReviews(),
                 PostgresVoteReviewStore.FromConnectionString(connectionString),
-                new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)), new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString))),
+                new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)), new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString)),
+                PostgresExecutiveActionReviewStore.FromConnectionString(connectionString)),
             new PublicationCatalog(names, IssueConfiguration.None), FixedRosters.NamedOnly(names.Keys), PhotoCaptures.None(), TimeProvider.System,
             new PruneReleases(store, releases, NullLogger<PruneReleases>.Instance));
 

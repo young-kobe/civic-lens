@@ -1,3 +1,7 @@
+using CivicLens.Application.Collection.FederalRegister;
+using CivicLens.Application.ExecutiveActions;
+using CivicLens.Core.ExecutiveActions;
+using CivicLens.Tests.Application.ExecutiveActions;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Roster;
 using CivicLens.Application.Paging;
@@ -45,6 +49,7 @@ internal sealed class PublicationScenario
     public FakeStatementReviewStore Statements { get; } = new();
     public FakeActionReviewStore Actions { get; } = new();
     public FakeVoteReviewStore Votes { get; } = new();
+    public FakeExecutiveActionReviewStore ExecutiveActions { get; } = new();
     public FakeRelationshipReviewStore Relationships { get; } = new();
     public FakeBriefReviewStore Briefs { get; } = new();
     public Dictionary<string, string> OfficialNames { get; } = new() { ["mayor"] = "Mayor Example", ["chair"] = "Council Chair Example" };
@@ -76,7 +81,7 @@ internal sealed class PublicationScenario
 
     public PublicationScenario() => Releases = new() { Events = Events };
 
-    public PublishedRecordLoaders Loaders() => new(Reviews, Statements, Actions, Votes, Relationships, Briefs);
+    public PublishedRecordLoaders Loaders() => new(Reviews, Statements, Actions, Votes, Relationships, Briefs, ExecutiveActions);
 
     public IssueConfiguration Issues { get; set; } = IssueConfiguration.None;
 
@@ -326,6 +331,24 @@ internal sealed class PublicationScenario
         return recordId;
     }
 
+    public string AddExecutiveAction(char id, ImmutableArray<ReviewDecision>? decisions = null, bool unpublished = false)
+    {
+        var recordId = new string(id, 64);
+        var document = FederalRegisterFixtures.Document(FederalRegisterFixtures.TrumpOrder);
+        var text = FederalRegisterRenderer.Render(document);
+        var extraction = Extraction(text, $"executive-action-{id}", "https://www.federalregister.gov/api/v1/documents/2025-01900.json");
+        var evidence = new FederalRegisterEvidence(document, extraction.ExtractionId, text, "mayor");
+        var revision = ExecutiveActionRevisions.Create(FederalRegisterFixtures.SourceId, 1, ApprovedAt, evidence) with { RecordId = recordId };
+        var all = decisions ?? [Decision(recordId, 1, ReviewDecisionKind.Approve)];
+        var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
+        var review = new ExecutiveActionReview(recordId, revision, null, [revision], all.Length,
+            ReviewPolicy.GetCurrentStatus(1, all, concerns), all, concerns);
+        ExecutiveActions.Publishable[recordId] = new(review, ImmutableDictionary.CreateRange(StringComparer.Ordinal,
+            [KeyValuePair.Create(extraction.ExtractionId, extraction)]));
+        if (unpublished) ExecutiveActions.Unpublished.Add(new(review, null));
+        return recordId;
+    }
+
     public string AddRelationship(char id, string statementId, string targetId, PublishedRecordKind targetKind = PublishedRecordKind.Action,
         ReviewDecisionKind decision = ReviewDecisionKind.Approve, int statementRevision = 1, int targetRevision = 1, int revisionNumber = 1, SourceSpan? quoteSpan = null)
     {
@@ -394,6 +417,8 @@ internal sealed class FakeRenderer : IReleaseRenderer
     public Task<string> RenderVoteAsync(PublishedVote record, string? billActionRecordId, ImmutableArray<PublishedRelationship> related,
         PublicationCatalog catalog, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>vote {record.RecordId} bill {billActionRecordId}{Related(related)}</html>");
+    public Task<string> RenderExecutiveActionAsync(PublishedExecutiveAction record, CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>executive action {record.RecordId}</html>");
     public Task<string> RenderRelationshipAsync(PublishedRelationship record, PublicationCatalog catalog, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>relationship {record.RecordId}</html>");
     public Task<string> RenderBriefAsync(PublishedBrief record, CancellationToken cancellationToken) =>

@@ -43,7 +43,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 
 ### Source configuration
 
-One `api` source with `apiParser` set to `congressBillList` follows the bill list. `ApiParser` in Application/Collection is the closed list of parsers. It holds `congressBillList`, `congressHouseVoteList`, `senateVoteList`, `congressLegislators`, `congressLegislatorsExecutive`, and `memberPhotos`. The second and third are in [votes](votes.md). The last three are in [roster](roster.md). The `ApiParser` JSON converter is registered in `ConfigurationJson`, which also serves the configuration snapshots.
+One `api` source with `apiParser` set to `congressBillList` follows the bill list. `ApiParser` in Application/Collection is the closed list of parsers. It holds `congressBillList`, `congressHouseVoteList`, `senateVoteList`, `congressLegislators`, `congressLegislatorsExecutive`, `memberPhotos`, and `federalRegisterDocuments`. The second and third are in [votes](votes.md). The fourth to sixth are in [roster](roster.md). The last is in [executive actions](executive-actions.md). The `ApiParser` JSON converter is registered in `ConfigurationJson`, which also serves the configuration snapshots.
 
 A Congress.gov source that sets `apiParser` also sets `credential`, `minimumCongress` (1 or more), and `backfillFrom`. Configuration allows these fields only with mode `api`. Null fields stay out of revision snapshots, so existing revision IDs do not change.
 

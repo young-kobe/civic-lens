@@ -13,7 +13,17 @@ public static class PublishedRecordLabels
         PublishedRecordKind.Brief => "Weekly brief",
         PublishedRecordKind.Vote => "Vote",
         PublishedRecordKind.Relationship => "Relationship",
+        PublishedRecordKind.ExecutiveAction => "Executive action",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no label.")
+    };
+
+    public static string ExecutiveActionKind(PublishedExecutiveActionKind kind) => kind switch
+    {
+        PublishedExecutiveActionKind.ExecutiveOrder => "Executive order",
+        PublishedExecutiveActionKind.Proclamation => "Proclamation",
+        PublishedExecutiveActionKind.Notice => "Notice",
+        PublishedExecutiveActionKind.Memorandum => "Memorandum",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Executive action kind has no label.")
     };
 
     public static string ReportCategory(string category) => category switch

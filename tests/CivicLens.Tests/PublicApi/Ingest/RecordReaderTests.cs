@@ -29,6 +29,18 @@ public sealed class RecordReaderTests
     }
 
     [Fact]
+    public void AnExecutiveActionIndexesNoSummaryAndItsSavedRecordAsSourceSoSearchAcceptsTheNewKind()
+    {
+        var sample = PublishedSamples.ExecutiveAction("Ending the Weaponization", "Tail text.");
+
+        var read = Read(sample);
+
+        Assert.Equal(PublishedRecordKind.ExecutiveAction, read.Entry.Kind);
+        Assert.Equal("", read.Summary);
+        Assert.EndsWith("Tail text.", read.Source);
+    }
+
+    [Fact]
     public void AnActionIndexesItsSummaryAndBillTitleAsSummaryAndItsSourcesAsSource()
     {
         var read = Read(PublishedSamples.Action("Doe sponsors a bill", "Doe sponsored it.", "A housing bill", "Sponsor: D000001"));
