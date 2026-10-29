@@ -28,13 +28,13 @@ x-host: &host
 
 x-postgres: &postgres
   image: postgres:18.3-alpine@sha256:54451ecb8ab38c24c3ec123f2fd501303a3a1856a5c66e98cecf2460d5e1e9d7
-  user: "10001:10001"
   restart: unless-stopped
   healthcheck:
-    test: ["CMD-SHELL", "pg_isready --username=$$POSTGRES_USER --dbname=$$POSTGRES_DB"]
+    test: ["CMD-SHELL", "pg_isready --host=127.0.0.1 --username=$$POSTGRES_USER --dbname=$$POSTGRES_DB"]
     interval: 10s
     timeout: 5s
     retries: 5
+    start_period: 60s
 
 services:
   postgres:
@@ -72,6 +72,7 @@ services:
       - ${CIVIC_LENS_ROOT:?}/env/search.secret.env
     environment:
       ASPNETCORE_URLS: http://127.0.0.1:${CIVIC_LENS_API_PORT:?}
+      CIVIC_LENS_RELEASE_BASE_URL: http://127.0.0.1:${CIVIC_LENS_CADDY_PORT:?}/
     depends_on:
       search-postgres:
         condition: service_healthy

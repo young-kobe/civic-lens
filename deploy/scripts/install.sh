@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# shellcheck source=common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 service_uid=10001
+postgres_uid=70
 
 if [[ $EUID -ne 0 ]]; then
   echo "Run this script with sudo." >&2
@@ -13,9 +13,9 @@ fi
 install -d -m 755 "$CIVIC_LENS_ROOT" "$CIVIC_LENS_ROOT/config"
 install -d -m 700 "$CIVIC_LENS_ROOT/env"
 install -d -m 755 -o "$service_uid" -g "$service_uid" "$CIVIC_LENS_ROOT/captures" "$CIVIC_LENS_ROOT/releases"
-install -d -m 700 -o "$service_uid" -g "$service_uid" \
-  "$CIVIC_LENS_ROOT/review-keys" "$CIVIC_LENS_ROOT/postgres" \
-  "$CIVIC_LENS_ROOT/postgres/operational" "$CIVIC_LENS_ROOT/postgres/search"
+install -d -m 700 -o "$service_uid" -g "$service_uid" "$CIVIC_LENS_ROOT/review-keys"
+install -d -m 755 "$CIVIC_LENS_ROOT/postgres"
+install -d -m 700 -o "$postgres_uid" -g "$postgres_uid" "$CIVIC_LENS_ROOT/postgres/operational" "$CIVIC_LENS_ROOT/postgres/search"
 
 for template in "$deploy_directory"/env/*.env.example; do
   target="$CIVIC_LENS_ROOT/env/$(basename "${template%.example}")"

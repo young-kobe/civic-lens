@@ -1,4 +1,3 @@
-# shellcheck shell=bash
 # Sourced by the other scripts. It owns the default root and the compose call.
 CIVIC_LENS_ROOT=${CIVIC_LENS_ROOT:-/srv/civic-lens}
 export CIVIC_LENS_ROOT

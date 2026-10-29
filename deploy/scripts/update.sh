@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# shellcheck source=common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 tag=${1:?Usage: update.sh <full commit SHA of the images>}
@@ -15,9 +14,17 @@ if ! grep -q '^CIVIC_LENS_IMAGE_TAG=' "$tag_file"; then
   exit 1
 fi
 
+repository=$(dirname "$deploy_directory")
+checkout=$(git -c safe.directory="$repository" -C "$repository" rev-parse HEAD)
+if [[ $checkout != "$tag" ]]; then
+  echo "The checkout is at $checkout. Check out $tag first, because the compose file and the Caddyfile come from the checkout." >&2
+  exit 1
+fi
+
 export CIVIC_LENS_IMAGE_TAG=$tag
 compose pull
 compose run --rm cli db migrate
-compose up --detach --remove-orphans
 sed -i "s/^CIVIC_LENS_IMAGE_TAG=.*/CIVIC_LENS_IMAGE_TAG=$tag/" "$tag_file"
+compose up --detach --remove-orphans
+compose up --detach --force-recreate caddy
 echo "Running images tagged $tag."
