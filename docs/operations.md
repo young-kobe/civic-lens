@@ -952,7 +952,7 @@ This section is for the temporary production machine, a Jetson with Docker Compo
 2. Run `sudo deploy/scripts/install.sh`. It creates the directories under `/srv/civic-lens` and the env files from the templates.
 3. Fill in the env files in `/srv/civic-lens/env`, and put `collection.json` and `issues.json` in `/srv/civic-lens/config`.
    The `api` sources in `config/federal-coverage.json` ship with `enabled: false`. Without them the site has no bills, votes, roster, or photos, so nothing publishes. Set `enabled` to `true` for `congress-members`, `congress-bills`, `congress-house-votes`, `senate-votes`, `member-photos`, and `executive-officials`. The two Congress.gov sources need `CIVIC_LENS_CONGRESS_API_KEY` in `host.secret.env`. See [Congress.gov bill stream](#congressgov-bill-stream) and [Member roster](#member-roster). The Host refuses a configuration file over 1 MB, and added indentation can push this file past that limit. So save it compact.
-   The file also holds two White House feed sources, `donald-trump-briefings-feed` and `donald-trump-remarks-feed`, which ship enabled. A deploy that already has a `collection.json` must copy these two lines and the `house-main` profile into it, or copy the new file. The worker then collects the President's statements for review. Do not add the presidential actions feed.
+   The file also holds two White House feed sources, `donald-trump-briefings-feed` and `donald-trump-remarks-feed`, which ship enabled. Do not add the presidential actions feed.
 4. Create the tunnel (see [Tunnel](#tunnel)) and the restic password file and repository (see [Backups](#backups)).
 5. Run `sudo deploy/scripts/update.sh <full-commit-sha>`.
 6. Set up Tailscale for the review workspace (see [Review workspace access](#review-workspace-access)).
@@ -960,6 +960,8 @@ This section is for the temporary production machine, a Jetson with Docker Compo
 8. Run `sudo deploy/scripts/check-live.sh`. See [Go-live checks](#go-live-checks).
 
 Do step 5 only after step 4. Without the credential file, the cloudflared container cannot start.
+
+On an existing deploy, copy the two White House source lines into `/srv/civic-lens/config/collection.json`, then restart the worker. A restart reads the configuration again.
 
 ### Go-live checks
 
