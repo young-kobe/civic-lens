@@ -21,7 +21,7 @@ public sealed class VoteviewVoteReaderTests
     }
 
     [Fact]
-    public async Task TheKindAndTheFactsComeFromTheQuestionAndTheSenateFactLinesSoAVoteviewVoteIsClassifiedLikeASenateGovVote()
+    public async Task TheKindAndTheFactsComeFromTheQuestionAndTheSenateFactLinesSoAVoteviewVoteIsClassifiedLikeAnOfficialSenateVote()
     {
         var world = Create();
 

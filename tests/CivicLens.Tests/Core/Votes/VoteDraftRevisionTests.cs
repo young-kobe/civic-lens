@@ -18,7 +18,6 @@ public sealed class VoteDraftRevisionTests
     }
 
     [Theory]
-    [InlineData(Chamber.House, VoteSource.SenateGov)]
     [InlineData(Chamber.House, VoteSource.Voteview)]
     [InlineData(Chamber.Senate, VoteSource.CongressGov)]
     [InlineData(Chamber.Senate, (VoteSource)9)]

@@ -14,6 +14,7 @@ public enum ApiResource
     HouseVoteList,
     HouseVoteDetail,
     HouseVoteMembers,
+    /// <summary>Retired: stored job definitions still name it. Preparation blocks such a job.</summary>
     SenateVoteMenu,
     SenateVote,
     VoteviewRollCalls,

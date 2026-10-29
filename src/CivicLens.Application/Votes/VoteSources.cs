@@ -10,7 +10,6 @@ public static class VoteSources
     public static VoteSource Of(WatchedSourceConfiguration source) => source.ApiParser switch
     {
         ApiParser.CongressHouseVoteList => VoteSource.CongressGov,
-        ApiParser.SenateVoteList => VoteSource.SenateGov,
         ApiParser.VoteviewSenateVoteList => VoteSource.Voteview,
         _ => throw new ArgumentException($"Source '{source.Id}' is not a vote source.", nameof(source))
     };

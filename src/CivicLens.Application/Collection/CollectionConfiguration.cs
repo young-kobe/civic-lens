@@ -1,7 +1,6 @@
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.Jobs;
-using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Issues;
 using CivicLens.Collection.Contracts;
@@ -74,7 +73,7 @@ public sealed record CollectionConfiguration
         if (Sources.Where(source => CoversNoPeople(source?.ApiParser)).GroupBy(source => source.ApiParser).Any(kind => kind.Count() > 1))
             throw new ArgumentException("A configuration may have only one roster or photo source of each kind.");
 
-        if (Sources.Count(source => source is { Enabled: true } && IsSenateVoteSource(source.ApiParser)) > 1)
+        if (Sources.Count(source => source is { Enabled: true, ApiParser: ApiParser.VoteviewSenateVoteList }) > 1)
             throw new ArgumentException("A configuration may enable only one Senate vote source.");
 
         var sourceUrls = new HashSet<Uri>();
@@ -103,8 +102,6 @@ public sealed record CollectionConfiguration
             source.AdmissionPolicy?.Validate();
             if (source.ApiParser is ApiParser.CongressBillList or ApiParser.CongressHouseVoteList)
                 ValidateListAdmissionCapacity(source, ApiPageQuery.PageLimit + 1);
-            if (source.ApiParser == ApiParser.SenateVoteList)
-                ValidateListAdmissionCapacity(source, SenateVoteMenuParser.MaximumVotes + 1);
             if (source.ApiParser == ApiParser.VoteviewSenateVoteList)
                 ValidateListAdmissionCapacity(source, VoteviewFollowOnJobs);
             if (source.ApiParser == ApiParser.MemberPhotos)
@@ -136,7 +133,7 @@ public sealed record CollectionConfiguration
     {
         IEnumerable<string> ids = source.ApiParser switch
         {
-            ApiParser.CongressBillList or ApiParser.CongressHouseVoteList or ApiParser.SenateVoteList or ApiParser.VoteviewSenateVoteList => asOf < source.BackfillFrom ? [] : BioguidePersonIds(),
+            ApiParser.CongressBillList or ApiParser.CongressHouseVoteList or ApiParser.VoteviewSenateVoteList => asOf < source.BackfillFrom ? [] : BioguidePersonIds(),
             ApiParser.CongressLegislators or ApiParser.CongressLegislatorsExecutive or ApiParser.MemberPhotos => [],
             null => source.Coverage!.Where(coverage => new DateRange(coverage.StartsOn, coverage.EndsBefore).Contains(asOf))
                 .Select(coverage => coverage.PersonId),
@@ -181,8 +178,11 @@ public sealed record CollectionConfiguration
                 ValidateCongressApiSource(source);
                 break;
             case ApiParser.SenateVoteList:
+                if (source.Enabled)
+                    throw new ArgumentException($"Source '{source.Id}' uses the retired senate.gov parser and cannot be enabled.");
+                break;
             case ApiParser.VoteviewSenateVoteList:
-                ValidateSenateVoteSource(source);
+                ValidateVoteviewSource(source);
                 break;
             case ApiParser.CongressLegislators:
             case ApiParser.CongressLegislatorsExecutive:
@@ -195,9 +195,6 @@ public sealed record CollectionConfiguration
     }
 
     private const int VoteviewFollowOnJobs = 2;
-
-    private static bool IsSenateVoteSource(ApiParser? parser) =>
-        parser is ApiParser.SenateVoteList or ApiParser.VoteviewSenateVoteList;
 
     private static bool CoversNoPeople(ApiParser? parser) => IsRosterFile(parser) || parser == ApiParser.MemberPhotos;
 
@@ -221,7 +218,7 @@ public sealed record CollectionConfiguration
         ValidateSessionWindow(source);
     }
 
-    private static void ValidateSenateVoteSource(WatchedSourceConfiguration source)
+    private static void ValidateVoteviewSource(WatchedSourceConfiguration source)
     {
         if (source.Credential is not null)
             throw new ArgumentException($"Source '{source.Id}' reads public files and cannot set a credential.");

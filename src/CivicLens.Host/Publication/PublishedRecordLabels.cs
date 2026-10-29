@@ -56,7 +56,6 @@ public static class PublishedRecordLabels
     public static string VoteSource(PublishedVoteSource source) => source switch
     {
         PublishedVoteSource.CongressGov => "Congress.gov House vote data, from the House Clerk",
-        PublishedVoteSource.SenateGov => "senate.gov vote file",
         PublishedVoteSource.Voteview => Voteview + " (voteview.com)",
         _ => throw new ArgumentOutOfRangeException(nameof(source), source, "Vote source has no label.")
     };

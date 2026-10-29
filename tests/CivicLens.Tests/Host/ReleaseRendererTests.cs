@@ -603,7 +603,6 @@ public sealed class ReleaseRendererTests
 
     [Theory]
     [InlineData(PublishedChamber.House, PublishedVoteSource.CongressGov, "Congress.gov House vote data", "https://clerk.house.gov/Votes/2025100")]
-    [InlineData(PublishedChamber.Senate, PublishedVoteSource.SenateGov, "senate.gov vote file", "https://www.senate.gov/legislative/LIS/roll_call_votes/vote1191/vote_119_1_00100.htm")]
     [InlineData(PublishedChamber.Senate, PublishedVoteSource.Voteview, "Voteview, an academic database at UCLA (voteview.com)", "https://www.senate.gov/legislative/LIS/roll_call_votes/vote1191/vote_119_1_00100.htm")]
     public async Task TheVotePageNamesItsDataSourceAndLinksTheOfficialRollCallPageSoAReaderCanCheckItAtTheChamber(
         PublishedChamber chamber, PublishedVoteSource source, string expectedSource, string expectedLink)
@@ -965,7 +964,7 @@ public sealed class ReleaseRendererTests
         var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None)).QuerySelector("main")!.TextContent;
 
         Assert.Contains("Senate votes come from Voteview, an academic database at UCLA", text, StringComparison.Ordinal);
-        Assert.Contains("Some older Senate votes may come from senate.gov. Each vote page names its source.", text, StringComparison.Ordinal);
+        Assert.Contains("Each vote page also links the official roll call page on senate.gov.", text, StringComparison.Ordinal);
         Assert.Contains("Voteview does not list a Vice President tie-break vote", text, StringComparison.Ordinal);
     }
 

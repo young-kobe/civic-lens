@@ -1,7 +1,6 @@
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Votes;
 using CivicLens.Infrastructure.Collection;
-using CivicLens.Infrastructure.Collection.Jobs.Persistence;
 using CivicLens.Infrastructure.Collection.Votes;
 using CivicLens.Infrastructure.Votes.Persistence;
 
@@ -17,9 +16,6 @@ internal static class VoteDraftQueueRows
         CreatedAtUtcTicks = nowTicks,
         Priority = priority
     });
-
-    public static IQueryable<VoteCandidateRow> OfEnabledSources(this IQueryable<VoteCandidateRow> candidates, CollectionAttemptDbContext db) =>
-        candidates.Where(candidate => !db.Set<CollectionScheduleRow>().Any(schedule => schedule.SourceId == candidate.SourceId && !schedule.Enabled));
 
     public static IQueryable<VoteCandidateRow> WaitingForBill(CollectionAttemptDbContext db) =>
         db.Set<VoteCandidateRow>().Where(candidate => candidate.BillType != null &&

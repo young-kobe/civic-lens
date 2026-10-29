@@ -51,7 +51,6 @@ internal static class PublishedVoteView
     public static string SavedData(PublishedVote vote) => vote.Source switch
     {
         PublishedVoteSource.Voteview => "Voteview files",
-        PublishedVoteSource.SenateGov => "senate.gov vote file",
         PublishedVoteSource.CongressGov => "Congress.gov API page",
         _ => throw new ArgumentOutOfRangeException(nameof(vote), vote.Source, "Vote source has no saved data name.")
     };

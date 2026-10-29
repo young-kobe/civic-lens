@@ -4,20 +4,16 @@ using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
-using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Application.Collection.Votes;
 using CivicLens.Application.Collection.VoteviewVotes;
 using CivicLens.Application.Documents;
-using CivicLens.Application.Roster;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Votes;
 
 namespace CivicLens.Application.Votes;
 
-public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore roster, ApiResponseReader responses, string artifactRoot)
+public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader responses, string artifactRoot)
 {
-    private sealed record RosterLisIds(Dictionary<string, string> Tracked, HashSet<string> Known);
-
     private sealed record ChamberRead(DateOnly Day, string[] DetailPrefixes, ImmutableArray<MemberVote> Members);
 
     public async Task<VoteRead> ReadAsync(VoteDraftEvidence evidence, CancellationToken cancellationToken)
@@ -39,7 +35,6 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
         VoteSources.Of(SourceOf(evidence)) switch
         {
             VoteSource.CongressGov => ReadHouseClerkAsync(evidence, cancellationToken),
-            VoteSource.SenateGov => ReadSenateGovAsync(evidence, cancellationToken),
             VoteSource.Voteview => ReadVoteviewAsync(evidence, cancellationToken),
             var source => throw new ArgumentOutOfRangeException(nameof(evidence), source, "Vote source has no reader.")
         };
@@ -61,23 +56,6 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
         return (new(day, VoteFactPrefixes.Detail, HouseMemberVotesOf(evidence.Members, members, tracked)), null);
     }
 
-    private async Task<(ChamberRead?, string? Error)> ReadSenateGovAsync(VoteDraftEvidence evidence, CancellationToken cancellationToken)
-    {
-        var candidate = evidence.Candidate;
-        var page = evidence.Detail;
-        if (page.ExtractionVersion != SenateVoteParser.ExtractionVersion)
-            return (null, VoteDraftErrorCodes.ExtractionVersionChanged);
-        var roll = new SenateVoteRoll(new VoteSession(candidate.Congress, candidate.SessionNumber), candidate.RollCallNumber);
-        var detail = SenateVoteParser.Parse((await LoadAsync(page.JobId, cancellationToken)).Body, roll);
-        if (TextError(page, SenateVoteRenderer.Render(detail)) is { } textError) return (null, textError);
-        var day = DateOnly.FromDateTime(detail.VoteDate.DateTime);
-        var tracked = TrackedOn(evidence, day);
-        var lisIds = await LisIdsOfAsync(evidence, tracked, cancellationToken);
-        if (lisIds is null || detail.Members.Any(member => !lisIds.Known.Contains(member.LisId)))
-            return (null, VoteDraftErrorCodes.EvidenceUnavailable);
-        return (new(day, VoteFactPrefixes.SenateDetail, SenateMemberVotesOf(page, detail, tracked, lisIds.Tracked)), null);
-    }
-
     private async Task<(ChamberRead?, string? Error)> ReadVoteviewAsync(VoteDraftEvidence evidence, CancellationToken cancellationToken)
     {
         var candidate = evidence.Candidate;
@@ -95,24 +73,6 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
             return (null, VoteDraftErrorCodes.RenderedTextMismatch);
         var tracked = TrackedOn(evidence, rollCall.Date);
         return (new(rollCall.Date, VoteFactPrefixes.SenateDetail, VoteviewMemberVotesOf(page, roll, tracked)), null);
-    }
-
-    private async Task<RosterLisIds?> LisIdsOfAsync(VoteDraftEvidence evidence, PersonConfiguration[] tracked,
-        CancellationToken cancellationToken)
-    {
-        var rosterSource = evidence.ConfigurationRevision.Configuration.RosterSourceOf(ApiParser.CongressLegislators);
-        if (rosterSource is null) return null;
-        var trackedIds = tracked.Select(person => person.BioguideId!).ToHashSet(StringComparer.Ordinal);
-        var all = await roster.ReadSenatorLisIdsAsync(rosterSource.Id, cancellationToken);
-        var senators = all.Where(item => trackedIds.Contains(item.BioguideId)).GroupBy(item => item.BioguideId);
-        var lisIds = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var senator in senators)
-        {
-            var ids = senator.Select(item => item.LisId).Where(id => id is not null).Distinct(StringComparer.Ordinal).ToArray();
-            if (ids.Length != 1) return null;
-            lisIds[senator.Key] = ids[0]!;
-        }
-        return new(lisIds, [.. all.Select(item => item.LisId).OfType<string>()]);
     }
 
     private static WatchedSourceConfiguration SourceOf(VoteDraftEvidence evidence) =>
@@ -161,16 +121,6 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
         return [.. roll.Votes.Join(tracked, vote => vote.Member.BioguideId, person => person.BioguideId,
                 (vote, person) => new MemberVote(person.Id, vote.Member.BioguideId, RenderedText.SingleLine(vote.Cast), citations[VoteviewRenderer.MemberLineOf(vote)]))
             .OrderBy(vote => vote.BioguideId, StringComparer.Ordinal)];
-    }
-
-    private static ImmutableArray<MemberVote> SenateMemberVotesOf(VoteDraftPage page, SenateVoteDetail detail, PersonConfiguration[] tracked,
-        Dictionary<string, string> lisIds)
-    {
-        var citations = LineCitations.ExactLines(page.ExtractionId, page.Text);
-        var people = tracked.Where(person => lisIds.ContainsKey(person.BioguideId!));
-        return [.. detail.Members.Join(people, member => member.LisId, person => lisIds[person.BioguideId!],
-                (member, person) => new MemberVote(person.Id, person.BioguideId!, RenderedText.SingleLine(member.VoteCast), citations[SenateVoteRenderer.MemberLine(member)]))
-            .DistinctBy(vote => vote.BioguideId).OrderBy(vote => vote.BioguideId, StringComparer.Ordinal)];
     }
 
     private async Task<CongressBill> LoadBillAsync(VoteDraftPage page, CancellationToken cancellationToken)

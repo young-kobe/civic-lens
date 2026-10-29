@@ -32,8 +32,8 @@ public sealed class VoteDraftPromptGoldenTests
     [Fact]
     public async Task TheSenatePromptNamesTheSenateAndItsSourcesWhileTheHouseGoldenAbovePinsTheHouseBytes()
     {
-        var world = SenateVoteWorld.Create(question: "On the Nomination", document: SenateVoteWorld.NominationDocument);
-        var snapshot = (await world.Reader(SenateVoteWorld.Senators()).ReadAsync(world.Evidence(), default)).Snapshot!;
+        var world = VoteviewVoteWorld.Create();
+        var snapshot = (await world.Reader().ReadAsync(world.Evidence(), default)).Snapshot!;
 
         var request = VoteDraftPrompt.Build(snapshot, VoteDraftTask.MaximumPromptBytes)!;
 

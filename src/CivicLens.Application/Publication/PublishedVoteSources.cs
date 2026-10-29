@@ -8,7 +8,6 @@ public static class PublishedVoteSources
     public static PublishedVoteSource Of(VoteSource source) => source switch
     {
         VoteSource.CongressGov => PublishedVoteSource.CongressGov,
-        VoteSource.SenateGov => PublishedVoteSource.SenateGov,
         VoteSource.Voteview => PublishedVoteSource.Voteview,
         _ => throw new ArgumentOutOfRangeException(nameof(source), source, "Vote source has no published form.")
     };

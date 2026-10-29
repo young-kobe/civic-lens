@@ -6,7 +6,6 @@ using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.MemberPhotos;
 using CivicLens.Application.Collection.Processing;
-using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Application.Collection.VoteviewVotes;
 using CivicLens.Application.Collection.Votes;
 using CivicLens.Application.Documents;
@@ -30,8 +29,6 @@ public sealed class JobPreparationTests
     private const string SummariesUrl = SourceUrl + "/119/hr/1/summaries?format=json&limit=1";
     private const string VoteListUrl = HouseVoteFixtures.SourceUrl + "/119/1?format=json&limit=250";
     private const string VoteDetailUrl = HouseVoteFixtures.SourceUrl + "/119/1/100?format=json";
-    private const string SenateMenuUrl = SenateVoteFixtures.SourceUrl + "/roll_call_lists/vote_menu_119_1.xml";
-    private const string SenateVoteUrl = SenateVoteFixtures.SourceUrl + "/roll_call_votes/vote1191/vote_119_1_00001.xml";
     private const string VoteMembersUrl = HouseVoteFixtures.SourceUrl + "/119/1/100/members?format=json";
     private static readonly DateOnly Backfill = new(2025, 1, 3);
     private static readonly string ListUrl = new BillStreamWindow(Backfill, Backfill).RequestUrl(SourceUrl);
@@ -283,8 +280,6 @@ public sealed class JobPreparationTests
         { ApiResource.HouseVoteList, VoteListUrl, """{"houseRollCallVotes":[],"pagination":{}}""" },
         { ApiResource.HouseVoteDetail, VoteDetailUrl, HouseVoteFixtures.Detail() },
         { ApiResource.HouseVoteMembers, VoteMembersUrl, HouseVoteFixtures.Members() },
-        { ApiResource.SenateVoteMenu, SenateMenuUrl, Encoding.UTF8.GetString(SenateVoteFixtures.Menu()) },
-        { ApiResource.SenateVote, SenateVoteUrl, Encoding.UTF8.GetString(SenateVoteFixtures.Vote()) },
         { ApiResource.VoteviewRollCalls, VoteviewUrl.File(VoteviewVoteFixtures.SourceUrl, ApiResource.VoteviewRollCalls, 119), VoteviewVoteFixtures.DefaultRollCalls },
         { ApiResource.VoteviewMembers, VoteviewUrl.File(VoteviewVoteFixtures.SourceUrl, ApiResource.VoteviewMembers, 119), VoteviewVoteFixtures.DefaultMembers },
         { ApiResource.VoteviewVotes, VoteviewUrl.File(VoteviewVoteFixtures.SourceUrl, ApiResource.VoteviewVotes, 119), VoteviewVoteFixtures.DefaultVotes },
@@ -292,31 +287,6 @@ public sealed class JobPreparationTests
         { ApiResource.ExecutiveRoster, ExecutiveFixtures.SourceUrl, ExecutiveFixtures.Json },
         { ApiResource.MemberPhoto, MemberPhotoFixtures.PhotoUrl(), "the photo fixture replaces this text" }
     };
-
-    [Fact]
-    public async Task ASenateMenuIsParsedAgainstTheSessionOfItsUrlAndPassedToTheStoreWithItsJob()
-    {
-        var result = await Prepare(ApiResource.SenateVoteMenu, SenateMenuUrl, Encoding.UTF8.GetString(SenateVoteFixtures.Menu()), null);
-
-        Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
-        var call = Assert.Single(votes.SenateMenus);
-        Assert.Equal(("job", 2), (call.JobId, call.Menu.Votes.Count));
-        Assert.Empty(extractions.Saved);
-    }
-
-    [Fact]
-    public async Task ASenateVoteIsExtractedOnceAndTheStoreGetsThatExtractionSoTheCandidateBindsTheExactEvidence()
-    {
-        var result = await Prepare(ApiResource.SenateVote, SenateVoteUrl, Encoding.UTF8.GetString(SenateVoteFixtures.Vote()), null);
-
-        Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
-        var saved = Assert.Single(extractions.Saved);
-        Assert.Equal("attempt", saved.SourceAttempt.AttemptId);
-        AssertPinned(saved, "congress-senate-vote-v1", "SenateVoteParser.ExtractionVersion",
-            saved.Text.Contains("\nMember: S428, Angela Alsobrooks, D, MD, Yea\n", StringComparison.Ordinal));
-        var call = Assert.Single(votes.SenateVotes);
-        Assert.Equal(("job", SenateVoteFixtures.Roll1, saved.ExtractionId), (call.JobId, call.Vote.Roll, call.ExtractionId));
-    }
 
     [Fact]
     public async Task AFinishedRollCallsJobAsksTheStoreForItsFollowOnJobsAndReadsNoBody()
@@ -372,13 +342,6 @@ public sealed class JobPreparationTests
         Assert.Empty(bodyReads);
         Assert.Empty(extractions.Saved);
         Assert.Empty(votes.VoteviewVotes);
-    }
-
-    [Fact]
-    public async Task ASenateVoteFileForAnotherRollThanItsUrlIsRefused()
-    {
-        await Assert.ThrowsAsync<InvalidDataException>(() =>
-            Prepare(ApiResource.SenateVote, SenateVoteUrl, Encoding.UTF8.GetString(SenateVoteFixtures.Vote(voteNumber: "2")), null));
     }
 
     [Fact]
@@ -592,10 +555,25 @@ public sealed class JobPreparationTests
         Assert.Empty(roster.Photos);
     }
 
+    private static readonly ApiResource[] RetiredResources = [ApiResource.SenateVoteMenu, ApiResource.SenateVote];
+
+    [Theory]
+    [InlineData(ApiResource.SenateVoteMenu)]
+    [InlineData(ApiResource.SenateVote)]
+    public async Task AJobOfARetiredSenateGovResourceIsBlockedBecauseNoReaderRemainsAndStoredJobsStillParse(ApiResource resource)
+    {
+        var result = await Prepare(resource, SourceUrl, "<xml/>", null);
+
+        Assert.Equal(EvidenceStatus.Blocked, result!.Status);
+        Assert.Equal("retiredApiResource", result.ErrorCode);
+        Assert.Empty(bodyReads);
+        Assert.Empty(extractions.Saved);
+    }
+
     [Fact]
     public void EveryApiResourceHasACaseInTheNeverExtractedTheory()
     {
-        var covered = EveryResource.Select(row => (ApiResource?)row[0]).OfType<ApiResource>();
+        var covered = EveryResource.Select(row => (ApiResource?)row[0]).OfType<ApiResource>().Concat(RetiredResources);
 
         Assert.Equal(Enum.GetValues<ApiResource>().Order(), covered.Order());
     }
@@ -635,15 +613,15 @@ public sealed class JobPreparationTests
             ApiResource.MemberPhoto => new ConfiguredCollectionSource(
                 MemberPhotoFixtures.Configuration(RosterFixtures.Person("a-person", "A Person", MemberPhotoFixtures.Bioguide)),
                 MemberPhotoFixtures.SourceId, Backfill),
-            ApiResource.SenateVoteMenu or ApiResource.SenateVote =>
-                new ConfiguredCollectionSource(SenateVoteFixtures.Configuration(), SenateVoteFixtures.SourceId, Backfill),
             ApiResource.VoteviewRollCalls or ApiResource.VoteviewMembers or ApiResource.VoteviewVotes =>
                 new ConfiguredCollectionSource(VoteviewVoteFixtures.Configuration(), VoteviewVoteFixtures.SourceId, Backfill),
             _ when IsHouseVote(resource) => new ConfiguredCollectionSource(HouseVoteFixtures.Configuration(), HouseVoteFixtures.SourceId, Backfill),
             _ => new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", Backfill)
         };
-        var definition = configured.CreateApiJobDefinition(resource ?? ApiResource.BillList, resource is null ? ListUrl : url, Backfill, CollectionJobPriority.Check);
-        if (resource is null) definition = definition with { ApiResource = null };
+        var isRetired = resource is { } named && RetiredResources.Contains(named);
+        var definition = configured.CreateApiJobDefinition(resource is null || isRetired ? ApiResource.BillList : resource.Value, resource is null || isRetired ? ListUrl : url,
+            Backfill, CollectionJobPriority.Check);
+        if (resource is null || isRetired) definition = definition with { ApiResource = resource };
         var attempt = new CollectionJobAttempt("attempt", definition.CreateRequest("job", Path.GetFullPath("captures")),
             new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
         var job = new CollectionJobRecord("job", definition, "key", CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,
@@ -758,23 +736,6 @@ public sealed class JobPreparationTests
         public List<(string JobId, HouseVote Vote)> Details { get; } = [];
         public List<(string JobId, HouseVote Vote)> Members { get; } = [];
         public List<string> ExtractionIds { get; } = [];
-        public List<(string JobId, SenateVoteMenu Menu)> SenateMenus { get; } = [];
-        public List<(string JobId, SenateVote Vote, string ExtractionId)> SenateVotes { get; } = [];
-
-        public Task<DiscoveryAdmissionResult> AdmitSenateMenuAsync(ConfiguredCollectionSource source, string menuJobId,
-            SenateVoteMenu menu, CancellationToken cancellationToken)
-        {
-            SenateMenus.Add((menuJobId, menu));
-            return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
-        }
-
-        public Task<DiscoveryAdmissionResult> AdmitSenateVoteAsync(ConfiguredCollectionSource source, string voteJobId,
-            SenateVote vote, string extractionId, CancellationToken cancellationToken)
-        {
-            SenateVotes.Add((voteJobId, vote, extractionId));
-            return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
-        }
-
         public List<(ApiResource Finished, string JobId, int Congress)> VoteviewFollowOns { get; } = [];
         public List<(VoteviewChain Chain, DateTimeOffset CapturedAt, IReadOnlyList<VoteviewRollExtraction> Rolls)> VoteviewVotes { get; } = [];
         public bool VoteviewBodiesKnown { get; set; }
@@ -946,9 +907,6 @@ public sealed class JobPreparationTests
             CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task<IReadOnlyList<CivicLens.Application.Roster.RosterMember>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
-
-        public Task<IReadOnlyList<CivicLens.Application.Roster.SenatorLisId>> ReadSenatorLisIdsAsync(string sourceId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }
 

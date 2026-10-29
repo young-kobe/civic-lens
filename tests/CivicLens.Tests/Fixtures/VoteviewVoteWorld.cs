@@ -57,7 +57,7 @@ internal sealed class VoteviewVoteWorld
     public static VoteviewVoteWorld Create() =>
         new(VoteviewVoteFixtures.DefaultRollCalls, VoteviewVoteFixtures.DefaultMembers, VoteviewVoteFixtures.DefaultVotes);
 
-    public VoteReader Reader() => new(Stores, new FixedMemberRoster([], []), new ApiResponseReader(Stores, Stores), "artifacts");
+    public VoteReader Reader() => new(Stores, new ApiResponseReader(Stores, Stores), "artifacts");
 
     public VoteDraftEvidence Evidence(string? savedText = null, string extractionVersion = VoteviewParser.ExtractionVersion, string? rosterJobId = MembersJob,
         int rollCall = 60)

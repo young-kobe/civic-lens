@@ -4,7 +4,7 @@ using CivicLens.Application.Roster;
 
 namespace CivicLens.Tests.Fixtures;
 
-internal sealed class FixedMemberRoster(RosterMember[] members, SenatorLisId[]? senators = null, OfficialPhoto[]? photos = null, Action? onPhotosRead = null) : IMemberRosterStore
+internal sealed class FixedMemberRoster(RosterMember[] members, OfficialPhoto[]? photos = null, Action? onPhotosRead = null) : IMemberRosterStore
 {
     public Task<bool> HasSnapshotOfCaptureAsync(string attemptId, CancellationToken cancellationToken) => throw new NotSupportedException();
 
@@ -24,9 +24,6 @@ internal sealed class FixedMemberRoster(RosterMember[] members, SenatorLisId[]? 
 
     public Task<IReadOnlyList<RosterMember>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<RosterMember>>(members);
-
-    public Task<IReadOnlyList<SenatorLisId>> ReadSenatorLisIdsAsync(string sourceId, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<SenatorLisId>>(senators ?? throw new NotSupportedException());
 }
 
 internal sealed class FixedExecutiveRoster(ExecutiveOfficial[] officials) : IExecutiveRosterStore

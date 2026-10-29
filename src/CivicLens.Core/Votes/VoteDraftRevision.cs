@@ -36,7 +36,7 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
         if (string.IsNullOrWhiteSpace(SourceId) || !Enum.IsDefined(Source) || !Enum.IsDefined(Chamber) || Congress < 1 || SessionNumber is not (1 or 2) || RollCallNumber < 1)
             throw new ArgumentException("A vote revision needs a source and a roll call identity.");
         if ((Chamber == Chamber.House) != (Source == VoteSource.CongressGov))
-            throw new ArgumentException("A House vote has the Congress.gov source and a Senate vote has the senate.gov or Voteview source.");
+            throw new ArgumentException("A House vote has the Congress.gov source and a Senate vote has the Voteview source.");
         if ((BillType is null) != (BillNumber is null) || BillType is not null && (string.IsNullOrWhiteSpace(BillType) || BillType.Length > MaximumBillTypeLength || BillNumber < 1))
             throw new ArgumentException($"A bill type has at most {MaximumBillTypeLength} characters and a number, and a number has a type.");
         if (TrackedIssueIds.IsDefault || TrackedIssueIds.Length > StatementDraftRevision.MaximumSelections)

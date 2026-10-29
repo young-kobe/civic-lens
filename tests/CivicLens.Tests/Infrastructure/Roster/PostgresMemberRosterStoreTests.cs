@@ -174,53 +174,6 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
     }
 
     [Fact]
-    public async Task SenatorLisIdsListOnlySenatorsFromEverySnapshotSoASenatorWhoLeftStillMatchesHisOldVotes()
-    {
-        var first = await ImportAsync('a', 0);
-        var later = await ImportAsync('b', 1);
-        await roster.AdmitAsync(first, RosterFixtures.Members(), null, default);
-        await roster.AdmitAsync(later, [.. RosterFixtures.Members().Skip(1)], null, default);
-
-        var senators = await roster.ReadSenatorLisIdsAsync(RosterFixtures.SourceId, default);
-
-        Assert.Equal([new SenatorLisId("C000127", "S275")], senators);
-        Assert.DoesNotContain(await roster.ReadLatestAsync(RosterFixtures.SourceId, default), member => member.BioguideId == "C000127");
-    }
-
-    [Fact]
-    public async Task ASenatorWithTwoLisIdsInTwoSnapshotsListsBothSoTheCallerCanRefuseTheConflict()
-    {
-        var first = await ImportAsync('a', 0);
-        var later = await ImportAsync('b', 1);
-        var members = RosterFixtures.Members();
-        await roster.AdmitAsync(first, members, null, default);
-        await roster.AdmitAsync(later, [members[0] with { LisId = "S999" }], null, default);
-
-        var senators = await roster.ReadSenatorLisIdsAsync(RosterFixtures.SourceId, default);
-
-        Assert.Equal([new SenatorLisId("C000127", "S275"), new SenatorLisId("C000127", "S999")], senators);
-    }
-
-    [Fact]
-    public async Task ASenatorWithoutALisIdListsWithANullIdSoTheCallerCanBlockInsteadOfSkippingHim()
-    {
-        var attemptId = await ImportAsync('a', 0);
-        var members = RosterFixtures.Members();
-        await roster.AdmitAsync(attemptId, [members[0] with { LisId = null }], null, default);
-
-        Assert.Equal([new SenatorLisId("C000127", null)], await roster.ReadSenatorLisIdsAsync(RosterFixtures.SourceId, default));
-    }
-
-    [Fact]
-    public async Task SenatorLisIdsOfOneSourceExcludeTheSnapshotsOfAnotherSource()
-    {
-        var attemptId = await ImportAsync('a', 0);
-        await roster.AdmitAsync(attemptId, RosterFixtures.Members(), null, default);
-
-        Assert.Empty(await roster.ReadSenatorLisIdsAsync("other-members", default));
-    }
-
-    [Fact]
     public async Task NoSnapshotReadsAsEmpty()
     {
         Assert.Empty(await roster.ReadLatestAsync(RosterFixtures.SourceId, default));
@@ -258,27 +211,11 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
         Assert.Equal(["Pending", "Blocked", "Blocked"], await StatusesAsync());
     }
 
-    [Fact]
-    public async Task ANewSnapshotLeavesTheSenateDraftsOfADisabledSourceBlockedSoASwitchedSourceNeverDraftsAgain()
-    {
-        await SeedBlockedVoteAsync('1', "Senate", "evidenceUnavailable");
-        await SeedBlockedVoteAsync('2', "Senate", "evidenceUnavailable", sourceId: "old-votes");
-        await ExecuteAsync($"""
-            SET session_replication_role = replica;
-            INSERT INTO collection_source_schedules (source_id, configuration_revision_id, interval_seconds, next_due_utc_ticks, enabled)
-            VALUES ('old-votes', '{new string('c', 64)}', 3600, 0, false), ('votes', '{new string('c', 64)}', 3600, 0, true)
-            """);
-
-        await roster.AdmitAsync(await ImportAsync('a', 0), RosterFixtures.Members(), null, default);
-
-        Assert.Equal(["Pending", "Blocked"], await StatusesAsync());
-    }
-
-    private Task SeedBlockedVoteAsync(char id, string chamber, string errorCode, string sourceId = "votes") => ExecuteAsync($"""
+    private Task SeedBlockedVoteAsync(char id, string chamber, string errorCode) => ExecuteAsync($"""
         SET session_replication_role = replica;
         INSERT INTO vote_candidates (candidate_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks,
             detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
-        VALUES ('{new string(id, 64)}', '{sourceId}', '{chamber}', 119, 1, {id}, 1, 'detail-{id}', 'members-{id}',
+        VALUES ('{new string(id, 64)}', 'votes', '{chamber}', 119, 1, {id}, 1, 'detail-{id}', 'members-{id}',
                 '{new string('c', 64)}', '{new string('c', 64)}', '{new string('c', 64)}', 1);
         INSERT INTO vote_analysis (candidate_id, task, status, error_code, fence, attempts, reserved_tokens, created_at_utc_ticks)
         VALUES ('{new string(id, 64)}', 'vote-draft', 'Blocked', '{errorCode}', 0, 1, 0, 1)

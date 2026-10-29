@@ -73,4 +73,22 @@ internal static class VoteviewVoteFixtures
         MaxBytes = 4_000_000,
         TimeoutSeconds = 30
     };
+
+    public static WatchedSourceConfiguration RetiredSenateGovSource(bool enabled) => new()
+    {
+        Id = "senate-votes",
+        Url = "https://www.senate.gov/legislative/LIS",
+        AllowedOrigin = "https://www.senate.gov",
+        AllowedPathPrefix = "/legislative/LIS",
+        Mode = CollectionMode.Api,
+        ApiParser = ApiParser.SenateVoteList,
+        MinimumCongress = 119,
+        BackfillFrom = Backfill,
+        Enabled = enabled,
+        AdmissionPolicy = new DiscoveryAdmissionPolicy(),
+        JobPolicy = new CollectionJobPolicy { MaxAttempts = 2 },
+        MaxRequests = 2,
+        MaxBytes = 1_000_000,
+        TimeoutSeconds = 10
+    };
 }

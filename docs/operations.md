@@ -181,68 +181,19 @@ WHERE c.detail_job_id IS NULL
 ORDER BY v.congress, v.session_number, v.roll_call_number;
 ```
 
-### Senate vote stream
-
-The source `senate-votes` in `config/federal-coverage.json` follows the Senate roll-call votes. senate.gov blocks the collector with a 403 now, so use the [Voteview Senate vote stream](#voteview-senate-vote-stream) instead. It ships with `enabled: false`, like the other `api` sources. It needs no key and no issue file for collection. Drafting needs the settings of [vote drafting](#vote-drafting). To enable it:
-
-1. Set `enabled` to `true` for `congress-members`. Restart the worker and wait for one roster snapshot. Without a snapshot with Senate `lis` IDs, each Senate draft blocks with `evidenceUnavailable`. A later snapshot requeues those drafts.
-2. Set `enabled` to `true` for `congress-bills`. A Senate vote on a bill waits for the detail of that bill.
-3. Set `enabled` to `true` for `senate-votes` and restart the worker. A restart reads the configuration again.
-
-To stop the source, set `enabled` to `false` and restart the worker.
-
-The first run reads the menus of the 119th Congress from `backfillFrom` 2025-01-03. It admits one job for each vote file. That is about 659 files for session 1 plus the votes of session 2 so far. The `senate.gov` pacing group spaces all senate.gov requests by 3 seconds. This includes the senator press sources, so they pace each other. Collection costs no money. Drafting costs about $0.00046 for each draft. Each day the sweep fetches again the votes of the last 30 days. [Votes](architecture/votes.md#senate-collection) holds the sweep rules.
-
-To check progress, run `jobs list` and `jobs get` as in [managed collection jobs](#managed-collection-jobs). Run `votes draft status` and `votes draft list pending 50` as in [vote drafting](#vote-drafting). To list the Senate drafts blocked by a roster gap, run this query:
-
-```sql
-SELECT v.congress, v.session_number, v.roll_call_number
-FROM vote_analysis e
-JOIN vote_candidates c ON c.candidate_id = e.candidate_id
-JOIN vote_versions v ON v.detail_job_id = c.detail_job_id AND v.session_number = c.session_number
-  AND v.roll_call_number = c.roll_call_number
-WHERE c.chamber = 'Senate' AND e.task = 'vote-draft'
-  AND e.status = 'Blocked' AND e.error_code = 'evidenceUnavailable'
-ORDER BY v.congress, v.session_number, v.roll_call_number;
-```
-
-Rows that stay after a fresh snapshot are the senator-left case or a conflict of `lis` IDs. A snapshot does not fix them.
-
-Known risks:
-
-- The Senate files give times with no zone. The parser assumes US Eastern time.
-- No en bloc or treaty vote file has been seen. A file that breaks a parser rule blocks its job.
-- A senator who left before the first roster snapshot has no `lis` ID in the roster. Early 119th Congress votes with such a senator stay blocked.
-
 ### Voteview Senate vote stream
 
-senate.gov blocks the collector with a 403, so the Senate votes come from Voteview. The source `voteview-senate-votes` in `config/federal-coverage.json` ships with `enabled: false`. A configuration may enable only one Senate vote source, so you turn `senate-votes` off in the same edit. Both sources keep the same public records. A switch back to senate.gov needs the same edit in the other direction.
+The Senate votes come from Voteview. senate.gov blocks the collector with a 403, so no other Senate vote source exists. The source `voteview-senate-votes` in `config/federal-coverage.json` ships with `enabled: false`. A configuration may enable only one Voteview source. The parser name `senateVoteList` still reads in a stored configuration, but no configuration can enable it.
 
 Do the steps on the machine that runs the worker. On production, this is `/srv/civic-lens/config/collection.json`. Production steps are for the owner to run.
 
 1. Check that `congress-bills` is enabled. A Senate vote on a bill waits for the detail of that bill. Check that `congress-members` is enabled. The roster gives the party of a senator who still serves.
-2. In the configuration file, set `enabled` to `false` for `senate-votes`. Set `enabled` to `true` for `voteview-senate-votes`. Keep the file compact, as the [first install](#first-install) says.
+2. In the configuration file, set `enabled` to `true` for `voteview-senate-votes`. Keep the file compact, as the [first install](#first-install) says.
 3. Stop the worker. On production, run `sudo deploy/scripts/compose.sh stop worker`.
-4. Check that no draft of the source that you turned off is Running. Replace `senate-votes` with `voteview-senate-votes` when you switch back to senate.gov. The result must be 0. If it is not 0, do not go on. Tell the owner.
+4. Start the worker, because it reads the configuration only at start. On production, run `sudo deploy/scripts/compose.sh up --detach worker`.
+5. Wait one day for the first full sweep. The sweep fetches the three files of the 119th Congress, about 3 MB, and then it makes a vote candidate for each roll call. Then run `jobs list` as in [managed collection jobs](#managed-collection-jobs) and `votes draft status` as in [vote drafting](#vote-drafting).
 
-```sql
-SELECT count(*) FROM vote_analysis e JOIN vote_candidates c ON c.candidate_id = e.candidate_id
-WHERE e.task = 'vote-draft' AND c.source_id = 'senate-votes' AND e.status = 'Running';
-```
-
-5. Block the drafts of that source that are already queued. Both sources write to the same `senate-votes` record, so a queued draft could append a revision to it. No command does this, so run the SQL below with `psql`. The bill detail step and the roster requeue skip a candidate whose source is disabled, so no new draft of that source is queued.
-
-```sql
-UPDATE vote_analysis e SET status = 'Blocked', error_code = 'sourceSwitched', retry_at = NULL
-FROM vote_candidates c
-WHERE c.candidate_id = e.candidate_id AND e.task = 'vote-draft' AND c.source_id = 'senate-votes'
-  AND e.status IN ('Pending', 'RetryWaiting', 'WaitingForBudget');
-```
-
-6. Start the worker, because it reads the configuration only at start. On production, run `sudo deploy/scripts/compose.sh up --detach worker`.
-
-To undo, turn the old source on again and the new one off, and restart the worker. Then run `votes draft requeue --blocked --code sourceSwitched` as in [vote drafting](#vote-drafting). That command moves every draft that step 5 blocked back to Pending.
-7. Wait one day for the first full sweep. The sweep fetches the three files of the 119th Congress, about 3 MB, and then it makes a vote candidate for each roll call. Then run `jobs list` as in [managed collection jobs](#managed-collection-jobs) and `votes draft status` as in [vote drafting](#vote-drafting).
+To stop the source, set `enabled` to `false` and restart the worker.
 
 What to watch:
 
@@ -1000,7 +951,7 @@ This section is for the temporary production machine, a Jetson with Docker Compo
 1. Install Docker with Compose v2. Clone the repository to `/opt/civic-lens` and check out the commit to deploy. The systemd units use this path. It must be on the root filesystem, because systemd loads the linked units at boot, before other disks mount.
 2. Run `sudo deploy/scripts/install.sh`. It creates the directories under `/srv/civic-lens` and the env files from the templates.
 3. Fill in the env files in `/srv/civic-lens/env`, and put `collection.json` and `issues.json` in `/srv/civic-lens/config`.
-   The `api` sources in `config/federal-coverage.json` ship with `enabled: false`. Without them the site has no bills, votes, roster, or photos, so nothing publishes. Set `enabled` to `true` for `congress-members`, `congress-bills`, `congress-house-votes`, `voteview-senate-votes`, `member-photos`, and `executive-officials`. Keep `senate-votes` off, because senate.gov blocks the collector; see [Voteview Senate vote stream](#voteview-senate-vote-stream). The two Congress.gov sources need `CIVIC_LENS_CONGRESS_API_KEY` in `host.secret.env`. See [Congress.gov bill stream](#congressgov-bill-stream) and [Member roster](#member-roster). The Host refuses a configuration file over 1 MB, and added indentation can push this file past that limit. So save it compact.
+   The `api` sources in `config/federal-coverage.json` ship with `enabled: false`. Without them the site has no bills, votes, roster, or photos, so nothing publishes. Set `enabled` to `true` for `congress-members`, `congress-bills`, `congress-house-votes`, `voteview-senate-votes`, `member-photos`, and `executive-officials`. See [Voteview Senate vote stream](#voteview-senate-vote-stream) for the Senate votes. The two Congress.gov sources need `CIVIC_LENS_CONGRESS_API_KEY` in `host.secret.env`. See [Congress.gov bill stream](#congressgov-bill-stream) and [Member roster](#member-roster). The Host refuses a configuration file over 1 MB, and added indentation can push this file past that limit. So save it compact.
    The file also holds two White House feed sources, `donald-trump-briefings-feed` and `donald-trump-remarks-feed`, which ship enabled. Do not add the presidential actions feed.
 4. Create the tunnel (see [Tunnel](#tunnel)) and the restic password file and repository (see [Backups](#backups)).
 5. Run `sudo deploy/scripts/update.sh <full-commit-sha>`.

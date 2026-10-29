@@ -2,7 +2,8 @@ using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Collection.HouseVotes;
-using CivicLens.Application.Collection.SenateVotes;
+using CivicLens.Application.Collection.Votes;
+using CivicLens.Application.Collection.VoteviewVotes;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Roster;
 using CivicLens.Core.Votes;
@@ -85,7 +86,6 @@ public sealed class PublishVoteTests
 
     [Theory]
     [InlineData(VoteSource.CongressGov, PublishedVoteSource.CongressGov)]
-    [InlineData(VoteSource.SenateGov, PublishedVoteSource.SenateGov)]
     [InlineData(VoteSource.Voteview, PublishedVoteSource.Voteview)]
     public async Task TheRecordNamesTheDataSourceOfItsRevisionSoAReaderKnowsWhoseDataTheCastsRestOn(VoteSource source, PublishedVoteSource expected)
     {
@@ -489,13 +489,12 @@ public sealed class PublishVoteTests
     }
 
     [Fact]
-    public async Task SenateLinesFromTheRealRendererPublishWithTheirTotalsAndParties()
+    public async Task VoteviewLinesFromTheRealRendererPublishWithTheirTotalsAndParties()
     {
-        var detail = new SenateVoteDetail(new(SenateVoteFixtures.Roll1, HouseVoteFixtures.Updated, null, null), HouseVoteFixtures.Updated, "On Passage", "Text", "Title",
-            "Passed", null, null, null, null, new(1, 1, 0, 0), [new("S9", "Ann", "Roe", "R", "AL", "Nay")]);
+        var text = VoteviewRenderer.Render(VoteviewRollOf(VoteviewMemberVoteOf("S1", "D", "Yea"), VoteviewMemberVoteOf("S9", "R", "Nay")));
         var scenario = new PublicationScenario();
-        var vote = scenario.AddVote('d', chamber: Chamber.Senate, trackedSourceId: "S1", totalLines: LinesOf(SenateVoteRenderer.Render(detail), "Count: "),
-            otherMemberLines: LinesOf(SenateVoteRenderer.Render(detail), "Member: "));
+        var vote = scenario.AddVote('d', chamber: Chamber.Senate, source: VoteSource.Voteview, trackedSourceId: "S1",
+            totalLines: LinesOf(text, "Count: "), otherMemberLines: [.. LinesOf(text, "Member: ").Where(line => !line.StartsWith("Member: S1,", StringComparison.Ordinal))]);
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
 
@@ -522,17 +521,13 @@ public sealed class PublishVoteTests
     }
 
     [Fact]
-    public async Task EachSenateCountLabelFromTheRealRendererPublishesIntoItsOwnTotal()
+    public async Task EachVoteviewCountLabelFromTheRealRendererPublishesIntoItsOwnTotal()
     {
-        SenateVoteMember[] members =
-        [
-            .. SenateMembers("A", "Yea", 3), .. SenateMembers("B", "Nay", 3), .. SenateMembers("C", "Present", 2), .. SenateMembers("D", "Not Voting", 1)
-        ];
-        var detail = new SenateVoteDetail(new(SenateVoteFixtures.Roll1, HouseVoteFixtures.Updated, null, null), HouseVoteFixtures.Updated, "On Passage", "Text", "Title",
-            "Passed", null, null, null, null, new(4, 3, 2, 1), members);
+        var text = VoteviewRenderer.Render(VoteviewRollOf([
+            VoteviewMemberVoteOf("S1", "D", "Yea"), .. VoteviewMembers("A", "Yea", 3), .. VoteviewMembers("B", "Nay", 3), .. VoteviewMembers("C", "Present", 2), .. VoteviewMembers("D", "Not Voting", 1)]));
         var scenario = new PublicationScenario();
-        var vote = scenario.AddVote('d', chamber: Chamber.Senate, trackedSourceId: "S1", totalLines: LinesOf(SenateVoteRenderer.Render(detail), "Count: "),
-            otherMemberLines: LinesOf(SenateVoteRenderer.Render(detail), "Member: "));
+        var vote = scenario.AddVote('d', chamber: Chamber.Senate, source: VoteSource.Voteview, trackedSourceId: "S1",
+            totalLines: LinesOf(text, "Count: "), otherMemberLines: [.. LinesOf(text, "Member: ").Where(line => !line.StartsWith("Member: S1,", StringComparison.Ordinal))]);
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
 
@@ -542,8 +537,15 @@ public sealed class PublishVoteTests
     private static HouseVoteMember[] Members(string idPrefix, string cast, int count) =>
         [.. Enumerable.Range(1, count).Select(index => new HouseVoteMember($"{idPrefix}{index}", "Ann", "Roe", "R", "AL", cast))];
 
-    private static SenateVoteMember[] SenateMembers(string idPrefix, string cast, int count) =>
-        [.. Enumerable.Range(1, count).Select(index => new SenateVoteMember($"{idPrefix}{index}", "Ann", "Roe", "R", "AL", cast))];
+    private static VoteviewMemberVote[] VoteviewMembers(string idPrefix, string cast, int count) =>
+        [.. Enumerable.Range(1, count).Select(index => VoteviewMemberVoteOf($"{idPrefix}{index}", "R", cast))];
+
+    private static VoteviewMemberVote VoteviewMemberVoteOf(string bioguideId, string party, string cast) =>
+        new(new VoteviewMember(bioguideId.GetHashCode(StringComparison.Ordinal), bioguideId, "Roe", party, "AL"), cast);
+
+    private static VoteviewRoll VoteviewRollOf(params VoteviewMemberVote[] votes) =>
+        new(new VoteviewRollCall(1, new SenateVoteRoll(new VoteSession(119, 1), 1), new DateOnly(2025, 4, 10), "On Passage", "Title", "Passed",
+            null, null, null, 0, 0), votes);
 
     private static string[] LinesOf(string text, string prefix) =>
         [.. text.Split('\n').Where(line => line.StartsWith(prefix, StringComparison.Ordinal))];
