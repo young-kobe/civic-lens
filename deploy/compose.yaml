@@ -116,6 +116,7 @@ services:
     volumes:
       - ${CIVIC_LENS_ROOT:?}/env/restic-password:/run/restic-password:ro
       - ${CIVIC_LENS_ROOT:?}/backup:${CIVIC_LENS_ROOT:?}/backup:ro
+      - ${CIVIC_LENS_ROOT:?}/config:${CIVIC_LENS_ROOT:?}/config:ro
       - ${CIVIC_LENS_ROOT:?}/captures:${CIVIC_LENS_ROOT:?}/captures:ro
       - ${CIVIC_LENS_ROOT:?}/releases:${CIVIC_LENS_ROOT:?}/releases:ro
 

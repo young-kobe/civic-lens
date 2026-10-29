@@ -986,7 +986,7 @@ No Terraform manages these steps. Check each one by hand.
 
 ### Backups
 
-A nightly systemd timer runs `deploy/scripts/backup.sh`. The script dumps the operational database with `pg_dump --format=custom` inside the Postgres container. Then it runs restic from the pinned official image. It backs up the dump, `captures/`, and `releases/`, in one snapshot. Then it keeps 7 daily, 4 weekly, and 6 monthly snapshots and prunes the rest. Restic encrypts the data before it leaves the machine. The repository is a Cloudflare R2 bucket.
+A nightly systemd timer runs `deploy/scripts/backup.sh`. The script dumps the operational database with `pg_dump --format=custom` inside the Postgres container. Then it runs restic from the pinned official image. It backs up the dump, `config/`, `captures/`, and `releases/`, in one snapshot. Then it keeps 7 daily, 4 weekly, and 6 monthly snapshots and prunes the rest. Restic encrypts the data before it leaves the machine. The repository is a Cloudflare R2 bucket.
 
 The backup does not hold the search database, because a publish rebuilds it. It does not hold env files, secrets, or Terraform state. It does not hold `review-keys/`. If the data-protection keys are lost, reviewers must sign in again. Nothing else breaks.
 
@@ -1017,7 +1017,7 @@ The first backup run by hand also proves the credentials. The timer runs at 03:3
 1. Stop the services that write: `sudo deploy/scripts/compose.sh stop worker review`.
 2. Restore the snapshot to a work directory: `sudo deploy/scripts/compose.sh run --rm -v /srv/restore:/restore restic restore latest --target /restore`. The files keep their full paths, for example `/srv/restore/srv/civic-lens/captures`.
 3. Restore the database. Start Postgres if it is down. Then run `sudo deploy/scripts/compose.sh exec -T postgres sh -c 'pg_restore --clean --if-exists --username="$POSTGRES_USER" --dbname="$POSTGRES_DB"' < /srv/restore/srv/civic-lens/backup/operational.dump`.
-4. Copy `captures/` and `releases/` back under `/srv/civic-lens`. Keep the owner 10001:10001. Check that `releases/current` is a link to the active release.
+4. Copy `config/`, `captures/` and `releases/` back under `/srv/civic-lens`. `config/` stays owned by root. Keep the owner 10001:10001 for `captures/` and `releases/`. Check that `releases/current` is a link to the active release.
 5. Start the services with `update.sh`. Rebuild the search database by a publish or by the search service procedure in [Run the search service](#run-the-search-service).
 6. Delete `/srv/restore`.
 
