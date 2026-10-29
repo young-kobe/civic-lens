@@ -41,6 +41,7 @@ public sealed class JobPreparationTests
     private readonly RecordingExecutive executives = new();
     private readonly ThrowingProcessingStore processing = new();
     private readonly RecordingExtractions extractions = new();
+    private readonly List<string> bodyReads = [];
 
     [Fact]
     public async Task DetailGateIsDecidedFromTheParsedBillAndStoredWithTheIssueRevision()
@@ -346,7 +347,7 @@ public sealed class JobPreparationTests
     }
 
     [Fact]
-    public async Task AVotesJobWhoseThreeBodiesEqualTheNewestCandidateParsesAndSavesNothing()
+    public async Task AVotesJobWhoseThreeBodiesEqualTheNewestCandidateLoadsNoBodyAndSavesNothing()
     {
         votes.VoteviewBodiesKnown = true;
         var url = VoteviewUrl.File(VoteviewVoteFixtures.SourceUrl, ApiResource.VoteviewVotes, 119);
@@ -354,6 +355,7 @@ public sealed class JobPreparationTests
         var result = await Prepare(ApiResource.VoteviewVotes, url, "not a csv at all", null);
 
         Assert.Equal(1, result!.DuplicateCount);
+        Assert.Empty(bodyReads);
         Assert.Empty(extractions.Saved);
         Assert.Empty(votes.VoteviewVotes);
     }
@@ -634,7 +636,7 @@ public sealed class JobPreparationTests
             false, [attempt]);
         var (jobs, bodyOf) = resource == ApiResource.VoteviewVotes ? VoteviewChainOf(configured, job, bytes) : ([job], _ => bytes);
         var preparation = new JobPreparation(new SingleJob(jobs), new CapturedAttempts(contentType), new NoDiscoveryAdmissions(), admissions, votes, roster, executives,
-            new FixedBody(bodyOf), processing, extractions, textExtractor, issues);
+            new FixedBody(bodyOf, bodyReads), processing, extractions, textExtractor, issues);
         return await preparation.PrepareAsync("job", "artifacts", default);
     }
 
@@ -960,9 +962,12 @@ public sealed class JobPreparationTests
         public Task<DiscoveryAdmissionResult> AdmitAutomaticCheckAsync(ConfiguredCollectionSource source, string attemptId, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
-    private sealed class FixedBody(Func<string, byte[]> body) : ICaptureBodyReader
+    private sealed class FixedBody(Func<string, byte[]> body, List<string> reads) : ICaptureBodyReader
     {
-        public Task<byte[]> ReadAsync(CapturedAttemptResult attempt, string artifactRoot, CancellationToken cancellationToken) =>
-            Task.FromResult(body(attempt.AttemptId));
+        public Task<byte[]> ReadAsync(CapturedAttemptResult attempt, string artifactRoot, CancellationToken cancellationToken)
+        {
+            reads.Add(attempt.AttemptId);
+            return Task.FromResult(body(attempt.AttemptId));
+        }
     }
 }

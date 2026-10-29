@@ -248,13 +248,16 @@ public sealed class JobPreparation(
         var rollCalls = await ReadVoteviewParentAsync(members.IdempotencyKey, ApiResource.VoteviewRollCalls, cancellationToken);
         if (rollCalls is null) return JobPreparationResult.Blocked(VoteviewJobMissing);
         var chain = new VoteviewChain(congress, rollCalls.JobId, members.JobId, job.JobId);
-        var rollCallsResponse = await responses.ReadAsync(rollCalls, artifactRoot, cancellationToken);
-        var membersResponse = await responses.ReadAsync(members, artifactRoot, cancellationToken);
-        var votesResponse = await responses.ReadAsync(job, artifactRoot, cancellationToken);
-        var bodies = new VoteviewBodies(rollCallsResponse.Captured.Capture.Sha256, membersResponse.Captured.Capture.Sha256,
-            votesResponse.Captured.Capture.Sha256, VoteviewParser.ExtractionVersion);
-        if (await voteAdmissions.HasVoteviewCandidateOfBodiesAsync(configured, congress, bodies, cancellationToken))
+        var rollCallsCapture = await responses.ReadCaptureAsync(rollCalls, cancellationToken);
+        var membersCapture = await responses.ReadCaptureAsync(members, cancellationToken);
+        var votesCapture = await responses.ReadCaptureAsync(job, cancellationToken);
+        var hashes = new VoteviewBodies(rollCallsCapture.Captured.Capture.Sha256, membersCapture.Captured.Capture.Sha256,
+            votesCapture.Captured.Capture.Sha256, VoteviewParser.ExtractionVersion);
+        if (await voteAdmissions.HasVoteviewCandidateOfBodiesAsync(configured, congress, hashes, cancellationToken))
             return JobPreparationResult.Prepared(duplicates: 1);
+        var rollCallsResponse = await responses.ReadBodyAsync(rollCallsCapture, artifactRoot, cancellationToken);
+        var membersResponse = await responses.ReadBodyAsync(membersCapture, artifactRoot, cancellationToken);
+        var votesResponse = await responses.ReadBodyAsync(votesCapture, artifactRoot, cancellationToken);
         var joined = VoteviewRoll.Join(VoteviewParser.ParseRollCalls(rollCallsResponse.Body, congress),
             VoteviewParser.ParseCasts(votesResponse.Body, congress), VoteviewParser.ParseMembers(membersResponse.Body, congress));
         var rolls = joined.Select(roll => new VoteviewRollExtraction(roll.RollCall,
