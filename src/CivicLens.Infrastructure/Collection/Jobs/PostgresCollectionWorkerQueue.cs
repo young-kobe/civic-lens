@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace CivicLens.Infrastructure.Collection.Jobs;
 
-/// <summary>Keyset reads due jobs in priority, creation, and job ID order, using database time.</summary>
+/// <summary>Keyset reads due jobs with their pacing keys in priority, creation, and job ID order, using database time.</summary>
 public sealed class PostgresCollectionWorkerQueue(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
     : ICollectionWorkerQueue
 {
@@ -19,7 +19,7 @@ public sealed class PostgresCollectionWorkerQueue(IDbContextFactory<CollectionAt
         return new(new PooledDbContextFactory<CollectionAttemptDbContext>(options));
     }
 
-    public async Task<CollectionWorkerQueuePage> GetEligibleJobIdsAsync(CollectionWorkerCursor? cursor,
+    public async Task<CollectionWorkerQueuePage> GetEligibleJobsAsync(CollectionWorkerCursor? cursor,
         int limit, CancellationToken cancellationToken)
     {
         if (limit is < 1 or > MaximumPageSize) throw new ArgumentOutOfRangeException(nameof(limit));
@@ -38,9 +38,9 @@ public sealed class PostgresCollectionWorkerQueue(IDbContextFactory<CollectionAt
                 row.CreatedAt == cursor.CreatedAtUtcTicks && string.Compare(row.JobId, cursor.JobId) > 0));
 
         var rows = await query.OrderBy(row => row.Priority).ThenBy(row => row.CreatedAt).ThenBy(row => row.JobId)
-            .Take(limit + 1).Select(row => new { row.JobId, row.Priority, row.CreatedAt }).ToArrayAsync(cancellationToken);
+            .Take(limit + 1).Select(row => new { row.JobId, row.PacingKey, row.Priority, row.CreatedAt }).ToArrayAsync(cancellationToken);
         var count = Math.Min(rows.Length, limit);
-        var ids = rows.Take(count).Select(row => row.JobId).ToImmutableArray();
+        var ids = rows.Take(count).Select(row => new CollectionWorkerQueueJob(row.JobId, row.PacingKey)).ToImmutableArray();
         var next = rows.Length > limit
             ? new CollectionWorkerCursor(rows[count - 1].Priority, rows[count - 1].CreatedAt, rows[count - 1].JobId)
             : null;

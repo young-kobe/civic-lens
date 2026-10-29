@@ -1,6 +1,6 @@
 namespace CivicLens.Application.Collection.Jobs;
 
-/// <summary>Keeps one claimed job and its optional singleton collector lease alive for one run.</summary>
+/// <summary>Keeps one claimed job and its optional collector lease alive for one run.</summary>
 internal sealed class CollectionJobLeaseGuard : IAsyncDisposable
 {
     private readonly ICollectionJobStore jobs;

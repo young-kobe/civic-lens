@@ -8,7 +8,7 @@ using CivicLens.Application.Collection.Processing;
 using CivicLens.Tests.Fixtures;
 namespace CivicLens.Tests.Application.Collection.Jobs;
 
-public sealed class CollectionJobWorkerTests
+public sealed partial class CollectionJobWorkerTests
 {
     [Fact]
     public async Task EmptyQueueWaitsForDurableWakeupInsteadOfPolling()
@@ -60,7 +60,7 @@ public sealed class CollectionJobWorkerTests
         {
             Assert.True(schedules.AdmissionCount >= callNumber);
             return Task.FromResult(callNumber == 1
-                ? new CollectionWorkerQueuePage(["scheduled-job"], null)
+                ? Page(null, "scheduled-job")
                 : new CollectionWorkerQueuePage([], null));
         });
         var worker = new CollectionJobWorker(queue,
@@ -78,7 +78,7 @@ public sealed class CollectionJobWorkerTests
     {
         var heartbeats = new RecordingHeartbeatStore();
         var queue = new SequenceQueue((_, callNumber) => Task.FromResult(callNumber == 1
-            ? new CollectionWorkerQueuePage(["job-a", "job-b", "job-c"], null)
+            ? Page(null, "job-a", "job-b", "job-c")
             : new CollectionWorkerQueuePage([], null)));
         var worker = new CollectionJobWorker(queue,
             new RunCollectionJob(new RecordingJobStore(), null!, null!, null!, null!, NullLogger<RunCollectionJob>.Instance),
@@ -99,12 +99,12 @@ public sealed class CollectionJobWorkerTests
             if (callNumber == 1)
             {
                 Assert.Null(receivedCursor);
-                return Task.FromResult(new CollectionWorkerQueuePage(["blocked-a", "blocked-b"], cursor));
+                return Task.FromResult(Page(cursor, "blocked-a", "blocked-b"));
             }
             if (callNumber == 2)
             {
                 Assert.Equal(cursor, receivedCursor);
-                return Task.FromResult(new CollectionWorkerQueuePage(["later-job"], null));
+                return Task.FromResult(Page(null, "later-job"));
             }
             throw new InvalidOperationException("The cursor scan should end after the last page.");
         });
@@ -131,7 +131,7 @@ public sealed class CollectionJobWorkerTests
         {
             if (callNumber == 1) throw new IOException("temporary queue failure");
             if (callNumber == 2)
-                return Task.FromResult(new CollectionWorkerQueuePage(["fails-on-claim", "later-job"], null));
+                return Task.FromResult(Page(null, "fails-on-claim", "later-job"));
             return Task.FromResult(new CollectionWorkerQueuePage([], null));
         });
         var jobs = new RecordingJobStore("fails-on-claim");
@@ -190,12 +190,15 @@ public sealed class CollectionJobWorkerTests
         Assert.Single(queue.CursorHistory);
     }
 
+    private static CollectionWorkerQueuePage Page(CollectionWorkerCursor? next, params string[] jobIds) =>
+        new([.. jobIds.Select(jobId => new CollectionWorkerQueueJob(jobId, "https://example.test:443"))], next);
+
     private sealed class SequenceQueue(Func<CollectionWorkerCursor?, int, Task<CollectionWorkerQueuePage>> next)
         : ICollectionWorkerQueue
     {
         public List<CollectionWorkerCursor?> CursorHistory { get; } = [];
 
-        public Task<CollectionWorkerQueuePage> GetEligibleJobIdsAsync(CollectionWorkerCursor? cursor, int limit,
+        public Task<CollectionWorkerQueuePage> GetEligibleJobsAsync(CollectionWorkerCursor? cursor, int limit,
             CancellationToken cancellationToken)
         {
             CursorHistory.Add(cursor);
@@ -232,6 +235,7 @@ public sealed class CollectionJobWorkerTests
     private sealed class RecordingJobStore(params string[] failingJobIds) : ICollectionJobStore
     {
         public List<string> ClaimedJobIds { get; } = [];
+        public Func<string, CancellationToken, Task> OnClaim { get; init; } = (_, _) => Task.CompletedTask;
 
         public Task<CollectionJobRecord> EnqueueAsync(ConfiguredCollectionSource source, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobRecord?> RequestCheckAsync(ConfiguredCollectionSource source, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -241,11 +245,12 @@ public sealed class CollectionJobWorkerTests
         public Task<IReadOnlyList<CollectionJobRecord>> ListLatestBySourceAsync(IReadOnlyCollection<string> sourceIds, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobActivity> ListActivityAsync(int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobRecord?> CancelAsync(string jobId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<CollectionJobClaim?> TryClaimAsync(string jobId, TimeSpan leaseDuration, CancellationToken cancellationToken)
+        public async Task<CollectionJobClaim?> TryClaimAsync(string jobId, TimeSpan leaseDuration, CancellationToken cancellationToken)
         {
-            ClaimedJobIds.Add(jobId);
+            lock (ClaimedJobIds) ClaimedJobIds.Add(jobId);
             if (failingJobIds.Contains(jobId, StringComparer.Ordinal)) throw new IOException("temporary claim failure");
-            return Task.FromResult<CollectionJobClaim?>(null);
+            await OnClaim(jobId, cancellationToken);
+            return null;
         }
         public Task<CollectionJobStartResult?> ReadPacingBlockAsync(string jobId, CancellationToken cancellationToken) =>
             Task.FromResult<CollectionJobStartResult?>(null);

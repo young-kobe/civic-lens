@@ -70,12 +70,12 @@ public sealed class PostgresCollectionPipelineWakeupTests(PostgresCollection pos
         await using var wakeup = PostgresCollectionPipelineWakeup.FromConnectionString(connectionString);
         await wakeup.ConnectAsync(default);
         var queue = PostgresCollectionWorkerQueue.FromConnectionString(connectionString);
-        Assert.Empty((await queue.GetEligibleJobIdsAsync(null, 20, default)).JobIds);
+        Assert.Empty((await queue.GetEligibleJobsAsync(null, 20, default)).Jobs);
 
         Assert.True(await jobs.ReleaseClaimAsync(claim.Lease, default));
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         await wakeup.WaitAsync(timeout.Token);
-        Assert.Contains(job.JobId, (await queue.GetEligibleJobIdsAsync(null, 20, default)).JobIds);
+        Assert.Contains(job.JobId, (await queue.GetEligibleJobsAsync(null, 20, default)).Jobs.Select(item => item.JobId));
     }
 
     [Fact]
@@ -142,7 +142,7 @@ public sealed class PostgresCollectionPipelineWakeupTests(PostgresCollection pos
             await wakeup.WaitAsync(timeout.Token);
             await wakeup.WaitAsync(timeout.Token);
             var queue = PostgresCollectionWorkerQueue.FromConnectionString(connectionString);
-            Assert.Empty((await queue.GetEligibleJobIdsAsync(null, 20, timeout.Token)).JobIds);
+            Assert.Empty((await queue.GetEligibleJobsAsync(null, 20, timeout.Token)).Jobs);
         }
         finally
         {

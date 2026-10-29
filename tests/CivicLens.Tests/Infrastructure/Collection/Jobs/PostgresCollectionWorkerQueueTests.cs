@@ -62,12 +62,12 @@ public sealed class PostgresCollectionWorkerQueueTests(PostgresCollection postgr
         await ExecuteAsync("UPDATE collection_jobs SET state = 'Running', lease_token = 'live-token', lease_fence = 1, lease_expires_at = @expires WHERE job_id = @id",
             new NpgsqlParameter("expires", now + TimeSpan.TicksPerHour), new NpgsqlParameter("id", liveLease.JobId));
 
-        var first = await queue.GetEligibleJobIdsAsync(null, 2, CancellationToken.None);
-        Assert.Equal(2, first.JobIds.Length);
+        var first = await queue.GetEligibleJobsAsync(null, 2, CancellationToken.None);
+        Assert.Equal(2, first.Jobs.Length);
         Assert.NotNull(first.NextCursor);
-        var second = await queue.GetEligibleJobIdsAsync(first.NextCursor, 2, CancellationToken.None);
+        var second = await queue.GetEligibleJobsAsync(first.NextCursor, 2, CancellationToken.None);
         Assert.Null(second.NextCursor);
-        var selected = first.JobIds.Concat(second.JobIds).ToHashSet(StringComparer.Ordinal);
+        var selected = first.Jobs.Concat(second.Jobs).Select(job => job.JobId).ToHashSet(StringComparer.Ordinal);
         Assert.Equal(3, selected.Count);
         Assert.Contains(pending.JobId, selected);
         Assert.Contains(dueRetry.JobId, selected);
@@ -87,11 +87,11 @@ public sealed class PostgresCollectionWorkerQueueTests(PostgresCollection postgr
         await SetCreatedAtAsync(backfill.JobId, 1);
         await SetCreatedAtAsync(press.JobId, 2);
 
-        var first = await queue.GetEligibleJobIdsAsync(null, 1, CancellationToken.None);
-        var second = await queue.GetEligibleJobIdsAsync(first.NextCursor, 1, CancellationToken.None);
+        var first = await queue.GetEligibleJobsAsync(null, 1, CancellationToken.None);
+        var second = await queue.GetEligibleJobsAsync(first.NextCursor, 1, CancellationToken.None);
 
-        Assert.Equal(press.JobId, Assert.Single(first.JobIds));
-        Assert.Equal(backfill.JobId, Assert.Single(second.JobIds));
+        Assert.Equal(press.JobId, Assert.Single(first.Jobs).JobId);
+        Assert.Equal(backfill.JobId, Assert.Single(second.Jobs).JobId);
         Assert.Null(second.NextCursor);
     }
 
@@ -103,9 +103,9 @@ public sealed class PostgresCollectionWorkerQueueTests(PostgresCollection postgr
         await SetCreatedAtAsync(older.JobId, 1);
         await SetCreatedAtAsync(newer.JobId, 2);
 
-        var page = await queue.GetEligibleJobIdsAsync(null, 2, CancellationToken.None);
+        var page = await queue.GetEligibleJobsAsync(null, 2, CancellationToken.None);
 
-        Assert.Equal([older.JobId, newer.JobId], page.JobIds.ToArray());
+        Assert.Equal([older.JobId, newer.JobId], page.Jobs.Select(job => job.JobId).ToArray());
     }
 
     private Task SetCreatedAtAsync(string jobId, long createdAt) =>
