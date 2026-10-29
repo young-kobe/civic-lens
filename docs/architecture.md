@@ -25,7 +25,7 @@ The system has one repository and three runtime parts. A C# application runs col
 - Coverage is selective. A missing record does not show inactivity. Relevant source failures stay visible as coverage limits.
 - A capture is not a document version, an approval, or a publication.
 - A model prediction is never a human approval. Approval binds to the exact revision and evidence reviewed.
-- Code approves action records and House vote records, because their facts come from Congress.gov and the Clerk XML and code checks every citation. People approve all other records. Public pages label the headline and the summary as an AI summary of the official record. Text that a person wrote gets no label.
+- Code approves action records, House vote records, and Senate vote records. Their facts come from Congress.gov, the Clerk XML, and the senate.gov vote files. Code checks every citation. People approve all other records. Public pages label the headline and the summary as an AI summary of the official record. Text that a person wrote gets no label.
 - Approval and publication are separate actions. Public serving reads published releases only.
 
 ### Status
@@ -39,7 +39,7 @@ Implemented:
 - AI drafting of document-change accounts
 - the statement gate and statement drafting
 - AI drafting of bill action records
-- AI drafting of House vote records, one for each roll call, from the vote candidates
+- AI drafting of House and Senate vote records, one for each roll call, from the vote candidates
 - action review, with person edits and withdrawals on records that code approved, and a triage page for statements
 - vote review: person edits, version-bound decisions, and the tracked member votes beside their citations
 - brief review: person edits, version-bound decisions, and a derived flag for changed cited records
@@ -49,6 +49,8 @@ Implemented:
 - the authenticated review workspace
 - static release publication of document changes, statements, actions, votes, weekly briefs, and relationships
 - related records on the statement, action, and vote pages
+- the public pages of each release: officials, official profiles, issues, weekly briefs, all records, about, method, reader reports, and photos
+- record withdrawals, the member roster, and member photos
 - the public search service with its own Postgres database, fed from published releases, and the search page of each release
 
 Pending: live Auth0 tenant verification, production deployment, AI classification, and MCP. The [roadmap](roadmap.md) holds the order.
@@ -173,7 +175,7 @@ Use the fixtures of the legacy crawler and its lessons about normalization, robo
 
 `WorkerLoop`, at the Application project root, owns three shared mechanics:
 
-- It waits for a wakeup and reconnects after a 2-second failure backoff. `CollectionJobWorker` and `AnalysisWorker` use this.
+- It waits for a wakeup and reconnects after a 2-second failure backoff. `CollectionJobWorker`, `AnalysisWorker`, and `StageWorker` use this. `StageWorker` runs the `factPublishing` stage and the report pull.
 - It renews a lease while work runs. Only `EvidenceProcessingWorker` and `AnalysisWorker` use this, because collection jobs keep `CollectionJobLeaseGuard`.
 - It owns the recoverable-exception rule and the type-name error code.
 
@@ -183,7 +185,7 @@ The collection and evidence workers keep their own claim, checkpoint, and progre
 
 `IWorkerWakeup` is the one wakeup port. `DatabaseClock`, at the Infrastructure project root, owns the database clock expression and its read. Every store that reads database time uses it, and so does `PostgresDeadlineWakeup`. `PostgresDeadlineWakeup`, also at the project root, implements the port with a LISTEN connection and a deadline query.
 
-Each wakeup factory gives `PostgresDeadlineWakeup` its own channel and deadline query. `PostgresCollectionPipelineWakeup` is a small factory in its feature folder. `PostgresAnalysisWakeup` is the one factory for analysis queues, and it takes the queue table name and task.
+Each wakeup factory gives `PostgresDeadlineWakeup` its own channel and deadline query. `PostgresCollectionPipelineWakeup` is a small factory in its feature folder. `PostgresAnalysisWakeup` is the one factory for analysis queues, and it takes the queue table name and task. `PostgresIntervalWakeup` and `PostgresBriefDraftStore.Wakeup` also build a `PostgresDeadlineWakeup`.
 
 The analysis queues share the `civic_lens_analysis` channel. The notify trigger sends the payload `table:task`. Each analysis listener ignores every other payload and filters its deadline query to its own task.
 
@@ -197,20 +199,13 @@ The keys, in their declared order:
 - Review keys: `civic-lens-document-change-review`, `civic-lens-statement-review`, `civic-lens-action-review`, `civic-lens-vote-review`, `civic-lens-relationship-review`, and `civic-lens-brief-review`. Publication takes all six of them in the order of `PostgresAdvisoryLock.ReviewKeysInOrder`. The vote key comes after the action key and before the relationship key. Vote drafting, vote review, and vote publication take it.
 - The relationship key comes after the vote key and before the brief key. Relationship drafting, relationship review, and publication take it. Publication takes it with the record keys, so the record keys come first, then the relationship key, then the brief key.
 - `civic-lens-collection-import`: the import store takes it for each write. No transaction holds it with another key.
-- The search service has its own database and its own keys, in `SearchLocks`: `civic-lens-search-schema`, `civic-lens-search-ingest`, and `civic-lens-search-reports`. The report insert takes the reports key and holds it to the commit, so the identity sequence commits in order. No transaction holds two search keys. See [search](architecture/search.md#behavior).
+- The search service has its own database and its own keys, in `SearchLocks`: `civic-lens-search-schema`, `civic-lens-search-ingest`, and `civic-lens-search-reports`. The report insert takes the reports key and holds it to the commit, so the identity sequence commits in order. `SchemaMigrator` takes the schema key as a session lock, because it runs several statements and one transaction for each file. `IndexTransaction` takes the ingest key as a transaction lock, so a second service cannot write a release at the same time. The search service does not reference Infrastructure, so these keys cannot join the order above. No transaction holds two search keys. See [search](architecture/search.md#behavior).
 
 A transaction that takes a brief queue row lock takes it before `civic-lens-brief-review`. The worker settlement locks its row and then takes the brief key. A publication commit, a release activation, and a review decision that must requeue a brief therefore lock every brief queue row in key order first. They use `BriefStaleness.TakeLocksAsync` and then take the brief key. A decision on a statement, an action, or a vote has saved its decision row and draft status by then. The relationship hook runs first and needs the new state. The commit and the activation take the earlier review keys, which include the relationship key (`PostgresAdvisoryLock.ReviewKeysBeforeBriefs`), then the brief rows, then the brief key.
 
 Extraction and comparison saves take no advisory lock. Each uses `INSERT ... ON CONFLICT DO NOTHING` in one ReadCommitted transaction. See [documents](architecture/documents.md#invariants).
 
 No transaction holds a review key with a collection key.
-
-The search service has its own database and its own two locks, owned by `SearchLocks` in `CivicLens.PublicApi`. The service does not reference Infrastructure and the databases are separate, so these locks cannot join the order above. Postgres hashes each text key with `hashtextextended(key, 0)`.
-
-- `civic-lens-search-schema`: `SchemaMigrator` takes it as a session lock. The migrator runs several statements and one transaction for each file. A transaction lock would end at the first commit. The session lock covers the whole run, and the migrator releases it at the end.
-- `civic-lens-search-ingest`: `IndexTransaction` takes it as a transaction lock at the start of each ingest. It keeps a second service from writing a release at the same time.
-
-No transaction holds both search keys.
 
 An analysis settlement can add a draft row or append a revision. It then takes its queue row lock (`FOR UPDATE` in `PostgresAnalysisQueue`) before the review key of its record kind. Review and publication writes take review keys only and never lock queue rows, so no lock cycle exists. An action or vote settlement that code approves then runs the same hooks as a person decision. It locks the relationship queue rows, takes the relationship key, locks the brief queue rows, and takes the brief key, in that order.
 
@@ -224,7 +219,7 @@ These rules cross features. Each line gives the rule, what enforces it, and the 
 
 - A capture never changes after import. Enforced by the primary key of `collection_captures` and the insert-only `PostgresCollectionAttemptStore`. Test: `PostgresCollectionAttemptStoreTests.SerializesConcurrentSameAndDistinctAttemptsAndRejectsHashLengthConflict`.
 - A model prediction is never a human approval. Enforced by `ReviewPolicy`, which refuses decisions by the analysis author. Test: `ReviewPolicyTests.TheAiDrafterCannotRecordAnyDecisionEvenOnItsOwnDraft`.
-- Only the worker path approves by code, and only for actions and House votes. The reserved subject `civic-lens:code` is the actor. A person cannot act as it. It publishes only actions and votes, through the `factPublishing` worker stage. Enforced by `ReviewAuthor.IsReserved`, `ReviewAuthorization`, `ReviewWriteRules`, `ReviewRecords.AppendCodeApprovedAsync`, and `PublishRelease`. Tests: `PostgresBillStreamTests.APersonCannotActAsTheCodeSubject`, `PostgresStatementDraftStoreTests.AStatementAiRevisionIsNeverApprovedByCodeBecauseOnlyAPersonApprovesJudgment`, and `PublishCodeApprovedFactsTests.TheCodeSubjectCannotPublishAJudgmentRecordBecauseOnlyAPersonApprovesJudgment`.
+- Only the worker path approves by code, and only for actions, House votes, and Senate votes. The reserved subject `civic-lens:code` is the actor. A person cannot act as it. It publishes only actions and votes, through the `factPublishing` worker stage. Enforced by `ReviewAuthor.IsReserved`, `ReviewAuthorization`, `ReviewWriteRules`, `ReviewRecords.AppendCodeApprovedAsync`, and `PublishRelease`. Tests: `PostgresBillStreamTests.APersonCannotActAsTheCodeSubject`, `PostgresStatementDraftStoreTests.AStatementAiRevisionIsNeverApprovedByCodeBecauseOnlyAPersonApprovesJudgment`, and `PublishCodeApprovedFactsTests.TheCodeSubjectCannotPublishAJudgmentRecordBecauseOnlyAPersonApprovesJudgment`.
 - A release holds the exact approved revision. Enforced by `PublishedRecordRules` and `PostgresPublicationStore`, which recheck the review state at commit. Test: `PostgresPublicationStoreTests.ASaveAfterTheBuildBlocksTheCommitBecauseTheServedRevisionWouldBeStale`.
 - The collector depends on Collection.Contracts only. Enforced by the dependency map in `ArchitectureTests`. Test: `ArchitectureTests.ProductionProjectsHaveOnlyApprovedDependencies`.
 - Only the current lease holder moves queue work. Each claim issues a new token and a higher fence, and a stale write fails. Enforced by `PostgresCollectionJobStore`, `EvidenceProcessingLifecycle`, and `AnalysisLifecycle`. Test: `PostgresDocumentChangeAnalysisStoreTests.AnExpiredLeaseIsRecoveredAsAnInterruptedRunAndTheStaleOwnerIsFenced`.
@@ -361,6 +356,7 @@ This is the only navigation index.
 | Action candidates | [Bills](architecture/bills.md#action-candidate) | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ActionCandidates.cs` |
 | Congress.gov House vote sweep, sessions, URLs | [Votes](architecture/votes.md#daily-sweep) | `src/CivicLens.Application/Collection/Votes/VoteSession.cs` |
 | House vote parsers and admission | [Votes](architecture/votes.md#parsing) | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteParser.cs` |
+| Senate vote parser, menu, and URLs | [Votes](architecture/votes.md#senate-collection) | `src/CivicLens.Application/Collection/SenateVotes/SenateVoteParser.cs` |
 | Vote candidates | [Votes](architecture/votes.md#admission) | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.Votes.cs` |
 | Vote tables: versions and candidates | [Votes](architecture/votes.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Collection/Votes/` |
 | Vote drafting, facts, and the member-vote copy | [Votes](architecture/votes.md#drafting) | `src/CivicLens.Application/Votes/VoteDraftStep.cs` |
