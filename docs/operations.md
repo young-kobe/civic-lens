@@ -1017,7 +1017,7 @@ The first backup run by hand also proves the credentials. The timer runs at 03:3
 
 **Restore.** Test this procedure once before you need it, on a spare machine or directory.
 
-1. Stop the backup timer and the services that use the database: `sudo systemctl stop civic-lens-backup.timer` and `sudo deploy/scripts/compose.sh stop worker review search`.
+1. Stop the backup timer and the services that use the databases: `sudo systemctl stop civic-lens-backup.timer` and `sudo deploy/scripts/compose.sh stop worker review search search-postgres`.
 2. Restore the snapshot to a work directory: `sudo deploy/scripts/compose.sh run --rm -v /srv/restore:/restore restic restore latest --target /restore`. The files keep their full paths, for example `/srv/restore/srv/civic-lens/captures`.
 3. Drop and create the operational database again. A restore into the old database would keep the tables of newer migrations. Start Postgres if it is down. Then run:
 
@@ -1026,9 +1026,25 @@ sudo deploy/scripts/compose.sh exec -T postgres sh -c 'psql --username="$POSTGRE
 sudo deploy/scripts/compose.sh exec -T postgres sh -c 'pg_restore --single-transaction --exit-on-error --username="$POSTGRES_USER" --dbname="$POSTGRES_DB"' < /srv/restore/srv/civic-lens/backup/operational.dump
 ```
 
-4. Copy `config/`, `captures/` and `releases/` back under `/srv/civic-lens` with `sudo cp -a`, one command for each directory. Do not copy only part of `releases/`, because `cp -a` keeps the hard links between releases only inside one copy. `config/` stays owned by root. `captures/` and `releases/` keep the owner 10001:10001. Check that `releases/current` is a link to the active release.
-5. Start the services with `update.sh`. The search database is not in the backup. The search service ingests the active release when it starts, and then every 2 minutes. Wait for one poll, then search on the site.
-6. Delete `/srv/restore`. Start the timer: `sudo systemctl start civic-lens-backup.timer`.
+4. Move the old folders aside, then copy the restored folders in. A copy into the old folders would keep releases newer than the snapshot, and the next publish would reuse their numbers. `cp -a` keeps the owners, the modes, and the hard links between releases.
+
+```sh
+for name in config captures releases; do
+  sudo mv "/srv/civic-lens/$name" "/srv/civic-lens/$name.old"
+  sudo cp -a "/srv/restore/srv/civic-lens/$name" /srv/civic-lens/
+done
+```
+
+   Check that `releases/current` is a link to the active release.
+5. Empty the search database, because it can hold releases newer than the snapshot. The search service would serve them again when their numbers come back.
+
+```sh
+sudo mv /srv/civic-lens/postgres/search /srv/civic-lens/postgres/search.old
+sudo install -d -m 700 -o 70 -g 70 /srv/civic-lens/postgres/search
+```
+
+6. Start the services with `update.sh`. The search service ingests the active release when it starts, and then every 2 minutes. Wait for one poll, then search on the site.
+7. Start the timer: `sudo systemctl start civic-lens-backup.timer`. When the site works, delete `/srv/restore` and the `.old` folders.
 
 The dump file stays in `/srv/civic-lens/backup`, mode 700, until the next run replaces it.
 
