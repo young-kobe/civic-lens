@@ -2,18 +2,11 @@
 @using CivicLens.Core.Documents
 
 <div class="comparison" data-layout="@LayoutChoices[0].Value">
-    @if (Heading is not null || ShowLayoutSwitch)
-    {
-        <div class="comparison-head">
-            @Heading
-            @if (ShowLayoutSwitch)
-            {
-                <LayoutSwitch Label="Comparison layout" Choices="LayoutChoices" />
-            }
-        </div>
-    }
+    <div class="comparison-head">
+        <LayoutSwitch Label="Comparison layout" Choices="LayoutChoices" />
+    </div>
     <div>
-        @for (var index = 0; index < Shown; index++)
+        @for (var index = 0; index < Hunks.Length; index++)
         {
             var hunk = Hunks[index];
             var key = LinkKey(ViewId, index);
@@ -42,10 +35,6 @@
             </article>
         }
     </div>
-    @if (Shown < Hunks.Length)
-    {
-        <p class="muted small">Showing @Shown of @Hunks.Length changed passages.</p>
-    }
 </div>
 
 @code {
@@ -53,13 +42,8 @@
     [Parameter, EditorRequired] public string ViewId { get; set; } = string.Empty;
     [Parameter] public string? BeforeExtractionId { get; set; }
     [Parameter] public string? AfterExtractionId { get; set; }
-    [Parameter] public int MaximumPassages { get; set; } = int.MaxValue;
-    [Parameter] public bool ShowLayoutSwitch { get; set; } = true;
-    [Parameter] public RenderFragment? Heading { get; set; }
 
     private static readonly IReadOnlyList<(string Value, string Text)> LayoutChoices = [("redline", "Redline"), ("side", "Side by side")];
-
-    private int Shown => Math.Min(Hunks.Length, MaximumPassages);
 
     public static string LinkKey(string viewId, int hunkIndex) => $"{viewId}-passage-{hunkIndex + 1}";
 

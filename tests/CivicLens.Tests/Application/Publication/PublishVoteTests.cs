@@ -487,6 +487,47 @@ public sealed class PublishVoteTests
         Assert.Equal(["Democrat", "Republican"], record.PartyMajorities.Select(party => party.Party));
     }
 
+    // Four different counts, with one tracked Democrat Yea, show that each label of the real renderer lands in its own total, so a swap between two labels fails here.
+    [Fact]
+    public async Task EachHouseCountLabelFromTheRealRendererPublishesIntoItsOwnTotal()
+    {
+        var detail = new HouseVoteDetail(HouseVoteFixtures.Vote(100, HouseVoteFixtures.Updated), null, null, null, "Passed", null, null,
+            [new("D", 1, 0, 0, 0), new("R", 3, 3, 2, 1)], [], null);
+        var members = new HouseVoteMemberVotes(detail.Vote,
+            [.. Members("H", "Aye", 3), .. Members("N", "No", 3), .. Members("P", "Present", 2), .. Members("V", "Not Voting", 1)]);
+        var scenario = new PublicationScenario();
+        var vote = scenario.AddVote('d', totalLines: LinesOf(HouseVoteRenderer.RenderDetail(detail), "Party total "),
+            otherMemberLines: LinesOf(HouseVoteRenderer.RenderMembers(members), "Member: "));
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
+
+        Assert.Equal(new PublishedVoteTotals { Yea = 4, Nay = 3, Present = 2, NotVoting = 1 }, ReadVote(scenario, summary, vote).Totals);
+    }
+
+    [Fact]
+    public async Task EachSenateCountLabelFromTheRealRendererPublishesIntoItsOwnTotal()
+    {
+        SenateVoteMember[] members =
+        [
+            .. SenateMembers("A", "Yea", 3), .. SenateMembers("B", "Nay", 3), .. SenateMembers("C", "Present", 2), .. SenateMembers("D", "Not Voting", 1)
+        ];
+        var detail = new SenateVoteDetail(new(SenateVoteFixtures.Roll1, HouseVoteFixtures.Updated, null, null), HouseVoteFixtures.Updated, "On Passage", "Text", "Title",
+            "Passed", null, null, null, null, new(4, 3, 2, 1), members);
+        var scenario = new PublicationScenario();
+        var vote = scenario.AddVote('d', chamber: Chamber.Senate, trackedSourceId: "S1", totalLines: LinesOf(SenateVoteRenderer.Render(detail), "Count: "),
+            otherMemberLines: LinesOf(SenateVoteRenderer.Render(detail), "Member: "));
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
+
+        Assert.Equal(new PublishedVoteTotals { Yea = 4, Nay = 3, Present = 2, NotVoting = 1 }, ReadVote(scenario, summary, vote).Totals);
+    }
+
+    private static HouseVoteMember[] Members(string idPrefix, string cast, int count) =>
+        [.. Enumerable.Range(1, count).Select(index => new HouseVoteMember($"{idPrefix}{index}", "Ann", "Roe", "R", "AL", cast))];
+
+    private static SenateVoteMember[] SenateMembers(string idPrefix, string cast, int count) =>
+        [.. Enumerable.Range(1, count).Select(index => new SenateVoteMember($"{idPrefix}{index}", "Ann", "Roe", "R", "AL", cast))];
+
     private static string[] LinesOf(string text, string prefix) =>
         [.. text.Split('\n').Where(line => line.StartsWith(prefix, StringComparison.Ordinal))];
 

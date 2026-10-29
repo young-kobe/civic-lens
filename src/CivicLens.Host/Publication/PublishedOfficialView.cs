@@ -39,7 +39,7 @@ internal static class PublishedOfficialView
     public static readonly IReadOnlyList<(string Kind, string Plural)> OfficeKinds =
         [("senator", "Senators"), ("representative", "Representatives"), ("executive", "Executives"), ("other", "Other officials")];
 
-    public static string RecordCount(int count) => $"{count} {(count == 1 ? "record" : "records")} other than votes";
+    public static string RecordCount(int count) => $"{count} {Noun(count, "record")} other than votes";
 
     public static string WebsiteHost(string website) => new Uri(website).IdnHost;
 
@@ -64,7 +64,7 @@ internal static class PublishedOfficialView
     public static string CountFilterLabel(int count, string subject, string issueName) => $"{count}: show {subject} on {issueName}";
 
     public static string CountFilterNotice(string subject, string issueName, int congress, int count) =>
-        $"Showing {subject} on {issueName} in the {CongressCalendar.Ordinal(congress)} Congress: {count} {(count == 1 ? "record" : "records")}";
+        $"Showing {subject} on {issueName} in the {CongressCalendar.Ordinal(congress)} Congress: {count} {Noun(count, "record")}";
 
     public const string LinkMeaning = "A reviewer approved each link. A link does not mean the vote or bill matches the statement.";
 
@@ -86,7 +86,7 @@ internal static class PublishedOfficialView
     {
         var share = missed.Share is { } value ? $" ({Percent(value)})" : "";
         var days = missed.First == missed.Last ? $"on {Moment.Day(missed.First)}" : $"{Moment.Day(missed.First)} to {Moment.Day(missed.Last)}";
-        return $"Missed {missed.Missed} of {missed.Held} roll call {Votes(missed.Held)} of all kinds{share}, including procedural votes, " +
+        return $"Missed {missed.Missed} of {missed.Held} roll call {Noun(missed.Held, "vote")} of all kinds{share}, including procedural votes, " +
             $"held in {ChamberName(missed.Chamber)} while they served, {days} ({CongressCalendar.Ordinal(congress)} Congress).";
     }
 
@@ -98,9 +98,9 @@ internal static class PublishedOfficialView
         var inCongress = $"in the {CongressCalendar.Ordinal(congress)} Congress";
         var sentence = votes.Cast == 0
             ? $"No Yea or Nay cast yet on a split vote in {ChamberName(votes.Chamber)} as a {votes.Party} {inCongress}."
-            : $"Voted with most {PartyOf(votes)} on {votes.Matched} of {votes.Cast} split {Votes(votes.Cast)}{share} {inCongress}.";
+            : $"Voted with most {PartyOf(votes)} on {votes.Matched} of {votes.Cast} split {Noun(votes.Cast, "vote")}{share} {inCongress}.";
         var other = votes.Cast == 0 ? "" : "other ";
-        return votes.NotCast == 0 ? sentence : $"{sentence} They did not cast Yea or Nay on {votes.NotCast} {other}split {Votes(votes.NotCast)}.";
+        return votes.NotCast == 0 ? sentence : $"{sentence} They did not cast Yea or Nay on {votes.NotCast} {other}split {Noun(votes.NotCast, "vote")}.";
     }
 
     public static string PartyOf(VotesWithParty votes) => $"{votes.Chamber} {Members(votes.Party)}";
@@ -109,7 +109,7 @@ internal static class PublishedOfficialView
 
     private static string ChamberName(PublishedChamber chamber) => chamber == PublishedChamber.Senate ? "the Senate" : "the House of Representatives";
 
-    private static string Votes(int count) => count == 1 ? "vote" : "votes";
+    private static string Noun(int count, string singular) => count == 1 ? singular : singular + "s";
 
     private static string Percent(double share) => string.Create(CultureInfo.InvariantCulture, $"{share * 100:0}%");
 
@@ -118,14 +118,4 @@ internal static class PublishedOfficialView
         var roll = $"{vote.Chamber} roll call {vote.RollCallNumber}, Congress {vote.Congress}, session {vote.Session}";
         return vote.BillType is null ? roll : $"{roll}, {ActionLabels.Bill(vote.Congress, vote.BillType, vote.BillNumber!.Value)}";
     }
-}
-
-internal sealed record PublishedOfficialRow(DateOnly Date, string RecordId, string Headline, PublishedRecordKind Kind, string? Detail, string? Cast,
-    DateTimeOffset PublishedAtUtc, bool AgainstParty, string? FilterKeys = null)
-{
-    public static PublishedOfficialRow Of(PublishedRecordEntry entry) => new(
-        ReleaseRecordOrder.Day(entry), entry.RecordId, entry.Headline, entry.Kind, null, null, entry.FirstPublishedAtUtc, false);
-
-    public static PublishedOfficialRow Of(PublishedOfficialVote vote) => new(
-        vote.VotedOn, vote.RecordId, vote.Headline, PublishedRecordKind.Vote, $"{PublishedOfficialView.RollCall(vote)}. Result of the vote: {vote.Result}", vote.Cast, DateTimeOffset.MinValue, VotesWithParty.IsBreak(vote));
 }

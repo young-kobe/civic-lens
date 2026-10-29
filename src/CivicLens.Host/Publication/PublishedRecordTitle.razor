@@ -1,0 +1,9 @@
+@using CivicLens.Publication.Contracts
+
+<CellTitle Href="@(RootPath + PublicationProtocol.RecordPagePath(RecordId))">@ChildContent</CellTitle>
+
+@code {
+    [Parameter, EditorRequired] public string RecordId { get; set; } = string.Empty;
+    [Parameter] public string RootPath { get; set; } = string.Empty;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

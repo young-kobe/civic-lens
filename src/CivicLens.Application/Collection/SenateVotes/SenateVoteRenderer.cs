@@ -1,4 +1,5 @@
 using System.Globalization;
+using CivicLens.Application.Votes;
 using static CivicLens.Application.Collection.RenderedText;
 
 namespace CivicLens.Application.Collection.SenateVotes;
@@ -31,7 +32,8 @@ public static class SenateVoteRenderer
     }
 
     private static string CountsOf(SenateVoteCounts counts) =>
-        $"Yea {Count(counts.Yeas ?? 0)}, Nay {Count(counts.Nays ?? 0)}, Present {Count(counts.Present ?? 0)}, Not voting {Count(counts.Absent ?? 0)}";
+        $"{VoteCountLabels.Yea} {Count(counts.Yeas ?? 0)}, {VoteCountLabels.Nay} {Count(counts.Nays ?? 0)}, "
+        + $"{VoteCountLabels.Present} {Count(counts.Present ?? 0)}, {VoteCountLabels.NotVoting} {Count(counts.Absent ?? 0)}";
 
     public static string MemberLine(SenateVoteMember member)
     {

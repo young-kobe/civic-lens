@@ -190,7 +190,8 @@ public sealed class RunCollectionJobTests
             MaxBytes = request.MaxBytes,
             TimeoutSeconds = request.TimeoutSeconds,
             MinDelayMilliseconds = request.MinDelayMilliseconds,
-            Policy = new CollectionJobPolicy()
+            Policy = new CollectionJobPolicy(),
+            Priority = CollectionJobPriority.Check
         };
         return new CollectionJobRecord("job-1", definition, "key", CollectionJobState.Running,
             DateTimeOffset.UtcNow, null, false, [attempt]);
@@ -208,7 +209,8 @@ public sealed class RunCollectionJobTests
             MaxBytes = request.MaxBytes,
             TimeoutSeconds = request.TimeoutSeconds,
             MinDelayMilliseconds = request.MinDelayMilliseconds,
-            Policy = new CollectionJobPolicy()
+            Policy = new CollectionJobPolicy(),
+            Priority = CollectionJobPriority.Check
         };
         return new CollectionJobRecord("job-1", definition, "key", CollectionJobState.Pending,
             DateTimeOffset.UtcNow, null, false, []);

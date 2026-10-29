@@ -62,7 +62,7 @@
             <Stat Value="overview.DraftsNeedingAction" Label="Drafts need action" Tone="Tone.Warn" Href="/Review?drafts=needs-action#drafts" />
             <Stat Value="overview.ApprovedDrafts" Label="Approved, private" Tone="Tone.Ok" Href="/Review?drafts=approved#drafts" />
             <Stat Value="statementCounts!.NeedsAction" Label="Statements need action" Tone="Tone.Warn" Href="@($"{StatementRoutes.List}?drafts={DraftFilterNames.NeedsAction}")" />
-            <Stat Value="factExceptionTotal" Label="Actions and votes need action" Tone="Tone.Warn" Href="#fact-exceptions" />
+            <Stat Value="unapprovedFactTotal" Label="Actions and votes need action" Tone="Tone.Warn" Href="#fact-exceptions" />
             <Stat Value="briefCounts!.NeedsAction" Label="Briefs need action" Tone="Tone.Warn" Href="@($"{BriefRoutes.List}?drafts={DraftFilterNames.NeedsAction}")" />
             <Stat Value="relationshipCounts!.NeedsAction" Label="Relationships need action" Tone="Tone.Warn" Href="@($"{RelationshipRoutes.List}?drafts={DraftFilterNames.NeedsAction}")" />
             <Stat Value="openReports" Label="Reader reports open" Tone="Tone.Warn" Href="@ReportRoutes.List" />
@@ -154,9 +154,9 @@
                 </Panel>
 
                 <Panel Title="Actions and votes needing action" Id="fact-exceptions">
-                    <Aside>@Count(factExceptionTotal, "record", "records")</Aside>
+                    <Aside>@Count(unapprovedFactTotal, "record", "records")</Aside>
                     <ChildContent>
-                        <DataTable Items="factExceptions" Caption="Actions and votes needing action">
+                        <DataTable Items="unapprovedFacts" Caption="Actions and votes needing action">
                             <Head>
                                 <th>Record</th>
                                 <th>Kind</th>

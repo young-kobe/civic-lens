@@ -9,7 +9,7 @@
 </PublicPage>
 
 @code {
-    private IReadOnlyList<Crumb> Crumbs => [PublicCrumbs.Home("../"), PublicCrumbs.AllRecords("../"), new(Title)];
+    private IReadOnlyList<Crumb> Crumbs => [PublicCrumbs.Home("../"), PublicCrumbs.Section(PublicSection.AllRecords, "../"), new(Title)];
 
     private string Title => $"Withdrawn {PublishedRecordLabels.Kind(Withdrawal.Kind).ToLowerInvariant()}: {Withdrawal.RecordId[..12]}";
 

@@ -40,8 +40,8 @@ public sealed partial class ReviewHome
     private StatementReviewCounts? statementCounts;
     private BriefReviewCounts? briefCounts;
     private RelationshipReviewCounts? relationshipCounts;
-    private IReadOnlyList<FactException> factExceptions = [];
-    private int factExceptionTotal;
+    private IReadOnlyList<UnapprovedFact> unapprovedFacts = [];
+    private int unapprovedFactTotal;
     private int openReports;
     private IReadOnlyList<FeedItem> activity = [];
     private string? error;
@@ -116,7 +116,7 @@ public sealed partial class ReviewHome
             statementCounts = await GetStatementCounts.ExecuteAsync(actor, cancellationToken);
             briefCounts = await GetBriefCounts.ExecuteAsync(actor, cancellationToken);
             relationshipCounts = await GetRelationshipCounts.ExecuteAsync(actor, cancellationToken);
-            await LoadFactExceptionsAsync(cancellationToken);
+            await LoadUnapprovedFactsAsync(cancellationToken);
             openReports = await CountReports.ExecuteAsync(actor, cancellationToken);
             if (collection is not null)
             {
@@ -140,20 +140,20 @@ public sealed partial class ReviewHome
         }
     }
 
-    private async Task LoadFactExceptionsAsync(CancellationToken cancellationToken)
+    private async Task LoadUnapprovedFactsAsync(CancellationToken cancellationToken)
     {
         var actions = await ListActionExceptions.ExecuteAsync(actor!, PageSize, cancellationToken);
         var votes = await ListVoteExceptions.ExecuteAsync(actor!, PageSize, cancellationToken);
-        factExceptionTotal = actions.Total + votes.Total;
-        factExceptions =
+        unapprovedFactTotal = actions.Total + votes.Total;
+        unapprovedFacts =
         [
-            .. actions.Items.Select(item => new FactException(PublishedRecordKind.Action, item.RecordId, item.CurrentRevision.Headline,
+            .. actions.Items.Select(item => new UnapprovedFact(PublishedRecordKind.Action, item.RecordId, item.CurrentRevision.Headline,
                 item.CurrentStatus, item.UnresolvedConcerns.Length, item.CurrentRevision.CreatedAtUtc)),
-            .. votes.Items.Select(item => new FactException(PublishedRecordKind.Vote, item.RecordId, item.CurrentRevision.Headline,
+            .. votes.Items.Select(item => new UnapprovedFact(PublishedRecordKind.Vote, item.RecordId, item.CurrentRevision.Headline,
                 item.CurrentStatus, item.UnresolvedConcerns.Length, item.CurrentRevision.CreatedAtUtc))
         ];
-        factExceptions =
-            [.. factExceptions.OrderByDescending(item => item.RevisedAtUtc).ThenByDescending(item => item.RecordId, StringComparer.Ordinal)];
+        unapprovedFacts =
+            [.. unapprovedFacts.OrderByDescending(item => item.RevisedAtUtc).ThenByDescending(item => item.RecordId, StringComparer.Ordinal)];
     }
 
     private async Task<string?> FindDraftAsync(CancellationToken cancellationToken)

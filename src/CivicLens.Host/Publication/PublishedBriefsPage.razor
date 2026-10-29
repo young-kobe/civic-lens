@@ -23,7 +23,7 @@
 </PublicPage>
 
 @code {
-    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), new("Briefs")];
+    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), PublicCrumbs.Current(PublicSection.Briefs)];
 
     [Parameter, EditorRequired] public PublicationRelease Release { get; set; } = default!;
     [Parameter, EditorRequired] public int Page { get; set; }

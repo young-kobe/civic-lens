@@ -71,7 +71,7 @@ The shared component library lives in `src/CivicLens.Host/Components`:
 | Folder | Components |
 |---|---|
 | `Layout` | `WorkspaceLayout`, the app shell with a side rail and top bar |
-| `Ui` | General controls: `Button`, `Panel`, `PageHeader`, `StatStrip`, `DataTable`, `TableCell`, `Pager`, `FilterTabs` (all links from `FilterTab.Link`, or all buttons from `FilterTab.Button` that a script reads; a mixed list throws `ArgumentException`, tested by `FilterTabsTests`), `Notice`, `EmptyState`, `HealthList`, `ActivityFeed`, `Field`, `TabSet`, `Drawer`, `ThemeToggle`, `ContextLink` (a link whose hidden suffix names its target) |
+| `Ui` | General controls: `Button`, `Panel`, `PageHeader`, `StatStrip`, `DataTable`, `TableCell`, `Pager`, `FilterTabs` (all links from `FilterTab.Link`, or all buttons from `FilterTab.Button` that a script reads; a mixed list throws `ArgumentException`, tested by `FilterTabsTests`), `Notice`, `EmptyState`, `HealthList`, `ActivityFeed`, `Field`, `TabSet`, `Drawer`, `ThemeToggle`, `ContextLink` (a link whose hidden suffix names its target), `CellTitle` (a table title that is a link when it has an address, else plain text) |
 | `Evidence` | `DocumentComparisonView` (redline and side-by-side), `RecordView`, `StatementRecord`, `CitationQuote`, `DocumentText` |
 
 `StatementRecord` wraps `RecordView` for one statement revision. It shows the headline, the summary, and the statement date with its evidence quote. It also shows speakers by configured name, other speakers, issues, policy areas, bill numbers, and each quotation with its kind.

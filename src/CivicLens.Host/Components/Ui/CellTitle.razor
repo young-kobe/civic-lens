@@ -1,0 +1,13 @@
+@if (Href is not null)
+{
+    <a class="cell-title" href="@Href">@ChildContent</a>
+}
+else
+{
+    <span class="cell-title">@ChildContent</span>
+}
+
+@code {
+    [Parameter] public string? Href { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

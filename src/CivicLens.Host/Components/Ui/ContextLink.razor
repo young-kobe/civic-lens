@@ -1,8 +1,10 @@
 <a class="@Class" href="@Href">@Text<span class="visually-hidden">: @Target</span></a>
 
 @code {
+    public const string FullVersionText = "Show in the full version";
+
     [Parameter, EditorRequired] public string Href { get; set; } = string.Empty;
-    [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
+    [Parameter] public string Text { get; set; } = "Show in the full source text";
     [Parameter, EditorRequired] public string Target { get; set; } = string.Empty;
     [Parameter] public string? Class { get; set; }
 }

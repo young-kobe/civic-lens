@@ -22,9 +22,12 @@ public sealed class PublicBaseUrl
 
     public string Join(string releasePath) => $"{origin}/{releasePath}";
 
-    private static bool IsBareOrigin(Uri uri) =>
-        uri.Host.Length > 0 && !uri.Host.EndsWith('.') && uri.HostNameType != UriHostNameType.IPv6 && uri.UserInfo.Length == 0 && uri.Query.Length == 0 && uri.Fragment.Length == 0 && uri.AbsolutePath == "/"
-        && !uri.OriginalString.Contains('?') && !uri.OriginalString.Contains('#');
+    private static bool IsBareOrigin(Uri uri)
+    {
+        if (uri.Host.Length == 0 || uri.Host.EndsWith('.') || uri.HostNameType == UriHostNameType.IPv6) return false;
+        if (uri.UserInfo.Length > 0 || uri.Query.Length > 0 || uri.Fragment.Length > 0 || uri.AbsolutePath != "/") return false;
+        return !uri.OriginalString.Contains('?') && !uri.OriginalString.Contains('#');
+    }
 
     private static bool IsAllowedScheme(Uri uri) =>
         uri.Scheme == Uri.UriSchemeHttps || (uri.Scheme == Uri.UriSchemeHttp && uri.Host is "localhost" or "127.0.0.1");

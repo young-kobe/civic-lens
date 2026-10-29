@@ -12,7 +12,7 @@
 </PublicPage>
 
 @code {
-    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), new("All records")];
+    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), PublicCrumbs.Current(PublicSection.AllRecords)];
 
     [Parameter, EditorRequired] public PublicationRelease Release { get; set; } = default!;
     [Parameter, EditorRequired] public int Page { get; set; }

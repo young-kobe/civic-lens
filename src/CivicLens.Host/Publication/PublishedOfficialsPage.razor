@@ -33,7 +33,7 @@
                     <li class="official-card" data-name="@card.Official.Profile.Name" data-office="@card.Kind" data-state="@card.Term?.State">
                         <OfficialPortrait Profile="card.Official.Profile" RootPath="" Compact="true" ShowCredit="@(!SharedCredit)" />
                         <div class="official-card-text">
-                            <a class="cell-title" href="@card.Official.PagePath">@card.Official.Profile.Name</a>
+                            <CellTitle Href="@card.Official.PagePath">@card.Official.Profile.Name</CellTitle>
                             @if (card.Term is { } term)
                             {
                                 <span class="cell-sub">@PublishedOfficialView.CardOffice(term, PublishedAtUtc)</span>
@@ -58,7 +58,7 @@
 @code {
     private sealed record Card(OfficialListing Official, PublishedOfficeTerm? Term, string Kind);
 
-    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), new("Officials")];
+    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), PublicCrumbs.Current(PublicSection.Officials)];
 
     [Parameter, EditorRequired] public IReadOnlyList<OfficialListing> Officials { get; set; } = [];
     [Parameter, EditorRequired] public DateTimeOffset PublishedAtUtc { get; set; }
