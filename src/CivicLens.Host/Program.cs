@@ -211,7 +211,7 @@ try
         await using var reportPullWakeup = reportPull?.Wakeup;
         executing = true;
         await jobs.SynchronizeAsync(workerConfiguration, cancellation.Token);
-        if (args is not [_, _, _, "--once"]) await heartbeats.ClearAsync(cancellation.Token);
+        if (!CollectionWorkerCommand.IsOnce(args)) await heartbeats.ClearAsync(cancellation.Token);
         await analysis.RecordStartAsync(cancellation.Token);
         await gate.RecordStartAsync(cancellation.Token);
         await statementDrafting.RecordStartAsync(cancellation.Token);

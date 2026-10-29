@@ -18,7 +18,7 @@ public sealed class StageWorker(string name, Func<CancellationToken, Task<int>> 
             while (!cancellationToken.IsCancellationRequested)
             {
                 passes++;
-                await beat.BeatAsync(cancellationToken);
+                await beat.BeatIfDueAsync(cancellationToken);
                 try
                 {
                     progress += await pass(cancellationToken);

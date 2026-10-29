@@ -60,7 +60,7 @@ public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysis
         while (!cancellationToken.IsCancellationRequested && !pause.IsPaused(out _))
         {
             passes++;
-            await beat.BeatAsync(cancellationToken);
+            await beat.BeatIfDueAsync(cancellationToken);
             Interlocked.Exchange(ref budgetExhausted, 0);
             IReadOnlyList<AnalysisRecord> eligible;
             try

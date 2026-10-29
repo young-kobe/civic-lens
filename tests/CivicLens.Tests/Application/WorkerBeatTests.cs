@@ -37,11 +37,11 @@ public sealed class WorkerBeatTests
         await stop.CancelAsync();
         await running;
 
-        Assert.Equal(2, beatsWhileStuck);
+        Assert.Equal(1, beatsWhileStuck);
     }
 
     [Fact]
-    public async Task AStageBeatsAtStartAndBeforeEachPassSoALoopHungBeforeItsFirstPassIsStillSeen()
+    public async Task AStageBeatsAtStartAndWhenItBeginsToWaitButNotAgainForAFastPass()
     {
         var store = new RecordingHeartbeatStore();
         using var stop = new CancellationTokenSource();
@@ -50,7 +50,7 @@ public sealed class WorkerBeatTests
         await new StageWorker("test", _ => Task.FromResult(1), wakeup, NullLogger<StageWorker>.Instance,
             TestBeat.Create(store, TimeSpan.FromMinutes(1))).ExecuteAsync(false, stop.Token);
 
-        Assert.Equal(3, store.Beats);
+        Assert.Equal(2, store.Beats);
     }
 
     [Fact]

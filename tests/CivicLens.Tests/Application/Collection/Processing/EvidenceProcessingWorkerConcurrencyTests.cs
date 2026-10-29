@@ -20,7 +20,7 @@ public sealed class EvidenceProcessingWorkerConcurrencyTests
         using var run = new GatedRun(6);
         var worker = run.Worker(degree);
 
-        var result = worker.ExecuteAsync(Path.GetTempPath(), 6, Lease, default);
+        var result = worker.ExecuteAsync(Path.GetTempPath(), 6, Lease, TestBeat.Create(), default);
         await run.WaitForRunningAsync(degree);
         await Task.Delay(150);
 
@@ -37,13 +37,25 @@ public sealed class EvidenceProcessingWorkerConcurrencyTests
         using var shutdown = new CancellationTokenSource();
         var worker = run.Worker(2);
 
-        var result = worker.ExecuteAsync(Path.GetTempPath(), 4, Lease, shutdown.Token);
+        var result = worker.ExecuteAsync(Path.GetTempPath(), 4, Lease, TestBeat.Create(), shutdown.Token);
         await run.WaitForRunningAsync(2);
         await shutdown.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => result);
         Assert.Equal(2, run.Released.Count);
         Assert.Equal(2, run.Released.Distinct().Count);
+    }
+
+    [Fact]
+    public async Task EachFinishedItemBeatsSoAPassOfManySlowItemsDoesNotLookLikeAHungLoop()
+    {
+        using var run = new GatedRun(4);
+        run.OpenGate();
+        var heartbeats = new RecordingHeartbeatStore();
+
+        await run.Worker(2).ExecuteAsync(Path.GetTempPath(), 4, Lease, TestBeat.Create(heartbeats, TimeSpan.Zero), default);
+
+        Assert.Equal(4, heartbeats.Beats);
     }
 
     private sealed class GatedRun : IDisposable

@@ -321,7 +321,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var staleHistory = new StalePredecessorHistoryStore(
             PostgresDocumentHistoryStore.FromConnectionString(connectionString), beforeAttempt);
         var worker = Worker(processing, staleHistory);
-        _ = await worker.ExecuteAsync(artifactRoot, 20, TimeSpan.FromSeconds(60), default);
+        _ = await worker.ExecuteAsync(artifactRoot, 20, TimeSpan.FromSeconds(60), TestBeat.Create(), default);
         var completed = await ProcessUntilTerminalAsync(worker, afterJob.JobId, afterAttempt);
 
         Assert.Equal(EvidenceProcessingOutcome.Changed, completed.Outcome);
@@ -337,8 +337,8 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var job = await CollectAsync("short-lease", "Short lease wording.");
         var attemptId = Assert.Single(job.Attempts).AttemptId;
         var worker = Worker(processing);
-        _ = await worker.ExecuteAsync(artifactRoot, 20, TimeSpan.FromSeconds(60), default);
-        _ = await worker.ExecuteAsync(artifactRoot, 20, TimeSpan.FromSeconds(60), default);
+        _ = await worker.ExecuteAsync(artifactRoot, 20, TimeSpan.FromSeconds(60), TestBeat.Create(), default);
+        _ = await worker.ExecuteAsync(artifactRoot, 20, TimeSpan.FromSeconds(60), TestBeat.Create(), default);
         var record = await RecordAsync(job.JobId, attemptId);
         Assert.Equal(EvidenceProcessingStage.Comparison, record.Stage);
         Assert.Equal(EvidenceProcessingStatus.Pending, record.Status);
@@ -347,7 +347,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
             PostgresDocumentHistoryStore.FromConnectionString(connectionString));
         var observedProcessing = new ObservedEvidenceProcessingStore(processing);
         var blockedWorker = Worker(observedProcessing, historyGate);
-        var execution = blockedWorker.ExecuteAsync(artifactRoot, 20, TimeSpan.FromSeconds(1), default);
+        var execution = blockedWorker.ExecuteAsync(artifactRoot, 20, TimeSpan.FromSeconds(1), TestBeat.Create(), default);
         try
         {
             await historyGate.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -373,7 +373,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var worker = Worker(observedProcessing);
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
-            worker.ExecuteAsync(artifactRoot, 20, TimeSpan.Zero, default));
+            worker.ExecuteAsync(artifactRoot, 20, TimeSpan.Zero, TestBeat.Create(), default));
 
         Assert.Equal(0, observedProcessing.EligibleReads);
     }
@@ -437,7 +437,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     {
         for (var pass = 0; pass < 50; pass++)
         {
-            _ = await worker.ExecuteAsync(artifactRoot, 20, TimeSpan.FromSeconds(60), default);
+            _ = await worker.ExecuteAsync(artifactRoot, 20, TimeSpan.FromSeconds(60), TestBeat.Create(), default);
             var record = (await processing.GetByJobIdsAsync([jobId], default))
                 .SingleOrDefault(candidate => candidate.AttemptId == attemptId);
             if (record?.Status is EvidenceProcessingStatus.Succeeded or EvidenceProcessingStatus.Blocked or EvidenceProcessingStatus.Failed)

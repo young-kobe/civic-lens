@@ -24,7 +24,7 @@ public sealed class EvidenceProcessingWorker(
     private readonly int degree = EvidenceProcessingPolicy.ValidateConcurrency(concurrency);
 
     public async Task<EvidenceProcessingWorkerResult> ExecuteAsync(string artifactRoot, int batchSize, TimeSpan leaseDuration,
-        CancellationToken cancellationToken)
+        WorkerBeat beat, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(artifactRoot);
         if (batchSize is < 1 or > MaximumBatchSize) throw new ArgumentOutOfRangeException(nameof(batchSize));
@@ -48,6 +48,7 @@ public sealed class EvidenceProcessingWorker(
                 logger.LogError(exception, "Evidence processing failed for job {JobId}.", record.JobId);
                 Interlocked.Increment(ref failures);
             }
+            await beat.BeatIfDueAsync(token);
         });
         return new(progress, failures);
     }

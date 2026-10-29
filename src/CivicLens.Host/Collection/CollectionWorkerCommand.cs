@@ -13,6 +13,8 @@ internal static class CollectionWorkerCommand
     public static bool Matches(string[] arguments) => arguments is
         ["worker", _, _] or ["worker", _, _, "--once"];
 
+    public static bool IsOnce(string[] arguments) => arguments is ["worker", _, _, "--once"];
+
     public static void ValidateArguments(string[] arguments)
     {
         if (!Matches(arguments)) throw new ArgumentException("Use worker <collector.dll> <artifact-directory> [--once].");
@@ -37,7 +39,7 @@ internal static class CollectionWorkerCommand
             new CaptureArtifactVerifier(), new CollectorProcess(collectorPath,
                 Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet"),
             loggers.CreateLogger<RunCollectionJob>());
-        var once = arguments.Length == 4;
+        var once = IsOnce(arguments);
         var collection = new CollectionJobWorker(queue, runner, loggers.CreateLogger<CollectionJobWorker>(), beat, evidenceProcessor, wakeup, schedules);
         var (result, analysisResults) = await RunAsync(collection, analysis ?? [], artifactRoot, once, cancellationToken);
         CollectionCommandOutput.Write(result);

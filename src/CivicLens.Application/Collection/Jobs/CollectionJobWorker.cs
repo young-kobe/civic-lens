@@ -62,7 +62,7 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
         while (!cancellationToken.IsCancellationRequested)
         {
             passes++;
-            await beat.BeatAsync(cancellationToken);
+            await beat.BeatIfDueAsync(cancellationToken);
             var progress = 0;
             var scheduleFailed = false;
             if (schedules is not null)
@@ -125,7 +125,6 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
                     var result = await ProcessEvidenceAsync(artifactDirectory, batchSize, lease, cancellationToken);
                     progress += result.ProgressCount;
                     failures += result.Failures;
-                    await beat.BeatIfDueAsync(cancellationToken);
                 }
 
                 cursor = page.NextCursor;
@@ -137,7 +136,6 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
                 var result = await ProcessEvidenceAsync(artifactDirectory, batchSize, lease, cancellationToken);
                 progress += result.ProgressCount;
                 failures += result.Failures;
-                await beat.BeatIfDueAsync(cancellationToken);
             }
 
             if (queueFailed || scheduleFailed || progress == 0 || cancellationToken.IsCancellationRequested) break;
@@ -151,7 +149,7 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
     {
         try
         {
-            return await evidenceProcessor!.ExecuteAsync(artifactDirectory, batchSize, lease, cancellationToken);
+            return await evidenceProcessor!.ExecuteAsync(artifactDirectory, batchSize, lease, beat, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return new(0, 0); }
         catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
