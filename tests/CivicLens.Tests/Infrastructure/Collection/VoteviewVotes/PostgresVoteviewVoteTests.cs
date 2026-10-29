@@ -68,7 +68,29 @@ public sealed class PostgresVoteviewVoteTests(PostgresCollection postgres) : IAs
 
         Assert.Equal([VoteviewUrl.File(VoteviewVoteFixtures.SourceUrl, ApiResource.VoteviewMembers, 118),
             VoteviewUrl.File(VoteviewVoteFixtures.SourceUrl, ApiResource.VoteviewRollCalls, 119)], jobs.Select(job => job.Url));
-        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM collection_jobs WHERE is_root AND idempotency_key LIKE 'voteview-senate/%/rollcalls/119/%'"));
+        Assert.Equal(VoteviewJobKeys.RollCalls(VoteviewVoteFixtures.SourceId, earlier), await ScalarAsync(
+            "SELECT idempotency_key FROM collection_jobs WHERE is_root AND idempotency_key LIKE 'voteview-senate/%/rollcalls/%'"));
+    }
+
+    [Fact]
+    public async Task EachDailySweepWalksTheWholeChainAgainSoTheCurrentCongressIsFetchedOnTheSecondDay()
+    {
+        var dayOne = await WalkAsync("day-one", first: 117);
+        var dayTwo = await WalkAsync("day-two", first: 117);
+
+        Assert.Equal([117, 118, 119], dayTwo.Where(job => job.Resource == ApiResource.VoteviewVotes).Select(job => job.Congress));
+        Assert.Empty(dayOne.Select(job => job.JobId).Intersect(dayTwo.Select(job => job.JobId)));
+        Assert.Equal(2, dayOne.Concat(dayTwo).Count(job => job is { Resource: ApiResource.VoteviewVotes, Congress: 119 }));
+    }
+
+    [Fact]
+    public async Task AFailedMiddleJobStopsThatDaysChainButTheNextDayMakesNewKeysAndReachesTheCurrentCongress()
+    {
+        var dayOne = await WalkAsync("failed-day-one", first: 117, failAtCongress: 118);
+        var dayTwo = await WalkAsync("failed-day-two", first: 117);
+
+        Assert.DoesNotContain(dayOne, job => job.Congress == 119);
+        Assert.Contains(dayTwo, job => job is { Resource: ApiResource.VoteviewVotes, Congress: 119 });
     }
 
     [Fact]
@@ -165,6 +187,30 @@ public sealed class PostgresVoteviewVoteTests(PostgresCollection postgres) : IAs
             Bodies("rollcalls-a", "members-a", "votes-a", VoteviewParser.ExtractionVersion + "-next"), default);
 
         Assert.False(bumped);
+    }
+
+    private async Task<List<(ApiResource Resource, int Congress, string JobId)>> WalkAsync(string rootKey, int first, int? failAtCongress = null)
+    {
+        var walked = new List<(ApiResource Resource, int Congress, string JobId)>();
+        var rollCalls = await SucceededJobs.RootAsync(store, connectionString, source, TestJobKeyPrefix + rootKey);
+        for (var congress = first; ; congress++)
+        {
+            var jobs = (await store.AdmitVoteviewFollowOnsAsync(source, ApiResource.VoteviewRollCalls, rollCalls, congress, default)).Jobs;
+            var members = jobs.Single(job => job.Url.Contains("/members/"));
+            await SucceededJobs.MarkSucceededAsync(connectionString, members.JobId);
+            var votes = Assert.Single((await store.AdmitVoteviewFollowOnsAsync(source, ApiResource.VoteviewMembers, members.JobId, congress, default)).Jobs);
+            walked.Add((ApiResource.VoteviewMembers, congress, members.JobId));
+            walked.Add((ApiResource.VoteviewVotes, congress, votes.JobId));
+            var next = jobs.SingleOrDefault(job => job.Url.Contains("/rollcalls/"));
+            if (next is null) return walked;
+            if (failAtCongress == congress + 1)
+            {
+                _ = await ScalarAsync($"UPDATE collection_jobs SET state = 'Failed' WHERE job_id = '{next.JobId}'");
+                return walked;
+            }
+            await SucceededJobs.MarkSucceededAsync(connectionString, next.JobId);
+            rollCalls = next.JobId;
+        }
     }
 
     private static VoteviewBodies Bodies(string rollCalls, string members, string votes, string? version = null) =>

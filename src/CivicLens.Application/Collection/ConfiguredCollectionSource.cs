@@ -186,7 +186,7 @@ public sealed class ConfiguredCollectionSource
             case ApiResource.VoteviewRollCalls:
                 yield return VoteviewJob(source, ApiResource.VoteviewMembers, VoteviewJobKeys.Members(SourceId, jobId), congress, currentDate);
                 if (congress < VoteviewJobKeys.CurrentCongress(currentDate))
-                    yield return VoteviewJob(source, ApiResource.VoteviewRollCalls, VoteviewJobKeys.RollCalls(SourceId, congress + 1, currentDate),
+                    yield return VoteviewJob(source, ApiResource.VoteviewRollCalls, VoteviewJobKeys.RollCalls(SourceId, jobId),
                         congress + 1, currentDate);
                 break;
             case ApiResource.VoteviewMembers:

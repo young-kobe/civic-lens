@@ -33,23 +33,13 @@ public sealed class VoteviewUrlTests
     }
 
     [Fact]
-    public void TheRollCallsKeyOfTheCurrentCongressHoldsTheSweepDayAndTheKeyOfAnEarlierCongressIsFinal()
-    {
-        var today = new DateOnly(2026, 10, 29);
-
-        Assert.Equal("voteview-senate/voteview-senate-votes/rollcalls/119/2026-10-29",
-            VoteviewJobKeys.RollCalls(VoteviewVoteFixtures.SourceId, 119, today));
-        Assert.Equal("voteview-senate/voteview-senate-votes/rollcalls/118/final",
-            VoteviewJobKeys.RollCalls(VoteviewVoteFixtures.SourceId, 118, today));
-    }
-
-    [Fact]
     public void EachLaterJobOfTheChainIsKeyedByItsParentJobSoTheVotesJobFindsItsSiblingsFromTheKeys()
     {
+        var nextRollCalls = VoteviewJobKeys.RollCalls(VoteviewVoteFixtures.SourceId, "rollcalls-job");
         var members = VoteviewJobKeys.Members(VoteviewVoteFixtures.SourceId, "rollcalls-job");
         var votes = VoteviewJobKeys.Votes(VoteviewVoteFixtures.SourceId, "members-job");
 
-        Assert.Equal(("rollcalls-job", "members-job"), (VoteviewJobKeys.ParentJobId(members), VoteviewJobKeys.ParentJobId(votes)));
-        Assert.NotEqual(members, votes);
+        Assert.Equal(["rollcalls-job", "rollcalls-job", "members-job"], new[] { nextRollCalls, members, votes }.Select(VoteviewJobKeys.ParentJobId));
+        Assert.Equal(3, new[] { nextRollCalls, members, votes }.Distinct().Count());
     }
 }
