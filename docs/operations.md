@@ -821,7 +821,7 @@ To keep the variables between runs, put them in `.runtime/search/api.env` as `NA
 
 Test a report with `curl -d recordId=<64 hex characters> -d revision=1 -d category=wrong-date -d cf-turnstile-response=XXXX.DUMMY.TOKEN.XXXX http://127.0.0.1:8100/v1/reports`. Pull with `curl -H "Authorization: Bearer $CIVIC_LENS_REPORT_PULL_TOKEN" 'http://127.0.0.1:8100/internal/v1/reports'`.
 
-The `/internal/*` route is not public. R-24 must block it at the edge or use a private listener before the service is exposed.
+The `/internal/*` route is not public. The [Caddyfile](#web-server) answers it with 404 on the API host.
 
 To use the search page, set `CIVIC_LENS_PUBLIC_API_URL=http://127.0.0.1:8100` in the environment of the process that publishes (the `releases publish` command or the review workspace), and serve the release root from a server that sends no cross-origin limit. The service allows any origin. Without the variable, `search.html` says that search is not available.
 
@@ -829,7 +829,7 @@ To give each page a canonical address, set `CIVIC_LENS_PUBLIC_BASE_URL` in the s
 
 To use the report page, also set `CIVIC_LENS_TURNSTILE_SITE_KEY` in the environment of the process that publishes. For a local trial use the Cloudflare test site key `1x00000000000000000000AA`, which always passes. Publish, serve the release root, and open a record page. Use its link "Report a problem with this record". Send the report, then run the pull command above to see it. Without the API address or the site key, `report.html` says that reporting is not available.
 
-Optional variables: `CIVIC_LENS_TRUSTED_PROXY_RANGES` (the Cloudflare ranges, empty in development) and `CIVIC_LENS_REQUESTS_PER_MINUTE` (default 60). The container image of the search service is in [Container images](#container-images).
+Optional variables: `CIVIC_LENS_TRUSTED_PROXY_RANGES` (empty in development) and `CIVIC_LENS_REQUESTS_PER_MINUTE` (default 60). In production, set the ranges to `127.0.0.0/8,::1`. The tunnel and Caddy run on the same machine, so the peer is loopback. Caddy passes the `CF-Connecting-IP` header that Cloudflare sets. The container image of the search service is in [Container images](#container-images).
 
 ## Container images
 
@@ -847,6 +847,26 @@ The `Dockerfile` in the repository root builds two images for linux-arm64. The w
 - After the first run on main, set the packages `civic-lens-host` and `civic-lens-search` to public in the ghcr package settings. Do this one time by hand. The Jetson then pulls without a token.
 - Each image has two tags: the full commit SHA and `main`. Deploy by the commit SHA. Pull one with `docker pull ghcr.io/young-kobe/civic-lens-host:<commit-sha>`. Check its attestation with `gh attestation verify oci://ghcr.io/young-kobe/civic-lens-host:<commit-sha> --repo young-kobe/civic-lens`.
 - Every base image is pinned by digest, and the tag is in a comment. The SDK image must equal the `global.json` version. The aspnet image must equal the runtime of that SDK (see the .NET release notes). To update a base image, change the digest and the comment together.
+
+## Web server
+
+`deploy/caddy/Caddyfile` configures Caddy for the temporary production machine. Public traffic goes from Cloudflare through the `cloudflared` tunnel to Caddy. Cloudflare ends TLS, so Caddy speaks plain HTTP and has `auto_https off`. Caddy listens on `127.0.0.1` only (`default_bind`), and its admin endpoint is off. `cloudflared` targets `http://127.0.0.1:<port>`. The review workspace is not behind Caddy.
+
+| Variable | Meaning |
+| --- | --- |
+| `CIVIC_LENS_CADDY_PORT` | The loopback port of Caddy. Default 8080. The tunnel points both host names at it |
+| `CIVIC_LENS_RELEASE_DIRECTORY` | The release root. The same variable as for publishing. Required. Caddy serves `<root>/current`, the link that a release activation swaps |
+| `CIVIC_LENS_API_PORT` | The loopback port of the search service. Default 8100. It must equal the port in `ASPNETCORE_URLS` of the search service. The compose file, in a later change, will derive one from the other |
+
+- `civic-lens.info` serves the static release. `file_server` uses the precompressed `release.json.gz` and `release.json.br`, the only compressed files that a publish writes. Caddy compresses other responses when it sends them. A missing path gets the release `404.html` with status 404. Other error statuses, for example 405, get a plain text body. The same block also answers `127.0.0.1`, so the search service on the same machine can read the release without the tunnel. A request for any other host name gets 404.
+- `api.civic-lens.info` proxies to the search service. `/internal/*` gets 404 and never reaches the service. Caddy passes the `CF-Connecting-IP` header unchanged. Cloudflare sets it on every request and replaces a value that the reader sent. The service trusts it because the peer is loopback.
+- `Cache-Control` values: `release.json` has `public, max-age=60`, because readers poll it about every 2 minutes. Every other file, HTML pages and assets included, has `public, max-age=300`, because their names do not change when the content changes. Only `photos/<64 hex characters>.jpg` has `public, max-age=31536000, immutable`, because the name is the hash of the content. Error pages have `no-store`.
+- Every page, asset, and error that Caddy answers from its own blocks has `X-Content-Type-Options: nosniff` and `Referrer-Policy: strict-origin-when-cross-origin`. A 502 from the search proxy and a 404 when the release has no `404.html` carry only `X-Robots-Tag`. No Content-Security-Policy is set.
+- Every response has `X-Robots-Tag: noindex` during the soft launch. The snippet `(noindex)` in the Caddyfile owns it. At go-live, delete the snippet and every `import noindex` line, then restart the Caddy container. The admin endpoint is off, so a reload is not possible. `robots.txt` stays as published.
+- Never add a `log` directive to a site block. Without one, Caddy writes no access log. The privacy page says that page reads and searches leave no record. Caddy still writes error lines, for example when `404.html` is missing. The global `log` block in the Caddyfile filters them. They keep the host, method, status, and error. They hold no query string, headers, or IP address. A file error can name the file path of the page, with no reader data. Do not weaken that filter.
+- Check the rule with `caddy adapt`. The output must have no `logs` key inside `apps.http.servers`, and the global `logs` entry must delete `request>uri`, `request>headers`, `request>remote_ip`, `request>remote_port`, and `request>client_ip`. At go-live, request a missing path with a query and a `CF-Connecting-IP` header. Then check that the Caddy log holds neither.
+
+Check the file with `caddy validate --config deploy/caddy/Caddyfile --adapter caddyfile`, with `CIVIC_LENS_RELEASE_DIRECTORY` set.
 
 ## Dev database reset
 
