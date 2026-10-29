@@ -4,7 +4,7 @@ namespace CivicLens.Host.Collection;
 
 internal static class WorkerHealthCommand
 {
-    public static readonly TimeSpan MaximumAge = TimeSpan.FromMinutes(3);
+    private static readonly TimeSpan MaximumAge = TimeSpan.FromMinutes(10);
 
     public static bool Matches(string[] arguments) => arguments is ["worker", "health"];
 

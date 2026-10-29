@@ -21,6 +21,6 @@ internal static class StatementDraftComposition
             StatementDraftTask.Task);
         var step = new StatementDraftStep(new PostgresStatementDraftStore(contexts),
             new AnthropicStatementDraftModel(configuration.ApiKey), configuration.Settings);
-        return new(status, configuration.Settings.DailyTokenLimit, new AnalysisWorker<StatementDraftRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<StatementDraftRun>>(), wakeup, beat: beat), wakeup);
+        return new(status, configuration.Settings.DailyTokenLimit, new AnalysisWorker<StatementDraftRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<StatementDraftRun>>(), beat, wakeup), wakeup);
     }
 }

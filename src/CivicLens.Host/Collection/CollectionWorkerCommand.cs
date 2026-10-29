@@ -25,9 +25,10 @@ internal static class CollectionWorkerCommand
     public static string ArtifactRootOf(string[] arguments) => Path.GetFullPath(arguments[2]);
 
     public static async Task<int> ExecuteAsync(string[] arguments, ICollectionWorkerQueue queue,
-        ICollectionJobStore jobs, ICollectionAttemptStore evidence, ILoggerFactory loggers, CancellationToken cancellationToken,
+        ICollectionJobStore jobs, ICollectionAttemptStore evidence, ILoggerFactory loggers, WorkerBeat beat,
+        CancellationToken cancellationToken,
         EvidenceProcessingWorker? evidenceProcessor = null, IWorkerWakeup? wakeup = null,
-        ICollectionScheduleStore? schedules = null, IReadOnlyList<AnalysisStage>? analysis = null, WorkerBeat? beat = null)
+        ICollectionScheduleStore? schedules = null, IReadOnlyList<AnalysisStage>? analysis = null)
     {
         ValidateArguments(arguments);
         var collectorPath = Path.GetFullPath(arguments[1]);
@@ -37,7 +38,7 @@ internal static class CollectionWorkerCommand
                 Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet"),
             loggers.CreateLogger<RunCollectionJob>());
         var once = arguments.Length == 4;
-        var collection = new CollectionJobWorker(queue, runner, loggers.CreateLogger<CollectionJobWorker>(), evidenceProcessor, wakeup, schedules, beat);
+        var collection = new CollectionJobWorker(queue, runner, loggers.CreateLogger<CollectionJobWorker>(), beat, evidenceProcessor, wakeup, schedules);
         var (result, analysisResults) = await RunAsync(collection, analysis ?? [], artifactRoot, once, cancellationToken);
         CollectionCommandOutput.Write(result);
         foreach (var (name, analysisResult) in analysisResults)

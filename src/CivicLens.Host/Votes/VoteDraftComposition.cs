@@ -26,6 +26,6 @@ internal static class VoteDraftComposition
         var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresVoteDraftStore.Table, VoteDraftTask.Task);
         var step = new VoteDraftStep(new PostgresVoteDraftStore(contexts), new VoteReader(jobs, new PostgresMemberRosterStore(contexts), responses, artifactRoot),
             new AnthropicVoteDraftModel(configuration.ApiKey), configuration.Settings, issues);
-        return new(status, configuration.Settings.DailyTokenLimit, new AnalysisWorker<VoteDraftRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<VoteDraftRun>>(), wakeup, beat: beat), wakeup);
+        return new(status, configuration.Settings.DailyTokenLimit, new AnalysisWorker<VoteDraftRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<VoteDraftRun>>(), beat, wakeup), wakeup);
     }
 }

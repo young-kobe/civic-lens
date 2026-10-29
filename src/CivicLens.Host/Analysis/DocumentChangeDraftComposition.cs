@@ -20,7 +20,7 @@ internal static class DocumentChangeDraftComposition
             DocumentChangeDraftTask.Task);
         var step = new DocumentChangeDraftStep(new PostgresDocumentChangeAnalysisStore(contexts),
             new AnthropicDocumentChangeDraftModel(configuration.ApiKey), configuration.Settings, [.. issueIds.Order(StringComparer.Ordinal)]);
-        var worker = new AnalysisWorker<AnalysisRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<AnalysisRun>>(), wakeup, beat: beat);
+        var worker = new AnalysisWorker<AnalysisRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<AnalysisRun>>(), beat, wakeup);
         return new(status, configuration.Settings.DailyTokenLimit, worker, wakeup);
     }
 }

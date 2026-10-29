@@ -8,7 +8,7 @@ namespace CivicLens.Application.Analysis;
 
 public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysisStatusStore status, TimeProvider clock,
     ILogger<AnalysisWorker<TRun>> logger,
-    IWorkerWakeup? wakeup = null, Func<CancellationToken, Task>? beforeEachPass = null, WorkerBeat? beat = null) where TRun : class
+    WorkerBeat beat, IWorkerWakeup? wakeup = null, Func<CancellationToken, Task>? beforeEachPass = null) where TRun : class
 {
     private static readonly TimeSpan ReleaseTimeout = TimeSpan.FromSeconds(5);
     private readonly IAnalysisTaskStep<TRun> step = step;
@@ -22,6 +22,7 @@ public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysis
     public async Task<AnalysisWorkerResult> ExecuteAsync(bool once, CancellationToken cancellationToken = default)
     {
         if (!once && wakeup is null) throw new InvalidOperationException("Continuous analysis requires a durable wakeup provider.");
+        await beat.BeatAsync(cancellationToken);
         _ = await queue.ReleaseBudgetWaitsAsync(cancellationToken);
         var failures = once ? 0 : await WorkerLoop.ConnectUntilAvailableAsync(wakeup!, cancellationToken);
         var passes = 0;
@@ -35,7 +36,7 @@ public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysis
                     if (once) break;
                     var pauseLength = resumeAt is { } at ? Max(at - clock.GetUtcNow(), TimeSpan.Zero) : Timeout.InfiniteTimeSpan;
                     Task Pause(CancellationToken token) => Task.Delay(pauseLength, clock, token);
-                    await (beat is null ? Pause(cancellationToken) : beat.WaitAsync(Pause, cancellationToken));
+                    await beat.WaitAsync(Pause, cancellationToken);
                     continue;
                 }
                 var drain = await DrainAsync(cancellationToken);
@@ -59,7 +60,7 @@ public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysis
         while (!cancellationToken.IsCancellationRequested && !pause.IsPaused(out _))
         {
             passes++;
-            if (beat is not null) await beat.BeatAsync(cancellationToken);
+            await beat.BeatAsync(cancellationToken);
             Interlocked.Exchange(ref budgetExhausted, 0);
             IReadOnlyList<AnalysisRecord> eligible;
             try
@@ -94,6 +95,7 @@ public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysis
                         logger.LogError(exception, "Analysis {Task} failed for subject {SubjectId}.", step.Identity.Task, record.SubjectId);
                         Interlocked.Increment(ref failures);
                     }
+                    await beat.BeatIfDueAsync(token);
                 });
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }

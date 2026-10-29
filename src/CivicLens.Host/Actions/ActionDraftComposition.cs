@@ -28,6 +28,6 @@ internal static class ActionDraftComposition
         var reader = new ActionBillReader(jobs, responses, textExtractor, artifactRoot);
         var step = new ActionDraftStep(new PostgresActionDraftStore(contexts), reader,
             new AnthropicActionDraftModel(configuration.ApiKey), configuration.Settings, issues);
-        return new(status, configuration.Settings.DailyTokenLimit, new AnalysisWorker<ActionDraftRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<ActionDraftRun>>(), wakeup, beat: beat), wakeup);
+        return new(status, configuration.Settings.DailyTokenLimit, new AnalysisWorker<ActionDraftRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<ActionDraftRun>>(), beat, wakeup), wakeup);
     }
 }

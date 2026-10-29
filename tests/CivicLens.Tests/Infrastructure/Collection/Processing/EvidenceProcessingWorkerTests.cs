@@ -87,7 +87,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
             new CaptureArtifactVerifier(), new FixtureCollector("Pipeline wording.", fail: false,
                 Interlocked.Increment(ref observationTick)), NullLogger<RunCollectionJob>.Instance);
         var pipeline = new CollectionJobWorker(PostgresCollectionWorkerQueue.FromConnectionString(connectionString),
-            runner, NullLogger<CollectionJobWorker>.Instance, Worker(processing));
+            runner, NullLogger<CollectionJobWorker>.Instance, TestBeat.Create(), Worker(processing));
 
         var result = await pipeline.ExecuteAsync(artifactRoot, once: true, batchSize: 20,
             leaseDuration: TimeSpan.FromSeconds(60));
@@ -112,7 +112,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
             new CaptureArtifactVerifier(), new ApiFixtureCollector(RosterFixtures.Json), NullLogger<RunCollectionJob>.Instance);
         var pipeline = new CollectionJobWorker(PostgresCollectionWorkerQueue.FromConnectionString(connectionString),
-            runner, NullLogger<CollectionJobWorker>.Instance, Worker(processing));
+            runner, NullLogger<CollectionJobWorker>.Instance, TestBeat.Create(), Worker(processing));
 
         _ = await pipeline.ExecuteAsync(artifactRoot, once: true, batchSize: 20, leaseDuration: TimeSpan.FromSeconds(60));
 
@@ -133,7 +133,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
             new CaptureArtifactVerifier(), new ApiFixtureCollector(RosterFixtures.Json), NullLogger<RunCollectionJob>.Instance);
         var pipeline = new CollectionJobWorker(PostgresCollectionWorkerQueue.FromConnectionString(connectionString),
-            runner, NullLogger<CollectionJobWorker>.Instance, Worker(processing));
+            runner, NullLogger<CollectionJobWorker>.Instance, TestBeat.Create(), Worker(processing));
 
         _ = await pipeline.ExecuteAsync(artifactRoot, once: true, batchSize: 20, leaseDuration: TimeSpan.FromSeconds(60));
 
@@ -543,7 +543,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         var runner = new RunCollectionJob(jobs, attempts, new FileCollectionReceiptHandoffStore(artifactRoot),
             new CaptureArtifactVerifier(), new ApiFixtureCollector(json), NullLogger<RunCollectionJob>.Instance);
         var pipeline = new CollectionJobWorker(PostgresCollectionWorkerQueue.FromConnectionString(connectionString),
-            runner, NullLogger<CollectionJobWorker>.Instance, Worker(processing));
+            runner, NullLogger<CollectionJobWorker>.Instance, TestBeat.Create(), Worker(processing));
         _ = await pipeline.ExecuteAsync(artifactRoot, once: true, batchSize: 20, leaseDuration: TimeSpan.FromSeconds(60));
         return (await jobs.GetAsync(jobId, default))!;
     }

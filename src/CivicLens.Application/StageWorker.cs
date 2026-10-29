@@ -5,10 +5,11 @@ namespace CivicLens.Application;
 
 /// <summary>Runs one pass, then sleeps until the wakeup. A pass returns its progress count. A failed pass is logged and counted.</summary>
 public sealed class StageWorker(string name, Func<CancellationToken, Task<int>> pass, IWorkerWakeup wakeup, ILogger<StageWorker> logger,
-    WorkerBeat? beat = null)
+    WorkerBeat beat)
 {
     public async Task<AnalysisWorkerResult> ExecuteAsync(bool once, CancellationToken cancellationToken = default)
     {
+        await beat.BeatAsync(cancellationToken);
         var failures = once ? 0 : await WorkerLoop.ConnectUntilAvailableAsync(wakeup, cancellationToken);
         var passes = 0;
         var progress = 0;
@@ -17,6 +18,7 @@ public sealed class StageWorker(string name, Func<CancellationToken, Task<int>> 
             while (!cancellationToken.IsCancellationRequested)
             {
                 passes++;
+                await beat.BeatAsync(cancellationToken);
                 try
                 {
                     progress += await pass(cancellationToken);

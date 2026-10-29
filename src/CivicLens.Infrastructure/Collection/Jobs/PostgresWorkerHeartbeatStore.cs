@@ -8,6 +8,9 @@ namespace CivicLens.Infrastructure.Collection.Jobs;
 /// <summary>Keeps one row for each work loop. Every write and every age uses the database clock.</summary>
 public sealed class PostgresWorkerHeartbeatStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) : IWorkerHeartbeatStore
 {
+    private const string BeatSql = "INSERT INTO worker_heartbeat (loop, beat_at_utc_ticks) VALUES ({0}, " + DatabaseClock.TicksSql + ") " +
+        "ON CONFLICT (loop) DO UPDATE SET beat_at_utc_ticks = EXCLUDED.beat_at_utc_ticks";
+
     public static PostgresWorkerHeartbeatStore FromConnectionString(string connectionString)
     {
         _ = PostgresCollectionJobStore.FromConnectionString(connectionString);
@@ -19,11 +22,7 @@ public sealed class PostgresWorkerHeartbeatStore(IDbContextFactory<CollectionAtt
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(loop);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        _ = await db.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO worker_heartbeat (loop, beat_at_utc_ticks)
-            VALUES ({loop}, {(await DatabaseClock.ReadAsync(db, cancellationToken)).Ticks})
-            ON CONFLICT (loop) DO UPDATE SET beat_at_utc_ticks = EXCLUDED.beat_at_utc_ticks
-            """, cancellationToken);
+        _ = await db.Database.ExecuteSqlRawAsync(BeatSql, [loop], cancellationToken);
     }
 
     public async Task ClearAsync(CancellationToken cancellationToken)

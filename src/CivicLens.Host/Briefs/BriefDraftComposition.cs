@@ -23,7 +23,7 @@ internal static class BriefDraftComposition
         var store = new PostgresBriefDraftStore(contexts);
         var names = collection.People.ToDictionary(person => person.Id, person => person.Name, StringComparer.Ordinal);
         var step = new BriefDraftStep(store, new AnthropicBriefDraftModel(configuration.ApiKey), configuration.Settings, names);
-        var worker = new AnalysisWorker<BriefDraftRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<BriefDraftRun>>(), wakeup, store.EnqueueClosedWeeksAsync, beat: beat);
+        var worker = new AnalysisWorker<BriefDraftRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<BriefDraftRun>>(), beat, wakeup, store.EnqueueClosedWeeksAsync);
         return new(status, configuration.Settings.DailyTokenLimit, worker, wakeup);
     }
 }

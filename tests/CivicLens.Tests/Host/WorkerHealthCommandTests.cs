@@ -20,7 +20,7 @@ public sealed class WorkerHealthCommandTests(PostgresCollection postgres) : IAsy
     public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
 
     [Fact]
-    public async Task EveryLoopWithinThreeMinutesIsHealthy()
+    public async Task EveryLoopWithinTenMinutesIsHealthy()
     {
         await store.BeatAsync("collection", default);
         await store.BeatAsync("gate", default);
@@ -38,12 +38,12 @@ public sealed class WorkerHealthCommandTests(PostgresCollection postgres) : IAsy
         await store.BeatAsync("collection", default);
         await store.BeatAsync("gate", default);
         await BriefWorldSeeder.RunAsync(connectionString,
-            "UPDATE worker_heartbeat SET beat_at_utc_ticks = beat_at_utc_ticks - 1810000000 WHERE loop = 'gate'");
+            "UPDATE worker_heartbeat SET beat_at_utc_ticks = beat_at_utc_ticks - 6010000000 WHERE loop = 'gate'");
 
         var result = await HostProcess.RunAsync(connectionString, "worker", "health");
 
         Assert.Equal(1, result.ExitCode);
-        Assert.Matches(@"loop gate last beat 18\d seconds ago", result.Output);
+        Assert.Matches(@"loop gate last beat 60\d seconds ago", result.Output);
         Assert.DoesNotContain("loop collection", result.Output);
     }
 

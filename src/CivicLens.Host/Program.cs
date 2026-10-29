@@ -185,7 +185,7 @@ try
         var queue = PostgresCollectionWorkerQueue.FromConnectionString(connectionString);
         var analysisContexts = AnalysisDbContextFactory.Create(connectionString);
         var heartbeats = PostgresWorkerHeartbeatStore.FromConnectionString(connectionString);
-        WorkerBeat BeatOf(string loop) => new(heartbeats, loop, loggers.CreateLogger<WorkerBeat>());
+        WorkerBeat BeatOf(string loop) => new(heartbeats, loop, loggers.CreateLogger<WorkerBeat>(), TimeProvider.System);
         var analysis = DocumentChangeDraftComposition.Create(analysisContexts, connectionString,
             issueConfiguration?.Issues.Select(issue => issue.Id) ?? [], BeatOf(WorkerLoopNames.Drafting), loggers);
         await using var analysisWakeup = analysis.Wakeup;
@@ -211,7 +211,7 @@ try
         await using var reportPullWakeup = reportPull?.Wakeup;
         executing = true;
         await jobs.SynchronizeAsync(workerConfiguration, cancellation.Token);
-        await heartbeats.ClearAsync(cancellation.Token);
+        if (args is not [_, _, _, "--once"]) await heartbeats.ClearAsync(cancellation.Token);
         await analysis.RecordStartAsync(cancellation.Token);
         await gate.RecordStartAsync(cancellation.Token);
         await statementDrafting.RecordStartAsync(cancellation.Token);
@@ -232,7 +232,7 @@ try
             new CompareDocuments(comparisons),
             evidenceConcurrency, loggers.CreateLogger<EvidenceProcessingWorker>());
         await using var wakeup = PostgresCollectionPipelineWakeup.FromConnectionString(connectionString);
-        return await CollectionWorkerCommand.ExecuteAsync(args, queue, jobs, attempts, loggers, cancellation.Token, processing, wakeup, jobs,
+        return await CollectionWorkerCommand.ExecuteAsync(args, queue, jobs, attempts, loggers, BeatOf(WorkerLoopNames.Collection), cancellation.Token, processing, wakeup, jobs,
             [.. new[]
             {
                 AnalysisStage.For(WorkerLoopNames.Drafting, analysis.Worker),
@@ -244,7 +244,7 @@ try
                 AnalysisStage.For(WorkerLoopNames.BriefDrafting, briefDrafting.Worker),
                 factPublishing?.Stage,
                 reportPull?.Stage
-            }.OfType<AnalysisStage>()], BeatOf(WorkerLoopNames.Collection));
+            }.OfType<AnalysisStage>()]);
     }
 
     if (WorkerHealthCommand.Matches(args))

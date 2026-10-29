@@ -26,7 +26,7 @@ internal static class StatementGateComposition
             StatementGateTask.Task);
         var step = new StatementGateStep(new PostgresStatementGateStore(contexts),
             new AnthropicStatementGateModel(configuration.ApiKey), configuration.Settings, rubric);
-        var worker = new AnalysisWorker<StatementGateRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<StatementGateRun>>(), wakeup, beat: beat);
+        var worker = new AnalysisWorker<StatementGateRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<StatementGateRun>>(), beat, wakeup);
         return new(status, configuration.Settings.DailyTokenLimit, worker, wakeup);
     }
 }

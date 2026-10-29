@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace CivicLens.Application.Publication;
 
 public sealed class PublishCodeApprovedFacts(PublishRelease publish, IPublicationStore publications, PublishedRecordLoaders loaders,
-    ILogger<PublishCodeApprovedFacts> logger)
+    ILogger<PublishCodeApprovedFacts> logger, WorkerBeat beat)
 {
     private static readonly ReviewActor Actor = new(ReviewAuthor.CodeSubject, ReviewRole.Owner);
 
@@ -16,6 +16,7 @@ public sealed class PublishCodeApprovedFacts(PublishRelease publish, IPublicatio
         var skipped = new HashSet<PublishedRecordReference>();
         while (true)
         {
+            await beat.BeatIfDueAsync(cancellationToken);
             // After a rollback the active release is not the latest. The stage waits until the owner activates the latest release.
             var state = await publications.GetStateAsync(cancellationToken);
             if (state.Active?.ReleaseNumber != state.LatestReleaseNumber && state.LatestReleaseNumber > 0) return published;
