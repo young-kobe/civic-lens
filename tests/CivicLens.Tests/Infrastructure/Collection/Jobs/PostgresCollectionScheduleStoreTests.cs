@@ -291,7 +291,7 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
 
     private sealed class EmptyQueue : ICollectionWorkerQueue
     {
-        public Task<CollectionWorkerQueuePage> GetEligibleJobIdsAsync(CollectionWorkerCursor? cursor, int limit,
+        public Task<CollectionWorkerQueuePage> GetEligibleJobsAsync(CollectionWorkerCursor? cursor, int limit,
             CancellationToken cancellationToken) => Task.FromResult(new CollectionWorkerQueuePage([], null));
     }
 

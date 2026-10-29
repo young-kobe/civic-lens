@@ -6,11 +6,13 @@ namespace CivicLens.Application.Collection.Jobs;
 /// <summary>Drains durable collection and evidence work, then waits for a database wakeup.</summary>
 public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollectionJob runner, ILogger<CollectionJobWorker> logger,
     WorkerBeat beat, EvidenceProcessingWorker? evidenceProcessor = null, IWorkerWakeup? wakeup = null,
-    ICollectionScheduleStore? schedules = null)
+    ICollectionScheduleStore? schedules = null, int concurrency = CollectionLanePolicy.DefaultConcurrency)
 {
     public const int DefaultBatchSize = 20;
     public const int MaximumBatchSize = 100;
     public static readonly TimeSpan DefaultLeaseDuration = TimeSpan.FromSeconds(60);
+
+    private readonly int lanes = CollectionLanePolicy.ValidateConcurrency(concurrency);
 
     public async Task<CollectionJobWorkerResult> ExecuteAsync(string artifactDirectory, bool once,
         int batchSize = DefaultBatchSize, TimeSpan? leaseDuration = null,
@@ -89,7 +91,7 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
                 CollectionWorkerQueuePage page;
                 try
                 {
-                    page = await queue.GetEligibleJobIdsAsync(cursor, batchSize, cancellationToken);
+                    page = await queue.GetEligibleJobsAsync(cursor, batchSize, cancellationToken);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
                 catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
@@ -100,25 +102,10 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
                     break;
                 }
 
-                foreach (var jobId in page.JobIds)
-                {
-                    if (cancellationToken.IsCancellationRequested) break;
-                    visited++;
-                    try
-                    {
-                        var result = await runner.ExecuteAsync(jobId, artifactDirectory, lease, cancellationToken);
-                        if (IsProgress(result.Status))
-                            progress++;
-                        if (IsFailure(result)) failures++;
-                    }
-                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
-                    catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
-                    {
-                        logger.LogError(exception, "Collection job {JobId} failed.", jobId);
-                        failures++;
-                    }
-                    await beat.BeatIfDueAsync(cancellationToken);
-                }
+                var pageResult = await RunPageAsync(page, artifactDirectory, lease, cancellationToken);
+                visited += pageResult.Visited;
+                progress += pageResult.Progress;
+                failures += pageResult.Failures;
 
                 if (evidenceProcessor is not null && !cancellationToken.IsCancellationRequested)
                 {
@@ -143,6 +130,52 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
 
         return new(passes, visited, failures, queueFailures);
     }
+
+    private async Task<PageResult> RunPageAsync(CollectionWorkerQueuePage page, string artifactDirectory,
+        TimeSpan lease, CancellationToken cancellationToken)
+    {
+        var visited = 0;
+        var progress = 0;
+        var failures = 0;
+        try
+        {
+            await Parallel.ForEachAsync(LanesOf(page), new ParallelOptions
+            {
+                MaxDegreeOfParallelism = lanes,
+                CancellationToken = cancellationToken
+            }, async (laneJobs, token) =>
+            {
+                foreach (var job in laneJobs)
+                {
+                    if (token.IsCancellationRequested) return;
+                    Interlocked.Increment(ref visited);
+                    try
+                    {
+                        var result = await runner.ExecuteAsync(job.JobId, artifactDirectory, lease, token);
+                        if (IsProgress(result.Status)) Interlocked.Increment(ref progress);
+                        if (IsFailure(result)) Interlocked.Increment(ref failures);
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested) { return; }
+                    catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))
+                    {
+                        logger.LogError(exception, "Collection job {JobId} failed.", job.JobId);
+                        Interlocked.Increment(ref failures);
+                    }
+                    await beat.BeatIfDueAsync(token);
+                }
+            });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        return new(visited, progress, failures);
+    }
+
+    /// <summary>One lane holds every job of a pacing key, in queue order. One lane holds the whole page when only one job may run.</summary>
+    private IEnumerable<IReadOnlyList<CollectionWorkerQueueJob>> LanesOf(CollectionWorkerQueuePage page) =>
+        lanes == 1
+            ? [page.Jobs]
+            : page.Jobs.GroupBy(job => job.PacingKey, StringComparer.Ordinal).Select(group => group.ToArray());
+
+    private readonly record struct PageResult(int Visited, int Progress, int Failures);
 
     private async Task<EvidenceProcessingWorkerResult> ProcessEvidenceAsync(string artifactDirectory, int batchSize,
         TimeSpan lease, CancellationToken cancellationToken)

@@ -8,7 +8,8 @@ using CivicLens.Collection.Contracts;
 
 namespace CivicLens.Infrastructure.Collection;
 
-public sealed class CollectorProcess(string collectorAssembly, string dotnetExecutable = "dotnet") : ICollectorProcess
+public sealed class CollectorProcess(string collectorAssembly, string dotnetExecutable = "dotnet", bool lockArtifactDirectory = true)
+    : ICollectorProcess
 {
     private static readonly string[] AllowedVariables =
     [
@@ -23,9 +24,12 @@ public sealed class CollectorProcess(string collectorAssembly, string dotnetExec
         if (!File.Exists(assembly))
             throw new FileNotFoundException("Build the collector before collecting.", assembly);
         Directory.CreateDirectory(request.ArtifactDirectory);
-        // Serialize direct invocations sharing this capture directory; managed jobs add database coordination.
-        await using var lease = new FileStream(Path.Combine(request.ArtifactDirectory, ".collector.lock"),
-            FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        // Direct runs have no database slot, so the lock file keeps them from sharing a capture directory.
+        // Managed runs skip it: the collector slot of each pacing key already bounds them.
+        await using var lease = lockArtifactDirectory
+            ? new FileStream(Path.Combine(request.ArtifactDirectory, ".collector.lock"),
+                FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)
+            : null;
         var manifest = Path.Combine(request.ArtifactDirectory, $".request-{Guid.NewGuid():N}.json");
         try
         {
