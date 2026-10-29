@@ -718,7 +718,7 @@ The flag does not remove files from old releases. A kept release directory keeps
 
 ## Automatic publication of facts
 
-The `worker` command can publish code-approved actions and votes. [Publication](architecture/publication.md#automatic-publication-of-facts) holds the rules. A person still publishes statements, relationships, briefs, and document changes. The stage is off by default. It runs when the variable below is `1`. Any other value stops the worker with exit code 2.
+The `worker` command can publish code-approved actions and votes. [Publication](architecture/publication.md#automatic-publication-of-facts) holds the rules. A person still publishes statements, relationships, briefs, and document changes. The stage is off by default. It runs when the variable below is `1`. Any other value stops the worker with exit code 2. Code approves an action or a vote only after a model drafts its headline and summary. So the stage publishes nothing until you also set `CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS` and `CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS`.
 
 | Variable | Meaning |
 |---|---|
@@ -921,7 +921,7 @@ A release contract change can add a required field to a published file. Old file
 - Under the root, `env/` holds the env files, `config/` holds `collection.json` and `issues.json`, and `captures/`, `releases/`, `review-keys/` and `postgres/` hold data. `captures/`, `releases/` and `review-keys/` belong to user 10001, the user of our images. The two Postgres directories belong to user 70, the `postgres` user of the Alpine Postgres image.
 - `compose.env` holds the image tag and the three ports (`CIVIC_LENS_CADDY_PORT`, `CIVIC_LENS_API_PORT`, `CIVIC_LENS_REVIEW_PORT`). The search address and the Caddy proxy target come from `CIVIC_LENS_API_PORT`. The release address of the search service comes from `CIVIC_LENS_CADDY_PORT`.
 - Secrets are in files that end in `.secret.env` and have mode 600. Each process reads only its own files. The database password is in two files, the Postgres file and the connection string. Keep the two equal. The report pull token is in the host and search files. Keep these two equal too.
-- The AI stages, fact publishing, and report pull are off while their variables are empty. Set `CIVIC_LENS_FACT_PUBLISHING=1`, `CIVIC_LENS_REPORT_PULL=1`, and the `*_DAILY_TOKENS` values to turn them on.
+- The AI stages, fact publishing, and report pull are off while their variables are empty. Set `CIVIC_LENS_FACT_PUBLISHING=1`, `CIVIC_LENS_REPORT_PULL=1`, and the `*_DAILY_TOKENS` values to turn them on. Fact publishing also needs action and vote drafting; see [Automatic publication of facts](#automatic-publication-of-facts).
 - The search service reads the release from Caddy at `127.0.0.1` on `CIVIC_LENS_CADDY_PORT`, so it does not need the tunnel.
 
 Run the scripts with `sudo`, because they write under the root and the env files hold secrets.
