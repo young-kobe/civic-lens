@@ -78,7 +78,9 @@ public sealed class PostgresVoteviewVoteTests(PostgresCollection postgres) : IAs
         var dayOne = await WalkAsync("day-one", first: 117);
         var dayTwo = await WalkAsync("day-two", first: 117);
 
-        Assert.Equal([117, 118, 119], dayTwo.Where(job => job.Resource == ApiResource.VoteviewVotes).Select(job => job.Congress));
+        var current = VoteviewJobKeys.CurrentCongress(DateOnly.FromDateTime(DateTime.UtcNow));
+        Assert.Equal(Enumerable.Range(117, current - 116),
+            dayTwo.Where(job => job.Resource == ApiResource.VoteviewVotes).Select(job => job.Congress));
         Assert.Empty(dayOne.Select(job => job.JobId).Intersect(dayTwo.Select(job => job.JobId)));
         Assert.Equal(2, dayOne.Concat(dayTwo).Count(job => job is { Resource: ApiResource.VoteviewVotes, Congress: 119 }));
     }
