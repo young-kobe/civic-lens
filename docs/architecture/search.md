@@ -40,7 +40,7 @@ The search service gives readers full-text search over every published record. I
 - `IngestWorker` also purges reports. It deletes a report only when its sequence is at or below the acknowledged sequence and it is older than 7 days. This keeps one timer loop, so no new hosted service exists.
 - The wire types `PulledReport`, `PulledReportBatch`, and `ReaderReportProtocol` are in `CivicLens.Publication.Contracts`. They are not release files, so `PublicationProtocol.SchemaVersion` does not change. The cursor format is owned by `ReportCursor` in the service, because it is opaque to the puller. `ReaderReportProtocol` also owns the retention days that publish shows on `about.html`.
 - The operational application pulls the reports with the stage `reportPull`; see [operational pull](#operational-pull).
-- The route `/internal/*` is not public. [R-24](../roadmap.md#later) must block it at the edge or use a private listener. This document does not build that.
+- The route `/internal/*` is not public. The Caddyfile answers `/internal/*` with 404 on the API host; see [Web server](../operations.md#web-server).
 
 ## Invariants
 

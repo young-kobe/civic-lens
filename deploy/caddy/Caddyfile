@@ -1,8 +1,24 @@
-# No log directive exists on purpose. Caddy writes no access log without one, and the privacy page says that page reads and searches leave no record.
+# No access log exists on purpose: the site blocks have no log directive. The privacy page says that page reads and searches leave no record.
+# The default logger keeps error lines for operators. The filter removes every field that names a reader.
 {
 	admin off
 	auto_https off
 	http_port {$CIVIC_LENS_CADDY_PORT:8080}
+	default_bind 127.0.0.1
+
+	log {
+		output stderr
+		format filter {
+			wrap json
+			fields {
+				request>uri delete
+				request>headers delete
+				request>remote_ip delete
+				request>remote_port delete
+				request>client_ip delete
+			}
+		}
+	}
 }
 
 (noindex) {
@@ -18,14 +34,13 @@
 }
 
 http://civic-lens.info {
-	bind 127.0.0.1 ::1
 	import noindex
 	import security_headers
 
 	root * {$CIVIC_LENS_RELEASE_DIRECTORY}/current
 	encode zstd gzip
 
-	header Cache-Control "public, max-age=300"
+	header ?Cache-Control "public, max-age=300"
 
 	@manifest path /release.json
 	header @manifest Cache-Control "public, max-age=60"
@@ -37,17 +52,22 @@ http://civic-lens.info {
 		precompressed br gzip
 	}
 
-	handle_errors {
+	handle_errors 404 {
 		import noindex
 		import security_headers
 		header Cache-Control "no-store"
 		rewrite * /404.html
 		file_server
 	}
+
+	handle_errors {
+		import noindex
+		import security_headers
+		respond "{err.status_code} {err.status_text}" {err.status_code}
+	}
 }
 
 http://api.civic-lens.info {
-	bind 127.0.0.1 ::1
 	import noindex
 	import security_headers
 
@@ -61,7 +81,7 @@ http://api.civic-lens.info {
 }
 
 http:// {
-	bind 127.0.0.1 ::1
 	import noindex
+	import security_headers
 	respond 404
 }
