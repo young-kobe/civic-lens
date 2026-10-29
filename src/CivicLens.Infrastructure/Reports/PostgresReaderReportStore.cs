@@ -106,6 +106,16 @@ public sealed class PostgresReaderReportStore(IDbContextFactory<CollectionAttemp
         throw new ReviewConflictException("This report is already resolved.");
     }
 
+    public async Task<int> DeleteExpiredClosedAsync(CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var now = await DatabaseClock.ReadAsync(db, cancellationToken);
+        var cutoffTicks = now.Ticks - TimeSpan.FromDays(ReaderReportProtocol.ClosedRetentionDays).Ticks;
+        return await db.Set<ReaderReportRow>()
+            .Where(row => row.Status != ReaderReportStatus.Open && row.ResolvedAtUtcTicks < cutoffTicks)
+            .ExecuteDeleteAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<ReaderReport>> ListUnansweredCorrectionsAsync(PublishedRecordKind kind, string recordId,
         CancellationToken cancellationToken)
     {

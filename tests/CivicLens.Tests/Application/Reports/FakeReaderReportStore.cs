@@ -26,6 +26,15 @@ internal sealed class FakeReaderReportStore : IReaderReportStore
         return Task.CompletedTask;
     }
 
+    public Exception? DeleteFailure { get; set; }
+    public int DeleteCalls { get; private set; }
+
+    public Task<int> DeleteExpiredClosedAsync(CancellationToken cancellationToken)
+    {
+        DeleteCalls++;
+        return DeleteFailure is { } failure ? Task.FromException<int>(failure) : Task.FromResult(0);
+    }
+
     public Task<ReaderReportPage> ListAsync(PageCursor? cursor, int limit, ReaderReportFilter filter, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 

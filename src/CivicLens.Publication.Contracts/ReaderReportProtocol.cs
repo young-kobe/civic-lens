@@ -25,6 +25,7 @@ public static class ReaderReportProtocol
     public const int MaximumCursorLength = 100;
     public const int MinimumPullTokenCharacters = 32;
     public const int PurgeAfterDays = 7;
+    public const int ClosedRetentionDays = 365;
 
     public static IReadOnlyList<string> Categories { get; } =
         [WrongQuoteCategory, WrongDateCategory, WrongAttributionCategory, MissingContextCategory, BrokenSourceLinkCategory, OtherCategory];

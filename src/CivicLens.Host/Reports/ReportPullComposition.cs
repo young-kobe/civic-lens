@@ -29,7 +29,7 @@ internal sealed record ReportPullComposition(AnalysisStage Stage, IWorkerWakeup 
         };
         var puller = new HttpReportPuller(client, ReadAddress(), ReadToken());
         var wakeup = PostgresIntervalWakeup.FromConnectionString(connectionString, "civic_lens_report_pull", TimeSpan.FromMinutes(5));
-        var worker = new StageWorker(WorkerLoopNames.ReportPull, new PullReaderReports(puller, new PostgresReaderReportStore(contexts)).ExecuteAsync, wakeup,
+        var worker = new StageWorker(WorkerLoopNames.ReportPull, new PullReaderReports(puller, new PostgresReaderReportStore(contexts), loggers.CreateLogger<PullReaderReports>()).ExecuteAsync, wakeup,
             loggers.CreateLogger<StageWorker>(), beat);
         return new(new AnalysisStage(WorkerLoopNames.ReportPull, worker.ExecuteAsync), wakeup);
     }
