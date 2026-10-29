@@ -63,6 +63,7 @@ http://civic-lens.info {
 	handle_errors {
 		import noindex
 		import security_headers
+		header Cache-Control "no-store"
 		respond "{err.status_code} {err.status_text}" {err.status_code}
 	}
 }
