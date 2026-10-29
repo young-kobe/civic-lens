@@ -283,6 +283,9 @@ public sealed class HttpCollector : IDisposable
         return fields[0];
     }
 
+    private static bool IsRobotsAbsent(HttpStatusCode status) =>
+        (int)status is >= 400 and < 500 && status is not (HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests);
+
     private async Task<FetchedRobots> GetRobotsAsync(CollectionRequest request, Action count, Action<long> addBytes,
         Func<long> getBytes, CancellationToken token, Func<Task<bool>> delayBeforeRedirectAsync)
     {
@@ -295,7 +298,7 @@ public sealed class HttpCollector : IDisposable
             robotRequest.Headers.UserAgent.ParseAdd(UserAgent);
             robotRequest.Headers.AcceptEncoding.ParseAdd("gzip, deflate, br");
             using var response = await client.SendAsync(robotRequest, HttpCompletionOption.ResponseHeadersRead, token);
-            if (response.StatusCode == HttpStatusCode.NotFound) return new FetchedRobots(RobotsRules.Empty, "", NotFound: true);
+            if (IsRobotsAbsent(response.StatusCode)) return new FetchedRobots(RobotsRules.Empty, "", NotFound: true);
             if ((int)response.StatusCode == 429)
                 throw new RobotsException(CollectionFailureCode.RateLimited, deferred: true,
                     retryAfterSeconds: RetrySeconds(response.Headers.RetryAfter));

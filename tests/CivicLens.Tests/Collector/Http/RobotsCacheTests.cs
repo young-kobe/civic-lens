@@ -42,6 +42,52 @@ public sealed class RobotsCacheTests : IDisposable
         Assert.Equal(CollectionOutcome.Captured, cached.Outcome);
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.Gone)]
+    [InlineData(HttpStatusCode.BadRequest)]
+    public async Task UnavailableClientErrorPermitsCollectionAndIsCachedLikeAMissingFile(HttpStatusCode status)
+    {
+        var site = new Site(robots: () => new HttpResponseMessage(status));
+
+        var first = await FetchAsync(site);
+        var cached = await FetchAsync(site);
+
+        Assert.Equal(["/robots.txt", "/watch", "/watch"], site.Paths);
+        Assert.Equal(CollectionOutcome.Captured, first.Outcome);
+        Assert.Equal(CollectionOutcome.Captured, cached.Outcome);
+        Assert.True(cached.RobotsCacheHit);
+    }
+
+    [Fact]
+    public async Task CachedUnavailableClientErrorIsNeverUsedAsAStaleCopy()
+    {
+        var site = new Site(robots: () => new HttpResponseMessage(HttpStatusCode.Gone));
+        await FetchAsync(site);
+        site.Robots = () => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+
+        clock.Advance(TimeSpan.FromDays(2));
+        var result = await FetchAsync(site);
+
+        Assert.Equal(CollectionFailureCode.RobotsUnavailable, result.FailureCode);
+        Assert.False(result.RobotsCacheHit);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    public async Task RobotsAccessDeniedBlocksCollectionBecauseAFirewallLikelyBlocksTheCollector(HttpStatusCode status)
+    {
+        var site = new Site(robots: () => new HttpResponseMessage(status));
+
+        var result = await FetchAsync(site);
+        await FetchAsync(site);
+
+        Assert.Equal(CollectionOutcome.Failed, result.Outcome);
+        Assert.Equal(CollectionFailureCode.RobotsUnavailable, result.FailureCode);
+        Assert.Equal(["/robots.txt", "/robots.txt"], site.Paths);
+        Assert.Empty(Directory.GetFiles(directory, "robots-*.json"));
+    }
+
     [Fact]
     public async Task OnlyAFreshFetchIsNotACacheHit()
     {
