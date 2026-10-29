@@ -90,7 +90,7 @@ public sealed class PublishedOfficialPageTests
         Assert.Equal("Mayor Example", document.QuerySelector("h1")!.TextContent);
         Assert.Equal(["Representative for WA, district 1", "Secretary of State"],
             document.QuerySelectorAll("[aria-labelledby='panel-offices'] tbody tr td:first-child").Select(cell => cell.TextContent));
-        Assert.Equal(["2025-01-03", "Present"], document.QuerySelectorAll("[aria-labelledby='panel-offices'] tbody tr td.num:nth-child(4)").Select(cell => cell.TextContent));
+        Assert.Equal(["2025-01-03", "Present"], document.QuerySelectorAll("[aria-labelledby='panel-offices'] tbody tr td[data-label='To']").Select(cell => cell.TextContent));
         Assert.All(document.QuerySelectorAll("table"), table => Assert.NotNull(table.QuerySelector("caption")));
         Assert.Contains("href=\"../officials.html\"", html, StringComparison.Ordinal);
         Assert.Contains("href=\"../assets/css/theme.css\"", html, StringComparison.Ordinal);
@@ -101,7 +101,7 @@ public sealed class PublishedOfficialPageTests
     {
         var page = Current([], []) with { Profile = Profile("pres", "Pat President", new PublishedOfficeTerm { Office = "President", Start = new DateOnly(2025, 1, 20) }) };
 
-        var offices = await OfficesAsync(page);
+        var offices = await PanelTableAsync(page, "panel-offices");
 
         Assert.Equal(["Office", "From", "To"], offices.QuerySelectorAll("thead th").Select(cell => cell.TextContent));
         Assert.Equal(3, offices.QuerySelectorAll("tbody td").Length);
@@ -115,7 +115,7 @@ public sealed class PublishedOfficialPageTests
             Profile = Profile("a", "Ann Able", Term("sen", "MA", "Democratic"), new PublishedOfficeTerm { Office = "President", Start = new DateOnly(2030, 1, 20) })
         };
 
-        var offices = await OfficesAsync(page);
+        var offices = await PanelTableAsync(page, "panel-offices");
 
         Assert.Equal(["Office", "Party", "From", "To"], offices.QuerySelectorAll("thead th").Select(cell => cell.TextContent));
         Assert.All(offices.QuerySelectorAll("tbody tr"), row => Assert.Equal(4, row.QuerySelectorAll("td").Length));
@@ -124,7 +124,7 @@ public sealed class PublishedOfficialPageTests
     [Fact]
     public async Task APageWithNoCastOnAnyRowGetsNoCastColumnBecauseOnlyAVoteHasACast()
     {
-        var records = await RecordsAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []));
+        var records = await PanelTableAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []), "panel-records");
 
         Assert.Equal(["Date", "Record"], records.QuerySelectorAll("thead th").Select(cell => cell.TextContent));
         Assert.Equal(2, records.QuerySelectorAll("tbody td").Length);
@@ -133,19 +133,11 @@ public sealed class PublishedOfficialPageTests
     [Fact]
     public async Task APageWithOneVoteKeepsTheCastColumnForEveryRow()
     {
-        var records = await RecordsAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], [Vote('3', new DateOnly(2026, 4, 1))]));
+        var records = await PanelTableAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], [Vote('3', new DateOnly(2026, 4, 1))]), "panel-records");
 
         Assert.Equal(["Date", "Record", "Cast"], records.QuerySelectorAll("thead th").Select(cell => cell.TextContent));
         Assert.All(records.QuerySelectorAll("tbody tr"), row => Assert.Equal(3, row.QuerySelectorAll("td").Length));
     }
-
-    private static async Task<AngleSharp.Dom.IElement> OfficesAsync(ReleaseOfficialPage page) =>
-        new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None))
-            .QuerySelector("[aria-labelledby='panel-offices'] table")!;
-
-    private static async Task<AngleSharp.Dom.IElement> RecordsAsync(ReleaseOfficialPage page) =>
-        new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None))
-            .QuerySelector("[aria-labelledby='panel-records'] table")!;
 
     [Fact]
     public async Task TheCurrentPageLinksTheOfficialWebsiteNamingItsHostWithNoReferrerAndNoOpener()
@@ -863,6 +855,10 @@ public sealed class PublishedOfficialPageTests
 
     private static async Task<AngleSharp.Dom.IDocument> ListAsync(DateTimeOffset publishedAtUtc, params OfficialListing[] officials) =>
         new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialsAsync(officials, publishedAtUtc, CancellationToken.None));
+
+    private static async Task<AngleSharp.Dom.IElement> PanelTableAsync(ReleaseOfficialPage page, string panelId) =>
+        new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None))
+            .QuerySelector($"[aria-labelledby='{panelId}'] table")!;
 
     private static ReleaseOfficialPage Current(PublishedRecordEntry[] entries, PublishedOfficialVote[] votes) =>
         new(Profile(), true, 119, true, [], [.. entries], [.. votes]);
