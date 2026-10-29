@@ -5,6 +5,7 @@ using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.MemberPhotos;
 using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Application.Collection.Votes;
+using CivicLens.Application.Collection.VoteviewVotes;
 using CivicLens.Collection.Contracts;
 
 namespace CivicLens.Application.Collection;
@@ -246,6 +247,11 @@ public sealed class ConfiguredCollectionSource
                 return VoteSession.FirstOfSweep(source.BackfillFrom!.Value, today, source.MinimumCongress!.Value) is { } firstMenu
                     ? new ApiTarget(ApiResource.SenateVoteMenu, SenateVoteUrl.Menu(source.Url, firstMenu),
                         CollectionJobPriority.Check)
+                    : null;
+            case ApiParser.VoteviewSenateVoteList:
+                return VoteSession.FirstOfSweep(source.BackfillFrom!.Value, today, source.MinimumCongress!.Value) is { } firstSession
+                    ? new ApiTarget(ApiResource.VoteviewRollCalls,
+                        VoteviewUrl.File(source.Url, ApiResource.VoteviewRollCalls, firstSession.Congress), CollectionJobPriority.Check)
                     : null;
             case ApiParser.CongressLegislators:
                 return new ApiTarget(ApiResource.MemberRoster, source.Url, CollectionJobPriority.Check);

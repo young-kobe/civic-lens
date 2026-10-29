@@ -16,6 +16,9 @@ public enum ApiResource
     HouseVoteMembers,
     SenateVoteMenu,
     SenateVote,
+    VoteviewRollCalls,
+    VoteviewVotes,
+    VoteviewMembers,
     MemberRoster,
     ExecutiveRoster,
     MemberPhoto

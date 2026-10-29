@@ -409,6 +409,8 @@ The reader takes the `lis` IDs of the senators from `IMemberRosterStore.ReadSena
 
 ## Limits and planned work
 
+- The `voteview-senate-votes` source is off and not yet wired to a job flow. senate.gov returns a 403 to the collector. Voteview publishes the Senate roll calls as three CSV files for each Congress: roll calls, votes, and members. The code in `src/CivicLens.Application/Collection/VoteviewVotes/` parses the files and joins them by Voteview number and icpsr. It renders one roll call as text. Each member line holds the bioguide ID. It skips the President row. It skips a roll call whose yea or nay member count differs from the roll call file. It refuses any other member with no bioguide ID. Tests: `VoteviewRollTests`, `VoteviewUrlTests`.
+- Planned: when code approves a Senate vote from this source, the approval rests on Voteview data and not on senate.gov. The published vote must say which source it used.
 - The lists of vote records read `vote_drafts` without the partial status indexes of `action_drafts`. The table held 676 roll calls on 2026-10-17 and grows by about 700 a year. `brief_drafts` also has no such indexes. Add the indexes when the table passes about 10,000 rows.
 - A later bill detail does not redraft a vote that was already drafted. The next change of the vote itself drafts again.
 - A voted bill from a congress before `minimumCongress` of the bill source would wait forever. No such vote exists today, because the vote sweep starts in 2025.

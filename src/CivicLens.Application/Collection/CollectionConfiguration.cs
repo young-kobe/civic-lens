@@ -74,6 +74,9 @@ public sealed record CollectionConfiguration
         if (Sources.Where(source => CoversNoPeople(source?.ApiParser)).GroupBy(source => source.ApiParser).Any(kind => kind.Count() > 1))
             throw new ArgumentException("A configuration may have only one roster or photo source of each kind.");
 
+        if (Sources.Count(source => source is { Enabled: true } && IsSenateVoteSource(source.ApiParser)) > 1)
+            throw new ArgumentException("A configuration may enable only one Senate vote source.");
+
         var sourceUrls = new HashSet<Uri>();
         foreach (var source in Sources)
         {
@@ -131,7 +134,7 @@ public sealed record CollectionConfiguration
     {
         IEnumerable<string> ids = source.ApiParser switch
         {
-            ApiParser.CongressBillList or ApiParser.CongressHouseVoteList or ApiParser.SenateVoteList => asOf < source.BackfillFrom ? [] : BioguidePersonIds(),
+            ApiParser.CongressBillList or ApiParser.CongressHouseVoteList or ApiParser.SenateVoteList or ApiParser.VoteviewSenateVoteList => asOf < source.BackfillFrom ? [] : BioguidePersonIds(),
             ApiParser.CongressLegislators or ApiParser.CongressLegislatorsExecutive or ApiParser.MemberPhotos => [],
             null => source.Coverage!.Where(coverage => new DateRange(coverage.StartsOn, coverage.EndsBefore).Contains(asOf))
                 .Select(coverage => coverage.PersonId),
@@ -176,6 +179,7 @@ public sealed record CollectionConfiguration
                 ValidateCongressApiSource(source);
                 break;
             case ApiParser.SenateVoteList:
+            case ApiParser.VoteviewSenateVoteList:
                 ValidateSenateVoteSource(source);
                 break;
             case ApiParser.CongressLegislators:
@@ -187,6 +191,9 @@ public sealed record CollectionConfiguration
                 throw new ArgumentOutOfRangeException(nameof(source));
         }
     }
+
+    private static bool IsSenateVoteSource(ApiParser? parser) =>
+        parser is ApiParser.SenateVoteList or ApiParser.VoteviewSenateVoteList;
 
     private static bool CoversNoPeople(ApiParser? parser) => IsRosterFile(parser) || parser == ApiParser.MemberPhotos;
 

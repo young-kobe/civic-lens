@@ -14,6 +14,9 @@ internal static partial class RenderedText
         if (!string.IsNullOrWhiteSpace(value)) lines.Add(Line(label, value));
     }
 
+    public static string MemberLine(string sourceId, string name, string party, string state, string cast) =>
+        Line("Member", string.Join(", ", new[] { sourceId, name, party, state, cast }.Select(SingleLine)));
+
     public static string SingleLine(string value) => LineBreaks().Replace(value, " ").Trim();
 
     public static string Count(int value) => value.ToString(CultureInfo.InvariantCulture);
