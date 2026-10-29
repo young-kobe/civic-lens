@@ -251,11 +251,11 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     public async Task PruneKeepsTheThirtyHighestNumbersAtTheRealLimit()
     {
         var draft = await CreateDraftAsync();
-        for (var number = 1; number <= 31; number++)
+        for (var number = 1; number <= PruneReleases.KeepReleases + 1; number++)
             await publications.CommitAsync(Owner.Subject, Commit(number, draft, 1, 0), $"key-{number}", Hash(number), default);
         var below = 0;
 
-        await publications.PruneAsync(30, (lowestKept, _, _) => { below = lowestKept; return Task.CompletedTask; }, default);
+        await publications.PruneAsync(PruneReleases.KeepReleases, (lowestKept, _, _) => { below = lowestKept; return Task.CompletedTask; }, default);
 
         Assert.Equal(2, below);
     }

@@ -481,6 +481,7 @@ internal sealed class FakePublicationStore : IPublicationStore
 
     public async Task PruneAsync(int keep, Func<int, string?, CancellationToken, Task> retireOlder, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (FailOnPrune is not null) throw FailOnPrune;
         if (Committed.Count == 0) return;
         var lowestKept = Committed.OrderByDescending(item => item.ReleaseNumber).Take(keep).Min(item => item.ReleaseNumber);
