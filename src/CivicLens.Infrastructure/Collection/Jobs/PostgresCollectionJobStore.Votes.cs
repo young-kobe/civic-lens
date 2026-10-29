@@ -113,11 +113,21 @@ public sealed partial class PostgresCollectionJobStore : IVoteAdmissionStore
     }
 
     private static async Task QueueCandidateAsync(CollectionAttemptDbContext db, VoteCandidateRow candidate, DateTimeOffset now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        QueueCandidate(db, candidate, now, await ReadQueueInputsAsync(db, candidate, cancellationToken));
+
+    private static void QueueCandidate(CollectionAttemptDbContext db, VoteCandidateRow candidate, DateTimeOffset now, QueueInputs inputs)
     {
-        if (await IsWaitingForBillDetailAsync(db, candidate, cancellationToken)) return;
-        VoteDraftQueueRows.Add(db, candidate.CandidateId, Ticks(now), await PriorityOfVoteAsync(db, candidate, cancellationToken));
+        if (!inputs.WaitsForBillDetail) VoteDraftQueueRows.Add(db, candidate.CandidateId, Ticks(now), inputs.Priority);
     }
+
+    private static async Task<QueueInputs> ReadQueueInputsAsync(CollectionAttemptDbContext db, VoteCandidateRow candidate,
+        CancellationToken cancellationToken) =>
+        await IsWaitingForBillDetailAsync(db, candidate, cancellationToken)
+            ? new QueueInputs(true, 0)
+            : new QueueInputs(false, await PriorityOfVoteAsync(db, candidate, cancellationToken));
+
+    private readonly record struct QueueInputs(bool WaitsForBillDetail, int Priority);
 
     private static async Task<bool> IsWaitingForBillDetailAsync(CollectionAttemptDbContext db, VoteCandidateRow candidate,
         CancellationToken cancellationToken) =>

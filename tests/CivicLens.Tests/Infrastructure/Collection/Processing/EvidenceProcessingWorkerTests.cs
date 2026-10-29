@@ -215,7 +215,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     public async Task PreparingABillDetailAgainKeepsTheOneExtractionEvenThoughTheGateIsADuplicate()
     {
         var detail = await RunBillJobAsync(ApiResource.Bill, BillDetail(sponsor: "A000001", cosponsors: 2));
-        var replay = new JobPreparation(jobs, attempts, jobs, jobs, jobs, PostgresMemberRosterStore.FromConnectionString(connectionString), PostgresExecutiveRosterStore.FromConnectionString(connectionString), new CaptureBodyReader(), processing, extractions, new CaptureDocumentTextExtractor(), issues);
+        var replay = new JobPreparation(jobs, attempts, jobs, jobs, jobs, PostgresMemberRosterStore.FromConnectionString(connectionString), PostgresExecutiveRosterStore.FromConnectionString(connectionString), new CaptureBodyReader(), processing, extractions, new CaptureDocumentTextExtractor(), issues, NullLogger<JobPreparation>.Instance);
 
         var result = await replay.PrepareAsync(detail.JobId, artifactRoot, default);
 
@@ -453,7 +453,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         Assert.Single(await processing.GetByJobIdsAsync([jobId], default), record => record.AttemptId == attemptId);
 
     private EvidenceProcessingWorker Worker(IEvidenceProcessingStore processingStore, IDocumentHistoryStore? historyStore = null) => new(jobs,
-        new JobPreparation(jobs, attempts, jobs, jobs, jobs, PostgresMemberRosterStore.FromConnectionString(connectionString), PostgresExecutiveRosterStore.FromConnectionString(connectionString), new CaptureBodyReader(), processingStore, extractions, new CaptureDocumentTextExtractor(), issues), processingStore, extract, new GetDocumentHistory(historyStore ?? PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
+        new JobPreparation(jobs, attempts, jobs, jobs, jobs, PostgresMemberRosterStore.FromConnectionString(connectionString), PostgresExecutiveRosterStore.FromConnectionString(connectionString), new CaptureBodyReader(), processingStore, extractions, new CaptureDocumentTextExtractor(), issues, NullLogger<JobPreparation>.Instance), processingStore, extract, new GetDocumentHistory(historyStore ?? PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
         new CompareDocuments(comparisons), 1, NullLogger<EvidenceProcessingWorker>.Instance);
 
     private CollectionJobDefinition ConfiguredDefinition(string? etag = null) =>
