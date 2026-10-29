@@ -1,0 +1,97 @@
+name: civic-lens
+
+x-host-volumes: &host-volumes
+  - ${CIVIC_LENS_ROOT:?}/captures:${CIVIC_LENS_ROOT:?}/captures
+  - ${CIVIC_LENS_ROOT:?}/releases:${CIVIC_LENS_ROOT:?}/releases
+  - ${CIVIC_LENS_ROOT:?}/review-keys:${CIVIC_LENS_ROOT:?}/review-keys
+  - ${CIVIC_LENS_ROOT:?}/config:${CIVIC_LENS_ROOT:?}/config:ro
+
+x-host-environment: &host-environment
+  CIVIC_LENS_ARTIFACT_DIRECTORY: ${CIVIC_LENS_ROOT:?}/captures
+  CIVIC_LENS_RELEASE_DIRECTORY: ${CIVIC_LENS_ROOT:?}/releases
+  CIVIC_LENS_REVIEW_KEY_DIRECTORY: ${CIVIC_LENS_ROOT:?}/review-keys
+  CIVIC_LENS_COLLECTION_CONFIG: ${CIVIC_LENS_ROOT:?}/config/collection.json
+  CIVIC_LENS_ISSUES_CONFIG: ${CIVIC_LENS_ROOT:?}/config/issues.json
+  CIVIC_LENS_REPORT_PULL_URL: http://127.0.0.1:${CIVIC_LENS_API_PORT:?}
+
+x-host: &host
+  image: ghcr.io/young-kobe/civic-lens-host:${CIVIC_LENS_IMAGE_TAG:?}
+  network_mode: host
+  env_file:
+    - ${CIVIC_LENS_ROOT:?}/env/host.env
+    - ${CIVIC_LENS_ROOT:?}/env/host.secret.env
+  environment: *host-environment
+  volumes: *host-volumes
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+x-postgres: &postgres
+  image: postgres:18.3-alpine@sha256:54451ecb8ab38c24c3ec123f2fd501303a3a1856a5c66e98cecf2460d5e1e9d7
+  user: "10001:10001"
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready --username=$$POSTGRES_USER --dbname=$$POSTGRES_DB"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+
+services:
+  postgres:
+    <<: *postgres
+    env_file: ${CIVIC_LENS_ROOT:?}/env/operational-db.secret.env
+    ports:
+      - 127.0.0.1:5433:5432
+    volumes:
+      - ${CIVIC_LENS_ROOT:?}/postgres/operational:/var/lib/postgresql
+
+  search-postgres:
+    <<: *postgres
+    env_file: ${CIVIC_LENS_ROOT:?}/env/search-db.secret.env
+    ports:
+      - 127.0.0.1:5434:5432
+    volumes:
+      - ${CIVIC_LENS_ROOT:?}/postgres/search:/var/lib/postgresql
+
+  worker:
+    <<: *host
+    restart: unless-stopped
+    command: ["worker", "/app/collector/CivicLens.Collector.dll", "${CIVIC_LENS_ROOT:?}/captures"]
+
+  review:
+    <<: *host
+    restart: unless-stopped
+    command: ["review", "${CIVIC_LENS_REVIEW_PORT:?}"]
+
+  search:
+    image: ghcr.io/young-kobe/civic-lens-search:${CIVIC_LENS_IMAGE_TAG:?}
+    network_mode: host
+    restart: unless-stopped
+    env_file:
+      - ${CIVIC_LENS_ROOT:?}/env/search.env
+      - ${CIVIC_LENS_ROOT:?}/env/search.secret.env
+    environment:
+      ASPNETCORE_URLS: http://127.0.0.1:${CIVIC_LENS_API_PORT:?}
+    depends_on:
+      search-postgres:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2.11.7-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
+    user: "10001:10001"
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      CIVIC_LENS_CADDY_PORT: ${CIVIC_LENS_CADDY_PORT:?}
+      CIVIC_LENS_API_PORT: ${CIVIC_LENS_API_PORT:?}
+      CIVIC_LENS_RELEASE_DIRECTORY: ${CIVIC_LENS_ROOT:?}/releases
+    tmpfs:
+      - /data
+      - /config
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${CIVIC_LENS_ROOT:?}/releases:${CIVIC_LENS_ROOT:?}/releases:ro
+
+  cli:
+    <<: *host
+    profiles: [tools]

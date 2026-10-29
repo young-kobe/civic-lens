@@ -866,6 +866,33 @@ Release numbers restart at 1 after this reset.
 
 A release contract change can add a required field to a published file. Old files then do not read, and the next publish fails. On the dev machine, repeat steps 1 to 5. These steps delete all captures and records, not only the releases. Collect again and let code approve the facts, then publish a fresh release with `releases publish` as in [Publish a static release](#publish-a-static-release). Production has no release yet, so it has no older files.
 
+## Production compose
+
+`deploy/compose.yaml` runs the temporary production machine with Docker Compose v2. It starts two Postgres containers, the worker, the review workspace, the search service, and Caddy. Check out the repository at the commit that you deploy, because Compose mounts `deploy/caddy/Caddyfile` from the checkout. The images are described under Container images. cloudflared, backups, and release retention are not in this file.
+
+- The worker, the review workspace, the search service, and Caddy use host networking. The review workspace keeps its loopback listener and the search service trusts only loopback proxies. Reach the review workspace through `tailscale serve`, not through Caddy.
+- The Postgres containers publish `127.0.0.1:5433` (operational) and `127.0.0.1:5434` (search). The connection strings in the secret env files name these ports. Change both places together.
+- The root is `/srv/civic-lens`, the Linux convention for data that a machine serves. To use another root, export `CIVIC_LENS_ROOT` for every script and `docker compose` call. Every directory is mounted at the same path inside the containers, so one path value serves both sides.
+- Under the root, `env/` holds the env files, `config/` holds `collection.json` and `issues.json`, and `captures/`, `releases/`, `review-keys/` and `postgres/` hold data. The data directories belong to user 10001, the user of the images.
+- `compose.env` holds the image tag and the three ports (`CIVIC_LENS_CADDY_PORT`, `CIVIC_LENS_API_PORT`, `CIVIC_LENS_REVIEW_PORT`). The search address and the Caddy proxy target come from `CIVIC_LENS_API_PORT`.
+- Secrets are in files that end in `.secret.env` and have mode 600. Each process reads only its own files. The database password is in two files, the Postgres file and the connection string. Keep the two equal. The report pull token is in the host and search files. Keep these two equal too.
+- The AI stages, fact publishing, and report pull are off while their variables are empty. Set `CIVIC_LENS_FACT_PUBLISHING=1`, `CIVIC_LENS_REPORT_PULL=1`, and the `*_DAILY_TOKENS` values to turn them on.
+- `CIVIC_LENS_RELEASE_BASE_URL` of the search service is the public address of the site, because the Caddyfile answers by host name.
+
+Run the scripts with `sudo`, because they write under the root and the env files hold secrets.
+
+```sh
+sudo deploy/scripts/install.sh
+sudo deploy/scripts/update.sh <full-commit-sha>
+sudo deploy/scripts/compose.sh run --rm cli releases list
+```
+
+`install.sh` creates the directories and copies each `deploy/env/*.env.example` file only when the target is absent. It never overwrites a file. Fill in the env files and the two config files, then run `update.sh`.
+
+`update.sh` sets the image tag for the run, pulls the images, applies the migrations with a one-off `cli` container, and recreates the services. It writes the tag to `compose.env` only after these steps succeed. Services never migrate at start. The tag must be a full commit SHA whose images exist. To roll back, run `update.sh` with an earlier SHA. A rollback does not undo a migration.
+
+`compose.sh` is `docker compose` with the compose file and `compose.env` set. The `cli` service starts the host image with no command. Add the host command after `cli`, for example `releases publish` or `db migrate`.
+
 ## Runtime data
 
-Runtime data belongs in ignored .runtime/. Generated publication and evaluation artifacts belong in ignored artifacts/. Never commit credentials or copy operational directories from the legacy repository. There is no deploy command and no public endpoint yet. Published releases live under the configured release directory, not in the repository. Production backup and restore and MCP runbooks will come here when they exist.
+Runtime data belongs in ignored .runtime/. Generated publication and evaluation artifacts belong in ignored artifacts/. Never commit credentials or copy operational directories from the legacy repository. The deploy files are in [Production compose](#production-compose). Published releases live under the configured release directory, not in the repository. Production backup and restore and MCP runbooks will come here when they exist.
