@@ -23,7 +23,7 @@ The publication feature turns approved revisions into immutable, cumulative stat
 - A release has no status column. `is_active` marks the one active release: a commit sets it on the new row and clears the old one, and rollback moves it.
 - Rollback is a CLI command only. The workspace has no rollback or activate control.
 - Every release is kept. Carried records are hard links, so disk grows only with published records, and public MCP clients can pin a release. The [search](search.md) service pins releases too.
-- In production, releases go to a Cloudflare R2 bucket behind the Cloudflare CDN on civic-lens.info. Terraform defines the bucket and the domain.
+- At launch, the Jetson serves releases through Caddy and the Cloudflare tunnel on civic-lens.info. See [Web server](../operations.md#web-server).
 - Publish stages and checks a release on the server, then uploads it. The active release changes only after the upload finishes.
 - Locally, a Caddy container serves the release root with `file_server { precompressed br gzip }`.
 - Host renders the shared Razor components to static HTML, so publication needs no new project.

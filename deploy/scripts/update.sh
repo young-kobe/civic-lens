@@ -31,5 +31,5 @@ compose stop worker
 compose run --rm cli db migrate
 sed -i "s/^CIVIC_LENS_IMAGE_TAG=.*/CIVIC_LENS_IMAGE_TAG=$tag/" "$tag_file"
 compose up --detach --remove-orphans
-compose up --detach --force-recreate caddy
+compose up --detach --force-recreate caddy cloudflared
 echo "Running images tagged $tag."

@@ -913,7 +913,7 @@ A release contract change can add a required field to a published file. Old file
 
 ## Production compose
 
-`deploy/compose.yaml` runs the temporary production machine with Docker Compose v2. It starts two Postgres containers, the worker, the review workspace, the search service, and Caddy. Check out the repository at the commit that you deploy, because Compose mounts `deploy/caddy/Caddyfile` from the checkout. The images are described under Container images. cloudflared, backups, release retention, and the heartbeat are not in this file.
+`deploy/compose.yaml` runs the temporary production machine with Docker Compose v2. It starts two Postgres containers, the worker, the review workspace, the search service, Caddy, and cloudflared. Check out the repository at the commit that you deploy, because Compose mounts `deploy/caddy/Caddyfile` from the checkout. The images are described under [Container images](#container-images). Backups run from the same file; see [Production runbook](#production-runbook). Release retention and the heartbeat are not in this file.
 
 - The worker, the review workspace, the search service, and Caddy use host networking. The review workspace keeps its loopback listener and the search service trusts only loopback proxies. Reach the review workspace through `tailscale serve`, not through Caddy.
 - The Postgres containers publish `127.0.0.1:5433` (operational) and `127.0.0.1:5434` (search). The connection strings in the secret env files name these ports. Change both places together.
@@ -936,8 +936,97 @@ sudo deploy/scripts/compose.sh run --rm cli releases list
 
 `update.sh` stops when the checkout is not at the given SHA, or when `deploy/` has uncommitted changes. It sets the image tag for the run and pulls the images. It stops the worker, so the old worker never runs on the new schema. Then it applies the migrations with a one-off `cli` container. Then it writes the tag to `compose.env`, because the schema now belongs to that commit. Last, it recreates the services, and it always recreates Caddy so that a changed Caddyfile takes effect. If a step after the migration fails, run `update.sh` again with the same SHA. If the migration fails, the worker stays stopped. Fix the cause and run `update.sh` again, or run `sudo deploy/scripts/compose.sh up --detach worker` to start the old worker. Services never migrate at start. The tag must be a full commit SHA whose images exist. To roll back, run `update.sh` with an earlier SHA. A rollback does not undo a migration.
 
-`compose.sh` is `docker compose` with the compose file and `compose.env` set. The `cli` service starts the host image with no command. Add the host command after `cli`, for example `releases publish` or `db migrate`.
+`compose.sh` is `docker compose` with the compose file and `compose.env` set. The `cli` service starts the host image with no command. The `restic` service has the same `tools` profile. Add the host command after `cli`, for example `releases publish` or `db migrate`.
+
+## Production runbook
+
+This section is for the temporary production machine, a Jetson with Docker Compose v2. The long-term cloud move will use Terraform. Terraform state never goes to R2, because it holds credentials. The first launch uses no Terraform.
+
+**Vendor data rule.** Cloudflare may receive public content and the encrypted backups. Nothing else leaves the machine. The review workspace is never behind Cloudflare, because it holds review notes and reviewer identity.
+
+### First install
+
+1. Install Docker with Compose v2. Clone the repository to `/opt/civic-lens` and check out the commit to deploy. The systemd units use this path.
+2. Run `sudo deploy/scripts/install.sh`. It creates the directories under `/srv/civic-lens` and the env files from the templates.
+3. Fill in the env files in `/srv/civic-lens/env`, and put `collection.json` and `issues.json` in `/srv/civic-lens/config`.
+4. Create the tunnel (see [Tunnel](#tunnel)) and the restic password file and repository (see [Backups](#backups)).
+5. Run `sudo deploy/scripts/update.sh <full-commit-sha>`.
+6. Set up Tailscale for the review workspace (see [Review workspace access](#review-workspace-access)).
+7. Enable the backup timer.
+
+Do step 5 only after step 4. Without the credential file, the cloudflared container cannot start.
+
+### Tunnel
+
+`deploy/cloudflared/config.yml` is the tunnel config. It sends `civic-lens.info` and `api.civic-lens.info` to Caddy at `http://127.0.0.1:8080`, and every other host name gets 404. The port equals the default of `CIVIC_LENS_CADDY_PORT`. If you change that variable, change the file in the same commit. The review workspace is not in the config.
+
+1. Install `cloudflared` on the machine for this one-time setup, or use the official image. Run `cloudflared tunnel login` and pick the `civic-lens.info` zone.
+2. Run `cloudflared tunnel create civic-lens`. It prints the tunnel ID and writes `<tunnel-id>.json`.
+3. Move that file to `/srv/civic-lens/cloudflared/credentials.json`. Run `sudo chown 10001:10001` and `sudo chmod 600` on it. The credential file stays on the machine and never goes to Git.
+4. Set `CIVIC_LENS_TUNNEL_ID` in `/srv/civic-lens/env/compose.env` to the tunnel ID.
+5. Create the DNS records: `cloudflared tunnel route dns civic-lens civic-lens.info` and `cloudflared tunnel route dns civic-lens api.civic-lens.info`.
+6. Delete `cert.pem` from the cloudflared home folder after step 5. The tunnel does not need it.
+
+### Review workspace access
+
+The review workspace uses Tailscale. Cloudflare Access is not used.
+
+1. Install Tailscale on the machine and sign in. Enable HTTPS certificates in the Tailscale admin console.
+2. Run `sudo tailscale serve --bg --https=443 http://127.0.0.1:5081`. The review port equals `CIVIC_LENS_REVIEW_PORT`.
+3. Set `CIVIC_LENS_REVIEW_ORIGIN` in `host.env` to `https://<machine>.<tailnet>.ts.net`, the exact origin that `tailscale serve status` shows. Run `update.sh` again.
+4. Give each reviewer access to the machine in the tailnet.
+
+### Vendor checklist
+
+No Terraform manages these steps. Check each one by hand.
+
+- Cloudflare: the zone `civic-lens.info` exists. The tunnel exists and has two DNS routes. A Turnstile widget exists, and its site key and secret are in the env files. An R2 bucket exists for the backups, with an API token that is limited to that bucket.
+- Auth0: a regular web application exists. Its callback and logout URLs use the Tailscale origin. The owner subject and reviewers are in `host.env`.
+- Tailscale: HTTPS certificates are on, and `tailscale serve` runs.
+
+### Backups
+
+A nightly systemd timer runs `deploy/scripts/backup.sh`. The script dumps the operational database with `pg_dump --format=custom` inside the Postgres container. Then it runs restic from the pinned official image. It backs up the dump, `captures/`, and `releases/`, in one snapshot. Then it keeps 7 daily, 4 weekly, and 6 monthly snapshots and prunes the rest. Restic encrypts the data before it leaves the machine. The repository is a Cloudflare R2 bucket.
+
+The backup does not hold the search database, because a publish rebuilds it. It does not hold env files, secrets, or Terraform state. It does not hold `review-keys/`. If the data-protection keys are lost, reviewers must sign in again. Nothing else breaks.
+
+Set up the backup one time:
+
+1. Fill in `/srv/civic-lens/env/backup.secret.env` with the R2 repository URL and the API token.
+2. Make the restic password file: `sudo sh -c 'umask 077; openssl rand -base64 32 > /srv/civic-lens/env/restic-password'`. Keep an offline copy of the password. Without it, no backup can be read.
+3. Create the repository: `sudo deploy/scripts/compose.sh run --rm restic init`.
+4. Link and enable the timer:
+
+```sh
+sudo systemctl link /opt/civic-lens/deploy/systemd/civic-lens-backup.service /opt/civic-lens/deploy/systemd/civic-lens-backup.timer
+sudo systemctl enable --now civic-lens-backup.timer
+```
+
+Day-to-day commands:
+
+```sh
+sudo systemctl start civic-lens-backup.service
+sudo journalctl -u civic-lens-backup.service
+sudo deploy/scripts/compose.sh run --rm restic snapshots
+```
+
+The first backup run by hand also proves the credentials. The timer runs at 03:30 local time.
+
+**Restore.** Test this procedure once before you need it, on a spare machine or directory.
+
+1. Stop the services that write: `sudo deploy/scripts/compose.sh stop worker review`.
+2. Restore the snapshot to a work directory: `sudo deploy/scripts/compose.sh run --rm -v /srv/restore:/restore restic restore latest --target /restore`. The files keep their full paths, for example `/srv/restore/srv/civic-lens/captures`.
+3. Restore the database. Start Postgres if it is down. Then run `sudo deploy/scripts/compose.sh exec -T postgres sh -c 'pg_restore --clean --if-exists --username="$POSTGRES_USER" --dbname="$POSTGRES_DB"' < /srv/restore/srv/civic-lens/backup/operational.dump`.
+4. Copy `captures/` and `releases/` back under `/srv/civic-lens`. Keep the owner 10001:10001. Check that `releases/current` is a link to the active release.
+5. Start the services with `update.sh`. Rebuild the search database by a publish or by the search service procedure in [Run the search service](#run-the-search-service).
+6. Delete `/srv/restore`.
+
+The dump file stays in `/srv/civic-lens/backup`, mode 700, until the next run replaces it.
+
+### No page logs
+
+Caddy keeps no access log for page reads or searches. The About page privacy claims depend on this. Do not add a `log` directive to a site block. See [Web server](#web-server).
 
 ## Runtime data
 
-Runtime data belongs in ignored .runtime/. Generated publication and evaluation artifacts belong in ignored artifacts/. Never commit credentials or copy operational directories from the legacy repository. The deploy files are in [Production compose](#production-compose). Published releases live under the configured release directory, not in the repository. Production backup and restore and MCP runbooks will come here when they exist.
+Runtime data belongs in ignored .runtime/. Generated publication and evaluation artifacts belong in ignored artifacts/. Never commit credentials or copy operational directories from the legacy repository. The deploy files are in [Production compose](#production-compose). Published releases live under the configured release directory, not in the repository. The MCP runbook will come here when it exists.

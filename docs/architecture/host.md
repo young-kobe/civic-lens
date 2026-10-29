@@ -16,13 +16,13 @@ The Host is the composition root, the CLI, and the authenticated web workspace. 
 - `wwwroot/fonts/newsreader.woff2` is already a Latin subset (262 glyphs, Newsreader 16pt version 1.003, 132000 bytes, axes `wght` and `opsz`). A new subset used the Google Fonts Latin range and Latin Extended-A. fonttools 4.65.0 and brotli 1.2.1 made it, at 128888 bytes. That saves 2.4 percent, so the file stays as it is. Every character of the 43 dev releases is in the font. The size comes from the variable axes. The OFL file names no Reserved Font Name. The release pages preload the fonts; see [publication](publication.md#rendering).
 - `OfficialPortrait` is the one component that shows the portrait of an official. It takes the profile and the release root path. It shows a figure with the image at its size, the alt text "Official portrait of {name}", and the credit. With no photo it shows an inline placeholder of the same frame. It adds the line "No portrait is shown for this official." A withheld photo gets the same line. The `Compact` option is for the cards of the officials list. It makes the figure small and loads the image lazily. It drops the placeholder line. The `ShowCredit` option hides the credit line of a photo. The frame is in `public.css`, with theme tokens only and no filter in dark mode. The current Congress page and the officials list use it.
 - Four global stylesheets hold all styles: `theme.css`, `app.css`, `public.css`, and `review.css`. Markup has no inline styles.
-- Production starts on the existing Hetzner CPX21 with containers, Terraform, and CI deployment. Production must run without the developer workstation.
+- Temporary production runs on a Jetson with Docker Compose. The long-term cloud move uses containers, Terraform, and CI deployment. Production must run without the developer workstation.
 - Auth0 is the identity provider.
 - AI uses hosted inference first. Evaluation can change the model for each task.
 - Off-server backups go to Cloudflare R2 through restic. R2 costs nothing under 10 GB and charges no download fee for restores. Backblaze B2 is the fallback if storage grows large.
 - Restic encrypts each backup on our server before upload. The vendor stores only data that it cannot read. The key stays with the owner and never goes to a vendor.
-- A pg_dump runs every 6 hours, so a failure loses at most 6 hours of database writes. Each run backs up the dump and the capture files together.
-- Restic keeps 7 daily, 4 weekly, and 12 monthly snapshots. A restore test runs each month.
+- A nightly timer runs `pg_dump` inside the Postgres container. A failure loses at most one day of database writes. Each run backs up the dump, the capture files, and the releases together. It does not back up the search database, env files, or the review key directory.
+- Restic keeps 7 daily, 4 weekly, and 6 monthly snapshots. A restore test runs each month.
 - The first deployment accepts single-host downtime during maintenance or failure.
 - Build and validate MVP features and the UI on the dev box first. The dev box is for development only. Live infrastructure is not a prerequisite for feature work.
 
@@ -112,17 +112,17 @@ Pages compose these components. The comparison page, the draft editor, and publi
 
 ## Limits and planned work
 
-Production hosting is agreed but not implemented. The [roadmap](../roadmap.md) holds the order. The agreed design:
+The Jetson runs temporary production; see the [production runbook](../operations.md#production-runbook). The long-term cloud move is agreed but not implemented. The [roadmap](../roadmap.md) holds the order. The agreed design:
 
 - Containers host the application, the collection and background jobs, and PostgreSQL with persistent storage.
-- Terraform defines all infrastructure at every vendor, and CI automates deployment. Services can use more than one vendor, such as Hetzner, Cloudflare, or AWS, when cost or resilience favors it.
+- For the cloud move, Terraform defines all infrastructure at every vendor, and CI automates deployment. Terraform state never goes to R2. Services can use more than one vendor, such as Hetzner, Cloudflare, or AWS, when cost or resilience favors it.
 - Production collection, review, publication, and recovery run without the developer workstation. Local development stays supported.
-- One CPX21 runs the operational application: Postgres, the worker, the review workspace, and publish. Cloudflare runs public serving and holds the backups. Terraform covers both vendors.
+- In the cloud move, one CPX21 runs the operational application: Postgres, the worker, the review workspace, and publish. Cloudflare runs public serving and holds the backups. Terraform covers both vendors.
 - The search service runs as its own container and database on the same box, with no access to operational storage. Public search and report requests reach it through the Cloudflare proxy.
 - Split out more services only when a measurement shows that the box is too small. The search service is the first candidate.
 - Both reviewers reach the shared workspace through their browsers. Live Auth0 tenant login and proxy verification happen in the infrastructure stage.
 - Retained evidence and database backups need off-server storage and a tested restoration.
-- The Cloudflare CDN serves approved releases from R2. It is separate from the operational application and storage, and reads only published files.
+- Caddy serves approved releases through the Cloudflare tunnel. It is separate from the operational application and storage, and reads only published files.
 - A release is a self-contained, immutable directory. Switching the active release is atomic, and earlier releases stay for rollback.
 - The public release must stay usable when the operational application, worker, or database is down while the host is up.
 - Production needs durable recovery, backup monitoring, bounded worker concurrency, capacity checks, and a restoration exercise.

@@ -93,6 +93,32 @@ services:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - ${CIVIC_LENS_ROOT:?}/releases:${CIVIC_LENS_ROOT:?}/releases:ro
 
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.3@sha256:faa8e0a1475f137c910be6025f43c8e4092fdd35461b31e19fd1390657a1ff39
+    user: "10001:10001"
+    network_mode: host
+    restart: unless-stopped
+    command: ["tunnel", "--config", "/etc/cloudflared/config.yml", "run", "${CIVIC_LENS_TUNNEL_ID:?}"]
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+      - ${CIVIC_LENS_ROOT:?}/cloudflared/credentials.json:/etc/cloudflared/credentials.json:ro
+
+  restic:
+    image: restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510
+    profiles: [tools]
+    hostname: civic-lens
+    env_file: ${CIVIC_LENS_ROOT:?}/env/backup.secret.env
+    environment:
+      RESTIC_PASSWORD_FILE: /run/restic-password
+      RESTIC_CACHE_DIR: /cache
+    tmpfs:
+      - /cache
+    volumes:
+      - ${CIVIC_LENS_ROOT:?}/env/restic-password:/run/restic-password:ro
+      - ${CIVIC_LENS_ROOT:?}/backup:${CIVIC_LENS_ROOT:?}/backup:ro
+      - ${CIVIC_LENS_ROOT:?}/captures:${CIVIC_LENS_ROOT:?}/captures:ro
+      - ${CIVIC_LENS_ROOT:?}/releases:${CIVIC_LENS_ROOT:?}/releases:ro
+
   cli:
     <<: *host
     profiles: [tools]
