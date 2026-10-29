@@ -147,7 +147,7 @@ public sealed partial class PostgresCollectionJobStore : IVoteAdmissionStore
     private static async Task QueueVotesWaitingForBillAsync(CollectionAttemptDbContext db, CongressBill bill, bool hasTrackedIssue,
         DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var waiting = await VoteDraftQueueRows.WaitingForBill(db).Where(candidate => candidate.Congress == bill.Congress &&
+        var waiting = await VoteDraftQueueRows.WaitingForBill(db).OfEnabledSources(db).Where(candidate => candidate.Congress == bill.Congress &&
             candidate.BillType == bill.Type && candidate.BillNumber == bill.Number)
             .Select(candidate => candidate.CandidateId).ToListAsync(cancellationToken);
         if (waiting.Count == 0) return;

@@ -223,7 +223,14 @@ Do the steps on the machine that runs the worker. On production, this is `/srv/c
 1. Check that `congress-bills` is enabled. A Senate vote on a bill waits for the detail of that bill. Check that `congress-members` is enabled. The roster gives the party of a senator who still serves.
 2. In the configuration file, set `enabled` to `false` for `senate-votes`. Set `enabled` to `true` for `voteview-senate-votes`. Keep the file compact, as the [first install](#first-install) says.
 3. Stop the worker. On production, run `sudo deploy/scripts/compose.sh stop worker`.
-4. Cancel the queued vote drafts of the source that you turned off. Both sources write to the same `senate-votes` record, so a draft that stays queued could append a revision to it. No command does this, so run the SQL below with `psql` while the worker is stopped. Replace `senate-votes` with `voteview-senate-votes` when you switch back to senate.gov. The statement blocks the drafts with the code `sourceSwitched`. It leaves Running and finished drafts alone.
+4. Check that no draft of the source that you turned off is Running. Replace `senate-votes` with `voteview-senate-votes` when you switch back to senate.gov. The result must be 0. If it is not 0, do not go on. Tell the owner.
+
+```sql
+SELECT count(*) FROM vote_analysis e JOIN vote_candidates c ON c.candidate_id = e.candidate_id
+WHERE e.task = 'vote-draft' AND c.source_id = 'senate-votes' AND e.status = 'Running';
+```
+
+5. Block the drafts of that source that are already queued. Both sources write to the same `senate-votes` record, so a queued draft could append a revision to it. No command does this, so run the SQL below with `psql`. The bill detail step and the roster requeue skip a candidate whose source is disabled, so no new draft of that source is queued.
 
 ```sql
 UPDATE vote_analysis e SET status = 'Blocked', error_code = 'sourceSwitched', retry_at = NULL
@@ -232,8 +239,10 @@ WHERE c.candidate_id = e.candidate_id AND e.task = 'vote-draft' AND c.source_id 
   AND e.status IN ('Pending', 'RetryWaiting', 'WaitingForBudget');
 ```
 
-5. Start the worker, because it reads the configuration only at start. On production, run `sudo deploy/scripts/compose.sh up --detach worker`.
-6. Wait one day for the first full sweep. The sweep fetches the three files of the 119th Congress, about 3 MB, and then it makes a vote candidate for each roll call. Then run `jobs list` as in [managed collection jobs](#managed-collection-jobs) and `votes draft status` as in [vote drafting](#vote-drafting).
+6. Start the worker, because it reads the configuration only at start. On production, run `sudo deploy/scripts/compose.sh up --detach worker`.
+
+To undo, turn the old source on again and the new one off, and restart the worker. Then run `votes draft requeue --blocked --code sourceSwitched` as in [vote drafting](#vote-drafting). That command moves every draft that step 5 blocked back to Pending.
+7. Wait one day for the first full sweep. The sweep fetches the three files of the 119th Congress, about 3 MB, and then it makes a vote candidate for each roll call. Then run `jobs list` as in [managed collection jobs](#managed-collection-jobs) and `votes draft status` as in [vote drafting](#vote-drafting).
 
 What to watch:
 
@@ -943,7 +952,13 @@ docker rm -f civic-lens-search-db
 
 Release numbers restart at 1 after this reset.
 
-The reset also covers the vote source change. A vote file and a vote revision from before this change have no `source`. Both read as Congress.gov, which is right for every House vote. Production has no published Senate votes. Production needs no reset for this change.
+A vote source change needs a reset only when the database holds Senate vote drafts from before the `source` field. A vote file and a vote revision with no `source` read as Congress.gov, which is right for every House vote. A stored Senate revision with no `source` breaks the pairing rule of `VoteDraftRevision.ValidateShape`. Run this check. If the count is 0, do not reset for this change.
+
+```sql
+SELECT count(*) FROM vote_drafts WHERE chamber = 'Senate';
+```
+
+Production has no Senate vote drafts, because senate.gov returned 403. Production needs no reset for this change.
 
 A release contract change can add a required field to a published file. Old files then do not read, and the next publish fails. On the dev machine, repeat steps 1 to 5. These steps delete all captures and records, not only the releases. Collect again and let code approve the facts, then publish a fresh release with `releases publish` as in [Publish a static release](#publish-a-static-release). Production has no release yet, so it has no older files.
 

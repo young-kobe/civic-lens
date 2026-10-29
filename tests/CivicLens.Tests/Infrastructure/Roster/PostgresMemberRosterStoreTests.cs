@@ -258,11 +258,27 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
         Assert.Equal(["Pending", "Blocked", "Blocked"], await StatusesAsync());
     }
 
-    private Task SeedBlockedVoteAsync(char id, string chamber, string errorCode) => ExecuteAsync($"""
+    [Fact]
+    public async Task ANewSnapshotLeavesTheSenateDraftsOfADisabledSourceBlockedSoASwitchedSourceNeverDraftsAgain()
+    {
+        await SeedBlockedVoteAsync('1', "Senate", "evidenceUnavailable");
+        await SeedBlockedVoteAsync('2', "Senate", "evidenceUnavailable", sourceId: "old-votes");
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO collection_source_schedules (source_id, configuration_revision_id, interval_seconds, next_due_utc_ticks, enabled)
+            VALUES ('old-votes', '{new string('c', 64)}', 3600, 0, false), ('votes', '{new string('c', 64)}', 3600, 0, true)
+            """);
+
+        await roster.AdmitAsync(await ImportAsync('a', 0), RosterFixtures.Members(), null, default);
+
+        Assert.Equal(["Pending", "Blocked"], await StatusesAsync());
+    }
+
+    private Task SeedBlockedVoteAsync(char id, string chamber, string errorCode, string sourceId = "votes") => ExecuteAsync($"""
         SET session_replication_role = replica;
         INSERT INTO vote_candidates (candidate_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks,
             detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
-        VALUES ('{new string(id, 64)}', 'votes', '{chamber}', 119, 1, {id}, 1, 'detail-{id}', 'members-{id}',
+        VALUES ('{new string(id, 64)}', '{sourceId}', '{chamber}', 119, 1, {id}, 1, 'detail-{id}', 'members-{id}',
                 '{new string('c', 64)}', '{new string('c', 64)}', '{new string('c', 64)}', 1);
         INSERT INTO vote_analysis (candidate_id, task, status, error_code, fence, attempts, reserved_tokens, created_at_utc_ticks)
         VALUES ('{new string(id, 64)}', 'vote-draft', 'Blocked', '{errorCode}', 0, 1, 0, 1)

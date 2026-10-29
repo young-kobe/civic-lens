@@ -626,7 +626,7 @@ public sealed class ReleaseRendererTests
 
         var caveat = new HtmlParser().ParseDocument(html).QuerySelector(".caveat")!.TextContent;
         Assert.Contains("does not list a Vice President tie-break vote", caveat, StringComparison.Ordinal);
-        Assert.Contains("the Civic Lens word for the cast code in the Voteview data, not the wording of the Senate roll call", caveat, StringComparison.Ordinal);
+        Assert.Contains("Civic Lens shows that code as a word such as Yea or Nay. The Senate roll call may use other words", caveat, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -965,6 +965,7 @@ public sealed class ReleaseRendererTests
         var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None)).QuerySelector("main")!.TextContent;
 
         Assert.Contains("Senate votes come from Voteview, an academic database at UCLA", text, StringComparison.Ordinal);
+        Assert.Contains("Some older Senate votes may come from senate.gov. Each vote page names its source.", text, StringComparison.Ordinal);
         Assert.Contains("Voteview does not list a Vice President tie-break vote", text, StringComparison.Ordinal);
     }
 

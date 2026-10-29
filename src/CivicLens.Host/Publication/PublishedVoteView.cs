@@ -44,7 +44,7 @@ internal static class PublishedVoteView
     public static string Caveat(PublishedVote vote) =>
         "This record lists only the officials that Civic Lens tracks. " + vote.Source switch
         {
-            PublishedVoteSource.Voteview => "Each cast is the Civic Lens word for the cast code in the Voteview data, not the wording of the Senate roll call. Voteview does not list a Vice President tie-break vote.",
+            PublishedVoteSource.Voteview => "Voteview stores each vote as a number code. Civic Lens shows that code as a word such as Yea or Nay. The Senate roll call may use other words. Voteview does not list a Vice President tie-break vote.",
             _ => $"Each cast is the wording of the {(vote.Chamber == PublishedChamber.Senate ? "Senate" : "House Clerk")} roll call at the observation time of its source."
         };
 

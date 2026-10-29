@@ -38,12 +38,13 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
     private Task<(ChamberRead?, string? Error)> ReadChamberAsync(VoteDraftEvidence evidence, CancellationToken cancellationToken) =>
         VoteSources.Of(SourceOf(evidence)) switch
         {
+            VoteSource.CongressGov => ReadHouseClerkAsync(evidence, cancellationToken),
+            VoteSource.SenateGov => ReadSenateGovAsync(evidence, cancellationToken),
             VoteSource.Voteview => ReadVoteviewAsync(evidence, cancellationToken),
-            VoteSource.SenateGov => ReadSenateAsync(evidence, cancellationToken),
-            _ => ReadHouseAsync(evidence, cancellationToken)
+            var source => throw new ArgumentOutOfRangeException(nameof(evidence), source, "Vote source has no reader.")
         };
 
-    private async Task<(ChamberRead?, string? Error)> ReadHouseAsync(VoteDraftEvidence evidence, CancellationToken cancellationToken)
+    private async Task<(ChamberRead?, string? Error)> ReadHouseClerkAsync(VoteDraftEvidence evidence, CancellationToken cancellationToken)
     {
         var candidate = evidence.Candidate;
         if (evidence.Detail.ExtractionVersion != HouseVoteParser.ExtractionVersion ||
@@ -60,7 +61,7 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
         return (new(day, VoteFactPrefixes.Detail, HouseMemberVotesOf(evidence.Members, members, tracked)), null);
     }
 
-    private async Task<(ChamberRead?, string? Error)> ReadSenateAsync(VoteDraftEvidence evidence, CancellationToken cancellationToken)
+    private async Task<(ChamberRead?, string? Error)> ReadSenateGovAsync(VoteDraftEvidence evidence, CancellationToken cancellationToken)
     {
         var candidate = evidence.Candidate;
         var page = evidence.Detail;
