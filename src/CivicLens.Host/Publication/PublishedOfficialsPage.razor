@@ -3,7 +3,7 @@
 @using CivicLens.Publication.Contracts
 
 <PublicPage Section="PublicSection.Officials" CanonicalPath="@PublicationProtocol.OfficialsPagePath" Title="Officials" Description="Every official with a published record or vote. Each page lists the records and votes that name one official." Crumbs="Crumbs">
-    <PageHeader Title="Officials" Lede="Each page lists the published records of one official and the votes of the current Congress. Each card counts the records other than votes that name the official. An official with none can still have votes." />
+    <PageHeader Title="Officials" Lede="Each page lists the published records of one official. The page of a member of Congress also shows their votes in the current Congress. Each card counts the records other than votes that name the official. An official with none can still have votes." />
     <Panel Label="Officials" Padded="true">
         @if (Cards.Count == 0)
         {
