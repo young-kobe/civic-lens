@@ -25,7 +25,7 @@ internal static class PublishedExecutiveActionView
         new("Revision", action.RevisionNumber.ToString(CultureInfo.InvariantCulture))
     ];
 
-    public static string CorrectionText(PublishedExecutiveActionNotice notice) => string.Concat(CorrectionParts(notice).Select(part => part.Text));
+    private static string CorrectionText(PublishedExecutiveActionNotice notice) => string.Concat(CorrectionParts(notice).Select(part => part.Text));
 
     public static string CorrectionTimelineText(PublishedExecutiveActionNotice notice) => CorrectionParts(notice)[0].Text.TrimEnd();
 
