@@ -602,6 +602,32 @@ public sealed class ReleaseRendererTests
     }
 
     [Theory]
+    [InlineData(PublishedChamber.House, PublishedVoteSource.CongressGov, "Congress.gov House vote data", "https://clerk.house.gov/Votes/2025100")]
+    [InlineData(PublishedChamber.Senate, PublishedVoteSource.SenateGov, "senate.gov vote file", "https://www.senate.gov/legislative/LIS/roll_call_votes/vote1191/vote_119_1_00100.htm")]
+    [InlineData(PublishedChamber.Senate, PublishedVoteSource.Voteview, "Voteview (voteview.com)", "https://www.senate.gov/legislative/LIS/roll_call_votes/vote1191/vote_119_1_00100.htm")]
+    public async Task TheVotePageNamesItsDataSourceAndLinksTheOfficialRollCallPageSoAReaderCanCheckItAtTheChamber(
+        PublishedChamber chamber, PublishedVoteSource source, string expectedSource, string expectedLink)
+    {
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote() with { Chamber = chamber, Source = source }, null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
+            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second);
+        Assert.Contains(expectedSource, facts["Data source"].TextContent, StringComparison.Ordinal);
+        Assert.Equal(expectedLink, facts["Official roll call page"].QuerySelector("a")!.GetAttribute("href"));
+        Assert.Contains(expectedSource.Split(' ')[0], document.QuerySelector("[aria-labelledby='result-title'] p")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AVoteviewVoteSaysThatVoteviewListsNoVicePresidentTieBreakVoteSoAFiftyFiftyResultIsNotMisread()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote() with { Chamber = PublishedChamber.Senate, Source = PublishedVoteSource.Voteview }, null, [],
+            PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.Contains("does not list a Vice President tie-break vote", new HtmlParser().ParseDocument(html).QuerySelector(".caveat")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData(PublishedChamber.House, "House Clerk roll call")]
     [InlineData(PublishedChamber.Senate, "Senate roll call")]
     public async Task TheVoteCaveatNamesTheSourceOfTheChamberThatHeldTheVote(PublishedChamber chamber, string source)
@@ -922,6 +948,25 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task AboutPageNamesVoteviewAsASenateVoteSourceAndCarriesTheCitationThatVoteviewAsksFor()
+    {
+        var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderAboutAsync(CancellationToken.None)).QuerySelector("main")!.TextContent;
+
+        Assert.Contains("Voteview, a roll call database of the University of California, Los Angeles (UCLA)", text, StringComparison.Ordinal);
+        Assert.Contains("Lewis, Jeffrey B., Keith Poole, Howard Rosenthal, Adam Boche, Aaron Rudkin, and Luke Sonnet (2026). Voteview: Congressional Roll-Call Votes Database. https://voteview.com/",
+            text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheMethodPageSaysWhereSenateVotesComeFromAndThatNoVicePresidentTieBreakVoteIsListed()
+    {
+        var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None)).QuerySelector("main")!.TextContent;
+
+        Assert.Contains("Some Senate roll call votes come from Voteview", text, StringComparison.Ordinal);
+        Assert.Contains("Voteview does not list a Vice President tie-break vote", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AboutPageGivesAContactAddressSoAnOfficialOrReaderCanReachTheOwner()
     {
         var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderAboutAsync(CancellationToken.None));
@@ -957,7 +1002,7 @@ public sealed class ReleaseRendererTests
         var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderAboutAsync(CancellationToken.None));
 
         var table = Assert.Single(document.QuerySelectorAll("table"), candidate => candidate.QuerySelector("caption")!.TextContent == "Terms for each kind of material");
-        Assert.Equal(["Our records, summaries and weekly briefs", "Our data files", "Words we quote from officials and Congress", "Official portraits", "Source code"],
+        Assert.Equal(["Our records, summaries and weekly briefs", "Our data files", "Words we quote from officials and Congress", "Senate vote data from Voteview", "Official portraits", "Source code"],
             table.QuerySelectorAll("tbody tr").Select(row => row.FirstElementChild!.TextContent));
         var license = document.QuerySelector("main a[href='https://creativecommons.org/licenses/by/4.0/']");
         Assert.Equal("CC BY 4.0", license!.TextContent);
@@ -1983,6 +2028,7 @@ public sealed class ReleaseRendererTests
             Congress = 119,
             Session = 1,
             RollCallNumber = 100,
+            Source = PublishedVoteSource.CongressGov,
             Kind = PublishedVoteKind.Passage,
             KindCitation = Cite(detailId, detail, "Question: On Passage"),
             VotedOn = new DateOnly(2025, 4, 10),

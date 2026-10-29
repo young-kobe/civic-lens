@@ -83,6 +83,22 @@ public sealed class PublishVoteTests
         await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote)));
     }
 
+    [Theory]
+    [InlineData(VoteSource.CongressGov, PublishedVoteSource.CongressGov)]
+    [InlineData(VoteSource.SenateGov, PublishedVoteSource.SenateGov)]
+    [InlineData(VoteSource.Voteview, PublishedVoteSource.Voteview)]
+    public async Task TheRecordNamesTheDataSourceOfItsRevisionSoAReaderKnowsWhoseDataTheCastsRestOn(VoteSource source, PublishedVoteSource expected)
+    {
+        var scenario = new PublicationScenario();
+        var vote = scenario.AddVote('d', source: source);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
+
+        var record = JsonSerializer.Deserialize<PublishedVote>(scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.RecordDataPath(vote)],
+            PublicationProtocol.JsonOptions)!;
+        Assert.Equal(expected, record.Source);
+    }
+
     [Fact]
     public async Task APersonEditedVoteWithItsApprovalPublishes()
     {

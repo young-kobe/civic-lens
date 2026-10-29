@@ -24,7 +24,7 @@ public static class VoteviewRenderer
         return string.Join('\n', lines);
     }
 
-    private static string MemberLineOf(VoteviewMemberVote vote) =>
+    public static string MemberLineOf(VoteviewMemberVote vote) =>
         MemberLine(vote.Member.BioguideId, vote.Member.Name, vote.Member.Party, vote.Member.State, vote.Cast);
 
     private static string CountsOf(VoteviewRoll roll) =>

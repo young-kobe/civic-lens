@@ -47,11 +47,13 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var row = await db.Set<VoteCandidateRow>().AsNoTracking().SingleOrDefaultAsync(item => item.CandidateId == candidateId, cancellationToken);
         if (row is null) return null;
-        var recordId = PostgresCollectionJobStore.HashVoteRecord(row.Chamber, row.SourceId, row.Congress, row.SessionNumber, row.RollCallNumber);
         var revisions = await StoredJobDefinition.LoadRevisionsAsync(db, [row.ConfigurationRevisionId], cancellationToken);
+        var configuration = StoredJobDefinition.Find(revisions, row.ConfigurationRevisionId);
+        var recordKey = VoteSources.RecordKeyOf(configuration.Configuration.Sources.Single(source => source.Id == row.SourceId));
+        var recordId = PostgresCollectionJobStore.HashVoteRecord(row.Chamber, recordKey, row.Congress, row.SessionNumber, row.RollCallNumber);
         var candidate = new VoteDraftCandidate(row.CandidateId, recordId, row.SourceId, row.Chamber, row.Congress, row.SessionNumber, row.RollCallNumber,
-            row.BillType, row.BillNumber, new DateTimeOffset(row.UpdateDateUtcTicks, TimeSpan.Zero));
-        return new(candidate, StoredJobDefinition.Find(revisions, row.ConfigurationRevisionId),
+            row.BillType, row.BillNumber, new DateTimeOffset(row.UpdateDateUtcTicks, TimeSpan.Zero), row.RosterJobId);
+        return new(candidate, configuration,
             await ReadPageAsync(db, row.DetailJobId, row.DetailExtractionId, cancellationToken),
             await ReadPageAsync(db, row.MembersJobId, row.MembersExtractionId, cancellationToken),
             await ReadBillDetailAsync(db, row, cancellationToken),

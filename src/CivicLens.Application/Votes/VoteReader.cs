@@ -6,6 +6,7 @@ using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
 using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Application.Collection.Votes;
+using CivicLens.Application.Collection.VoteviewVotes;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Roster;
 using CivicLens.Core.Documents;
@@ -22,9 +23,7 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
     public async Task<VoteRead> ReadAsync(VoteDraftEvidence evidence, CancellationToken cancellationToken)
     {
         if (BillError(evidence) is { } billError) return new(null, billError);
-        var (chamberRead, chamberError) = evidence.Candidate.Chamber == Chamber.Senate
-            ? await ReadSenateAsync(evidence, cancellationToken)
-            : await ReadHouseAsync(evidence, cancellationToken);
+        var (chamberRead, chamberError) = await ReadChamberAsync(evidence, cancellationToken);
         if (chamberRead is null) return new(null, chamberError);
 
         CongressBill? bill = null;
@@ -36,6 +35,14 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
         return new(Assemble(evidence, chamberRead, bill?.PolicyArea), null);
     }
 
+    private Task<(ChamberRead?, string? Error)> ReadChamberAsync(VoteDraftEvidence evidence, CancellationToken cancellationToken) =>
+        VoteSources.Of(SourceOf(evidence)) switch
+        {
+            VoteSource.Voteview => ReadVoteviewAsync(evidence, cancellationToken),
+            VoteSource.SenateGov => ReadSenateAsync(evidence, cancellationToken),
+            _ => ReadHouseAsync(evidence, cancellationToken)
+        };
+
     private async Task<(ChamberRead?, string? Error)> ReadHouseAsync(VoteDraftEvidence evidence, CancellationToken cancellationToken)
     {
         var candidate = evidence.Candidate;
@@ -43,9 +50,9 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
             evidence.Members.ExtractionVersion != HouseVoteMembersParser.ExtractionVersion)
             return (null, VoteDraftErrorCodes.ExtractionVersionChanged);
         var roll = new HouseVoteRoll(new VoteSession(candidate.Congress, candidate.SessionNumber), candidate.RollCallNumber);
-        var detail = HouseVoteParser.Parse((await LoadAsync(evidence.Detail, cancellationToken)).Body, roll);
+        var detail = HouseVoteParser.Parse((await LoadAsync(evidence.Detail.JobId, cancellationToken)).Body, roll);
         if (TextError(evidence.Detail, HouseVoteRenderer.RenderDetail(detail)) is { } detailError) return (null, detailError);
-        var members = HouseVoteMembersParser.Parse((await LoadAsync(evidence.Members, cancellationToken)).Body, roll);
+        var members = HouseVoteMembersParser.Parse((await LoadAsync(evidence.Members.JobId, cancellationToken)).Body, roll);
         if (TextError(evidence.Members, HouseVoteRenderer.RenderMembers(members)) is { } membersError) return (null, membersError);
         if (detail.StartDate is not { } start) return (null, VoteDraftErrorCodes.EvidenceUnavailable);
         var day = DateOnly.FromDateTime(start.DateTime);
@@ -60,7 +67,7 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
         if (page.ExtractionVersion != SenateVoteParser.ExtractionVersion)
             return (null, VoteDraftErrorCodes.ExtractionVersionChanged);
         var roll = new SenateVoteRoll(new VoteSession(candidate.Congress, candidate.SessionNumber), candidate.RollCallNumber);
-        var detail = SenateVoteParser.Parse((await LoadAsync(page, cancellationToken)).Body, roll);
+        var detail = SenateVoteParser.Parse((await LoadAsync(page.JobId, cancellationToken)).Body, roll);
         if (TextError(page, SenateVoteRenderer.Render(detail)) is { } textError) return (null, textError);
         var day = DateOnly.FromDateTime(detail.VoteDate.DateTime);
         var tracked = TrackedOn(evidence, day);
@@ -68,6 +75,25 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
         if (lisIds is null || detail.Members.Any(member => !lisIds.Known.Contains(member.LisId)))
             return (null, VoteDraftErrorCodes.EvidenceUnavailable);
         return (new(day, VoteFactPrefixes.SenateDetail, SenateMemberVotesOf(page, detail, tracked, lisIds.Tracked)), null);
+    }
+
+    private async Task<(ChamberRead?, string? Error)> ReadVoteviewAsync(VoteDraftEvidence evidence, CancellationToken cancellationToken)
+    {
+        var candidate = evidence.Candidate;
+        var page = evidence.Detail;
+        if (page.ExtractionVersion != VoteviewParser.ExtractionVersion)
+            return (null, VoteDraftErrorCodes.ExtractionVersionChanged);
+        if (candidate.RosterJobId is not { } rosterJobId) return (null, VoteDraftErrorCodes.EvidenceUnavailable);
+        var congress = candidate.Congress;
+        var rollCall = VoteviewParser.ParseRollCalls((await LoadAsync(evidence.Detail.JobId, cancellationToken)).Body, congress)
+            .SingleOrDefault(item => item.Roll == new SenateVoteRoll(new VoteSession(congress, candidate.SessionNumber), candidate.RollCallNumber));
+        if (rollCall is null) return (null, VoteDraftErrorCodes.EvidenceUnavailable);
+        var members = VoteviewParser.ParseMembers((await LoadAsync(rosterJobId, cancellationToken)).Body, congress);
+        var casts = VoteviewParser.ParseCasts((await LoadAsync(evidence.Members.JobId, cancellationToken)).Body, congress);
+        if (VoteviewRoll.Join([rollCall], casts, members).SingleOrDefault() is not { } roll || TextError(page, VoteviewRenderer.Render(roll)) is { } textError)
+            return (null, VoteDraftErrorCodes.RenderedTextMismatch);
+        var tracked = TrackedOn(evidence, rollCall.Date);
+        return (new(rollCall.Date, VoteFactPrefixes.SenateDetail, VoteviewMemberVotesOf(page, roll, tracked)), null);
     }
 
     private async Task<RosterLisIds?> LisIdsOfAsync(VoteDraftEvidence evidence, PersonConfiguration[] tracked,
@@ -88,12 +114,11 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
         return new(lisIds, [.. all.Select(item => item.LisId).OfType<string>()]);
     }
 
-    private static PersonConfiguration[] TrackedOn(VoteDraftEvidence evidence, DateOnly day)
-    {
-        var configuration = evidence.ConfigurationRevision.Configuration;
-        var source = configuration.Sources.Single(item => item.Id == evidence.Candidate.SourceId);
-        return configuration.CoveredBioguidePeopleOf(source, day);
-    }
+    private static WatchedSourceConfiguration SourceOf(VoteDraftEvidence evidence) =>
+        evidence.ConfigurationRevision.Configuration.Sources.Single(item => item.Id == evidence.Candidate.SourceId);
+
+    private static PersonConfiguration[] TrackedOn(VoteDraftEvidence evidence, DateOnly day) =>
+        evidence.ConfigurationRevision.Configuration.CoveredBioguidePeopleOf(SourceOf(evidence), day);
 
     private static VoteSnapshot Assemble(VoteDraftEvidence evidence, ChamberRead read, string? policyArea)
     {
@@ -104,7 +129,7 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
         var chamber = evidence.Candidate.Chamber;
         var (kind, kindCitation) = chamber == Chamber.Senate ? SenateVoteKindTable.Classify(facts) : VoteKindTable.Classify(facts);
         var votedOnCitation = VoteFacts.Find(facts, VoteFactPrefixes.Started)!.Citation;
-        return new(chamber, facts, votedOnCitation, kind, kindCitation, read.Members, VoteFingerprint.Compute(facts, read.Members),
+        return new(chamber, VoteSources.Of(SourceOf(evidence)), facts, votedOnCitation, kind, kindCitation, read.Members, VoteFingerprint.Compute(facts, read.Members),
             policyArea, read.Day,
             configuredPeople.Where(person => involved.Contains(person.Id)).ToImmutableDictionary(person => person.Id, person => person.Name),
             [.. configuredPeople.Select(person => person.Name)]);
@@ -129,6 +154,14 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
             .DistinctBy(vote => vote.BioguideId).OrderBy(vote => vote.BioguideId, StringComparer.Ordinal)];
     }
 
+    private static ImmutableArray<MemberVote> VoteviewMemberVotesOf(VoteDraftPage page, VoteviewRoll roll, PersonConfiguration[] tracked)
+    {
+        var citations = LineCitations.ExactLines(page.ExtractionId, page.Text);
+        return [.. roll.Votes.Join(tracked, vote => vote.Member.BioguideId, person => person.BioguideId,
+                (vote, person) => new MemberVote(person.Id, vote.Member.BioguideId, RenderedText.SingleLine(vote.Cast), citations[VoteviewRenderer.MemberLineOf(vote)]))
+            .OrderBy(vote => vote.BioguideId, StringComparer.Ordinal)];
+    }
+
     private static ImmutableArray<MemberVote> SenateMemberVotesOf(VoteDraftPage page, SenateVoteDetail detail, PersonConfiguration[] tracked,
         Dictionary<string, string> lisIds)
     {
@@ -145,9 +178,9 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
         return CongressBillDetailJob.Parse(job, await responses.ReadAsync(job, artifactRoot, cancellationToken));
     }
 
-    private async Task<ApiResponse> LoadAsync(VoteDraftPage page, CancellationToken cancellationToken)
+    private async Task<ApiResponse> LoadAsync(string jobId, CancellationToken cancellationToken)
     {
-        var job = await jobs.GetAsync(page.JobId, cancellationToken) ?? throw new InvalidDataException("A vote page job is missing.");
+        var job = await jobs.GetAsync(jobId, cancellationToken) ?? throw new InvalidDataException("A vote page job is missing.");
         return await responses.ReadAsync(job, artifactRoot, cancellationToken);
     }
 

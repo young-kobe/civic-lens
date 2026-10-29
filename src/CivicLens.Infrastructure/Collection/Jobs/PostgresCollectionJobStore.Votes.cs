@@ -159,8 +159,8 @@ public sealed partial class PostgresCollectionJobStore : IVoteAdmissionStore
         long updateDateUtcTicks) =>
         HashIdentity($"{IdentityPrefix(chamber)}:{sourceId.Length}:{sourceId}{congress}:{sessionNumber}:{rollCallNumber}:{updateDateUtcTicks}");
 
-    internal static string HashVoteRecord(Chamber chamber, string sourceId, int congress, int sessionNumber, int rollCallNumber) =>
-        HashIdentity($"{IdentityPrefix(chamber)}-record:{sourceId.Length}:{sourceId}{congress}:{sessionNumber}:{rollCallNumber}");
+    internal static string HashVoteRecord(Chamber chamber, string recordKey, int congress, int sessionNumber, int rollCallNumber) =>
+        HashIdentity($"{IdentityPrefix(chamber)}-record:{recordKey.Length}:{recordKey}{congress}:{sessionNumber}:{rollCallNumber}");
 
     private static string IdentityPrefix(Chamber chamber) => $"{chamber.ToString().ToLowerInvariant()}-vote";
 

@@ -95,7 +95,7 @@ internal sealed class SenateVoteWorld
     {
         var vote = Page("vote", string.IsNullOrEmpty(versionOverride) ? SenateVoteParser.ExtractionVersion : versionOverride);
         return new(new VoteDraftCandidate(CandidateId, RecordId, SenateVoteFixtures.SourceId, Chamber.Senate, 119, 1, 1,
-                HasBill ? "s" : null, HasBill ? 5 : null, UpdatedAt),
+                HasBill ? "s" : null, HasBill ? 5 : null, UpdatedAt, null),
             Revision, vote, vote, HasBill ? BillPage() : null, null, false);
     }
 
