@@ -462,7 +462,7 @@ catch (OperationCanceledException)
 catch (Exception exception) when (!executing && exception is ArgumentException or UnauthorizedAccessException or IOException or JsonException or InvalidOperationException)
 {
     // Configuration and provider exceptions may contain credentials or other input values.
-    Console.Error.WriteLine("Invalid input/configuration. Check command paths, source configuration, and CIVIC_LENS_DATABASE for database commands.");
+    Console.Error.WriteLine("Invalid input/configuration. Check command paths, source configuration, the 1 MB limit for configuration files, and CIVIC_LENS_DATABASE for database commands.");
     return 2;
 }
 catch (Exception)
