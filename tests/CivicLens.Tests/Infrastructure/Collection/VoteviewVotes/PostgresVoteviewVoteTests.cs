@@ -129,6 +129,20 @@ public sealed class PostgresVoteviewVoteTests(PostgresCollection postgres) : IAs
     }
 
     [Fact]
+    public async Task ExtractionsFromTwoCapturesAreRefusedBecauseOneVotesJobHasOneCaptureAndTheOwnershipCheckRunsOnce()
+    {
+        var chain = await ChainAsync("two-captures");
+        var first = await RollsAsync(chain, FirstCapture);
+        var second = await RollsAsync(chain, SecondCapture);
+        foreach (var roll in first.Concat(second)) _ = await documents.SaveAsync(roll.Extraction, default);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            store.AdmitVoteviewVotesAsync(source, chain, FirstCapture, [first[0], second[1]], default));
+
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM vote_versions"));
+    }
+
+    [Fact]
     public async Task OnlyTheSameThreeBodiesAsTheNewestCandidateCountAsUnchanged()
     {
         var chain = await ChainAsync("bodies", rollCallsBody: "rollcalls-a", membersBody: "members-a", votesBody: "votes-a");

@@ -60,9 +60,11 @@ public sealed partial class PostgresCollectionJobStore
         return TransactionAsync(async (db, now) =>
         {
             var changed = await ChangedVoteviewRollsAsync(db, source.SourceId, chain.Congress, rolls, cancellationToken);
+            if (changed.Count == 0) return NoAdmission with { DuplicateCount = rolls.Count };
+            await EnsureExtractionsAreOfJobAsync(db, chain.VotesJobId, changed, cancellationToken);
+            var queueInputsByBill = new Dictionary<(string? Type, int? Number), QueueInputs>();
             foreach (var roll in changed)
             {
-                await EnsureExtractionIsOfJobAsync(db, chain.VotesJobId, roll.Extraction.ExtractionId, cancellationToken);
                 var call = roll.RollCall;
                 var row = NewVoteRow(source.SourceId, chain.RollCallsJobId, Chamber.Senate, call.Roll.Session, call.Roll.Number, votesCapturedAt,
                     call.BillType, call.BillNumber, roll.Extraction.ExtractionId);
@@ -70,10 +72,21 @@ public sealed partial class PostgresCollectionJobStore
                 var candidate = NewVoteCandidate(source, row, chain.VotesJobId, roll.Extraction.ExtractionId, now);
                 candidate.RosterJobId = chain.MembersJobId;
                 db.Add(candidate);
-                await QueueCandidateAsync(db, candidate, now, cancellationToken);
+                var bill = (candidate.BillType, candidate.BillNumber);
+                if (!queueInputsByBill.TryGetValue(bill, out var inputs))
+                    queueInputsByBill[bill] = inputs = await ReadQueueInputsAsync(db, candidate, cancellationToken);
+                QueueCandidate(db, candidate, now, inputs);
             }
             return NoAdmission with { DuplicateCount = rolls.Count - changed.Count };
         }, cancellationToken);
+    }
+
+    private static async Task EnsureExtractionsAreOfJobAsync(CollectionAttemptDbContext db, string jobId,
+        IReadOnlyList<VoteviewRollExtraction> rolls, CancellationToken cancellationToken)
+    {
+        if (rolls.Select(roll => roll.Extraction.SourceAttempt.AttemptId).Distinct(StringComparer.Ordinal).Count() != 1)
+            throw new InvalidDataException("The roll calls of one Voteview votes job must come from one capture.");
+        await EnsureExtractionIsOfJobAsync(db, jobId, rolls[0].Extraction.ExtractionId, cancellationToken);
     }
 
     private static async Task<IReadOnlyList<VoteviewRollExtraction>> ChangedVoteviewRollsAsync(CollectionAttemptDbContext db, string sourceId,
