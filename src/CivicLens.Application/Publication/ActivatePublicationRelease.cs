@@ -14,9 +14,23 @@ public sealed class ActivatePublicationRelease(IPublicationStore publications, I
         ReviewAuthorization.RequireOwner(actor);
         if (releaseNumber < 1) throw new ArgumentOutOfRangeException(nameof(releaseNumber), "Release number must be at least 1.");
         var replaced = (await publications.GetStateAsync(cancellationToken)).Active;
-        var summary = await publications.ActivateAsync(releaseNumber, cancellationToken);
+        var summary = await publications.ActivateAsync(releaseNumber,
+            (directoryName, token) => RequireFilesAsync(releaseNumber, directoryName, token), cancellationToken);
         var served = await publications.ServeActiveAsync(releases.ActivateAsync, cancellationToken) ?? summary;
         return await CompareAsync(replaced, summary, served, cancellationToken);
+    }
+
+    private async Task RequireFilesAsync(int releaseNumber, string directoryName, CancellationToken cancellationToken)
+    {
+        try
+        {
+            _ = await releases.ReadFileAsync(directoryName, PublicationProtocol.ManifestPath, PublicationProtocol.MaximumManifestBytes,
+                cancellationToken);
+        }
+        catch (FileNotFoundException exception)
+        {
+            throw new ArgumentException($"Release {releaseNumber} has no files on this machine, so it cannot be activated.", exception);
+        }
     }
 
     // The switch is done when this runs, so a failed read must not fail the command. Each failure empties only its own lists.

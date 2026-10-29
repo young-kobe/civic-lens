@@ -88,6 +88,15 @@ public sealed class FileReleaseDirectoryTests : IDisposable
         Assert.Null(await releases.GetActiveAsync(default));
     }
 
+    [Fact]
+    public async Task ReadingAFileOfAMissingReleaseThrowsFileNotFoundSoActivationCanRefuseIt()
+    {
+        var missing = $"000001-{Guid.NewGuid():N}";
+
+        await Assert.ThrowsAsync<FileNotFoundException>(() =>
+            releases.ReadFileAsync(missing, PublicationProtocol.ManifestPath, 1024, default));
+    }
+
     [Theory]
     [InlineData("../escape.json")]
     [InlineData("a/../../escape.json")]

@@ -223,7 +223,7 @@ public sealed class PostgresBriefPublicationTests(PostgresCollection postgres) :
     {
         await seeder.ReleaseAsync(2, InWeek.AddHours(1), active: false, Statement, Action, DocumentChange, BriefBinding);
 
-        _ = await publications.ActivateAsync(2, default);
+        _ = await publications.ActivateAsync(2, (_, _) => Task.CompletedTask, default);
 
         Assert.Equal("Succeeded:3", await seeder.BriefQueueStatusAsync(Week));
     }
@@ -233,7 +233,7 @@ public sealed class PostgresBriefPublicationTests(PostgresCollection postgres) :
     {
         await seeder.ReleaseAsync(2, InWeek.AddHours(1), active: false, Action, DocumentChange);
 
-        _ = await publications.ActivateAsync(2, default);
+        _ = await publications.ActivateAsync(2, (_, _) => Task.CompletedTask, default);
 
         Assert.Equal("Pending:0", await seeder.BriefQueueStatusAsync(Week));
     }

@@ -70,14 +70,17 @@ public sealed class PostgresPublicationStore : IPublicationStore
         return rows.Select(ToSummary).ToList();
     }
 
-    public async Task<PublicationReleaseSummary> ActivateAsync(int releaseNumber, CancellationToken cancellationToken)
+    public async Task<PublicationReleaseSummary> ActivateAsync(int releaseNumber, Func<string, CancellationToken, Task> requireFiles,
+        CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(requireFiles);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.ReviewKeysBeforeBriefs, cancellationToken);
         await BriefStaleness.TakeLocksAsync(briefQueue, db, cancellationToken);
         var row = await db.Set<PublicationReleaseRow>().AsNoTracking()
             .SingleOrDefaultAsync(candidate => candidate.ReleaseNumber == releaseNumber, cancellationToken)
             ?? throw new ArgumentException($"Release {releaseNumber} has not been committed.", nameof(releaseNumber));
+        await requireFiles(row.DirectoryName, cancellationToken);
         await BriefStaleness.RequeueAfterActivationAsync(briefQueue, db, releaseNumber, cancellationToken);
         await ClearActiveAsync(db, cancellationToken);
         await db.Set<PublicationReleaseRow>().Where(candidate => candidate.ReleaseNumber == releaseNumber)

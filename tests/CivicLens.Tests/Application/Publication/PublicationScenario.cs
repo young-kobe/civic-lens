@@ -458,12 +458,14 @@ internal sealed class FakePublicationStore : IPublicationStore
         Task.FromResult(new PublicationState(Committed.Select(item => item.ReleaseNumber).DefaultIfEmpty().Max(),
             Committed.SingleOrDefault(item => item.ReleaseNumber == ActiveReleaseNumber)));
 
-    public Task<PublicationReleaseSummary> ActivateAsync(int releaseNumber, CancellationToken cancellationToken)
+    public async Task<PublicationReleaseSummary> ActivateAsync(int releaseNumber, Func<string, CancellationToken, Task> requireFiles,
+        CancellationToken cancellationToken)
     {
         var summary = Committed.SingleOrDefault(item => item.ReleaseNumber == releaseNumber)
             ?? throw new ArgumentException($"Release {releaseNumber} has not been committed.");
+        await requireFiles(summary.DirectoryName, cancellationToken);
         ActiveReleaseNumber = releaseNumber;
-        return Task.FromResult(summary);
+        return summary;
     }
 
     public async Task<PublicationReleaseSummary?> ServeActiveAsync(Func<string, CancellationToken, Task> serve,
@@ -535,7 +537,9 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
     {
         ReadPaths.Add(relativePath);
         Events?.Add($"read {relativePath.Split('/', '.')[^2][..1]}");
-        var content = Directories[directoryName][relativePath];
+        var content = Directories.TryGetValue(directoryName, out var directory) && directory.TryGetValue(relativePath, out var file)
+            ? file
+            : throw new FileNotFoundException("Release file was not found.", relativePath);
         if (content.Length > maximumBytes) throw new InvalidDataException("Release file exceeds the allowed size.");
         return Task.FromResult(content);
     }

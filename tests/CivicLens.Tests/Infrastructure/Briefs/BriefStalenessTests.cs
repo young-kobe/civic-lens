@@ -180,7 +180,7 @@ public sealed class BriefStalenessTests(PostgresCollection postgres) : IAsyncLif
         await CommitAsync(Binding(PublishedRecordKind.Statement, P1, 1), Binding(PublishedRecordKind.DocumentChange, D1, 1),
             Binding(PublishedRecordKind.Action, A1, 1));
         Assert.Equal("Succeeded:3", await seeder.BriefQueueStatusAsync(Week));
-        _ = await publications.ActivateAsync(2, default);
+        _ = await publications.ActivateAsync(2, (_, _) => Task.CompletedTask, default);
 
         Assert.Equal("Succeeded:3", await seeder.BriefQueueStatusAsync(Week));
     }
@@ -211,7 +211,7 @@ public sealed class BriefStalenessTests(PostgresCollection postgres) : IAsyncLif
         await seeder.ExecuteAsync("UPDATE brief_analysis SET status = 'Succeeded', attempts = 3");
         Assert.Equal(2, await ReadRevisionAsync(S2));
 
-        _ = await publications.ActivateAsync(2, default);
+        _ = await publications.ActivateAsync(2, (_, _) => Task.CompletedTask, default);
 
         Assert.Equal("Pending:0", await seeder.BriefQueueStatusAsync(Week));
         Assert.Equal(1, await ReadRevisionAsync(S2));
@@ -223,7 +223,7 @@ public sealed class BriefStalenessTests(PostgresCollection postgres) : IAsyncLif
         _ = await briefs.RedraftAsync(Week, default);
         await seeder.ExecuteAsync("UPDATE brief_analysis SET status = 'Succeeded', attempts = 3");
 
-        _ = await publications.ActivateAsync(1, default);
+        _ = await publications.ActivateAsync(1, (_, _) => Task.CompletedTask, default);
 
         Assert.Equal("Pending:0", await seeder.BriefQueueStatusAsync(Week));
         var evidence = (await briefs.ReadEvidenceAsync(BriefWeek.RecordIdOf(Week), default))!;
