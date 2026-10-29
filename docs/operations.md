@@ -714,7 +714,7 @@ The output lists the members to add and the configured people who left the roste
 
 Set `"withholdPhoto": true` on the person in the collection configuration and commit it. Restart the worker and the review workspace, because each reads the configuration only at start. A worker with the old configuration writes the photo back at its next automatic publish. Then run `releases publish <idempotency-key>` with no record. The command makes a release that applies the flag. When the person has no published record, no release shows their photo. The command then refuses with "Nothing to publish", and nothing needs to be done. The new release shows no photo for the person, and the official page shows the neutral line "No portrait is shown for this official." Collection continues, so removing the flag, restarting, and publishing again restores the newest photo.
 
-The flag does not remove files from old releases. An old release directory keeps the photo file until release retention ([R-24](roadmap.md#later)) removes it. Purge the file from the CDN if it must leave at once. A rollback with `releases activate` to an older release shows the photo again. See [roster](architecture/roster.md#limits-and-planned-work).
+The flag does not remove files from old releases. An old release directory keeps the photo file until release retention ([R-24](roadmap.md#later)) removes it. Purge the file from the Cloudflare cache if it must leave at once. A rollback with `releases activate` to an older release shows the photo again. See [roster](architecture/roster.md#limits-and-planned-work).
 
 ## Automatic publication of facts
 
@@ -915,7 +915,7 @@ A release contract change can add a required field to a published file. Old file
 
 `deploy/compose.yaml` runs the temporary production machine with Docker Compose v2. It starts two Postgres containers, the worker, the review workspace, the search service, Caddy, and cloudflared. Check out the repository at the commit that you deploy, because Compose mounts `deploy/caddy/Caddyfile` from the checkout. The images are described under [Container images](#container-images). Backups run from the same file; see [Production runbook](#production-runbook). Release retention and the heartbeat are not in this file.
 
-- The worker, the review workspace, the search service, and Caddy use host networking. The review workspace keeps its loopback listener and the search service trusts only loopback proxies. Reach the review workspace through `tailscale serve`, not through Caddy.
+- The worker, the review workspace, the search service, Caddy, and cloudflared use host networking. The review workspace keeps its loopback listener and the search service trusts only loopback proxies. Reach the review workspace through `tailscale serve`, not through Caddy.
 - The Postgres containers publish `127.0.0.1:5433` (operational) and `127.0.0.1:5434` (search). The connection strings in the secret env files name these ports. Change both places together.
 - The root is `/srv/civic-lens`, the Linux convention for data that a machine serves. To use another root, give `CIVIC_LENS_ROOT` to every script, for example `sudo CIVIC_LENS_ROOT=/data/civic-lens deploy/scripts/update.sh <sha>`. `sudo` drops an exported value. Every directory is mounted at the same path inside the containers, so one path value serves both sides.
 - Under the root, `env/` holds the env files, `config/` holds `collection.json` and `issues.json`, and `captures/`, `releases/`, `review-keys/` and `postgres/` hold data. `captures/`, `releases/` and `review-keys/` belong to user 10001, the user of our images. The two Postgres directories belong to user 70, the `postgres` user of the Alpine Postgres image.
@@ -934,7 +934,7 @@ sudo deploy/scripts/compose.sh run --rm cli releases list
 
 `install.sh` creates the directories and copies each `deploy/env/*.env.example` file only when the target is absent. It never overwrites a file. Fill in the env files and the two config files, then run `update.sh`.
 
-`update.sh` stops when the checkout is not at the given SHA, or when `deploy/` has uncommitted changes. It sets the image tag for the run and pulls the images. It stops the worker, so the old worker never runs on the new schema. Then it applies the migrations with a one-off `cli` container. Then it writes the tag to `compose.env`, because the schema now belongs to that commit. Last, it recreates the services, and it always recreates Caddy so that a changed Caddyfile takes effect. If a step after the migration fails, run `update.sh` again with the same SHA. If the migration fails, the worker stays stopped. Fix the cause and run `update.sh` again, or run `sudo deploy/scripts/compose.sh up --detach worker` to start the old worker. Services never migrate at start. The tag must be a full commit SHA whose images exist. To roll back, run `update.sh` with an earlier SHA. A rollback does not undo a migration.
+`update.sh` stops when the checkout is not at the given SHA, when `deploy/` has uncommitted changes, or when the Caddy port in `compose.env` differs from the port in the tunnel config. It sets the image tag for the run and pulls the images. It stops the worker, so the old worker never runs on the new schema. Then it applies the migrations with a one-off `cli` container. Then it writes the tag to `compose.env`, because the schema now belongs to that commit. Last, it recreates the services, and it always recreates Caddy and cloudflared so that a changed Caddyfile or tunnel config takes effect. If a step after the migration fails, run `update.sh` again with the same SHA. If the migration fails, the worker stays stopped. Fix the cause and run `update.sh` again, or run `sudo deploy/scripts/compose.sh up --detach worker` to start the old worker. Services never migrate at start. The tag must be a full commit SHA whose images exist. To roll back, run `update.sh` with an earlier SHA. A rollback does not undo a migration.
 
 `compose.sh` is `docker compose` with the compose file and `compose.env` set. The `cli` service starts the host image with no command. The `restic` service has the same `tools` profile. Add the host command after `cli`, for example `releases publish` or `db migrate`.
 
@@ -946,7 +946,7 @@ This section is for the temporary production machine, a Jetson with Docker Compo
 
 ### First install
 
-1. Install Docker with Compose v2. Clone the repository to `/opt/civic-lens` and check out the commit to deploy. The systemd units use this path.
+1. Install Docker with Compose v2. Clone the repository to `/opt/civic-lens` and check out the commit to deploy. The systemd units use this path. It must be on the root filesystem, because systemd loads the linked units at boot, before other disks mount.
 2. Run `sudo deploy/scripts/install.sh`. It creates the directories under `/srv/civic-lens` and the env files from the templates.
 3. Fill in the env files in `/srv/civic-lens/env`, and put `collection.json` and `issues.json` in `/srv/civic-lens/config`.
 4. Create the tunnel (see [Tunnel](#tunnel)) and the restic password file and repository (see [Backups](#backups)).
@@ -958,9 +958,9 @@ Do step 5 only after step 4. Without the credential file, the cloudflared contai
 
 ### Tunnel
 
-`deploy/cloudflared/config.yml` is the tunnel config. It sends `civic-lens.info` and `api.civic-lens.info` to Caddy at `http://127.0.0.1:8080`, and every other host name gets 404. The port equals the default of `CIVIC_LENS_CADDY_PORT`. If you change that variable, change the file in the same commit. The review workspace is not in the config.
+`deploy/cloudflared/config.yml` is the tunnel config. It sends `civic-lens.info` and `api.civic-lens.info` to Caddy at `http://127.0.0.1:8080`, and every other host name gets 404. The port equals the default of `CIVIC_LENS_CADDY_PORT`. If you change that variable, change the file in the same commit. `update.sh` stops when the two differ. The review workspace is not in the config.
 
-1. Install `cloudflared` on the machine for this one-time setup, or use the official image. Run `cloudflared tunnel login` and pick the `civic-lens.info` zone.
+1. Install the `cloudflared` package on the machine for this one-time setup. The service uses the pinned image. Run `cloudflared tunnel login` and pick the `civic-lens.info` zone.
 2. Run `cloudflared tunnel create civic-lens`. It prints the tunnel ID and writes `<tunnel-id>.json`.
 3. Move that file to `/srv/civic-lens/cloudflared/credentials.json`. Run `sudo chown 10001:10001` and `sudo chmod 600` on it. The credential file stays on the machine and never goes to Git.
 4. Set `CIVIC_LENS_TUNNEL_ID` in `/srv/civic-lens/env/compose.env` to the tunnel ID.
@@ -986,7 +986,7 @@ No Terraform manages these steps. Check each one by hand.
 
 ### Backups
 
-A nightly systemd timer runs `deploy/scripts/backup.sh`. The script dumps the operational database with `pg_dump --format=custom` inside the Postgres container. Then it runs restic from the pinned official image. It backs up the dump, `config/`, `captures/`, and `releases/`, in one snapshot. Then it keeps 7 daily, 4 weekly, and 6 monthly snapshots and prunes the rest. Restic encrypts the data before it leaves the machine. The repository is a Cloudflare R2 bucket.
+A nightly systemd timer runs `deploy/scripts/backup.sh`. The script takes a lock, so two runs cannot overlap. It dumps the operational database with `pg_dump --format=custom` inside the Postgres container. Then it runs restic from the pinned official image. It backs up the dump, `config/`, `captures/`, and `releases/`, in one snapshot. Then it keeps 7 daily, 4 weekly, and 6 monthly snapshots and prunes the rest. Restic encrypts the data before it leaves the machine. The repository is a Cloudflare R2 bucket.
 
 The backup does not hold the search database, because a publish rebuilds it. It does not hold env files, secrets, or Terraform state. It does not hold `review-keys/`. If the data-protection keys are lost, reviewers must sign in again. Nothing else breaks.
 
@@ -1007,19 +1007,27 @@ Day-to-day commands:
 ```sh
 sudo systemctl start civic-lens-backup.service
 sudo journalctl -u civic-lens-backup.service
+systemctl list-timers civic-lens-backup.timer
+systemctl --failed
 sudo deploy/scripts/compose.sh run --rm restic snapshots
 ```
 
-The first backup run by hand also proves the credentials. The timer runs at 03:30 local time.
+The first backup run by hand also proves the credentials. The timer runs at 03:30 local time. Check `list-timers` and `--failed` every week. A failed backup sends no alert. The last run time must be less than a day old.
 
 **Restore.** Test this procedure once before you need it, on a spare machine or directory.
 
-1. Stop the services that write: `sudo deploy/scripts/compose.sh stop worker review`.
+1. Stop the backup timer and the services that use the database: `sudo systemctl stop civic-lens-backup.timer` and `sudo deploy/scripts/compose.sh stop worker review search`.
 2. Restore the snapshot to a work directory: `sudo deploy/scripts/compose.sh run --rm -v /srv/restore:/restore restic restore latest --target /restore`. The files keep their full paths, for example `/srv/restore/srv/civic-lens/captures`.
-3. Restore the database. Start Postgres if it is down. Then run `sudo deploy/scripts/compose.sh exec -T postgres sh -c 'pg_restore --clean --if-exists --username="$POSTGRES_USER" --dbname="$POSTGRES_DB"' < /srv/restore/srv/civic-lens/backup/operational.dump`.
-4. Copy `config/`, `captures/` and `releases/` back under `/srv/civic-lens`. `config/` stays owned by root. Keep the owner 10001:10001 for `captures/` and `releases/`. Check that `releases/current` is a link to the active release.
-5. Start the services with `update.sh`. Rebuild the search database by a publish or by the search service procedure in [Run the search service](#run-the-search-service).
-6. Delete `/srv/restore`.
+3. Drop and create the operational database again. A restore into the old database would keep the tables of newer migrations. Start Postgres if it is down. Then run:
+
+```sh
+sudo deploy/scripts/compose.sh exec -T postgres sh -c 'psql --username="$POSTGRES_USER" --dbname=postgres --command="DROP DATABASE \"$POSTGRES_DB\" WITH (FORCE)" --command="CREATE DATABASE \"$POSTGRES_DB\" OWNER \"$POSTGRES_USER\""'
+sudo deploy/scripts/compose.sh exec -T postgres sh -c 'pg_restore --single-transaction --exit-on-error --username="$POSTGRES_USER" --dbname="$POSTGRES_DB"' < /srv/restore/srv/civic-lens/backup/operational.dump
+```
+
+4. Copy `config/`, `captures/` and `releases/` back under `/srv/civic-lens` with `sudo cp -a`, one command for each directory. Do not copy only part of `releases/`, because `cp -a` keeps the hard links between releases only inside one copy. `config/` stays owned by root. `captures/` and `releases/` keep the owner 10001:10001. Check that `releases/current` is a link to the active release.
+5. Start the services with `update.sh`. The search database is not in the backup. The search service ingests the active release when it starts, and then every 2 minutes. Wait for one poll, then search on the site.
+6. Delete `/srv/restore`. Start the timer: `sudo systemctl start civic-lens-backup.timer`.
 
 The dump file stays in `/srv/civic-lens/backup`, mode 700, until the next run replaces it.
 

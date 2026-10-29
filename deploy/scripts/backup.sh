@@ -7,7 +7,15 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-dump="$CIVIC_LENS_ROOT/backup/operational.dump"
+umask 077
+backup_directory="$CIVIC_LENS_ROOT/backup"
+exec 9>"$backup_directory/lock"
+if ! flock --nonblock 9; then
+  echo "Another backup is running." >&2
+  exit 1
+fi
+
+dump="$backup_directory/operational.dump"
 trap 'rm -f "$dump.partial"' EXIT
 
 compose exec -T postgres sh -c 'pg_dump --format=custom --username="$POSTGRES_USER" --dbname="$POSTGRES_DB"' > "$dump.partial"

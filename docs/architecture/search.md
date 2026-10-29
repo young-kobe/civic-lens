@@ -223,7 +223,7 @@ Run commands are in [operations](../operations.md#run-the-search-service).
 - A search database restored from a backup keeps its epoch. Reports made after the backup are lost, and the puller can skip new reports that reuse the lost sequences.
 - The review system keeps a closed report with no deletion rule. [R-24](../roadmap.md#later) adds one, and the About page then states it.
 - The request log filter in `PublicApiApp` has no provider. A provider-specific `Logging` level, such as `Logging__Console__LogLevel__Default`, overrides it and logs the search text again. The [R-24](../roadmap.md#later) deploy must set none.
-- The About page says a search keeps nothing. That stays true only while the Caddy and CDN deploy keeps no access logs for search requests. [R-24](../roadmap.md#later) must set that.
+- The About page says a search keeps nothing. That stays true only while the Caddy deploy keeps no access logs for search requests. The Caddyfile sets that; see [Web server](../operations.md#web-server).
 - Edge blocking of `/internal/*` is deferred to [R-24](../roadmap.md#later).
 - The search API answers 200 for a withdrawn record in the pinned releases that hold it. A status 410 needs the ingest to read withdrawals and the API to change its status. This waits until after [R-24](../roadmap.md#later).
 - Only the first full ingest is long, because it fetches every record inside one transaction. Later ingests fetch only new revisions. Readers are not blocked, because they read committed rows.

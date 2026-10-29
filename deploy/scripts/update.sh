@@ -14,6 +14,13 @@ if ! grep -q '^CIVIC_LENS_IMAGE_TAG=' "$tag_file"; then
   exit 1
 fi
 
+tunnel_ports=$(sed -n 's#^ *service: http://127.0.0.1:\([0-9]*\)$#\1#p' "$deploy_directory/cloudflared/config.yml" | sort -u)
+caddy_port=$(sed -n 's/^CIVIC_LENS_CADDY_PORT=//p' "$tag_file")
+if [[ $tunnel_ports != "$caddy_port" ]]; then
+  echo "CIVIC_LENS_CADDY_PORT is $caddy_port, but deploy/cloudflared/config.yml sends traffic to port $tunnel_ports. Make them equal." >&2
+  exit 1
+fi
+
 repository=$(dirname "$deploy_directory")
 checkout=$(git -c safe.directory="$repository" -C "$repository" rev-parse HEAD)
 if [[ $checkout != "$tag" ]]; then

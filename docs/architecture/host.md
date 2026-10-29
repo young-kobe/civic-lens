@@ -21,7 +21,7 @@ The Host is the composition root, the CLI, and the authenticated web workspace. 
 - AI uses hosted inference first. Evaluation can change the model for each task.
 - Off-server backups go to Cloudflare R2 through restic. R2 costs nothing under 10 GB and charges no download fee for restores. Backblaze B2 is the fallback if storage grows large.
 - Restic encrypts each backup on our server before upload. The vendor stores only data that it cannot read. The key stays with the owner and never goes to a vendor.
-- A nightly timer runs `pg_dump` inside the Postgres container. A failure loses at most one day of database writes. Each run backs up the dump, the capture files, and the releases together. It does not back up the search database, env files, or the review key directory.
+- A nightly timer runs `pg_dump` inside the Postgres container. A failure loses at most one day of database writes. Each run backs up the dump, the config files, the capture files, and the releases together. It does not back up the search database, env files, or the review key directory.
 - Restic keeps 7 daily, 4 weekly, and 6 monthly snapshots. A restore test runs each month.
 - The first deployment accepts single-host downtime during maintenance or failure.
 - Build and validate MVP features and the UI on the dev box first. The dev box is for development only. Live infrastructure is not a prerequisite for feature work.
