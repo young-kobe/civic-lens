@@ -38,7 +38,7 @@ internal static class CollectionWorkerCommand
         var artifactRoot = ArtifactRootOf(arguments);
         var runner = new RunCollectionJob(jobs, evidence, new FileCollectionReceiptHandoffStore(artifactRoot),
             new CaptureArtifactVerifier(), new CollectorProcess(collectorPath,
-                Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet"),
+                Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet", lockArtifactDirectory: false),
             loggers.CreateLogger<RunCollectionJob>());
         var once = IsOnce(arguments);
         var collection = new CollectionJobWorker(queue, runner, loggers.CreateLogger<CollectionJobWorker>(), beat, evidenceProcessor, wakeup, schedules,

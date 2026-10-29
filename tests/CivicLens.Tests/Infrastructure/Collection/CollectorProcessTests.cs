@@ -199,6 +199,44 @@ public sealed class CollectorProcessTests
     }
 
     [Fact]
+    public async Task ManagedRunsIgnoreTheDirectoryLockWhileADirectRunStillRefusesIt()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "civic-managed-" + Guid.NewGuid().ToString("N"));
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var origin = $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}";
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        var request = Request() with
+        {
+            Url = origin + "/watch",
+            AllowedOrigin = origin,
+            AllowedPathPrefix = "/watch",
+            ArtifactDirectory = directory,
+            MinDelayMilliseconds = 0
+        };
+        var server = ServeAsync(listener, Encoding.UTF8.GetBytes("Exact source bytes.\r\n"), false, false, 3, deadline.Token);
+        Directory.CreateDirectory(directory);
+        try
+        {
+            using var otherRun = new FileStream(Path.Combine(directory, ".collector.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            var assembly = typeof(HttpCollector).Assembly.Location;
+
+            await Assert.ThrowsAsync<IOException>(() => new CollectorProcess(assembly).RunAsync(request, deadline.Token));
+
+            var managed = new CollectorProcess(assembly, lockArtifactDirectory: false);
+            Assert.Equal(CollectionOutcome.Captured, (await managed.RunAsync(request, deadline.Token)).Outcome);
+            Assert.Equal(CollectionOutcome.Captured, (await managed.RunAsync(request with { JobId = Guid.NewGuid().ToString("N") }, deadline.Token)).Outcome);
+        }
+        finally
+        {
+            deadline.Cancel();
+            listener.Stop();
+            try { await server; } catch (Exception exception) when (exception is OperationCanceledException or SocketException) { }
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
     public async Task CancellingChildReleasesDirectoryLeaseAndRemovesManifest()
     {
         var directory = Path.Combine(Path.GetTempPath(), "civic-cancel-" + Guid.NewGuid().ToString("N"));

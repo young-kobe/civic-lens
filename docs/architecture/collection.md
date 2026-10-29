@@ -518,8 +518,7 @@ The shared wakeup and lease mechanics are in [Shared worker mechanics](../archit
 
 ## Limits and planned work
 
-- Extra collection lanes gain speed only after one blocker goes. The collector process holds an exclusive `.collector.lock` file in the artifact directory. The choice is pending.
-- Unmanaged commands need operator coordination. The host serializes processes that share an artifact directory, but separate directories and standalone collectors are not coordinated.
+- Unmanaged commands need operator coordination. A lock file in the artifact directory serializes direct collector runs that share it. Managed runs skip the lock, because the collector slot of each pacing key bounds them. Separate directories and standalone collectors are not coordinated.
 - Candidate loading for a new 304 has no cutoff, so memory use can grow with the history of a source. Pagination or streaming must keep the all-candidates ambiguity rule.
 - Orphan capture cleanup is future work. Successful handoffs are removed with no completed archive and no capture retention policy.
 - The host does not replay stored validators automatically. Validators are explicit on the source or the manifest.
