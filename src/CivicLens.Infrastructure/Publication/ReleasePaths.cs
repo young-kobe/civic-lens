@@ -6,6 +6,7 @@ internal static partial class ReleasePaths
 {
     public const string StagingFolder = "staging";
     public const string ReleasesFolder = "releases";
+    public const string TombstoneFolder = "deleting";
     public const string CurrentLink = "current";
 
     private const UnixFileMode DirectoryMode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |

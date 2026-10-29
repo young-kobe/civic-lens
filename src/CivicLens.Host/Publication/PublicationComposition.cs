@@ -48,7 +48,7 @@ internal static class PublicationComposition
                 PostgresExecutiveRosterStore.FromConnectionString(connectionString)),
             new ReleasePhotos(PostgresCollectionAttemptStore.FromConnectionString(connectionString), new CaptureBodyReader(), artifactRoot,
                 loggers.CreateLogger<ReleasePhotos>()),
-            TimeProvider.System);
+            TimeProvider.System, new PruneReleases(publications, releases, loggers.CreateLogger<PruneReleases>()));
         return new(publish, loaders);
     }
 }

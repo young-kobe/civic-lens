@@ -25,9 +25,10 @@ public sealed class PublishRelease
     private readonly PublishedRecordRules rules;
     private readonly PublicationOfficials officials;
     private readonly TimeProvider clock;
+    private readonly PruneReleases prune;
 
     public PublishRelease(IPublicationStore publications, IReleaseDirectory releases, IReleaseRenderer renderer,
-        PublishedRecordLoaders loaders, PublicationCatalog catalog, PublicationOfficials officials, ReleasePhotos releasePhotos, TimeProvider clock)
+        PublishedRecordLoaders loaders, PublicationCatalog catalog, PublicationOfficials officials, ReleasePhotos releasePhotos, TimeProvider clock, PruneReleases prune)
     {
         this.officials = officials;
         this.publications = publications;
@@ -40,6 +41,7 @@ public sealed class PublishRelease
         dataFiles = new ReleaseDataFiles(releases, loaders.Votes, officials, releasePhotos);
         officialPages = new ReleaseOfficialPages(new ReleaseOfficialVotes(releases, loaders.Votes), officials, renderer, catalog);
         this.clock = clock;
+        this.prune = prune;
         rules = new PublishedRecordRules(catalog);
     }
 
@@ -94,6 +96,7 @@ public sealed class PublishRelease
         };
         var summary = await CommitAsync(actor, commit, request.IdempotencyKey, payloadHash, cancellationToken);
         await ServeActiveReleaseAsync(cancellationToken);
+        await prune.ExecuteAsync(cancellationToken);
         return summary;
     }
 

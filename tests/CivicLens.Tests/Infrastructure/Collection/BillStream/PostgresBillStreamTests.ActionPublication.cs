@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Application.Issues;
 using CivicLens.Infrastructure.Relationships;
@@ -136,12 +137,14 @@ public sealed partial class PostgresBillStreamTests
         var revision = (await ActionReviews().GetRevisionAsync(RecordId, 1, default))!;
         var names = revision.Sponsorships.Select(item => item.PersonId).Distinct().ToDictionary(id => id, id => $"Official {id}");
         var releases = new FileReleaseDirectory(Path.Combine(captureRoot, "releases"));
-        var publisher = new PublishRelease(PostgresPublicationStore.FromConnectionString(connectionString), releases, new ReleaseRenderer(null, null),
+        var store = PostgresPublicationStore.FromConnectionString(connectionString);
+        var publisher = new PublishRelease(store, releases, new ReleaseRenderer(null, null),
             new PublishedRecordLoaders(PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
                 PostgresStatementReviewStore.FromConnectionString(connectionString), ActionReviews(),
                 PostgresVoteReviewStore.FromConnectionString(connectionString),
                 new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)), new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString))),
-            new PublicationCatalog(names, IssueConfiguration.None), FixedRosters.NamedOnly(names.Keys), PhotoCaptures.None(), TimeProvider.System);
+            new PublicationCatalog(names, IssueConfiguration.None), FixedRosters.NamedOnly(names.Keys), PhotoCaptures.None(), TimeProvider.System,
+            new PruneReleases(store, releases, NullLogger<PruneReleases>.Instance));
 
         var summary = await publisher.ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("publish", new PublishedRecordReference(PublishedRecordKind.Action, RecordId)));

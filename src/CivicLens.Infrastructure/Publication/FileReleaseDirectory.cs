@@ -65,8 +65,14 @@ public sealed class FileReleaseDirectory : IReleaseDirectory
     {
         cancellationToken.ThrowIfCancellationRequested();
         ReleasePaths.RequireDirectoryName(directoryName);
+        var tombstones = Path.Combine(rootPath, ReleasePaths.TombstoneFolder);
+        ReleasePaths.CreateReadableDirectory(tombstones);
+        foreach (var leftover in Directory.EnumerateDirectories(tombstones)) Directory.Delete(leftover, recursive: true);
         var path = ReleasePath(directoryName);
-        if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
+        if (!Directory.Exists(path)) return Task.CompletedTask;
+        var tombstone = Path.Combine(tombstones, Guid.NewGuid().ToString("N"));
+        Directory.Move(path, tombstone);
+        Directory.Delete(tombstone, recursive: true);
         return Task.CompletedTask;
     }
 

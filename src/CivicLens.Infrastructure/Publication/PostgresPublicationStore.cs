@@ -103,6 +103,19 @@ public sealed class PostgresPublicationStore : IPublicationStore
         return active is null ? null : ToSummary(active);
     }
 
+    public async Task PruneAsync(int keep, Func<IReadOnlyList<string>, CancellationToken, Task> deleteDirectories,
+        CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(keep, 1);
+        ArgumentNullException.ThrowIfNull(deleteDirectories);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.ReviewKeysInOrder, cancellationToken);
+        var old = await db.Set<PublicationReleaseRow>().AsNoTracking()
+            .OrderByDescending(row => row.ReleaseNumber).Skip(keep).Where(row => !row.IsActive).Select(row => row.DirectoryName).ToListAsync(cancellationToken);
+        await deleteDirectories(old, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     public async Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey,
         string payloadHash, CancellationToken cancellationToken)
     {

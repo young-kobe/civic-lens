@@ -207,6 +207,45 @@ public sealed class FileReleaseDirectoryTests : IDisposable
     }
 
     [Fact]
+    public async Task DeletingRemovesLeftoverTombstonesSoAHalfDeletedReleaseNeverStaysOnDisk()
+    {
+        var first = await BuildReleaseAsync(1, "one");
+        var leftover = Path.Combine(root, "deleting", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(leftover);
+        await File.WriteAllTextAsync(Path.Combine(leftover, "release.json"), "half");
+
+        await releases.DeleteAsync(first, default);
+
+        Assert.Empty(Directory.EnumerateFileSystemEntries(Path.Combine(root, "deleting")));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(Path.Combine(root, "releases")));
+    }
+
+    [Fact]
+    public async Task DeletingAnUnknownReleaseChangesNothingSoARepeatedPruneIsSafe()
+    {
+        var kept = await BuildReleaseAsync(1, "one");
+
+        await releases.DeleteAsync("000009-" + new string('a', 32), default);
+
+        Assert.True(File.Exists(Path.Combine(root, "releases", kept, "release.json")));
+    }
+
+    [Fact]
+    public async Task DeletingAReleaseKeepsTheHardLinkedFilesOfNewerReleases()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var baseName = await BuildReleaseAsync(1, "one");
+        await using var staging = await releases.BeginAsync(default);
+        await staging.LinkFileAsync(baseName, "records/a.json", default);
+        await staging.WriteFileAsync("release.json", Encoding.UTF8.GetBytes("two"), default);
+        var linkedName = await staging.CompleteAsync(2, default);
+
+        await releases.DeleteAsync(baseName, default);
+
+        Assert.Equal("{}", await File.ReadAllTextAsync(Path.Combine(root, "releases", linkedName, "records", "a.json")));
+    }
+
+    [Fact]
     public async Task LinkedFilesShareStorageWithTheBaseReleaseSoDiskDoesNotGrowPerRelease()
     {
         if (OperatingSystem.IsWindows()) return;

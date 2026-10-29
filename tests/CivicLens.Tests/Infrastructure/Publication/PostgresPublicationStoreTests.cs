@@ -232,6 +232,44 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task PruneOffersEveryReleaseBelowTheHighestKeptExceptTheActiveOneSoARolledBackReleaseSurvives()
+    {
+        var draft = await CreateDraftAsync();
+        var first = await publications.CommitAsync(Owner.Subject, Commit(1, draft, 1, 0), "key-1", Hash(1), default);
+        var second = await publications.CommitAsync(Owner.Subject, Commit(2, draft, 1, 0), "key-2", Hash(2), default);
+        await publications.CommitAsync(Owner.Subject, Commit(3, draft, 1, 0), "key-3", Hash(3), default);
+        await publications.ActivateAsync(1, (_, _) => Task.CompletedTask, default);
+        IReadOnlyList<string>? offered = null;
+
+        await publications.PruneAsync(1, (names, _) => { offered = names; return Task.CompletedTask; }, default);
+
+        Assert.Equal([second.DirectoryName], offered);
+        Assert.Equal(first, (await publications.GetStateAsync(default)).Active);
+        Assert.Equal(3, (await publications.ListAsync(10, default)).Count);
+    }
+
+    [Fact]
+    public async Task PruneDeletesFilesWhileHoldingThePublicationLockSoNoActivationCanSwitchToADirectoryBeingDeleted()
+    {
+        var draft = await CreateDraftAsync();
+        await publications.CommitAsync(Owner.Subject, Commit(1, draft, 1, 0), "key-1", Hash(1), default);
+        await publications.CommitAsync(Owner.Subject, Commit(2, draft, 1, 0), "key-2", Hash(2), default);
+        var lockWasFree = true;
+
+        await publications.PruneAsync(1, async (_, _) =>
+        {
+            await using var other = new NpgsqlConnection(connectionString);
+            await other.OpenAsync();
+            await using var transaction = await other.BeginTransactionAsync();
+            await using var command = new NpgsqlCommand(
+                "SELECT pg_try_advisory_xact_lock(hashtextextended('civic-lens-brief-review', 0))", other, transaction);
+            lockWasFree = (bool)(await command.ExecuteScalarAsync())!;
+        }, default);
+
+        Assert.False(lockWasFree);
+    }
+
+    [Fact]
     public async Task ReleaseBuiltBeforeARollbackIsRejectedSoItCannotRestoreWithdrawnRecords()
     {
         var draft = await CreateDraftAsync();

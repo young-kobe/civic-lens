@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using CivicLens.Application.Issues;
 using CivicLens.Infrastructure.Relationships;
 using CivicLens.Infrastructure.Votes;
@@ -93,12 +94,15 @@ public sealed class PublishedReleaseOutlivesDatabaseTests : IAsyncLifetime
         await new DecideDocumentChangeReview(reviews, catalog).ExecuteAsync(Owner,
             new(saved.DraftId, 2, 0, ReviewDecisionKind.Approve, null, [], "approve"));
 
-        var publish = new PublishRelease(PostgresPublicationStore.FromConnectionString(connectionString),
-            new FileReleaseDirectory(releasesRoot), new ReleaseRenderer(null, null),
+        var store = PostgresPublicationStore.FromConnectionString(connectionString);
+        var directory = new FileReleaseDirectory(releasesRoot);
+        var publish = new PublishRelease(store,
+            directory, new ReleaseRenderer(null, null),
             new PublishedRecordLoaders(reviews, new PostgresStatementReviewStore(factory), new PostgresActionReviewStore(factory),
                 new PostgresVoteReviewStore(factory), new PostgresRelationshipReviewStore(factory),
                 new PostgresBriefReviewStore(factory)),
-            new PublicationCatalog(new Dictionary<string, string> { ["mayor"] = "Mayor Example" }, IssueConfiguration.None), FixedRosters.NamedOnly(["mayor"]), PhotoCaptures.None(), TimeProvider.System);
+            new PublicationCatalog(new Dictionary<string, string> { ["mayor"] = "Mayor Example" }, IssueConfiguration.None), FixedRosters.NamedOnly(["mayor"]), PhotoCaptures.None(), TimeProvider.System,
+            new PruneReleases(store, directory, NullLogger<PruneReleases>.Instance));
         return await publish.ExecuteAsync(Owner, new PublishReleaseRequest([new(PublishedRecordKind.DocumentChange, saved.DraftId)], "publish"));
     }
 

@@ -84,7 +84,7 @@ internal sealed class PublicationScenario
 
     public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events, OfficialPages = OfficialPages, PublicBaseUrl = BaseUrl }, Loaders(),
         new PublicationCatalog(OfficialNames, Issues), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, null, Photos, () => PhotoReads++), new FixedExecutiveRoster(ExecutiveOfficials)),
-        Captures.Photos("artifacts"), Clock);
+        Captures.Photos("artifacts"), Clock, new PruneReleases(Publications, Releases, NullLogger<PruneReleases>.Instance));
 
     public BlockedPublishedRecords Blocked() => new(Publications);
 
@@ -453,6 +453,7 @@ internal sealed class FakePublicationStore : IPublicationStore
     public Dictionary<PublishedRecordReference, ReviewStatus> ReviewStatuses { get; } = [];
     public int? ActiveReleaseNumber { get; set; }
     public Action? BeforeServe { get; set; }
+    public Exception? FailOnPrune { get; set; }
 
     public Task<PublicationState> GetStateAsync(CancellationToken cancellationToken) =>
         Task.FromResult(new PublicationState(Committed.Select(item => item.ReleaseNumber).DefaultIfEmpty().Max(),
@@ -475,6 +476,14 @@ internal sealed class FakePublicationStore : IPublicationStore
         var active = Committed.SingleOrDefault(item => item.ReleaseNumber == ActiveReleaseNumber);
         if (active is not null) await serve(active.DirectoryName, cancellationToken);
         return active;
+    }
+
+    public async Task PruneAsync(int keep, Func<IReadOnlyList<string>, CancellationToken, Task> deleteDirectories,
+        CancellationToken cancellationToken)
+    {
+        if (FailOnPrune is not null) throw FailOnPrune;
+        await deleteDirectories([.. Committed.OrderByDescending(item => item.ReleaseNumber).Skip(keep)
+            .Where(item => item.ReleaseNumber != ActiveReleaseNumber).Select(item => item.DirectoryName)], cancellationToken);
     }
 
     public Task<IReadOnlyDictionary<PublishedRecordReference, ReviewStatus>> ReadReviewStatusesAsync(
