@@ -988,6 +988,8 @@ No Terraform manages these steps. Check each one by hand.
 
 A nightly systemd timer runs `deploy/scripts/backup.sh`. The script takes a lock, so two runs cannot overlap. It dumps the operational database with `pg_dump --format=custom` inside the Postgres container. Then it runs restic from the pinned official image. It backs up the dump, `config/`, `captures/`, and `releases/`, in one snapshot. Then it keeps 7 daily, 4 weekly, and 6 monthly snapshots and prunes the rest. Restic encrypts the data before it leaves the machine. The repository is a Cloudflare R2 bucket.
 
+The About page says a backup can keep a closed reader report for up to 6 months after its deletion. If you change `--keep-monthly`, change the page too. A backup outage of several weeks can also break that claim, because the prune does not run.
+
 The backup does not hold the search database, because a publish rebuilds it. It does not hold env files, secrets, or Terraform state. It does not hold `review-keys/`. If the data-protection keys are lost, reviewers must sign in again. Nothing else breaks.
 
 Set up the backup one time:
