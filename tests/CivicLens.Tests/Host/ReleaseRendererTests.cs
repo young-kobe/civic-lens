@@ -931,6 +931,15 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task AboutPageStatesTheClosedReportRetentionAndFailsWhenTheRuleNoLongerSaysOneYear()
+    {
+        var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderAboutAsync(CancellationToken.None));
+
+        Assert.Equal(365, ReaderReportProtocol.ClosedRetentionDays);
+        Assert.Contains("we delete it from the review system after one year", document.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AboutPagePrivacyTableNamesWhatIsKeptForEachActionSoNoReaderIsLeftToGuess()
     {
         var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderAboutAsync(CancellationToken.None));
