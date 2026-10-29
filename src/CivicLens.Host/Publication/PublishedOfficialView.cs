@@ -28,16 +28,13 @@ internal static class PublishedOfficialView
 
     public static PublishedOfficeTerm? LatestTerm(IEnumerable<PublishedOfficeTerm> terms) => terms.OrderBy(term => term.Start).LastOrDefault();
 
-    public static string OfficeKind(PublishedOfficeTerm? term) => term?.Office switch
-    {
-        MemberRosterParser.Senate => "senator",
-        MemberRosterParser.House => "representative",
-        ExecutiveRosterParser.President or ExecutiveRosterParser.VicePresident => "executive",
-        _ => "other"
-    };
+    public static string OfficeKey(PublishedOfficeKind kind) => kind.ToString().ToLowerInvariant();
 
-    public static readonly IReadOnlyList<(string Kind, string Plural)> OfficeKinds =
-        [("senator", "Senators"), ("representative", "Representatives"), ("executive", "Executives"), ("other", "Other officials")];
+    public static readonly IReadOnlyList<(PublishedOfficeKind Kind, string Plural)> OfficeKinds =
+    [
+        (PublishedOfficeKind.Senator, "Senators"), (PublishedOfficeKind.Representative, "Representatives"), (PublishedOfficeKind.Executive, "Executives"),
+        (PublishedOfficeKind.Judicial, "Justices"), (PublishedOfficeKind.Other, "Other officials")
+    ];
 
     public static string RecordCount(int count) => $"{count} {Noun(count, "record")} other than votes";
 

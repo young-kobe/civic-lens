@@ -8,4 +8,5 @@ public sealed record OfficeConfiguration
     public required DateOnly StartsOn { get; init; }
     public DateOnly? EndsOn { get; init; }
     public string? Party { get; init; }
+    public ConfiguredOfficeKind? Kind { get; init; }
 }

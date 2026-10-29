@@ -78,8 +78,8 @@ public sealed class PublishedOfficialPageTests
                 Name = "Mayor Example",
                 Terms =
                 [
-                    new() { Office = "rep", State = "WA", District = 1, Party = "Democrat", Start = new(1993, 1, 3), End = new(2025, 1, 3) },
-                    new() { Office = "Secretary of State", Start = new(2025, 1, 21) }
+                    new() { Office = "rep", Kind = PublishedOfficeKind.Representative, State = "WA", District = 1, Party = "Democrat", Start = new(1993, 1, 3), End = new(2025, 1, 3) },
+                    new() { Office = "Secretary of State", Kind = PublishedOfficeKind.Executive, Start = new(2025, 1, 21) }
                 ]
             }
         };
@@ -99,7 +99,7 @@ public sealed class PublishedOfficialPageTests
     [Fact]
     public async Task AnOfficialWithNoPartyOnAnyTermGetsNoPartyColumnBecauseItWouldBeEmpty()
     {
-        var page = Current([], []) with { Profile = Profile("pres", "Pat President", new PublishedOfficeTerm { Office = "President", Start = new DateOnly(2025, 1, 20) }) };
+        var page = Current([], []) with { Profile = Profile("pres", "Pat President", new PublishedOfficeTerm { Office = "President", Kind = PublishedOfficeKind.Executive, Start = new DateOnly(2025, 1, 20) }) };
 
         var offices = await PanelTableAsync(page, "panel-offices");
 
@@ -112,7 +112,7 @@ public sealed class PublishedOfficialPageTests
     {
         var page = Current([], []) with
         {
-            Profile = Profile("a", "Ann Able", Term("sen", "MA", "Democratic"), new PublishedOfficeTerm { Office = "President", Start = new DateOnly(2030, 1, 20) })
+            Profile = Profile("a", "Ann Able", Term("sen", "MA", "Democratic"), new PublishedOfficeTerm { Office = "President", Kind = PublishedOfficeKind.Executive, Start = new DateOnly(2030, 1, 20) })
         };
 
         var offices = await PanelTableAsync(page, "panel-offices");
@@ -447,7 +447,7 @@ public sealed class PublishedOfficialPageTests
     {
         var profile = Profile() with
         {
-            Terms = [new() { Office = "rep", State = "WA", District = 1, Party = "Democrat", Start = new(2021, 1, 3), End = new(2025, 1, 3) }]
+            Terms = [new() { Office = "rep", Kind = PublishedOfficeKind.Representative, State = "WA", District = 1, Party = "Democrat", Start = new(2021, 1, 3), End = new(2025, 1, 3) }]
         };
         var page = new ReleaseOfficialPage(profile, true, congress, false, [], [], []);
 
@@ -541,6 +541,19 @@ public sealed class PublishedOfficialPageTests
             page.QuerySelectorAll("[data-officials-filters] button").Select(button => button.TextContent.Trim()));
         Assert.Equal(["All states", "MA", "TX"], page.QuerySelectorAll("[data-officials-state] option").Select(option => option.TextContent));
         Assert.Equal(["true", "false", "false"], page.QuerySelectorAll("[data-officials-filters] button").Select(button => button.GetAttribute("aria-pressed")));
+    }
+
+    [Fact]
+    public async Task AJudicialOfficeIsInTheJusticesTabAfterExecutivesAndAnExecutiveOfficeIsInExecutivesNotOtherOfficials()
+    {
+        var page = await ListAsync(
+            new OfficialListing(Profile("a", "Ann Able", Term("sen", "MA", "Democratic")), 1),
+            new OfficialListing(Profile("b", "Bob Baker", new PublishedOfficeTerm { Office = "Chief Justice", Kind = PublishedOfficeKind.Judicial, Start = new DateOnly(2005, 9, 29) }), 1),
+            new OfficialListing(Profile("c", "Cy Cole", new PublishedOfficeTerm { Office = "Secretary of State", Kind = PublishedOfficeKind.Executive, Start = new DateOnly(2025, 1, 21) }), 1));
+
+        Assert.Equal(["All officials (3)", "Senators (1)", "Executives (1)", "Justices (1)"],
+            page.QuerySelectorAll("[data-officials-filters] button").Select(button => button.TextContent.Trim()));
+        Assert.Equal(["senator", "judicial", "executive"], page.QuerySelectorAll("ul.officials > li").Select(card => card.GetAttribute("data-office")));
     }
 
     [Fact]
@@ -835,7 +848,14 @@ public sealed class PublishedOfficialPageTests
     private static PublishedOfficialProfile Profile(string id, string name, params PublishedOfficeTerm[] terms) => new() { Id = id, Name = name, Terms = terms };
 
     private static PublishedOfficeTerm Term(string office, string? state, string party) =>
-        new() { Office = office, State = state, Party = party, Start = new DateOnly(2025, 1, 3) };
+        new() { Office = office, Kind = KindOf(office), State = state, Party = party, Start = new DateOnly(2025, 1, 3) };
+
+    private static PublishedOfficeKind KindOf(string office) => office switch
+    {
+        "sen" => PublishedOfficeKind.Senator,
+        "rep" => PublishedOfficeKind.Representative,
+        _ => PublishedOfficeKind.Executive
+    };
 
     private static PublishedOfficialProfile WithPhoto(string id, string name, string credit) => Profile(id, name) with
     {

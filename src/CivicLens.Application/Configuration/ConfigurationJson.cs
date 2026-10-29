@@ -18,6 +18,7 @@ public static class ConfigurationJson
             DefaultIgnoreCondition = ignoreNulls ? JsonIgnoreCondition.WhenWritingNull : JsonIgnoreCondition.Never
         };
         options.Converters.Add(new JsonStringEnumConverter<ApiParser>(JsonNamingPolicy.CamelCase, allowIntegerValues: false));
+        options.Converters.Add(new JsonStringEnumConverter<ConfiguredOfficeKind>(JsonNamingPolicy.CamelCase, allowIntegerValues: false));
         options.MakeReadOnly(populateMissingResolver: true);
         return options;
     }

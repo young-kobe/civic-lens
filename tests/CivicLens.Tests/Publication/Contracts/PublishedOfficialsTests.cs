@@ -18,7 +18,7 @@ public sealed class PublishedOfficialsTests
                     Id = "mayor",
                     Name = "Mayor Example",
                     WikidataId = "Q1",
-                    Terms = [new() { Office = "sen", State = "WA", District = null, Party = "Democrat", Start = new(2025, 1, 3), End = new(2031, 1, 3) }]
+                    Terms = [new() { Office = "sen", Kind = PublishedOfficeKind.Senator, State = "WA", District = null, Party = "Democrat", Start = new(2025, 1, 3), End = new(2031, 1, 3) }]
                 }
             ]
         };
@@ -79,14 +79,14 @@ public sealed class PublishedOfficialsTests
                 {
                     Id = "mayor",
                     Name = "Mayor Example",
-                    Terms = [new() { Office = "sen", State = "WA", Party = "Democrat", Start = new(2025, 1, 3), End = new(2031, 1, 3) }]
+                    Terms = [new() { Office = "sen", Kind = PublishedOfficeKind.Senator, State = "WA", Party = "Democrat", Start = new(2025, 1, 3), End = new(2031, 1, 3) }]
                 }
             ]
         };
         var catalog = new PublishedCatalog { Issues = [new() { Id = "housing", Name = "Housing" }], PolicyAreas = [] };
 
         Assert.Equal(1, PublicationProtocol.SchemaVersion);
-        Assert.Equal("""{"officials":[{"id":"mayor","name":"Mayor Example","wikidataId":null,"website":null,"photo":null,"terms":[{"office":"sen","state":"WA","district":null,"party":"Democrat","caucus":null,"start":"2025-01-03","end":"2031-01-03"}]}]}""",
+        Assert.Equal("""{"officials":[{"id":"mayor","name":"Mayor Example","wikidataId":null,"website":null,"photo":null,"terms":[{"office":"sen","kind":"senator","state":"WA","district":null,"party":"Democrat","caucus":null,"start":"2025-01-03","end":"2031-01-03"}]}]}""",
             JsonSerializer.Serialize(officials, PublicationProtocol.JsonOptions));
         Assert.Equal("""{"issues":[{"id":"housing","name":"Housing"}],"policyAreas":[]}""",
             JsonSerializer.Serialize(catalog, PublicationProtocol.JsonOptions));
@@ -97,12 +97,12 @@ public sealed class PublishedOfficialsTests
     {
         var officials = new PublishedOfficials
         {
-            Officials = [new() { Id = "sec", Name = "Secretary Example", Terms = [new() { Office = "Secretary of State", Start = new(2025, 1, 21) }] }]
+            Officials = [new() { Id = "sec", Name = "Secretary Example", Terms = [new() { Office = "Secretary of State", Kind = PublishedOfficeKind.Executive, Start = new(2025, 1, 21) }] }]
         };
 
         officials.Validate();
 
-        Assert.Equal("""{"officials":[{"id":"sec","name":"Secretary Example","wikidataId":null,"website":null,"photo":null,"terms":[{"office":"Secretary of State","state":null,"district":null,"party":null,"caucus":null,"start":"2025-01-21","end":null}]}]}""",
+        Assert.Equal("""{"officials":[{"id":"sec","name":"Secretary Example","wikidataId":null,"website":null,"photo":null,"terms":[{"office":"Secretary of State","kind":"executive","state":null,"district":null,"party":null,"caucus":null,"start":"2025-01-21","end":null}]}]}""",
             JsonSerializer.Serialize(officials, PublicationProtocol.JsonOptions));
     }
 
@@ -127,7 +127,15 @@ public sealed class PublishedOfficialsTests
     [Fact]
     public void ATermThatEndsBeforeItStartsIsRefused()
     {
-        var term = new PublishedOfficeTerm { Office = "prez", Party = "Democrat", Start = new(2025, 1, 20), End = new(2021, 1, 20) };
+        var term = new PublishedOfficeTerm { Office = "prez", Kind = PublishedOfficeKind.Executive, Party = "Democrat", Start = new(2025, 1, 20), End = new(2021, 1, 20) };
+
+        Assert.Throws<InvalidDataException>(new PublishedOfficialProfile { Id = "a", Name = "A", Terms = [term] }.Validate);
+    }
+
+    [Fact]
+    public void ATermWithAnUndefinedKindIsRefusedBecauseTheListCouldNotPlaceTheOfficial()
+    {
+        var term = new PublishedOfficeTerm { Office = "prez", Kind = (PublishedOfficeKind)99, Start = new(2025, 1, 20) };
 
         Assert.Throws<InvalidDataException>(new PublishedOfficialProfile { Id = "a", Name = "A", Terms = [term] }.Validate);
     }
@@ -142,7 +150,7 @@ public sealed class PublishedOfficialsTests
         {
             Id = "a",
             Name = "A",
-            Terms = [.. Enumerable.Repeat(new PublishedOfficeTerm { Office = "rep", Party = "D", Start = new(2025, 1, 3), End = new(2027, 1, 3) },
+            Terms = [.. Enumerable.Repeat(new PublishedOfficeTerm { Office = "rep", Kind = PublishedOfficeKind.Representative, Party = "D", Start = new(2025, 1, 3), End = new(2027, 1, 3) },
                 PublishedOfficials.MaximumTerms + 1)]
         };
 
