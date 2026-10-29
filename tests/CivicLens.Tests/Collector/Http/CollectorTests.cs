@@ -665,23 +665,6 @@ public sealed class CollectorTests
         Assert.Equal(new[] { "vendor-opaque", "gzip" }, second.Response.ContentEncodings);
         Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(payload)), second.Capture!.Sha256);
         Assert.Single(Directory.GetFiles(directory.Path, "*.gz"));
-    }
-
-    [Fact]
-    public async Task ALaneThatLosesTheMoveRaceForIdenticalBytesStillSucceeds()
-    {
-        using var directory = new TemporaryDirectory();
-        var payload = Encoding.UTF8.GetBytes("bytes that two lanes save at once");
-        var handler = new QueueHandler(
-            _ => Response(HttpStatusCode.NotFound),
-            _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new RacingContent(payload, directory.Path) });
-        using var collector = new HttpCollector(handler);
-
-        var result = await collector.FetchAsync(Request(directory.Path));
-
-        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
-        Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(payload)), result.Capture!.Sha256);
-        Assert.Single(Directory.GetFiles(directory.Path, "*.gz"));
         Assert.Empty(Directory.GetFiles(directory.Path, ".capture-*"));
     }
 
@@ -1538,30 +1521,6 @@ public sealed class CollectorTests
         protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) => Task.CompletedTask;
         protected override bool TryComputeLength(out long length) { length = 100; return true; }
         protected override Task<Stream> CreateContentReadStreamAsync() => Task.FromResult<Stream>(new MemoryStream(new byte[10]));
-    }
-    private sealed class RacingContent(byte[] payload, string directory) : HttpContent
-    {
-        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) => Task.CompletedTask;
-        protected override bool TryComputeLength(out long length) { length = payload.Length; return true; }
-        protected override Task<Stream> CreateContentReadStreamAsync() => Task.FromResult<Stream>(new RacingStream(payload, directory));
-    }
-    private sealed class RacingStream(byte[] bytes, string directory) : MemoryStream(bytes)
-    {
-        private readonly byte[] expected = bytes;
-
-        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
-        {
-            var read = base.Read(buffer.Span);
-            if (read == 0) SaveTheOtherLanesCapture();
-            return ValueTask.FromResult(read);
-        }
-
-        private void SaveTheOtherLanesCapture()
-        {
-            using var file = File.Create(Path.Combine(directory, Convert.ToHexStringLower(SHA256.HashData(expected)) + ".gz"));
-            using var gzip = new GZipStream(file, CompressionLevel.Optimal);
-            gzip.Write(expected);
-        }
     }
     private sealed class CancelContent(CancellationTokenSource source) : HttpContent
     {

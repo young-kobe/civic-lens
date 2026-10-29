@@ -281,7 +281,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- wo
 | Variable | Meaning |
 |---|---|
 | `CIVIC_LENS_EVIDENCE_CONCURRENCY` | Optional number of captured pages processed at the same time (default 2, 1 to 4). Any other value stops the worker with exit code 2 |
-| `CIVIC_LENS_COLLECTION_CONCURRENCY` | Optional number of collection jobs run at the same time (default 1, 1 to 4). Jobs of one pacing key never run together. Any other value stops the worker with exit code 2. Lanes run keys of separate hosts at once. Congress.gov shares one key, so lanes never run its jobs in parallel. Production uses 3, so house.gov, senate.gov, and the other hosts progress together |
+| `CIVIC_LENS_COLLECTION_CONCURRENCY` | Optional number of collection jobs run at the same time (default 1, 1 to 4). Jobs of one pacing key never run together. Any other value stops the worker with exit code 2. Lanes run keys of separate hosts at once. All Congress.gov jobs share one pacing key, so lanes never run them in parallel. Production uses 3, so house.gov, senate.gov, and the other hosts progress together |
 
 Enabled sources are checked every hour unless `checkIntervalSeconds` sets another interval from 60 to 604800 seconds. The engine rules are in [collection](architecture/collection.md#autonomous-collection-engine).
 
