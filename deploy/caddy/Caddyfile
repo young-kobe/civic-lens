@@ -33,7 +33,7 @@
 	}
 }
 
-http://civic-lens.info {
+http://civic-lens.info, http://127.0.0.1 {
 	import noindex
 	import security_headers
 
