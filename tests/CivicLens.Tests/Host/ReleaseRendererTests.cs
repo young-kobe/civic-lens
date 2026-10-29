@@ -405,6 +405,27 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task StatementPageLinksTheArticleAndSaysThatTheSourceIsTheFeedWhenTheStatementCameFromAFeed()
+    {
+        var statement = Statement() with { ArticleUrl = "https://senator.example/news/a" };
+
+        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(statement, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var panel = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='source-title']")!;
+        var link = Assert.Single(panel.QuerySelectorAll("a"), anchor => anchor.GetAttribute("href") == "https://senator.example/news/a");
+        Assert.Contains("nofollow", link.GetAttribute("rel"), StringComparison.Ordinal);
+        Assert.Contains("feed that lists the article", panel.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StatementPageShowsNoArticleLineWhenTheSourceIsTheArticleItself()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.DoesNotContain("feed that lists the article", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RecordPagesLinkEachSpeakerToTheOfficialPageBecauseEverySpeakerOfAPublishedRecordHasOne()
     {
         var statement = Statement() with

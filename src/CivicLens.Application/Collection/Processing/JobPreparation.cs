@@ -1,5 +1,6 @@
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
+using CivicLens.Application.Collection.FeedStatements;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.MemberPhotos;
 using CivicLens.Application.Collection.SenateVotes;
@@ -34,6 +35,7 @@ public sealed class JobPreparation(
     private const string NotModified = "notModified";
     private const string VoteviewJobMissing = "voteviewJobMissing";
     private const string VoteviewCountMismatch = "voteviewCountMismatch";
+    private const string FeedStatementTextInvalid = "feedStatementTextInvalid";
     private const string ApiResourceMissing = "apiResourceMissing";
     private const string IssuesConfigurationUnavailable = "issuesConfigurationUnavailable";
     private readonly IssueConfiguration? issueConfiguration = issues?.ReadConfiguration();
@@ -46,10 +48,10 @@ public sealed class JobPreparation(
         if (job is null || job.State != CollectionJobState.Succeeded) return null;
         if (job.Definition.Mode == CollectionMode.Api)
             return await PrepareApiAsync(job, artifactRoot, cancellationToken);
-        return await PrepareConfiguredAsync(job, cancellationToken);
+        return await PrepareConfiguredAsync(job, artifactRoot, cancellationToken);
     }
 
-    private async Task<JobPreparationResult> PrepareConfiguredAsync(CollectionJobRecord job,
+    private async Task<JobPreparationResult> PrepareConfiguredAsync(CollectionJobRecord job, string artifactRoot,
         CancellationToken cancellationToken)
     {
         var definition = job.Definition;
@@ -77,6 +79,9 @@ public sealed class JobPreparation(
                     admitted += result.AdmittedCount;
                     deferred += result.DeferredCount;
                     duplicates += result.DuplicateCount;
+                    if (configured.StatementTextInFeed)
+                        preparationError ??= await SaveFeedStatementsAsync(configured, jobAttempt.Request, captured, artifactRoot,
+                            cancellationToken);
                 }
                 else preparationError = stored.Discovery is null ? NotModified : "discoveryUnavailable";
             }
@@ -87,6 +92,23 @@ public sealed class JobPreparation(
         if (preparationError is null or NotModified)
             return JobPreparationResult.Prepared(preparationError, admitted, deferred, duplicates);
         return JobPreparationResult.Blocked(preparationError, admitted, deferred, duplicates);
+    }
+
+    private async Task<string?> SaveFeedStatementsAsync(ConfiguredCollectionSource configured, CollectionRequest request,
+        CapturedAttemptResult feed, string artifactRoot, CancellationToken cancellationToken)
+    {
+        var body = await bodies.ReadAsync(feed, artifactRoot, cancellationToken);
+        IReadOnlyList<FeedItemExtraction> items;
+        try
+        {
+            items = await FeedStatementExtractions.ReadAsync(body, feed, request, textExtractor, cancellationToken);
+        }
+        catch (InvalidDataException)
+        {
+            return FeedStatementTextInvalid;
+        }
+        _ = await extractions.SaveFeedItemsAsync(items, configured.MaximumNewFeedStatements, cancellationToken);
+        return null;
     }
 
     private Task<JobPreparationResult> PrepareApiAsync(CollectionJobRecord job, string artifactRoot,

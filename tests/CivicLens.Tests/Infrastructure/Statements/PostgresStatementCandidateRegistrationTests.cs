@@ -1,3 +1,5 @@
+using CivicLens.Application.Documents;
+using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents;
@@ -14,6 +16,7 @@ namespace CivicLens.Tests.Infrastructure.Statements;
 public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private const string ArticleUrl = "https://example.test/pages/article";
+    private const string FeedUrl = "https://example.test/pages/feed";
     private static readonly DateTimeOffset In119th = new(2026, 3, 1, 0, 0, 0, TimeSpan.Zero);
     private readonly string root = Path.Combine(Path.GetTempPath(), "civic-statements-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
@@ -190,6 +193,69 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
         Assert.Equal(3L, await ScalarAsync($"SELECT priority::bigint FROM vote_analysis WHERE candidate_id = '{new string('1', 64)}'"));
         Assert.Equal(1L, await ScalarAsync($"SELECT priority::bigint FROM vote_analysis WHERE candidate_id = '{new string('2', 64)}'"));
     }
+
+    [Fact]
+    public async Task FeedItemsRegisterNewestFirstUpToTheLimitSoOneBusyFeedCannotFloodTheGate()
+    {
+        var feed = await seeder.ImportAsync("feed", FeedUrl, CandidateJobKind.None);
+        var items = Items(feed, "a", "b", "c");
+
+        var registered = await extractions.SaveFeedItemsAsync(items, 2, CancellationToken.None);
+
+        Assert.Equal(2, registered);
+        Assert.Equal([(feed.SourceId, ItemUrl("a"), items[0].Extraction.ExtractionId, feed.AttemptId),
+                (feed.SourceId, ItemUrl("b"), items[1].Extraction.ExtractionId, feed.AttemptId)],
+            (await CandidatesAsync()).OrderBy(row => row.Url, StringComparer.Ordinal));
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM statement_analysis WHERE task = 'gate' AND status = 'Pending'"));
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM document_extractions"));
+    }
+
+    [Fact]
+    public async Task AReplayOfTheSameFeedAttemptNeverAddsCandidatesBeyondTheLimit()
+    {
+        var feed = await seeder.ImportAsync("feed", FeedUrl, CandidateJobKind.None);
+        var items = Items(feed, "a", "b", "c");
+        await extractions.SaveFeedItemsAsync(items, 2, CancellationToken.None);
+
+        var replayed = await extractions.SaveFeedItemsAsync(items, 2, CancellationToken.None);
+
+        Assert.Equal(0, replayed);
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM statement_candidates"));
+    }
+
+    [Fact]
+    public async Task AFeedItemForALinkThatAPageJobAlreadyHoldsAddsNeitherACandidateNorAnExtraction()
+    {
+        var page = await seeder.ImportAsync("Page text.", ItemUrl("a"), CandidateJobKind.DiscoveryAdmitted);
+        await extractions.SaveAsync(new DocumentExtraction(page, "p", "Page text."), CancellationToken.None);
+        var feed = await seeder.ImportAsync("feed", FeedUrl, CandidateJobKind.None);
+
+        var registered = await extractions.SaveFeedItemsAsync(Items(feed, "a"), 5, CancellationToken.None);
+
+        Assert.Equal(0, registered);
+        Assert.Equal([page.AttemptId], (await CandidatesAsync()).Select(row => row.Attempt));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM document_extractions"));
+    }
+
+    [Fact]
+    public async Task APageJobForALinkThatAFeedItemAlreadyHoldsKeepsTheFeedItemTextAsTheFirstText()
+    {
+        var feed = await seeder.ImportAsync("feed", FeedUrl, CandidateJobKind.None);
+        var items = Items(feed, "a");
+        await extractions.SaveFeedItemsAsync(items, 5, CancellationToken.None);
+        var page = await seeder.ImportAsync("Page text.", ItemUrl("a"), CandidateJobKind.DiscoveryAdmitted);
+
+        await extractions.SaveAsync(new DocumentExtraction(page, "p", "Page text."), CancellationToken.None);
+
+        Assert.Equal([(feed.SourceId, ItemUrl("a"), items[0].Extraction.ExtractionId, feed.AttemptId)], await CandidatesAsync());
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM statement_analysis"));
+    }
+
+    private static string ItemUrl(string name) => "https://example.test/pages/" + name;
+
+    private static FeedItemExtraction[] Items(CapturedAttemptResult feed, params string[] names) =>
+        [.. names.Select((name, part) => new FeedItemExtraction(ItemUrl(name),
+            new DocumentExtraction(feed, "feed-v1", "Link: " + ItemUrl(name) + "\n\nText of " + name, part: part)))];
 
     private Task SeedVoteRowAsync(string candidateId, int roll, int congress, int billNumber) => ExecuteAsync(connectionString, $"""
         SET session_replication_role = replica;
