@@ -1403,7 +1403,7 @@ public sealed class ReleaseRendererTests
         {
             Id = "mayor",
             Name = "Mayor Example",
-            Terms = [new() { Office = "Representative", Party = "Republican", Start = new DateOnly(2025, 1, 3) }]
+            Terms = [new() { Office = "Representative", Kind = PublishedOfficeKind.Representative, Party = "Republican", Start = new DateOnly(2025, 1, 3) }]
         };
         PublishedRecordEntry[] entries =
         [

@@ -382,6 +382,27 @@ public sealed class ConfigurationTests
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<CollectionConfiguration>(json, ConfigurationJson.Options));
     }
 
+    [Theory]
+    [InlineData("executive", ConfiguredOfficeKind.Executive)]
+    [InlineData("judicial", ConfiguredOfficeKind.Judicial)]
+    public void AnOfficeKindIsReadFromItsClosedSet(string kind, ConfiguredOfficeKind expected)
+    {
+        var office = JsonSerializer.Deserialize<OfficeConfiguration>($$"""{"title":"Chief Justice","startsOn":"2005-09-29","kind":"{{kind}}"}""", ConfigurationJson.Options);
+
+        Assert.Equal(expected, office!.Kind);
+    }
+
+    [Theory]
+    [InlineData("legislative")]
+    [InlineData("justice")]
+    [InlineData("1")]
+    public void AnOfficeKindOutsideTheClosedSetIsRejectedAtLoadBecauseItWouldSendAnOfficialToTheWrongTab(string kind)
+    {
+        var json = $$"""{"title":"Chief Justice","startsOn":"2005-09-29","kind":"{{kind}}"}""";
+
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<OfficeConfiguration>(json, ConfigurationJson.Options));
+    }
+
     [Fact]
     public void CoverageShapesAreStrictEvenForDisabledSources()
     {

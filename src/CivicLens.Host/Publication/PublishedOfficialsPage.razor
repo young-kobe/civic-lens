@@ -30,7 +30,7 @@
             <ul class="officials" role="list" data-officials>
                 @foreach (var card in Cards)
                 {
-                    <li class="official-card" data-name="@card.Official.Profile.Name" data-office="@card.Kind" data-state="@card.Term?.State">
+                    <li class="official-card" data-name="@card.Official.Profile.Name" data-office="@PublishedOfficialView.OfficeKey(card.Kind)" data-state="@card.Term?.State">
                         <OfficialPortrait Profile="card.Official.Profile" RootPath="" Compact="true" ShowCredit="@(!SharedCredit)" />
                         <div class="official-card-text">
                             <CellTitle Href="@card.Official.PagePath">@card.Official.Profile.Name</CellTitle>
@@ -56,7 +56,7 @@
 </PublicPage>
 
 @code {
-    private sealed record Card(OfficialListing Official, PublishedOfficeTerm? Term, string Kind);
+    private sealed record Card(OfficialListing Official, PublishedOfficeTerm? Term, PublishedOfficeKind Kind);
 
     private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), PublicCrumbs.Current(PublicSection.Officials)];
 
@@ -68,7 +68,7 @@
     private IReadOnlyList<Card> Cards => cards ??= [.. Officials.Select(official =>
     {
         var term = PublishedOfficialView.LatestTerm(official.Profile.Terms);
-        return new Card(official, term, PublishedOfficialView.OfficeKind(term));
+        return new Card(official, term, term?.Kind ?? PublishedOfficeKind.Other);
     })];
 
     private IReadOnlyList<string>? credits;
@@ -84,5 +84,5 @@
         .. PublishedOfficialView.OfficeKinds
             .Select(kind => (kind.Kind, kind.Plural, Count: Cards.Count(card => card.Kind == kind.Kind)))
             .Where(kind => kind.Count > 0)
-            .Select(kind => FilterTab.Button($"{kind.Plural} ({kind.Count})", kind.Kind, selected: false))];
+            .Select(kind => FilterTab.Button($"{kind.Plural} ({kind.Count})", PublishedOfficialView.OfficeKey(kind.Kind), selected: false))];
 }

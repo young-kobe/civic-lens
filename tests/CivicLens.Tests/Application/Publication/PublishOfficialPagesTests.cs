@@ -330,6 +330,48 @@ public sealed class PublishOfficialPagesTests
         Assert.Equal(("Secretary of State", "Republican", new DateOnly(2025, 1, 21), null), (term.Office, term.Party, term.Start, term.End));
     }
 
+    [Theory]
+    [InlineData("C000127", "Representative,Senator")]
+    [InlineData("N000147", "Representative,Representative")]
+    public async Task AMemberTermIsKindSenatorOrRepresentativeByItsChamberSoTheListGroupsASenatorWhoWasARepresentative(string bioguideId, string expected)
+    {
+        var scenario = new PublicationScenario();
+        scenario.ExternalIds["mayor"] = (bioguideId, null);
+        scenario.RosterMembers = RosterFixtures.Members();
+
+        var summary = await PublishAsync(scenario, "k", PublishedRecordKind.Statement, scenario.AddStatement('a'));
+
+        var kinds = Assert.Single(Officials(scenario.Releases.Directories[summary.DirectoryName]).Officials).Terms.Select(term => term.Kind.ToString());
+        Assert.Equal(expected.Split(','), kinds);
+    }
+
+    [Fact]
+    public async Task AnExecutiveRosterTermIsKindExecutiveSoThePresidentIsNotInOtherOfficials()
+    {
+        var scenario = new PublicationScenario();
+        scenario.ExternalIds["mayor"] = ("V000137", "Q22686");
+        scenario.ExecutiveOfficials = ExecutiveFixtures.Officials();
+
+        var summary = await PublishAsync(scenario, "k", PublishedRecordKind.Statement, scenario.AddStatement('a'));
+
+        var terms = Assert.Single(Officials(scenario.Releases.Directories[summary.DirectoryName]).Officials).Terms;
+        Assert.All(terms, term => Assert.Equal(PublishedOfficeKind.Executive, term.Kind));
+    }
+
+    [Theory]
+    [InlineData(ConfiguredOfficeKind.Executive, PublishedOfficeKind.Executive)]
+    [InlineData(ConfiguredOfficeKind.Judicial, PublishedOfficeKind.Judicial)]
+    [InlineData(null, PublishedOfficeKind.Other)]
+    public async Task AConfiguredOfficeTakesItsConfiguredKindElseOtherSoOnlyAnOfficeWithAKindLeavesTheOtherOfficialsTab(ConfiguredOfficeKind? kind, PublishedOfficeKind expected)
+    {
+        var scenario = new PublicationScenario();
+        scenario.Offices["mayor"] = [new() { Title = "Chief Justice", StartsOn = new(2005, 9, 29), Kind = kind }];
+
+        var summary = await PublishAsync(scenario, "k", PublishedRecordKind.Statement, scenario.AddStatement('a'));
+
+        Assert.Equal(expected, Assert.Single(Assert.Single(Officials(scenario.Releases.Directories[summary.DirectoryName]).Officials).Terms).Kind);
+    }
+
     [Fact]
     public async Task APersonWithABioguideIdAndNoMemberTermShowsTheConfiguredOffice()
     {
