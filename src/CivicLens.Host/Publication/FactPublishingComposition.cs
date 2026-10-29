@@ -11,11 +11,10 @@ namespace CivicLens.Host.Publication;
 
 internal sealed record FactPublishingComposition(AnalysisStage Stage, IWorkerWakeup Wakeup)
 {
-    private const string StageName = "factPublishing";
     private const string EnabledVariable = "CIVIC_LENS_FACT_PUBLISHING";
 
     public static FactPublishingComposition? Create(string connectionString, CollectionConfiguration collection, IssueConfiguration? issues,
-        string artifactRoot, ILoggerFactory loggers)
+        string artifactRoot, WorkerBeat beat, ILoggerFactory loggers)
     {
         var setting = Environment.GetEnvironmentVariable(EnabledVariable);
         if (string.IsNullOrWhiteSpace(setting)) return null;
@@ -28,7 +27,7 @@ internal sealed record FactPublishingComposition(AnalysisStage Stage, IWorkerWak
             collection, PublicationComposition.RequireIssues(issues), artifactRoot, loggers);
         var wakeup = PostgresIntervalWakeup.FromConnectionString(connectionString, "civic_lens_fact_publishing", TimeSpan.FromHours(1));
         var publishFacts = new PublishCodeApprovedFacts(publish, publications, loaders, loggers.CreateLogger<PublishCodeApprovedFacts>());
-        var worker = new StageWorker(StageName, publishFacts.ExecuteAsync, wakeup, loggers.CreateLogger<StageWorker>());
-        return new(new AnalysisStage(StageName, worker.ExecuteAsync), wakeup);
+        var worker = new StageWorker(WorkerLoopNames.FactPublishing, publishFacts.ExecuteAsync, wakeup, loggers.CreateLogger<StageWorker>(), beat);
+        return new(new AnalysisStage(WorkerLoopNames.FactPublishing, worker.ExecuteAsync), wakeup);
     }
 }

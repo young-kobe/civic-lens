@@ -8,7 +8,7 @@ namespace CivicLens.Application.Analysis;
 
 public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysisStatusStore status, TimeProvider clock,
     ILogger<AnalysisWorker<TRun>> logger,
-    IWorkerWakeup? wakeup = null, Func<CancellationToken, Task>? beforeEachPass = null) where TRun : class
+    IWorkerWakeup? wakeup = null, Func<CancellationToken, Task>? beforeEachPass = null, WorkerBeat? beat = null) where TRun : class
 {
     private static readonly TimeSpan ReleaseTimeout = TimeSpan.FromSeconds(5);
     private readonly IAnalysisTaskStep<TRun> step = step;
@@ -33,8 +33,9 @@ public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysis
                 if (pause.IsPaused(out var resumeAt))
                 {
                     if (once) break;
-                    await Task.Delay(resumeAt is { } at ? Max(at - clock.GetUtcNow(), TimeSpan.Zero) : Timeout.InfiniteTimeSpan,
-                        clock, cancellationToken);
+                    var pauseLength = resumeAt is { } at ? Max(at - clock.GetUtcNow(), TimeSpan.Zero) : Timeout.InfiniteTimeSpan;
+                    Task Pause(CancellationToken token) => Task.Delay(pauseLength, clock, token);
+                    await (beat is null ? Pause(cancellationToken) : beat.WaitAsync(Pause, cancellationToken));
                     continue;
                 }
                 var drain = await DrainAsync(cancellationToken);
@@ -43,7 +44,7 @@ public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysis
                 failures += drain.Failures;
                 if (once) break;
                 if (pause.IsPaused(out _)) continue;
-                failures += await WorkerLoop.WaitForWorkAsync(wakeup!, drain.Failures > 0, cancellationToken);
+                failures += await WorkerLoop.WaitForWorkAsync(wakeup!, drain.Failures > 0, beat, cancellationToken);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
@@ -58,6 +59,7 @@ public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysis
         while (!cancellationToken.IsCancellationRequested && !pause.IsPaused(out _))
         {
             passes++;
+            if (beat is not null) await beat.BeatAsync(cancellationToken);
             Interlocked.Exchange(ref budgetExhausted, 0);
             IReadOnlyList<AnalysisRecord> eligible;
             try

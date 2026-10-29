@@ -6,7 +6,7 @@ namespace CivicLens.Application.Collection.Jobs;
 /// <summary>Drains durable collection and evidence work, then waits for a database wakeup.</summary>
 public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollectionJob runner, ILogger<CollectionJobWorker> logger,
     EvidenceProcessingWorker? evidenceProcessor = null, IWorkerWakeup? wakeup = null,
-    ICollectionScheduleStore? schedules = null)
+    ICollectionScheduleStore? schedules = null, WorkerBeat? beat = null)
 {
     public const int DefaultBatchSize = 20;
     public const int MaximumBatchSize = 100;
@@ -42,7 +42,7 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
             try
             {
                 wakeupFailures += await WorkerLoop.WaitForWorkAsync(wakeup!,
-                    drain.QueueFailures > 0 || drain.JobFailures > 0, cancellationToken);
+                    drain.QueueFailures > 0 || drain.JobFailures > 0, beat, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
         }
@@ -61,6 +61,7 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
         while (!cancellationToken.IsCancellationRequested)
         {
             passes++;
+            if (beat is not null) await beat.BeatAsync(cancellationToken);
             var progress = 0;
             var scheduleFailed = false;
             if (schedules is not null)

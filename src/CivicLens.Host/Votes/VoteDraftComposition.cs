@@ -1,3 +1,4 @@
+using CivicLens.Application;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
@@ -16,7 +17,7 @@ namespace CivicLens.Host.Votes;
 internal static class VoteDraftComposition
 {
     public static AnalysisComposition<VoteDraftRun> Create(IDbContextFactory<CollectionAttemptDbContext> contexts, string connectionString,
-        ICollectionJobStore jobs, ApiResponseReader responses, IssueConfigurationRevision? issues, string artifactRoot, ILoggerFactory loggers)
+        ICollectionJobStore jobs, ApiResponseReader responses, IssueConfigurationRevision? issues, string artifactRoot, WorkerBeat beat, ILoggerFactory loggers)
     {
         var status = new PostgresAnalysisStatusStore(contexts, VoteDraftTask.Task);
         var configuration = VoteDraftConfiguration.FromEnvironment();
@@ -25,6 +26,6 @@ internal static class VoteDraftComposition
         var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresVoteDraftStore.Table, VoteDraftTask.Task);
         var step = new VoteDraftStep(new PostgresVoteDraftStore(contexts), new VoteReader(jobs, new PostgresMemberRosterStore(contexts), responses, artifactRoot),
             new AnthropicVoteDraftModel(configuration.ApiKey), configuration.Settings, issues);
-        return new(status, configuration.Settings.DailyTokenLimit, new AnalysisWorker<VoteDraftRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<VoteDraftRun>>(), wakeup), wakeup);
+        return new(status, configuration.Settings.DailyTokenLimit, new AnalysisWorker<VoteDraftRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<VoteDraftRun>>(), wakeup, beat: beat), wakeup);
     }
 }

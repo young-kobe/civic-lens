@@ -60,6 +60,8 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A parked comparison becomes due once its predecessor is settled, and never before. This holds when items run in parallel. Enforced by the settled-predecessor SQL that the eligible scan, the claim, and the worker check share in `PostgresEvidenceProcessingStore`. Tests: `PostgresEvidenceProcessingStoreTests.AnUnsettledPredecessorKeepsTheWaiterParkedAndUnclaimable` and `PostgresEvidenceProcessingStoreTests.APredecessorThatSettlesBetweenTheReadAndTheParkStillWakesAndReleasesTheWaiter`.
 - A processing checkpoint needs the current lease and fence. Enforced by `EvidenceProcessingLifecycle` and `ck_evidence_processing_lease`. Test: `PostgresEvidenceProcessingStoreTests.EnsureIsIdempotentAndCheckpointFencesReclaimedLease`.
 - The evidence degree stays between 1 and 4, and items run at once up to it. Enforced by `EvidenceProcessingPolicy.ValidateConcurrency` and `Parallel.ForEachAsync` in `EvidenceProcessingWorker`. Tests: `EvidenceProcessingWorkerConcurrencyTests.ItemsRunAtOnceUpToTheConfiguredDegreeAndNoFurther` and `EvidenceProcessingPolicyTests.ConcurrencyRejectsValuesOutsideBounds`.
+- Each work loop writes its heartbeat after each pass and once each minute while it waits. A loop stuck inside a pass writes none, so its beat goes stale. Enforced by `WorkerBeat` and the shared `WorkerLoop.WaitForWorkAsync`. Test: `WorkerBeatTests.ALoopThatIsStuckInsideAPassWritesNoBeatSoItsHeartbeatGoesStale`.
+- `worker health` fails when no heartbeat exists or when any loop beat is older than 3 minutes. Enforced by `WorkerHealthCommand`. Test: `WorkerHealthCommandTests.OneStaleLoopMakesTheWorkerUnhealthyEvenWhenOtherLoopsBeatSoAHungLoopIsNotHidden`.
 - Two workers never own one processing item. Enforced by the single-statement fenced claim. Test: `PostgresEvidenceProcessingStoreTests.CompetingClaimsHaveOneOwnerAndWorkOrdersByCaptureObservation`.
 
 ## Behavior
@@ -331,6 +333,8 @@ Collection state keeps its meaning: success means that verified collection evide
 
 **Parallel processing.** `EvidenceProcessingWorker` runs the eligible items of one pass in parallel, up to `CIVIC_LENS_EVIDENCE_CONCURRENCY`. The default is 2 and the maximum is 4. `EvidenceProcessingPolicy` owns these bounds. Each task claims its own item with the fenced claim. Several items for one URL stay correct, because a comparison parks until its predecessor settles. On shutdown each task releases its claim.
 
+**Heartbeat.** Each loop of the worker owns one `worker_heartbeat` row, keyed by the loop name. The names are `collection`, `drafting`, `gate`, `statementDrafting`, `actionDrafting`, `voteDrafting`, `relationshipDrafting`, `briefDrafting`, `factPublishing`, and `reportPull`. `WorkerLoopNames` owns them. A loop writes its row at the start of each pass. It writes again each minute while it waits for a wakeup or for the end of a pause. The loop itself writes the beat, so a hung loop stops its own beat. The database clock sets the time and the age. A failed write is logged and the loop goes on, so a database outage makes the beat stale. The worker clears all rows at start, so a loop that is off leaves no old row. `worker health` prints one line. It exits 0 when every row is at most 3 minutes old. It exits 1 when a row is older or when no row exists. `worker --once` writes beats only for the passes it runs.
+
 `worker --once` admits due checks and drains the runnable stages, also downstream work released during the run. The worker requires `CIVIC_LENS_COLLECTION_CONFIG` and validates that configuration before it starts.
 
 **Leases.** Evidence processing shares Application-owned lease bounds of one second to ten minutes, for pipeline startup, processing startup, claims, and renewals. Renewal runs every third of the lease duration. Retry checkpoints carry a nonnegative delay of at most five minutes.
@@ -432,7 +436,7 @@ The review workspace has an owner-only Sources page when `CIVIC_LENS_COLLECTION_
 - The page lists configured sources with the health of their latest root job, and the recent checks. The latest list job is the latest check of a bill or vote source.
 - Check details open in a side panel. It shows each attempt, the retry timing, Check again for a tracked page URL, and a link to all saved versions.
 - The page refreshes every 5 seconds while a check is active and every 30 seconds otherwise. A connection failure shows a reconnect notice.
-- It accepts configured sources and retained article URLs only. It holds no demonstration records and does not claim worker liveness.
+- It accepts configured sources and retained article URLs only. It holds no demonstration records.
 - A baseline or unchanged observation does not enter review.
 
 The owner can also collect a retained article URL again. That uses the current coverage, limits, and profile, and keeps the retained URL. It never reruns a listing or creates work from an arbitrary URL. The page has no manual admission, extraction, or comparison controls; only the worker and the CLI run them.
@@ -458,6 +462,7 @@ Provider exception details are not printed, because they can hold connection val
 
 ## Storage and contracts
 
+- `worker_heartbeat` holds one row for each loop with its name and the database time of its last beat.
 - The generated [collection schema](schema/collection.md) lists every table, column, key, check, index, and trigger.
 - `PostgresCollectionAttemptStore` uses a fresh `CollectionAttemptDbContext` for each call. It starts a READ COMMITTED transaction, takes the `civic-lens-collection-import` advisory lock shared by all collection imports, and then reads existing evidence. The lock order is in [advisory locks](../architecture.md#advisory-locks).
 - All import writers must use that lock. HTTP collection and capture verification finish before the operation. Reads and unrelated work do not take the import lock.
@@ -496,13 +501,13 @@ Provider exception details are not printed, because they can hold connection val
 | Pacing groups | `src/CivicLens.Application/Collection/PacingGroupConfiguration.cs`, `src/CivicLens.Application/Collection/CollectionConfiguration.cs` |
 | Discovery admission | `src/CivicLens.Application/Collection/Discovery/DiscoveryAdmissionPolicy.cs`, `src/CivicLens.Application/Collection/Discovery/DiscoveryAdmissionBudget.cs`, `src/CivicLens.Application/Collection/Discovery/IDiscoveryAdmissionStore.cs` |
 | Managed jobs | `src/CivicLens.Application/Collection/Jobs/RunCollectionJob.cs`, `src/CivicLens.Application/Collection/Jobs/CollectionJobLifecycle.cs`, `src/CivicLens.Application/Collection/Jobs/CollectionJobCharges.cs`, `src/CivicLens.Application/Collection/Jobs/CollectionJobPolicy.cs`, `src/CivicLens.Application/Collection/Jobs/ICollectionJobStore.cs` |
-| Engine and preparation | `src/CivicLens.Application/Collection/Jobs/CollectionJobWorker.cs`, `src/CivicLens.Application/Collection/Processing/EvidenceProcessingWorker.cs`, `src/CivicLens.Application/Collection/Processing/EvidenceProcessingLifecycle.cs`, `src/CivicLens.Application/Collection/Processing/EvidenceProcessingPolicy.cs`, `src/CivicLens.Application/Collection/Processing/JobPreparation.cs` |
+| Engine and preparation | `src/CivicLens.Application/Collection/Jobs/CollectionJobWorker.cs`, `src/CivicLens.Application/WorkerBeat.cs`, `src/CivicLens.Application/IWorkerHeartbeatStore.cs`, `src/CivicLens.Application/Collection/Processing/EvidenceProcessingWorker.cs`, `src/CivicLens.Application/Collection/Processing/EvidenceProcessingLifecycle.cs`, `src/CivicLens.Application/Collection/Processing/EvidenceProcessingPolicy.cs`, `src/CivicLens.Application/Collection/Processing/JobPreparation.cs` |
 | Schedules | `src/CivicLens.Application/Collection/WatchedSourceConfiguration.cs`, `src/CivicLens.Application/Collection/Jobs/ICollectionScheduleStore.cs` |
 | Process adapter and verification | `src/CivicLens.Infrastructure/Collection/CollectorProcess.cs`, `src/CivicLens.Infrastructure/Collection/CaptureArtifactVerifier.cs` |
 | Postgres evidence | `src/CivicLens.Infrastructure/Collection/PostgresCollectionAttemptStore.cs`, `src/CivicLens.Infrastructure/Collection/CollectionAttemptDbContext.cs` |
-| Postgres jobs | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/JobRowWriter.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/StoredJobDefinition.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionWorkerQueue.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionPipelineWakeup.cs` |
+| Postgres jobs | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/JobRowWriter.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/StoredJobDefinition.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionWorkerQueue.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionPipelineWakeup.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresWorkerHeartbeatStore.cs` |
 | Postgres processing | `src/CivicLens.Infrastructure/Collection/Processing/PostgresEvidenceProcessingStore.cs` |
-| CLI and pages | `src/CivicLens.Host/Collection/CollectionWorkerCommand.cs`, `src/CivicLens.Host/Collection/CollectionJobCommand.cs`, `src/CivicLens.Host/Collection/CollectionRecoveryCommand.cs`, `src/CivicLens.Host/Collection/DiscoveryCommand.cs`, `src/CivicLens.Host/Collection/CollectionCommandOutput.cs`, `src/CivicLens.Host/Collection/SourcesPage.razor` |
+| CLI and pages | `src/CivicLens.Host/Collection/CollectionWorkerCommand.cs`, `src/CivicLens.Host/Collection/WorkerHealthCommand.cs`, `src/CivicLens.Host/Collection/WorkerLoopNames.cs`, `src/CivicLens.Host/Collection/CollectionJobCommand.cs`, `src/CivicLens.Host/Collection/CollectionRecoveryCommand.cs`, `src/CivicLens.Host/Collection/DiscoveryCommand.cs`, `src/CivicLens.Host/Collection/CollectionCommandOutput.cs`, `src/CivicLens.Host/Collection/SourcesPage.razor` |
 | Parser parity test | `tests/CivicLens.Tests/Infrastructure/Documents/HtmlParseParityTests.cs` |
 
 The shared wakeup and lease mechanics are in [Shared worker mechanics](../architecture.md#shared-worker-mechanics). Commands are in [operations](../operations.md#managed-collection-jobs).
@@ -519,7 +524,7 @@ The shared wakeup and lease mechanics are in [Shared worker mechanics](../archit
 - Future wire changes need an explicit compatibility decision.
 - Browser rendering and OCR are deferred until a selected source needs them.
 - An article whose path equals the configured page path or the prefix, and which only its query names, is also skipped. An example is `/?p=123`. No admitted URL in the dev data has this form.
-- Planned engine policies: a worker heartbeat and a documented spending total come with R-24. An engine-health view follows in R-18. A higher size limit for the shared configuration loader is needed only if the coverage file would pass 1 MB before the deploy.
+- Planned engine policies: a documented spending total comes with R-24. An engine-health view follows in R-18. A higher size limit for the shared configuration loader is needed only if the coverage file would pass 1 MB before the deploy.
 - Later, in R-41: collection concurrency for backfills, when a measured backlog is more than one worker can clear. Backlog limits and live configuration reload are not planned.
 - Agreed upgrade ([R-22](../roadmap.md#later)): ordered row locks in place of the single global lock of the job store. Measure lock waits on a bills-only collection run before the design.
 - Fix the remaining format and parser limits that the federal coverage found ([R-30](../roadmap.md#next)).

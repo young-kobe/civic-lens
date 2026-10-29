@@ -61,6 +61,7 @@ if (args is [] or ["--help"] or ["help"])
           jobs list [limit]
           jobs cancel <job-id>
           worker <collector.dll> <artifact-directory> [--once]
+          worker health
           discovery get <attempt-id>
           discovery admit <config.json> <source-id> <attempt-id> <idempotency-key> [--as-of yyyy-MM-dd]
           documents extract <captured-attempt-id> <artifact-directory>
@@ -152,7 +153,7 @@ if (args.Contains("--as-of", StringComparer.Ordinal))
 if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _]
     or ["discovery", "get", _] or ["discovery", "admit", _, _, _, _]
     or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args) &&
-    !CollectionWorkerCommand.Matches(args) && !DocumentCommand.Matches(args) && !ReleaseCommand.Matches(args) &&
+    !CollectionWorkerCommand.Matches(args) && !WorkerHealthCommand.Matches(args) && !DocumentCommand.Matches(args) && !ReleaseCommand.Matches(args) &&
     !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args) && !ActionCommand.Matches(args) && !VoteCommand.Matches(args) && !RelationshipCommand.Matches(args) && !BriefCommand.Matches(args) && !RosterCommand.Matches(args))
 {
     Console.Error.WriteLine("Unknown command. Use --help.");
@@ -183,31 +184,34 @@ try
         var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!;
         var queue = PostgresCollectionWorkerQueue.FromConnectionString(connectionString);
         var analysisContexts = AnalysisDbContextFactory.Create(connectionString);
+        var heartbeats = PostgresWorkerHeartbeatStore.FromConnectionString(connectionString);
+        WorkerBeat BeatOf(string loop) => new(heartbeats, loop, loggers.CreateLogger<WorkerBeat>());
         var analysis = DocumentChangeDraftComposition.Create(analysisContexts, connectionString,
-            issueConfiguration?.Issues.Select(issue => issue.Id) ?? [], loggers);
+            issueConfiguration?.Issues.Select(issue => issue.Id) ?? [], BeatOf(WorkerLoopNames.Drafting), loggers);
         await using var analysisWakeup = analysis.Wakeup;
-        var gate = StatementGateComposition.Create(analysisContexts, connectionString, issues, loggers);
+        var gate = StatementGateComposition.Create(analysisContexts, connectionString, issues, BeatOf(WorkerLoopNames.Gate), loggers);
         await using var gateWakeup = gate.Wakeup;
-        var statementDrafting = StatementDraftComposition.Create(analysisContexts, connectionString, loggers);
+        var statementDrafting = StatementDraftComposition.Create(analysisContexts, connectionString, BeatOf(WorkerLoopNames.StatementDrafting), loggers);
         await using var statementDraftingWakeup = statementDrafting.Wakeup;
         var textExtractor = new CaptureDocumentTextExtractor();
         var apiResponses = new ApiResponseReader(attempts, new CaptureBodyReader());
         var artifactRoot = CollectionWorkerCommand.ArtifactRootOf(args);
         var actionDrafting = ActionDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, textExtractor, issues,
-            artifactRoot, loggers);
+            artifactRoot, BeatOf(WorkerLoopNames.ActionDrafting), loggers);
         await using var actionDraftingWakeup = actionDrafting.Wakeup;
-        var voteDrafting = VoteDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, issues, artifactRoot, loggers);
+        var voteDrafting = VoteDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, issues, artifactRoot, BeatOf(WorkerLoopNames.VoteDrafting), loggers);
         await using var voteDraftingWakeup = voteDrafting.Wakeup;
-        var relationshipDrafting = RelationshipDraftComposition.Create(analysisContexts, connectionString, workerConfiguration, loggers);
+        var relationshipDrafting = RelationshipDraftComposition.Create(analysisContexts, connectionString, workerConfiguration, BeatOf(WorkerLoopNames.RelationshipDrafting), loggers);
         await using var relationshipDraftingWakeup = relationshipDrafting.Wakeup;
-        var briefDrafting = BriefDraftComposition.Create(analysisContexts, connectionString, workerConfiguration, loggers);
+        var briefDrafting = BriefDraftComposition.Create(analysisContexts, connectionString, workerConfiguration, BeatOf(WorkerLoopNames.BriefDrafting), loggers);
         await using var briefDraftingWakeup = briefDrafting.Wakeup;
-        var factPublishing = FactPublishingComposition.Create(connectionString, workerConfiguration, issueConfiguration, artifactRoot, loggers);
+        var factPublishing = FactPublishingComposition.Create(connectionString, workerConfiguration, issueConfiguration, artifactRoot, BeatOf(WorkerLoopNames.FactPublishing), loggers);
         await using var factPublishingWakeup = factPublishing?.Wakeup;
-        var reportPull = ReportPullComposition.Create(analysisContexts, connectionString, loggers);
+        var reportPull = ReportPullComposition.Create(analysisContexts, connectionString, BeatOf(WorkerLoopNames.ReportPull), loggers);
         await using var reportPullWakeup = reportPull?.Wakeup;
         executing = true;
         await jobs.SynchronizeAsync(workerConfiguration, cancellation.Token);
+        await heartbeats.ClearAsync(cancellation.Token);
         await analysis.RecordStartAsync(cancellation.Token);
         await gate.RecordStartAsync(cancellation.Token);
         await statementDrafting.RecordStartAsync(cancellation.Token);
@@ -231,16 +235,24 @@ try
         return await CollectionWorkerCommand.ExecuteAsync(args, queue, jobs, attempts, loggers, cancellation.Token, processing, wakeup, jobs,
             [.. new[]
             {
-                AnalysisStage.For("drafting", analysis.Worker),
-                AnalysisStage.For("gate", gate.Worker),
-                AnalysisStage.For("statementDrafting", statementDrafting.Worker),
-                AnalysisStage.For("actionDrafting", actionDrafting.Worker),
-                AnalysisStage.For("voteDrafting", voteDrafting.Worker),
-                AnalysisStage.For("relationshipDrafting", relationshipDrafting.Worker),
-                AnalysisStage.For("briefDrafting", briefDrafting.Worker),
+                AnalysisStage.For(WorkerLoopNames.Drafting, analysis.Worker),
+                AnalysisStage.For(WorkerLoopNames.Gate, gate.Worker),
+                AnalysisStage.For(WorkerLoopNames.StatementDrafting, statementDrafting.Worker),
+                AnalysisStage.For(WorkerLoopNames.ActionDrafting, actionDrafting.Worker),
+                AnalysisStage.For(WorkerLoopNames.VoteDrafting, voteDrafting.Worker),
+                AnalysisStage.For(WorkerLoopNames.RelationshipDrafting, relationshipDrafting.Worker),
+                AnalysisStage.For(WorkerLoopNames.BriefDrafting, briefDrafting.Worker),
                 factPublishing?.Stage,
                 reportPull?.Stage
-            }.OfType<AnalysisStage>()]);
+            }.OfType<AnalysisStage>()], BeatOf(WorkerLoopNames.Collection));
+    }
+
+    if (WorkerHealthCommand.Matches(args))
+    {
+        var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE");
+        if (string.IsNullOrWhiteSpace(connectionString)) throw new ArgumentException("worker health requires CIVIC_LENS_DATABASE.");
+        executing = true;
+        return await WorkerHealthCommand.ExecuteAsync(PostgresWorkerHeartbeatStore.FromConnectionString(connectionString), Console.Out, cancellation.Token);
     }
 
     if (AnalysisCommand.Matches(args))

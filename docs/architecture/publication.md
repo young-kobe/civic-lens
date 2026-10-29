@@ -509,7 +509,7 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - A record that cannot build still takes a place in the 64 records that the tick lists. More than 63 such records in one kind can hide other records until a person fixes them.
 - A ready record that cannot build is logged at error level at every tick until a person fixes it. A store read that fails, for example on a changed citation, fails the tick.
 - After a rollback and a CLI publish, the rolled-back records list again with the same key. The stage replays the stored release each tick and publishes nothing until new records change the batch. Publish those records with the CLI.
-- The stage has no heartbeat or status row yet. [R-24](../roadmap.md#later) adds the process view.
+- The stage has no status row. Its loop writes the `factPublishing` heartbeat; see [collection](collection.md#autonomous-collection-engine).
 - A vote record embeds at most `PublishedVote.MaximumSources` sources: the detail, the members, and the bill detail.
 - An action record embeds at most `PublishedAction.MaximumSources` sources. The worst case is the detail page, 3 cosponsor pages (250 rows), and the summaries page, which is 5 sources. A record over the cap fails publish loudly.
 - The stage `factPublishing` leaves out a withdrawn action or vote that code approves again. It logs one line for each skipped record at every tick, until a person returns the record.

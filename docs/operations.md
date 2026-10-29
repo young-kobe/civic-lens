@@ -270,6 +270,12 @@ A crawl delay longer than every attempt timeout can exhaust the retries. Inspect
 
 **Worker.** `worker <collector.dll> <artifact-directory>` needs `CIVIC_LENS_COLLECTION_CONFIG` with an absolute configuration path. It runs the durable collection-to-review engine. `--once` admits due checks, drains the runnable work, and exits without waiting for future deadlines. Ctrl+C stops the worker. Change the configuration and restart the worker to apply it. Cancelling one job does not disable its source schedule. Keep one worker for each operational store. Leases and fenced checkpoints protect ownership if another worker runs.
 
+**Worker health.** `worker health` needs `CIVIC_LENS_DATABASE`. It reads the heartbeat rows that the loops of the worker write. It prints one line and exits 0 when every loop beat is at most 3 minutes old. It exits 1 when one beat is older or when no beat exists. The line names the loop and its age.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- worker health
+```
+
 | Variable | Meaning |
 |---|---|
 | `CIVIC_LENS_EVIDENCE_CONCURRENCY` | Optional number of captured pages processed at the same time (default 2, 1 to 4). Any other value stops the worker with exit code 2 |

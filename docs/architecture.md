@@ -173,10 +173,11 @@ Use the fixtures of the legacy crawler and its lessons about normalization, robo
 
 ## Shared worker mechanics
 
-`WorkerLoop`, at the Application project root, owns three shared mechanics:
+`WorkerLoop`, at the Application project root, owns four shared mechanics:
 
 - It waits for a wakeup and reconnects after a 2-second failure backoff. `CollectionJobWorker`, `AnalysisWorker`, and `StageWorker` use this. `StageWorker` runs the `factPublishing` stage and the report pull.
 - It renews a lease while work runs. Only `EvidenceProcessingWorker` and `AnalysisWorker` use this, because collection jobs keep `CollectionJobLeaseGuard`.
+- It writes the loop heartbeat through `WorkerBeat` while a loop waits. `AnalysisWorker` also uses `WorkerBeat` for its pause wait and at each pass. See [collection](architecture/collection.md#autonomous-collection-engine).
 - It owns the recoverable-exception rule and the type-name error code.
 
 A refused renewal cancels the work at once. A failed renewal is tried again while time is left before the lease deadline. The deadline counts from when the last successful renewal request was sent. Each attempt stops at that deadline.
