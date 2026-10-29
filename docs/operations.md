@@ -872,7 +872,7 @@ The `Dockerfile` in the repository root builds two images for linux-arm64. The w
 - Every page, asset, and error that Caddy answers from its own blocks has `X-Content-Type-Options: nosniff` and `Referrer-Policy: strict-origin-when-cross-origin`. A 502 from the search proxy and a 404 when the release has no `404.html` carry only `X-Robots-Tag`. No Content-Security-Policy is set.
 - Every response has `X-Robots-Tag: noindex` during the soft launch. The snippet `(noindex)` in the Caddyfile owns it. At go-live, delete the snippet and every `import noindex` line, then restart the Caddy container. The admin endpoint is off, so a reload is not possible. `robots.txt` stays as published.
 - Never add a `log` directive to a site block. Without one, Caddy writes no access log. The privacy page says that page reads and searches leave no record. Caddy still writes error lines, for example when `404.html` is missing. The global `log` block in the Caddyfile filters them. They keep the host, method, status, and error. They hold no query string, headers, or IP address. A file error can name the file path of the page, with no reader data. Do not weaken that filter.
-- Check the rule with `caddy adapt`. The output must have no `logs` key inside `apps.http.servers`, and the global `logs` entry must delete `request>uri`, `request>headers`, `request>remote_ip`, `request>remote_port`, and `request>client_ip`. At go-live, request a missing path with a query and a `CF-Connecting-IP` header. Then check that the Caddy log holds neither.
+- Check the rule with `caddy adapt`. The output must have no `logs` key inside `apps.http.servers`, and the global `logs` entry must delete `request>uri`, `request>headers`, `request>remote_ip`, `request>remote_port`, and `request>client_ip`. `deploy/scripts/check-live.sh` checks the live log; see [Go-live checks](#go-live-checks).
 
 Check the file with `caddy validate --config deploy/caddy/Caddyfile --adapter caddyfile`, with `CIVIC_LENS_RELEASE_DIRECTORY` set.
 
@@ -953,8 +953,30 @@ This section is for the temporary production machine, a Jetson with Docker Compo
 5. Run `sudo deploy/scripts/update.sh <full-commit-sha>`.
 6. Set up Tailscale for the review workspace (see [Review workspace access](#review-workspace-access)).
 7. Enable the backup timer.
+8. Run `sudo deploy/scripts/check-live.sh`. See [Go-live checks](#go-live-checks).
 
 Do step 5 only after step 4. Without the credential file, the cloudflared container cannot start.
+
+### Go-live checks
+
+Run `sudo deploy/scripts/check-live.sh` from `/opt/civic-lens` after the first install and after each `update.sh`. The script prints one PASS or FAIL line per check, runs every check, and exits with code 1 if one failed. Each FAIL line says what it expected, what came back, and what to check. It sends requests to the public host names, so it needs the tunnel. The checks are:
+
+- `X-Robots-Tag: noindex` on the home page, the missing page, and an api response. The script reads `deploy/caddy/Caddyfile`. With an `import noindex` line, each response must carry the header. Without one, no response may carry it.
+- A missing page returns 404 with the release 404 page and `Cache-Control: no-store`.
+- `api.civic-lens.info/internal/*` returns 404.
+- Caddy keeps no access log. The script requests a missing path with a random query value and a random `CF-Connecting-IP` value. Then it reads the Caddy log of the last 5 minutes. The log must hold neither value.
+- `civic-lens-backup.service` ran, its last result was success, and its last run ended less than 26 hours ago.
+- A reader cannot forge `CF-Connecting-IP`. The script reads `CIVIC_LENS_REQUESTS_PER_MINUTE` from `search.env`, with 60 as the default. It sends one more request than that to the search route, each with a different forged `CF-Connecting-IP`. Cloudflare replaces the header, so all requests count for the caller, and the last one must get 429. This check runs last. It blocks the address of the caller on the search service for up to one minute.
+
+**Withdraw test.** The script does not test withdrawal, because the test changes the live site. Do it by hand at the first launch and after a change to publication code:
+
+1. In the review workspace, request changes on one published record.
+2. Withdraw it: `sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> --withdraw <kind>:<id> <text>`. Use a new key.
+3. Check that the page of the record says it is withdrawn.
+4. Read the release numbers with `sudo deploy/scripts/compose.sh run --rm cli releases list`. Activate the release from before the withdrawal: `sudo deploy/scripts/compose.sh run --rm cli releases activate <release-number>`. The record shows again. The `blocked` list in the output names it, because review still blocks it.
+5. In the review workspace, approve the record again. The approval must resolve the open concern and carry a resolution note.
+
+The `cli` service reads `host.env` and `host.secret.env`. It holds every variable that `releases publish` and `releases activate` need.
 
 ### Tunnel
 
