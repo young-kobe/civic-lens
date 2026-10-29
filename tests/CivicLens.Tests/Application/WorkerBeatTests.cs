@@ -76,7 +76,12 @@ public sealed class WorkerBeatTests
         var logger = new CapturingLogger<WorkerBeat>();
         var store = new RecordingHeartbeatStore(failing: true);
 
-        await TestBeat.Create(store, Interval, logger: logger).WaitAsync(_ => Task.Delay(Interval * 6), default);
+        var wake = new TaskCompletionSource();
+
+        var waiting = TestBeat.Create(store, Interval, logger: logger).WaitAsync(_ => wake.Task, default);
+        await Eventually(() => store.Beats >= 3);
+        wake.SetResult();
+        await waiting;
 
         var entry = logger.Entries.First();
         Assert.Equal((LogLevel.Error, "down"), (entry.Level, entry.Exception!.Message));
