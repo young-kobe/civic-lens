@@ -321,17 +321,17 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
-    public void AnOfficeIsRefusedForAPersonWithABioguideIdBecauseTheRosterGivesTheirTerms()
+    public void AnOfficeIsAllowedForAPersonWithABioguideIdBecauseAFormerMemberHasNoRosterTerm()
     {
         var person = new PersonConfiguration
         {
             Id = "one",
             Name = "One",
             BioguideId = "W000817",
-            Offices = [new() { Title = "Senator", StartsOn = new(2025, 1, 3) }]
+            Offices = [new() { Title = "Vice President", StartsOn = new(2025, 1, 20), EndsOn = new(2029, 1, 20) }]
         };
 
-        Assert.Throws<ArgumentException>(() => DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }], person).Validate());
+        DatedConfiguration([new SourceCoverageConfiguration { PersonId = "one" }], person).Validate();
     }
 
     [Fact]

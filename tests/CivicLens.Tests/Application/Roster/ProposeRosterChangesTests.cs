@@ -27,6 +27,17 @@ public sealed class ProposeRosterChangesTests
     }
 
     [Fact]
+    public async Task AConfiguredPersonWithOfficesIsNotProposedAsALeaveBecauseTheConfigurationKeepsThemOutsideTheRoster()
+    {
+        var kept = RosterFixtures.Person("jd-vance", "J.D. Vance", "V000137") with { Offices = [new() { Title = "Vice President", StartsOn = new(2025, 1, 20) }] };
+        var gone = RosterFixtures.Person("old-member", "Old Member", "O000001");
+
+        var proposal = await new ProposeRosterChanges(new FixedMemberRoster(RosterFixtures.Members())).ExecuteAsync(RosterFixtures.Configuration(kept, gone), default);
+
+        Assert.Equal(["old-member"], proposal!.Leaves.Select(leave => leave.Id));
+    }
+
+    [Fact]
     public async Task NoSnapshotYieldsNoProposalSoAnEmptyRosterNeverReadsAsEveryoneLeaving()
     {
         var configuration = RosterFixtures.Configuration(RosterFixtures.Person("a", "A", "A000001"));
