@@ -2,7 +2,7 @@
 @using CivicLens.Publication.Contracts
 
 <PublicPage CanonicalPath="@PublicationProtocol.AboutPagePath" Title="About Civic Lens" Description="What Civic Lens covers, where its records come from, and who approves them." Crumbs="Crumbs">
-    <PageHeader Title="About Civic Lens" Lede="Civic Lens publishes records of what members of Congress say and do. Each record shows its sources." />
+    <PageHeader Title="About Civic Lens" Lede="Civic Lens publishes records of what members of Congress say and do. Each record shows its sources. Civic Lens is not part of any government office, party, campaign or company." />
     <Panel Title="What it covers" Padded="true">
         <p>Civic Lens covers the federal government of the United States. It covers the members of Congress.</p>
     </Panel>
@@ -23,12 +23,68 @@
         <p>A record page shows each correction. A person can withdraw a record. The page of a withdrawn record says that it is withdrawn. Its content is no longer published.</p>
         <p>You can tell us about a mistake on the <a href="@PublicationProtocol.ReportPagePath">report page</a>. A person checks each report.</p>
     </Panel>
+    <Panel Title="Contact" Padded="true">
+        <p><strong>A record is wrong.</strong> Open the record and use "Report a problem with this record" at the bottom of the page. The report names the exact record and version, so we can find and fix the problem fast.</p>
+        <p><strong>Anything else.</strong> Send an email to <a href="mailto:@ContactEmail">@ContactEmail</a>. We read every message. We cannot promise to answer each one.</p>
+        <p>Officials and their staff use the same two ways. Please do not send private details about yourself or other people.</p>
+    </Panel>
+    <Panel Title="Privacy" Padded="true">
+        <p>You do not need an account. We set no cookies. We use no analytics and no ad trackers. We never sell data.</p>
+        <DataTable Roles="true" Items="PrivacyRows" Caption="What we keep and who else sees it">
+            <Head><TableCell Header>When you</TableCell><TableCell Header>What we keep</TableCell><TableCell Header>Who else sees it</TableCell></Head>
+            <Row Context="row">
+                <TableCell Main>@row.Action</TableCell>
+                <TableCell Label="What we keep">@row.Kept</TableCell>
+                <TableCell Label="Who else sees it">@row.SeenBy</TableCell>
+            </Row>
+        </DataTable>
+        <p>Cloudflare keeps its own logs under its <a href="@CloudflarePrivacyUrl" rel="noopener noreferrer">privacy policy</a>.</p>
+        <p>We keep your report in our review system. The copy on the report server is deleted after @ReaderReportProtocol.PurgeAfterDays days, once the review system has it.</p>
+    </Panel>
+    <Panel Title="Using our records" Padded="true">
+        <p>You may copy, share and build on our records. Please credit us and link to the record.</p>
+        <DataTable Roles="true" Items="ReuseRows" Caption="Terms for each kind of material">
+            <Head><TableCell Header>What</TableCell><TableCell Header>Terms</TableCell><TableCell Header>Credit</TableCell></Head>
+            <Row Context="row">
+                <TableCell Main>@row.What</TableCell>
+                <TableCell Label="Terms">@row.Terms@if (row.LicenseName is not null) {<text> <a href="@row.LicenseUrl" rel="noopener noreferrer">@row.LicenseName</a>.</text>}</TableCell>
+                <TableCell Label="Credit">@row.Credit</TableCell>
+            </Row>
+        </DataTable>
+        <p>A record can be corrected or withdrawn. Link to it, so your readers see the current version. Do not suggest that Civic Lens supports you, a product or a campaign.</p>
+    </Panel>
     <Panel Title="More information" Padded="true">
         <p>The <a href="@PublicationProtocol.MethodPagePath">method page</a> explains how the counts on each official page work.</p>
-        <p>The code of Civic Lens uses the AGPL-3.0 license.</p>
     </Panel>
 </PublicPage>
 
 @code {
+    private const string ContactEmail = "contact@civic-lens.info";
+    private const string CloudflarePrivacyUrl = "https://www.cloudflare.com/privacypolicy/";
+    private const string CreativeCommonsUrl = "https://creativecommons.org/licenses/by/4.0/";
+    private const string CreditLine = "\"Civic Lens, civic-lens.info\" and a link to the record.";
+
     private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), new("About")];
+
+    private static readonly IReadOnlyList<PrivacyRow> PrivacyRows =
+    [
+        new("Read a page", "Nothing.", "Cloudflare delivers our pages. Like any web host, it sees your IP address and the page you open."),
+        new("Pick light or dark", "Your choice, saved in your own browser only.", "No one."),
+        new("Search", "Nothing. The search service does not save your words or your IP address.", "Cloudflare carries your search to us and sees your IP address and your search words, because they are in the page address."),
+        new("Report a problem", "The record, the problem type and your text. No name, no email and no IP address.", "Cloudflare carries your report to us and sees your IP address. Its Turnstile check confirms you are a person and does not read your text."),
+        new("Email us", "Your message and your email address, so we can answer.", "Cloudflare passes your email to our mailbox at Google (Gmail). Our reply goes out through Resend, a mail delivery service.")
+    ];
+
+    private static readonly IReadOnlyList<ReuseRow> ReuseRows =
+    [
+        new("Our records, summaries and weekly briefs", "Free to reuse, also for business, under", CreditLine, "CC BY 4.0", CreativeCommonsUrl),
+        new("Our data files", "The same terms. Each release has a file for every record.", "The same."),
+        new("Words we quote from officials and Congress", "Not ours. Most work of the federal government is public domain in the US.", "Name the original source. Each record names it or links to the record that does."),
+        new("Official portraits", "Public domain, from the Government Publishing Office.", "The credit shown with each photo or below the list."),
+        new("Source code", "AGPL-3.0, on", "Keep the license notice.", "GitHub", "https://github.com/young-kobe/civic-lens")
+    ];
+
+    private sealed record PrivacyRow(string Action, string Kept, string SeenBy);
+
+    private sealed record ReuseRow(string What, string Terms, string Credit, string? LicenseName = null, string? LicenseUrl = null);
 }

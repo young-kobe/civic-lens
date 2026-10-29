@@ -25,7 +25,7 @@ The search service gives readers full-text search over every published record. I
 - Publish writes `search.html` in every release. Its canonical address, when `CIVIC_LENS_PUBLIC_BASE_URL` is set, is the bare page without a query. The page fills its filters from the manifest. Issue and policy area names come from the publication catalog. A script calls the service at `CIVIC_LENS_PUBLIC_API_URL`. Without the variable, the page says that search is not available.
 - The facet pages are the path for readers without JavaScript.
 - Readers send a report with `POST /v1/reports`. The body is form-encoded, so the browser sends a CORS simple request and needs no preflight. The route keeps `Access-Control-Allow-Origin: *` and sets no cookie.
-- The service stores nothing about the reporter. It keeps no IP address, no hash of one, and no contact field. The client address only keys the in-memory rate limit. The service does not log it.
+- The service stores nothing about the reporter. It keeps no IP address, no hash of one, and no contact field. The client address only keys the in-memory rate limit. The service logs neither it nor the query text of a search. `PublicApiApp` sets the log level of `Microsoft.AspNetCore` to warning, because the information request logs hold the request address with the query. Test: `SearchEndpointsTests.ASearchWritesNoQueryTextToTheLogsBecauseThePrivacyTableOfTheAboutPagePromisesNothingIsSaved`. A response sets no cookie. Tests: `SearchEndpointsTests.EveryResponseAllowsAnyOriginAndSetsNoCookie` and `ReportEndpointsTests.AReportAnswerSetsNoCookieBecauseTheAboutPageToldReadersThatNoCookieIsSet`.
 - The checks run in this order: the shape of the form, the Turnstile check, then the database write. The route reads at most 32 KB of body. An unknown pair of record ID and revision answers 404.
 - A report binds to a record revision in the `records` table, in any release range. A report on a replaced revision is accepted, because a reader may hold an old page. The row stores the kind from that table.
 - Cloudflare Turnstile checks each report in the service. `TurnstileVerifier` sends the token and the secret to the siteverify API and nothing else. It needs `success` and the configured hostname. A 5 second timeout, a failed call, an unreadable reply, or the code "internal-error" gives 503, so the check fails closed.
@@ -38,7 +38,7 @@ The search service gives readers full-text search over every published record. I
 - The cursor is `<epoch>.<sequence>` and moves forward only. The epoch is a uuid that the first migration creates once. A cursor of another epoch starts from the first report, so a reset or restore never skips reports. The puller dedupes by report ID.
 - The `after` value acknowledges every report at or below it. The acknowledged sequence in `report_pull_state` never moves back.
 - `IngestWorker` also purges reports. It deletes a report only when its sequence is at or below the acknowledged sequence and it is older than 7 days. This keeps one timer loop, so no new hosted service exists.
-- The wire types `PulledReport`, `PulledReportBatch`, and `ReaderReportProtocol` are in `CivicLens.Publication.Contracts`. They are not release files, so `PublicationProtocol.SchemaVersion` does not change. The cursor format is owned by `ReportCursor` in the service, because it is opaque to the puller.
+- The wire types `PulledReport`, `PulledReportBatch`, and `ReaderReportProtocol` are in `CivicLens.Publication.Contracts`. They are not release files, so `PublicationProtocol.SchemaVersion` does not change. The cursor format is owned by `ReportCursor` in the service, because it is opaque to the puller. `ReaderReportProtocol` also owns the retention days that publish shows on `about.html`.
 - The operational application pulls the reports with the stage `reportPull`; see [operational pull](#operational-pull).
 - The route `/internal/*` is not public. [R-24](../roadmap.md#later) must block it at the edge or use a private listener. This document does not build that.
 
@@ -190,7 +190,7 @@ The poll interval is 2 minutes and the statement timeout is 2 seconds. Both are 
 - `records` holds one row for each record revision: the manifest entry fields, the body text, the weighted `search` vector, `first_release`, and `last_release`. GIN indexes cover the vector and the three ID arrays.
 - `reader_reports` holds `sequence` (identity), `report_id`, `record_id`, `revision_number`, `kind`, `category`, `body`, `payload_hash`, and `received_at`. CHECK constraints bound the numbers. A unique index covers record ID, revision, and payload hash.
 - `report_pull_state` holds one row: the `epoch` uuid, created once, and the `acked_sequence`.
-- `PulledReport`, `PulledReportBatch`, and `ReaderReportProtocol` define the pull wire format.
+- `PulledReport`, `PulledReportBatch`, and `ReaderReportProtocol` define the pull wire format. `ReaderReportProtocol` also owns the retention days that publish shows on `about.html`.
 - The service reads the same contract types as the static site: `PublicationRelease` and the six record types. `PublicationProtocol.SearchSourceTextCharacters` and `PublicationProtocol.SearchPagePath` are shared with the page.
 
 ## Code map
@@ -221,6 +221,9 @@ Run commands are in [operations](../operations.md#run-the-search-service).
 - A duplicate sent at the daily cap gets 503 like any other report.
 - The pull trusts the cursor of the token holder. A cursor above the highest sequence acknowledges reports that the puller never saw.
 - A search database restored from a backup keeps its epoch. Reports made after the backup are lost, and the puller can skip new reports that reuse the lost sequences.
+- The review system keeps a closed report with no deletion rule. [R-24](../roadmap.md#later) adds one, and the About page then states it.
+- The request log filter in `PublicApiApp` has no provider. A provider-specific `Logging` level, such as `Logging__Console__LogLevel__Default`, overrides it and logs the search text again. The [R-24](../roadmap.md#later) deploy must set none.
+- The About page says a search keeps nothing. That stays true only while the Caddy and CDN deploy keeps no access logs for search requests. [R-24](../roadmap.md#later) must set that.
 - Edge blocking of `/internal/*` is deferred to [R-24](../roadmap.md#later).
 - The search API answers 200 for a withdrawn record in the pinned releases that hold it. A status 410 needs the ingest to read withdrawals and the API to change its status. This waits until after [R-24](../roadmap.md#later).
 - Only the first full ingest is long, because it fetches every record inside one transaction. Later ingests fetch only new revisions. Readers are not blocked, because they read committed rows.

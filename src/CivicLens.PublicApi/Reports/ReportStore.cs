@@ -9,8 +9,6 @@ namespace CivicLens.PublicApi.Reports;
 /// </summary>
 public sealed class ReportStore(NpgsqlDataSource database, PublicApiOptions options)
 {
-    private const int PurgeAfterDays = 7;
-
     public async Task<ReportReceipt> StoreAsync(ReportSubmission submission, CancellationToken cancellationToken)
     {
         await using var connection = await database.OpenConnectionAsync(cancellationToken);
@@ -80,7 +78,7 @@ public sealed class ReportStore(NpgsqlDataSource database, PublicApiOptions opti
         await using var connection = await database.OpenConnectionAsync(cancellationToken);
         return await ExecuteAsync(connection, null, $"""
             DELETE FROM reader_reports
-            WHERE sequence <= (SELECT acked_sequence FROM report_pull_state) AND received_at < now() - interval '{PurgeAfterDays} days'
+            WHERE sequence <= (SELECT acked_sequence FROM report_pull_state) AND received_at < now() - interval '{ReaderReportProtocol.PurgeAfterDays} days'
             """, cancellationToken);
     }
 

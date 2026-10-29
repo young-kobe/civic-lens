@@ -5,6 +5,7 @@ using CivicLens.PublicApi.Search;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Tests.PublicApi;
 
@@ -28,7 +29,7 @@ internal sealed class ApiHost : IAsyncDisposable
     public HttpClient Client { get; }
 
     public static async Task<ApiHost> StartAsync(PostgresCollection postgres, FakeReleaseSite site, Func<PublicApiOptions, PublicApiOptions>? change = null,
-        HttpMessageHandler? turnstile = null)
+        HttpMessageHandler? turnstile = null, ILoggerProvider? logProvider = null)
     {
         var options = new PublicApiOptions
         {
@@ -36,7 +37,7 @@ internal sealed class ApiHost : IAsyncDisposable
             Database = await postgres.CreateEmptyDatabaseAsync()
         };
         options = change?.Invoke(options) ?? options;
-        var app = PublicApiApp.Build(options, ["--logging:LogLevel:Default=None"], site, turnstile);
+        var app = PublicApiApp.Build(options, logProvider is null ? ["--logging:LogLevel:Default=None"] : [], site, turnstile, logProvider);
         app.Urls.Add("http://127.0.0.1:0");
         await app.StartAsync();
         return new ApiHost(postgres, app, options, site);

@@ -64,6 +64,22 @@ public sealed class SearchEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task ASearchWritesNoQueryTextToTheLogsBecauseThePrivacyTableOfTheAboutPagePromisesNothingIsSaved()
+    {
+        var logs = new CapturedLogs();
+        var site = new FakeReleaseSite();
+        site.Publish(1, PublishedSamples.Statement('a', "Rent cap"));
+        await using var host = await ApiHost.StartAsync(postgres, site, logProvider: logs);
+        await host.WaitForReleaseAsync();
+
+        using var response = await host.Client.GetAsync("/v1/search?q=zebracrossing&release=1");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains(logs.Lines, line => line.Contains("Ingested release", StringComparison.Ordinal));
+        Assert.DoesNotContain(logs.Lines, line => line.Contains("zebracrossing", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task APinnedReleaseThatWasNeverIngestedAnswers404WithTheReasonReleaseNotIndexed()
     {
         await using var host = await StartWithReleasesAsync();
