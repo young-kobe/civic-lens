@@ -260,7 +260,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- jo
 
 Reuse an enqueue key only for the same configuration revision, source settings, policy, and any explicit coverage date. Use a new key for a new logical check.
 
-The worker skips a job while a lease, the global collector slot, an origin barrier, an origin deadline, or a retry deadline blocks it. Use `jobs get` to see the state and `retryAt`. Job commands return 0 on success, 2 for invalid input or a missing job, and 1 for operational failures. `jobs list` defaults to 20 jobs, with a maximum of 100.
+The worker skips a job while a lease, the collector slot of its pacing key, an origin barrier, an origin deadline, or a retry deadline blocks it. Use `jobs get` to see the state and `retryAt`. Job commands return 0 on success, 2 for invalid input or a missing job, and 1 for operational failures. `jobs list` defaults to 20 jobs, with a maximum of 100.
 
 Optional source `jobPolicy` fields are `maxAttempts` (default 3), `initialRetryDelaySeconds` (30), `maximumRetryDelaySeconds` (3600), `maxTotalRequests`, `maxTotalBytes`, and `maxTotalTimeoutSeconds`. Omitted aggregate limits equal the per-attempt limit times `maxAttempts`. Limits must reserve at least one complete attempt. Source `eTag` and `lastModified` are optional explicit validators.
 
@@ -287,7 +287,7 @@ Enabled sources are checked every hour unless `checkIntervalSeconds` sets anothe
 
 **Pacing groups.** Optional top-level `pacingGroups` limit the total load on shared hosts. For example, `{"hostSuffix": "house.gov", "minDelayMilliseconds": 3000}` spaces all managed jobs for any `*.house.gov` origin by at least 3 seconds. This adds to the pacing of each origin. If the queue keeps growing, lower the delay. The group rules are in [collection](architecture/collection.md#robots-and-pacing).
 
-Managed jobs share one collector slot for each operational store. Direct `collect` and standalone collector commands are outside this guarantee. Do not treat collection as exactly once. Back up the database and the complete artifact roots together.
+Managed jobs share one collector slot for each pacing key. Direct `collect` and standalone collector commands are outside this guarantee. Do not treat collection as exactly once. Back up the database and the complete artifact roots together.
 
 ## Feed and HTML discovery
 

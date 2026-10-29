@@ -170,22 +170,41 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task SingletonAdmissionSurvivesDifferentRootsAndOriginBarrierOutlivesCollectorRelease()
+    public async Task DifferentPacingKeysRunAtOnceWhileOneKeyAndOneGroupNeverDoAndTheBarrierOutlivesCollectorRelease()
     {
         var first = await EnqueueClaimAsync("first", Source());
         var other = await EnqueueClaimAsync("other", Source("https://other.test"));
         var starts = await Task.WhenAll(jobs.TryStartAttemptAsync(first.Lease, root, default),
             jobs.TryStartAttemptAsync(other.Lease, root + "-other", default));
-        Assert.Single(starts, start => start.Status == CollectionJobStartStatus.Started);
-        Assert.Single(starts, start => start.BlockReason == CollectionJobBlockReason.CollectorBusy);
-        var winner = starts[0].Status == CollectionJobStartStatus.Started ? first : other;
-        var active = starts.Single(start => start.Status == CollectionJobStartStatus.Started);
-        Assert.True(await jobs.ReleaseCollectorAsync(winner.Lease, active.CollectorLease!, default));
+        Assert.All(starts, start => Assert.Equal(CollectionJobStartStatus.Started, start.Status));
+        Assert.NotEqual(starts[0].CollectorLease!.Token, starts[1].CollectorLease!.Token);
+        Assert.True(await jobs.ReleaseCollectorAsync(first.Lease, starts[0].CollectorLease!, default));
 
-        var sameOrigin = await EnqueueClaimAsync("same", Source(winner.Job.Definition.AllowedOrigin));
+        var sameOrigin = await EnqueueClaimAsync("same", Source(first.Job.Definition.AllowedOrigin));
         var blocked = await jobs.TryStartAttemptAsync(sameOrigin.Lease, root, default);
         Assert.Equal(CollectionJobBlockReason.AttemptUnresolved, blocked.BlockReason);
         Assert.Empty((await jobs.GetAsync(sameOrigin.Job.JobId, default))!.Attempts);
+    }
+
+    [Fact]
+    public async Task HostsOfOnePacingGroupNeverRunTwoAttemptsEvenAfterTheCollectorIsReleased()
+    {
+        var first = await EnqueueClaimAsync("group-a", GroupedSource("a.house.gov"));
+        var second = await EnqueueClaimAsync("group-b", GroupedSource("b.house.gov"));
+        var outside = await EnqueueClaimAsync("group-c", GroupedSource("a.senate.gov"));
+        var started = await jobs.TryStartAttemptAsync(first.Lease, root, default);
+        Assert.Equal(CollectionJobBlockReason.AttemptUnresolved,
+            (await jobs.TryStartAttemptAsync(second.Lease, root + "-b", default)).BlockReason);
+        Assert.True(await jobs.ReleaseCollectorAsync(first.Lease, started.CollectorLease!, default));
+        Assert.Equal(CollectionJobBlockReason.AttemptUnresolved,
+            (await jobs.TryStartAttemptAsync(second.Lease, root + "-b", default)).BlockReason);
+        Assert.Equal(CollectionJobStartStatus.Started,
+            (await jobs.TryStartAttemptAsync(outside.Lease, root + "-c", default)).Status);
+
+        var interrupted = new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null, "NoReceipt");
+        Assert.True(await jobs.SettleAttemptAsync(first.Lease, started.Attempt!.AttemptId, interrupted, default));
+        Assert.Equal(CollectionJobBlockReason.OriginBackoff,
+            (await jobs.TryStartAttemptAsync(second.Lease, root + "-b", default)).BlockReason);
     }
 
     [Fact]

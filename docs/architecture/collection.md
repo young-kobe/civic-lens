@@ -43,8 +43,8 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - An attempt import is idempotent, and a conflicting reuse of an attempt ID fails. Enforced by `CollectionImportPolicy` under the `PostgresAdvisoryLock.CollectionImport` key. Test: `PostgresCollectionAttemptStoreTests.PersistsDuplicateAndConflictingReplayAcrossAdapterInstances`.
 - Only a 304 links to a prior capture, and only to one unambiguous capture. Enforced by `CollectionImportPolicy`, `ck_collection_attempts_prior_outcome`, and `ck_collection_attempts_prior_pair`. Test: `PostgresCollectionAttemptStoreTests.LinksUnambiguous304AndPreservesUnresolvedAmbiguityOnReplay`.
 - An enqueue key returns one job, and its reuse for another definition fails. Enforced by `IX_collection_jobs_idempotency_key` and, for the conflict, `ConfiguredCollectionSource.PrepareDefinition`. Test: `PostgresCollectionJobStoreTests.EnqueueIsIdempotentAndConflictingKeysCannotReplaceSnapshots`.
-- One managed collector runs at a time. Enforced by `ck_collector_singleton` and the slot lease in `PostgresCollectionJobStore`. Test: `PostgresCollectionJobStoreTests.SingletonAdmissionSurvivesDifferentRootsAndOriginBarrierOutlivesCollectorRelease`.
-- Each origin and each job has at most one unresolved attempt. Enforced by `collection_job_origins.unresolved_attempt_id` and `IX_collection_job_attempts_job_id`. Test: `PostgresCollectionJobStoreTests.SingletonAdmissionSurvivesDifferentRootsAndOriginBarrierOutlivesCollectorRelease`.
+- Managed collectors of different pacing keys run at once. A pacing key never runs two at once, and neither does a pacing group. Enforced by the slot row of each pacing key and by the unresolved-attempt marker on the origin row and the group key row. `PostgresCollectionJobStore` checks and sets both under the `PostgresAdvisoryLock.CollectionJobs` key. Tests: `PostgresCollectionJobStoreTests.DifferentPacingKeysRunAtOnceWhileOneKeyAndOneGroupNeverDoAndTheBarrierOutlivesCollectorRelease` and `PostgresCollectionJobStoreTests.HostsOfOnePacingGroupNeverRunTwoAttemptsEvenAfterTheCollectorIsReleased`.
+- Each origin, each pacing group, and each job has at most one unresolved attempt. Enforced by `collection_job_origins.unresolved_attempt_id` and `IX_collection_job_attempts_job_id`. Tests: `PostgresCollectionJobStoreTests.DifferentPacingKeysRunAtOnceWhileOneKeyAndOneGroupNeverDoAndTheBarrierOutlivesCollectorRelease` and `PostgresCollectionJobStoreTests.HostsOfOnePacingGroupNeverRunTwoAttemptsEvenAfterTheCollectorIsReleased`.
 - A stale job owner cannot renew, settle, or release. Enforced by the token, fence, and expiry checks in `PostgresCollectionJobStore` and `ck_job_lease`. Test: `PostgresCollectionJobStoreTests.ExpiredOwnerCannotRenewSettleOrReleaseNewOwnershipAndReservationsSurvive`.
 - Job budget totals equal the sum over the job's attempts. Enforced by `CollectionJobCharges`, the one owner of the totals. Test: `PostgresCollectionJobStoreTests.DerivedChargesMatchTheRetiredCountersAcrossStartRefundAndRetry`.
 - A settlement must match the imported evidence. Enforced by `PostgresCollectionJobStore.SettleAttemptAsync`. Test: `PostgresCollectionJobStoreTests.SettlementRejectsDifferentEvidenceBeforeRefundingBudget`.
@@ -294,8 +294,8 @@ A completed HTTP observation stays immutable. A retry creates a new attempt ID a
 - A press check runs before a backfill job that is older. Enforced by the claim scan. Test: `PostgresCollectionWorkerQueueTests.ABackfillJobCreatedBeforeAPressCheckIsListedAfterItAcrossPages`.
 - Jobs of equal priority run in creation order. Enforced by the same scan. Test: `PostgresCollectionWorkerQueueTests.JobsOfEqualPriorityKeepCreationOrder`.
 - Each job has an expiring token and an increasing fence. Expired ownership rejects stale database updates and signals the local child to stop.
-- A renewable singleton collector slot admits one managed collector across all artifact roots. Recovery and waiting jobs do not hold that slot.
-- A per-origin unresolved-attempt barrier survives lease expiry until reconciliation. An unprocessed 429 receipt therefore cannot be bypassed.
+- A renewable collector slot for each pacing key admits one managed collector for that key across all artifact roots. Recovery and waiting jobs do not hold a slot.
+- A per-origin and per-pacing-group unresolved-attempt barrier survives lease expiry until reconciliation. An unprocessed 429 receipt therefore cannot be bypassed.
 - Origin deadlines include minimum pacing and server Retry-After, also values beyond the backoff cap.
 - Direct `collect` and standalone collector runs are outside this coordination.
 
@@ -374,7 +374,7 @@ An active root job of the same source suppresses the scheduled admission and use
 | Source scheduling | Fixed interval for each source, hourly default; due-time order with source ID tie-break; one catch-up after downtime |
 | Work selection | Bounded batches, oldest eligible collection first; observation order for evidence; prerequisite waits leave runnable capacity |
 | Admission | Enabled source and current coverage, no overlapping active root check, exact-URL deduplication, job and discovery budget reservation |
-| Collection concurrency | One managed collector slot for each store, origin pacing and backoff, unresolved-attempt barrier, renewable fenced leases |
+| Collection concurrency | One managed collector slot for each pacing key, origin pacing and backoff, unresolved-attempt barrier, renewable fenced leases |
 | Stage handoff | Preparation registration in the settlement transaction; idempotent child admission and evidence saves; fenced checkpoints |
 | Recovery | Startup drain of durable work, upgrade backfill, persisted retry and lease deadlines, connection resubscription, predecessor waits due by rule |
 | Human boundary | Changed evidence enters review; approval and publication stay explicit |
@@ -518,7 +518,7 @@ The shared wakeup and lease mechanics are in [Shared worker mechanics](../archit
 
 ## Limits and planned work
 
-- Extra collection lanes gain speed only after two blockers go. The single collector slot (`ck_collector_singleton`) returns `collectorBusy` to a second running attempt. The collector process also holds an exclusive `.collector.lock` file in the artifact directory. The choice is pending.
+- Extra collection lanes gain speed only after one blocker goes. The collector process holds an exclusive `.collector.lock` file in the artifact directory. The choice is pending.
 - Unmanaged commands need operator coordination. The host serializes processes that share an artifact directory, but separate directories and standalone collectors are not coordinated.
 - Candidate loading for a new 304 has no cutoff, so memory use can grow with the history of a source. Pagination or streaming must keep the all-candidates ambiguity rule.
 - Orphan capture cleanup is future work. Successful handoffs are removed with no completed archive and no capture retention policy.

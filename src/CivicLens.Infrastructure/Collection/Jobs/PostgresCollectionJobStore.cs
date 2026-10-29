@@ -147,7 +147,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         {
             var row = await OwnedJobAsync(db, jobLease, now, cancellationToken);
             if (row is null) return new CollectionJobRenewal(false, false, null, null);
-            var slot = collectorLease is null ? null : await db.Set<CollectorSlotRow>().SingleOrDefaultAsync(cancellationToken);
+            var slot = collectorLease is null ? null : await ReadSlotAsync(db, row.PacingKey, cancellationToken);
             if (collectorLease is not null && !OwnsSlot(slot, jobLease, collectorLease, now))
                 return new CollectionJobRenewal(false, row.CancellationRequested, null, null);
             row.LeaseExpiresAt = Ticks(now + leaseDuration);
@@ -181,8 +181,8 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
             return new CollectionJobStartResult(CollectionJobStartStatus.Exhausted);
         }
         var originKey = NormalizeOrigin(definition.AllowedOrigin);
-        var (origin, slot, admissionBlock) = await ReadAdmissionAvailabilityAsync(db, originKey,
-            definition.ResolvePacingGroup()?.Key, now, cancellationToken);
+        var groupKey = definition.ResolvePacingGroup()?.Key;
+        var (origin, group, slot, admissionBlock) = await ReadAdmissionAvailabilityAsync(db, originKey, groupKey, now, cancellationToken);
         if (admissionBlock is not null) return admissionBlock;
 
         var attempt = new JobAttemptRow
@@ -196,7 +196,12 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         db.Add(attempt);
         if (origin is null) { origin = new JobOriginRow { Origin = originKey }; db.Add(origin); }
         origin.UnresolvedAttemptId = attempt.AttemptId;
-        if (slot is null) { slot = new CollectorSlotRow(); db.Add(slot); }
+        if (groupKey is not null)
+        {
+            if (group is null) { group = new JobOriginRow { Origin = groupKey }; db.Add(group); }
+            group.UnresolvedAttemptId = attempt.AttemptId;
+        }
+        if (slot is null) { slot = new CollectorSlotRow { PacingKey = row.PacingKey }; db.Add(slot); }
         slot.JobId = row.JobId;
         slot.AttemptId = attempt.AttemptId;
         slot.Token = Guid.NewGuid().ToString("N");
@@ -210,8 +215,9 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
     public Task<bool> ReleaseCollectorAsync(CollectionJobLease jobLease, CollectionCollectorLease collectorLease,
         CancellationToken cancellationToken) => TransactionAsync(async (db, now) =>
     {
-        if (await OwnedJobAsync(db, jobLease, now, cancellationToken) is null) return false;
-        var slot = await db.Set<CollectorSlotRow>().SingleOrDefaultAsync(cancellationToken);
+        var job = await OwnedJobAsync(db, jobLease, now, cancellationToken);
+        if (job is null) return false;
+        var slot = await ReadSlotAsync(db, job.PacingKey, cancellationToken);
         if (!OwnsSlot(slot, jobLease, collectorLease, now)) return false;
         slot!.JobId = null;
         slot.AttemptId = null;
@@ -294,6 +300,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         var next = AddDelay(now, TimeSpan.FromMilliseconds(group.MinDelayMilliseconds));
         if (rateLimitBackoff > next) next = rateLimitBackoff.Value;
         row.NotBefore = Math.Max(row.NotBefore, Ticks(next));
+        row.UnresolvedAttemptId = null;
     }
 
     private static async Task EnqueuePreparationAsync(CollectionAttemptDbContext db, JobRow job,
@@ -350,23 +357,29 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
             availability.Block.RetryAt?.UtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    private static async Task<(JobOriginRow? Origin, CollectorSlotRow? Slot, CollectionJobStartResult? Block)>
+    private static async Task<(JobOriginRow? Origin, JobOriginRow? Group, CollectorSlotRow? Slot, CollectionJobStartResult? Block)>
         ReadAdmissionAvailabilityAsync(CollectionAttemptDbContext db, string originKey, string? groupKey,
             DateTimeOffset now, CancellationToken cancellationToken)
     {
         var origin = await db.Set<JobOriginRow>().SingleOrDefaultAsync(item => item.Origin == originKey, cancellationToken);
         if (origin?.UnresolvedAttemptId is not null)
-            return (origin, null, Blocked(CollectionJobBlockReason.AttemptUnresolved));
+            return (origin, null, null, Blocked(CollectionJobBlockReason.AttemptUnresolved));
         if (origin?.NotBefore > Ticks(now))
-            return (origin, null, Blocked(CollectionJobBlockReason.OriginBackoff, FromTicks(origin.NotBefore)));
+            return (origin, null, null, Blocked(CollectionJobBlockReason.OriginBackoff, FromTicks(origin.NotBefore)));
         var group = groupKey is null ? null
             : await db.Set<JobOriginRow>().SingleOrDefaultAsync(item => item.Origin == groupKey, cancellationToken);
+        if (group?.UnresolvedAttemptId is not null)
+            return (origin, group, null, Blocked(CollectionJobBlockReason.AttemptUnresolved));
         if (group?.NotBefore > Ticks(now))
-            return (origin, null, Blocked(CollectionJobBlockReason.OriginBackoff, FromTicks(group.NotBefore)));
-        var slot = await db.Set<CollectorSlotRow>().SingleOrDefaultAsync(cancellationToken);
-        return (origin, slot, slot?.ExpiresAt > Ticks(now)
+            return (origin, group, null, Blocked(CollectionJobBlockReason.OriginBackoff, FromTicks(group.NotBefore)));
+        var slot = await ReadSlotAsync(db, groupKey ?? originKey, cancellationToken);
+        return (origin, group, slot, slot?.ExpiresAt > Ticks(now)
             ? Blocked(CollectionJobBlockReason.CollectorBusy, FromTicks(slot.ExpiresAt)) : null);
     }
+
+    private static Task<CollectorSlotRow?> ReadSlotAsync(CollectionAttemptDbContext db, string pacingKey,
+        CancellationToken cancellationToken) =>
+        db.Set<CollectorSlotRow>().SingleOrDefaultAsync(item => item.PacingKey == pacingKey, cancellationToken);
 
     private static void ValidateResolution(CollectionAttemptResolution resolution, CollectionRequest request)
     {
