@@ -83,10 +83,10 @@ internal sealed class VoteTally
         }
         var totals = new PublishedVoteTotals
         {
-            Yea = Take(counts, "Yea"),
-            Nay = Take(counts, "Nay"),
-            Present = Take(counts, "Present"),
-            NotVoting = Take(counts, "Not voting")
+            Yea = Take(counts, VoteCountLabels.Yea),
+            Nay = Take(counts, VoteCountLabels.Nay),
+            Present = Take(counts, VoteCountLabels.Present),
+            NotVoting = Take(counts, VoteCountLabels.NotVoting)
         };
         return counts.Count == 0 ? totals : throw new ArgumentException($"Vote {recordId} has an unknown count label: {counts.Keys.First()}");
     }

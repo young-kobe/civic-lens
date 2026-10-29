@@ -45,7 +45,7 @@
     <header class="public-header">
         <a class="public-brand" href="@(RootPath + PublicationProtocol.HomePath)"><BrandMark />Civic Lens</a>
         <nav class="public-nav" aria-label="Site">
-            @foreach (var link in SectionLinks)
+            @foreach (var link in PublicSections.All)
             {
                 <a href="@(RootPath + link.Path)" aria-current="@(link.Section == Section ? "page" : null)">@link.Label</a>
             }
@@ -65,15 +65,6 @@
 </html>
 
 @code {
-    private static readonly (PublicSection Section, string Label, string Path)[] SectionLinks =
-    [
-        (PublicSection.Officials, "Officials", PublicationProtocol.OfficialsPagePath),
-        (PublicSection.Issues, "Issues", PublicationProtocol.FacetsPath),
-        (PublicSection.Briefs, "Briefs", PublicationProtocol.BriefsPagePath(1)),
-        (PublicSection.AllRecords, "All records", PublicationProtocol.AllRecordsPagePath(1)),
-        (PublicSection.Search, "Search", PublicationProtocol.SearchPagePath)
-    ];
-
     private string documentTitle = string.Empty;
     private string description = string.Empty;
     private string? canonicalUrl;

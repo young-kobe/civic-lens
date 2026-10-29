@@ -13,7 +13,7 @@
 </PublicPage>
 
 @code {
-    private IReadOnlyList<Crumb> Crumbs => [PublicCrumbs.Home("../"), PublicCrumbs.Issues("../"), new(Facet.Name)];
+    private IReadOnlyList<Crumb> Crumbs => [PublicCrumbs.Home("../"), PublicCrumbs.Section(PublicSection.Issues, "../"), new(Facet.Name)];
 
     [Parameter, EditorRequired] public ReleaseFacet Facet { get; set; } = default!;
     [Parameter, EditorRequired] public int Page { get; set; }

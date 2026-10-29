@@ -487,6 +487,26 @@ public sealed class PublishVoteTests
         Assert.Equal(["Democrat", "Republican"], record.PartyMajorities.Select(party => party.Party));
     }
 
+    // Two different counts per label show that the renderer and the tally read each label from the same owner, so a label cannot drift into another total.
+    [Fact]
+    public async Task EachSenateCountLabelFromTheRealRendererPublishesIntoItsOwnTotal()
+    {
+        SenateVoteMember[] members =
+        [
+            new("S2", "B", "Two", "R", "AL", "Yea"), new("S3", "C", "Three", "R", "AL", "Nay"),
+            new("S4", "D", "Four", "R", "AL", "Present"), new("S5", "E", "Five", "R", "AL", "Not Voting")
+        ];
+        var detail = new SenateVoteDetail(new(SenateVoteFixtures.Roll1, HouseVoteFixtures.Updated, null, null), HouseVoteFixtures.Updated, "On Passage", "Text", "Title",
+            "Passed", null, null, null, null, new(2, 1, 1, 1), members);
+        var scenario = new PublicationScenario();
+        var vote = scenario.AddVote('d', chamber: Chamber.Senate, trackedSourceId: "S1", totalLines: LinesOf(SenateVoteRenderer.Render(detail), "Count: "),
+            otherMemberLines: LinesOf(SenateVoteRenderer.Render(detail), "Member: "));
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
+
+        Assert.Equal(new PublishedVoteTotals { Yea = 2, Nay = 1, Present = 1, NotVoting = 1 }, ReadVote(scenario, summary, vote).Totals);
+    }
+
     private static string[] LinesOf(string text, string prefix) =>
         [.. text.Split('\n').Where(line => line.StartsWith(prefix, StringComparison.Ordinal))];
 

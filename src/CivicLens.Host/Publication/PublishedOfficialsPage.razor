@@ -58,7 +58,7 @@
 @code {
     private sealed record Card(OfficialListing Official, PublishedOfficeTerm? Term, string Kind);
 
-    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), new("Officials")];
+    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), PublicCrumbs.Current(PublicSection.Officials)];
 
     [Parameter, EditorRequired] public IReadOnlyList<OfficialListing> Officials { get; set; } = [];
     [Parameter, EditorRequired] public DateTimeOffset PublishedAtUtc { get; set; }

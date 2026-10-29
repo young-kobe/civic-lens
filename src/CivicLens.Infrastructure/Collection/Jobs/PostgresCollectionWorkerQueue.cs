@@ -50,7 +50,7 @@ public sealed class PostgresCollectionWorkerQueue(IDbContextFactory<CollectionAt
     private static void ValidateCursor(CollectionWorkerCursor? cursor)
     {
         if (cursor is null) return;
-        if (cursor.Priority is < CollectionJobPriority.Check or > CollectionJobPriority.Backfill ||
+        if (!CollectionJobPriority.IsValid(cursor.Priority) ||
             cursor.CreatedAtUtcTicks is < 0 or > 3155378975999999999 ||
             string.IsNullOrWhiteSpace(cursor.JobId) || cursor.JobId.Length > 128)
             throw new ArgumentException("Worker queue cursor is invalid.", nameof(cursor));

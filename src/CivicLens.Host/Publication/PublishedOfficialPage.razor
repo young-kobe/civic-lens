@@ -35,23 +35,10 @@
                         var issue = PublishedRecordView.IssueLink(issueId, Catalog, Page.RootPath);
                         var bills = profile.SponsoredOn(issueId);
                     }
-                    <TableCell Main>
-                        @if (issue.Href is not null)
-                        {
-                            <a class="cell-title" href="@issue.Href">@issue.Text</a>
-                        }
-                        else
-                        {
-                            <span class="cell-title">@issue.Text</span>
-                        }
-                    </TableCell>
-                    <TableCell Class="num" Label="@PublicColumn.TheirStatements"><CountFilter Count="profile.Statements.CountOf(issueId)" Key="@TalkAndActionProfile.CountKey(TalkAndActionProfile.StatementCount, issueId)"
-                        Label="@PublishedOfficialView.CountFilterLabel(profile.Statements.CountOf(issueId), PublishedOfficialView.StatementsSubject, issue.Text)"
-                        Notice="@PublishedOfficialView.CountFilterNotice(PublishedOfficialView.StatementsSubject, issue.Text, Page.Congress!.Value, profile.Statements.CountOf(issueId))" /></TableCell>
+                    <TableCell Main><CellTitle Href="@issue.Href">@issue.Text</CellTitle></TableCell>
+                    <TableCell Class="num" Label="@PublicColumn.TheirStatements">@IssueCount(profile.Statements.CountOf(issueId), TalkAndActionProfile.StatementCount, issueId, PublishedOfficialView.StatementsSubject, issue.Text)</TableCell>
                     <TableCell Label="@PublicColumn.BillsTheySponsored">
-                        <CountFilter Count="bills.Length" Key="@TalkAndActionProfile.CountKey(TalkAndActionProfile.BillCount, issueId)"
-                            Label="@PublishedOfficialView.CountFilterLabel(bills.Length, PublishedOfficialView.BillsSubject, issue.Text)"
-                            Notice="@PublishedOfficialView.CountFilterNotice(PublishedOfficialView.BillsSubject, issue.Text, Page.Congress!.Value, bills.Length)" />
+                        @IssueCount(bills.Length, TalkAndActionProfile.BillCount, issueId, PublishedOfficialView.BillsSubject, issue.Text)
                         @if (!bills.IsEmpty)
                         {
                             <ul class="choices">
@@ -62,9 +49,7 @@
                             </ul>
                         }
                     </TableCell>
-                    <TableCell Class="num" Label="@PublicColumn.VotesTheyCast"><CountFilter Count="profile.Votes.CountOf(issueId)" Key="@TalkAndActionProfile.CountKey(TalkAndActionProfile.VoteCount, issueId)"
-                        Label="@PublishedOfficialView.CountFilterLabel(profile.Votes.CountOf(issueId), PublishedOfficialView.VotesSubject, issue.Text)"
-                        Notice="@PublishedOfficialView.CountFilterNotice(PublishedOfficialView.VotesSubject, issue.Text, Page.Congress!.Value, profile.Votes.CountOf(issueId))" /></TableCell>
+                    <TableCell Class="num" Label="@PublicColumn.VotesTheyCast">@IssueCount(profile.Votes.CountOf(issueId), TalkAndActionProfile.VoteCount, issueId, PublishedOfficialView.VotesSubject, issue.Text)</TableCell>
                 </Row>
                 <Empty><EmptyState Title="No tracked issue" Text="None of their statements, sponsored bills, or votes in this Congress is on a tracked issue." /></Empty>
             </DataTable>
@@ -73,7 +58,7 @@
         <Panel Title="@($"Missed votes in Congress {Page.Congress}")" Padded="true">
             @foreach (var missed in profile.MissedByChamber)
             {
-                <p>@PublishedOfficialView.MissedVotes(missed, Page.Congress!.Value)</p>
+                <p>@PublishedOfficialView.MissedVotes(missed, TalkAndActionCongress)</p>
             }
             <p class="muted small">@PublishedOfficialView.MissedVoteMeaning</p>
         </Panel>
@@ -89,7 +74,7 @@
                     <Head><TableCell Header Class="fit num">@PublicColumn.StatementDate</TableCell><TableCell Header>@PublicColumn.WhatTheySaid</TableCell><TableCell Header>@PublicColumn.Link</TableCell><TableCell Header>@PublicColumn.WhatTheyDid</TableCell><TableCell Header>@PublicColumn.TheirVote</TableCell></Head>
                     <Row Context="pair">
                         <TableCell Class="fit num" Label="@PublicColumn.StatementDate">@PublishedOfficialView.StatementDay(pair)</TableCell>
-                        <TableCell Main><a class="cell-title" href="@(Page.RootPath + PublicationProtocol.RecordPagePath(pair.StatementRecordId))">@pair.StatementHeadline</a></TableCell>
+                        <TableCell Main><PublishedRecordTitle RecordId="@pair.StatementRecordId" RootPath="@Page.RootPath">@pair.StatementHeadline</PublishedRecordTitle></TableCell>
                         <TableCell Label="@PublicColumn.Link">@PublishedRecordLabels.RelationshipType(pair.Type)</TableCell>
                         <TableCell Label="@PublicColumn.WhatTheyDid"><a href="@(Page.RootPath + PublicationProtocol.RecordPagePath(pair.TargetRecordId))">@pair.TargetTitle</a></TableCell>
                         <TableCell Label="@PublicColumn.TheirVote">@PublishedOfficialView.TheirVote(pair)</TableCell>
@@ -102,7 +87,7 @@
             <Panel Title="Votes with their party" Padded="true">
                 @foreach (var withParty in profile.WithPartyByChamber)
                 {
-                    <p>@PublishedOfficialView.WithParty(withParty, Page.Congress!.Value)</p>
+                    <p>@PublishedOfficialView.WithParty(withParty, TalkAndActionCongress)</p>
                 }
                 <p class="muted small">@PublishedOfficialView.SplitVoteMeaning</p>
                 @if (profile.WithPartyByChamber.Any(withParty => withParty.Cast > 0) && profile.WithPartyByChamber.All(withParty => withParty.Breaks.IsEmpty))
@@ -115,7 +100,7 @@
                         <Head><TableCell Header Class="fit num">@PublicColumn.Date</TableCell><TableCell Header>@PublicColumn.Vote</TableCell><TableCell Header>@PublicColumn.TheirVote</TableCell><TableCell Header>Most @PublishedOfficialView.PartyOf(withParty)</TableCell><TableCell Header>@PublicColumn.Result</TableCell></Head>
                         <Row Context="vote">
                             <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Iso(vote.VotedOn)</TableCell>
-                            <TableCell Main><a class="cell-title" href="@(Page.RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))">@vote.Headline</a></TableCell>
+                            <TableCell Main><PublishedRecordTitle RecordId="@vote.RecordId" RootPath="@Page.RootPath">@vote.Headline</PublishedRecordTitle></TableCell>
                             <TableCell Label="@PublicColumn.TheirVote">@vote.Cast</TableCell>
                             <TableCell Label="@($"Most {PublishedOfficialView.PartyOf(withParty)}")">@vote.PartyMajority</TableCell>
                             <TableCell Label="@PublicColumn.Result">@vote.Result</TableCell>
@@ -139,7 +124,7 @@
             <Row Context="row">
                 <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Iso(row.Date)</TableCell>
                 <TableCell Main>
-                    <a class="cell-title" href="@(Page.RootPath + PublicationProtocol.RecordPagePath(row.RecordId))">@row.Headline</a>
+                    <PublishedRecordTitle RecordId="@row.RecordId" RootPath="@Page.RootPath">@row.Headline</PublishedRecordTitle>
                     <StatusBadge Text="@PublishedRecordLabels.Kind(row.Kind)" />
                     @if (row.Detail is not null)
                     {
@@ -169,9 +154,16 @@
     [Parameter, EditorRequired] public PublicationCatalog Catalog { get; set; } = default!;
 
     private IReadOnlyList<Crumb> Crumbs => Page.IsCurrent
-        ? [PublicCrumbs.Home(Page.RootPath), PublicCrumbs.Officials(Page.RootPath), new(Page.Profile.Name)]
-        : [PublicCrumbs.Home(Page.RootPath), PublicCrumbs.Officials(Page.RootPath),
+        ? [PublicCrumbs.Home(Page.RootPath), PublicCrumbs.Section(PublicSection.Officials, Page.RootPath), new(Page.Profile.Name)]
+        : [PublicCrumbs.Home(Page.RootPath), PublicCrumbs.Section(PublicSection.Officials, Page.RootPath),
             new(Page.Profile.Name, Page.RootPath + PublicationProtocol.OfficialPagePath(Page.Profile.Id)), new(Title)];
+
+    private int TalkAndActionCongress => Page.Congress!.Value;
+
+    private RenderFragment IssueCount(int count, string countKind, string issueId, string subject, string issueName) =>
+        @<CountFilter Count="count" Key="@TalkAndActionProfile.CountKey(countKind, issueId)"
+            Label="@PublishedOfficialView.CountFilterLabel(count, subject, issueName)"
+            Notice="@PublishedOfficialView.CountFilterNotice(subject, issueName, TalkAndActionCongress, count)" />;
 
     private string NoOfficeText => Page.IsTracked
         ? "The rosters and the configuration list no dated office for this official."

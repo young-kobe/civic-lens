@@ -20,7 +20,7 @@
         }
     </Head>
     <Row Context="entry">
-        <TableCell Main><a class="cell-title" href="@(RootPath + PublicationProtocol.RecordPagePath(entry.RecordId))">@entry.Headline</a>@if (Columns != RecordTableColumns.Week) {@(" ")<StatusBadge Text="@PublishedRecordLabels.Kind(entry.Kind)" />}</TableCell>
+        <TableCell Main><PublishedRecordTitle RecordId="@entry.RecordId" RootPath="@RootPath">@entry.Headline</PublishedRecordTitle>@if (Columns != RecordTableColumns.Week) {@(" ")<StatusBadge Text="@PublishedRecordLabels.Kind(entry.Kind)" />}</TableCell>
         @switch (Columns)
         {
             case RecordTableColumns.Facet:

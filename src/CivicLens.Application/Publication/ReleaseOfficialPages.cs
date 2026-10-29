@@ -76,9 +76,10 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
         var files = await votes.ListAsync(previous, profile.Id, cancellationToken);
         var rowsInMemory = new Dictionary<int, PublishedOfficialVote[]>();
         var congresses = new List<int>();
-        foreach (var congress in files.VoteCongresses.Union(changes.Of(profile.Id).Keys).Order())
+        var changed = changes.Of(profile.Id);
+        foreach (var congress in files.VoteCongresses.Union(changed.Keys).Order())
         {
-            if (changes.Of(profile.Id).TryGetValue(congress, out var added))
+            if (changed.TryGetValue(congress, out var added))
             {
                 var kept = files.VoteCongresses.Contains(congress) ? await votes.ReadAsync(previous, profile.Id, congress, cancellationToken) : [];
                 var rows = await votes.RewriteAsync(staging, profile.Id, congress, kept, added, changes, cancellationToken);

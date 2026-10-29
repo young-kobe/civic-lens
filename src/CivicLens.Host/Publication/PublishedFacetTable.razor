@@ -4,16 +4,7 @@
 <DataTable Roles="true" Items="Facets" Caption="@Caption">
     <Head><TableCell Header>Name</TableCell><TableCell Header Class="fit num">@PublicColumn.Records</TableCell></Head>
     <Row Context="facet">
-        <TableCell Main>
-            @if (facet.HasPages)
-            {
-                <a class="cell-title" href="@(RootPath + facet.PagePath(1))">@facet.Name</a>
-            }
-            else
-            {
-                <span class="cell-title">@facet.Name</span>
-            }
-        </TableCell>
+        <TableCell Main><CellTitle Href="@(facet.HasPages ? RootPath + facet.PagePath(1) : null)">@facet.Name</CellTitle></TableCell>
         <TableCell Class="fit num" Label="@PublicColumn.Records">@facet.Records.Length</TableCell>
     </Row>
     <Empty><EmptyState Title="None yet" Text="No published record has one." /></Empty>

@@ -97,7 +97,7 @@
         const panel = document.querySelector("[data-records]");
         if (count && panel) {
             const clear = count.querySelector("button").getAttribute("aria-pressed") === "true";
-            if ("layout" in panel.dataset) setLayout(panel, "all");
+            if ("layout" in panel.dataset) setLayout(panel, panel.querySelector("[data-layout-choice]").dataset.layoutChoice);
             showRecords(panel, clear ? null : count);
         } else if (target?.closest("[data-filter-clear]") && panel) {
             const pressed = document.querySelector("[data-count-filter] button[aria-pressed='true']");

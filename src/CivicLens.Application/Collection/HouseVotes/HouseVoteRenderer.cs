@@ -1,4 +1,5 @@
 using System.Globalization;
+using CivicLens.Application.Votes;
 using static CivicLens.Application.Collection.RenderedText;
 
 namespace CivicLens.Application.Collection.HouseVotes;
@@ -41,7 +42,8 @@ public static class HouseVoteRenderer
     {
         var counts = new (string Label, int? Value)[]
         {
-            ("Yea", total.Yea), ("Nay", total.Nay), ("Present", total.Present), ("Not voting", total.NotVoting)
+            (VoteCountLabels.Yea, total.Yea), (VoteCountLabels.Nay, total.Nay), (VoteCountLabels.Present, total.Present),
+            (VoteCountLabels.NotVoting, total.NotVoting)
         };
         var present = counts.Where(count => count.Value is not null).Select(count => $"{count.Label} {Count(count.Value!.Value)}");
         return Line($"Party total {total.Party}", string.Join(", ", present));

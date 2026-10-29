@@ -13,7 +13,7 @@
 @code {
     private IReadOnlyList<Crumb> Crumbs => [PublicCrumbs.Home("../"), SectionCrumb, new(Headline)];
 
-    private Crumb SectionCrumb => Section == PublicSection.Briefs ? PublicCrumbs.Briefs("../") : PublicCrumbs.AllRecords("../");
+    private Crumb SectionCrumb => PublicCrumbs.Section(Section == PublicSection.Briefs ? PublicSection.Briefs : PublicSection.AllRecords, "../");
 
     [Parameter] public PublicSection Section { get; set; } = PublicSection.AllRecords;
     [Parameter, EditorRequired] public string RecordId { get; set; } = string.Empty;

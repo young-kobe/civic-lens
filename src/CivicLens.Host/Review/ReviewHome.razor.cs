@@ -40,7 +40,7 @@ public sealed partial class ReviewHome
     private StatementReviewCounts? statementCounts;
     private BriefReviewCounts? briefCounts;
     private RelationshipReviewCounts? relationshipCounts;
-    private IReadOnlyList<FactException> factExceptions = [];
+    private IReadOnlyList<UnapprovedFact> factExceptions = [];
     private int factExceptionTotal;
     private int openReports;
     private IReadOnlyList<FeedItem> activity = [];
@@ -147,9 +147,9 @@ public sealed partial class ReviewHome
         factExceptionTotal = actions.Total + votes.Total;
         factExceptions =
         [
-            .. actions.Items.Select(item => new FactException(PublishedRecordKind.Action, item.RecordId, item.CurrentRevision.Headline,
+            .. actions.Items.Select(item => new UnapprovedFact(PublishedRecordKind.Action, item.RecordId, item.CurrentRevision.Headline,
                 item.CurrentStatus, item.UnresolvedConcerns.Length, item.CurrentRevision.CreatedAtUtc)),
-            .. votes.Items.Select(item => new FactException(PublishedRecordKind.Vote, item.RecordId, item.CurrentRevision.Headline,
+            .. votes.Items.Select(item => new UnapprovedFact(PublishedRecordKind.Vote, item.RecordId, item.CurrentRevision.Headline,
                 item.CurrentStatus, item.UnresolvedConcerns.Length, item.CurrentRevision.CreatedAtUtc))
         ];
         factExceptions =
