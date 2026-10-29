@@ -1120,7 +1120,7 @@ public sealed class CollectorTests
     }
 
     [Fact]
-    public async Task ThousandsOfWildcardRulesAreMatchedWithinOnePathEvaluation()
+    public async Task ThousandsOfWildcardRulesNeverMakeRobotsUnavailable()
     {
         using var directoryOwner = new TemporaryDirectory();
         var rules = string.Concat(Enumerable.Range(0, 9_000).Select(i => $"Disallow: /watch/*/section{i}/*.json$\n"));
@@ -1143,6 +1143,8 @@ public sealed class CollectorTests
     [InlineData("/watch/*", "/watch/anything", true)]
     [InlineData("/watch/a*a*b", "/watch/aab", true)]
     [InlineData("/watch/a*a*b", "/watch/ab", false)]
+    [InlineData("/watch/a*ab$", "/watch/ab", false)]
+    [InlineData("/watch/a*ab$", "/watch/aab", true)]
     public async Task RobotsWildcardAndTerminalAnchorMatchOnlyWhatTheStandardDefines(string rule, string path, bool denied)
     {
         using var directoryOwner = new TemporaryDirectory();
@@ -1150,7 +1152,8 @@ public sealed class CollectorTests
             _ => Response(HttpStatusCode.OK, "content"));
         using var collector = new HttpCollector(handler);
         var result = await collector.FetchAsync(Request(directoryOwner.Path) with { Url = "https://example.test" + path });
-        Assert.Equal(denied, result.FailureCode == CollectionFailureCode.RobotsDenied);
+        Assert.Equal(denied ? CollectionFailureCode.RobotsDenied : null, result.FailureCode);
+        Assert.Equal(denied ? CollectionOutcome.Failed : CollectionOutcome.Captured, result.Outcome);
     }
 
     [Fact]
