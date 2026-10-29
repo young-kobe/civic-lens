@@ -85,12 +85,12 @@ public sealed class VoteReader(ICollectionJobStore jobs, IMemberRosterStore rost
             return (null, VoteDraftErrorCodes.ExtractionVersionChanged);
         if (candidate.RosterJobId is not { } rosterJobId) return (null, VoteDraftErrorCodes.EvidenceUnavailable);
         var congress = candidate.Congress;
-        var rollCall = VoteviewParser.ParseRollCalls((await LoadAsync(evidence.Detail.JobId, cancellationToken)).Body, congress)
+        var rollCall = VoteviewParser.ParseRollCalls((await LoadAsync(page.JobId, cancellationToken)).Body, congress)
             .SingleOrDefault(item => item.Roll == new SenateVoteRoll(new VoteSession(congress, candidate.SessionNumber), candidate.RollCallNumber));
         if (rollCall is null) return (null, VoteDraftErrorCodes.EvidenceUnavailable);
         var members = VoteviewParser.ParseMembers((await LoadAsync(rosterJobId, cancellationToken)).Body, congress);
         var casts = VoteviewParser.ParseCasts((await LoadAsync(evidence.Members.JobId, cancellationToken)).Body, congress);
-        if (VoteviewRoll.Join([rollCall], casts, members).SingleOrDefault() is not { } roll || TextError(page, VoteviewRenderer.Render(roll)) is { } textError)
+        if (VoteviewRoll.Join([rollCall], casts, members).SingleOrDefault() is not { } roll || TextError(page, VoteviewRenderer.Render(roll)) is not null)
             return (null, VoteDraftErrorCodes.RenderedTextMismatch);
         var tracked = TrackedOn(evidence, rollCall.Date);
         return (new(rollCall.Date, VoteFactPrefixes.SenateDetail, VoteviewMemberVotesOf(page, roll, tracked)), null);

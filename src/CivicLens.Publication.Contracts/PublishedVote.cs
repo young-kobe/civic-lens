@@ -26,7 +26,7 @@ public sealed record PublishedVote
     public required int Congress { get; init; }
     public required int Session { get; init; }
     public required int RollCallNumber { get; init; }
-    public required PublishedVoteSource Source { get; init; }
+    public PublishedVoteSource Source { get; init; } = PublishedVoteSource.CongressGov;
     public required PublishedVoteKind Kind { get; init; }
     public PublishedCitation? KindCitation { get; init; }
     public required DateOnly VotedOn { get; init; }

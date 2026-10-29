@@ -17,6 +17,17 @@ public sealed class VoteDraftRevisionTests
         Assert.Throws<ArgumentException>(() => (Revision() with { Chamber = (Chamber)9 }).ValidateShape());
     }
 
+    [Theory]
+    [InlineData(Chamber.House, VoteSource.SenateGov)]
+    [InlineData(Chamber.House, VoteSource.Voteview)]
+    [InlineData(Chamber.Senate, VoteSource.CongressGov)]
+    [InlineData(Chamber.Senate, (VoteSource)9)]
+    public void AVoteSourceThatCannotHaveCarriedTheChamberIsRefusedSoAHouseVoteNeverNamesVoteview(Chamber chamber, VoteSource source)
+    {
+        Assert.Throws<ArgumentException>(() => (Revision() with { Chamber = chamber, Source = source }).ValidateShape());
+        (Revision() with { Chamber = Chamber.Senate, Source = VoteSource.Voteview }).ValidateShape();
+    }
+
     [Fact]
     public void AnAnalysisRevisionFollowsTheCurrentOneAndAFirstRevisionIsNumberOne()
     {

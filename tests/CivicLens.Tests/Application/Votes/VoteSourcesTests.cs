@@ -12,8 +12,8 @@ public sealed class VoteSourcesTests
         var senateGov = SenateVoteFixtures.Configuration().Sources[0];
         var voteview = VoteviewVoteFixtures.Source(VoteviewVoteFixtures.SourceId, enabled: true);
 
-        Assert.Equal(VoteSources.SenateRecordKey, VoteSources.RecordKeyOf(senateGov));
-        Assert.Equal(VoteSources.SenateRecordKey, VoteSources.RecordKeyOf(voteview));
+        Assert.Equal("senate-votes", VoteSources.RecordKeyOf(senateGov));
+        Assert.Equal("senate-votes", VoteSources.RecordKeyOf(voteview));
     }
 
     [Fact]

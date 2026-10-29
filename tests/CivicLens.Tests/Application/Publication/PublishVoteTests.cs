@@ -90,7 +90,8 @@ public sealed class PublishVoteTests
     public async Task TheRecordNamesTheDataSourceOfItsRevisionSoAReaderKnowsWhoseDataTheCastsRestOn(VoteSource source, PublishedVoteSource expected)
     {
         var scenario = new PublicationScenario();
-        var vote = scenario.AddVote('d', source: source);
+        var vote = scenario.AddVote('d', source: source, chamber: source == VoteSource.CongressGov ? Chamber.House : Chamber.Senate,
+            totalLines: source == VoteSource.CongressGov ? null : ["Count: Yea 1, Nay 0, Present 0, Not voting 0"]);
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
 

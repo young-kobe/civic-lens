@@ -222,8 +222,18 @@ Do the steps on the machine that runs the worker. On production, this is `/srv/c
 
 1. Check that `congress-bills` is enabled. A Senate vote on a bill waits for the detail of that bill. Check that `congress-members` is enabled. The roster gives the party of a senator who still serves.
 2. In the configuration file, set `enabled` to `false` for `senate-votes`. Set `enabled` to `true` for `voteview-senate-votes`. Keep the file compact, as the [first install](#first-install) says.
-3. Restart the worker, because it reads the configuration only at start. On production, run `sudo deploy/scripts/compose.sh restart worker`.
-4. Wait one day for the first full sweep. The sweep fetches the three files of the 119th Congress, about 3 MB, and then it makes a vote candidate for each roll call. Then run `jobs list` as in [managed collection jobs](#managed-collection-jobs) and `votes draft status` as in [vote drafting](#vote-drafting).
+3. Stop the worker. On production, run `sudo deploy/scripts/compose.sh stop worker`.
+4. Cancel the queued vote drafts of the source that you turned off. Both sources write to the same `senate-votes` record, so a draft that stays queued could append a revision to it. No command does this, so run the SQL below with `psql` while the worker is stopped. Replace `senate-votes` with `voteview-senate-votes` when you switch back to senate.gov. The statement blocks the drafts with the code `sourceSwitched`. It leaves Running and finished drafts alone.
+
+```sql
+UPDATE vote_analysis e SET status = 'Blocked', error_code = 'sourceSwitched', retry_at = NULL
+FROM vote_candidates c
+WHERE c.candidate_id = e.candidate_id AND e.task = 'vote-draft' AND c.source_id = 'senate-votes'
+  AND e.status IN ('Pending', 'RetryWaiting', 'WaitingForBudget');
+```
+
+5. Start the worker, because it reads the configuration only at start. On production, run `sudo deploy/scripts/compose.sh up --detach worker`.
+6. Wait one day for the first full sweep. The sweep fetches the three files of the 119th Congress, about 3 MB, and then it makes a vote candidate for each roll call. Then run `jobs list` as in [managed collection jobs](#managed-collection-jobs) and `votes draft status` as in [vote drafting](#vote-drafting).
 
 What to watch:
 
@@ -933,7 +943,7 @@ docker rm -f civic-lens-search-db
 
 Release numbers restart at 1 after this reset.
 
-The reset also covers the vote source change. A vote record now requires `source`. A vote record file from before this change does not read, so the search service and a later correction of that record fail. A vote revision from before this change reads as a Congress.gov revision, which is right for every House vote. Production has no published Senate votes. If a production release holds a House vote record, drop that release with the owner before you deploy this change, or reset the production database. If no production release holds a vote record, production needs no reset.
+The reset also covers the vote source change. A vote file and a vote revision from before this change have no `source`. Both read as Congress.gov, which is right for every House vote. Production has no published Senate votes. Production needs no reset for this change.
 
 A release contract change can add a required field to a published file. Old files then do not read, and the next publish fails. On the dev machine, repeat steps 1 to 5. These steps delete all captures and records, not only the releases. Collect again and let code approve the facts, then publish a fresh release with `releases publish` as in [Publish a static release](#publish-a-static-release). Production has no release yet, so it has no older files.
 

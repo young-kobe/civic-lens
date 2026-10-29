@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using CivicLens.Core.Votes;
 using CivicLens.Publication.Contracts;
 
@@ -42,6 +43,18 @@ public sealed class PublishedVoteTests
         Assert.Contains("\"kind\":\"passage\"", json, StringComparison.Ordinal);
         Assert.Contains("\"votedOn\":\"2025-04-10\"", json, StringComparison.Ordinal);
         JsonSerializer.Deserialize<PublishedVote>(json, PublicationProtocol.JsonOptions)!.Validate();
+    }
+
+    [Fact]
+    public void AVoteFileFromBeforeTheSourceFieldReadsAsCongressGovBecauseEveryOlderVoteWasAHouseVote()
+    {
+        var json = JsonNode.Parse(JsonSerializer.Serialize(Vote(), PublicationProtocol.JsonOptions))!.AsObject();
+        Assert.True(json.Remove("source"));
+
+        var record = JsonSerializer.Deserialize<PublishedVote>(json.ToJsonString(), PublicationProtocol.JsonOptions)!;
+
+        record.Validate();
+        Assert.Equal(PublishedVoteSource.CongressGov, record.Source);
     }
 
     [Fact]

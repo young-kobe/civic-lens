@@ -59,10 +59,11 @@ internal sealed class VoteviewVoteWorld
 
     public VoteReader Reader() => new(Stores, new FixedMemberRoster([], []), new ApiResponseReader(Stores, Stores), "artifacts");
 
-    public VoteDraftEvidence Evidence(string? savedText = null, string extractionVersion = VoteviewParser.ExtractionVersion)
+    public VoteDraftEvidence Evidence(string? savedText = null, string extractionVersion = VoteviewParser.ExtractionVersion, string? rosterJobId = MembersJob,
+        int rollCall = 60)
     {
         var page = Page(VotesJob, savedText ?? Text, extractionVersion);
-        return new(new VoteDraftCandidate(CandidateId, RecordId, VoteviewVoteFixtures.SourceId, Chamber.Senate, 119, 1, 60, null, null, UpdatedAt, MembersJob),
+        return new(new VoteDraftCandidate(CandidateId, RecordId, VoteviewVoteFixtures.SourceId, Chamber.Senate, 119, 1, rollCall, null, null, UpdatedAt, rosterJobId),
             Revision, page with { JobId = RollCallsJob }, page, null, null, false);
     }
 

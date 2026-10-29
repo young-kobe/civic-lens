@@ -604,7 +604,7 @@ public sealed class ReleaseRendererTests
     [Theory]
     [InlineData(PublishedChamber.House, PublishedVoteSource.CongressGov, "Congress.gov House vote data", "https://clerk.house.gov/Votes/2025100")]
     [InlineData(PublishedChamber.Senate, PublishedVoteSource.SenateGov, "senate.gov vote file", "https://www.senate.gov/legislative/LIS/roll_call_votes/vote1191/vote_119_1_00100.htm")]
-    [InlineData(PublishedChamber.Senate, PublishedVoteSource.Voteview, "Voteview (voteview.com)", "https://www.senate.gov/legislative/LIS/roll_call_votes/vote1191/vote_119_1_00100.htm")]
+    [InlineData(PublishedChamber.Senate, PublishedVoteSource.Voteview, "Voteview, an academic database at UCLA (voteview.com)", "https://www.senate.gov/legislative/LIS/roll_call_votes/vote1191/vote_119_1_00100.htm")]
     public async Task TheVotePageNamesItsDataSourceAndLinksTheOfficialRollCallPageSoAReaderCanCheckItAtTheChamber(
         PublishedChamber chamber, PublishedVoteSource source, string expectedSource, string expectedLink)
     {
@@ -615,7 +615,7 @@ public sealed class ReleaseRendererTests
             .ToDictionary(pair => pair.First.TextContent, pair => pair.Second);
         Assert.Contains(expectedSource, facts["Data source"].TextContent, StringComparison.Ordinal);
         Assert.Equal(expectedLink, facts["Official roll call page"].QuerySelector("a")!.GetAttribute("href"));
-        Assert.Contains(expectedSource.Split(' ')[0], document.QuerySelector("[aria-labelledby='result-title'] p")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains(expectedSource.Split(' ')[0].TrimEnd(','), document.QuerySelector("[aria-labelledby='result-title'] p")!.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -624,7 +624,9 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote() with { Chamber = PublishedChamber.Senate, Source = PublishedVoteSource.Voteview }, null, [],
             PublicationCatalogs.None, CancellationToken.None);
 
-        Assert.Contains("does not list a Vice President tie-break vote", new HtmlParser().ParseDocument(html).QuerySelector(".caveat")!.TextContent, StringComparison.Ordinal);
+        var caveat = new HtmlParser().ParseDocument(html).QuerySelector(".caveat")!.TextContent;
+        Assert.Contains("does not list a Vice President tie-break vote", caveat, StringComparison.Ordinal);
+        Assert.Contains("the Civic Lens word for the cast code in the Voteview data, not the wording of the Senate roll call", caveat, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -952,7 +954,7 @@ public sealed class ReleaseRendererTests
     {
         var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderAboutAsync(CancellationToken.None)).QuerySelector("main")!.TextContent;
 
-        Assert.Contains("Voteview, a roll call database of the University of California, Los Angeles (UCLA)", text, StringComparison.Ordinal);
+        Assert.Contains("Senate votes come from Voteview, an academic database at UCLA. Voteview is not an official source, so each Senate vote page links the official Senate roll call.", text, StringComparison.Ordinal);
         Assert.Contains("Lewis, Jeffrey B., Keith Poole, Howard Rosenthal, Adam Boche, Aaron Rudkin, and Luke Sonnet (2026). Voteview: Congressional Roll-Call Votes Database. https://voteview.com/",
             text, StringComparison.Ordinal);
     }
@@ -962,7 +964,7 @@ public sealed class ReleaseRendererTests
     {
         var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None)).QuerySelector("main")!.TextContent;
 
-        Assert.Contains("Some Senate roll call votes come from Voteview", text, StringComparison.Ordinal);
+        Assert.Contains("Senate votes come from Voteview, an academic database at UCLA", text, StringComparison.Ordinal);
         Assert.Contains("Voteview does not list a Vice President tie-break vote", text, StringComparison.Ordinal);
     }
 

@@ -63,4 +63,24 @@ public sealed class VoteviewVoteReaderTests
         Assert.Equal((null, VoteDraftErrorCodes.ExtractionVersionChanged), (read.Snapshot, read.ErrorCode));
         Assert.Equal(0, world.Stores.BodyReads);
     }
+
+    [Fact]
+    public async Task ACandidateWithoutARosterJobBlocksBecauseTheMemberFileCannotBeFound()
+    {
+        var world = Create();
+
+        var read = await world.Reader().ReadAsync(world.Evidence(rosterJobId: null), default);
+
+        Assert.Equal((null, VoteDraftErrorCodes.EvidenceUnavailable), (read.Snapshot, read.ErrorCode));
+    }
+
+    [Fact]
+    public async Task ARollCallThatIsNotInTheRollCallFileBlocksBecauseItsSavedTextHasNoCaptureToCheckAgainst()
+    {
+        var world = Create();
+
+        var read = await world.Reader().ReadAsync(world.Evidence(rollCall: 99), default);
+
+        Assert.Equal((null, VoteDraftErrorCodes.EvidenceUnavailable), (read.Snapshot, read.ErrorCode));
+    }
 }
