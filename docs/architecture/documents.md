@@ -19,7 +19,7 @@ The documents feature turns verified captures into immutable text extractions, e
 
 Each line gives the rule, what enforces it, and the test that protects it. Cross-feature invariants are in [architecture](../architecture.md#invariants).
 
-- An extraction ID depends on the attempt, the extraction version, the profile revision, and the optional part, never on the text. Enforced by `DocumentExtraction`. Test: `DocumentExtractionTests.IdentityIsFramedAndIndependentOfTextWhileTextHashTracksContent`.
+- An extraction ID depends on the attempt, the extraction version, the profile revision, and the optional part, never on the text. Enforced by `DocumentExtraction`. Tests: `DocumentExtractionTests.IdentityIsFramedAndIndependentOfTextWhileTextHashTracksContent`, `DocumentExtractionTests.APartSplitsOneCaptureIntoOneIdentityEachWhileAnExtractionWithoutAPartKeepsItsOldId`.
 - One extraction identity keeps one text and one provenance. Enforced by `PostgresDocumentExtractionStore`: an insert that finds the row compares the committed winner and throws on a mismatch. Test: `PostgresDocumentExtractionStoreTests.RejectsChangedProvenanceAndDetectsStoredTextTampering`.
 - A read verifies the text hash and the identity. Enforced by `PostgresDocumentExtractionStore`. Test: `PostgresDocumentExtractionStoreTests.RejectsChangedProvenanceAndDetectsStoredTextTampering`.
 - Versions that differ give an Incompatible comparison, not a diff. Enforced by `DocumentComparison`. Test: `DocumentComparisonTests.RequiresEqualProfileRevisionAndProcessingVersions`.
@@ -113,7 +113,7 @@ A malformed link returns 400, and missing evidence returns 404. A storage or rec
 
 - The generated [documents schema](schema/documents.md) lists every table, column, key, check, index, and trigger.
 - Text identity is the SHA-256 of strict UTF-8 text.
-- Whole-body extraction identity is the SHA-256 of two framed UTF-8 strings: attempt ID and extraction version. A profile revision and a part number add one frame each, only when they are set. The nullable `part` column keeps the part. One capture gives one extraction for each part. Each frame has a four-byte big-endian byte length.
+- Whole-body extraction identity is the SHA-256 of two framed UTF-8 strings: attempt ID and extraction version. A profile revision and a part number add one frame each, only when they are set. The nullable `part` column keeps the part. Dropping the column, as the `Down` of the migration `VoteviewSenateVotes` does, makes the stored part IDs stale, and reads of those rows then fail. One capture gives one extraction for each part. Each frame has a four-byte big-endian byte length.
 - A profile extraction adds the profile revision ID as a third framed string. Identities without a profile do not change.
 - Profile revision identity hashes the framed ID and selector, a four-byte big-endian exclusion count, and each framed exclusion in order. IDs and exclusion order are significant.
 - `PostgresDocumentExtractionStore` uses the operational DbContext and additive migrations. The save verifies provenance first. It then inserts with `ON CONFLICT DO NOTHING` in one ReadCommitted transaction and takes no advisory lock. If the row exists, the save compares the committed winner and throws on a mismatch. Only the inserting transaction registers statement candidates.

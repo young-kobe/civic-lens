@@ -433,7 +433,9 @@ The reader takes the `lis` IDs of the senators from `IMemberRosterStore.ReadSena
 
 ## Limits and planned work
 
-- The `voteview-senate-votes` source is off. The code can collect, but the reader, the published source label, and the About page text come in a later change. Until then, enable only one Senate vote source after that change.
+- Do not enable `voteview-senate-votes` until the reader change lands. The code collects and queues roll calls, but the reader, the published source label, and the About page text come later.
+- The `Down` of the migration `VoteviewSenateVotes` fails once Voteview rows exist, because one roll call job then holds many version rows. It also makes the stored part IDs stale. Reset the development database instead of reverting.
+- Reader work for the next change: load the votes job (`members_job_id`) for the detail extraction, because the detail job holds no extraction text. Never split a `Member` line on commas, because the Voteview `bioname` holds commas. Read the party and cast from the end of the line, as `VoteMemberLine` does.
 - When code approves a Senate vote from the Voteview source, the approval rests on Voteview data and not on senate.gov. A later change adds the source label to the published vote.
 - A Voteview check of the first Congress of the sweep fetches all three files each day, because the scheduled root has no sweep key. Only the children of a later Congress get the key `final`.
 - A Voteview roll call whose counts differ from its roll call file is skipped without an error. Nothing counts these skips yet.
