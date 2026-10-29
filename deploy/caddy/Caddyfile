@@ -1,0 +1,67 @@
+# No log directive exists on purpose. Caddy writes no access log without one, and the privacy page says that page reads and searches leave no record.
+{
+	admin off
+	auto_https off
+	http_port {$CIVIC_LENS_CADDY_PORT:8080}
+}
+
+(noindex) {
+	header X-Robots-Tag noindex
+}
+
+(security_headers) {
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}
+
+http://civic-lens.info {
+	bind 127.0.0.1 ::1
+	import noindex
+	import security_headers
+
+	root * {$CIVIC_LENS_RELEASE_DIRECTORY}/current
+	encode zstd gzip
+
+	header Cache-Control "public, max-age=300"
+
+	@manifest path /release.json
+	header @manifest Cache-Control "public, max-age=60"
+
+	@photos path_regexp photos ^/photos/[0-9a-f]{64}\.jpg$
+	header @photos Cache-Control "public, max-age=31536000, immutable"
+
+	file_server {
+		precompressed br gzip
+	}
+
+	handle_errors {
+		import noindex
+		import security_headers
+		header Cache-Control "no-store"
+		rewrite * /404.html
+		file_server
+	}
+}
+
+http://api.civic-lens.info {
+	bind 127.0.0.1 ::1
+	import noindex
+	import security_headers
+
+	handle /internal/* {
+		respond 404
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:{$CIVIC_LENS_API_PORT:8100}
+	}
+}
+
+http:// {
+	bind 127.0.0.1 ::1
+	import noindex
+	respond 404
+}
