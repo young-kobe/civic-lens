@@ -19,14 +19,24 @@ internal static class PublishedExecutiveActionView
         new("Published in the Federal Register", Moment.Iso(action.PublishedOn)),
         new("Federal Register citation", action.FederalRegisterCitation),
         new("Federal Register document number", action.DocumentNumber),
-        .. action.CorrectionNotices.Select(notice => Fact.LinkList("Correction notice", [new FactLink(CorrectionText(notice), notice.Url)])),
+        .. action.CorrectionNotices.Select(notice => CorrectionFact(notice)),
         Fact.LinkList("Read the document", [new FactLink("Open the Federal Register page", action.DocumentUrl)]),
         new("Published", $"Checked by code {Moment.Full(action.ApprovedAtUtc)}; first published {Moment.Full(action.FirstPublishedAtUtc)}"),
         new("Revision", action.RevisionNumber.ToString(CultureInfo.InvariantCulture))
     ];
 
-    public static string CorrectionText(PublishedExecutiveActionNotice notice) =>
-        $"The Federal Register published a correction on {Moment.Iso(notice.PublishedOn)}. This page shows the original document. Open the correction to see what changed.";
+    public static string CorrectionText(PublishedExecutiveActionNotice notice) => string.Concat(CorrectionParts(notice).Select(part => part.Text));
+
+    private static Fact CorrectionFact(PublishedExecutiveActionNotice notice) =>
+        new("Correction notice", CorrectionText(notice), [.. CorrectionParts(notice).Select(part => new FactLink(part.Text, part.IsLink ? notice.Url : null))])
+        { Separator = "" };
+
+    private static (string Text, bool IsLink)[] CorrectionParts(PublishedExecutiveActionNotice notice) =>
+    [
+        ($"The Federal Register published a correction on {Moment.Iso(notice.PublishedOn)}. This page shows the original document. ", false),
+        ("Open the correction", true),
+        (" to see what changed.", false)
+    ];
 
     public static IReadOnlyList<CitedRange> RangesIn(PublishedExecutiveAction action, PublishedDocumentVersion source) =>
     [.. action.Citations().Select((citation, index) => (citation, anchor: PublishedRecordView.CitationAnchor(index)))
