@@ -235,5 +235,5 @@ Run commands are in [operations](../operations.md#run-the-search-service).
 - The index keeps every revision of every release. Storage grows with published revisions. Review this with the retention rule of [publication](publication.md#limits-and-planned-work).
 - A search without text returns no snippet.
 - A snippet scans the first 50,000 characters of the record body. A match later in the body gives a snippet from the start of the body.
-- The service has no Dockerfile. [R-24](../roadmap.md#later) adds the container.
+- The `Dockerfile` target `search` builds the service image. [Container images](../operations.md#container-images) describes it. [R-24](../roadmap.md#later) adds the cloud deployment.
 - After the first deploy, public MCP ([R-25](../roadmap.md#later)) will use this API and the same release pinning.

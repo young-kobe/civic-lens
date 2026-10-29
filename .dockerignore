@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+.runtime/
+.git/
+.github/
+.claude/
+artifacts/
+tests/
+docs/
+.env
+.env.*
