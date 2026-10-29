@@ -21,10 +21,6 @@
 	}
 }
 
-(noindex) {
-	header X-Robots-Tag noindex
-}
-
 (security_headers) {
 	header {
 		X-Content-Type-Options nosniff
@@ -34,7 +30,6 @@
 }
 
 http://civic-lens.info, http://127.0.0.1 {
-	import noindex
 	import security_headers
 
 	root * {$CIVIC_LENS_RELEASE_DIRECTORY}/current
@@ -53,7 +48,6 @@ http://civic-lens.info, http://127.0.0.1 {
 	}
 
 	handle_errors 404 {
-		import noindex
 		import security_headers
 		header Cache-Control "no-store"
 		rewrite * /404.html
@@ -61,7 +55,6 @@ http://civic-lens.info, http://127.0.0.1 {
 	}
 
 	handle_errors {
-		import noindex
 		import security_headers
 		header Cache-Control "no-store"
 		respond "{err.status_code} {err.status_text}" {err.status_code}
@@ -69,7 +62,6 @@ http://civic-lens.info, http://127.0.0.1 {
 }
 
 http://api.civic-lens.info {
-	import noindex
 	import security_headers
 
 	handle /internal/* {
@@ -82,7 +74,6 @@ http://api.civic-lens.info {
 }
 
 http:// {
-	import noindex
 	import security_headers
 	respond 404
 }
