@@ -142,7 +142,7 @@ A malformed link returns 400, and missing evidence returns 404. A storage or rec
 ## Limits and planned work
 
 - Automatic navigation filtering is planned.
-- A page without a content profile blocks with `contentProfileUnavailable`. On 2026-10-16, 12 of 30 sampled House feeds blocked this way. In `config/federal-coverage.json`, 282 of 1,392 page, HTML, and feed sources have no profile. See [D-12](../roadmap.md#pending-decisions).
+- A page without a content profile blocks with `contentProfileUnavailable`. On 2026-10-16, 12 of 30 sampled House feeds blocked this way. In `config/federal-coverage.json`, 282 of 1,394 page, HTML, and feed sources have no profile. See [D-12](../roadmap.md#pending-decisions).
 - Future cleanup ([R-31](../roadmap.md#later)): a saved comparison keeps hunk and context text that its exact offsets can rebuild from the two extractions. Remove this redundant copy.
 - Keep document history available for investigation.
 
