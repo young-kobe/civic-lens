@@ -963,20 +963,23 @@ Run `sudo deploy/scripts/check-live.sh` from `/opt/civic-lens` after the first i
 
 - `X-Robots-Tag: noindex` on the home page and on an api response. The script reads `deploy/caddy/Caddyfile`. With an `import noindex` line, each response must carry the header. Without one, no response may carry it.
 - A missing page returns 404 with the release 404 page and `Cache-Control: no-store`.
-- `api.civic-lens.info/internal/*` returns 404.
-- Caddy keeps no access log. The script requests a missing path with a random query value and a random `CF-Connecting-IP` value. Then it reads the Caddy log of the last 5 minutes. The log must hold neither value.
-- `civic-lens-backup.service` ran, its last result was success, and its last run ended less than 26 hours ago.
-- A reader cannot forge `CF-Connecting-IP`. The script reads `CIVIC_LENS_REQUESTS_PER_MINUTE` from `search.env`, with 60 as the default. It sends up to twice that number plus two requests to the search route, each with a different forged `CF-Connecting-IP`. Cloudflare replaces the header, so all requests count for the caller, and one must get 429. The limit counts in fixed one-minute windows, so this number fills one window even when a window ends during the check. This check runs last. It blocks the address of the caller on the search service for up to one minute.
+- `api.civic-lens.info/internal/v1/reports` returns 404. With a pull token set, the search service answers that route with 401, so a 404 proves that Caddy blocks it. Without a token, the route does not exist and the check proves nothing.
+- Caddy keeps no access log. The script reads your address from `/cdn-cgi/trace` of the site, then requests a missing path with a random query value. Then it reads the Caddy log of the last 5 minutes. The log must hold neither the query value nor your address.
+- A backup succeeded less than 26 hours ago. `backup.sh` writes the time to `/srv/civic-lens/backup/last-success` as its last step, so a failed run leaves the old time. A reboot does not clear the file.
+- A reader cannot forge `CF-Connecting-IP`. The script reads `CIVIC_LENS_REQUESTS_PER_MINUTE` from `search.env`, with 60 as the default. It fails if `CIVIC_LENS_TRUSTED_PROXY_RANGES` is empty, because then all readers share one limit. It sends twice the limit plus two requests to the search route, 20 at a time, each with a different forged `CF-Connecting-IP`. Cloudflare replaces the header, so all requests count for the caller, and one must get 429. The limit counts in fixed one-minute windows, so this number fills one window even when a window ends during the check. This check runs last. It blocks the address of the caller on the search service for up to one minute.
 
-**Withdraw test.** The script does not test withdrawal, because the test changes the live site. Do it by hand at the first launch and after a change to publication code:
+**Withdraw test.** The script does not test withdrawal, because the test changes the live site. Do it by hand at the first launch and after a change to publication code. Do it only when a record is ready to publish, for example an approved statement. The rollback in step 5 pauses fact publishing, and the publish in step 7 ends the pause; see [publication](architecture/publication.md).
 
-1. In the review workspace, request changes on one published record.
-2. Withdraw it: `sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> --withdraw <kind>:<id> <text>`. Use a new key.
-3. Check that the page of the record says it is withdrawn.
-4. Read the release numbers with `sudo deploy/scripts/compose.sh run --rm cli releases list`. Activate the release from before the withdrawal: `sudo deploy/scripts/compose.sh run --rm cli releases activate <release-number>`. The record shows again. The `blocked` list in the output names it, because review still blocks it.
-5. In the review workspace, approve the record again. The approval must resolve the open concern and carry a resolution note.
+1. Stop the worker, so that no fact release lands during the test: `sudo deploy/scripts/compose.sh stop worker`.
+2. In the review workspace, request changes on one published record. Pick a record that no relationship or brief cites, or the withdrawal stops with exit code 2.
+3. Withdraw it: `sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> --withdraw <kind>:<id> <text>`. Use a new key.
+4. Check that the page of the record says it is withdrawn.
+5. Read the release numbers with `sudo deploy/scripts/compose.sh run --rm cli releases list`. Activate the release from before the withdrawal: `sudo deploy/scripts/compose.sh run --rm cli releases activate <release-number>`. The record shows again. The `blocked` list in the output names it, because review still blocks it.
+6. In the review workspace, approve the record again. The approval must resolve the open concern and carry a resolution note.
+7. Publish the ready record: `sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> <kind>:<id>`. Then check with `releases list` that the active release is the latest release.
+8. Start the worker: `sudo deploy/scripts/compose.sh up --detach worker`.
 
-The `cli` service reads `host.env` and `host.secret.env`. It holds every variable that `releases publish` and `releases activate` need.
+The `cli` service gets every variable that these commands need from `deploy/compose.yaml` and the host env files.
 
 ### Tunnel
 
@@ -1008,7 +1011,7 @@ No Terraform manages these steps. Check each one by hand.
 
 ### Backups
 
-A nightly systemd timer runs `deploy/scripts/backup.sh`. The script takes a lock, so two runs cannot overlap. It dumps the operational database with `pg_dump --format=custom` inside the Postgres container. Then it runs restic from the pinned official image. It backs up the dump, `config/`, `captures/`, and `releases/`, in one snapshot. Then it keeps 7 daily, 4 weekly, and 6 monthly snapshots and prunes the rest. Restic encrypts the data before it leaves the machine. The repository is a Cloudflare R2 bucket.
+A nightly systemd timer runs `deploy/scripts/backup.sh`. The script takes a lock, so two runs cannot overlap. It dumps the operational database with `pg_dump --format=custom` inside the Postgres container. Then it runs restic from the pinned official image. It backs up the dump, `config/`, `captures/`, and `releases/`, in one snapshot. Then it keeps 7 daily, 4 weekly, and 6 monthly snapshots and prunes the rest. Last, it writes the time to `backup/last-success`, which [Go-live checks](#go-live-checks) reads. Restic encrypts the data before it leaves the machine. The repository is a Cloudflare R2 bucket.
 
 The About page says a backup can keep a closed reader report for up to 6 months after its deletion. If you change `--keep-monthly`, change the page too. A backup outage of several weeks can also break that claim, because the prune does not run.
 

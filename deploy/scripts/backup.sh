@@ -23,3 +23,6 @@ mv "$dump.partial" "$dump"
 
 compose run --rm -T restic backup "$dump" "$CIVIC_LENS_ROOT/config" "$CIVIC_LENS_ROOT/captures" "$CIVIC_LENS_ROOT/releases"
 compose run --rm -T restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
+
+date --utc +%Y-%m-%dT%H:%M:%SZ > "$backup_directory/last-success.partial"
+mv "$backup_directory/last-success.partial" "$backup_directory/last-success"

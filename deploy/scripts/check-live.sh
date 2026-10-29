@@ -8,7 +8,7 @@ api=https://api.civic-lens.info
 user_agent="CivicLens/0.1 (civic-lens.info)"
 caddyfile="$deploy_directory/caddy/Caddyfile"
 search_env="$CIVIC_LENS_ROOT/env/search.env"
-backup_unit=civic-lens-backup.service
+backup_stamp="$CIVIC_LENS_ROOT/backup/last-success"
 backup_max_age_hours=26
 failures=0
 
@@ -31,6 +31,10 @@ noindex_expected() { grep -Eq '^[[:space:]]*import noindex[[:space:]]*$' "$caddy
 
 check_noindex() {
   local name=$1 url=$2 headers value
+  if [[ ! -r $caddyfile ]]; then
+    fail "$name: cannot read $caddyfile. Run the script from the checkout with sudo."
+    return
+  fi
   headers=$(fetch "$url")
   if [[ -z $headers ]]; then
     fail "$name: no response from $url. Check that the tunnel and Caddy run: sudo deploy/scripts/compose.sh ps"
@@ -52,10 +56,10 @@ check_missing_page() {
   cache=$(header_of "$headers" cache-control)
   if [[ $(status_of "$headers") != 404 ]]; then
     fail "Missing page: expected status 404 from $site, got '$(status_of "$headers")'. Check that the active release has files: sudo deploy/scripts/compose.sh run --rm cli releases list"
-  elif [[ $cache != no-store ]]; then
-    fail "Missing page: expected Cache-Control: no-store, got '${cache:-no header}'. Check the handle_errors block of the Caddyfile."
   elif ! grep -qi '<html' "$body_file"; then
     fail "Missing page: expected the release 404 page (HTML), got a plain body. Check that the active release has 404.html."
+  elif [[ $cache != no-store ]]; then
+    fail "Missing page: expected Cache-Control: no-store, got '${cache:-no header}'. Check the handle_errors block of the Caddyfile."
   else
     pass "Missing page: status 404, release 404 page, Cache-Control no-store"
   fi
@@ -63,65 +67,74 @@ check_missing_page() {
 
 check_internal_route() {
   local status
-  status=$(status_of "$(fetch "$api/internal/check-live")")
+  status=$(status_of "$(fetch "$api/internal/v1/reports")")
   if [[ $status == 404 ]]; then
     pass "Internal route: $api/internal/* returns 404"
   else
-    fail "Internal route: expected status 404 from $api/internal/check-live, got '${status:-no response}'. Check the handle /internal/* block of the Caddyfile."
+    fail "Internal route: expected status 404 from $api/internal/v1/reports, got '${status:-no response}'. Check the handle /internal/* block of the Caddyfile."
   fi
 }
 
+# Cloudflare replaces CF-Connecting-IP with the real address of the caller, so the check looks for that address in the log.
 check_no_access_log() {
-  local query_value="probe$RANDOM$RANDOM$RANDOM" address="203.0.113.$((RANDOM % 254 + 1))" log
-  fetch --header "CF-Connecting-IP: $address" "$site/no-such-page?$query_value=$query_value" > /dev/null
+  local query_value="probe$RANDOM$RANDOM$RANDOM" address log
+  address=$(curl --silent --max-time 15 --user-agent "$user_agent" "$site/cdn-cgi/trace" | sed -n 's/^ip=//p')
+  if [[ -z $address ]]; then
+    fail "Access log: could not read your address from $site/cdn-cgi/trace. Check that Cloudflare serves the site."
+    return
+  fi
+  fetch "$site/no-such-page?$query_value=$query_value" > /dev/null
   if ! log=$(compose logs --no-color --since 5m caddy 2>&1); then
     fail "Access log: could not read the Caddy log. Check that Docker runs and that you used sudo."
   elif grep -qF -e "$query_value" -e "$address" <<< "$log"; then
-    fail "Access log: expected no trace of the probe request, but the Caddy log holds '$query_value' or '$address'. Check for a log directive in a Caddyfile site block."
+    fail "Access log: expected no trace of the probe request, but the Caddy log holds '$query_value' or your address '$address'. Check for a log directive in a Caddyfile site block."
   else
-    pass "Access log: the Caddy log holds neither the probe query nor the probe address"
+    pass "Access log: the Caddy log holds neither the probe query nor your address"
   fi
 }
 
 check_backup_age() {
-  local result exit_time exit_epoch age_hours
-  result=$(systemctl show "$backup_unit" --property=Result --value)
-  exit_time=$(systemctl show "$backup_unit" --property=ExecMainExitTimestamp --value)
-  if [[ -z $exit_time ]]; then
-    fail "Backup: $backup_unit never ran. Run it: sudo systemctl start $backup_unit. Then check that the timer is enabled: systemctl list-timers civic-lens-backup.timer"
-  elif [[ $result != success ]]; then
-    fail "Backup: expected the last result to be success, got '$result'. Read the log: sudo journalctl -u $backup_unit"
-  elif ! exit_epoch=$(date --date "$exit_time" +%s); then
-    fail "Backup: could not read the last run time '$exit_time'. Check: systemctl show $backup_unit"
-  elif age_hours=$((($(date +%s) - exit_epoch) / 3600)); ((age_hours >= backup_max_age_hours)); then
-    fail "Backup: expected a run in the last $backup_max_age_hours hours, the last run ended $age_hours hours ago ($exit_time). Check the timer: systemctl list-timers civic-lens-backup.timer"
+  local stamp stamp_epoch age_hours
+  if [[ ! -r $backup_stamp ]]; then
+    fail "Backup: $backup_stamp is missing, so no backup has succeeded. Run one: sudo systemctl start civic-lens-backup.service. Then read: sudo journalctl -u civic-lens-backup.service"
+    return
+  fi
+  stamp=$(< "$backup_stamp")
+  if ! stamp_epoch=$(date --date "$stamp" +%s); then
+    fail "Backup: could not read the time '$stamp' in $backup_stamp. The next good backup writes it again."
+  elif age_hours=$((($(date +%s) - stamp_epoch) / 3600)); ((age_hours >= backup_max_age_hours)); then
+    fail "Backup: expected a good backup in the last $backup_max_age_hours hours, the last one ended $age_hours hours ago ($stamp). Read: sudo journalctl -u civic-lens-backup.service and systemctl list-timers civic-lens-backup.timer"
   else
-    pass "Backup: the last run succeeded and ended $exit_time"
+    pass "Backup: the last good backup ended $stamp"
   fi
 }
 
 # Cloudflare replaces CF-Connecting-IP, so every request below counts for the real caller. If the header were trusted from a reader, each forged value would get its own count and none would reach the limit.
-# The limit uses fixed one-minute windows. Twice the limit plus two requests puts more than the limit in one window, even when a window ends during the loop.
+# The limit uses fixed one-minute windows. Twice the limit plus two requests, sent 20 at a time, puts more than the limit in one window.
 check_forged_header_limit() {
-  local limit=60 attempt attempts status=""
+  local limit=60 ranges="" attempts statuses
   if [[ -r $search_env ]]; then
     limit=$(sed -n 's/^CIVIC_LENS_REQUESTS_PER_MINUTE=//p' "$search_env" | tail -n 1)
     limit=${limit:-60}
+    ranges=$(sed -n 's/^CIVIC_LENS_TRUSTED_PROXY_RANGES=//p' "$search_env" | tail -n 1)
   fi
   if [[ ! $limit =~ ^[0-9]+$ ]]; then
     fail "Rate limit: CIVIC_LENS_REQUESTS_PER_MINUTE in $search_env is '$limit', not a whole number. Fix the file."
     return
   fi
+  if [[ -z $ranges ]]; then
+    fail "Rate limit: CIVIC_LENS_TRUSTED_PROXY_RANGES in $search_env is empty, so all readers share one limit. Set it as in deploy/env/search.env.example."
+    return
+  fi
   attempts=$((2 * (limit + 1)))
-  echo "NOTE  The next check sends up to $attempts requests. It blocks your own address on the search service for up to one minute."
-  for ((attempt = 1; attempt <= attempts; attempt++)); do
-    status=$(status_of "$(fetch --header "CF-Connecting-IP: 198.18.$((attempt / 250)).$((attempt % 250 + 1))" "$api/v1/search?q=check")")
-    if [[ $status == 429 ]]; then break; fi
-  done
-  if [[ $status == 429 ]]; then
-    pass "Rate limit: request $attempt with forged CF-Connecting-IP values got 429, so the header cannot be forged"
+  echo "NOTE  The next check sends $attempts requests. It blocks your own address on the search service for up to one minute."
+  statuses=$(seq 1 "$attempts" | awk '{ print "198.18." int($1 / 250) "." ($1 % 250 + 1) }' |
+    xargs -P 20 -I {} curl --silent --max-time 15 --user-agent "$user_agent" --output /dev/null --write-out '%{http_code}\n' \
+      --header "CF-Connecting-IP: {}" "$api/v1/search?q=check" || true)
+  if grep -qx 429 <<< "$statuses"; then
+    pass "Rate limit: requests with forged CF-Connecting-IP values got 429, so the header cannot be forged"
   else
-    fail "Rate limit: expected status 429 within $attempts requests with a different forged CF-Connecting-IP each time, the last got '${status:-no response}'. Check that requests reach the service through Cloudflare, and the limit in $search_env."
+    fail "Rate limit: expected status 429 within $attempts requests with a different forged CF-Connecting-IP each time, got none. Check that requests reach the service through Cloudflare, and the limit in $search_env."
   fi
 }
 
