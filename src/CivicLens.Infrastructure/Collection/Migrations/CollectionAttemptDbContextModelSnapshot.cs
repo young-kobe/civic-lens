@@ -1688,9 +1688,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.Jobs.Persistence.CollectorSlotRow", b =>
                 {
-                    b.Property<int>("Id")
-                        .HasColumnType("integer")
-                        .HasColumnName("id");
+                    b.Property<string>("PacingKey")
+                        .HasColumnType("text")
+                        .HasColumnName("pacing_key");
 
                     b.Property<string>("AttemptId")
                         .HasColumnType("character varying(128)")
@@ -1712,7 +1712,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("text")
                         .HasColumnName("token");
 
-                    b.HasKey("Id");
+                    b.HasKey("PacingKey");
 
                     b.HasIndex("AttemptId");
 
@@ -1721,8 +1721,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.ToTable("collection_collector_slot", null, t =>
                         {
                             t.HasCheckConstraint("ck_collector_lease", "(token IS NULL AND expires_at IS NULL AND job_id IS NULL AND attempt_id IS NULL) OR (token IS NOT NULL AND expires_at IS NOT NULL AND job_id IS NOT NULL AND attempt_id IS NOT NULL)");
-
-                            t.HasCheckConstraint("ck_collector_singleton", "id = 1");
                         });
                 });
 

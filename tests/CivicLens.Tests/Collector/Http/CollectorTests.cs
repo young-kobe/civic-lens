@@ -665,6 +665,7 @@ public sealed class CollectorTests
         Assert.Equal(new[] { "vendor-opaque", "gzip" }, second.Response.ContentEncodings);
         Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(payload)), second.Capture!.Sha256);
         Assert.Single(Directory.GetFiles(directory.Path, "*.gz"));
+        Assert.Empty(Directory.GetFiles(directory.Path, ".capture-*"));
     }
 
     [Theory]
