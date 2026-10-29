@@ -584,7 +584,7 @@ public sealed class JobPreparationTests
             new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
         var job = new CollectionJobRecord("job", definition, "key", CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,
             false, [attempt]);
-        var preparation = new JobPreparation(new SingleJob(job), new CapturedAttempts(contentType), new NoDiscoveryAdmissions(), admissions, votes, roster, executives,
+        var preparation = new JobPreparation(new SingleJob(job), new CapturedAttempts(contentType), new NoDiscoveryAdmissions(), admissions, votes, null!, roster, executives,
             new FixedBody(bytes), processing, extractions, textExtractor, issues);
         return await preparation.PrepareAsync("job", "artifacts", default);
     }
