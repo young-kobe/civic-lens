@@ -833,7 +833,7 @@ Optional variables: `CIVIC_LENS_TRUSTED_PROXY_RANGES` (the Cloudflare ranges, em
 
 ## Container images
 
-The `Dockerfile` in the repository root builds two images for linux-arm64. The workflow `.github/workflows/release.yml` builds them on a native ARM64 runner. On a push to main it pushes them to ghcr.io and adds a build provenance attestation to each. On a pull request that changes the build inputs, it builds them and does not push or attest. A newer push can cancel a queued run, so deploy only a commit whose image tag exists.
+The `Dockerfile` in the repository root builds two images for linux-arm64. The workflow `.github/workflows/release.yml` builds them on a native ARM64 runner. On main, from a push or a manual run, it pushes them to ghcr.io and adds a build provenance attestation to each. On a pull request that changes the build inputs, it builds them and does not push or attest. Pull request runs never wait for or cancel main runs. A newer main run can cancel a queued main run, so deploy only a commit whose image tag exists.
 
 | Image | Holds | Entry point |
 | --- | --- | --- |
