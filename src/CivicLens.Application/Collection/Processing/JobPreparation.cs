@@ -12,6 +12,7 @@ using CivicLens.Application.Roster;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Application.Collection.Processing;
 
@@ -27,10 +28,12 @@ public sealed class JobPreparation(
     IEvidenceProcessingStore processing,
     IDocumentExtractionStore extractions,
     IDocumentTextExtractor textExtractor,
-    IssueConfigurationRevision? issues)
+    IssueConfigurationRevision? issues,
+    ILogger<JobPreparation> logger)
 {
     private const string NotModified = "notModified";
     private const string VoteviewJobMissing = "voteviewJobMissing";
+    private const string VoteviewCountMismatch = "voteviewCountMismatch";
     private const string ApiResourceMissing = "apiResourceMissing";
     private const string IssuesConfigurationUnavailable = "issuesConfigurationUnavailable";
     private readonly IssueConfiguration? issueConfiguration = issues?.ReadConfiguration();
@@ -258,14 +261,20 @@ public sealed class JobPreparation(
         var rollCallsResponse = await responses.ReadBodyAsync(rollCallsCapture, artifactRoot, cancellationToken);
         var membersResponse = await responses.ReadBodyAsync(membersCapture, artifactRoot, cancellationToken);
         var votesResponse = await responses.ReadBodyAsync(votesCapture, artifactRoot, cancellationToken);
-        var joined = VoteviewRoll.Join(VoteviewParser.ParseRollCalls(rollCallsResponse.Body, congress),
-            VoteviewParser.ParseCasts(votesResponse.Body, congress), VoteviewParser.ParseMembers(membersResponse.Body, congress));
+        var rollCallRows = VoteviewParser.ParseRollCalls(rollCallsResponse.Body, congress);
+        var joined = VoteviewRoll.Join(rollCallRows, VoteviewParser.ParseCasts(votesResponse.Body, congress),
+            VoteviewParser.ParseMembers(membersResponse.Body, congress));
         var rolls = joined.Select(roll => new VoteviewRollExtraction(roll.RollCall,
             new DocumentExtraction(votesResponse.Captured, VoteviewParser.ExtractionVersion, VoteviewRenderer.Render(roll), part: roll.RollCall.Part))).ToArray();
         var changed = await voteAdmissions.SelectChangedVoteviewRollsAsync(configured, congress, rolls, cancellationToken);
         foreach (var roll in changed) _ = await extractions.SaveAsync(roll.Extraction, cancellationToken);
-        return PreparedFrom(await voteAdmissions.AdmitVoteviewVotesAsync(configured, chain, votesResponse.Captured.ObservedAt, changed,
+        var prepared = PreparedFrom(await voteAdmissions.AdmitVoteviewVotesAsync(configured, chain, votesResponse.Captured.ObservedAt, changed,
             cancellationToken));
+        var skipped = rollCallRows.Count - joined.Count;
+        if (skipped == 0) return prepared;
+        logger.LogWarning("Voteview Congress {Congress} skipped {Skipped} roll calls whose member counts differ from the roll call file.",
+            congress, skipped);
+        return prepared with { ErrorCode = VoteviewCountMismatch };
     }
 
     private async Task<CollectionJobRecord?> ReadVoteviewParentAsync(string childKey, ApiResource expected, CancellationToken cancellationToken)

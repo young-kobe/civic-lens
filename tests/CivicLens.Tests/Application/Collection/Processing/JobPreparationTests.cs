@@ -42,6 +42,7 @@ public sealed class JobPreparationTests
     private readonly ThrowingProcessingStore processing = new();
     private readonly RecordingExtractions extractions = new();
     private readonly List<string> bodyReads = [];
+    private readonly RecordingLogger warnings = new();
 
     [Fact]
     public async Task DetailGateIsDecidedFromTheParsedBillAndStoredWithTheIssueRevision()
@@ -347,6 +348,19 @@ public sealed class JobPreparationTests
     }
 
     [Fact]
+    public async Task ARollCallWhoseCountsDisagreeGivesTheMismatchCodeAndALogWithTheCountWhileTheOtherRollCallsStillAdmit()
+    {
+        var url = VoteviewUrl.File(VoteviewVoteFixtures.SourceUrl, ApiResource.VoteviewVotes, 119);
+
+        var result = await Prepare(ApiResource.VoteviewVotes, url, VoteviewVoteFixtures.DefaultVotes, null);
+
+        Assert.Equal((EvidenceStatus.Succeeded, "voteviewCountMismatch"), (result!.Status, result.ErrorCode));
+        Assert.Equal("Voteview Congress 119 skipped 1 roll calls whose member counts differ from the roll call file.", Assert.Single(warnings.Messages));
+        Assert.Single(votes.VoteviewVotes);
+        Assert.Equal(2, votes.VoteviewRollsBeforeChangeFilter);
+    }
+
+    [Fact]
     public async Task AVotesJobWhoseThreeBodiesEqualTheNewestCandidateLoadsNoBodyAndSavesNothing()
     {
         votes.VoteviewBodiesKnown = true;
@@ -636,7 +650,7 @@ public sealed class JobPreparationTests
             false, [attempt]);
         var (jobs, bodyOf) = resource == ApiResource.VoteviewVotes ? VoteviewChainOf(configured, job, bytes) : ([job], _ => bytes);
         var preparation = new JobPreparation(new SingleJob(jobs), new CapturedAttempts(contentType), new NoDiscoveryAdmissions(), admissions, votes, roster, executives,
-            new FixedBody(bodyOf, bodyReads), processing, extractions, textExtractor, issues);
+            new FixedBody(bodyOf, bodyReads), processing, extractions, textExtractor, issues, warnings);
         return await preparation.PrepareAsync("job", "artifacts", default);
     }
 
@@ -960,6 +974,18 @@ public sealed class JobPreparationTests
     {
         public Task<DiscoveryAdmissionResult> AdmitAsync(ConfiguredCollectionSource source, string attemptId, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<DiscoveryAdmissionResult> AdmitAutomaticCheckAsync(ConfiguredCollectionSource source, string attemptId, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class RecordingLogger : Microsoft.Extensions.Logging.ILogger<JobPreparation>
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state,
+            Exception? exception, Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
     }
 
     private sealed class FixedBody(Func<string, byte[]> body, List<string> reads) : ICaptureBodyReader
