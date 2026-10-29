@@ -1,12 +1,8 @@
 using CivicLens.Application.Collection;
 using CivicLens.Application.Roster;
-using CivicLens.Application.Votes;
-using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Roster.Persistence;
-using CivicLens.Infrastructure.Votes;
-using CivicLens.Infrastructure.Votes.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
@@ -15,8 +11,6 @@ namespace CivicLens.Infrastructure.Roster;
 /// <summary>Retains one append-only snapshot of the member roster for each capture body not yet seen.</summary>
 public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) : IMemberRosterStore
 {
-    private readonly PostgresAnalysisQueue<VoteAnalysisRow, VoteAnalysisBudgetRow, VoteDraftRun> voteQueue = VoteDraftStaleness.NewQueue(contextFactory);
-
     public static PostgresMemberRosterStore FromConnectionString(string connectionString)
     {
         _ = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
@@ -47,7 +41,6 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
             db.Add(ToRow(attemptId, member));
             db.AddRange(member.Terms.Select(term => ToRow(attemptId, member.BioguideId, term)));
         }
-        _ = await VoteDraftStaleness.RequeueSenateUnmatchedAsync(voteQueue, db, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
