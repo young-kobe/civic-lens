@@ -105,6 +105,8 @@ public sealed record CollectionConfiguration
                 ValidateListAdmissionCapacity(source, ApiPageQuery.PageLimit + 1);
             if (source.ApiParser == ApiParser.SenateVoteList)
                 ValidateListAdmissionCapacity(source, SenateVoteMenuParser.MaximumVotes + 1);
+            if (source.ApiParser == ApiParser.VoteviewSenateVoteList)
+                ValidateListAdmissionCapacity(source, VoteviewFollowOnJobs);
             if (source.ApiParser == ApiParser.MemberPhotos)
                 ValidateListAdmissionCapacity(source, People.Count(person => person.BioguideId is not null));
             if (source.CheckIntervalSeconds is { } interval && interval is
@@ -191,6 +193,8 @@ public sealed record CollectionConfiguration
                 throw new ArgumentOutOfRangeException(nameof(source));
         }
     }
+
+    private const int VoteviewFollowOnJobs = 2;
 
     private static bool IsSenateVoteSource(ApiParser? parser) =>
         parser is ApiParser.SenateVoteList or ApiParser.VoteviewSenateVoteList;

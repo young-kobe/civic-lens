@@ -33,23 +33,23 @@ public sealed class VoteviewUrlTests
     }
 
     [Fact]
-    public void TheKeyOfTheCurrentCongressHoldsTheSweepDayAndTheKeyOfAnEarlierCongressIsFinal()
+    public void TheRollCallsKeyOfTheCurrentCongressHoldsTheSweepDayAndTheKeyOfAnEarlierCongressIsFinal()
     {
         var today = new DateOnly(2026, 10, 29);
 
-        Assert.Equal("voteview-senate/voteview-senate-votes/voteviewvotes/119/2026-10-29",
-            VoteviewJobKeys.File(VoteviewVoteFixtures.SourceId, ApiResource.VoteviewVotes, 119, today));
-        Assert.Equal("voteview-senate/voteview-senate-votes/voteviewvotes/118/final",
-            VoteviewJobKeys.File(VoteviewVoteFixtures.SourceId, ApiResource.VoteviewVotes, 118, today));
+        Assert.Equal("voteview-senate/voteview-senate-votes/rollcalls/119/2026-10-29",
+            VoteviewJobKeys.RollCalls(VoteviewVoteFixtures.SourceId, 119, today));
+        Assert.Equal("voteview-senate/voteview-senate-votes/rollcalls/118/final",
+            VoteviewJobKeys.RollCalls(VoteviewVoteFixtures.SourceId, 118, today));
     }
 
     [Fact]
-    public void EachFileOfOneCongressHasItsOwnKeySoTheThreeJobsDoNotCollide()
+    public void EachLaterJobOfTheChainIsKeyedByItsParentJobSoTheVotesJobFindsItsSiblingsFromTheKeys()
     {
-        var today = new DateOnly(2026, 10, 29);
-        var keys = new[] { ApiResource.VoteviewRollCalls, ApiResource.VoteviewVotes, ApiResource.VoteviewMembers }
-            .Select(resource => VoteviewJobKeys.File(VoteviewVoteFixtures.SourceId, resource, 119, today));
+        var members = VoteviewJobKeys.Members(VoteviewVoteFixtures.SourceId, "rollcalls-job");
+        var votes = VoteviewJobKeys.Votes(VoteviewVoteFixtures.SourceId, "members-job");
 
-        Assert.Equal(3, keys.Distinct().Count());
+        Assert.Equal(("rollcalls-job", "members-job"), (VoteviewJobKeys.ParentJobId(members), VoteviewJobKeys.ParentJobId(votes)));
+        Assert.NotEqual(members, votes);
     }
 }

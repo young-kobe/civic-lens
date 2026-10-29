@@ -41,7 +41,8 @@ public sealed record CollectionJobDefinition
         ConfigurationRevision!.Configuration.Sources.FirstOrDefault(source => source.Id == SourceId)?.Url;
 
     public bool IsRoot() =>
-        ApiResource is Collection.ApiResource.BillList or Collection.ApiResource.HouseVoteList or Collection.ApiResource.SenateVoteMenu || ConfiguredUrl == Url;
+        ApiResource is Collection.ApiResource.BillList or Collection.ApiResource.HouseVoteList or Collection.ApiResource.SenateVoteMenu or
+            Collection.ApiResource.VoteviewRollCalls || ConfiguredUrl == Url;
 
     public bool IsListingPage()
     {

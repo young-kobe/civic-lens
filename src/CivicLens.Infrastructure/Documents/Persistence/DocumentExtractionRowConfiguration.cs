@@ -15,6 +15,7 @@ internal sealed class DocumentExtractionRowConfiguration : IEntityTypeConfigurat
             table.HasCheckConstraint("ck_document_extractions_versions",
                 "length(btrim(extraction_version)) > 0");
             table.HasCheckConstraint("ck_document_extractions_text_limit", "length(text) <= 2000000");
+            table.HasCheckConstraint("ck_document_extractions_part", "part IS NULL OR part >= 0");
         });
         builder.HasKey(row => row.ExtractionId);
         builder.Property(row => row.ExtractionId).HasColumnName("extraction_id").HasMaxLength(64);
@@ -23,6 +24,7 @@ internal sealed class DocumentExtractionRowConfiguration : IEntityTypeConfigurat
         builder.Property(row => row.Text).HasColumnName("text").IsRequired();
         builder.Property(row => row.TextSha256).HasColumnName("text_sha256").HasMaxLength(64).IsRequired();
         builder.Property(row => row.ProfileJson).HasColumnName("profile_json").HasMaxLength(8000);
+        builder.Property(row => row.Part).HasColumnName("part");
         builder.HasOne<AttemptRow>().WithMany().HasForeignKey(row => row.AttemptId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(row => row.AttemptId).HasDatabaseName("ix_document_extractions_attempt");
     }

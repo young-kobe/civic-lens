@@ -30,6 +30,7 @@ internal sealed class VoteCandidateRowConfiguration : IEntityTypeConfiguration<V
         builder.Property(row => row.BillNumber).HasColumnName("bill_number");
         builder.Property(row => row.DetailJobId).HasColumnName("detail_job_id").HasMaxLength(128);
         builder.Property(row => row.MembersJobId).HasColumnName("members_job_id").HasMaxLength(128);
+        builder.Property(row => row.RosterJobId).HasColumnName("roster_job_id").HasMaxLength(128);
         builder.Property(row => row.DetailExtractionId).HasColumnName("detail_extraction_id").HasMaxLength(64);
         builder.Property(row => row.MembersExtractionId).HasColumnName("members_extraction_id").HasMaxLength(64);
         builder.Property(row => row.ConfigurationRevisionId).HasColumnName("configuration_revision_id").HasMaxLength(64);
@@ -38,9 +39,10 @@ internal sealed class VoteCandidateRowConfiguration : IEntityTypeConfiguration<V
         builder.HasIndex(row => new { row.SourceId, row.Chamber, row.Congress, row.SessionNumber, row.RollCallNumber, row.UpdateDateUtcTicks })
             .HasDatabaseName("ix_vote_candidates_roll");
         builder.HasIndex(row => new { row.Congress, row.BillType, row.BillNumber }).HasDatabaseName("ix_vote_candidates_bill");
-        builder.HasIndex(row => row.DetailJobId).IsUnique().HasDatabaseName("ux_vote_candidates_detail_job");
-        builder.HasOne<VoteVersionRow>().WithMany().HasForeignKey(row => row.DetailJobId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(row => new { row.DetailJobId, row.SessionNumber, row.RollCallNumber }).IsUnique().HasDatabaseName("ux_vote_candidates_detail_job");
+        builder.HasOne<VoteVersionRow>().WithMany().HasForeignKey(row => new { row.DetailJobId, row.SessionNumber, row.RollCallNumber }).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<JobRow>().WithMany().HasForeignKey(row => row.MembersJobId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<JobRow>().WithMany().HasForeignKey(row => row.RosterJobId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<DocumentExtractionRow>().WithMany().HasForeignKey(row => row.DetailExtractionId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<DocumentExtractionRow>().WithMany().HasForeignKey(row => row.MembersExtractionId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<ConfigurationRevisionRow>().WithMany().HasForeignKey(row => row.ConfigurationRevisionId)

@@ -21,6 +21,19 @@ public sealed class DocumentExtractionTests
     }
 
     [Fact]
+    public void APartSplitsOneCaptureIntoOneIdentityEachWhileAnExtractionWithoutAPartKeepsItsOldId()
+    {
+        var attempt = Captured("ab");
+        var whole = new DocumentExtraction(attempt, "c", "text");
+        var partOne = new DocumentExtraction(attempt, "c", "text", part: 1);
+        var partTwo = new DocumentExtraction(attempt, "c", "text", part: 2);
+
+        Assert.Equal("f2939f903016e5bb29b1e4a61cdbd376220ca03a24180b39995f2d50f2e0a647", whole.ExtractionId);
+        Assert.Equal(3, new[] { whole.ExtractionId, partOne.ExtractionId, partTwo.ExtractionId }.Distinct().Count());
+        Assert.Throws<ArgumentOutOfRangeException>(() => new DocumentExtraction(attempt, "c", "text", part: -1));
+    }
+
+    [Fact]
     public void RejectsInvalidTextAndUnboundedVersions()
     {
         var attempt = Captured("attempt");

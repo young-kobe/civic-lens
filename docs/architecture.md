@@ -25,7 +25,7 @@ The system has one repository and three runtime parts. A C# application runs col
 - Coverage is selective. A missing record does not show inactivity. Relevant source failures stay visible as coverage limits.
 - A capture is not a document version, an approval, or a publication.
 - A model prediction is never a human approval. Approval binds to the exact revision and evidence reviewed.
-- Code approves action records, House vote records, and Senate vote records. Their facts come from Congress.gov, the Clerk XML, and the senate.gov vote files. Code checks every citation. People approve all other records. Public pages label the headline and the summary as an AI summary of the official record. Text that a person wrote gets no label.
+- Code approves action records, House vote records, and Senate vote records. Their facts come from Congress.gov, the Clerk XML, and the senate.gov or Voteview vote files. A Senate vote from the Voteview source rests on Voteview data. Code checks every citation. People approve all other records. Public pages label the headline and the summary as an AI summary of the official record. Text that a person wrote gets no label.
 - Approval and publication are separate actions. Public serving reads published releases only.
 
 ### Status
@@ -263,6 +263,7 @@ The protocol, configuration, schema, parser, and behavior versions start at the 
 | House vote detail extraction | `congress-house-vote-v1` | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteParser.cs` | Extraction IDs, text, and citations of a House vote | The parse or the rendered text of a vote changes |
 | House vote members extraction | `congress-house-vote-members-v1` | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteMembersParser.cs` | Extraction IDs, text, and citations of a House member list | The parse or the rendered text of a member list changes |
 | Senate vote extraction | `congress-senate-vote-v1` | `src/CivicLens.Application/Collection/SenateVotes/SenateVoteParser.cs` | Extraction IDs, text, and citations of a Senate vote | The parse or the rendered text of a vote changes |
+| Voteview Senate vote extraction | `voteview-senate-vote-v1` | `src/CivicLens.Application/Collection/VoteviewVotes/VoteviewParser.cs` | Extraction IDs, text, and citations of a Voteview Senate vote | The parse or the rendered text of a roll call changes |
 | Comparison algorithm | `line-lcs-context-v1` | `src/CivicLens.Core/Documents/DocumentComparison.cs` | Stored comparison IDs and hunks | Hunk or word-edit output changes |
 | Comparison settings | `bounded-lines-2000-...-v1` | same file | Limits recorded with each comparison | Any limit constant changes |
 | Draft task | `document-change-draft-v1` | `src/CivicLens.Application/Analysis/DocumentChangeDraftTask.cs` | Analysis runs | Task flow or output handling changes |
@@ -358,6 +359,7 @@ This is the only navigation index.
 | Congress.gov House vote sweep, sessions, URLs | [Votes](architecture/votes.md#daily-sweep) | `src/CivicLens.Application/Collection/Votes/VoteSession.cs` |
 | House vote parsers and admission | [Votes](architecture/votes.md#parsing) | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteParser.cs` |
 | Senate vote parser, menu, and URLs | [Votes](architecture/votes.md#senate-collection) | `src/CivicLens.Application/Collection/SenateVotes/SenateVoteParser.cs` |
+| Voteview Senate vote parsers, URLs, and keys | [Votes](architecture/votes.md#voteview-senate-collection) | `src/CivicLens.Application/Collection/VoteviewVotes/VoteviewParser.cs` |
 | Vote candidates | [Votes](architecture/votes.md#admission) | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.Votes.cs` |
 | Vote tables: versions and candidates | [Votes](architecture/votes.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Collection/Votes/` |
 | Vote drafting, facts, and the member-vote copy | [Votes](architecture/votes.md#drafting) | `src/CivicLens.Application/Votes/VoteDraftStep.cs` |

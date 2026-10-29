@@ -170,6 +170,36 @@ public sealed class ConfiguredCollectionSource
             nextMenu is null ? [.. votes] : [.. votes, nextMenu]);
     }
 
+    public ApiJobBatch CreateVoteviewFollowOnBatch(ApiResource finished, string jobId, int congress, DateOnly currentDate)
+    {
+        var source = ReadVoteviewSource();
+        var template = PrepareDefinition(source, currentDate, null, article: false);
+        return new ApiJobBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), template,
+            [.. VoteviewFollowOns(source, finished, jobId, congress, currentDate)]);
+    }
+
+    private IEnumerable<ApiJob> VoteviewFollowOns(WatchedSourceConfiguration source, ApiResource finished, string jobId, int congress,
+        DateOnly currentDate)
+    {
+        switch (finished)
+        {
+            case ApiResource.VoteviewRollCalls:
+                yield return VoteviewJob(source, ApiResource.VoteviewMembers, VoteviewJobKeys.Members(SourceId, jobId), congress, currentDate);
+                if (congress < VoteviewJobKeys.CurrentCongress(currentDate))
+                    yield return VoteviewJob(source, ApiResource.VoteviewRollCalls, VoteviewJobKeys.RollCalls(SourceId, congress + 1, currentDate),
+                        congress + 1, currentDate);
+                break;
+            case ApiResource.VoteviewMembers:
+                yield return VoteviewJob(source, ApiResource.VoteviewVotes, VoteviewJobKeys.Votes(SourceId, jobId), congress, currentDate);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(finished));
+        }
+    }
+
+    private ApiJob VoteviewJob(WatchedSourceConfiguration source, ApiResource resource, string key, int congress, DateOnly currentDate) =>
+        new(key, CreateApiJobDefinition(resource, VoteviewUrl.File(source.Url, resource, congress), currentDate, CollectionJobPriority.Check));
+
     public ApiJobBatch CreateMemberPhotoBatch(DateOnly currentDate)
     {
         var source = ReadMemberPhotoSource();
@@ -275,6 +305,11 @@ public sealed class ConfiguredCollectionSource
         ReadSource() is { ApiParser: ApiParser.SenateVoteList } source
             ? source
             : throw new ArgumentException("Senate vote admission requires a configured Senate vote source.");
+
+    private WatchedSourceConfiguration ReadVoteviewSource() =>
+        ReadSource() is { ApiParser: ApiParser.VoteviewSenateVoteList } source
+            ? source
+            : throw new ArgumentException("Voteview admission requires a configured Voteview Senate vote source.");
 
     private WatchedSourceConfiguration ReadMemberPhotoSource() =>
         ReadSource() is { ApiParser: ApiParser.MemberPhotos } source
