@@ -195,10 +195,13 @@ public sealed class RobotsCacheTests : IDisposable
         Assert.Equal(CollectionFailureCode.RobotsUnavailable, result.FailureCode);
     }
 
-    [Fact]
-    public async Task UnreadableRobotsResponsesAreNeverCached()
+    [Theory]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    [InlineData(HttpStatusCode.RequestTimeout)]
+    [InlineData(HttpStatusCode.ProxyAuthenticationRequired)]
+    public async Task TemporaryRobotsResponsesDeferAndAreNeverCached(HttpStatusCode status)
     {
-        var site = new Site(robots: () => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        var site = new Site(robots: () => new HttpResponseMessage(status));
         var failed = await FetchAsync(site);
         site.Robots = Ok("User-agent: *\nDisallow:\n");
 
