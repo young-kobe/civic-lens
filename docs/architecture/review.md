@@ -233,7 +233,7 @@ A record page shows a banner for each report that was resolved as CorrectionNeed
 
 ### Authentication
 
-The Host uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.12 for the Auth0 authorization-code flow with PKCE. The CLI acts as the configured owner subject. The authenticated `review` command binds to loopback and expects an HTTPS reverse proxy; see [host](host.md).
+The Host uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.14 for the Auth0 authorization-code flow with PKCE. The CLI acts as the configured owner subject. The authenticated `review` command binds to loopback and expects an HTTPS reverse proxy; see [host](host.md).
 
 ## Storage and contracts
 

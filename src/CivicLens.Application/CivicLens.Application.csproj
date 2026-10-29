@@ -3,6 +3,6 @@
     <ProjectReference Include="../CivicLens.Core/CivicLens.Core.csproj" />
     <ProjectReference Include="../CivicLens.Collection.Contracts/CivicLens.Collection.Contracts.csproj" />
     <ProjectReference Include="../CivicLens.Publication.Contracts/CivicLens.Publication.Contracts.csproj" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
   </ItemGroup>
 </Project>
