@@ -52,10 +52,7 @@ public static class HouseVoteRenderer
     private static string CandidateTotalLine(HouseVoteCandidateTotal total) =>
         Line($"Candidate total {SingleLine(total.Candidate)}", Count(total.Total));
 
-    public static string MemberLine(HouseVoteMember member)
-    {
-        var name = SingleLine($"{member.FirstName} {member.LastName}");
-        var fields = new[] { member.BioguideId, name, member.Party ?? "", member.State ?? "", member.VoteCast };
-        return Line("Member", string.Join(", ", fields.Select(SingleLine)));
-    }
+    public static string MemberLine(HouseVoteMember member) =>
+        RenderedText.MemberLine(member.BioguideId, $"{member.FirstName} {member.LastName}", member.Party ?? "", member.State ?? "",
+            member.VoteCast);
 }

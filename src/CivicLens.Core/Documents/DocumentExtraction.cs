@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using CivicLens.Core.Collection;
@@ -10,11 +11,13 @@ public sealed class DocumentExtraction
     public const int MaximumTextLength = 2_000_000;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
-    public DocumentExtraction(CapturedAttemptResult sourceAttempt, string extractionVersion, string text, DocumentContentProfile? profile = null)
+    public DocumentExtraction(CapturedAttemptResult sourceAttempt, string extractionVersion, string text, DocumentContentProfile? profile = null,
+        int? part = null)
     {
         ArgumentNullException.ThrowIfNull(sourceAttempt);
         ValidateVersion(extractionVersion, nameof(extractionVersion));
         ArgumentNullException.ThrowIfNull(text);
+        if (part is < 0) throw new ArgumentOutOfRangeException(nameof(part), "Part cannot be negative.");
         if (text.Length > MaximumTextLength)
             throw new ArgumentException("Extracted text exceeds the maximum length.", nameof(text));
         if (text.Contains('\0')) throw new ArgumentException("Extracted text cannot contain NUL.", nameof(text));
@@ -30,14 +33,16 @@ public sealed class DocumentExtraction
         ExtractionVersion = extractionVersion;
         Text = text;
         Profile = profile;
+        Part = part;
         TextSha256 = Convert.ToHexStringLower(SHA256.HashData(textBytes));
-        ExtractionId = ComputeExtractionId(sourceAttempt.AttemptId, extractionVersion, profile);
+        ExtractionId = ComputeExtractionId(sourceAttempt.AttemptId, extractionVersion, profile, part);
     }
 
     public CapturedAttemptResult SourceAttempt { get; }
     public string ExtractionVersion { get; }
     public string Text { get; }
     public DocumentContentProfile? Profile { get; }
+    public int? Part { get; }
     public string TextSha256 { get; }
     public string ExtractionId { get; }
 
@@ -48,13 +53,15 @@ public sealed class DocumentExtraction
     }
 
     private static string ComputeExtractionId(string attemptId, string extractionVersion,
-        DocumentContentProfile? profile)
+        DocumentContentProfile? profile, int? part)
     {
         using var buffer = new MemoryStream();
         WriteFramed(buffer, attemptId);
         WriteFramed(buffer, extractionVersion);
         if (profile is not null)
             WriteFramed(buffer, profile.RevisionId);
+        if (part is not null)
+            WriteFramed(buffer, part.Value.ToString(CultureInfo.InvariantCulture));
         return Convert.ToHexStringLower(SHA256.HashData(buffer.ToArray()));
     }
 

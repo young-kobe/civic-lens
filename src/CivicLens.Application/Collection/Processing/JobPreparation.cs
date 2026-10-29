@@ -3,6 +3,7 @@ using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.MemberPhotos;
 using CivicLens.Application.Collection.SenateVotes;
+using CivicLens.Application.Collection.VoteviewVotes;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Votes;
 using CivicLens.Application.Documents;
@@ -11,6 +12,7 @@ using CivicLens.Application.Roster;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Application.Collection.Processing;
 
@@ -26,9 +28,12 @@ public sealed class JobPreparation(
     IEvidenceProcessingStore processing,
     IDocumentExtractionStore extractions,
     IDocumentTextExtractor textExtractor,
-    IssueConfigurationRevision? issues)
+    IssueConfigurationRevision? issues,
+    ILogger<JobPreparation> logger)
 {
     private const string NotModified = "notModified";
+    private const string VoteviewJobMissing = "voteviewJobMissing";
+    private const string VoteviewCountMismatch = "voteviewCountMismatch";
     private const string ApiResourceMissing = "apiResourceMissing";
     private const string IssuesConfigurationUnavailable = "issuesConfigurationUnavailable";
     private readonly IssueConfiguration? issueConfiguration = issues?.ReadConfiguration();
@@ -98,6 +103,8 @@ public sealed class JobPreparation(
             ApiResource.HouseVoteMembers => AdmitHouseVoteMembersAsync(job, artifactRoot, cancellationToken),
             ApiResource.SenateVoteMenu => AdmitSenateVoteMenuAsync(job, artifactRoot, cancellationToken),
             ApiResource.SenateVote => AdmitSenateVoteAsync(job, artifactRoot, cancellationToken),
+            ApiResource.VoteviewRollCalls or ApiResource.VoteviewMembers => AdmitVoteviewFollowOnsAsync(job, cancellationToken),
+            ApiResource.VoteviewVotes => AdmitVoteviewVotesAsync(job, artifactRoot, cancellationToken),
             ApiResource.MemberRoster => AdmitMemberRosterAsync(job, artifactRoot, cancellationToken),
             ApiResource.ExecutiveRoster => AdmitExecutiveRosterAsync(job, artifactRoot, cancellationToken),
             ApiResource.MemberPhoto => AdmitMemberPhotoAsync(job, artifactRoot, cancellationToken),
@@ -224,6 +231,56 @@ public sealed class JobPreparation(
         var extractionId = await SaveExtractionAsync(response.Captured, SenateVoteParser.ExtractionVersion,
             SenateVoteRenderer.Render(detail), cancellationToken);
         return PreparedFrom(await voteAdmissions.AdmitSenateVoteAsync(configured, job.JobId, detail.Vote, extractionId, cancellationToken));
+    }
+
+    private async Task<JobPreparationResult> AdmitVoteviewFollowOnsAsync(CollectionJobRecord job, CancellationToken cancellationToken)
+    {
+        var configured = ConfiguredSourceOf(job);
+        var resource = job.Definition.ApiResource!.Value;
+        var congress = VoteviewUrl.ReadCongress(configured.SourceUrl, resource, job.Definition.Url);
+        return PreparedFrom(await voteAdmissions.AdmitVoteviewFollowOnsAsync(configured, resource, job.JobId, congress, cancellationToken));
+    }
+
+    private async Task<JobPreparationResult> AdmitVoteviewVotesAsync(CollectionJobRecord job, string artifactRoot,
+        CancellationToken cancellationToken)
+    {
+        var configured = ConfiguredSourceOf(job);
+        var congress = VoteviewUrl.ReadCongress(configured.SourceUrl, ApiResource.VoteviewVotes, job.Definition.Url);
+        var members = await ReadVoteviewParentAsync(job.IdempotencyKey, ApiResource.VoteviewMembers, cancellationToken);
+        if (members is null) return JobPreparationResult.Blocked(VoteviewJobMissing);
+        var rollCalls = await ReadVoteviewParentAsync(members.IdempotencyKey, ApiResource.VoteviewRollCalls, cancellationToken);
+        if (rollCalls is null) return JobPreparationResult.Blocked(VoteviewJobMissing);
+        var chain = new VoteviewChain(congress, rollCalls.JobId, members.JobId, job.JobId);
+        var rollCallsCapture = await responses.ReadCaptureAsync(rollCalls, cancellationToken);
+        var membersCapture = await responses.ReadCaptureAsync(members, cancellationToken);
+        var votesCapture = await responses.ReadCaptureAsync(job, cancellationToken);
+        var hashes = new VoteviewBodies(rollCallsCapture.Captured.Capture.Sha256, membersCapture.Captured.Capture.Sha256,
+            votesCapture.Captured.Capture.Sha256, VoteviewParser.ExtractionVersion);
+        if (await voteAdmissions.HasVoteviewCandidateOfBodiesAsync(configured, congress, hashes, cancellationToken))
+            return JobPreparationResult.Prepared(duplicates: 1);
+        var rollCallsResponse = await responses.ReadBodyAsync(rollCallsCapture, artifactRoot, cancellationToken);
+        var membersResponse = await responses.ReadBodyAsync(membersCapture, artifactRoot, cancellationToken);
+        var votesResponse = await responses.ReadBodyAsync(votesCapture, artifactRoot, cancellationToken);
+        var rollCallRows = VoteviewParser.ParseRollCalls(rollCallsResponse.Body, congress);
+        var joined = VoteviewRoll.Join(rollCallRows, VoteviewParser.ParseCasts(votesResponse.Body, congress),
+            VoteviewParser.ParseMembers(membersResponse.Body, congress));
+        var rolls = joined.Select(roll => new VoteviewRollExtraction(roll.RollCall,
+            new DocumentExtraction(votesResponse.Captured, VoteviewParser.ExtractionVersion, VoteviewRenderer.Render(roll), part: roll.RollCall.Part))).ToArray();
+        var changed = await voteAdmissions.SelectChangedVoteviewRollsAsync(configured, congress, rolls, cancellationToken);
+        foreach (var roll in changed) _ = await extractions.SaveAsync(roll.Extraction, cancellationToken);
+        var prepared = PreparedFrom(await voteAdmissions.AdmitVoteviewVotesAsync(configured, chain, votesResponse.Captured.ObservedAt, changed,
+            cancellationToken));
+        var skipped = rollCallRows.Count - joined.Count;
+        if (skipped == 0) return prepared;
+        logger.LogWarning("Voteview Congress {Congress} skipped {Skipped} roll calls whose member counts differ from the roll call file.",
+            congress, skipped);
+        return prepared with { ErrorCode = VoteviewCountMismatch };
+    }
+
+    private async Task<CollectionJobRecord?> ReadVoteviewParentAsync(string childKey, ApiResource expected, CancellationToken cancellationToken)
+    {
+        var parent = await jobs.GetAsync(VoteviewJobKeys.ParentJobId(childKey), cancellationToken);
+        return parent is { State: CollectionJobState.Succeeded } && parent.Definition.ApiResource == expected ? parent : null;
     }
 
     private async Task<JobPreparationResult> AdmitMemberRosterAsync(CollectionJobRecord job, string artifactRoot,

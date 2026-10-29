@@ -35,10 +35,6 @@ public static class SenateVoteRenderer
         $"{VoteCountLabels.Yea} {Count(counts.Yeas ?? 0)}, {VoteCountLabels.Nay} {Count(counts.Nays ?? 0)}, "
         + $"{VoteCountLabels.Present} {Count(counts.Present ?? 0)}, {VoteCountLabels.NotVoting} {Count(counts.Absent ?? 0)}";
 
-    public static string MemberLine(SenateVoteMember member)
-    {
-        var name = SingleLine($"{member.FirstName} {member.LastName}");
-        var fields = new[] { member.LisId, name, member.Party, member.State, member.VoteCast };
-        return Line("Member", string.Join(", ", fields.Select(SingleLine)));
-    }
+    public static string MemberLine(SenateVoteMember member) =>
+        RenderedText.MemberLine(member.LisId, $"{member.FirstName} {member.LastName}", member.Party, member.State, member.VoteCast);
 }
