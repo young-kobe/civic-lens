@@ -38,7 +38,7 @@ public sealed class PublishedExecutiveActionTests
         Assert.Equal(ExecutiveActionFacts.Signed, PublishedExecutiveAction.SignedLabel);
         Assert.Equal(ExecutiveActionFacts.Published, PublishedExecutiveAction.PublishedLabel);
         Assert.Equal(ExecutiveActionFacts.Citation, PublishedExecutiveAction.CitationLabel);
-        Assert.Equal(ExecutiveActionFacts.CorrectionOf, PublishedExecutiveAction.CorrectionOfLabel);
+        Assert.Equal(ExecutiveActionFacts.CorrectionNotice, PublishedExecutiveAction.CorrectionNoticeLabel);
         Assert.Equal(ExecutiveActionFacts.Url, PublishedExecutiveAction.UrlLabel);
     }
 
@@ -64,9 +64,23 @@ public sealed class PublishedExecutiveActionTests
     }
 
     [Fact]
-    public void ACorrectionNeedsItsCitedFactAndOtherRecordsHaveNone()
+    public void ACorrectionNoticeNeedsItsCitedFactAndAFactNeedsItsNotice()
     {
-        Assert.Throws<InvalidDataException>((Record() with { CorrectionOf = "2024-26714" }).Validate);
+        var notice = new PublishedExecutiveActionNotice { DocumentNumber = "R1-2025-00001", PublishedOn = new DateOnly(2025, 2, 3), Url = "https://www.federalregister.gov/x" };
+
+        Assert.Throws<InvalidDataException>((Record() with { CorrectionNotices = [notice] }).Validate);
+        Assert.Equal("R1-2025-00001, published 2025-02-03, https://www.federalregister.gov/x", notice.Value);
+    }
+
+    [Fact]
+    public void TheEntryNamesTheDocumentTypeSoThePresidentPageShowsTheSpecificBadgeAndOtherKindsNameNone()
+    {
+        var entry = Record().ToEntry();
+        entry.Validate();
+
+        Assert.Equal(PublishedExecutiveActionKind.ExecutiveOrder, entry.DocumentType);
+        Assert.Throws<InvalidDataException>((entry with { DocumentType = null }).Validate);
+        Assert.Throws<InvalidDataException>((entry with { Kind = PublishedRecordKind.Vote }).Validate);
     }
 
     private static PublishedExecutiveAction Record(PublishedExecutiveActionFact[]? facts = null)
@@ -95,6 +109,7 @@ public sealed class PublishedExecutiveActionTests
             Sources = [new() { ExtractionId = extractionId, Url = "https://www.federalregister.gov/api/v1/documents/2025-01900.json", ObservedAtUtc = DateTimeOffset.UnixEpoch, Text = Text }],
             ApprovedAtUtc = DateTimeOffset.UnixEpoch,
             FirstPublishedAtUtc = DateTimeOffset.UnixEpoch,
+            CorrectionNotices = [],
             Corrections = []
         };
     }

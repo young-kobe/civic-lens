@@ -169,9 +169,9 @@ The source `federal-register-documents` in `config/federal-coverage.json` follow
 
 To stop the source, set `enabled` to `false` and restart the worker.
 
-The first run lists every document from `backfillFrom` 2024-10-29. It admits one job for each document, about 340 in the first year. Each check after that runs every 6 hours and lists from 2 days before the newest stored publication date. Run `jobs list` and `jobs get` as in [managed collection jobs](#managed-collection-jobs) to see progress. A blocked job names its reason.
+The first run lists every document from `backfillFrom` 2024-10-29. It admits one job for each document, about 700 over two years. Each check after that runs every 6 hours and lists from 2 days before the newest stored publication date. Run `jobs list` and `jobs get` as in [managed collection jobs](#managed-collection-jobs) to see progress. A blocked job names its reason.
 
-To withdraw a record, open `/Review/ExecutiveActions/{id}` and withdraw approval. Then publish the withdrawal as for any record.
+To withdraw a record, open `/Review/ExecutiveActions/{id}` and withdraw approval. Then run `releases publish <key> --withdraw executiveAction:<id> <text>` as in [publish a static release](#publish-a-static-release). The page alone does not change the public site.
 
 ### Congress.gov House vote stream
 

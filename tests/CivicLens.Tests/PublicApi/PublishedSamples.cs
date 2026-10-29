@@ -174,6 +174,7 @@ internal static class PublishedSamples
             DocumentUrl = "https://www.federalregister.gov/documents/2025/01/28/2025-01900/x",
             President = new PublishedOfficial { Id = "o1", Name = "Official o1" },
             Facts = [.. lines.Select(Fact)],
+            CorrectionNotices = [],
             Sources = [new PublishedDocumentVersion { ExtractionId = SourceId, Url = "https://www.federalregister.gov/api/v1/documents/2025-01900.json", ObservedAtUtc = Published, Text = text }],
             ApprovedAtUtc = Published,
             FirstPublishedAtUtc = Published

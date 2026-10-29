@@ -6,14 +6,15 @@ namespace CivicLens.Publication.Contracts;
 public sealed record PublishedExecutiveAction
 {
     public const int MaximumHeadlineLength = 1_000;
-    public const int MaximumFacts = 16;
-    public const int MaximumSources = 1;
+    public const int MaximumNotices = 8;
+    public const int MaximumFacts = 16 + MaximumNotices;
+    public const int MaximumSources = 1 + MaximumNotices;
     public const string DocumentNumberLabel = "Federal Register document";
     public const string TitleLabel = "Title";
     public const string SignedLabel = "Signed";
     public const string PublishedLabel = "Published";
     public const string CitationLabel = "Citation";
-    public const string CorrectionOfLabel = "Corrects document";
+    public const string CorrectionNoticeLabel = "Correction notice";
     public const string UrlLabel = "Document URL";
 
     public required string RecordId { get; init; }
@@ -21,13 +22,13 @@ public sealed record PublishedExecutiveAction
     public required string Headline { get; init; }
     public required PublishedExecutiveActionKind Kind { get; init; }
     public required string DocumentNumber { get; init; }
-    public string? CorrectionOf { get; init; }
     public required DateOnly SignedOn { get; init; }
     public required DateOnly PublishedOn { get; init; }
     public required string FederalRegisterCitation { get; init; }
     public required string DocumentUrl { get; init; }
     public required PublishedOfficial President { get; init; }
     public required PublishedExecutiveActionFact[] Facts { get; init; }
+    public required PublishedExecutiveActionNotice[] CorrectionNotices { get; init; }
     public required PublishedDocumentVersion[] Sources { get; init; }
     public required DateTimeOffset ApprovedAtUtc { get; init; }
     public required DateTimeOffset FirstPublishedAtUtc { get; init; }
@@ -44,7 +45,8 @@ public sealed record PublishedExecutiveAction
         IssueIds = [],
         PolicyAreaIds = [],
         SourceHost = Sources[0].Host,
-        EventDate = SignedOn
+        EventDate = SignedOn,
+        DocumentType = Kind
     };
 
     public IEnumerable<PublishedCitation> Citations() => Facts.Select(fact => fact.Citation);
@@ -69,9 +71,11 @@ public sealed record PublishedExecutiveAction
         RequireFact(PublishedLabel, Day(PublishedOn));
         RequireFact(CitationLabel, FederalRegisterCitation);
         RequireFact(UrlLabel, DocumentUrl);
-        if (CorrectionOf is not null) RequireFact(CorrectionOfLabel, CorrectionOf);
-        else if (Facts.Any(fact => fact.Label == CorrectionOfLabel))
-            throw new InvalidDataException("A published executive action that corrects no document has no correction fact.");
+        if (CorrectionNotices is null || CorrectionNotices.Length > MaximumNotices || CorrectionNotices.Any(notice => notice is null))
+            throw new InvalidDataException($"A published executive action holds at most {MaximumNotices} correction notices.");
+        foreach (var notice in CorrectionNotices) RequireFact(CorrectionNoticeLabel, notice.Value);
+        if (Facts.Count(fact => fact.Label == CorrectionNoticeLabel) != CorrectionNotices.Length)
+            throw new InvalidDataException("Each correction notice fact of a published executive action needs its notice.");
     }
 
     private static string Day(DateOnly day) => day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);

@@ -21,6 +21,7 @@ public sealed record PublishedRecordEntry
     public PublishedRecordKind? TargetKind { get; init; }
     public string? TargetRecordId { get; init; }
     public string? MatchedOfficialId { get; init; }
+    public PublishedExecutiveActionKind? DocumentType { get; init; }
 
     public void Validate()
     {
@@ -33,6 +34,8 @@ public sealed record PublishedRecordEntry
                 $"Release manifest filters allow {MaximumFilterValues} distinct values of up to {MaximumFilterValueLength} characters each.");
         if (Kind == PublishedRecordKind.Action ? !HasValidBillTitle : BillTitle is not null)
             throw new InvalidDataException($"An action manifest entry holds a bill title of 1 to {PublishedAction.MaximumBillTitleLength} characters. Other entries hold none.");
+        if ((Kind == PublishedRecordKind.ExecutiveAction) != (DocumentType is { } type && Enum.IsDefined(type)))
+            throw new InvalidDataException("An executive action manifest entry names its document type. Other entries name none.");
         if (Kind == PublishedRecordKind.Relationship ? !HasValidLink : HasAnyLink)
             throw new InvalidDataException("A relationship manifest entry names its link type, statement, and target. Other entries name none.");
     }

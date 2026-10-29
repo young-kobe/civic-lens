@@ -16,11 +16,12 @@ public static class FederalRegisterListParser
     public static FederalRegisterListPage Parse(ReadOnlySpan<byte> body)
     {
         var wire = CongressApiJson.Deserialize<Wire>(body, "Federal Register list");
-        if (wire.Results is null || wire.Count is not >= 0 || wire.TotalPages is not >= 0)
-            throw new InvalidDataException("Federal Register list needs a count, a page count, and results.");
-        if (wire.TotalPages > 1 || wire.Results.Length != wire.Count || wire.Results.Length > FederalRegisterUrl.PageLimit)
+        if (wire.Count is not >= 0 || wire.TotalPages is not >= 0)
+            throw new InvalidDataException("Federal Register list needs a count and a page count.");
+        var results = wire.Results ?? (wire.Count == 0 ? [] : throw new InvalidDataException("Federal Register list needs its results."));
+        if (wire.TotalPages > 1 || results.Length != wire.Count || results.Length > FederalRegisterUrl.PageLimit)
             throw new InvalidDataException("Federal Register list does not fit one page.");
-        var items = wire.Results.Select(item => new FederalRegisterListItem(
+        var items = results.Select(item => new FederalRegisterListItem(
             FederalRegisterDocumentNumber.Require(item.DocumentNumber),
             item.PublicationDate ?? throw new InvalidDataException("Federal Register list item needs a publication date."))).ToArray();
         if (items.DistinctBy(item => item.DocumentNumber).Count() != items.Length)

@@ -19,7 +19,8 @@ internal static class PublishedExecutiveActionView
         new("Published in the Federal Register", Moment.Iso(action.PublishedOn)),
         new("Federal Register citation", action.FederalRegisterCitation),
         new("Federal Register document number", action.DocumentNumber),
-        .. action.CorrectionOf is { } corrected ? [new Fact("Corrects document", corrected)] : Array.Empty<Fact>(),
+        .. action.CorrectionNotices.Select(notice => new Fact("Correction notice", $"{notice.DocumentNumber}, published {Moment.Iso(notice.PublishedOn)}",
+            [new FactLink("Open the correction notice", notice.Url)])),
         Fact.LinkList("Read the document", [new FactLink("Open the Federal Register page", action.DocumentUrl)]),
         new("Published", $"Checked by code {Moment.Full(action.ApprovedAtUtc)}; first published {Moment.Full(action.FirstPublishedAtUtc)}"),
         new("Revision", action.RevisionNumber.ToString(CultureInfo.InvariantCulture))

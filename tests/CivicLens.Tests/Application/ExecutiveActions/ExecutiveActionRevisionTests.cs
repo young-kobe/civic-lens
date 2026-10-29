@@ -13,12 +13,16 @@ public sealed class ExecutiveActionRevisionTests
     private const string ExtractionId = "e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0";
     private static readonly DateTimeOffset Now = new(2026, 10, 29, 12, 0, 0, TimeSpan.Zero);
 
-    private static (ExecutiveActionRevision Revision, string Text) Create(string json = FederalRegisterFixtures.TrumpOrder, int number = 1)
+    private static (ExecutiveActionRevision Revision, string Text) Create(string json = FederalRegisterFixtures.TrumpOrder)
+    {
+        var evidence = Evidence(json);
+        return (ExecutiveActionRevisions.Create(FederalRegisterFixtures.SourceId, Now, evidence, []), evidence.ExtractionText);
+    }
+
+    private static FederalRegisterEvidence Evidence(string json, string extractionId = ExtractionId)
     {
         var document = FederalRegisterFixtures.Document(json);
-        var text = FederalRegisterRenderer.Render(document);
-        var evidence = new FederalRegisterEvidence(document, ExtractionId, text, "donald-trump");
-        return (ExecutiveActionRevisions.Create(FederalRegisterFixtures.SourceId, number, Now, evidence), text);
+        return new FederalRegisterEvidence(document, extractionId, FederalRegisterRenderer.Render(document), "donald-trump");
     }
 
     [Fact]
@@ -34,14 +38,35 @@ public sealed class ExecutiveActionRevisionTests
     }
 
     [Fact]
-    public void ARecordIdFollowsTheDocumentThatIsCorrectedSoACorrectionAppendsToTheSameRecord()
+    public void ACorrectionAddsANoticeThatCitesItsOwnExtractionAndLeavesTheOriginalFactsAsTheyWere()
     {
         var original = Create(FederalRegisterFixtures.BidenProclamation).Revision;
-        var correction = Create(FederalRegisterFixtures.BidenProclamationCorrection, number: 2).Revision;
+        var correction = Evidence(FederalRegisterFixtures.BidenProclamationCorrection, new string('c', 64));
 
-        Assert.Equal(original.RecordId, correction.RecordId);
-        Assert.Equal("2024-26714", correction.CorrectionOf);
-        Assert.Equal(2, correction.RevisionNumber);
+        var next = ExecutiveActionRevisions.Add(original, Now.AddDays(1), ExecutiveActionRevisions.NoticeOf(correction));
+
+        Assert.Equal(original.RecordId, next.RecordId);
+        Assert.Equal(2, next.RevisionNumber);
+        Assert.Equal(original.Facts, next.Facts);
+        Assert.Equal("2024-26714", next.DocumentNumber);
+        Assert.Equal(new DateOnly(2024, 11, 13), next.PublishedOn);
+        var notice = Assert.Single(next.Notices);
+        Assert.Equal(("R1-2024-26714", new DateOnly(2024, 11, 20), new string('c', 64)), (notice.DocumentNumber, notice.PublishedOn, notice.Citation.ExtractionId));
+        Assert.Equal(notice.Text, correction.ExtractionText.Substring(notice.Citation.Start, notice.Citation.Length));
+        next.ValidateShape();
+    }
+
+    [Fact]
+    public void ARecordThatStartsFromTheOriginalHoldsTheNoticesThatWaitedInDateOrder()
+    {
+        var evidence = Evidence(FederalRegisterFixtures.BidenProclamation);
+        var later = ExecutiveActionRevisions.NoticeOf(Evidence(FederalRegisterFixtures.BidenProclamationCorrection, new string('c', 64)));
+        var earlier = later with { DocumentNumber = "R1-2024-26700", PublishedOn = new DateOnly(2024, 11, 14) };
+
+        var revision = ExecutiveActionRevisions.Create(FederalRegisterFixtures.SourceId, Now, evidence, [later, earlier]);
+
+        Assert.Equal(["R1-2024-26700", "R1-2024-26714"], revision.Notices.Select(notice => notice.DocumentNumber));
+        Assert.Equal(1, revision.RevisionNumber);
     }
 
     [Fact]

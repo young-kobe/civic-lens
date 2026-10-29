@@ -27,6 +27,20 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
+    public async Task AnExecutiveActionRowShowsItsSpecificTypeAndOtherRowsShowTheirKind()
+    {
+        var page = Current(
+            [Entry('1', PublishedRecordKind.ExecutiveAction, new DateOnly(2026, 5, 1)) with { DocumentType = PublishedExecutiveActionKind.Proclamation },
+             Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 4, 1))], []);
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        var badges = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-records']")!.QuerySelectorAll("tbody .badge, tbody [class*=badge]")
+            .Select(badge => badge.TextContent.Trim());
+        Assert.Equal(["Proclamation", "Action"], badges);
+    }
+
+    [Fact]
     public async Task AnOfficialPageAndAFacetPageOrderTheSameEntriesTheSameWayBecauseOneRuleOwnsTheDateOrder()
     {
         var published = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero);

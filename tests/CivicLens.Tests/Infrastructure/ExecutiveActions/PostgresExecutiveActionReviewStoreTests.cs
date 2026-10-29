@@ -129,6 +129,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 2, ReviewDecisionKind.WithdrawApproval, "auth0|owner",
             "The title is wrong.", [], DateTimeOffset.UtcNow);
         await store.DecideAsync("auth0|owner", decision, 1, 1, "key-1", new string('a', 64), default);
+        await Task.Delay(TimeSpan.FromSeconds(1));
         var withdrawn = await publisher.ExecuteAsync(PublicationScenario.Owner,
             new PublishReleaseRequest([], "withdraw") { Withdrawals = [new(PublishedRecordKind.ExecutiveAction, recordId, "The title is wrong.")] });
         Assert.Empty(JsonSerializer.Deserialize<PublicationRelease>(await releases.ReadFileAsync(withdrawn.DirectoryName,

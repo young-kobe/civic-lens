@@ -8,8 +8,9 @@ The executive actions feature records presidential documents from the Federal Re
 
 - The source is the Federal Register JSON API. It needs no key. The collector sends the shared User-Agent `CivicLens/0.1 (civic-lens.info)` and no email address.
 - The scope is executive orders, proclamations, notices, and memoranda. The list filter `presidential_document_type` selects them. The API gives `presidential_document_type` as a filter only, so the parser reads the `subtype` field of each document.
-- One record is one document. Its identity is the Federal Register document number. A correction document names the document it corrects in `correction_of`. The correction appends a revision to the record of the corrected document. Revision 1 is the first document that Civic Lens reads.
-- A record for a correction whose original Civic Lens never read starts under the number of the original. The original, if it arrives later, becomes the next revision.
+- One record is one original document. Its identity is the Federal Register document number of the original. The record always keeps the number, the dates, the citation, and the link of the original as its facts.
+- A correction document names the original in `correction_of`. It adds one `Correction notice` fact to the record. The fact holds the number, the publication date, and the link of the correction, and it cites the capture of the correction. A correction never replaces a fact of the original. Each new notice makes a new revision.
+- A correction that arrives before its original is stored with its notice and makes no record. It admits a job for the original at once. The original then makes revision 1 with every notice that waited. This holds in either arrival order.
 - A list job covers a window of publication dates and admits one document job for each listed document. The window needs no cursor table. It starts 2 days before the newest publication date of any stored document, or at `backfillFrom` when none exists. It ends today.
 - A window must fit one API page of 1,000 documents. A longer list is invalid data and blocks the job. About 340 documents appear in a year, so the first window from `backfillFrom` fits.
 - A document job fetches the document with pinned `fields[]`. The pin keeps a changing field such as the page view count out of the capture. The pin also adds `president`, which the API omits otherwise.
@@ -19,7 +20,7 @@ The executive actions feature records presidential documents from the Federal Re
 - The signer is the configured person whose `President` office covers the signing date. The person ID must equal the President identifier that the Federal Register cites. Both Presidents hold office on 2025-01-20, so the cited identifier picks one. A document with no match is invalid data and blocks the job.
 - Issue and policy area lists are empty at launch.
 - The published kind is `executiveAction`. It adds no manifest version bump.
-- A person with the owner role withdraws a record on the review page. The page has the decision panel only.
+- A reviewer or the owner can withdraw approval on the review page, as for a vote. The page has the decision panel only. The withdrawal reaches the public site when the owner publishes it with `releases publish --withdraw`.
 
 ## Invariants
 
@@ -27,7 +28,7 @@ Each line gives the rule, what enforces it, and the test that protects it.
 
 - A document makes at most one revision. Enforced by the key of `executive_action_documents`. Test: `PostgresFederalRegisterTests.ADocumentThatIsKnownAddsNoSecondRevisionSoAReplayOfPreparationChangesNothing`.
 - A revision and its code approval commit together or not at all. Enforced by `ExecutiveActionRows.AppendCodeApprovedAsync` inside the job store transaction. Test: `PostgresFederalRegisterTests.ADocumentWritesRevisionOneAndTheCodeApprovalInOneTransaction`.
-- A correction appends a revision to the record of the corrected document. Enforced by `FederalRegisterDocument.RecordDocumentNumber` and `ExecutiveActionIdentity`. Tests: `PostgresFederalRegisterTests.ACorrectionAppendsARevisionToTheRecordItCorrectsAndCodeApprovesItAgain`, `PostgresFederalRegisterTests.ACorrectionWhoseOriginalIsNotKnownStartsTheRecordOfTheOriginalNumber`.
+- A correction adds a notice and keeps the original facts, in either arrival order. Enforced by `ExecutiveActionRows.AdmitAsync`. Tests: `PostgresFederalRegisterTests.ACorrectionAppendsARevisionThatKeepsTheOriginalFactsAndAddsOneNoticeCitedToItsOwnCapture`, `PostgresFederalRegisterTests.ACorrectionThatArrivesFirstWaitsAndAsksForTheOriginalThenTheOriginalStartsTheRecordWithTheNotice`, `ExecutiveActionRevisionTests.ACorrectionAddsANoticeThatCitesItsOwnExtractionAndLeavesTheOriginalFactsAsTheyWere`.
 - Every fact equals the text of its citation, and every typed field equals its fact. Enforced by `ExecutiveActionRevision.ValidateShape` and `ValidateAgainst`. Tests: `ExecutiveActionRevisionTests.AFactThatDiffersFromTheTypedFieldIsRefusedSoTheTitleAndItsCitationCannotDrift`, `ExecutiveActionRevisionTests.AFactMustEqualTheTextOfItsCitationInTheSavedExtraction`.
 - Only the code writes a revision. Enforced by `ExecutiveActionRevision.ValidateShape`. Test: `ExecutiveActionRevisionTests.ARevisionByAnyoneButTheCodeIsRefusedBecauseNoPersonEditsTheseRecords`.
 - The signer is a configured President in office on the signing date, and the Federal Register cites that person. Enforced by `ExecutiveActionSigner`. Tests: `ExecutiveActionSignerTests.ACitedPresidentWhoIsNotInOfficeOnTheSigningDateIsInvalidSoNoRecordNamesTheWrongPerson`, `ExecutiveActionSignerTests.OnTheDayOfTheHandoverTheCitedPresidentPicksBetweenTheTwoOffices`.
@@ -76,17 +77,17 @@ President: Donald Trump
 Document URL: https://www.federalregister.gov/documents/2025/01/28/2025-01900/ending-the-weaponization-of-the-federal-government
 ```
 
-A notice or memorandum has no number line. A correction adds the line `Corrects document`.
+A notice or memorandum has no number line. The extraction of a correction document adds the line `Correction notice`, which holds its own number, date, and link. The record cites that line.
 
 ### Admission
 
-Preparation of a document job parses the body, finds the signer, saves the extraction, and calls `AdmitDocumentAsync`. The store takes the job lock and the executive action review lock. It then looks for the document in `executive_action_documents`. A known document ends the work as a duplicate.
+Preparation of a document job parses the body, finds the signer, saves the extraction, and calls `AdmitDocumentAsync`. The store takes the job lock. It looks for the document in `executive_action_documents` under that lock, and a known document ends the work as a duplicate. Then the store takes the executive action review lock.
 
-Otherwise the store reads or creates the draft row of the record. It builds the next revision, appends it, and approves it by code when the rules allow it. It writes the document row in the same transaction. The extraction must belong to an attempt of the job.
+An original creates the draft row and revision 1, with the notices that waited. A correction adds its notice to the current revision and appends the next revision. A correction with no draft waits. Code approves each revision when the rules allow it. The store writes the document row in the same transaction. The extraction must belong to an attempt of the job.
 
 ### Review
 
-The review page at `/Review/ExecutiveActions/{id}` shows the facts, their quotes, the history, and the decision panel. It has no editor. The owner can withdraw approval or request changes. A record that needs action appears in the review overview with the other fact records.
+The review page at `/Review/ExecutiveActions/{id}` shows the facts, their quotes, the history, and the decision panel. It has no editor. A reviewer or the owner can withdraw approval or request changes. A record that needs action appears in the review overview with the other fact records.
 
 ### Publication
 
@@ -98,7 +99,7 @@ The release holds the record file and a page for each record. The headline is th
 - `executive_action_drafts` has one row for each record. It holds the current revision, the review state, and the listing columns.
 - `executive_action_revisions` holds one row for each revision as JSON.
 - `executive_action_review_decisions` holds the decisions, including the code approval.
-- `executive_action_documents` has one row for each document that made a revision. It holds the publication date, which sets the next window.
+- `executive_action_documents` has one row for each document. It holds the publication date, which sets the next window. It holds the first revision that has the document. A correction that waits has no revision and keeps its notice.
 - `IFederalRegisterAdmissionStore` is the port of list and document admission. `PostgresCollectionJobStore` implements it. `IExecutiveActionReviewStore` is the review and publication port. `PostgresExecutiveActionReviewStore` implements it.
 - `PublishedExecutiveAction` is the published record. It has the kind `executiveAction`.
 

@@ -17,6 +17,9 @@ public static class PublishedRecordLabels
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no label.")
     };
 
+    public static string Badge(PublishedRecordEntry entry) =>
+        entry.DocumentType is { } type ? ExecutiveActionKind(type) : Kind(entry.Kind);
+
     public static string ExecutiveActionKind(PublishedExecutiveActionKind kind) => kind switch
     {
         PublishedExecutiveActionKind.ExecutiveOrder => "Executive order",

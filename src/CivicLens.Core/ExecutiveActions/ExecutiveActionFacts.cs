@@ -13,15 +13,17 @@ public static class ExecutiveActionFacts
     public const string Published = "Published";
     public const string Citation = "Citation";
     public const string President = "President";
-    public const string CorrectionOf = "Corrects document";
+    public const string CorrectionNotice = "Correction notice";
     public const string Url = "Document URL";
 
     public static string Line(string label, string value) => $"{label}: {value}";
 
-    public static string Date(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    private static string Date(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-    public static IReadOnlyList<(string Label, string Value)> Of(string documentNumber, string? correctionOf, ExecutiveActionKind kind,
-        string? presidentialNumber, string title, DateOnly signedOn, DateOnly publishedOn, string citation, string presidentName, string url)
+    public static string NoticeValue(string documentNumber, DateOnly publishedOn, string url) => $"{documentNumber}, published {Date(publishedOn)}, {url}";
+
+    public static IReadOnlyList<(string Label, string Value)> Of(string documentNumber, ExecutiveActionKind kind, string? presidentialNumber,
+        string title, DateOnly signedOn, DateOnly publishedOn, string citation, string presidentName, string url)
     {
         var facts = new List<(string, string)>
         {
@@ -34,7 +36,6 @@ public static class ExecutiveActionFacts
         facts.Add((Published, Date(publishedOn)));
         facts.Add((Citation, citation));
         facts.Add((President, presidentName));
-        if (correctionOf is not null) facts.Add((CorrectionOf, correctionOf));
         facts.Add((Url, url));
         return facts;
     }

@@ -6,7 +6,7 @@ namespace CivicLens.Application.ExecutiveActions;
 /// <summary>Finds the configured President who signed a document. The person's ID must equal the President that the Federal Register cites.</summary>
 public static class ExecutiveActionSigner
 {
-    public const string PresidentTitle = "President";
+    private const string PresidentTitle = "President";
 
     public static string PersonIdOf(CollectionConfiguration configuration, FederalRegisterDocument document)
     {

@@ -128,7 +128,7 @@
                 <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Iso(row.Date)</TableCell>
                 <TableCell Main>
                     <PublishedRecordTitle RecordId="@row.RecordId" RootPath="@Page.RootPath">@row.Headline</PublishedRecordTitle>
-                    <StatusBadge Text="@PublishedRecordLabels.Kind(row.Kind)" />
+                    <StatusBadge Text="@row.Badge" />
                     @if (row.Detail is not null)
                     {
                         <div class="muted small">@row.Detail</div>

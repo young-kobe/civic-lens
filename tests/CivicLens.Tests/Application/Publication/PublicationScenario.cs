@@ -338,7 +338,7 @@ internal sealed class PublicationScenario
         var text = FederalRegisterRenderer.Render(document);
         var extraction = Extraction(text, $"executive-action-{id}", "https://www.federalregister.gov/api/v1/documents/2025-01900.json");
         var evidence = new FederalRegisterEvidence(document, extraction.ExtractionId, text, "mayor");
-        var revision = ExecutiveActionRevisions.Create(FederalRegisterFixtures.SourceId, 1, ApprovedAt, evidence) with { RecordId = recordId };
+        var revision = ExecutiveActionRevisions.Create(FederalRegisterFixtures.SourceId, ApprovedAt, evidence, []) with { RecordId = recordId };
         var all = decisions ?? [Decision(recordId, 1, ReviewDecisionKind.Approve)];
         var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
         var review = new ExecutiveActionReview(recordId, revision, null, [revision], all.Length,

@@ -62,13 +62,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     source_id = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
                     document_number = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
                     record_id = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
-                    revision_number = table.Column<int>(type: "integer", nullable: false),
+                    revision_number = table.Column<int>(type: "integer", nullable: true),
+                    notice_json = table.Column<string>(type: "text", nullable: true),
                     published_on = table.Column<DateOnly>(type: "date", nullable: false),
                     document_job_id = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_executive_action_documents", x => new { x.source_id, x.document_number });
+                    table.CheckConstraint("ck_executive_action_documents_pending", "revision_number IS NOT NULL OR notice_json IS NOT NULL");
                     table.CheckConstraint("ck_executive_action_documents_revision", "revision_number >= 1");
                     table.ForeignKey(
                         name: "FK_executive_action_documents_collection_jobs_document_job_id",
@@ -120,10 +122,14 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 columns: new[] { "source_id", "published_on" });
 
             migrationBuilder.CreateIndex(
-                name: "ux_executive_action_documents_revision",
+                name: "ix_executive_action_documents_record",
                 table: "executive_action_documents",
-                columns: new[] { "record_id", "revision_number" },
-                unique: true);
+                column: "record_id");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_executive_action_documents_record_id_revision_number",
+                table: "executive_action_documents",
+                columns: new[] { "record_id", "revision_number" });
 
             migrationBuilder.CreateIndex(
                 name: "ix_executive_action_drafts_issue_ids",

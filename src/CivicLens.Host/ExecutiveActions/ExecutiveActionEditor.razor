@@ -39,7 +39,7 @@ else
         {
             <Notice Tone="@(isConflict ? Tone.Warn : Tone.Ok)" Dismissible="@(!isConflict)">@statusMessage</Notice>
         }
-        <Notice Tone="Tone.Neutral">Code wrote this record from the Federal Register and approved it. No person edits it. Withdraw approval here to take it off the public site.</Notice>
+        <Notice Tone="Tone.Neutral">Code wrote this record from the Federal Register and approved it. No person edits it. Withdraw approval here. Then publish the withdrawal with the command `releases publish --withdraw`, because the public site changes only when a release publishes.</Notice>
         @if (concerns.Length > 0)
         {
             <Notice Tone="Tone.Warn">Approval is blocked. @(concerns.Length == 1 ? "Resolve the open concern below first." : $"Resolve the {concerns.Length} open concerns below first.")</Notice>
@@ -57,6 +57,10 @@ else
                     @foreach (var fact in revision.Facts)
                     {
                         <li><CitationQuote Label="@fact.Label" Quote="@(fact.Citation.QuoteIn(detail.Extractions))" /></li>
+                    }
+                    @foreach (var notice in revision.Notices)
+                    {
+                        <li><CitationQuote Label="Correction notice" Quote="@(notice.Citation.QuoteIn(detail.Extractions))" /></li>
                     }
                 </ul>
             </Panel>

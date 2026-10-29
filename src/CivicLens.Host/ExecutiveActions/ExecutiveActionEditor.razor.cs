@@ -52,7 +52,7 @@ public sealed partial class ExecutiveActionEditor
         new("Signed", Moment.Iso(revision.SignedOn)),
         new("Published", Moment.Iso(revision.PublishedOn)),
         new("President", revision.PresidentName),
-        new("Corrects document", revision.CorrectionOf ?? "None")
+        Fact.List("Correction notices", revision.Notices.Select(notice => notice.Value))
     ];
 
     private IReadOnlyList<ReviewHistoryEntry> History => ReviewHistoryEntry.Newest(

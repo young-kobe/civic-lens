@@ -24,6 +24,15 @@ public sealed class FederalRegisterParserTests
     }
 
     [Fact]
+    public void AnEmptyListMayOmitItsResultsButAListWithCountsMustHoldThem()
+    {
+        var empty = """{"count":0,"total_pages":0,"description":"none"}""";
+
+        Assert.Empty(FederalRegisterListParser.Parse(FederalRegisterFixtures.Bytes(empty)).Items);
+        Assert.Throws<InvalidDataException>(() => FederalRegisterListParser.Parse(FederalRegisterFixtures.Bytes("""{"count":2,"total_pages":1}""")));
+    }
+
+    [Fact]
     public void AListThatRepeatsADocumentIsInvalid()
     {
         var json = FederalRegisterFixtures.List.Replace("2025-01901", "2025-01900");
@@ -60,6 +69,14 @@ public sealed class FederalRegisterParserTests
         Assert.Equal("2024-26714", correction.CorrectionOf);
         Assert.Equal("R1-2024-26714", correction.DocumentNumber);
         Assert.Equal("2024-26714", correction.RecordDocumentNumber);
+    }
+
+    [Fact]
+    public void ACorrectionRendersOneNoticeLineThatNamesItsNumberDateAndLink()
+    {
+        var text = FederalRegisterRenderer.Render(FederalRegisterFixtures.Document(FederalRegisterFixtures.BidenProclamationCorrection));
+
+        Assert.EndsWith("\nCorrection notice: R1-2024-26714, published 2024-11-20, https://www.federalregister.gov/documents/2024/11/20/R1-2024-26714/to-facilitate-positive-adjustment-to-competition-from-imports-of-fine-denier-polyester-staple-fiber", text);
     }
 
     [Fact]

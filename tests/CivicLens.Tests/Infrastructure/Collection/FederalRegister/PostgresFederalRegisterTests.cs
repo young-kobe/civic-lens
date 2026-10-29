@@ -88,7 +88,7 @@ public sealed class PostgresFederalRegisterTests(PostgresCollection postgres) : 
     }
 
     [Fact]
-    public async Task ACorrectionAppendsARevisionToTheRecordItCorrectsAndCodeApprovesItAgain()
+    public async Task ACorrectionAppendsARevisionThatKeepsTheOriginalFactsAndAddsOneNoticeCitedToItsOwnCapture()
     {
         await AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
         await AdmitAsync(FederalRegisterFixtures.BidenProclamationCorrection, "joe-biden");
@@ -97,20 +97,31 @@ public sealed class PostgresFederalRegisterTests(PostgresCollection postgres) : 
         Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM executive_action_revisions"));
         Assert.Equal(2, await ScalarAsync("SELECT current_revision_number FROM executive_action_drafts"));
         Assert.Equal("Approved", await ScalarAsync("SELECT review_status FROM executive_action_drafts"));
+        Assert.Equal("2024-26714", await ScalarAsync("SELECT revision_json::jsonb ->> 'documentNumber' FROM executive_action_revisions WHERE revision_number = 2"));
+        Assert.Equal("2024-11-13", await ScalarAsync("SELECT revision_json::jsonb ->> 'publishedOn' FROM executive_action_revisions WHERE revision_number = 2"));
+        Assert.Equal("R1-2024-26714", await ScalarAsync("SELECT revision_json::jsonb -> 'notices' -> 0 ->> 'documentNumber' FROM executive_action_revisions WHERE revision_number = 2"));
+        Assert.Equal(0, await ScalarAsync("SELECT jsonb_array_length(revision_json::jsonb -> 'notices') FROM executive_action_revisions WHERE revision_number = 1"));
         Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM executive_action_documents"));
-        Assert.Equal("R1-2024-26714", await ScalarAsync(
-            "SELECT revision_json::jsonb ->> 'documentNumber' FROM executive_action_revisions WHERE revision_number = 2"));
     }
 
     [Fact]
-    public async Task ACorrectionWhoseOriginalIsNotKnownStartsTheRecordOfTheOriginalNumber()
+    public async Task ACorrectionThatArrivesFirstWaitsAndAsksForTheOriginalThenTheOriginalStartsTheRecordWithTheNotice()
     {
         await AdmitAsync(FederalRegisterFixtures.BidenProclamationCorrection, "joe-biden");
+
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM executive_action_drafts"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM executive_action_documents WHERE revision_number IS NULL AND notice_json IS NOT NULL"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM collection_jobs WHERE idempotency_key LIKE '%/document/2024-26714'"));
+
         await AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
 
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM executive_action_drafts"));
-        Assert.Equal("2024-26714", await ScalarAsync(
-            "SELECT revision_json::jsonb ->> 'documentNumber' FROM executive_action_revisions WHERE revision_number = 2"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM executive_action_revisions"));
+        Assert.Equal("Approved", await ScalarAsync("SELECT review_status FROM executive_action_drafts"));
+        Assert.Equal("2024-26714", await ScalarAsync("SELECT revision_json::jsonb ->> 'documentNumber' FROM executive_action_revisions"));
+        Assert.Equal("2024-11-13", await ScalarAsync("SELECT revision_json::jsonb ->> 'publishedOn' FROM executive_action_revisions"));
+        Assert.Equal("R1-2024-26714", await ScalarAsync("SELECT revision_json::jsonb -> 'notices' -> 0 ->> 'documentNumber' FROM executive_action_revisions"));
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM executive_action_documents WHERE revision_number = 1"));
     }
 
     [Fact]
@@ -148,8 +159,8 @@ public sealed class PostgresFederalRegisterTests(PostgresCollection postgres) : 
     private async Task<string> EnqueueDocumentAsync(string number)
     {
         var page = new FederalRegisterListPage([new FederalRegisterListItem(number, new DateOnly(2025, 1, 28))]);
-        var admitted = await store.AdmitListPageAsync(Source(), page, default);
-        var jobId = Assert.Single(admitted.Jobs).JobId;
+        _ = await store.AdmitListPageAsync(Source(), page, default);
+        var jobId = (string)(await ScalarAsync($"SELECT job_id FROM collection_jobs WHERE idempotency_key LIKE '%/document/{number}'"))!;
         await SucceededJobs.MarkSucceededAsync(connectionString, jobId);
         return jobId;
     }

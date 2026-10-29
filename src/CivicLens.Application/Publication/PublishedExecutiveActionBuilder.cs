@@ -13,6 +13,13 @@ internal sealed class PublishedExecutiveActionBuilder(PublishedRecordRules rules
         var (review, extractions) = action;
         var revision = review.CurrentRevision;
 
+        PublishedExecutiveActionFact Fact(string label, string value, SourceSpan citation) => new()
+        {
+            Label = label,
+            Value = value,
+            Citation = PublishedRecordRules.Cite(citation, extractions[citation.ExtractionId])
+        };
+
         var record = new PublishedExecutiveAction
         {
             RecordId = review.RecordId,
@@ -20,17 +27,18 @@ internal sealed class PublishedExecutiveActionBuilder(PublishedRecordRules rules
             Headline = revision.Title,
             Kind = KindOf(revision.Kind),
             DocumentNumber = revision.DocumentNumber,
-            CorrectionOf = revision.CorrectionOf,
             SignedOn = revision.SignedOn,
             PublishedOn = revision.PublishedOn,
             FederalRegisterCitation = revision.FederalRegisterCitation,
             DocumentUrl = revision.DocumentUrl,
             President = rules.MapOfficial(review.RecordId, revision.PersonId),
-            Facts = [.. revision.Facts.Select(fact => new PublishedExecutiveActionFact
+            Facts = [.. revision.Facts.Select(fact => Fact(fact.Label, fact.Value, fact.Citation)),
+                .. revision.Notices.Select(notice => Fact(ExecutiveActionFacts.CorrectionNotice, notice.Value, notice.Citation))],
+            CorrectionNotices = [.. revision.Notices.Select(notice => new PublishedExecutiveActionNotice
             {
-                Label = fact.Label,
-                Value = fact.Value,
-                Citation = PublishedRecordRules.Cite(fact.Citation, extractions[fact.Citation.ExtractionId])
+                DocumentNumber = notice.DocumentNumber,
+                PublishedOn = notice.PublishedOn,
+                Url = notice.Url
             })],
             Sources = PublishedRecordRules.Sources(revision.Citations, extractions),
             ApprovedAtUtc = PublishedRecordRules.GetApprovalTime(revision.RevisionNumber, review.Decisions),

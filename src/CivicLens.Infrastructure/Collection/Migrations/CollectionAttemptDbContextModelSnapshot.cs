@@ -2531,6 +2531,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("document_job_id");
 
+                    b.Property<string>("NoticeJson")
+                        .HasColumnType("text")
+                        .HasColumnName("notice_json");
+
                     b.Property<DateOnly>("PublishedOn")
                         .HasColumnType("date")
                         .HasColumnName("published_on");
@@ -2541,7 +2545,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("record_id");
 
-                    b.Property<int>("RevisionNumber")
+                    b.Property<int?>("RevisionNumber")
                         .HasColumnType("integer")
                         .HasColumnName("revision_number");
 
@@ -2549,15 +2553,18 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("DocumentJobId");
 
-                    b.HasIndex("RecordId", "RevisionNumber")
-                        .IsUnique()
-                        .HasDatabaseName("ux_executive_action_documents_revision");
+                    b.HasIndex("RecordId")
+                        .HasDatabaseName("ix_executive_action_documents_record");
+
+                    b.HasIndex("RecordId", "RevisionNumber");
 
                     b.HasIndex("SourceId", "PublishedOn")
                         .HasDatabaseName("ix_executive_action_documents_published");
 
                     b.ToTable("executive_action_documents", null, t =>
                         {
+                            t.HasCheckConstraint("ck_executive_action_documents_pending", "revision_number IS NOT NULL OR notice_json IS NOT NULL");
+
                             t.HasCheckConstraint("ck_executive_action_documents_revision", "revision_number >= 1");
                         });
                 });
@@ -5100,8 +5107,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionRow", null)
                         .WithMany()
                         .HasForeignKey("RecordId", "RevisionNumber")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionReviewDecisionRow", b =>
