@@ -27,6 +27,8 @@ internal static class PublishedExecutiveActionView
 
     public static string CorrectionText(PublishedExecutiveActionNotice notice) => string.Concat(CorrectionParts(notice).Select(part => part.Text));
 
+    public static string CorrectionTimelineText(PublishedExecutiveActionNotice notice) => CorrectionParts(notice)[0].Text.TrimEnd();
+
     private static Fact CorrectionFact(PublishedExecutiveActionNotice notice) =>
         new("Correction notice", CorrectionText(notice), [.. CorrectionParts(notice).Select(part => new FactLink(part.Text, part.IsLink ? notice.Url : null))])
         { Separator = "" };

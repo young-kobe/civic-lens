@@ -38,5 +38,6 @@ public sealed class PublishedExecutiveActionPageTests : IDisposable
         Assert.Equal(2, page.Split(plain).Length - 1);
         Assert.Contains($"{plain} <a href=\"{link}\">Open the correction</a> to see what changed.", page);
         Assert.Equal(1, page.Split($"<a href=\"{link}\"").Length - 1);
+        Assert.Equal(1, page.Split("Open the correction").Length - 1);
     }
 }
