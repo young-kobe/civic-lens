@@ -24,6 +24,7 @@ public sealed class ConfigurationFileTests
             var result = await HostProcess.RunAsync(null, "validate", path);
 
             Assert.Equal(exitCode, result.ExitCode);
+            Assert.Equal(exitCode != 0, result.Error.Contains("1 MB limit", StringComparison.Ordinal));
         }
         finally
         {

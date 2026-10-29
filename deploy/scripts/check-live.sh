@@ -75,7 +75,7 @@ check_internal_route() {
   fi
 }
 
-# Cloudflare replaces CF-Connecting-IP with the real address of the caller, so the check looks for that address in the log.
+# Cloudflare sets CF-Connecting-IP to the real address of the caller, so the check looks for that address in the log.
 check_no_access_log() {
   local query_value="probe$RANDOM$RANDOM$RANDOM" address log
   address=$(curl --silent --max-time 15 --user-agent "$user_agent" "$site/cdn-cgi/trace" | sed -n 's/^ip=//p')
@@ -109,9 +109,19 @@ check_backup_age() {
   fi
 }
 
-# Cloudflare replaces CF-Connecting-IP, so every request below counts for the real caller. If the header were trusted from a reader, each forged value would get its own count and none would reach the limit.
+# Cloudflare refuses a request that already carries CF-Connecting-IP (403, error code 1000), so a reader cannot choose the address that the limit counts.
+check_forged_header() {
+  local status
+  status=$(status_of "$(fetch --header "CF-Connecting-IP: 198.18.0.1" "$api/v1/search?q=check")")
+  if [[ $status == 403 ]]; then
+    pass "Forged header: Cloudflare refuses a request with a forged CF-Connecting-IP (403)"
+  else
+    fail "Forged header: expected status 403 from Cloudflare for a forged CF-Connecting-IP, got '${status:-no response}'. Check that $api goes through Cloudflare and not straight to the machine."
+  fi
+}
+
 # The limit uses fixed one-minute windows. Twice the limit plus two requests, sent 20 at a time, puts more than the limit in one window.
-check_forged_header_limit() {
+check_rate_limit() {
   local limit ranges attempts statuses
   if [[ ! -r $search_env ]]; then
     fail "Rate limit: cannot read $search_env. Run the script with sudo, and check that install.sh created the file."
@@ -130,13 +140,13 @@ check_forged_header_limit() {
   fi
   attempts=$((2 * (limit + 1)))
   echo "NOTE  The next check sends $attempts requests. It blocks your own address on the search service for up to one minute."
-  statuses=$(seq 1 "$attempts" | awk '{ print "198.18." int($1 / 250) "." ($1 % 250 + 1) }' |
+  statuses=$(seq 1 "$attempts" |
     xargs -P 20 -I {} curl --silent --max-time 15 --user-agent "$user_agent" --output /dev/null --write-out '%{http_code}\n' \
-      --header "CF-Connecting-IP: {}" "$api/v1/search?q=check" || true)
+      "$api/v1/search?q=check&probe={}" || true)
   if grep -qx 429 <<< "$statuses"; then
-    pass "Rate limit: requests with forged CF-Connecting-IP values got 429, so the header cannot be forged"
+    pass "Rate limit: the search service answered 429 within $attempts requests"
   else
-    fail "Rate limit: expected status 429 within $attempts requests with a different forged CF-Connecting-IP each time, got none. Check that requests reach the service through Cloudflare, and the limit in $search_env."
+    fail "Rate limit: expected status 429 within $attempts requests, got none. Check the limit in $search_env and that the search service runs."
   fi
 }
 
@@ -146,7 +156,8 @@ check_missing_page
 check_internal_route
 check_no_access_log
 check_backup_age
-check_forged_header_limit
+check_forged_header
+check_rate_limit
 
 if (( failures > 0 )); then
   echo "$failures check(s) failed."
