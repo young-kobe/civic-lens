@@ -16,7 +16,7 @@ public sealed class ReaderReportPullTests
         var source = new ScriptedSource(Batch(Report(), Report()) with { NextCursor = "c1" }, Batch(Report()) with { NextCursor = "c2" },
             Batch() with { NextCursor = "c2" });
 
-        var pulled = await new PullReaderReports(source, store).ExecuteAsync(default);
+        var pulled = await Pull(source).ExecuteAsync(default);
 
         Assert.Equal(3, pulled);
         Assert.Equal(new string?[] { null, "c1", "c2" }, source.CursorsAsked);
@@ -31,7 +31,7 @@ public sealed class ReaderReportPullTests
         var source = new ScriptedSource(Batch(first) with { NextCursor = "c1" },
             Batch(Report(), Report() with { RevisionNumber = 0 }) with { NextCursor = "c2" });
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => new PullReaderReports(source, store).ExecuteAsync(default));
+        await Assert.ThrowsAsync<InvalidDataException>(() => Pull(source).ExecuteAsync(default));
 
         Assert.Equal("c1", store.Cursor);
         Assert.Equal([first.ReportId], store.Stored);
@@ -42,7 +42,7 @@ public sealed class ReaderReportPullTests
     {
         var source = new ScriptedSource(Batch(Report()) with { NextCursor = "c1" }, Batch(Report()) with { NextCursor = "c1" });
 
-        var pulled = await new PullReaderReports(source, store).ExecuteAsync(default);
+        var pulled = await Pull(source).ExecuteAsync(default);
 
         Assert.Equal((2, 2), (pulled, store.Stored.Count));
     }
@@ -51,7 +51,7 @@ public sealed class ReaderReportPullTests
     public async Task WhenTheServiceIsDownTheStageCountsAFailureKeepsTheCursorAndPullsAgainOnTheNextTick()
     {
         var source = new ScriptedSource(Batch(Report()) with { NextCursor = "c1" }, Batch() with { NextCursor = "c1" });
-        var pull = new PullReaderReports(source, store);
+        var pull = Pull(source);
         await pull.ExecuteAsync(default);
         var logger = new CapturingLogger<StageWorker>();
         var worker = new StageWorker("reportPull", pull.ExecuteAsync, new CountingWakeup(), logger, TestBeat.Create());
@@ -67,6 +67,21 @@ public sealed class ReaderReportPullTests
         Assert.Equal((0, 1), (recovered.Failures, recovered.ProgressCount));
         Assert.Equal("c2", store.Cursor);
     }
+
+    [Fact]
+    public async Task AFailedDeletionOfExpiredReportsIsLoggedAndTheNewReportsAreStillPulledSoAStuckDeleteNeverBlocksTheQueue()
+    {
+        var logger = new CapturingLogger<PullReaderReports>();
+        store.DeleteFailure = new InvalidOperationException("database busy");
+        var source = new ScriptedSource(Batch(Report()) with { NextCursor = "c1" }, Batch() with { NextCursor = "c1" });
+
+        var pulled = await new PullReaderReports(source, store, logger).ExecuteAsync(default);
+
+        Assert.Equal((1, 1, 1), (pulled, store.Stored.Count, store.DeleteCalls));
+        Assert.Equal("database busy", Assert.Single(logger.Entries).Exception!.Message);
+    }
+
+    private PullReaderReports Pull(IReaderReportSource source) => new(source, store, new CapturingLogger<PullReaderReports>());
 
     private sealed class ScriptedSource(params PulledReportBatch[] batches) : IReaderReportSource
     {

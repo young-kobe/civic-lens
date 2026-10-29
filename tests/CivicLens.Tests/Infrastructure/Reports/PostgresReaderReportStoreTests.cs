@@ -231,6 +231,38 @@ public sealed class PostgresReaderReportStoreTests(PostgresCollection postgres) 
         await seeder.ExecuteAsync(InsertReport(record, "CorrectionNeeded", "'Fix it.'"));
     }
 
+    [Fact]
+    public async Task OnlyClosedReportsResolvedMoreThanAYearAgoAreDeletedSoAnOpenReportAndARecentOneAreNeverLost()
+    {
+        var day = TimeSpan.TicksPerDay;
+        var record = new string('b', 64);
+        var expiredDismissed = await InsertAsync(record, "Dismissed", null, -(ReaderReportProtocol.ClosedRetentionDays * day + day));
+        var expiredCorrection = await InsertAsync(record, "CorrectionNeeded", "Fix it.", -(ReaderReportProtocol.ClosedRetentionDays * day + day));
+        var insideWindow = await InsertAsync(record, "Dismissed", null, -(ReaderReportProtocol.ClosedRetentionDays * day - day));
+        var ancientOpen = await InsertAsync(record, "Open", null, null);
+
+        var deleted = await store.DeleteExpiredClosedAsync(default);
+
+        Assert.Equal(2, deleted);
+        Assert.Null(await store.GetAsync(expiredDismissed, default));
+        Assert.Null(await store.GetAsync(expiredCorrection, default));
+        Assert.NotNull(await store.GetAsync(insideWindow, default));
+        Assert.NotNull(await store.GetAsync(ancientOpen, default));
+    }
+
+    private async Task<Guid> InsertAsync(string record, string status, string? note, long? resolvedOffsetTicks)
+    {
+        var id = Guid.NewGuid();
+        var resolvedAt = resolvedOffsetTicks is { } offset ? DateTimeOffset.UtcNow.Ticks + offset : (long?)null;
+        await seeder.ExecuteAsync("""
+            INSERT INTO reader_reports (report_id, record_id, kind, revision_number, category, body, received_at_utc_ticks, status, note,
+                resolved_by, resolved_at_utc_ticks, version)
+            VALUES (@id, @record, 'Statement', 1, 'other', 'text', 1, @status, @note,
+                CASE WHEN @resolvedAt::bigint IS NULL THEN NULL ELSE 'auth0|friend' END, @resolvedAt::bigint, 0)
+            """, ("id", id), ("record", record), ("status", status), ("note", (object?)note ?? DBNull.Value), ("resolvedAt", (object?)resolvedAt ?? DBNull.Value));
+        return id;
+    }
+
     private static string InsertReport(string record, string status, string note) => $"""
         INSERT INTO reader_reports (report_id, record_id, kind, revision_number, category, body, received_at_utc_ticks, status, note,
             resolved_by, resolved_at_utc_ticks, version)
