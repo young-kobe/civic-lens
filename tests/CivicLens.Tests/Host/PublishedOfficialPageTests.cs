@@ -97,6 +97,57 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
+    public async Task AnOfficialWithNoPartyOnAnyTermGetsNoPartyColumnBecauseItWouldBeEmpty()
+    {
+        var page = Current([], []) with { Profile = Profile("pres", "Pat President", new PublishedOfficeTerm { Office = "President", Start = new DateOnly(2025, 1, 20) }) };
+
+        var offices = await OfficesAsync(page);
+
+        Assert.Equal(["Office", "From", "To"], offices.QuerySelectorAll("thead th").Select(cell => cell.TextContent));
+        Assert.Equal(3, offices.QuerySelectorAll("tbody td").Length);
+    }
+
+    [Fact]
+    public async Task AnOfficialWithAPartyOnOneTermKeepsThePartyColumnForEveryTerm()
+    {
+        var page = Current([], []) with
+        {
+            Profile = Profile("a", "Ann Able", Term("sen", "MA", "Democratic"), new PublishedOfficeTerm { Office = "President", Start = new DateOnly(2030, 1, 20) })
+        };
+
+        var offices = await OfficesAsync(page);
+
+        Assert.Equal(["Office", "Party", "From", "To"], offices.QuerySelectorAll("thead th").Select(cell => cell.TextContent));
+        Assert.All(offices.QuerySelectorAll("tbody tr"), row => Assert.Equal(4, row.QuerySelectorAll("td").Length));
+    }
+
+    [Fact]
+    public async Task APageWithNoCastOnAnyRowGetsNoCastColumnBecauseOnlyAVoteHasACast()
+    {
+        var records = await RecordsAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []));
+
+        Assert.Equal(["Date", "Record"], records.QuerySelectorAll("thead th").Select(cell => cell.TextContent));
+        Assert.Equal(2, records.QuerySelectorAll("tbody td").Length);
+    }
+
+    [Fact]
+    public async Task APageWithOneVoteKeepsTheCastColumnForEveryRow()
+    {
+        var records = await RecordsAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], [Vote('3', new DateOnly(2026, 4, 1))]));
+
+        Assert.Equal(["Date", "Record", "Cast"], records.QuerySelectorAll("thead th").Select(cell => cell.TextContent));
+        Assert.All(records.QuerySelectorAll("tbody tr"), row => Assert.Equal(3, row.QuerySelectorAll("td").Length));
+    }
+
+    private static async Task<AngleSharp.Dom.IElement> OfficesAsync(ReleaseOfficialPage page) =>
+        new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None))
+            .QuerySelector("[aria-labelledby='panel-offices'] table")!;
+
+    private static async Task<AngleSharp.Dom.IElement> RecordsAsync(ReleaseOfficialPage page) =>
+        new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None))
+            .QuerySelector("[aria-labelledby='panel-records'] table")!;
+
+    [Fact]
     public async Task TheCurrentPageLinksTheOfficialWebsiteNamingItsHostWithNoReferrerAndNoOpener()
     {
         var page = Current([], []) with { Profile = Profile() with { Website = "https://warren.senate.gov/about" } };

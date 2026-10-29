@@ -14,10 +14,13 @@
         }
         <Panel Title="Offices">
             <DataTable Roles="true" Items="Page.Profile.Terms" Caption="@($"Offices of {Page.Profile.Name}")">
-                <Head><TableCell Header>Office</TableCell><TableCell Header>@PublicColumn.Party</TableCell><TableCell Header Class="fit num">@PublicColumn.From</TableCell><TableCell Header Class="fit num">@PublicColumn.To</TableCell></Head>
+                <Head><TableCell Header>Office</TableCell>@if (HasParty){<TableCell Header>@PublicColumn.Party</TableCell>}<TableCell Header Class="fit num">@PublicColumn.From</TableCell><TableCell Header Class="fit num">@PublicColumn.To</TableCell></Head>
                 <Row Context="term">
                     <TableCell Main>@PublishedOfficialView.Office(term)</TableCell>
-                    <TableCell Label="@PublicColumn.Party">@term.Party</TableCell>
+                    @if (HasParty)
+                    {
+                        <TableCell Label="@PublicColumn.Party">@term.Party</TableCell>
+                    }
                     <TableCell Class="fit num" Label="@PublicColumn.From">@Moment.Iso(term.Start)</TableCell>
                     <TableCell Class="fit num" Label="@PublicColumn.To">@(term.End is { } end ? Moment.Iso(end) : "Present")</TableCell>
                 </Row>
@@ -120,7 +123,7 @@
             </div>
         }
         <DataTable Roles="true" Items="Rows" RowClass="@(row => row.AgainstParty ? "against-party" : null)" RowFilterKeys="@(row => row.FilterKeys)" Caption="@($"Published records of {Page.Profile.Name}")">
-            <Head><TableCell Header Class="fit num">@PublicColumn.Date</TableCell><TableCell Header>Record</TableCell><TableCell Header>@PublicColumn.Cast</TableCell></Head>
+            <Head><TableCell Header Class="fit num">@PublicColumn.Date</TableCell><TableCell Header>Record</TableCell>@if (HasCast){<TableCell Header>@PublicColumn.Cast</TableCell>}</Head>
             <Row Context="row">
                 <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Iso(row.Date)</TableCell>
                 <TableCell Main>
@@ -131,7 +134,10 @@
                         <div class="muted small">@row.Detail</div>
                     }
                 </TableCell>
-                <TableCell Label="@PublicColumn.Cast">@row.Cast</TableCell>
+                @if (HasCast)
+                {
+                    <TableCell Label="@PublicColumn.Cast">@row.Cast</TableCell>
+                }
             </Row>
             <Empty><EmptyState Title="No records yet" Text="There are no records here." /></Empty>
         </DataTable>
@@ -174,6 +180,10 @@
         : null;
 
     private IReadOnlyList<PublishedOfficialRow>? rows;
+
+    private bool HasParty => Page.Profile.Terms.Any(term => term.Party is not null);
+
+    private bool HasCast => Rows.Any(row => row.Cast is not null);
 
     private IReadOnlyList<PublishedOfficialRow> Rows => rows ??= PublishedOfficialView.Rows(Page);
 
