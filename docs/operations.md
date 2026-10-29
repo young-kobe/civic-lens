@@ -281,7 +281,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- wo
 | Variable | Meaning |
 |---|---|
 | `CIVIC_LENS_EVIDENCE_CONCURRENCY` | Optional number of captured pages processed at the same time (default 2, 1 to 4). Any other value stops the worker with exit code 2 |
-| `CIVIC_LENS_COLLECTION_CONCURRENCY` | Optional number of collection jobs run at the same time (default 1, 1 to 4). Jobs of one pacing key never run together. Any other value stops the worker with exit code 2. Congress.gov allows 5,000 requests an hour for each key, so 3 is the recommended production value |
+| `CIVIC_LENS_COLLECTION_CONCURRENCY` | Optional number of collection jobs run at the same time (default 1, 1 to 4). Jobs of one pacing key never run together. Any other value stops the worker with exit code 2. Lanes run keys of separate hosts at once. Congress.gov shares one key, so lanes never run its jobs in parallel. Production uses 3, so house.gov, senate.gov, and the other hosts progress together |
 
 Enabled sources are checked every hour unless `checkIntervalSeconds` sets another interval from 60 to 604800 seconds. The engine rules are in [collection](architecture/collection.md#autonomous-collection-engine).
 
@@ -953,6 +953,7 @@ This section is for the temporary production machine, a Jetson with Docker Compo
 2. Run `sudo deploy/scripts/install.sh`. It creates the directories under `/srv/civic-lens` and the env files from the templates.
 3. Fill in the env files in `/srv/civic-lens/env`, and put `collection.json` and `issues.json` in `/srv/civic-lens/config`.
    The `api` sources in `config/federal-coverage.json` ship with `enabled: false`. Without them the site has no bills, votes, roster, or photos, so nothing publishes. Set `enabled` to `true` for `congress-members`, `congress-bills`, `congress-house-votes`, `senate-votes`, `member-photos`, and `executive-officials`. The two Congress.gov sources need `CIVIC_LENS_CONGRESS_API_KEY` in `host.secret.env`. See [Congress.gov bill stream](#congressgov-bill-stream) and [Member roster](#member-roster). The Host refuses a configuration file over 1 MB, and added indentation can push this file past that limit. So save it compact.
+   Set `CIVIC_LENS_COLLECTION_CONCURRENCY=3` in `/srv/civic-lens/env/host.env`.
    The file also holds two White House feed sources, `donald-trump-briefings-feed` and `donald-trump-remarks-feed`, which ship enabled. Do not add the presidential actions feed.
 4. Create the tunnel (see [Tunnel](#tunnel)) and the restic password file and repository (see [Backups](#backups)).
 5. Run `sudo deploy/scripts/update.sh <full-commit-sha>`.

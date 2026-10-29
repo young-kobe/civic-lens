@@ -28,8 +28,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 name: "pacing_key",
                 table: "collection_collector_slot",
                 type: "text",
-                nullable: false,
-                defaultValue: "");
+                nullable: false);
 
             migrationBuilder.AddPrimaryKey(
                 name: "PK_collection_collector_slot",
@@ -41,6 +40,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.Sql("DELETE FROM collection_collector_slot");
+            migrationBuilder.Sql("UPDATE collection_job_origins SET unresolved_attempt_id = NULL WHERE origin LIKE 'group:%'");
 
             migrationBuilder.DropPrimaryKey(
                 name: "PK_collection_collector_slot",
@@ -54,8 +54,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 name: "id",
                 table: "collection_collector_slot",
                 type: "integer",
-                nullable: false,
-                defaultValue: 0);
+                nullable: false);
 
             migrationBuilder.AddPrimaryKey(
                 name: "PK_collection_collector_slot",

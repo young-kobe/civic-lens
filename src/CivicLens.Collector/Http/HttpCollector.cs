@@ -425,12 +425,12 @@ public sealed class HttpCollector : IDisposable
             var destination = Path.Combine(dir, destinationName);
             var existing = new FileInfo(destination);
             if (existing.LinkTarget is not null) throw new IOException("Existing artifact cannot be a symbolic link.");
-            if (File.Exists(destination))
+            try { File.Move(temp, destination); }
+            catch (IOException) when (File.Exists(destination))
             {
                 await VerifyExistingAsync(destination, digest, size, token);
                 File.Delete(temp);
             }
-            else File.Move(temp, destination);
             return new CaptureArtifact { Sha256 = digest, RelativePath = destinationName, ByteLength = size };
         }
         catch (HttpRequestException exception) { throw new IOException("Response body transport failed before completion.", exception); }
