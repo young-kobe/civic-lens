@@ -854,7 +854,8 @@ public sealed class PublishedOfficialPageTests
     {
         "sen" => PublishedOfficeKind.Senator,
         "rep" => PublishedOfficeKind.Representative,
-        _ => PublishedOfficeKind.Executive
+        "prez" => PublishedOfficeKind.Executive,
+        _ => throw new ArgumentOutOfRangeException(nameof(office))
     };
 
     private static PublishedOfficialProfile WithPhoto(string id, string name, string credit) => Profile(id, name) with

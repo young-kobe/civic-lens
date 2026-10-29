@@ -835,6 +835,8 @@ Optional variables: `CIVIC_LENS_TRUSTED_PROXY_RANGES` (the Cloudflare ranges, em
 
 Reset the development database once, if it was created before the initial migration. The migrations are one initial migration, and the protocol, configuration, schema, parser, and behavior versions start at 1. The code reads no row, capture, or release from before the initial migration. Production has no older data and needs no reset.
 
+The reset also covers the term kind change. Each term of `officials.json` now requires `kind`. `PreviousRelease.ReadOfficialsAsync` throws on a release without it, so a publish fails until the reset.
+
 The reset also covers the linked pairs change. A relationship revision now holds the matched official. An older revision reads with no matched official, so a person edit of it and its publish fail. Release manifests now hold link fields and `billTitle`, and an older release does not read. Reset once after this change merges.
 
 1. Stop the services that use the database: the `make review` command (proxy, review workspace, and worker), the static server, and the search service. Stop any other `dotnet` host that runs.

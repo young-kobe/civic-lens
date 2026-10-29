@@ -141,13 +141,14 @@ public sealed class CollectionConfigurationRevisionTests
         var configuration = Configuration(["person"]);
         var withOffice = configuration with
         {
-            People = [new PersonConfiguration { Id = "person", Name = "Official", Offices = [new() { Title = "Secretary", StartsOn = new(2025, 1, 21) }] }]
+            People = [new PersonConfiguration { Id = "person", Name = "Official", Offices = [new() { Title = "Secretary", StartsOn = new(2025, 1, 21), Kind = ConfiguredOfficeKind.Judicial }] }]
         };
 
         var revision = CollectionConfigurationRevision.Create(withOffice);
 
-        Assert.Contains("\"offices\":[{\"title\":\"Secretary\",\"startsOn\":\"2025-01-21\"}]", revision.Json, StringComparison.Ordinal);
+        Assert.Contains("\"offices\":[{\"title\":\"Secretary\",\"startsOn\":\"2025-01-21\",\"kind\":\"judicial\"}]", revision.Json, StringComparison.Ordinal);
         Assert.Equal("Secretary", revision.ReadConfiguration().People[0].Offices![0].Title);
+        Assert.Equal(ConfiguredOfficeKind.Judicial, revision.ReadConfiguration().People[0].Offices![0].Kind);
         Assert.DoesNotContain("offices", CollectionConfigurationRevision.Create(configuration).Json, StringComparison.Ordinal);
     }
 

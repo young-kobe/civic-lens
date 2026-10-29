@@ -55,7 +55,12 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
     private static PublishedOfficeTerm ToTerm(RosterTerm term) => new()
     {
         Office = term.Chamber,
-        Kind = term.Chamber == MemberRosterParser.Senate ? PublishedOfficeKind.Senator : PublishedOfficeKind.Representative,
+        Kind = term.Chamber switch
+        {
+            MemberRosterParser.Senate => PublishedOfficeKind.Senator,
+            MemberRosterParser.House => PublishedOfficeKind.Representative,
+            _ => throw new InvalidDataException($"Roster term has unknown chamber '{term.Chamber}'.")
+        },
         State = term.State,
         District = term.District,
         Party = term.Party,
@@ -102,9 +107,10 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
         Office = office.Title,
         Kind = office.Kind switch
         {
+            null => PublishedOfficeKind.Other,
             ConfiguredOfficeKind.Executive => PublishedOfficeKind.Executive,
             ConfiguredOfficeKind.Judicial => PublishedOfficeKind.Judicial,
-            _ => PublishedOfficeKind.Other
+            _ => throw new ArgumentOutOfRangeException(nameof(office), office.Kind, "Office kind has no published form.")
         },
         Party = office.Party,
         Start = office.StartsOn,
