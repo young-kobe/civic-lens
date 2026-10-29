@@ -143,8 +143,8 @@ A robots 404 means there is no robots file, and this permits collection. So does
 - On a cache hit, the collector does not wait before its first content request, because Application origin pacing already spaced the jobs.
 - Only 200 and permitted 4xx responses (no robots file) are cached. Other responses and rules that fail to parse are never cached.
 - A corrupt, unreadable, or future-dated file is ignored and refetched. A failed cache write does not fail collection.
-- When a refetch gets a 5xx, the collector obeys a cached 200 copy up to 7 days old, also its Disallow rules. It reports one robots request and `robotsCacheHit` true.
-- A cached missing-file entry is never used that way. A robots 5xx then behaves as with no cache.
+- When a refetch gets a 5xx, 407, or 408, the collector obeys a cached 200 copy up to 7 days old, also its Disallow rules. It reports one robots request and `robotsCacheHit` true.
+- A cached missing-file entry is never used that way. A robots 5xx, 407, or 408 then behaves as with no cache.
 - A robots 429 is never masked. It always defers with `rateLimited`, so the application applies the group backoff.
 - A timeout before any request, for example while the collector reads the cache, is a `timeout` failure with no requests.
 

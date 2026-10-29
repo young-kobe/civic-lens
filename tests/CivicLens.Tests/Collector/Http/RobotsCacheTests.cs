@@ -138,12 +138,14 @@ public sealed class RobotsCacheTests : IDisposable
         Assert.Equal(["/robots.txt"], site.Paths);
     }
 
-    [Fact]
-    public async Task StaleCopyIsUsedWhenRefetchGetsServerError()
+    [Theory]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    [InlineData(HttpStatusCode.RequestTimeout)]
+    public async Task StaleCopyIsUsedWhenRefetchGetsATemporaryError(HttpStatusCode status)
     {
         var site = new Site(robots: Ok("User-agent: *\nDisallow:\n"));
         await FetchAsync(site);
-        site.Robots = () => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+        site.Robots = () => new HttpResponseMessage(status);
 
         clock.Advance(TimeSpan.FromDays(2));
         var result = await FetchAsync(site);
