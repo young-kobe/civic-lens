@@ -2279,6 +2279,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("roll_call_number");
 
+                    b.Property<string>("RosterJobId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("roster_job_id");
+
                     b.Property<int>("SessionNumber")
                         .HasColumnType("integer")
                         .HasColumnName("session_number");
@@ -2299,16 +2304,18 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("DetailExtractionId");
 
-                    b.HasIndex("DetailJobId")
-                        .IsUnique()
-                        .HasDatabaseName("ux_vote_candidates_detail_job");
-
                     b.HasIndex("MembersExtractionId");
 
                     b.HasIndex("MembersJobId");
 
+                    b.HasIndex("RosterJobId");
+
                     b.HasIndex("Congress", "BillType", "BillNumber")
                         .HasDatabaseName("ix_vote_candidates_bill");
+
+                    b.HasIndex("DetailJobId", "SessionNumber", "RollCallNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ux_vote_candidates_detail_job");
 
                     b.HasIndex("SourceId", "Chamber", "Congress", "SessionNumber", "RollCallNumber", "UpdateDateUtcTicks")
                         .HasDatabaseName("ix_vote_candidates_roll");
@@ -2336,6 +2343,14 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("detail_job_id");
 
+                    b.Property<int>("SessionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("session_number");
+
+                    b.Property<int>("RollCallNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("roll_call_number");
+
                     b.Property<int?>("BillNumber")
                         .HasColumnType("integer")
                         .HasColumnName("bill_number");
@@ -2361,14 +2376,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("extraction_id");
 
-                    b.Property<int>("RollCallNumber")
-                        .HasColumnType("integer")
-                        .HasColumnName("roll_call_number");
-
-                    b.Property<int>("SessionNumber")
-                        .HasColumnType("integer")
-                        .HasColumnName("session_number");
-
                     b.Property<string>("SourceId")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -2379,7 +2386,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("update_date_utc_ticks");
 
-                    b.HasKey("DetailJobId");
+                    b.HasKey("DetailJobId", "SessionNumber", "RollCallNumber");
 
                     b.HasIndex("ExtractionId");
 
@@ -2469,6 +2476,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("extraction_version");
 
+                    b.Property<int?>("Part")
+                        .HasColumnType("integer")
+                        .HasColumnName("part");
+
                     b.Property<string>("ProfileJson")
                         .HasMaxLength(8000)
                         .HasColumnType("character varying(8000)")
@@ -2493,6 +2504,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.ToTable("document_extractions", null, t =>
                         {
                             t.HasCheckConstraint("ck_document_extractions_hashes", "extraction_id ~ '^[0-9a-f]{64}$' AND text_sha256 ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_document_extractions_part", "part IS NULL OR part >= 0");
 
                             t.HasCheckConstraint("ck_document_extractions_text_limit", "length(text) <= 2000000");
 
@@ -5013,12 +5026,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("CivicLens.Infrastructure.Collection.Votes.VoteVersionRow", null)
-                        .WithMany()
-                        .HasForeignKey("DetailJobId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
                         .WithMany()
                         .HasForeignKey("MembersExtractionId")
@@ -5028,6 +5035,17 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Collection.Jobs.Persistence.JobRow", null)
                         .WithMany()
                         .HasForeignKey("MembersJobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Collection.Jobs.Persistence.JobRow", null)
+                        .WithMany()
+                        .HasForeignKey("RosterJobId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Collection.Votes.VoteVersionRow", null)
+                        .WithMany()
+                        .HasForeignKey("DetailJobId", "SessionNumber", "RollCallNumber")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

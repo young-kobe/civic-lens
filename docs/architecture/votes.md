@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The votes feature collects House roll-call votes from the Congress.gov `house-vote` API and Senate roll-call votes from the senate.gov XML files. It fetches each House roll call as two durable jobs, the detail and the member votes. A Senate roll call is one job, because one XML file holds both. Each roll call version with all its pages captured becomes a vote candidate. The `worker` drafts one vote record for each source and roll call from these candidates. Code approves each worker revision after it checks the citations, because the facts come from the House Clerk XML, senate.gov, and Congress.gov. A person can still edit, request changes on, and withdraw a record on the vote review pages. An approved vote record publishes as the vote kind of a release; see [publication](publication.md#vote-record).
+The votes feature collects House roll-call votes from the Congress.gov `house-vote` API and Senate roll-call votes from the senate.gov XML files. A second Senate source reads the Voteview CSV files. It fetches each House roll call as two durable jobs, the detail and the member votes. A Senate roll call is one job, because one XML file holds both. Each roll call version with all its pages captured becomes a vote candidate. The `worker` drafts one vote record for each source and roll call from these candidates. Code approves each worker revision after it checks the citations, because the facts come from the House Clerk XML, senate.gov, and Congress.gov. A person can still edit, request changes on, and withdraw a record on the vote review pages. An approved vote record publishes as the vote kind of a release; see [publication](publication.md#vote-record).
 
 ## Decisions
 
@@ -56,6 +56,14 @@ The votes feature collects House roll-call votes from the Congress.gov `house-vo
 Each line gives the rule, what enforces it, and the test that protects it. Cross-feature invariants are in [architecture](../architecture.md#invariants).
 
 - The event date of a vote is its vote day. The draft row copies it, the candidate ID, the tracked issue IDs, and the member person IDs from the current revision at each append. Enforced by `VoteDraftRows.Revised`. Test: `PostgresHouseVoteTests.EachWorkerRevisionReplacesTheListedColumnsWithThoseOfTheCurrentRevision`.
+- A votes job that skips roll calls for a count mismatch still succeeds, with the code `voteviewCountMismatch`. A warning names the Congress and the number skipped. Enforced by `JobPreparation`. Test: `JobPreparationTests.ARollCallWhoseCountsDisagreeGivesTheMismatchCodeAndALogWithTheCountWhileTheOtherRollCallsStillAdmit`.
+- A Voteview votes job whose parent job is missing or not Succeeded is Blocked with `voteviewJobMissing`. Enforced by `JobPreparation`. No test.
+- Each daily Voteview sweep makes new job keys for the whole chain, so a failed job blocks only its own day. Enforced by `VoteviewJobKeys`. Tests: `PostgresVoteviewVoteTests.EachDailySweepWalksTheWholeChainAgainSoTheCurrentCongressIsFetchedOnTheSecondDay`, `PostgresVoteviewVoteTests.AFailedMiddleJobStopsThatDaysChainButTheNextDayMakesNewKeysAndReachesTheCurrentCongress`.
+- A Voteview roll call gets a new version only when its rendered text differs from the newest version. Enforced by `PostgresCollectionJobStore.AdmitVoteviewVotesAsync`, which compares the hash under the job lock. Test: `PostgresVoteviewVoteTests.ANextDayWithTheSameTextWritesNoVersionButChangedTextWritesOneAndKeepsTheOldVersion`.
+- A roll call job of Voteview holds many versions, one for each session and roll number. Enforced by the composite key of `vote_versions`. Test: `PostgresVoteviewVoteTests.OneRollCallsJobHoldsManyVersionsAndOnlyTheRollCallWithNoBillIsQueuedBecauseABillRollCallWaitsForItsBillDetail`.
+- The President row never counts as a senator, and a member with no bioguide ID is refused. Enforced by `VoteviewParser` and `VoteviewRoll.Join`. Tests: `VoteviewRollTests.ThePresidentRowIsLeftOutBecauseHeIsNotASenatorAndWouldBreakTheYeaCount`, `VoteviewRollTests.ThePresidentOfAnotherTermIsLeftOutByChamberNotByAFixedIcpsrSoANewPresidentNeedsNoCodeChange`, `VoteviewRollTests.ASenateMemberWithNoBioguideIdIsRefusedBecauseTheRecordCouldNotName`.
+- A roll call whose member counts differ from its roll call file is skipped, and the job succeeds. Enforced by `VoteviewRoll.Join`. Test: `VoteviewRollTests.ARollCallWhoseMemberCountsDisagreeWithTheFileCountsIsSkippedAndTheOtherRollCallsStillRender`.
+- The votes job stops when its three bodies equal those of the newest candidate. Enforced by `PostgresCollectionJobStore.HasVoteviewCandidateOfBodiesAsync`. Tests: `PostgresVoteviewVoteTests.OnlyTheSameThreeBodiesAsTheNewestCandidateCountAsUnchanged`, `JobPreparationTests.AVotesJobWhoseThreeBodiesEqualTheNewestCandidateLoadsNoBodyAndSavesNothing`.
 - One record exists for each vote version. Enforced by `ux_vote_versions_roll`. Test: `PostgresHouseVoteTests.ASecondDetailJobOfTheSameVoteVersionRecordsNothingAndAdmitsNoMembersJob`.
 - A changed vote is a new version with its own members job. Enforced by `HouseVoteJobKeys` and `PostgresCollectionJobStore.AdmitDetailAsync`. Test: `PostgresHouseVoteTests.AChangedVoteIsRecordedAsANewVersionWithItsOwnMembersJob`.
 - A bill type has a number, and a number has a type. Enforced by `ck_vote_versions_bill` and `ck_vote_candidates_bill`. Test: `PostgresHouseVoteTests.TheDatabaseRefusesABillTypeWithoutANumber`.
@@ -355,6 +363,24 @@ The modify date is the version of a vote. The menu has no modify date, so a job 
 
 Admission of a vote file finds the `vote_versions` row by source, chamber, roll call, and exact modify date. A found row is a duplicate and writes nothing. Otherwise the store checks the extraction against the job, then writes the version and the candidate in one transaction. It then queues the draft like the House members admission. The candidate waits for the detail of its bill. A vote with no bill queues at once. It admits no further job.
 
+### Voteview Senate collection
+
+senate.gov returns a 403 to the collector, so a second Senate source reads the Voteview CSV files. Voteview publishes three files for each Congress: roll calls, votes, and members. The files are public, and the host has no `robots.txt`. The shipped source `voteview-senate-votes` sets `apiParser` `voteviewSenateVoteList`, `backfillFrom` 2025-01-03, `minimumCongress` 119, and `maxBytes` 4,000,000. It ships with `enabled: false`. A configuration may enable only one Senate vote source.
+
+The source URL is `https://voteview.com/static/data/out`. The file URL is `{source url}/{kind}/S{congress}_{kind}.csv` with the kind `rollcalls`, `votes`, or `members`. `VoteviewUrl` owns it. The resources are `voteviewRollCalls`, `voteviewMembers`, and `voteviewVotes`.
+
+The due check creates one root job for the roll call file of the first Congress. The jobs form a chain, like the House list, detail, and members jobs. The roll call job admits the members job of its Congress. For an earlier Congress it also admits the roll call job of the next Congress. The members job admits the votes job. The key of the members job holds the ID of the roll call job. The key of the votes job holds the ID of the members job. The votes job finds its two sibling captures from these keys. The key of every job after the root holds the ID of its parent job, as the next-menu key of the Senate sweep does. Each daily sweep therefore walks the whole chain again, and a failed job blocks only that day. The body check below keeps the repeat cheap. `VoteviewJobKeys` owns the keys.
+
+The roll call job and the members job read no body. The votes job reads all three captures. It first reads the three attempts and compares their capture hashes and the extraction version with those of the newest candidate of the Congress. When all match, it stops and loads no body. Otherwise it loads the three bodies and parses the files and joins them by the Voteview roll number and the icpsr number.
+
+`VoteviewParser` refuses a row of another Congress or chamber, an unknown cast code, and an unknown party code. It skips every member row of the chamber `President`, and the join drops the casts of those icpsr numbers. It refuses every other member with no bioguide ID. It refuses a vote by an icpsr that the member file does not list. It refuses a member who votes twice in one roll call. `VoteviewRoll.Join` skips a roll call whose yea or nay member count differs from the roll call file. The job still succeeds with the code `voteviewCountMismatch`, and a warning gives the number skipped. The number is only in the log.
+
+`VoteviewRenderer` renders one roll call as text. The first line is `Senate vote: {congress} {session} {clerk roll}`. The `Started` line holds the day. The fact lines `Question`, `Vote title`, `Result`, `Majority required`, and `Count` follow, with the prefixes of `VoteFactPrefixes.SenateDetail`. One `Member` line for each senator follows: the bioguide ID, the Voteview name, the party letter, the state, and the cast. `RenderedText.MemberLine` owns the line for all three sources. `SenateVoteKindTable` classifies the question text. A test covers the 17 questions of the 119th Congress.
+
+Each rendered roll call is one extraction of the votes capture. The extraction ID holds the Voteview roll number as its part, so one capture gives one extraction for each roll call. The store compares the text hash with the newest version of the roll call. It writes a new version only when the hash differs. Preparation saves only the extractions of changed roll calls. The store checks the hash again under the job lock, like `AdmitPhotoAsync`.
+
+A version row has the roll call job as its detail job. Its update time is the capture time of the votes file. The candidate names the roll call job as detail, the votes job as members, and the members job as roster. Both extraction columns name the one rendered text. The candidate waits for its bill detail like the other vote candidates.
+
 ### Senate drafting
 
 `VoteReader` dispatches on the chamber of the candidate. The Senate branch checks the extraction version of the one saved page, parses the capture, and compares the render with the saved text. It takes the vote day from the `Started` line, which keeps the Eastern offset. The facts are the lines that start with the prefixes of `VoteFactPrefixes.SenateDetail`: `Started`, `Question`, `Question text`, `Vote title`, `Result`, `Document`, and `Count`. A vote on a bill adds the bill facts as the House path does. A vote with no bill identity, such as a nomination, skips the bill detail.
@@ -364,8 +390,8 @@ The reader takes the `lis` IDs of the senators from `IMemberRosterStore.ReadSena
 ## Storage and contracts
 
 - The generated [votes schema](schema/votes.md) lists every table, column, key, check, and index.
-- `vote_versions` holds one row for each vote version, keyed by its detail job. The row stores the chamber and the identity, the exact update time, and the nullable bill identity. It also names the extraction of the detail. The store reads it to find duplicates and to write the candidate.
-- `vote_candidates` holds one row for each vote version with both pages captured. It stores the chamber, and it names the detail job, the members job, both extractions, and the configuration revision. Drafting reads these rows.
+- `vote_versions` holds one row for each vote version, keyed by its detail job, session, and roll call number. A Voteview roll call job holds many roll calls. The row stores the chamber and the identity, the exact update time, and the nullable bill identity. It also names the extraction of the detail. The store reads it to find duplicates and to write the candidate.
+- `vote_candidates` holds one row for each vote version with both pages captured. It stores the chamber, and it names the detail job, the members job, both extractions, and the configuration revision. A composite foreign key and a unique index on the detail job, session, and roll call number tie it to its version. The nullable `roster_job_id` names the members file job of a Voteview candidate. Drafting reads these rows.
 - The candidate ID is a SHA-256 hash of the source, the roll call, and the exact update time. `PostgresCollectionJobStore.HashVoteCandidate` builds it. It frames the text like the bill candidate ID, with the prefix `house-vote:` or `senate-vote:`.
 - A Senate vote has one job. The version row and the candidate row both name that job and its extraction, in `detail_job_id` and `members_job_id`, and in `detail_extraction_id` and `members_extraction_id`. The Senate reader reads the capture once and parses both parts from it. No migration is needed.
 - The store writes no page rows. The two extractions and the captures of the two jobs are the evidence of a candidate.
@@ -387,8 +413,9 @@ The reader takes the `lis` IDs of the senators from `IMemberRosterStore.ReadSena
 | Configuration and job binding | `src/CivicLens.Application/Collection/CollectionConfiguration.cs`, `src/CivicLens.Application/Collection/ConfiguredCollectionSource.cs`, `src/CivicLens.Application/Collection/Jobs/CollectionJobDefinition.cs` |
 | Preparation | `src/CivicLens.Application/Collection/Processing/JobPreparation.cs` |
 | Senate parsers, URLs, keys, rendering | `src/CivicLens.Application/Collection/SenateVotes/` |
+| Voteview parsers, URLs, keys, rendering | `src/CivicLens.Application/Collection/VoteviewVotes/` |
 | Admission port | `src/CivicLens.Application/Collection/Votes/IVoteAdmissionStore.cs` |
-| Postgres admission and candidates | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.Votes.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.Scheduling.cs` |
+| Postgres admission and candidates | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.Votes.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.VoteviewVotes.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.Scheduling.cs` |
 | Table rows | `src/CivicLens.Infrastructure/Collection/Votes/` |
 | Drafting step and checks | `src/CivicLens.Application/Votes/VoteDraftStep.cs`, `src/CivicLens.Application/Votes/VoteDraftContext.cs`, `src/CivicLens.Application/Votes/VoteDraftResolver.cs` |
 | Bill detail lookup | `src/CivicLens.Infrastructure/Collection/BillStream/BillDetailRows.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.BillFollowOns.cs` |
@@ -409,6 +436,12 @@ The reader takes the `lis` IDs of the senators from `IMemberRosterStore.ReadSena
 
 ## Limits and planned work
 
+- Do not enable `voteview-senate-votes` until the reader change lands. The code collects and queues roll calls, but the reader, the published source label, and the About page text come later.
+- The `Down` of the migration `VoteviewSenateVotes` fails once Voteview rows exist, because one roll call job then holds many version rows. It also makes the stored part IDs stale. Reset the development database instead of reverting.
+- Reader work for the next change: load the votes job (`members_job_id`) for the detail extraction, because the detail job holds no extraction text. Never split a `Member` line on commas, because the Voteview `bioname` holds commas. Read the party and cast from the end of the line, as `VoteMemberLine` does.
+- When code approves a Senate vote from the Voteview source, the approval rests on Voteview data and not on senate.gov. A later change adds the source label to the published vote.
+- Each daily Voteview sweep fetches the three files of every Congress from the minimum Congress on. The body check stops the parse and the render of an unchanged Congress, but the fetch still costs about 3 MB for each Congress.
+- Voteview may not record a Vice President tie-break vote. This is unchecked.
 - The lists of vote records read `vote_drafts` without the partial status indexes of `action_drafts`. The table held 676 roll calls on 2026-10-17 and grows by about 700 a year. `brief_drafts` also has no such indexes. Add the indexes when the table passes about 10,000 rows.
 - A later bill detail does not redraft a vote that was already drafted. The next change of the vote itself drafts again.
 - A voted bill from a congress before `minimumCongress` of the bill source would wait forever. No such vote exists today, because the vote sweep starts in 2025.

@@ -32,6 +32,31 @@ public sealed class SenateVoteKindTableTests
         Assert.Equal((expected, QuestionSpan), (kind, citation));
     }
 
+    [Theory]
+    [InlineData("On Cloture on the Motion to Proceed", VoteKind.Cloture)]
+    [InlineData("On Passage of the Bill", VoteKind.Passage)]
+    [InlineData("On the Amendment", VoteKind.Amendment)]
+    [InlineData("On the Cloture Motion", VoteKind.Cloture)]
+    [InlineData("On the Concurrent Resolution", VoteKind.Passage)]
+    [InlineData("On the Decision of the Chair", VoteKind.Other)]
+    [InlineData("On the Joint Resolution", VoteKind.Passage)]
+    [InlineData("On the Motion", VoteKind.Other)]
+    [InlineData("On the Motion to Adjourn", VoteKind.Other)]
+    [InlineData("On the Motion to Discharge", VoteKind.Other)]
+    [InlineData("On the Motion to Proceed", VoteKind.MotionToProceed)]
+    [InlineData("On the Motion to Recommit", VoteKind.Other)]
+    [InlineData("On the Motion to Reconsider", VoteKind.Other)]
+    [InlineData("On the Motion to Table", VoteKind.Other)]
+    [InlineData("On the Nomination", VoteKind.Nomination)]
+    [InlineData("On the Point of Order", VoteKind.Other)]
+    [InlineData("On the Resolution", VoteKind.Passage)]
+    public void EveryVoteQuestionVoteviewListsForTheSenateOf2025To2026MapsToTheSameKindAsTheSenateGovQuestion(string question, VoteKind expected)
+    {
+        var (kind, _) = SenateVoteKindTable.Classify([Fact($"Question: {question}")]);
+
+        Assert.Equal(expected, kind);
+    }
+
     [Fact]
     public void AClotureMotionOnANominationIsClotureBecauseTheVoteDecidesToEndDebateNotToConfirm()
     {

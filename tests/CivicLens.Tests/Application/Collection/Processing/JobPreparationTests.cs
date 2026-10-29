@@ -8,6 +8,7 @@ using CivicLens.Application.Collection.FederalRegister;
 using CivicLens.Application.Collection.MemberPhotos;
 using CivicLens.Application.Collection.Processing;
 using CivicLens.Application.Collection.SenateVotes;
+using CivicLens.Application.Collection.VoteviewVotes;
 using CivicLens.Application.Collection.Votes;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Issues;
@@ -42,6 +43,8 @@ public sealed class JobPreparationTests
     private readonly RecordingExecutive executives = new();
     private readonly ThrowingProcessingStore processing = new();
     private readonly RecordingExtractions extractions = new();
+    private readonly List<string> bodyReads = [];
+    private readonly RecordingLogger warnings = new();
 
     [Fact]
     public async Task DetailGateIsDecidedFromTheParsedBillAndStoredWithTheIssueRevision()
@@ -284,6 +287,9 @@ public sealed class JobPreparationTests
         { ApiResource.HouseVoteMembers, VoteMembersUrl, HouseVoteFixtures.Members() },
         { ApiResource.SenateVoteMenu, SenateMenuUrl, Encoding.UTF8.GetString(SenateVoteFixtures.Menu()) },
         { ApiResource.SenateVote, SenateVoteUrl, Encoding.UTF8.GetString(SenateVoteFixtures.Vote()) },
+        { ApiResource.VoteviewRollCalls, VoteviewUrl.File(VoteviewVoteFixtures.SourceUrl, ApiResource.VoteviewRollCalls, 119), VoteviewVoteFixtures.DefaultRollCalls },
+        { ApiResource.VoteviewMembers, VoteviewUrl.File(VoteviewVoteFixtures.SourceUrl, ApiResource.VoteviewMembers, 119), VoteviewVoteFixtures.DefaultMembers },
+        { ApiResource.VoteviewVotes, VoteviewUrl.File(VoteviewVoteFixtures.SourceUrl, ApiResource.VoteviewVotes, 119), VoteviewVoteFixtures.DefaultVotes },
         { ApiResource.MemberRoster, RosterFixtures.SourceUrl, RosterFixtures.Json },
         { ApiResource.ExecutiveRoster, ExecutiveFixtures.SourceUrl, ExecutiveFixtures.Json },
         { ApiResource.MemberPhoto, MemberPhotoFixtures.PhotoUrl(), "the photo fixture replaces this text" },
@@ -354,6 +360,62 @@ public sealed class JobPreparationTests
             saved.Text.Contains("\nMember: S428, Angela Alsobrooks, D, MD, Yea\n", StringComparison.Ordinal));
         var call = Assert.Single(votes.SenateVotes);
         Assert.Equal(("job", SenateVoteFixtures.Roll1, saved.ExtractionId), (call.JobId, call.Vote.Roll, call.ExtractionId));
+    }
+
+    [Fact]
+    public async Task AFinishedRollCallsJobAsksTheStoreForItsFollowOnJobsAndReadsNoBody()
+    {
+        var url = VoteviewUrl.File(VoteviewVoteFixtures.SourceUrl, ApiResource.VoteviewRollCalls, 119);
+
+        var result = await Prepare(ApiResource.VoteviewRollCalls, url, "", null);
+
+        Assert.Equal(1, result!.AdmittedCount);
+        Assert.Equal((ApiResource.VoteviewRollCalls, "job", 119), Assert.Single(votes.VoteviewFollowOns));
+    }
+
+    [Fact]
+    public async Task AVotesJobRendersEveryRollCallFromAllThreeFilesButSavesOnlyTheRollCallsTheStoreCallsChanged()
+    {
+        var url = VoteviewUrl.File(VoteviewVoteFixtures.SourceUrl, ApiResource.VoteviewVotes, 119);
+
+        var result = await Prepare(ApiResource.VoteviewVotes, url, VoteviewVoteFixtures.DefaultVotes, null);
+
+        Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
+        Assert.Equal(2, votes.VoteviewRollsBeforeChangeFilter);
+        var saved = Assert.Single(extractions.Saved);
+        Assert.Equal(1, saved.Part);
+        Assert.Equal("voteview-senate-vote-v1", saved.ExtractionVersion);
+        Assert.StartsWith("Senate vote: 119 1 1\n", saved.Text);
+        var call = Assert.Single(votes.VoteviewVotes);
+        Assert.Equal(new VoteviewChain(119, "rollcalls-job", "members-job", "job"), call.Chain);
+        Assert.Equal(saved.ExtractionId, Assert.Single(call.Rolls).Extraction.ExtractionId);
+    }
+
+    [Fact]
+    public async Task ARollCallWhoseCountsDisagreeGivesTheMismatchCodeAndALogWithTheCountWhileTheOtherRollCallsStillAdmit()
+    {
+        var url = VoteviewUrl.File(VoteviewVoteFixtures.SourceUrl, ApiResource.VoteviewVotes, 119);
+
+        var result = await Prepare(ApiResource.VoteviewVotes, url, VoteviewVoteFixtures.DefaultVotes, null);
+
+        Assert.Equal((EvidenceStatus.Succeeded, "voteviewCountMismatch"), (result!.Status, result.ErrorCode));
+        Assert.Equal("Voteview Congress 119 skipped 1 roll calls whose member counts differ from the roll call file.", Assert.Single(warnings.Messages));
+        Assert.Single(votes.VoteviewVotes);
+        Assert.Equal(2, votes.VoteviewRollsBeforeChangeFilter);
+    }
+
+    [Fact]
+    public async Task AVotesJobWhoseThreeBodiesEqualTheNewestCandidateLoadsNoBodyAndSavesNothing()
+    {
+        votes.VoteviewBodiesKnown = true;
+        var url = VoteviewUrl.File(VoteviewVoteFixtures.SourceUrl, ApiResource.VoteviewVotes, 119);
+
+        var result = await Prepare(ApiResource.VoteviewVotes, url, "not a csv at all", null);
+
+        Assert.Equal(1, result!.DuplicateCount);
+        Assert.Empty(bodyReads);
+        Assert.Empty(extractions.Saved);
+        Assert.Empty(votes.VoteviewVotes);
     }
 
     [Fact]
@@ -621,6 +683,8 @@ public sealed class JobPreparationTests
                 new ConfiguredCollectionSource(FederalRegisterFixtures.Configuration(), FederalRegisterFixtures.SourceId, Backfill),
             ApiResource.SenateVoteMenu or ApiResource.SenateVote =>
                 new ConfiguredCollectionSource(SenateVoteFixtures.Configuration(), SenateVoteFixtures.SourceId, Backfill),
+            ApiResource.VoteviewRollCalls or ApiResource.VoteviewMembers or ApiResource.VoteviewVotes =>
+                new ConfiguredCollectionSource(VoteviewVoteFixtures.Configuration(), VoteviewVoteFixtures.SourceId, Backfill),
             _ when IsHouseVote(resource) => new ConfiguredCollectionSource(HouseVoteFixtures.Configuration(), HouseVoteFixtures.SourceId, Backfill),
             _ => new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", Backfill)
         };
@@ -630,9 +694,33 @@ public sealed class JobPreparationTests
             new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
         var job = new CollectionJobRecord("job", definition, "key", CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,
             false, [attempt]);
-        var preparation = new JobPreparation(new SingleJob(job), new CapturedAttempts(contentType), new NoDiscoveryAdmissions(), admissions, votes, federalRegister, roster, executives,
-            new FixedBody(bytes), processing, extractions, textExtractor, issues);
+        var (jobs, bodyOf) = resource == ApiResource.VoteviewVotes ? VoteviewChainOf(configured, job, bytes) : ([job], _ => bytes);
+        var preparation = new JobPreparation(new SingleJob(jobs), new CapturedAttempts(contentType), new NoDiscoveryAdmissions(), admissions, votes, federalRegister, roster, executives,
+            new FixedBody(bodyOf, bodyReads), processing, extractions, textExtractor, issues, warnings);
         return await preparation.PrepareAsync("job", "artifacts", default);
+    }
+
+    private static (CollectionJobRecord[] Jobs, Func<string, byte[]> BodyOf) VoteviewChainOf(ConfiguredCollectionSource configured,
+        CollectionJobRecord votes, byte[] votesBody)
+    {
+        CollectionJobRecord Job(string id, ApiResource resource, string key)
+        {
+            var definition = configured.CreateApiJobDefinition(resource, VoteviewUrl.File(configured.SourceUrl, resource, 119), Backfill,
+                CollectionJobPriority.Check);
+            var attempt = new CollectionJobAttempt("attempt-" + id, definition.CreateRequest(id, Path.GetFullPath("captures")),
+                new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
+            return new CollectionJobRecord(id, definition, key, CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null, false, [attempt]);
+        }
+        var rollCalls = Job("rollcalls-job", ApiResource.VoteviewRollCalls, "scheduled-check/x/1");
+        var members = Job("members-job", ApiResource.VoteviewMembers, VoteviewJobKeys.Members(VoteviewVoteFixtures.SourceId, rollCalls.JobId));
+        var voteJob = votes with { IdempotencyKey = VoteviewJobKeys.Votes(VoteviewVoteFixtures.SourceId, members.JobId) };
+        byte[] BodyOf(string attemptId) => attemptId switch
+        {
+            "attempt-rollcalls-job" => VoteviewVoteFixtures.Bytes(VoteviewVoteFixtures.DefaultRollCalls),
+            "attempt-members-job" => VoteviewVoteFixtures.Bytes(VoteviewVoteFixtures.DefaultMembers),
+            _ => votesBody
+        };
+        return ([rollCalls, members, voteJob], BodyOf);
     }
 
     private static bool IsHouseVote(ApiResource? resource) =>
@@ -753,6 +841,35 @@ public sealed class JobPreparationTests
             return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
         }
 
+        public List<(ApiResource Finished, string JobId, int Congress)> VoteviewFollowOns { get; } = [];
+        public List<(VoteviewChain Chain, DateTimeOffset CapturedAt, IReadOnlyList<VoteviewRollExtraction> Rolls)> VoteviewVotes { get; } = [];
+        public bool VoteviewBodiesKnown { get; set; }
+        public int VoteviewRollsBeforeChangeFilter { get; private set; }
+
+        public Task<DiscoveryAdmissionResult> AdmitVoteviewFollowOnsAsync(ConfiguredCollectionSource source, ApiResource finished,
+            string jobId, int congress, CancellationToken cancellationToken)
+        {
+            VoteviewFollowOns.Add((finished, jobId, congress));
+            return Task.FromResult(new DiscoveryAdmissionResult([new DiscoveryAdmissionJob("next", "https://x")], 0, 0));
+        }
+
+        public Task<bool> HasVoteviewCandidateOfBodiesAsync(ConfiguredCollectionSource source, int congress, VoteviewBodies bodies,
+            CancellationToken cancellationToken) => Task.FromResult(VoteviewBodiesKnown);
+
+        public Task<IReadOnlyList<VoteviewRollExtraction>> SelectChangedVoteviewRollsAsync(ConfiguredCollectionSource source, int congress,
+            IReadOnlyList<VoteviewRollExtraction> rolls, CancellationToken cancellationToken)
+        {
+            VoteviewRollsBeforeChangeFilter = rolls.Count;
+            return Task.FromResult<IReadOnlyList<VoteviewRollExtraction>>([.. rolls.Where(roll => roll.RollCall.Part == 1)]);
+        }
+
+        public Task<DiscoveryAdmissionResult> AdmitVoteviewVotesAsync(ConfiguredCollectionSource source, VoteviewChain chain,
+            DateTimeOffset votesCapturedAt, IReadOnlyList<VoteviewRollExtraction> rolls, CancellationToken cancellationToken)
+        {
+            VoteviewVotes.Add((chain, votesCapturedAt, rolls));
+            return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
+        }
+
         public Task<DiscoveryAdmissionResult> AdmitListPageAsync(ConfiguredCollectionSource source, string listJobId,
             HouseVoteListPage page, CancellationToken cancellationToken)
         {
@@ -823,10 +940,10 @@ public sealed class JobPreparationTests
         public Task<bool> ReleaseAsync(EvidenceProcessingClaim claim, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
-    private sealed class SingleJob(CollectionJobRecord job) : ICollectionJobStore
+    private sealed class SingleJob(params CollectionJobRecord[] jobs) : ICollectionJobStore
     {
         public Task<CollectionJobRecord?> GetAsync(string jobId, CancellationToken cancellationToken) =>
-            Task.FromResult<CollectionJobRecord?>(job);
+            Task.FromResult(jobs.SingleOrDefault(job => job.JobId == jobId));
 
         public Task<CollectionJobRecord> EnqueueAsync(ConfiguredCollectionSource source, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobRecord?> RequestCheckAsync(ConfiguredCollectionSource source, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -925,9 +1042,24 @@ public sealed class JobPreparationTests
         public Task<DiscoveryAdmissionResult> AdmitAutomaticCheckAsync(ConfiguredCollectionSource source, string attemptId, string idempotencyKey, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
-    private sealed class FixedBody(byte[] body) : ICaptureBodyReader
+    private sealed class RecordingLogger : Microsoft.Extensions.Logging.ILogger<JobPreparation>
     {
-        public Task<byte[]> ReadAsync(CapturedAttemptResult attempt, string artifactRoot, CancellationToken cancellationToken) =>
-            Task.FromResult(body);
+        public List<string> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state,
+            Exception? exception, Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
+    }
+
+    private sealed class FixedBody(Func<string, byte[]> body, List<string> reads) : ICaptureBodyReader
+    {
+        public Task<byte[]> ReadAsync(CapturedAttemptResult attempt, string artifactRoot, CancellationToken cancellationToken)
+        {
+            reads.Add(attempt.AttemptId);
+            return Task.FromResult(body(attempt.AttemptId));
+        }
     }
 }

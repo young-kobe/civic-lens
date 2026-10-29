@@ -15,6 +15,7 @@ internal sealed class VoteCandidateRow
     public int? BillNumber { get; set; }
     public string DetailJobId { get; set; } = "";
     public string MembersJobId { get; set; } = "";
+    public string? RosterJobId { get; set; }
     public string DetailExtractionId { get; set; } = "";
     public string MembersExtractionId { get; set; } = "";
     public string ConfigurationRevisionId { get; set; } = "";

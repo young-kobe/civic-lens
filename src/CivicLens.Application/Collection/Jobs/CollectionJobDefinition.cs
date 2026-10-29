@@ -3,6 +3,7 @@ using CivicLens.Application.Collection.FederalRegister;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.MemberPhotos;
 using CivicLens.Application.Collection.SenateVotes;
+using CivicLens.Application.Collection.VoteviewVotes;
 using CivicLens.Collection.Contracts;
 using System.Text.Json.Serialization;
 
@@ -41,7 +42,8 @@ public sealed record CollectionJobDefinition
         ConfigurationRevision!.Configuration.Sources.FirstOrDefault(source => source.Id == SourceId)?.Url;
 
     public bool IsRoot() =>
-        ApiResource is Collection.ApiResource.BillList or Collection.ApiResource.HouseVoteList or Collection.ApiResource.SenateVoteMenu || ConfiguredUrl == Url;
+        ApiResource is Collection.ApiResource.BillList or Collection.ApiResource.HouseVoteList or Collection.ApiResource.SenateVoteMenu or
+            Collection.ApiResource.VoteviewRollCalls || ConfiguredUrl == Url;
 
     public bool IsListingPage()
     {
@@ -114,6 +116,7 @@ public sealed record CollectionJobDefinition
             ApiParser.CongressBillList => MatchesBillResource(resource, source.Url, url),
             ApiParser.CongressHouseVoteList => MatchesHouseVoteResource(resource, source.Url, url),
             ApiParser.SenateVoteList => MatchesSenateVoteResource(resource, source.Url, url),
+            ApiParser.VoteviewSenateVoteList => VoteviewUrl.TryReadCongress(source.Url, resource, url) is not null,
             ApiParser.CongressLegislators => resource == Collection.ApiResource.MemberRoster && url == source.Url,
             ApiParser.CongressLegislatorsExecutive => resource == Collection.ApiResource.ExecutiveRoster && url == source.Url,
             ApiParser.FederalRegisterDocuments => MatchesFederalRegisterResource(resource, source.Url, url),

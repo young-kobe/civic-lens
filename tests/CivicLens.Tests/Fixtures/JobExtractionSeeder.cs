@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CivicLens.Collection.Contracts;
+using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Documents;
@@ -12,7 +13,13 @@ internal sealed class JobExtractionSeeder(PostgresCollectionJobStore store, Post
 {
     public async Task<string> SaveAsync(string jobId, string body, string text, string extractionVersion)
     {
-        var captured = await seeder.ImportAsync(body, "https://example.test/pages/a", CandidateJobKind.None);
+        var captured = await AttachCaptureAsync(jobId, body);
+        return (await extractions.SaveAsync(new DocumentExtraction(captured, extractionVersion, text), default)).ExtractionId;
+    }
+
+    public async Task<CapturedAttemptResult> AttachCaptureAsync(string jobId, string body, DateTimeOffset? observedAt = null)
+    {
+        var captured = await seeder.ImportAsync(body, "https://example.test/pages/a", CandidateJobKind.None, observedAt: observedAt);
         var request = (await store.GetAsync(jobId, default))!.Definition.CreateRequest(captured.AttemptId, captureRoot);
         var requestJson = JsonSerializer.Serialize(request, CollectionProtocol.JsonOptions);
         await using var connection = new NpgsqlConnection(connectionString);
@@ -23,6 +30,6 @@ internal sealed class JobExtractionSeeder(PostgresCollectionJobStore store, Post
                     (SELECT COALESCE(MAX(sequence), 0) + 1 FROM collection_job_attempts WHERE job_id = '{{jobId}}'), '{{requestJson}}', 0, '{}', 0)
             """, connection);
         await command.ExecuteNonQueryAsync();
-        return (await extractions.SaveAsync(new DocumentExtraction(captured, extractionVersion, text), default)).ExtractionId;
+        return captured;
     }
 }
