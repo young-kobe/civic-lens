@@ -1120,6 +1120,43 @@ public sealed class CollectorTests
     }
 
     [Fact]
+    public async Task ThousandsOfWildcardRulesNeverMakeRobotsUnavailable()
+    {
+        using var directoryOwner = new TemporaryDirectory();
+        var rules = string.Concat(Enumerable.Range(0, 9_000).Select(i => $"Disallow: /watch/*/section{i}/*.json$\n"));
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.OK, "User-agent: *\n" + rules + "Disallow: /watch/last/*.pdf\n"));
+        using var collector = new HttpCollector(handler);
+        var result = await collector.FetchAsync(Request(directoryOwner.Path) with { Url = "https://example.test/watch/last/a.pdf", MaxBytes = 1_000_000 });
+        Assert.Equal(CollectionFailureCode.RobotsDenied, result.FailureCode);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    [Theory]
+    [InlineData("/watch/*/private", "/watch/a/b/private", true)]
+    [InlineData("/watch/*/private", "/watch/private", false)]
+    [InlineData("/watch/*.pdf$", "/watch/a/report.pdf", true)]
+    [InlineData("/watch/*.pdf$", "/watch/a/report.pdf?page=2", false)]
+    [InlineData("/watch/exact$", "/watch/exact", true)]
+    [InlineData("/watch/exact$", "/watch/exact/more", false)]
+    [InlineData("/watch/a$b", "/watch/a$b", true)]
+    [InlineData("/watch/a$b", "/watch/ab", false)]
+    [InlineData("/watch/*", "/watch/anything", true)]
+    [InlineData("/watch/a*a*b", "/watch/aab", true)]
+    [InlineData("/watch/a*a*b", "/watch/ab", false)]
+    [InlineData("/watch/a*ab$", "/watch/ab", false)]
+    [InlineData("/watch/a*ab$", "/watch/aab", true)]
+    public async Task RobotsWildcardAndTerminalAnchorMatchOnlyWhatTheStandardDefines(string rule, string path, bool denied)
+    {
+        using var directoryOwner = new TemporaryDirectory();
+        var handler = new QueueHandler(_ => Response(HttpStatusCode.OK, $"User-agent: *\nDisallow: {rule}\n"),
+            _ => Response(HttpStatusCode.OK, "content"));
+        using var collector = new HttpCollector(handler);
+        var result = await collector.FetchAsync(Request(directoryOwner.Path) with { Url = "https://example.test" + path });
+        Assert.Equal(denied ? CollectionFailureCode.RobotsDenied : null, result.FailureCode);
+        Assert.Equal(denied ? CollectionOutcome.Failed : CollectionOutcome.Captured, result.Outcome);
+    }
+
+    [Fact]
     public async Task RobotsUnicodeRuleMatchesPercentEncodedUrl()
     {
         using var directoryOwner = new TemporaryDirectory();

@@ -213,7 +213,7 @@ public sealed class HttpCollector : IDisposable
                     new CachedRobots(fetched.Text, clock.GetUtcNow(), fetched.NotFound), CancellationToken.None);
                 return fetched.Rules;
             }
-            catch (RobotsException exception) when (exception.IsServerError && stale is not null)
+            catch (RobotsException exception) when (exception.UsesStaleCopy && stale is not null)
             {
                 robotsCacheHit = true;
                 return stale;
@@ -283,6 +283,12 @@ public sealed class HttpCollector : IDisposable
         return fields[0];
     }
 
+    private static bool IsRobotsAbsent(HttpStatusCode status) =>
+        (int)status is >= 400 and < 500 && status is not (HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden);
+
+    private static bool IsRobotsTemporary(HttpStatusCode status) =>
+        (int)status is >= 500 and < 600 || status is HttpStatusCode.ProxyAuthenticationRequired or HttpStatusCode.RequestTimeout;
+
     private async Task<FetchedRobots> GetRobotsAsync(CollectionRequest request, Action count, Action<long> addBytes,
         Func<long> getBytes, CancellationToken token, Func<Task<bool>> delayBeforeRedirectAsync)
     {
@@ -295,13 +301,13 @@ public sealed class HttpCollector : IDisposable
             robotRequest.Headers.UserAgent.ParseAdd(UserAgent);
             robotRequest.Headers.AcceptEncoding.ParseAdd("gzip, deflate, br");
             using var response = await client.SendAsync(robotRequest, HttpCompletionOption.ResponseHeadersRead, token);
-            if (response.StatusCode == HttpStatusCode.NotFound) return new FetchedRobots(RobotsRules.Empty, "", NotFound: true);
             if ((int)response.StatusCode == 429)
                 throw new RobotsException(CollectionFailureCode.RateLimited, deferred: true,
                     retryAfterSeconds: RetrySeconds(response.Headers.RetryAfter));
-            if ((int)response.StatusCode is >= 500 and < 600)
+            if (IsRobotsTemporary(response.StatusCode))
                 throw new RobotsException(CollectionFailureCode.RobotsUnavailable, deferred: true,
                     retryAfterSeconds: RetrySeconds(response.Headers.RetryAfter));
+            if (IsRobotsAbsent(response.StatusCode)) return new FetchedRobots(RobotsRules.Empty, "", NotFound: true);
             if ((int)response.StatusCode is >= 300 and < 400)
             {
                 if (response.Headers.Location is null) throw new RobotsException(CollectionFailureCode.RobotsUnavailable);
@@ -525,7 +531,7 @@ public sealed class HttpCollector : IDisposable
         public CollectionFailureCode FailureCode { get; } = failureCode;
         public bool Deferred { get; } = deferred;
         public long? RetryAfterSeconds { get; } = retryAfterSeconds;
-        public bool IsServerError => Deferred && FailureCode == CollectionFailureCode.RobotsUnavailable;
+        public bool UsesStaleCopy => Deferred && FailureCode == CollectionFailureCode.RobotsUnavailable;
     }
 
     private sealed record FetchedRobots(RobotsRules Rules, string Text, bool NotFound = false);

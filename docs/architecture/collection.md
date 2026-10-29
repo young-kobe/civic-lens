@@ -128,22 +128,23 @@ Except in API mode, the collector requests `/robots.txt` on the same origin firs
 - Blank and comment lines do not end a group. Extension directives do not split consecutive user-agent lines.
 - Unknown directives and malformed non-path rules are ignored.
 - Limits are 2,048 characters for each rule, 2,304 for each line, and 10,000 rules, groups, and user-agent entries.
-- Each regex match has 50 ms, and each path evaluation has 250 ms.
+- Each rule is normalized once when the file is parsed. Matching compares the pieces between `*` in order. It uses no regular expression, and its cost depends only on the rule and path lengths.
+- Percent-encoding normalization of each rule and path has a 50 ms limit.
 
 **Fetch.** Robots redirects stay on the configured origin, without credentials or fragments, with configured pacing between hops. Every hop uses the shared request budget and timeout. `robotsRequestCount` counts each robots hop inside the total `requestCount`. Several robots hops therefore cannot imply that a conditional content request occurred.
 
-A robots 404 permits collection. Other ambiguous or unreadable responses block content fetching. A robots 429, a server error, or a network failure gives a deferred observation with no content response metadata. Retry-After is kept when supplied. A matching denial is a permanent failure.
+A robots 404 means there is no robots file, and this permits collection. So does any other 4xx response except 401, 403, 407, 408, and 429 (RFC 9309 section 2.3.1.3). A robots 401 or 403 usually means a firewall blocks the collector. RFC 9309 lets a crawler access the site after a 401 or 403, but does not require it. The collector does not crawl. Other ambiguous or unreadable responses block content fetching. A robots 407, 408, or 429, a server error, or a network failure gives a deferred observation with no content response metadata. Retry-After is kept when supplied. A matching denial is a permanent failure.
 
 **Decoding.** Identity, gzip, deflate, and Brotli responses are supported, with strict UTF-8 decoding for robots. Wire bytes use the shared byte budget. Each decoding stage is bounded to 10 MB and drained to completion. At most 16 encoding tokens are accepted. Executables and tests enable the strict compression validation of the pinned runtime.
 
-**Cache.** The collector caches robots rules as files in the artifact directory of the request. The name is `robots-<sha256 of the normalized origin>.json`. The file holds the decoded robots text, the fetch time, and whether the entry was a 404. `RobotsCache` owns the files.
+**Cache.** The collector caches robots rules as files in the artifact directory of the request. The name is `robots-<sha256 of the normalized origin>.json`. The file holds the decoded robots text, the fetch time, and whether the entry was a missing file (a permitted 4xx response). `RobotsCache` owns the files.
 
 - A copy younger than 24 hours replaces the robots request. The collector then reports `robotsRequestCount` 0, `robotsCacheHit` true, and the cached crawl delay.
 - On a cache hit, the collector does not wait before its first content request, because Application origin pacing already spaced the jobs.
-- Only 200 and 404 responses are cached. Other responses and rules that fail to parse are never cached.
+- Only 200 and permitted 4xx responses (no robots file) are cached. Other responses and rules that fail to parse are never cached.
 - A corrupt, unreadable, or future-dated file is ignored and refetched. A failed cache write does not fail collection.
-- When a refetch gets a 5xx, the collector obeys a cached 200 copy up to 7 days old, also its Disallow rules. It reports one robots request and `robotsCacheHit` true.
-- A cached 404 is never used that way. A robots 5xx then behaves as with no cache.
+- When a refetch gets a 5xx, 407, or 408, the collector obeys a cached 200 copy up to 7 days old, also its Disallow rules. It reports one robots request and `robotsCacheHit` true.
+- A cached missing-file entry is never used that way. A robots 5xx, 407, or 408 then behaves as with no cache.
 - A robots 429 is never masked. It always defers with `rateLimited`, so the application applies the group backoff.
 - A timeout before any request, for example while the collector reads the cache, is a `timeout` failure with no requests.
 

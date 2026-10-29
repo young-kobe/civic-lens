@@ -1,7 +1,6 @@
 using System.Text;
 using CivicLens.Collection.Contracts;
 using System.Text.RegularExpressions;
-using System.Diagnostics;
 
 namespace CivicLens.Collector.Http;
 
@@ -28,13 +27,10 @@ internal sealed class RobotsRules
     {
         var normalizedPath = NormalizeUnreserved(path, pattern: false);
         Rule? bestMatch = null;
-        var matchingBudget = Stopwatch.StartNew();
         foreach (var rule in rules)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (matchingBudget.Elapsed > TimeSpan.FromMilliseconds(250))
-                throw new TimeoutException("Robots rule matching exceeded its time limit.");
-            if (!RuleMatches(rule.Path, normalizedPath, cancellationToken)) continue;
+            if (!rule.Matches(normalizedPath)) continue;
             if (bestMatch is null || rule.Specificity > bestMatch.Specificity ||
                 (rule.Specificity == bestMatch.Specificity && rule.Allow && !bestMatch.Allow))
                 bestMatch = rule;
@@ -80,7 +76,7 @@ internal sealed class RobotsRules
                 if (value.Length == 0) continue;
                 if (value.Length > MaximumRuleLength) throw new FormatException("Robots rule exceeds the supported limit.");
                 if (!value.StartsWith('/')) continue;
-                group.Rules.Add(new Rule(value, key.Equals("allow", StringComparison.OrdinalIgnoreCase)));
+                group.Rules.Add(Rule.Create(NormalizeUnreserved(value), key.Equals("allow", StringComparison.OrdinalIgnoreCase)));
                 if (++totalRules > MaximumRules) throw new FormatException("Robots file has too many rules.");
             }
             else if (key.Equals("crawl-delay", StringComparison.OrdinalIgnoreCase))
@@ -153,16 +149,6 @@ internal sealed class RobotsRules
         return output.ToString();
     }
 
-    private static bool RuleMatches(string rule, string path, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        rule = NormalizeUnreserved(rule);
-        var terminal = rule.EndsWith('$');
-        if (terminal) rule = rule[..^1];
-        var expression = "^" + Regex.Escape(rule).Replace("\\*", ".*") + (terminal ? "$" : ".*");
-        return Regex.IsMatch(path, expression, RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, MatchTimeout);
-    }
-
     private sealed class Group
     {
         public List<string> UserAgents { get; } = [];
@@ -170,24 +156,45 @@ internal sealed class RobotsRules
         public long? CrawlDelayMilliseconds { get; set; }
     }
 
-    private sealed record Rule(string Path, bool Allow)
+    private sealed record Rule(string[] Segments, bool Terminal, bool Allow, int Specificity)
     {
-        public int Specificity
+        public static Rule Create(string normalizedPattern, bool allow)
         {
-            get
+            var terminal = normalizedPattern.EndsWith('$');
+            var literal = terminal ? normalizedPattern[..^1] : normalizedPattern;
+            return new Rule(literal.Split('*'), terminal, allow, CountOctets(literal));
+        }
+
+        public bool Matches(string path)
+        {
+            var first = Segments[0];
+            if (!path.StartsWith(first, StringComparison.Ordinal)) return false;
+            if (Segments.Length == 1) return !Terminal || path.Length == first.Length;
+
+            var position = first.Length;
+            for (var i = 1; i < Segments.Length - 1; i++)
             {
-                var normalized = NormalizeUnreserved(Path);
-                var octets = 0;
-                for (var i = 0; i < normalized.Length; i++)
-                {
-                    if (normalized[i] == '*' || normalized[i] == '$') continue;
-                    octets++;
-                    if (normalized[i] == '%' && i + 2 < normalized.Length &&
-                        byte.TryParse(normalized.AsSpan(i + 1, 2), System.Globalization.NumberStyles.HexNumber,
-                            System.Globalization.CultureInfo.InvariantCulture, out _)) i += 2;
-                }
-                return octets;
+                var found = path.IndexOf(Segments[i], position, StringComparison.Ordinal);
+                if (found < 0) return false;
+                position = found + Segments[i].Length;
             }
+            var last = Segments[^1];
+            if (!Terminal) return path.IndexOf(last, position, StringComparison.Ordinal) >= 0;
+            return path.Length - last.Length >= position && path.EndsWith(last, StringComparison.Ordinal);
+        }
+
+        private static int CountOctets(string literal)
+        {
+            var octets = 0;
+            for (var i = 0; i < literal.Length; i++)
+            {
+                if (literal[i] == '*') continue;
+                octets++;
+                if (literal[i] == '%' && i + 2 < literal.Length &&
+                    byte.TryParse(literal.AsSpan(i + 1, 2), System.Globalization.NumberStyles.HexNumber,
+                        System.Globalization.CultureInfo.InvariantCulture, out _)) i += 2;
+            }
+            return octets;
         }
     }
 }
