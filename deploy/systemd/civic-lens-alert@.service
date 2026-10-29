@@ -1,0 +1,6 @@
+[Unit]
+Description=Civic Lens alert for %I
+
+[Service]
+Type=oneshot
+ExecStart=/opt/civic-lens/deploy/scripts/alert.sh %I

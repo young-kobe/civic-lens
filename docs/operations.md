@@ -995,10 +995,11 @@ Set up the backup one time:
 1. Fill in `/srv/civic-lens/env/backup.secret.env` with the R2 repository URL and the API token.
 2. Make the restic password file: `sudo sh -c 'umask 077; openssl rand -base64 32 > /srv/civic-lens/env/restic-password'`. Keep an offline copy of the password. Without it, no backup can be read.
 3. Create the repository: `sudo deploy/scripts/compose.sh run --rm restic init`.
-4. Link and enable the timer:
+4. Set up the failure alert (see [Failure alerts](#failure-alerts)).
+5. Link and enable the timer:
 
 ```sh
-sudo systemctl link /opt/civic-lens/deploy/systemd/civic-lens-backup.service /opt/civic-lens/deploy/systemd/civic-lens-backup.timer
+sudo systemctl link /opt/civic-lens/deploy/systemd/civic-lens-backup.service /opt/civic-lens/deploy/systemd/civic-lens-backup.timer /opt/civic-lens/deploy/systemd/civic-lens-alert@.service
 sudo systemctl enable --now civic-lens-backup.timer
 ```
 
@@ -1012,7 +1013,7 @@ systemctl --failed
 sudo deploy/scripts/compose.sh run --rm restic snapshots
 ```
 
-The first backup run by hand also proves the credentials. The timer runs at 03:30 local time. Check `list-timers` and `--failed` every week. A failed backup sends no alert. The last run time must be less than a day old.
+The first backup run by hand also proves the credentials. The timer runs at 03:30 local time. Check `list-timers` and `--failed` every week. A timer that never runs sends no alert, so the last run time must be less than a day old.
 
 **Restore.** Test this procedure once before you need it, on a spare machine or directory.
 
@@ -1030,6 +1031,16 @@ sudo deploy/scripts/compose.sh exec -T postgres sh -c 'pg_restore --single-trans
 6. Delete `/srv/restore`. Start the timer: `sudo systemctl start civic-lens-backup.timer`.
 
 The dump file stays in `/srv/civic-lens/backup`, mode 700, until the next run replaces it.
+
+### Failure alerts
+
+If `civic-lens-backup.service` fails, systemd starts `civic-lens-alert@civic-lens-backup.service`. That unit runs `deploy/scripts/alert.sh` with the failed unit name. The script sends one email through the Resend HTTP API from `alerts@civic-lens.info`. The body holds the unit name, the host name, the time, and the command `journalctl -u <unit>`. It holds no log line and no other data. Resend receives only this text. If the send fails, the script exits with an error in the journal of the alert unit. Other jobs can use the script later: give it any unit name.
+
+1. In Resend, add and verify the `civic-lens.info` domain. Add the DNS records that Resend shows in the Cloudflare zone.
+2. Make a send-only API key in Resend.
+3. Fill in `/srv/civic-lens/env/alert.secret.env` with the key and the recipient address. The file has mode 600. The script passes the key to `curl` in a temporary header file, not on the command line.
+4. Check that `curl --version` shows version 7.55 or later. The script needs `curl` on the host.
+5. Test: `sudo systemctl start civic-lens-alert@civic-lens-test.service`. An email arrives that names the unit `civic-lens-test`. Read `sudo journalctl -u civic-lens-alert@civic-lens-test.service` if it does not.
 
 ### No page logs
 
