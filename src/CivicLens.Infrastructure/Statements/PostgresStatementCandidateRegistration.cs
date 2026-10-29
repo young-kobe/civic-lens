@@ -26,7 +26,7 @@ internal static class PostgresStatementCandidateRegistration
         string extractionId, CancellationToken cancellationToken) =>
         InsertAsync(db, feed, link, extractionId, cancellationToken);
 
-    // One call per attempt: rows lock in key order inside it, so two writers cannot lock rows in opposite orders.
+    // One call per transaction: rows lock in key order inside it, so two writers cannot lock rows in opposite orders.
     public static Task RaiseAnalysisPrioritiesAsync(CollectionAttemptDbContext db, CapturedAttemptResult attempt,
         IReadOnlyCollection<string> articleTexts, CancellationToken cancellationToken) =>
         StatementBillMentions.RaiseRowsNamedByAsync(db, DateOnly.FromDateTime(attempt.ObservedAt.UtcDateTime), articleTexts,

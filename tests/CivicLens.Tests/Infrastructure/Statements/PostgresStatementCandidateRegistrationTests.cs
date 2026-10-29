@@ -277,14 +277,25 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
     }
 
     [Fact]
-    public async Task TwoParallelSavesOfOneFeedAttemptTogetherRegisterNoMoreThanTheLimit()
+    public async Task ASaveOfAFeedAttemptWaitsForAnotherWriterOfTheSameAttemptSoTheBoundIsReadAfterThatWriterCommits()
     {
         var feed = await seeder.ImportAsync("feed", FeedUrl, CandidateJobKind.None);
-        var names = Enumerable.Range(0, 6).Select(index => "item" + index).ToArray();
-        var items = Items(feed, names);
+        await using var holder = new NpgsqlConnection(connectionString);
+        await holder.OpenAsync();
+        await using var transaction = await holder.BeginTransactionAsync();
+        await using (var lockCommand = new NpgsqlCommand(
+            "SELECT 1 FROM collection_attempts WHERE attempt_id = @id FOR NO KEY UPDATE", holder, transaction))
+        {
+            lockCommand.Parameters.AddWithValue("id", feed.AttemptId);
+            await lockCommand.ExecuteScalarAsync();
+        }
 
-        await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => extractions.SaveFeedItemsAsync(items, 2, CancellationToken.None)));
+        var save = extractions.SaveFeedItemsAsync(Items(feed, "a", "b", "c"), 2, CancellationToken.None);
+        var finishedWhileLocked = await Task.WhenAny(save, Task.Delay(TimeSpan.FromSeconds(1))) == save;
+        await transaction.CommitAsync();
+        await save.WaitAsync(TimeSpan.FromSeconds(10));
 
+        Assert.False(finishedWhileLocked, "The save must wait for the writer that holds the attempt row.");
         Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM statement_candidates"));
     }
 
