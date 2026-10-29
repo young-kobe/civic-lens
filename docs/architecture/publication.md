@@ -299,8 +299,11 @@ A statement record carries one source version with the full extracted text, the 
 - issues, policy areas, and bill numbers
 - the optional statement date with its evidence
 - 1 to 32 quotations, each with its kind: `directQuotation` or `releaseText`
+- an optional `articleUrl`, the link of the article, when the source is a feed that lists the article. It is null when the source is the article page. A null value keeps old files valid, so the schema version stays 1.
 
 Every quotation must equal the source text at its offsets.
+
+The source URL of a statement is the URL that the collector requested for the cited capture. For a feed item, the source is the feed and `articleUrl` is the item link. The statement page then links the article and says that the source is the feed that lists it. `PublishedStatementBuilder` sets both URLs. `PublishedStatement.Validate` requires a web URL for the link. Tests: `PublishStatementTests.AStatementFromAFeedCitesTheFeedCaptureAndLinksTheArticleBecauseTheReaderNeedsBoth`, `PublishStatementTests.AStatementFromTheArticlePageHasNoSeparateArticleLinkBecauseItsSourceIsTheArticle`, `PublishedStatementTests.RejectsAnArticleLinkThatIsNotAWebUrlBecauseTheReaderFollowsIt`, `PublishedStatementTests.ARecordWrittenBeforeTheArticleLinkExistedStillReadsWithNoLink`, and `ReleaseRendererTests.StatementPageLinksTheArticleAndSaysThatTheSourceIsTheFeedWhenTheStatementCameFromAFeed`.
 
 An action record carries:
 

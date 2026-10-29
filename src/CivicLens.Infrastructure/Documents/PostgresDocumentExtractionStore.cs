@@ -38,7 +38,7 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var captured = await RequireImportedAsync(db, extraction, cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
-        if (await InsertAsync(db, captured, extraction, cancellationToken) is { } winner) return winner;
+        if (await InsertOrReadReplayAsync(db, captured, extraction, cancellationToken) is { } winner) return winner;
         await PostgresStatementCandidateRegistration.RegisterAsync(db, captured, extraction.ExtractionId, extraction.Text, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return extraction;
@@ -63,7 +63,7 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
         {
             if (registered >= remaining) break;
             if (known.Links.Contains(item.Link)) continue;
-            if (await InsertAsync(db, captured, item.Extraction, cancellationToken) is not null) continue;
+            if (await InsertOrReadReplayAsync(db, captured, item.Extraction, cancellationToken) is not null) continue;
             if (await PostgresStatementCandidateRegistration.RegisterFeedItemAsync(db, captured, item.Link,
                     item.Extraction.ExtractionId, item.Extraction.Text, cancellationToken))
                 registered++;
@@ -82,8 +82,7 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
         return captured;
     }
 
-    /// <summary>Returns null when the row is new, or the retained row of an equal replay.</summary>
-    private static async Task<DocumentExtraction?> InsertAsync(CollectionAttemptDbContext db, CapturedAttemptResult captured,
+    private static async Task<DocumentExtraction?> InsertOrReadReplayAsync(CollectionAttemptDbContext db, CapturedAttemptResult captured,
         DocumentExtraction extraction, CancellationToken cancellationToken)
     {
         var profileJson = SerializeProfile(extraction.Profile);

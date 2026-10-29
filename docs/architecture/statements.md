@@ -7,6 +7,9 @@ The statements feature finds articles that may hold an official's statement and 
 ## Decisions
 
 - A candidate is the first extraction of an article that discovery admission created. Later fetches and parser upgrades never create a second candidate.
+- Some senate.gov article pages return 403 to our User-Agent, but the feeds of those senators carry the full text. A feed source can therefore set `statementTextInFeed`. A person sets it only after the person checks that the feed holds the full text. Each feed item then makes one candidate with the text of the item. No config file sets the flag yet.
+- A feed item candidate has the same key as a page job for the same link: the source plus the item link. The first text that registers wins. A later page text for the link adds nothing.
+- A public statement from a feed item cites the feed capture and links the article. See [publication](publication.md#release-content).
 - The gate uses the two issue layers in [configuration](configuration.md#decisions).
 - Watched pages are never candidates. They stay document-change sources only.
 - A later edit to an admitted article is a document change, not a new statement.
@@ -50,7 +53,11 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - The event date of a statement is its statement date, or else the capture date of its candidate (`statement_candidates.created_at_utc_ticks`, as a UTC date). Enforced by `StatementDraftRevision.EventOn`. Test: `StatementDraftRevisionTests.TheEventDateIsTheStatementDateElseTheCaptureDate`.
 - A count equals the total of its list filter, so a draft with no revision needs action. Enforced by `PostgresStatementReviewStore.CountAsync` and `ReviewRecords.Drafts`. Test: `PostgresStatementReviewStoreTests.CountsUseTheSameStatusRuleAsTheListFiltersSoADraftWithoutARevisionNeedsAction`.
 - A statement candidate is the source plus the URL, and it never repeats. Enforced by the primary key of `statement_candidates`. Test: `PostgresStatementCandidateRegistrationTests.ConcurrentSavesForTheSameSourceAndUrlLeaveOneCandidate`.
-- Only discovery-admitted jobs become candidates. Enforced by `PostgresStatementCandidateRegistration`. Test: `PostgresStatementCandidateRegistrationTests.ExtractionFromAWatchedPageJobRegistersNoCandidate`.
+- Only discovery-admitted jobs and the items of a flagged feed become candidates. Enforced by `PostgresStatementCandidateRegistration`. Test: `PostgresStatementCandidateRegistrationTests.ExtractionFromAWatchedPageJobRegistersNoCandidate`.
+- A feed item and a page job for one link make one candidate, and the first text stays. Enforced by `PostgresCollectionJobStore.HashCandidate` and the primary key of `statement_candidates`. Tests: `PostgresStatementCandidateRegistrationTests.AFeedItemForALinkThatAPageJobAlreadyHoldsAddsNeitherACandidateNorAnExtraction` and `PostgresStatementCandidateRegistrationTests.APageJobForALinkThatAFeedItemAlreadyHoldsKeepsTheFeedItemTextAsTheFirstText`.
+- One feed capture adds at most `maxJobs` candidates of its source in total, newest item first, also when preparation runs again. Enforced by `PostgresDocumentExtractionStore.SaveFeedItemsAsync`. Tests: `PostgresStatementCandidateRegistrationTests.FeedItemsRegisterNewestFirstUpToTheLimitSoOneBusyFeedCannotFloodTheGate` and `PostgresStatementCandidateRegistrationTests.AReplayOfTheSameFeedAttemptNeverAddsCandidatesBeyondTheLimit`.
+- A feed item link must pass the origin and path prefix of its source, as a page job link does. Enforced by `FeedStatementExtractions` through `CollectionRequest.ResolveCandidate`. Test: `FeedStatementExtractionsTests.ALinkOutsideTheAllowedPrefixOrOriginIsRefusedLikeAPageJobWould`.
+- A feed item extraction has the identity of its capture and its index in the feed, so a rerun makes the same IDs. Enforced by `FeedStatementExtractions` and `DocumentExtraction`. Test: `FeedStatementExtractionsTests.TheIdentityOfAnItemDependsOnTheCaptureAndItsIndexSoARerunMakesTheSameIds`.
 - A Succeeded gate has a known reason. Enforced by `StatementGateLifecycle`. Test: `StatementGateLifecycleTests.ASucceededGateNeedsAKnownReason`.
 - When a valid answer has no verified issue and namesBillOrVote is false, a bill number in the text still passes the release. Enforced by `StatementGateResolver`. Test: `StatementGateResolverTests.ABillNumberInTheTextPassesWithoutTheModelAnswerSoTheFloorHoldsWhenTheModelMissesIt`.
 - A gate answer must hold `namesBillOrVote`, so a missing answer never reads as false. Enforced by `StatementGateResolver.Parse` with the required constructor parameters of `AnalysisAnswerRules.OutputJson`. Test: `StatementGateResolverTests.AnAnswerWithoutTheBillOrVoteFieldIsRejectedSoAMissingFieldNeverReadsAsFalse`.
@@ -119,6 +126,14 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 The registration inserts the candidate with `ON CONFLICT (candidate_id) DO NOTHING`. When that insert adds a row, it also inserts the Pending `gate` row in `statement_analysis`. A failure rolls back the extraction, the candidate, and the gate row together.
 
 The first extraction of a candidate is the one whose attempt has the earliest observed time. Ties go to the lower attempt ID, then the lower extraction ID. An extraction has no stored creation time, so the observed time of its capture sets the order.
+
+### Feed items
+
+When a source sets `statementTextInFeed`, `JobPreparation` also reads each captured feed of the source. It runs after article admission. `FeedStatementExtractions` parses the stored capture again. For each item it takes `content:encoded`, else `description`, and converts the HTML with `ExtractHtmlFragmentAsync`. It skips an item with no link or no text. It also skips an item whose link is outside the scope of the source or that an earlier item already used. It makes no guess about items that hold a summary only.
+
+Each kept item makes one extraction, with the index of the item in the feed as its part. The text starts with the lines `Feed item guid`, `Link`, `Title`, and `Published`, then a blank line, then the body. A line is left out when the feed has no value. These lines are part of the cited text, so a citation can name the guid and the link. Footers that the site adds stay in the text.
+
+`PostgresDocumentExtractionStore.SaveFeedItemsAsync` takes the items newest first. The newest item has the latest `pubDate`, and an item with no date comes last. The call skips a link that already has a candidate. It then saves the extraction, registers the candidate with `ON CONFLICT (candidate_id) DO NOTHING`, and stops when the capture has `maxJobs` candidates. `maxJobs` is the admission limit of the source. The candidate URL is the item link. Its attempt is the feed capture. A feed that fails to parse blocks the job with the code `feedStatementTextInvalid`. The page jobs of the same check are still admitted.
 
 ### Issue gate
 
@@ -441,7 +456,7 @@ With `--since`, `regate` moves only candidates first captured on or after that U
 
 - The generated [statements schema](schema/statements.md) lists every table, column, key, check, index, and trigger.
 - Candidate identity is the source plus the admitted URL. It is hashed as `PostgresCollectionJobStore.HashCandidate` hashes it for `collection_candidate_jobs`. The two tables share this value without a foreign key.
-- `statement_candidates` keeps the first extraction of the article and its attempt.
+- `statement_candidates` keeps the first extraction of the article and its attempt. For a feed item, the URL is the item link and the attempt is the feed capture.
 - `statement_analysis` is keyed by `(candidate_id, task)`. Its tasks are `gate` and `statement-draft`. A `gate` row exists for every candidate. A `statement-draft` row exists after the gate lets the candidate pass.
 - `statement_analysis` has the queue columns and checks of `document_change_analysis`, without `draft_id`.
 - The trigger `trg_statement_analysis_notify` calls `civic_lens_notify_analysis_change`. The gate and drafting workers therefore wake on the same channel as the document-change worker.
@@ -477,6 +492,7 @@ With `--since`, `regate` moves only candidates first captured on or after that U
 |---|---|
 | Revision, quotation kind, bill numbers | `src/CivicLens.Core/Statements/StatementDraftRevision.cs`, `src/CivicLens.Core/Statements/QuotedText.cs`, `src/CivicLens.Core/Statements/BillNumberFinder.cs` |
 | Candidate registration | `src/CivicLens.Infrastructure/Statements/PostgresStatementCandidateRegistration.cs` |
+| Feed item text | `src/CivicLens.Application/Collection/FeedStatements/FeedItemParser.cs`, `src/CivicLens.Application/Collection/FeedStatements/FeedItemRenderer.cs`, `src/CivicLens.Application/Collection/FeedStatements/FeedStatementExtractions.cs`, `src/CivicLens.Application/Documents/FeedItemExtraction.cs` |
 | Gate | `src/CivicLens.Application/Statements/StatementGateStep.cs`, `src/CivicLens.Application/Statements/StatementGatePrompt.cs`, `src/CivicLens.Application/Statements/StatementGateResolver.cs`, `src/CivicLens.Application/Statements/StatementGateLifecycle.cs`, `src/CivicLens.Application/Statements/RegateStatementCandidates.cs` |
 | Drafting | `src/CivicLens.Application/Statements/StatementDraftStep.cs`, `src/CivicLens.Application/Statements/StatementDraftPrompt.cs`, `src/CivicLens.Application/Statements/StatementDraftResolver.cs`, `src/CivicLens.Application/Statements/StatementDraftLifecycle.cs`, `src/CivicLens.Application/Statements/StatementSpeakerRoster.cs`, `src/CivicLens.Application/Statements/StatementGateCarryOver.cs` |
 | Shared quote check | `src/CivicLens.Application/Statements/ArticleQuote.cs`, `src/CivicLens.Core/Documents/UniqueQuote.cs` |
@@ -507,6 +523,9 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 
 - Actions are in [actions](actions.md). Weekly briefs are in [briefs](briefs.md).
 - Planned: structured statement extraction and temporal identity resolution.
+- A feed item source still admits page jobs for the same links. A page that returns 403 fails and adds nothing. A page that works adds nothing when the feed text came first.
+- The feed parser reads RSS 2.0 only. It ignores `xml:base` and the charset of the HTTP header. An Atom feed blocks the job with `feedStatementTextInvalid`.
+- An item that the feed later edits keeps its first text. A later edit is not a new statement.
 - Each quotation stays addressable for later matching with actions.
 - Planned after the first deploy ([R-38](../roadmap.md#later)): find the same or nearly the same sentences in releases from different offices. It shows coordinated messaging and who used the words first.
 - The bill or vote answer of the model is unmeasured. The `passed-bill-or-vote` and `passed-bill-number` counts show how often each path fires. The bill number rule finds only the forms that `BillNumberFinder` accepts.
