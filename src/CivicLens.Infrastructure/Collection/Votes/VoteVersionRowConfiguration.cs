@@ -27,7 +27,7 @@ internal sealed class VoteVersionRowConfiguration : IEntityTypeConfiguration<Vot
         builder.Property(row => row.BillType).HasColumnName("bill_type").HasMaxLength(16);
         builder.Property(row => row.BillNumber).HasColumnName("bill_number");
         builder.Property(row => row.ExtractionId).HasColumnName("extraction_id").HasMaxLength(64);
-        builder.HasKey(row => row.DetailJobId);
+        builder.HasKey(row => new { row.DetailJobId, row.SessionNumber, row.RollCallNumber });
         builder.HasIndex(row => new { row.SourceId, row.Chamber, row.Congress, row.SessionNumber, row.RollCallNumber, row.UpdateDateUtcTicks })
             .IsUnique().HasDatabaseName("ux_vote_versions_roll");
         builder.HasOne<JobRow>().WithMany().HasForeignKey(row => row.DetailJobId).OnDelete(DeleteBehavior.Restrict);
