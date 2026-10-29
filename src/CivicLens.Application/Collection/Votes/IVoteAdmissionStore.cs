@@ -25,7 +25,7 @@ public interface IVoteAdmissionStore
     Task<DiscoveryAdmissionResult> AdmitVoteviewFollowOnsAsync(ConfiguredCollectionSource source, ApiResource finished, string jobId,
         int congress, CancellationToken cancellationToken);
 
-    /// <summary>True when the newest candidate of the Congress came from captures with these three bodies.</summary>
+    /// <summary>True when the newest candidate of the Congress came from captures with these three bodies and the same extraction version.</summary>
     Task<bool> HasVoteviewCandidateOfBodiesAsync(ConfiguredCollectionSource source, int congress, VoteviewBodies bodies,
         CancellationToken cancellationToken);
 

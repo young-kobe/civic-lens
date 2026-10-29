@@ -252,7 +252,7 @@ public sealed class JobPreparation(
         var membersResponse = await responses.ReadAsync(members, artifactRoot, cancellationToken);
         var votesResponse = await responses.ReadAsync(job, artifactRoot, cancellationToken);
         var bodies = new VoteviewBodies(rollCallsResponse.Captured.Capture.Sha256, membersResponse.Captured.Capture.Sha256,
-            votesResponse.Captured.Capture.Sha256);
+            votesResponse.Captured.Capture.Sha256, VoteviewParser.ExtractionVersion);
         if (await voteAdmissions.HasVoteviewCandidateOfBodiesAsync(configured, congress, bodies, cancellationToken))
             return JobPreparationResult.Prepared(duplicates: 1);
         var joined = VoteviewRoll.Join(VoteviewParser.ParseRollCalls(rollCallsResponse.Body, congress),

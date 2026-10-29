@@ -37,6 +37,8 @@ public sealed partial class PostgresCollectionJobStore
                 candidate.RosterJobId != null)
             .OrderByDescending(candidate => candidate.CreatedAtUtcTicks).FirstOrDefaultAsync(cancellationToken);
         return newest is not null &&
+            await db.Set<DocumentExtractionRow>().AsNoTracking().AnyAsync(extraction => extraction.ExtractionId == newest.DetailExtractionId &&
+                extraction.ExtractionVersion == bodies.ExtractionVersion, cancellationToken) &&
             await CaptureSha256OfJobAsync(db, newest.DetailJobId, cancellationToken) == bodies.RollCallsSha256 &&
             await CaptureSha256OfJobAsync(db, newest.RosterJobId!, cancellationToken) == bodies.MembersSha256 &&
             await CaptureSha256OfJobAsync(db, newest.MembersJobId, cancellationToken) == bodies.VotesSha256;

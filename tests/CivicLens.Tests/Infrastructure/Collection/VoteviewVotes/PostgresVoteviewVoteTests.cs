@@ -155,8 +155,20 @@ public sealed class PostgresVoteviewVoteTests(PostgresCollection postgres) : IAs
         Assert.False(anyChanged);
     }
 
-    private static VoteviewBodies Bodies(string rollCalls, string members, string votes) =>
-        new(Sha256(rollCalls), Sha256(members), Sha256(votes));
+    [Fact]
+    public async Task ANewExtractionVersionRendersAgainEvenWhenTheThreeBodiesAreTheSameSoARendererFixReachesOldRollCalls()
+    {
+        var chain = await ChainAsync("version", rollCallsBody: "rollcalls-a", membersBody: "members-a", votesBody: "votes-a");
+        await AdmitAsync(chain, FirstCapture);
+
+        var bumped = await store.HasVoteviewCandidateOfBodiesAsync(source, 119,
+            Bodies("rollcalls-a", "members-a", "votes-a", VoteviewParser.ExtractionVersion + "-next"), default);
+
+        Assert.False(bumped);
+    }
+
+    private static VoteviewBodies Bodies(string rollCalls, string members, string votes, string? version = null) =>
+        new(Sha256(rollCalls), Sha256(members), Sha256(votes), version ?? VoteviewParser.ExtractionVersion);
 
     private static string Sha256(string text) =>
         Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(text)));
