@@ -155,5 +155,5 @@ The join of a configured person to roster terms is in [publication](publication.
 - Photos are never used in ads.
 - A person with no row has no photo. The no-photo state is derived and never stored.
 - A person does not review a photo. The source is a public domain portrait set.
-- A takedown of one photo uses the `withholdPhoto` flag of the person. Old release directories keep the file; see [operations](../operations.md#take-down-a-member-photo).
+- A takedown of one photo uses the `withholdPhoto` flag of the person. Kept release directories keep the file until a prune removes them; see [operations](../operations.md#take-down-a-member-photo).
 - The reuse table of `about.html` says that official portraits are public domain from the Government Publishing Office. That row must change when configured executive photos ship, because they may not come from the GPO and may not be public domain; see [publication](publication.md).

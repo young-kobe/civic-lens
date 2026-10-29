@@ -65,9 +65,55 @@ public sealed class FileReleaseDirectory : IReleaseDirectory
     {
         cancellationToken.ThrowIfCancellationRequested();
         ReleasePaths.RequireDirectoryName(directoryName);
-        var path = ReleasePath(directoryName);
-        if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
+        var tombstone = MoveToTombstone(ReleasePath(directoryName));
+        if (tombstone is not null) Directory.Delete(tombstone, recursive: true);
         return Task.CompletedTask;
+    }
+
+    public Task RetireOlderThanAsync(int releaseNumber, IReadOnlyCollection<string> keepDirectoryNames,
+        CancellationToken cancellationToken)
+    {
+        var releases = Path.Combine(rootPath, ReleasePaths.ReleasesFolder);
+        if (!Directory.Exists(releases)) return Task.CompletedTask;
+        foreach (var path in Directory.EnumerateDirectories(releases))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var name = Path.GetFileName(path);
+            if (ReleasePaths.TryReleaseNumber(name, out var number) && number < releaseNumber && !keepDirectoryNames.Contains(name))
+                _ = MoveToTombstone(path);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteRetiredAsync(CancellationToken cancellationToken)
+    {
+        var tombstones = Path.Combine(rootPath, ReleasePaths.TombstoneFolder);
+        if (!Directory.Exists(tombstones)) return Task.CompletedTask;
+        foreach (var tombstone in Directory.EnumerateDirectories(tombstones))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                Directory.Delete(tombstone, recursive: true);
+            }
+            catch (DirectoryNotFoundException)
+            {
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    // One rename takes the folder out of releases/, so no half-deleted folder can look like a complete release.
+    private string? MoveToTombstone(string path)
+    {
+        if (!Directory.Exists(path)) return null;
+        var tombstones = Path.Combine(rootPath, ReleasePaths.TombstoneFolder);
+        ReleasePaths.CreateReadableDirectory(tombstones);
+        var tombstone = Path.Combine(tombstones, Guid.NewGuid().ToString("N"));
+        Directory.Move(path, tombstone);
+        return tombstone;
     }
 
     public Task ActivateAsync(string directoryName, CancellationToken cancellationToken)

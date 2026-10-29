@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Application.Issues;
 using System.Diagnostics;
@@ -25,8 +26,10 @@ public sealed class PublishedRelatedRecordsTests : IDisposable
         var scenario = new PublicationScenario();
         var statement = scenario.AddStatement('c');
         var action = scenario.AddAction('d');
-        var publish = new PublishRelease(scenario.Publications, new FileReleaseDirectory(root), new ReleaseRenderer(null, null), scenario.Loaders(),
-            new PublicationCatalog(scenario.OfficialNames, IssueConfiguration.None), FixedRosters.NamedOnly(scenario.OfficialNames.Keys), PhotoCaptures.None(), scenario.Clock);
+        var directory = new FileReleaseDirectory(root);
+        var publish = new PublishRelease(scenario.Publications, directory, new ReleaseRenderer(null, null), scenario.Loaders(),
+            new PublicationCatalog(scenario.OfficialNames, IssueConfiguration.None), FixedRosters.NamedOnly(scenario.OfficialNames.Keys), PhotoCaptures.None(), scenario.Clock,
+            new PruneReleases(scenario.Publications, directory, NullLogger<PruneReleases>.Instance));
         var first = await publish.ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
             new PublishedRecordReference(PublishedRecordKind.Statement, statement), new PublishedRecordReference(PublishedRecordKind.Action, action)));
         var relationship = scenario.AddRelationship('e', statement, action);

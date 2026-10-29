@@ -207,6 +207,90 @@ public sealed class FileReleaseDirectoryTests : IDisposable
     }
 
     [Fact]
+    public async Task RetiringMovesOlderFoldersOutOfReleasesSoNoHalfDeletedFolderCanLookLikeARelease()
+    {
+        var first = await BuildReleaseAsync(1, "one");
+        var second = await BuildReleaseAsync(2, "two");
+
+        await releases.RetireOlderThanAsync(2, [], default);
+
+        Assert.False(Directory.Exists(Path.Combine(root, "releases", first)));
+        Assert.True(File.Exists(Path.Combine(root, "releases", second, "release.json")));
+        Assert.Single(Directory.EnumerateDirectories(Path.Combine(root, "deleting")));
+    }
+
+    [Fact]
+    public async Task RetiringSkipsTheKeptFoldersEvenWhenTheyAreOlder()
+    {
+        var first = await BuildReleaseAsync(1, "one");
+        await BuildReleaseAsync(2, "two");
+
+        await releases.RetireOlderThanAsync(3, [first], default);
+
+        Assert.True(Directory.Exists(Path.Combine(root, "releases", first)));
+    }
+
+    [Fact]
+    public async Task RetiringIgnoresFoldersThatAreNotReleaseNamesSoNothingElseIsMoved()
+    {
+        await BuildReleaseAsync(1, "one");
+        var other = Path.Combine(root, "releases", "notes");
+        Directory.CreateDirectory(other);
+
+        await releases.RetireOlderThanAsync(9, [], default);
+
+        Assert.True(Directory.Exists(other));
+    }
+
+    [Fact]
+    public async Task DeletingRetiredRemovesEveryTombstoneIncludingOnesAnEarlierCrashLeft()
+    {
+        await BuildReleaseAsync(1, "one");
+        await releases.RetireOlderThanAsync(2, [], default);
+        var leftover = Path.Combine(root, "deleting", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(leftover);
+        await File.WriteAllTextAsync(Path.Combine(leftover, "release.json"), "half");
+
+        await releases.DeleteRetiredAsync(default);
+
+        Assert.Empty(Directory.EnumerateFileSystemEntries(Path.Combine(root, "deleting")));
+    }
+
+    [Fact]
+    public async Task DeletingRetiredWithNoTombstoneFolderDoesNothing()
+    {
+        await releases.DeleteRetiredAsync(default);
+
+        Assert.False(Directory.Exists(Path.Combine(root, "deleting")));
+    }
+
+    [Fact]
+    public async Task DeletingAnUnknownReleaseChangesNothingSoARepeatedDiscardIsSafe()
+    {
+        var kept = await BuildReleaseAsync(1, "one");
+
+        await releases.DeleteAsync("000009-" + new string('a', 32), default);
+
+        Assert.True(File.Exists(Path.Combine(root, "releases", kept, "release.json")));
+    }
+
+    [Fact]
+    public async Task DeletingARetiredReleaseKeepsTheHardLinkedFilesOfNewerReleases()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var baseName = await BuildReleaseAsync(1, "one");
+        await using var staging = await releases.BeginAsync(default);
+        await staging.LinkFileAsync(baseName, "records/a.json", default);
+        await staging.WriteFileAsync("release.json", Encoding.UTF8.GetBytes("two"), default);
+        var linkedName = await staging.CompleteAsync(2, default);
+
+        await releases.RetireOlderThanAsync(2, [], default);
+        await releases.DeleteRetiredAsync(default);
+
+        Assert.Equal("{}", await File.ReadAllTextAsync(Path.Combine(root, "releases", linkedName, "records", "a.json")));
+    }
+
+    [Fact]
     public async Task LinkedFilesShareStorageWithTheBaseReleaseSoDiskDoesNotGrowPerRelease()
     {
         if (OperatingSystem.IsWindows()) return;

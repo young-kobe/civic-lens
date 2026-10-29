@@ -6,6 +6,7 @@ internal static partial class ReleasePaths
 {
     public const string StagingFolder = "staging";
     public const string ReleasesFolder = "releases";
+    public const string TombstoneFolder = "deleting";
     public const string CurrentLink = "current";
 
     private const UnixFileMode DirectoryMode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
@@ -14,6 +15,12 @@ internal static partial class ReleasePaths
         UnixFileMode.GroupRead | UnixFileMode.OtherRead;
 
     public static string ReleaseName(int releaseNumber) => $"{releaseNumber:D6}-{Guid.NewGuid():N}";
+
+    public static bool TryReleaseNumber(string directoryName, out int releaseNumber)
+    {
+        releaseNumber = 0;
+        return DirectoryNamePattern().IsMatch(directoryName) && int.TryParse(directoryName.AsSpan(0, 6), out releaseNumber);
+    }
 
     public static void RequireDirectoryName(string directoryName)
     {
