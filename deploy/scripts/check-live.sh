@@ -112,12 +112,14 @@ check_backup_age() {
 # Cloudflare replaces CF-Connecting-IP, so every request below counts for the real caller. If the header were trusted from a reader, each forged value would get its own count and none would reach the limit.
 # The limit uses fixed one-minute windows. Twice the limit plus two requests, sent 20 at a time, puts more than the limit in one window.
 check_forged_header_limit() {
-  local limit=60 ranges="" attempts statuses
-  if [[ -r $search_env ]]; then
-    limit=$(sed -n 's/^CIVIC_LENS_REQUESTS_PER_MINUTE=//p' "$search_env" | tail -n 1)
-    limit=${limit:-60}
-    ranges=$(sed -n 's/^CIVIC_LENS_TRUSTED_PROXY_RANGES=//p' "$search_env" | tail -n 1)
+  local limit ranges attempts statuses
+  if [[ ! -r $search_env ]]; then
+    fail "Rate limit: cannot read $search_env. Run the script with sudo, and check that install.sh created the file."
+    return
   fi
+  limit=$(sed -n 's/^CIVIC_LENS_REQUESTS_PER_MINUTE=//p' "$search_env" | tail -n 1 | tr -d "\"'")
+  limit=${limit:-60}
+  ranges=$(sed -n 's/^CIVIC_LENS_TRUSTED_PROXY_RANGES=//p' "$search_env" | tail -n 1 | tr -d "\"'")
   if [[ ! $limit =~ ^[0-9]+$ ]]; then
     fail "Rate limit: CIVIC_LENS_REQUESTS_PER_MINUTE in $search_env is '$limit', not a whole number. Fix the file."
     return

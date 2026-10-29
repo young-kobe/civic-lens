@@ -976,7 +976,7 @@ Run `sudo deploy/scripts/check-live.sh` from `/opt/civic-lens` after the first i
 4. Check that the page of the record says it is withdrawn.
 5. Read the release numbers with `sudo deploy/scripts/compose.sh run --rm cli releases list`. Activate the release from before the withdrawal: `sudo deploy/scripts/compose.sh run --rm cli releases activate <release-number>`. The record shows again. The `blocked` list in the output names it, because review still blocks it.
 6. In the review workspace, approve the record again. The approval must resolve the open concern and carry a resolution note.
-7. Publish the ready record: `sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> <kind>:<id>`. Then check with `releases list` that the active release is the latest release.
+7. Publish a different ready record, for example the approved statement: `sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> <kind>:<id>`. Do not use the record from step 6. The active release already holds it at its current revision, so the publish refuses it. Then check with `releases list` that the active release is the latest release.
 8. Start the worker: `sudo deploy/scripts/compose.sh up --detach worker`.
 
 The `cli` service gets every variable that these commands need from `deploy/compose.yaml` and the host env files.
