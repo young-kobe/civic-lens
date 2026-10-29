@@ -81,6 +81,19 @@ public sealed class ReaderReportPullTests
         Assert.Equal("database busy", Assert.Single(logger.Entries).Exception!.Message);
     }
 
+    [Fact]
+    public async Task ADeletionCancelledByShutdownStopsThePassSoTheWorkerExitsWithoutPulling()
+    {
+        using var shutdown = new CancellationTokenSource();
+        await shutdown.CancelAsync();
+        store.DeleteFailure = new OperationCanceledException(shutdown.Token);
+        var source = new ScriptedSource(Batch(Report()) with { NextCursor = "c1" });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Pull(source).ExecuteAsync(shutdown.Token));
+
+        Assert.Empty(source.CursorsAsked);
+    }
+
     private PullReaderReports Pull(IReaderReportSource source) => new(source, store, new CapturingLogger<PullReaderReports>());
 
     private sealed class ScriptedSource(params PulledReportBatch[] batches) : IReaderReportSource

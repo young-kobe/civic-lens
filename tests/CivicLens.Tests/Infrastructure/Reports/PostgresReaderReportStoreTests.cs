@@ -234,6 +234,7 @@ public sealed class PostgresReaderReportStoreTests(PostgresCollection postgres) 
     [Fact]
     public async Task OnlyClosedReportsResolvedMoreThanAYearAgoAreDeletedSoAnOpenReportAndARecentOneAreNeverLost()
     {
+        Assert.Equal(365, ReaderReportProtocol.ClosedRetentionDays);
         var day = TimeSpan.TicksPerDay;
         var record = new string('b', 64);
         var expiredDismissed = await InsertAsync(record, "Dismissed", null, -(ReaderReportProtocol.ClosedRetentionDays * day + day));
