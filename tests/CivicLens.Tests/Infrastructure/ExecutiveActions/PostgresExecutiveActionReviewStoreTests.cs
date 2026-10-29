@@ -107,6 +107,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
     {
         var recordId = await AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
         var releases = new FileReleaseDirectory(Path.Combine(captureRoot, "releases"));
+        var clock = new FakeClock(DateTimeOffset.UtcNow);
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
         var publisher = new PublishRelease(publications, releases, new ReleaseRenderer(null, null), new PublishedRecordLoaders(
                 PostgresDocumentChangeReviewStore.FromConnectionString(connectionString), PostgresStatementReviewStore.FromConnectionString(connectionString),
@@ -114,7 +115,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
                 new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)),
                 new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString)), store),
             new PublicationCatalog(new Dictionary<string, string> { ["donald-trump"] = "Donald Trump" }, IssueConfiguration.None),
-            FixedRosters.NamedOnly(["donald-trump"]), PhotoCaptures.None(), TimeProvider.System, new PruneReleases(publications, releases, NullLogger<PruneReleases>.Instance));
+            FixedRosters.NamedOnly(["donald-trump"]), PhotoCaptures.None(), clock, new PruneReleases(publications, releases, NullLogger<PruneReleases>.Instance));
         var reference = new PublishedRecordReference(PublishedRecordKind.ExecutiveAction, recordId);
 
         var summary = await publisher.ExecuteAsync(new ReviewActor(ReviewAuthor.CodeSubject, ReviewRole.Owner), PublicationScenario.Request("publish", reference));
@@ -129,7 +130,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 2, ReviewDecisionKind.WithdrawApproval, "auth0|owner",
             "The title is wrong.", [], DateTimeOffset.UtcNow);
         await store.DecideAsync("auth0|owner", decision, 1, 1, "key-1", new string('a', 64), default);
-        await Task.Delay(TimeSpan.FromSeconds(1));
+        clock.Now = clock.Now.AddMinutes(1);
         var withdrawn = await publisher.ExecuteAsync(PublicationScenario.Owner,
             new PublishReleaseRequest([], "withdraw") { Withdrawals = [new(PublishedRecordKind.ExecutiveAction, recordId, "The title is wrong.")] });
         Assert.Empty(JsonSerializer.Deserialize<PublicationRelease>(await releases.ReadFileAsync(withdrawn.DirectoryName,

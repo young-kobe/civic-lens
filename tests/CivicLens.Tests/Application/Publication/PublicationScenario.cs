@@ -331,22 +331,35 @@ internal sealed class PublicationScenario
         return recordId;
     }
 
-    public string AddExecutiveAction(char id, ImmutableArray<ReviewDecision>? decisions = null, bool unpublished = false)
+    public string AddExecutiveAction(char id, ImmutableArray<ReviewDecision>? decisions = null, bool unpublished = false, bool withNotice = false)
     {
         var recordId = new string(id, 64);
-        var document = FederalRegisterFixtures.Document(FederalRegisterFixtures.TrumpOrder);
-        var text = FederalRegisterRenderer.Render(document);
-        var extraction = Extraction(text, $"executive-action-{id}", "https://www.federalregister.gov/api/v1/documents/2025-01900.json");
-        var evidence = new FederalRegisterEvidence(document, extraction.ExtractionId, text, "mayor");
-        var revision = ExecutiveActionRevisions.Create(FederalRegisterFixtures.SourceId, ApprovedAt, evidence, []) with { RecordId = recordId };
+        var (extraction, evidence) = ExecutiveEvidence(withNotice ? FederalRegisterFixtures.BidenProclamation : FederalRegisterFixtures.TrumpOrder, $"executive-action-{id}");
+        var extractions = new List<DocumentExtraction> { extraction };
+        var notices = new List<ExecutiveActionNotice>();
+        if (withNotice)
+        {
+            var (noticeExtraction, correction) = ExecutiveEvidence(FederalRegisterFixtures.BidenProclamationCorrection, $"executive-notice-{id}");
+            extractions.Add(noticeExtraction);
+            notices.Add(ExecutiveActionRevisions.NoticeOf(correction));
+        }
+        var revision = ExecutiveActionRevisions.Create(FederalRegisterFixtures.SourceId, ApprovedAt, evidence, notices) with { RecordId = recordId };
         var all = decisions ?? [Decision(recordId, 1, ReviewDecisionKind.Approve)];
         var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
         var review = new ExecutiveActionReview(recordId, revision, null, [revision], all.Length,
             ReviewPolicy.GetCurrentStatus(1, all, concerns), all, concerns);
         ExecutiveActions.Publishable[recordId] = new(review, ImmutableDictionary.CreateRange(StringComparer.Ordinal,
-            [KeyValuePair.Create(extraction.ExtractionId, extraction)]));
+            extractions.Select(item => KeyValuePair.Create(item.ExtractionId, item))));
         if (unpublished) ExecutiveActions.Unpublished.Add(new(review, null));
         return recordId;
+    }
+
+    private static (DocumentExtraction Extraction, FederalRegisterEvidence Evidence) ExecutiveEvidence(string json, string attemptId)
+    {
+        var document = FederalRegisterFixtures.Document(json);
+        var text = FederalRegisterRenderer.Render(document);
+        var extraction = Extraction(text, attemptId, $"https://www.federalregister.gov/api/v1/documents/{document.DocumentNumber}.json");
+        return (extraction, new FederalRegisterEvidence(document, extraction.ExtractionId, text, "mayor"));
     }
 
     public string AddRelationship(char id, string statementId, string targetId, PublishedRecordKind targetKind = PublishedRecordKind.Action,

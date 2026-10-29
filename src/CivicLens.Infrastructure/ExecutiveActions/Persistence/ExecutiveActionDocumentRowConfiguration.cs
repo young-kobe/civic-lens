@@ -21,7 +21,6 @@ internal sealed class ExecutiveActionDocumentRowConfiguration : IEntityTypeConfi
         builder.Property(row => row.NoticeJson).HasColumnName("notice_json");
         builder.Property(row => row.PublishedOn).HasColumnName("published_on").HasColumnType("date");
         builder.Property(row => row.DocumentJobId).HasColumnName("document_job_id").HasMaxLength(128).IsRequired();
-        builder.HasIndex(row => row.RecordId).HasDatabaseName("ix_executive_action_documents_record");
         builder.HasIndex(row => new { row.SourceId, row.PublishedOn }).HasDatabaseName("ix_executive_action_documents_published");
         builder.HasOne<ExecutiveActionRevisionRow>().WithMany()
             .HasForeignKey(row => new { row.RecordId, row.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);

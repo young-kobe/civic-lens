@@ -17,13 +17,15 @@ internal static class ExecutiveActionRows
 
     /// <summary>Records one document. An original makes revision 1 with the correction notices that waited for it. A correction appends a revision
     /// to the record of its original, or waits when the original is not recorded. Code approves each revision in the same transaction.
-    /// Returns null when the document waits.</summary>
+    /// Returns null when the document waits. A correction of a correction is invalid data, in either arrival order.</summary>
     public static async Task<ExecutiveActionRevision?> AdmitAsync(CollectionAttemptDbContext db, string sourceId, string documentJobId,
         FederalRegisterEvidence evidence, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.ExecutiveActionReview, cancellationToken);
         var document = evidence.Document;
         var recordId = ExecutiveActionIdentity.RecordId(sourceId, document.RecordDocumentNumber);
+        if (document.CorrectionOf is { } corrected && await CorrectsACorrectionAsync(db, sourceId, document.DocumentNumber, corrected, cancellationToken))
+            throw new CorrectionOfCorrectionException(document.DocumentNumber, corrected);
         var row = new ExecutiveActionDocumentRow
         {
             SourceId = sourceId,
@@ -38,6 +40,15 @@ internal static class ExecutiveActionRows
             : await AddNoticeAsync(db, recordId, row, evidence, now, cancellationToken);
         row.RevisionNumber = revision?.RevisionNumber;
         return revision;
+    }
+
+    private static async Task<bool> CorrectsACorrectionAsync(CollectionAttemptDbContext db, string sourceId, string documentNumber,
+        string correctedNumber, CancellationToken cancellationToken)
+    {
+        var ownRecordId = ExecutiveActionIdentity.RecordId(sourceId, documentNumber);
+        var documents = db.Set<ExecutiveActionDocumentRow>().Where(row => row.SourceId == sourceId);
+        return await documents.AnyAsync(row => row.DocumentNumber == correctedNumber && row.NoticeJson != null, cancellationToken) ||
+            await documents.AnyAsync(row => row.RecordId == ownRecordId, cancellationToken);
     }
 
     private static async Task<ExecutiveActionRevision> StartRecordAsync(CollectionAttemptDbContext db, string sourceId, string recordId,

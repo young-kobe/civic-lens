@@ -87,6 +87,22 @@ public sealed class ExecutiveActionRevisionTests
         Bound(revision, text).ValidateForApproval(Extractions(revision, text));
     }
 
+    [Fact]
+    public void ANoticeMustEqualTheTextOfItsCitationInTheSavedExtraction()
+    {
+        var original = Evidence(FederalRegisterFixtures.BidenProclamation);
+        var correction = Evidence(FederalRegisterFixtures.BidenProclamationCorrection, new string('c', 64));
+        var revision = ExecutiveActionRevisions.Create(FederalRegisterFixtures.SourceId, Now, original, [ExecutiveActionRevisions.NoticeOf(correction)]);
+        Dictionary<string, DocumentExtraction> Saved(string correctionText) => new()
+        {
+            [original.ExtractionId] = new DocumentExtraction(Captured(), "federal-register-document-v1", original.ExtractionText),
+            [correction.ExtractionId] = new DocumentExtraction(Captured(), "federal-register-document-v1", correctionText)
+        };
+
+        revision.ValidateAgainst(Saved(correction.ExtractionText));
+        Assert.Throws<ArgumentException>(() => revision.ValidateAgainst(Saved(correction.ExtractionText.Replace("R1-2024-26714", "R1-2024-99999"))));
+    }
+
     private static ExecutiveActionRevision Bound(ExecutiveActionRevision revision, string text)
     {
         var id = new DocumentExtraction(Captured(), "federal-register-document-v1", text).ExtractionId;

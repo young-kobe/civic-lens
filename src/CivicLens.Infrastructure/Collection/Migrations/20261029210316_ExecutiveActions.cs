@@ -122,11 +122,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 columns: new[] { "source_id", "published_on" });
 
             migrationBuilder.CreateIndex(
-                name: "ix_executive_action_documents_record",
-                table: "executive_action_documents",
-                column: "record_id");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_executive_action_documents_record_id_revision_number",
                 table: "executive_action_documents",
                 columns: new[] { "record_id", "revision_number" });

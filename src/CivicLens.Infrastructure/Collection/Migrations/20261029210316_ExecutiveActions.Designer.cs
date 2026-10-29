@@ -2556,9 +2556,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("DocumentJobId");
 
-                    b.HasIndex("RecordId")
-                        .HasDatabaseName("ix_executive_action_documents_record");
-
                     b.HasIndex("RecordId", "RevisionNumber");
 
                     b.HasIndex("SourceId", "PublishedOn")

@@ -48,6 +48,23 @@ public sealed class PublishExecutiveActionTests
     }
 
     [Fact]
+    public async Task ACorrectionNoticeIsPublishedAsAFactThatEqualsTheContractNoticeValue()
+    {
+        var scenario = new PublicationScenario();
+        var record = scenario.AddExecutiveAction('a', withNotice: true);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", record));
+
+        var files = scenario.Releases.Directories[summary.DirectoryName];
+        var published = JsonSerializer.Deserialize<PublishedExecutiveAction>(files[PublicationProtocol.RecordDataPath(record)], PublicationProtocol.JsonOptions)!;
+        published.Validate();
+        var notice = Assert.Single(published.CorrectionNotices);
+        var fact = Assert.Single(published.Facts, item => item.Label == PublishedExecutiveAction.CorrectionNoticeLabel);
+        Assert.Equal(notice.Value, fact.Value);
+        Assert.Equal(2, published.Sources.Length);
+    }
+
+    [Fact]
     public async Task CommitBindsTheRecordToItsKindSoTheStoreChecksTheExecutiveActionTable()
     {
         var scenario = new PublicationScenario();

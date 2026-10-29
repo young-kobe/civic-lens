@@ -39,7 +39,7 @@ internal static class PublishedTimelineView
 
     public static IReadOnlyList<TimelineEvent> For(PublishedExecutiveAction record) =>
         WithPublication([new(record.SignedOn, "Signed by the President"), new(record.PublishedOn, "Published in the Federal Register"),
-            .. record.CorrectionNotices.Select(notice => new TimelineEvent(notice.PublishedOn, $"Correction notice {notice.DocumentNumber} published"))],
+            .. record.CorrectionNotices.Select(notice => new TimelineEvent(notice.PublishedOn, PublishedExecutiveActionView.CorrectionText(notice)))],
             record.ApprovedAtUtc, record.FirstPublishedAtUtc, record.Corrections);
 
     public static IReadOnlyList<TimelineEvent> For(PublishedRelationship record)

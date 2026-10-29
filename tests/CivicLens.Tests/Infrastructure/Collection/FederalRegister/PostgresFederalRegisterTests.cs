@@ -125,6 +125,24 @@ public sealed class PostgresFederalRegisterTests(PostgresCollection postgres) : 
     }
 
     [Fact]
+    public async Task ACorrectionOfACorrectionIsInvalidDataInEitherArrivalOrderSoItNeverWaitsSilently()
+    {
+        await AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
+        await AdmitAsync(FederalRegisterFixtures.BidenProclamationCorrection, "joe-biden");
+
+        await Assert.ThrowsAsync<CorrectionOfCorrectionException>(() => AdmitAsync(CorrectionOfCorrection, "joe-biden"));
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM executive_action_documents"));
+    }
+
+    [Fact]
+    public async Task ACorrectionThatWaitsBlocksTheCorrectionItNamesWhenThatDocumentIsAlsoACorrection()
+    {
+        await AdmitAsync(CorrectionOfCorrection, "joe-biden");
+
+        await Assert.ThrowsAsync<CorrectionOfCorrectionException>(() => AdmitAsync(FederalRegisterFixtures.BidenProclamationCorrection, "joe-biden"));
+    }
+
+    [Fact]
     public async Task AnExtractionOfAnotherJobIsInvalidDataAndRecordsNothing()
     {
         var job = await EnqueueDocumentAsync("2025-01900");
@@ -175,6 +193,10 @@ public sealed class PostgresFederalRegisterTests(PostgresCollection postgres) : 
         await store.AdmitDocumentAsync(Source(), jobId, evidence, default);
         return new(jobId, evidence);
     }
+
+    private static readonly string CorrectionOfCorrection = FederalRegisterFixtures.BidenProclamationCorrection
+        .Replace("\"document_number\":\"R1-2024-26714\"", "\"document_number\":\"R1-2024-26799\"")
+        .Replace("\"correction_of\":\"https://www.federalregister.gov/api/v1/documents/2024-26714\"", "\"correction_of\":\"https://www.federalregister.gov/api/v1/documents/R1-2024-26714\"");
 
     private static ConfiguredCollectionSource Source() =>
         new(FederalRegisterFixtures.Configuration(), FederalRegisterFixtures.SourceId, DateOnly.FromDateTime(DateTime.UtcNow));

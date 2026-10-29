@@ -19,12 +19,14 @@ internal static class PublishedExecutiveActionView
         new("Published in the Federal Register", Moment.Iso(action.PublishedOn)),
         new("Federal Register citation", action.FederalRegisterCitation),
         new("Federal Register document number", action.DocumentNumber),
-        .. action.CorrectionNotices.Select(notice => new Fact("Correction notice", $"{notice.DocumentNumber}, published {Moment.Iso(notice.PublishedOn)}",
-            [new FactLink("Open the correction notice", notice.Url)])),
+        .. action.CorrectionNotices.Select(notice => Fact.LinkList("Correction notice", [new FactLink(CorrectionText(notice), notice.Url)])),
         Fact.LinkList("Read the document", [new FactLink("Open the Federal Register page", action.DocumentUrl)]),
         new("Published", $"Checked by code {Moment.Full(action.ApprovedAtUtc)}; first published {Moment.Full(action.FirstPublishedAtUtc)}"),
         new("Revision", action.RevisionNumber.ToString(CultureInfo.InvariantCulture))
     ];
+
+    public static string CorrectionText(PublishedExecutiveActionNotice notice) =>
+        $"The Federal Register published a correction on {Moment.Iso(notice.PublishedOn)}. This page shows the original document. Open the correction to see what changed.";
 
     public static IReadOnlyList<CitedRange> RangesIn(PublishedExecutiveAction action, PublishedDocumentVersion source) =>
     [.. action.Citations().Select((citation, index) => (citation, anchor: PublishedRecordView.CitationAnchor(index)))

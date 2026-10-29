@@ -71,8 +71,9 @@ public sealed record PublishedExecutiveAction
         RequireFact(PublishedLabel, Day(PublishedOn));
         RequireFact(CitationLabel, FederalRegisterCitation);
         RequireFact(UrlLabel, DocumentUrl);
-        if (CorrectionNotices is null || CorrectionNotices.Length > MaximumNotices || CorrectionNotices.Any(notice => notice is null))
-            throw new InvalidDataException($"A published executive action holds at most {MaximumNotices} correction notices.");
+        if (CorrectionNotices is null || CorrectionNotices.Length > MaximumNotices || CorrectionNotices.Any(notice => notice is null) ||
+            CorrectionNotices.Select(notice => notice.DocumentNumber).Distinct(StringComparer.Ordinal).Count() != CorrectionNotices.Length)
+            throw new InvalidDataException($"A published executive action holds at most {MaximumNotices} distinct correction notices.");
         foreach (var notice in CorrectionNotices) RequireFact(CorrectionNoticeLabel, notice.Value);
         if (Facts.Count(fact => fact.Label == CorrectionNoticeLabel) != CorrectionNotices.Length)
             throw new InvalidDataException("Each correction notice fact of a published executive action needs its notice.");

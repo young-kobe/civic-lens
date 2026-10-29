@@ -6,7 +6,7 @@ namespace CivicLens.Tests.Publication.Contracts;
 
 public sealed class PublishedExecutiveActionTests
 {
-    private const string Text = "Federal Register document: 2025-01900\nTitle: Ending the Weaponization\nSigned: 2025-01-20\nPublished: 2025-01-28\nCitation: 90 FR 8235\nDocument URL: https://www.federalregister.gov/documents/2025/01/28/2025-01900/x";
+    private const string Text = "Federal Register document: 2025-01900\nTitle: Ending the Weaponization\nSigned: 2025-01-20\nPublished: 2025-01-28\nCitation: 90 FR 8235\nDocument URL: https://www.federalregister.gov/documents/2025/01/28/2025-01900/x\nCorrection notice: R1-2025-00001, published 2025-02-03, https://www.federalregister.gov/x";
     private static readonly string Id = new('a', 64);
 
     [Fact]
@@ -69,7 +69,17 @@ public sealed class PublishedExecutiveActionTests
         var notice = new PublishedExecutiveActionNotice { DocumentNumber = "R1-2025-00001", PublishedOn = new DateOnly(2025, 2, 3), Url = "https://www.federalregister.gov/x" };
 
         Assert.Throws<InvalidDataException>((Record() with { CorrectionNotices = [notice] }).Validate);
+        Assert.Throws<InvalidDataException>(Record([.. Record().Facts, NoticeFact(notice)]).Validate);
         Assert.Equal("R1-2025-00001, published 2025-02-03, https://www.federalregister.gov/x", notice.Value);
+    }
+
+    [Fact]
+    public void TwoNoticesOfTheSameDocumentAreRefused()
+    {
+        var notice = new PublishedExecutiveActionNotice { DocumentNumber = "R1-2025-00001", PublishedOn = new DateOnly(2025, 2, 3), Url = "https://www.federalregister.gov/x" };
+        var facts = Record().Facts;
+
+        Assert.Throws<InvalidDataException>((Record([.. facts, NoticeFact(notice), NoticeFact(notice)]) with { CorrectionNotices = [notice, notice] }).Validate);
     }
 
     [Fact]
@@ -83,14 +93,18 @@ public sealed class PublishedExecutiveActionTests
         Assert.Throws<InvalidDataException>((entry with { Kind = PublishedRecordKind.Vote }).Validate);
     }
 
+    private static readonly string ExtractionId = new('e', 64);
+
+    private static PublishedExecutiveActionFact Fact(string label, string value)
+    {
+        var line = $"{label}: {value}";
+        return new() { Label = label, Value = value, Citation = new() { ExtractionId = ExtractionId, Start = Text.IndexOf(line, StringComparison.Ordinal), Length = line.Length, Quote = line } };
+    }
+
+    private static PublishedExecutiveActionFact NoticeFact(PublishedExecutiveActionNotice notice) => Fact(PublishedExecutiveAction.CorrectionNoticeLabel, notice.Value);
+
     private static PublishedExecutiveAction Record(PublishedExecutiveActionFact[]? facts = null)
     {
-        var extractionId = new string('e', 64);
-        PublishedExecutiveActionFact Fact(string label, string value)
-        {
-            var line = $"{label}: {value}";
-            return new() { Label = label, Value = value, Citation = new() { ExtractionId = extractionId, Start = Text.IndexOf(line, StringComparison.Ordinal), Length = line.Length, Quote = line } };
-        }
         return new()
         {
             RecordId = Id,
@@ -106,7 +120,7 @@ public sealed class PublishedExecutiveActionTests
             Facts = facts ?? [Fact("Federal Register document", "2025-01900"), Fact("Title", "Ending the Weaponization"), Fact("Signed", "2025-01-20"),
                 Fact("Published", "2025-01-28"), Fact("Citation", "90 FR 8235"),
                 Fact("Document URL", "https://www.federalregister.gov/documents/2025/01/28/2025-01900/x")],
-            Sources = [new() { ExtractionId = extractionId, Url = "https://www.federalregister.gov/api/v1/documents/2025-01900.json", ObservedAtUtc = DateTimeOffset.UnixEpoch, Text = Text }],
+            Sources = [new() { ExtractionId = ExtractionId, Url = "https://www.federalregister.gov/api/v1/documents/2025-01900.json", ObservedAtUtc = DateTimeOffset.UnixEpoch, Text = Text }],
             ApprovedAtUtc = DateTimeOffset.UnixEpoch,
             FirstPublishedAtUtc = DateTimeOffset.UnixEpoch,
             CorrectionNotices = [],
