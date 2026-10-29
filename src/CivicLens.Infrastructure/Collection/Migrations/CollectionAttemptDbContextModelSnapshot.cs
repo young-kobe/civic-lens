@@ -17,7 +17,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -1920,6 +1920,22 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_job_state", "state IN ('Pending','Running','WaitingToRetry','Succeeded','Failed','Cancelled')");
                         });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.Jobs.Persistence.WorkerHeartbeatRow", b =>
+                {
+                    b.Property<string>("Loop")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("loop");
+
+                    b.Property<long>("BeatAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("beat_at_utc_ticks");
+
+                    b.HasKey("Loop");
+
+                    b.ToTable("worker_heartbeat", (string)null);
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.Persistence.AttemptRow", b =>

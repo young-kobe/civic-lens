@@ -4,7 +4,7 @@ Political transparency through officials' statements and actions, document chang
 
 The approved product direction serves regular citizens seeking transparency in U.S. national politics. Public readers start with reviewed accounts and can inspect the supporting evidence; authorized reviewers assess the proposed public record beside its sources. State and local coverage are possible future extensions. The [editorial experience](docs/architecture/publication.md#public-reader-experience) defines the agreed flow. A restrained monochrome identity is selected for both surfaces.
 
-**Current state:** A durable worker collects configured official sources, the Congress.gov bill list, the Congress.gov House vote list, and the Senate vote files. A separate bounded collector fetches them. The worker stores immutable captures, extracts text, and compares versions in Postgres. Checked-in EF migrations apply schema changes.
+**Current state:** A durable worker collects configured official sources, the Congress.gov bill list, the Congress.gov House vote list, and the Senate vote files. A separate bounded collector fetches them. The worker stores immutable captures, extracts text, and compares versions in Postgres. Checked-in EF migrations apply schema changes. The `worker health` command reports whether every worker loop has written a heartbeat in the last 10 minutes.
 
 Each release holds the public pages: officials, official profiles, issues, weekly briefs, all records, about, method, reader reports, and photos. The owner can withdraw a published record from the CLI. The worker keeps a member roster with photos.
 

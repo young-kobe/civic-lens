@@ -4,10 +4,12 @@ using Microsoft.Extensions.Logging;
 namespace CivicLens.Application;
 
 /// <summary>Runs one pass, then sleeps until the wakeup. A pass returns its progress count. A failed pass is logged and counted.</summary>
-public sealed class StageWorker(string name, Func<CancellationToken, Task<int>> pass, IWorkerWakeup wakeup, ILogger<StageWorker> logger)
+public sealed class StageWorker(string name, Func<CancellationToken, Task<int>> pass, IWorkerWakeup wakeup, ILogger<StageWorker> logger,
+    WorkerBeat beat)
 {
     public async Task<AnalysisWorkerResult> ExecuteAsync(bool once, CancellationToken cancellationToken = default)
     {
+        await beat.BeatAsync(cancellationToken);
         var failures = once ? 0 : await WorkerLoop.ConnectUntilAvailableAsync(wakeup, cancellationToken);
         var passes = 0;
         var progress = 0;
@@ -16,6 +18,7 @@ public sealed class StageWorker(string name, Func<CancellationToken, Task<int>> 
             while (!cancellationToken.IsCancellationRequested)
             {
                 passes++;
+                await beat.BeatIfDueAsync(cancellationToken);
                 try
                 {
                     progress += await pass(cancellationToken);
@@ -27,7 +30,7 @@ public sealed class StageWorker(string name, Func<CancellationToken, Task<int>> 
                     logger.LogError(exception, "Stage {Stage} failed a pass.", name);
                 }
                 if (once) break;
-                failures += await WorkerLoop.WaitForWorkAsync(wakeup, false, cancellationToken);
+                failures += await WorkerLoop.WaitForWorkAsync(wakeup, false, beat, cancellationToken);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }

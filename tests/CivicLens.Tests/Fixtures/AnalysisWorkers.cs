@@ -16,30 +16,31 @@ internal static class AnalysisWorkers
 {
     public static AnalysisWorker<AnalysisRun> Drafting(IDocumentChangeAnalysisStore store, IAnalysisStatusStore status,
         IDocumentChangeDraftModel model, DocumentChangeDraftSettings settings, ImmutableArray<string> issueIds,
-        TimeProvider clock, IWorkerWakeup? wakeup = null) =>
-        new(new DocumentChangeDraftStep(store, model, settings, issueIds), status, clock, NullLogger<AnalysisWorker<AnalysisRun>>.Instance, wakeup);
+        TimeProvider clock, IWorkerWakeup? wakeup = null, WorkerBeat? beat = null) =>
+        new(new DocumentChangeDraftStep(store, model, settings, issueIds), status, clock, NullLogger<AnalysisWorker<AnalysisRun>>.Instance,
+            beat ?? TestBeat.Create(), wakeup);
 
     public static AnalysisWorker<StatementGateRun> Gate(IStatementGateStore store, IAnalysisStatusStore status,
         IStatementGateModel model, StatementGateSettings settings, IssueConfigurationRevision revision, TimeProvider clock) =>
-        new(new StatementGateStep(store, model, settings, revision), status, clock, NullLogger<AnalysisWorker<StatementGateRun>>.Instance);
+        new(new StatementGateStep(store, model, settings, revision), status, clock, NullLogger<AnalysisWorker<StatementGateRun>>.Instance, TestBeat.Create());
 
     public static AnalysisWorker<StatementDraftRun> StatementDrafting(IStatementDraftStore store, IAnalysisStatusStore status,
         IStatementDraftModel model, StatementDraftSettings settings, TimeProvider clock) =>
-        new(new StatementDraftStep(store, model, settings), status, clock, NullLogger<AnalysisWorker<StatementDraftRun>>.Instance);
+        new(new StatementDraftStep(store, model, settings), status, clock, NullLogger<AnalysisWorker<StatementDraftRun>>.Instance, TestBeat.Create());
 
     public static AnalysisWorker<ActionDraftRun> ActionDrafting(IActionDraftStore store, IAnalysisStatusStore status, ActionBillReader reader,
         IActionDraftModel model, ActionDraftSettings settings, IssueConfigurationRevision issues, TimeProvider clock) =>
-        new(new ActionDraftStep(store, reader, model, settings, issues), status, clock, NullLogger<AnalysisWorker<ActionDraftRun>>.Instance);
+        new(new ActionDraftStep(store, reader, model, settings, issues), status, clock, NullLogger<AnalysisWorker<ActionDraftRun>>.Instance, TestBeat.Create());
 
     public static AnalysisWorker<VoteDraftRun> VoteDrafting(IVoteDraftStore store, IAnalysisStatusStore status, VoteReader reader,
         IVoteDraftModel model, VoteDraftSettings settings, IssueConfigurationRevision issues, TimeProvider clock) =>
-        new(new VoteDraftStep(store, reader, model, settings, issues), status, clock, NullLogger<AnalysisWorker<VoteDraftRun>>.Instance);
+        new(new VoteDraftStep(store, reader, model, settings, issues), status, clock, NullLogger<AnalysisWorker<VoteDraftRun>>.Instance, TestBeat.Create());
 
     public static AnalysisWorker<BriefDraftRun> BriefDrafting(IBriefDraftStore store, IAnalysisStatusStore status, IBriefDraftModel model,
         BriefDraftSettings settings, IReadOnlyDictionary<string, string> officialNames, TimeProvider clock) =>
-        new(new BriefDraftStep(store, model, settings, officialNames), status, clock, NullLogger<AnalysisWorker<BriefDraftRun>>.Instance, null, store.EnqueueClosedWeeksAsync);
+        new(new BriefDraftStep(store, model, settings, officialNames), status, clock, NullLogger<AnalysisWorker<BriefDraftRun>>.Instance, TestBeat.Create(), null, store.EnqueueClosedWeeksAsync);
 
     public static AnalysisWorker<RelationshipDraftRun> RelationshipDrafting(IRelationshipDraftStore store, IAnalysisStatusStore status,
         IRelationshipDraftModel model, RelationshipDraftSettings settings, IReadOnlyDictionary<string, string> officialNames, TimeProvider clock) =>
-        new(new RelationshipDraftStep(store, model, settings, officialNames), status, clock, NullLogger<AnalysisWorker<RelationshipDraftRun>>.Instance);
+        new(new RelationshipDraftStep(store, model, settings, officialNames), status, clock, NullLogger<AnalysisWorker<RelationshipDraftRun>>.Instance, TestBeat.Create());
 }

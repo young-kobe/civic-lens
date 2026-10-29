@@ -13,6 +13,8 @@ internal static class CollectionWorkerCommand
     public static bool Matches(string[] arguments) => arguments is
         ["worker", _, _] or ["worker", _, _, "--once"];
 
+    public static bool IsOnce(string[] arguments) => arguments is ["worker", _, _, "--once"];
+
     public static void ValidateArguments(string[] arguments)
     {
         if (!Matches(arguments)) throw new ArgumentException("Use worker <collector.dll> <artifact-directory> [--once].");
@@ -25,7 +27,8 @@ internal static class CollectionWorkerCommand
     public static string ArtifactRootOf(string[] arguments) => Path.GetFullPath(arguments[2]);
 
     public static async Task<int> ExecuteAsync(string[] arguments, ICollectionWorkerQueue queue,
-        ICollectionJobStore jobs, ICollectionAttemptStore evidence, ILoggerFactory loggers, CancellationToken cancellationToken,
+        ICollectionJobStore jobs, ICollectionAttemptStore evidence, ILoggerFactory loggers, WorkerBeat beat,
+        CancellationToken cancellationToken,
         EvidenceProcessingWorker? evidenceProcessor = null, IWorkerWakeup? wakeup = null,
         ICollectionScheduleStore? schedules = null, IReadOnlyList<AnalysisStage>? analysis = null)
     {
@@ -36,8 +39,8 @@ internal static class CollectionWorkerCommand
             new CaptureArtifactVerifier(), new CollectorProcess(collectorPath,
                 Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet"),
             loggers.CreateLogger<RunCollectionJob>());
-        var once = arguments.Length == 4;
-        var collection = new CollectionJobWorker(queue, runner, loggers.CreateLogger<CollectionJobWorker>(), evidenceProcessor, wakeup, schedules);
+        var once = IsOnce(arguments);
+        var collection = new CollectionJobWorker(queue, runner, loggers.CreateLogger<CollectionJobWorker>(), beat, evidenceProcessor, wakeup, schedules);
         var (result, analysisResults) = await RunAsync(collection, analysis ?? [], artifactRoot, once, cancellationToken);
         CollectionCommandOutput.Write(result);
         foreach (var (name, analysisResult) in analysisResults)

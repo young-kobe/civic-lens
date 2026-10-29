@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Text.Json;
+using CivicLens.Application;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
@@ -123,6 +124,18 @@ public sealed class PublishCodeApprovedFactsTests
         Assert.Equal(0, await Facts(scenario).ExecuteAsync(default));
 
         Assert.Equal(2, scenario.Publications.Committed.Count);
+    }
+
+    [Fact]
+    public async Task EachBatchOfATickBeatsSoALongPublishDoesNotMakeTheWorkerLookDead()
+    {
+        var store = new RecordingHeartbeatStore();
+        var scenario = new PublicationScenario();
+        AddReadyActions(scenario, PublishRelease.MaximumRecords + 6);
+
+        await Facts(scenario, beat: TestBeat.Create(store, TimeSpan.Zero)).ExecuteAsync(default);
+
+        Assert.True(store.Beats >= 2);
     }
 
     [Fact]
@@ -300,8 +313,10 @@ public sealed class PublishCodeApprovedFactsTests
         Assert.DoesNotContain(logger.Entries, entry => entry.Level == LogLevel.Error);
     }
 
-    private static PublishCodeApprovedFacts Facts(PublicationScenario scenario, CapturingLogger<PublishCodeApprovedFacts>? logger = null) =>
-        new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), logger ?? new CapturingLogger<PublishCodeApprovedFacts>());
+    private static PublishCodeApprovedFacts Facts(PublicationScenario scenario, CapturingLogger<PublishCodeApprovedFacts>? logger = null,
+        WorkerBeat? beat = null) =>
+        new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), logger ?? new CapturingLogger<PublishCodeApprovedFacts>(),
+            beat ?? TestBeat.Create());
 
     private static ImmutableArray<ReviewDecision> ApprovedByCode(char id) =>
         [PublicationScenario.Decision(new string(id, 64), 1, ReviewDecisionKind.Approve) with { ActorSubject = ReviewAuthor.CodeSubject }];

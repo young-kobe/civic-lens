@@ -5,7 +5,7 @@ namespace CivicLens.Application.Collection.Jobs;
 
 /// <summary>Drains durable collection and evidence work, then waits for a database wakeup.</summary>
 public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollectionJob runner, ILogger<CollectionJobWorker> logger,
-    EvidenceProcessingWorker? evidenceProcessor = null, IWorkerWakeup? wakeup = null,
+    WorkerBeat beat, EvidenceProcessingWorker? evidenceProcessor = null, IWorkerWakeup? wakeup = null,
     ICollectionScheduleStore? schedules = null)
 {
     public const int DefaultBatchSize = 20;
@@ -26,6 +26,7 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
         if (lease < TimeSpan.FromMilliseconds(30))
             throw new ArgumentOutOfRangeException(nameof(leaseDuration), "Lease duration must be at least 30 milliseconds.");
 
+        await beat.BeatAsync(cancellationToken);
         var wakeupFailures = once ? 0 : await WorkerLoop.ConnectUntilAvailableAsync(wakeup!, cancellationToken);
         var passes = 0;
         var visited = 0;
@@ -42,7 +43,7 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
             try
             {
                 wakeupFailures += await WorkerLoop.WaitForWorkAsync(wakeup!,
-                    drain.QueueFailures > 0 || drain.JobFailures > 0, cancellationToken);
+                    drain.QueueFailures > 0 || drain.JobFailures > 0, beat, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
         }
@@ -61,6 +62,7 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
         while (!cancellationToken.IsCancellationRequested)
         {
             passes++;
+            await beat.BeatIfDueAsync(cancellationToken);
             var progress = 0;
             var scheduleFailed = false;
             if (schedules is not null)
@@ -115,6 +117,7 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
                         logger.LogError(exception, "Collection job {JobId} failed.", jobId);
                         failures++;
                     }
+                    await beat.BeatIfDueAsync(cancellationToken);
                 }
 
                 if (evidenceProcessor is not null && !cancellationToken.IsCancellationRequested)
@@ -146,7 +149,7 @@ public sealed class CollectionJobWorker(ICollectionWorkerQueue queue, RunCollect
     {
         try
         {
-            return await evidenceProcessor!.ExecuteAsync(artifactDirectory, batchSize, lease, cancellationToken);
+            return await evidenceProcessor!.ExecuteAsync(artifactDirectory, batchSize, lease, beat, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return new(0, 0); }
         catch (Exception exception) when (WorkerLoop.IsRecoverable(exception))

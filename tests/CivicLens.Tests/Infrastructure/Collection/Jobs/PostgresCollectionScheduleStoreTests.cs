@@ -279,7 +279,7 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
         };
         await SynchronizeDueAsync(configuration);
         var pipeline = new CollectionJobWorker(new EmptyQueue(),
-            new RunCollectionJob(null!, null!, null!, null!, null!, NullLogger<RunCollectionJob>.Instance), NullLogger<CollectionJobWorker>.Instance, schedules: store);
+            new RunCollectionJob(null!, null!, null!, null!, null!, NullLogger<RunCollectionJob>.Instance), NullLogger<CollectionJobWorker>.Instance, TestBeat.Create(), schedules: store);
 
         var result = await pipeline.ExecuteAsync(Path.GetTempPath(), once: true, batchSize: 1);
 

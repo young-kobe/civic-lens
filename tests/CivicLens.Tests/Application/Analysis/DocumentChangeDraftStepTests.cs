@@ -182,12 +182,43 @@ public sealed class DocumentChangeDraftStepTests
         Assert.Equal((State.Failed, "outputRejected"), (store.Entries.Single().Status, store.Entries.Single().ErrorCode));
     }
 
+    [Fact]
+    public async Task EachFinishedItemBeatsSoAPassOfSlowItemsDoesNotLookLikeAHungLoop()
+    {
+        var heartbeats = new RecordingHeartbeatStore();
+        var beat = TestBeat.Create(heartbeats, TimeSpan.Zero);
+        var model = new FakeDocumentChangeDraftModel().Draft(FakeDocumentChangeDraftModel.Output(("h1", "after", "Item 0 new")));
+
+        await Worker(new FakeAnalysisStore(3), model, beat: beat).ExecuteAsync(once: true);
+
+        Assert.True(heartbeats.Beats >= 1 + 1 + 3);
+    }
+
+    [Fact]
+    public async Task APausedWorkerKeepsBeatingSoAnAccountPauseDoesNotLookLikeADeadWorker()
+    {
+        var heartbeats = new RecordingHeartbeatStore();
+        var status = new FakeAnalysisStatusStore();
+        using var stop = new CancellationTokenSource();
+        var worker = Worker(new FakeAnalysisStore(1), new FakeDocumentChangeDraftModel().Fail(AnalysisModelFailure.BillingFailed),
+            wakeup: new CountingWakeup(), status: status, beat: TestBeat.Create(heartbeats, TimeSpan.FromMilliseconds(20)));
+
+        var running = worker.ExecuteAsync(once: false, stop.Token);
+        while (status.Pauses.Count == 0) await Task.Delay(5);
+        var beatsAtPause = heartbeats.Beats;
+        while (heartbeats.Beats < beatsAtPause + 3) await Task.Delay(5);
+        await stop.CancelAsync();
+        await running;
+
+        Assert.True(heartbeats.Beats >= beatsAtPause + 3);
+    }
+
     private static AnalysisWorker<AnalysisRun> Worker(FakeAnalysisStore store, FakeDocumentChangeDraftModel model,
         DocumentChangeDraftSettings? settings = null, IWorkerWakeup? wakeup = null, FakeAnalysisStatusStore? status = null,
-        FakeClock? clock = null) =>
+        FakeClock? clock = null, WorkerBeat? beat = null) =>
         AnalysisWorkers.Drafting(store, status ?? new FakeAnalysisStatusStore(), model,
             settings ?? new DocumentChangeDraftSettings(10_000_000, concurrency: 1), [],
-            clock ?? new FakeClock(DateTimeOffset.UnixEpoch), wakeup);
+            clock ?? new FakeClock(DateTimeOffset.UnixEpoch), wakeup, beat);
 
     private sealed class FakeWakeup(Action onWait) : IWorkerWakeup
     {

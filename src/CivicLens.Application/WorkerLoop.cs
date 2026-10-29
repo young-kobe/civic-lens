@@ -9,14 +9,15 @@ public static class WorkerLoop
     public static bool IsRecoverable(Exception exception) =>
         exception is not OutOfMemoryException and not StackOverflowException;
 
-    public static async Task<int> WaitForWorkAsync(IWorkerWakeup wakeup, bool reconnect, CancellationToken cancellationToken)
+    public static async Task<int> WaitForWorkAsync(IWorkerWakeup wakeup, bool reconnect, WorkerBeat beat,
+        CancellationToken cancellationToken)
     {
         var failures = 0;
         if (!reconnect)
         {
             try
             {
-                await wakeup.WaitAsync(cancellationToken);
+                await beat.WaitAsync(wakeup.WaitAsync, cancellationToken);
                 return failures;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }

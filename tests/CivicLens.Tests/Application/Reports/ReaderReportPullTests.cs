@@ -54,7 +54,7 @@ public sealed class ReaderReportPullTests
         var pull = new PullReaderReports(source, store);
         await pull.ExecuteAsync(default);
         var logger = new CapturingLogger<StageWorker>();
-        var worker = new StageWorker("reportPull", pull.ExecuteAsync, new CountingWakeup(), logger);
+        var worker = new StageWorker("reportPull", pull.ExecuteAsync, new CountingWakeup(), logger, TestBeat.Create());
 
         source.Failure = new HttpRequestException("connection refused");
         var down = await worker.ExecuteAsync(once: true);

@@ -1,3 +1,4 @@
+using CivicLens.Application;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Briefs;
 using CivicLens.Application.Collection;
@@ -13,7 +14,7 @@ namespace CivicLens.Host.Briefs;
 internal static class BriefDraftComposition
 {
     public static AnalysisComposition<BriefDraftRun> Create(IDbContextFactory<CollectionAttemptDbContext> contexts, string connectionString,
-        CollectionConfiguration collection, ILoggerFactory loggers)
+        CollectionConfiguration collection, WorkerBeat beat, ILoggerFactory loggers)
     {
         var status = new PostgresAnalysisStatusStore(contexts, BriefDraftTask.Task);
         var configuration = BriefDraftConfiguration.FromEnvironment();
@@ -22,7 +23,7 @@ internal static class BriefDraftComposition
         var store = new PostgresBriefDraftStore(contexts);
         var names = collection.People.ToDictionary(person => person.Id, person => person.Name, StringComparer.Ordinal);
         var step = new BriefDraftStep(store, new AnthropicBriefDraftModel(configuration.ApiKey), configuration.Settings, names);
-        var worker = new AnalysisWorker<BriefDraftRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<BriefDraftRun>>(), wakeup, store.EnqueueClosedWeeksAsync);
+        var worker = new AnalysisWorker<BriefDraftRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<BriefDraftRun>>(), beat, wakeup, store.EnqueueClosedWeeksAsync);
         return new(status, configuration.Settings.DailyTokenLimit, worker, wakeup);
     }
 }

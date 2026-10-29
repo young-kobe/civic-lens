@@ -5,6 +5,7 @@ using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Processing;
 
+using CivicLens.Tests.Fixtures;
 namespace CivicLens.Tests.Application.Collection.Jobs;
 
 public sealed class CollectionJobWorkerTests
@@ -20,7 +21,7 @@ public sealed class CollectionJobWorkerTests
             await cancellation.CancelAsync();
             await Task.Delay(Timeout.Infinite, token);
         });
-        var worker = new CollectionJobWorker(queue, runner, NullLogger<CollectionJobWorker>.Instance, wakeup: wakeup);
+        var worker = new CollectionJobWorker(queue, runner, NullLogger<CollectionJobWorker>.Instance, TestBeat.Create(), wakeup: wakeup);
 
         var result = await worker.ExecuteAsync(Path.GetTempPath(), once: false,
             cancellationToken: cancellation.Token);
@@ -43,7 +44,7 @@ public sealed class CollectionJobWorkerTests
             return Task.FromResult(new CollectionWorkerQueuePage([], null));
         });
         var worker = new CollectionJobWorker(queue,
-            new RunCollectionJob(new RecordingJobStore(), null!, null!, null!, null!, NullLogger<RunCollectionJob>.Instance), NullLogger<CollectionJobWorker>.Instance, wakeup: wakeup);
+            new RunCollectionJob(new RecordingJobStore(), null!, null!, null!, null!, NullLogger<RunCollectionJob>.Instance), NullLogger<CollectionJobWorker>.Instance, TestBeat.Create(), wakeup: wakeup);
 
         _ = await worker.ExecuteAsync(Path.GetTempPath(), once: false, cancellationToken: cancellation.Token);
 
@@ -63,13 +64,29 @@ public sealed class CollectionJobWorkerTests
                 : new CollectionWorkerQueuePage([], null));
         });
         var worker = new CollectionJobWorker(queue,
-            new RunCollectionJob(new RecordingJobStore(), null!, null!, null!, null!, NullLogger<RunCollectionJob>.Instance), NullLogger<CollectionJobWorker>.Instance, schedules: schedules);
+            new RunCollectionJob(new RecordingJobStore(), null!, null!, null!, null!, NullLogger<RunCollectionJob>.Instance), NullLogger<CollectionJobWorker>.Instance, TestBeat.Create(), schedules: schedules);
 
         var result = await worker.ExecuteAsync(Path.GetTempPath(), once: true, batchSize: 7);
 
         Assert.Equal(1, result.JobsVisited);
         Assert.Equal(2, schedules.AdmissionCount);
         Assert.Equal([7, 7], schedules.Limits);
+    }
+
+    [Fact]
+    public async Task EachVisitedJobBeatsSoALongPageOfSlowJobsDoesNotLookLikeAHungLoop()
+    {
+        var heartbeats = new RecordingHeartbeatStore();
+        var queue = new SequenceQueue((_, callNumber) => Task.FromResult(callNumber == 1
+            ? new CollectionWorkerQueuePage(["job-a", "job-b", "job-c"], null)
+            : new CollectionWorkerQueuePage([], null)));
+        var worker = new CollectionJobWorker(queue,
+            new RunCollectionJob(new RecordingJobStore(), null!, null!, null!, null!, NullLogger<RunCollectionJob>.Instance),
+            NullLogger<CollectionJobWorker>.Instance, TestBeat.Create(heartbeats, TimeSpan.Zero));
+
+        await worker.ExecuteAsync(Path.GetTempPath(), once: true);
+
+        Assert.True(heartbeats.Beats >= 1 + 1 + 3);
     }
 
     [Fact]
@@ -93,7 +110,7 @@ public sealed class CollectionJobWorkerTests
         });
         var jobs = new RecordingJobStore();
         var wakeup = new FakeWakeup(token => { cancellation.Cancel(); return Task.CompletedTask; });
-        var worker = new CollectionJobWorker(queue, new RunCollectionJob(jobs, null!, null!, null!, null!, NullLogger<RunCollectionJob>.Instance), NullLogger<CollectionJobWorker>.Instance, wakeup: wakeup);
+        var worker = new CollectionJobWorker(queue, new RunCollectionJob(jobs, null!, null!, null!, null!, NullLogger<RunCollectionJob>.Instance), NullLogger<CollectionJobWorker>.Instance, TestBeat.Create(), wakeup: wakeup);
 
         var result = await worker.ExecuteAsync(Path.GetTempPath(), once: false,
             cancellationToken: cancellation.Token);
@@ -119,7 +136,7 @@ public sealed class CollectionJobWorkerTests
         });
         var jobs = new RecordingJobStore("fails-on-claim");
         var wakeup = new FakeWakeup(token => { cancellation.Cancel(); return Task.CompletedTask; });
-        var worker = new CollectionJobWorker(queue, new RunCollectionJob(jobs, null!, null!, null!, null!, NullLogger<RunCollectionJob>.Instance), NullLogger<CollectionJobWorker>.Instance, wakeup: wakeup);
+        var worker = new CollectionJobWorker(queue, new RunCollectionJob(jobs, null!, null!, null!, null!, NullLogger<RunCollectionJob>.Instance), NullLogger<CollectionJobWorker>.Instance, TestBeat.Create(), wakeup: wakeup);
 
         var result = await worker.ExecuteAsync(Path.GetTempPath(), once: false,
             cancellationToken: cancellation.Token);
@@ -148,7 +165,7 @@ public sealed class CollectionJobWorkerTests
         var schedules = new RecordingScheduleStore(1);
         var wakeup = new FakeWakeup(_ => throw new InvalidOperationException("Wakeup should not connect."));
         var processor = new EvidenceProcessingWorker(null!, null!, null!, null!, null!, null!, 1, NullLogger<EvidenceProcessingWorker>.Instance);
-        var worker = new CollectionJobWorker(queue, new RunCollectionJob(store, null!, null!, null!, null!, NullLogger<RunCollectionJob>.Instance), NullLogger<CollectionJobWorker>.Instance,
+        var worker = new CollectionJobWorker(queue, new RunCollectionJob(store, null!, null!, null!, null!, NullLogger<RunCollectionJob>.Instance), NullLogger<CollectionJobWorker>.Instance, TestBeat.Create(),
             processor, wakeup, schedules);
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => worker.ExecuteAsync(Path.GetTempPath(),
@@ -165,7 +182,7 @@ public sealed class CollectionJobWorkerTests
     {
         var queue = new SequenceQueue((_, _) => Task.FromResult(new CollectionWorkerQueuePage([], null)));
         var worker = new CollectionJobWorker(queue,
-            new RunCollectionJob(new RecordingJobStore(), null!, null!, null!, null!, NullLogger<RunCollectionJob>.Instance), NullLogger<CollectionJobWorker>.Instance);
+            new RunCollectionJob(new RecordingJobStore(), null!, null!, null!, null!, NullLogger<RunCollectionJob>.Instance), NullLogger<CollectionJobWorker>.Instance, TestBeat.Create());
 
         _ = await worker.ExecuteAsync(Path.GetTempPath(), once: true,
             leaseDuration: TimeSpan.FromMilliseconds(30));

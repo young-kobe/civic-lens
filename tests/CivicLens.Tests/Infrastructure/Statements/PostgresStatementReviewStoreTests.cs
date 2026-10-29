@@ -225,7 +225,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
             RelationshipDraftTask.Task);
         var worker = new AnalysisWorker<RelationshipDraftRun>(new RelationshipDraftStep(relationshipStore, model,
             new RelationshipDraftSettings(10_000_000, concurrency: 1), RelationshipFixtures.Officials),
-            new PostgresAnalysisStatusStore(factory, RelationshipDraftTask.Task), TimeProvider.System, NullLogger<AnalysisWorker<RelationshipDraftRun>>.Instance, wakeup);
+            new PostgresAnalysisStatusStore(factory, RelationshipDraftTask.Task), TimeProvider.System, NullLogger<AnalysisWorker<RelationshipDraftRun>>.Instance, TestBeat.Create(), wakeup);
         using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(60));
         var running = worker.ExecuteAsync(once: false, stop.Token);
         await Task.Delay(1500);
