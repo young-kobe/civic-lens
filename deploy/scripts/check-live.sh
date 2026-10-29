@@ -101,8 +101,9 @@ check_backup_age() {
 }
 
 # Cloudflare replaces CF-Connecting-IP, so every request below counts for the real caller. If the header were trusted from a reader, each forged value would get its own count and none would reach the limit.
+# The limit uses fixed one-minute windows. Twice the limit plus two requests puts more than the limit in one window, even when a window ends during the loop.
 check_forged_header_limit() {
-  local limit=60 attempt status=""
+  local limit=60 attempt attempts status=""
   if [[ -r $search_env ]]; then
     limit=$(sed -n 's/^CIVIC_LENS_REQUESTS_PER_MINUTE=//p' "$search_env" | tail -n 1)
     limit=${limit:-60}
@@ -111,14 +112,16 @@ check_forged_header_limit() {
     fail "Rate limit: CIVIC_LENS_REQUESTS_PER_MINUTE in $search_env is '$limit', not a whole number. Fix the file."
     return
   fi
-  echo "NOTE  The next check sends $((limit + 1)) requests. It blocks your own address on the search service for up to one minute."
-  for ((attempt = 1; attempt <= limit + 1; attempt++)); do
+  attempts=$((2 * (limit + 1)))
+  echo "NOTE  The next check sends up to $attempts requests. It blocks your own address on the search service for up to one minute."
+  for ((attempt = 1; attempt <= attempts; attempt++)); do
     status=$(status_of "$(fetch --header "CF-Connecting-IP: 198.18.$((attempt / 250)).$((attempt % 250 + 1))" "$api/v1/search?q=check")")
+    if [[ $status == 429 ]]; then break; fi
   done
   if [[ $status == 429 ]]; then
-    pass "Rate limit: request $((limit + 1)) with forged CF-Connecting-IP values got 429, so the header cannot be forged"
+    pass "Rate limit: request $attempt with forged CF-Connecting-IP values got 429, so the header cannot be forged"
   else
-    fail "Rate limit: expected status 429 on request $((limit + 1)) with a different forged CF-Connecting-IP each time, got '${status:-no response}'. Check that requests reach the service through Cloudflare, and the limit in $search_env."
+    fail "Rate limit: expected status 429 within $attempts requests with a different forged CF-Connecting-IP each time, the last got '${status:-no response}'. Check that requests reach the service through Cloudflare, and the limit in $search_env."
   fi
 }
 

@@ -961,12 +961,12 @@ Do step 5 only after step 4. Without the credential file, the cloudflared contai
 
 Run `sudo deploy/scripts/check-live.sh` from `/opt/civic-lens` after the first install and after each `update.sh`. The script prints one PASS or FAIL line per check, runs every check, and exits with code 1 if one failed. Each FAIL line says what it expected, what came back, and what to check. It sends requests to the public host names, so it needs the tunnel. The checks are:
 
-- `X-Robots-Tag: noindex` on the home page, the missing page, and an api response. The script reads `deploy/caddy/Caddyfile`. With an `import noindex` line, each response must carry the header. Without one, no response may carry it.
+- `X-Robots-Tag: noindex` on the home page and on an api response. The script reads `deploy/caddy/Caddyfile`. With an `import noindex` line, each response must carry the header. Without one, no response may carry it.
 - A missing page returns 404 with the release 404 page and `Cache-Control: no-store`.
 - `api.civic-lens.info/internal/*` returns 404.
 - Caddy keeps no access log. The script requests a missing path with a random query value and a random `CF-Connecting-IP` value. Then it reads the Caddy log of the last 5 minutes. The log must hold neither value.
 - `civic-lens-backup.service` ran, its last result was success, and its last run ended less than 26 hours ago.
-- A reader cannot forge `CF-Connecting-IP`. The script reads `CIVIC_LENS_REQUESTS_PER_MINUTE` from `search.env`, with 60 as the default. It sends one more request than that to the search route, each with a different forged `CF-Connecting-IP`. Cloudflare replaces the header, so all requests count for the caller, and the last one must get 429. This check runs last. It blocks the address of the caller on the search service for up to one minute.
+- A reader cannot forge `CF-Connecting-IP`. The script reads `CIVIC_LENS_REQUESTS_PER_MINUTE` from `search.env`, with 60 as the default. It sends up to twice that number plus two requests to the search route, each with a different forged `CF-Connecting-IP`. Cloudflare replaces the header, so all requests count for the caller, and one must get 429. The limit counts in fixed one-minute windows, so this number fills one window even when a window ends during the check. This check runs last. It blocks the address of the caller on the search service for up to one minute.
 
 **Withdraw test.** The script does not test withdrawal, because the test changes the live site. Do it by hand at the first launch and after a change to publication code:
 
