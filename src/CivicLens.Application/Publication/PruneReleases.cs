@@ -6,23 +6,29 @@ public sealed class PruneReleases(IPublicationStore publications, IReleaseDirect
 {
     public const int KeepReleases = 30;
 
+    // The publish is done when this runs, so no failure and no shutdown may fail it.
     public async Task ExecuteAsync(CancellationToken cancellationToken = default)
     {
-        try
-        {
-            await publications.PruneAsync(KeepReleases, DeleteUnservedAsync, cancellationToken);
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            logger.LogWarning(exception, "Old release files could not be pruned. The next publish tries again.");
-        }
+        await TryAsync(() => publications.PruneAsync(KeepReleases, RetireAsync, CancellationToken.None));
+        await TryAsync(() => releases.DeleteRetiredAsync(cancellationToken));
     }
 
     // The store holds the publication lock, so the served release cannot change while this reads it.
-    private async Task DeleteUnservedAsync(IReadOnlyList<string> directoryNames, CancellationToken cancellationToken)
+    private async Task RetireAsync(int lowestKept, string? activeDirectory, CancellationToken cancellationToken)
     {
         var served = await releases.GetActiveAsync(cancellationToken);
-        foreach (var directoryName in directoryNames.Where(name => name != served))
-            await releases.DeleteAsync(directoryName, cancellationToken);
+        await releases.RetireOlderThanAsync(lowestKept, [.. new[] { activeDirectory, served }.OfType<string>()], cancellationToken);
+    }
+
+    private async Task TryAsync(Func<Task> step)
+    {
+        try
+        {
+            await step();
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Old release files could not be pruned. The next publish tries again.");
+        }
     }
 }

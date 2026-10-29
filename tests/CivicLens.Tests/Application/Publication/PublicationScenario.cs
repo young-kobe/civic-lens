@@ -454,6 +454,7 @@ internal sealed class FakePublicationStore : IPublicationStore
     public int? ActiveReleaseNumber { get; set; }
     public Action? BeforeServe { get; set; }
     public Exception? FailOnPrune { get; set; }
+    public bool InsidePrune { get; private set; }
 
     public Task<PublicationState> GetStateAsync(CancellationToken cancellationToken) =>
         Task.FromResult(new PublicationState(Committed.Select(item => item.ReleaseNumber).DefaultIfEmpty().Max(),
@@ -478,12 +479,21 @@ internal sealed class FakePublicationStore : IPublicationStore
         return active;
     }
 
-    public async Task PruneAsync(int keep, Func<IReadOnlyList<string>, CancellationToken, Task> deleteDirectories,
-        CancellationToken cancellationToken)
+    public async Task PruneAsync(int keep, Func<int, string?, CancellationToken, Task> retireOlder, CancellationToken cancellationToken)
     {
         if (FailOnPrune is not null) throw FailOnPrune;
-        await deleteDirectories([.. Committed.OrderByDescending(item => item.ReleaseNumber).Skip(keep)
-            .Where(item => item.ReleaseNumber != ActiveReleaseNumber).Select(item => item.DirectoryName)], cancellationToken);
+        if (Committed.Count == 0) return;
+        var lowestKept = Committed.OrderByDescending(item => item.ReleaseNumber).Take(keep).Min(item => item.ReleaseNumber);
+        InsidePrune = true;
+        try
+        {
+            await retireOlder(lowestKept, Committed.SingleOrDefault(item => item.ReleaseNumber == ActiveReleaseNumber)?.DirectoryName,
+                cancellationToken);
+        }
+        finally
+        {
+            InsidePrune = false;
+        }
     }
 
     public Task<IReadOnlyDictionary<PublishedRecordReference, ReviewStatus>> ReadReviewStatusesAsync(
@@ -533,6 +543,10 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
     public int DiscardedStagings { get; set; }
     public string? Active { get; set; }
     public Exception? FailOnDelete { get; set; }
+    public Exception? FailOnDeleteRetired { get; set; }
+    public List<string> Retired { get; } = [];
+    public List<string> RetiredEver { get; } = [];
+    public Action? OnDeleteRetired { get; set; }
     public Exception? FailOnActivate { get; set; }
 
     public Task<IReleaseStaging> BeginAsync(CancellationToken cancellationToken)
@@ -563,6 +577,30 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
         if (files.Count > maximumFiles) throw new InvalidDataException("Release folder holds more files than allowed.");
         return Task.FromResult(files);
     }
+
+    public Task RetireOlderThanAsync(int releaseNumber, IReadOnlyCollection<string> keepDirectoryNames,
+        CancellationToken cancellationToken)
+    {
+        foreach (var name in Directories.Keys.Where(name => NumberOf(name) < releaseNumber && !keepDirectoryNames.Contains(name)).ToList())
+        {
+            Directories.Remove(name);
+            Retired.Add(name);
+            RetiredEver.Add(name);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteRetiredAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        OnDeleteRetired?.Invoke();
+        if (FailOnDeleteRetired is not null) throw FailOnDeleteRetired;
+        Retired.Clear();
+        return Task.CompletedTask;
+    }
+
+    private static int NumberOf(string directoryName) => int.Parse(directoryName.Split('-')[1]);
 
     public Task DeleteAsync(string directoryName, CancellationToken cancellationToken)
     {

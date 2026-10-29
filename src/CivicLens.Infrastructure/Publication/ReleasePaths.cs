@@ -16,6 +16,12 @@ internal static partial class ReleasePaths
 
     public static string ReleaseName(int releaseNumber) => $"{releaseNumber:D6}-{Guid.NewGuid():N}";
 
+    public static bool TryReleaseNumber(string directoryName, out int releaseNumber)
+    {
+        releaseNumber = 0;
+        return DirectoryNamePattern().IsMatch(directoryName) && int.TryParse(directoryName.AsSpan(0, 6), out releaseNumber);
+    }
+
     public static void RequireDirectoryName(string directoryName)
     {
         if (directoryName is null || !DirectoryNamePattern().IsMatch(directoryName))
