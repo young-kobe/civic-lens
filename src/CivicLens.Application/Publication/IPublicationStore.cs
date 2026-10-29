@@ -6,7 +6,8 @@ public interface IPublicationStore
 {
     Task<PublicationState> GetStateAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<PublicationReleaseSummary>> ListAsync(int limit, CancellationToken cancellationToken);
-    Task<PublicationReleaseSummary> ActivateAsync(int releaseNumber, CancellationToken cancellationToken);
+    Task<PublicationReleaseSummary> ActivateAsync(int releaseNumber, Func<string, CancellationToken, Task> requireFiles,
+        CancellationToken cancellationToken);
 
     Task<PublicationReleaseSummary?> ServeActiveAsync(Func<string, CancellationToken, Task> serve,
         CancellationToken cancellationToken);

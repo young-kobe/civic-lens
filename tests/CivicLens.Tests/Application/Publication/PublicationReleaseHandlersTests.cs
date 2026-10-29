@@ -22,11 +22,27 @@ public sealed class PublicationReleaseHandlersTests
     }
 
     [Fact]
+    public async Task ActivatingAReleaseWhoseFilesAreGoneIsRefusedBecauseTheLinkCouldNotServeItAndLaterPublishesWouldFail()
+    {
+        var scenario = new PublicationScenario();
+        await scenario.Publications.CommitAsync("owner", new(1, null, "release-1", [], []), "a", "h", default);
+        await scenario.Publications.CommitAsync("owner", new(2, 1, "release-2", [], []), "b", "h", default);
+        SeedFiles(scenario, "release-2");
+
+        var refusal = await Assert.ThrowsAsync<ArgumentException>(() => scenario.Activator().ExecuteAsync(PublicationScenario.Owner, 1));
+
+        Assert.Equal("Release 1 has no files on this machine, so it cannot be activated.", refusal.Message);
+        Assert.Equal(2, scenario.Publications.ActiveReleaseNumber);
+        Assert.Empty(scenario.Releases.Activated);
+    }
+
+    [Fact]
     public async Task OwnerCanRollBackToAnEarlierCommittedRelease()
     {
         var scenario = new PublicationScenario();
         await scenario.Publications.CommitAsync("owner", new(1, null, "release-1", [], []), "a", "h", default);
         await scenario.Publications.CommitAsync("owner", new(2, 1, "release-2", [], []), "b", "h", default);
+        SeedFiles(scenario, "release-1", "release-2");
         var handler = scenario.Activator();
 
         var summary = await handler.ExecuteAsync(PublicationScenario.Owner, 1);
@@ -41,6 +57,7 @@ public sealed class PublicationReleaseHandlersTests
         var scenario = new PublicationScenario();
         await scenario.Publications.CommitAsync("owner", new(1, null, "release-1", [], []), "a", "h", default);
         await scenario.Publications.CommitAsync("owner", new(2, 1, "release-2", [], []), "b", "h", default);
+        SeedFiles(scenario, "release-1", "release-2");
         scenario.Publications.BeforeServe = () => scenario.Publications.ActiveReleaseNumber = 2;
 
         await scenario.Activator().ExecuteAsync(PublicationScenario.Owner, 1);
@@ -135,7 +152,7 @@ public sealed class PublicationReleaseHandlersTests
     {
         var (scenario, action) = await PublishedActionAsync();
         await WithdrawAsync(scenario, action);
-        scenario.Releases.Directories[scenario.Publications.Committed[0].DirectoryName].Remove(PublicationProtocol.ManifestPath);
+        scenario.Releases.Directories[scenario.Publications.Committed[0].DirectoryName][PublicationProtocol.ManifestPath] = [0x7B];
         var logger = new CapturingLogger<ActivatePublicationRelease>();
 
         var result = await scenario.Activator(logger).ExecuteAsync(PublicationScenario.Owner, 1);
@@ -177,6 +194,11 @@ public sealed class PublicationReleaseHandlersTests
 
         Assert.Equal(scenario.Publications.Committed[1].DirectoryName, scenario.Releases.Active);
         Assert.Empty(result.RestoredWithdrawals);
+    }
+
+    private static void SeedFiles(PublicationScenario scenario, params string[] directoryNames)
+    {
+        foreach (var name in directoryNames) scenario.Releases.Directories[name] = new() { [PublicationProtocol.ManifestPath] = [] };
     }
 
     private static async Task<(PublicationScenario Scenario, PublishedRecordReference Action)> PublishedActionAsync()
