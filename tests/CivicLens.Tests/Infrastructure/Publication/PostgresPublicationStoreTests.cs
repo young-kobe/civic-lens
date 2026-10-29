@@ -211,6 +211,27 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task ActivationChecksTheFilesWhileHoldingThePublicationLockSoAPruneCannotDeleteThemBetweenCheckAndSwitch()
+    {
+        var draft = await CreateDraftAsync();
+        await publications.CommitAsync(Owner.Subject, Commit(1, draft, 1, 0), "key-1", Hash(1), default);
+        await publications.CommitAsync(Owner.Subject, Commit(2, draft, 1, 0), "key-2", Hash(2), default);
+        var lockWasFree = true;
+
+        await publications.ActivateAsync(1, async (_, _) =>
+        {
+            await using var other = new NpgsqlConnection(connectionString);
+            await other.OpenAsync();
+            await using var transaction = await other.BeginTransactionAsync();
+            await using var command = new NpgsqlCommand(
+                "SELECT pg_try_advisory_xact_lock(hashtextextended('civic-lens-document-change-review', 0))", other, transaction);
+            lockWasFree = (bool)(await command.ExecuteScalarAsync())!;
+        }, default);
+
+        Assert.False(lockWasFree);
+    }
+
+    [Fact]
     public async Task ReleaseBuiltBeforeARollbackIsRejectedSoItCannotRestoreWithdrawnRecords()
     {
         var draft = await CreateDraftAsync();
