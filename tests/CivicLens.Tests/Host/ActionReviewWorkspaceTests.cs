@@ -64,7 +64,7 @@ public sealed class ActionReviewWorkspaceTests(PostgresCollection postgres) : IA
     }
 
     [Fact]
-    public async Task TheReviewHomeShowsNoFactExceptionWhenCodeApprovedEveryActionAndVoteAsync()
+    public async Task TheReviewHomeShowsNoUnapprovedFactWhenCodeApprovedEveryActionAndVoteAsync()
     {
         var seeder = new RelationshipWorldSeeder(host.ConnectionString);
         await seeder.ActionAsync(RelationshipFixtures.Action(1), "Approved");

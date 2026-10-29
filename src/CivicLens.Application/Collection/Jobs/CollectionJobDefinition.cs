@@ -26,7 +26,7 @@ public sealed record CollectionJobDefinition
     public string? ETag { get; init; }
     public DateTimeOffset? LastModified { get; init; }
     public required CollectionJobPolicy Policy { get; init; }
-    public int Priority { get; init; } = CollectionJobPriority.Check;
+    public required int Priority { get; init; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public CollectionConfigurationRevision? ConfigurationRevision { get; init; }
@@ -70,7 +70,8 @@ public sealed record CollectionJobDefinition
             MinDelayMilliseconds = source.MinDelayMilliseconds,
             ETag = source.ETag,
             LastModified = source.LastModified,
-            Policy = source.JobPolicy ?? new CollectionJobPolicy()
+            Policy = source.JobPolicy ?? new CollectionJobPolicy(),
+            Priority = CollectionJobPriority.Check
         };
         return definition;
     }
