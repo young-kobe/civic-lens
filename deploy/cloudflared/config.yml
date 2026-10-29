@@ -1,0 +1,9 @@
+# The tunnel ID comes from the command line. The credential file lives only on the machine.
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  - hostname: civic-lens.info
+    service: http://127.0.0.1:8080
+  - hostname: api.civic-lens.info
+    service: http://127.0.0.1:8080
+  - service: http_status:404

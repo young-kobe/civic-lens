@@ -243,7 +243,7 @@ The [roadmap](../roadmap.md) holds the delivery order. These design rules apply 
 - A label binds to the exact comparison, the rubric version, and the labeler. Model output, also agreement between models, is a prediction, never a label.
 - Labels from the review queue are biased by the gate. False-negative estimates therefore use the random sample of skipped changes, weighted by its selection rate.
 - Measure agreement between the two reviewers on an overlapping sample.
-- Self-hosted encoders are out of scope for now, because of the CPX21 memory limit.
+- Self-hosted encoders are out of scope for now, because of the memory limit of the production machine.
 - A confidence is shown as a score only after a calibration map for that task exists. The map is fitted on human outcomes and versioned. Code-checked results are verified or failed, not scored.
 - A labeled eval set follows the rubric. A prompt or model change runs against it on demand, within a budget, and ships only without a regression.
 - Weekly briefs reuse the same adapter and the same checks. Statement and action extraction will reuse them too.

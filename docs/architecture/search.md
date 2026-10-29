@@ -20,7 +20,7 @@ The search service gives readers full-text search over every published record. I
 - Queries use `websearch_to_tsquery('english', q)` and `ts_rank_cd`. A snippet comes from `ts_headline` over the first 50,000 characters of the record body. The snippet marks each match between U+E000 and U+E001, so a reader script never needs HTML from the service.
 - Paging uses a keyset cursor, as the review UI does. The cursor carries its release, so all pages of one search read the same release. This service pages forward only, so the cursor has no direction.
 - The public address will be `api.civic-lens.info`. Every response allows any origin. The service sets no cookie. The search routes check no credential. The report pull route checks one shared bearer token.
-- The rate limiter is the ASP.NET built-in fixed window. It keys on `CF-Connecting-IP` only when the connection comes from a configured Cloudflare range. Otherwise it keys on the remote address. An IPv6 client counts as its /64 network.
+- The rate limiter is the ASP.NET built-in fixed window. It keys on `CF-Connecting-IP` only when the connection comes from a configured trusted proxy range. In production that range is loopback, because Caddy and the tunnel run on the same machine. Otherwise it keys on the remote address. An IPv6 client counts as its /64 network.
 - A record file holds the full source text. The service indexes it and does not serve it. The API returns index rows and the paths of the record files.
 - Publish writes `search.html` in every release. Its canonical address, when `CIVIC_LENS_PUBLIC_BASE_URL` is set, is the bare page without a query. The page fills its filters from the manifest. Issue and policy area names come from the publication catalog. A script calls the service at `CIVIC_LENS_PUBLIC_API_URL`. Without the variable, the page says that search is not available.
 - The facet pages are the path for readers without JavaScript.
@@ -223,7 +223,7 @@ Run commands are in [operations](../operations.md#run-the-search-service).
 - A search database restored from a backup keeps its epoch. Reports made after the backup are lost, and the puller can skip new reports that reuse the lost sequences.
 - The review system keeps a closed report with no deletion rule. [R-24](../roadmap.md#later) adds one, and the About page then states it.
 - The request log filter in `PublicApiApp` has no provider. A provider-specific `Logging` level, such as `Logging__Console__LogLevel__Default`, overrides it and logs the search text again. The [R-24](../roadmap.md#later) deploy must set none.
-- The About page says a search keeps nothing. That stays true only while the Caddy and CDN deploy keeps no access logs for search requests. [R-24](../roadmap.md#later) must set that.
+- The About page says a search keeps nothing. That stays true only while the Caddy deploy keeps no access logs for search requests. The Caddyfile sets that; see [Web server](../operations.md#web-server).
 - Edge blocking of `/internal/*` is deferred to [R-24](../roadmap.md#later).
 - The search API answers 200 for a withdrawn record in the pinned releases that hold it. A status 410 needs the ingest to read withdrawals and the API to change its status. This waits until after [R-24](../roadmap.md#later).
 - Only the first full ingest is long, because it fetches every record inside one transaction. Later ingests fetch only new revisions. Readers are not blocked, because they read committed rows.

@@ -30,7 +30,7 @@ The workspace uses Blazor static server-side rendering with a shared Razor compo
 
 [The federal pilot](docs/operations.md#federal-source-pilot) configures official Senate sources for Elizabeth Warren and Ted Cruz. Collection can be managed through CLI jobs or the owner-only Sources page. Captured pages and readable extractions are separate outcomes; a first observation establishes a baseline, not a document change.
 
-Production hosting is agreed for the existing Hetzner CPX21, with Terraform-managed infrastructure and CI deployment independent of the developer workstation. This deployment remains planned; see [production hosting](docs/architecture/host.md#limits-and-planned-work).
+A Jetson runs temporary production with Docker Compose; see the [production runbook](docs/operations.md#production-runbook). The long-term cloud move, with Terraform, stays planned; see [production hosting](docs/architecture/host.md#limits-and-planned-work).
 
 ## Start here
 

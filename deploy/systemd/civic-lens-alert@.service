@@ -1,0 +1,7 @@
+[Unit]
+Description=Civic Lens alert for %i
+
+[Service]
+Type=oneshot
+ExecStart=/opt/civic-lens/deploy/scripts/alert.sh %i
+PrivateTmp=yes

@@ -14,6 +14,8 @@ install -d -m 755 "$CIVIC_LENS_ROOT" "$CIVIC_LENS_ROOT/config"
 install -d -m 700 "$CIVIC_LENS_ROOT/env"
 install -d -m 755 -o "$service_uid" -g "$service_uid" "$CIVIC_LENS_ROOT/captures" "$CIVIC_LENS_ROOT/releases"
 install -d -m 700 -o "$service_uid" -g "$service_uid" "$CIVIC_LENS_ROOT/review-keys"
+install -d -m 700 "$CIVIC_LENS_ROOT/backup"
+install -d -m 700 -o "$service_uid" -g "$service_uid" "$CIVIC_LENS_ROOT/cloudflared"
 install -d -m 755 "$CIVIC_LENS_ROOT/postgres"
 install -d -m 700 -o "$postgres_uid" -g "$postgres_uid" "$CIVIC_LENS_ROOT/postgres/operational" "$CIVIC_LENS_ROOT/postgres/search"
 
@@ -27,4 +29,4 @@ for template in "$deploy_directory"/env/*.env.example; do
   fi
 done
 
-echo "Edit the files in $CIVIC_LENS_ROOT/env and add collection.json and issues.json to $CIVIC_LENS_ROOT/config."
+echo "Edit the files in $CIVIC_LENS_ROOT/env and add collection.json and issues.json to $CIVIC_LENS_ROOT/config. Follow the runbook for the tunnel credential file and the restic password file."

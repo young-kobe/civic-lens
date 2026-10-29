@@ -151,7 +151,7 @@ flowchart LR
 | Public search and read API | `CivicLens.PublicApi`, a Web SDK project over its own Postgres database through plain Npgsql, fed from published releases |
 | Local MCP (planned) | Official C# SDK; separate local development and review registration |
 | Public MCP (planned) | Separate deployment over published artifacts and index; Cloudflare Worker is a candidate |
-| Production hosting (planned) | Hetzner CPX21 containers and separately served static releases; Terraform and CI deployment |
+| Production hosting | Jetson with Docker Compose (temporary); planned cloud move with Terraform and CI deployment |
 | Tests and CI | xUnit, architecture, contract, and integration tests, GitHub Actions |
 
 Package rules:
