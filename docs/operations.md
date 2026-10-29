@@ -837,7 +837,7 @@ To give each page a canonical address, set `CIVIC_LENS_PUBLIC_BASE_URL` in the s
 
 To use the report page, also set `CIVIC_LENS_TURNSTILE_SITE_KEY` in the environment of the process that publishes. For a local trial use the Cloudflare test site key `1x00000000000000000000AA`, which always passes. Publish, serve the release root, and open a record page. Use its link "Report a problem with this record". Send the report, then run the pull command above to see it. Without the API address or the site key, `report.html` says that reporting is not available.
 
-Optional variables: `CIVIC_LENS_TRUSTED_PROXY_RANGES` (empty in development) and `CIVIC_LENS_REQUESTS_PER_MINUTE` (default 60). In production, set the ranges to `127.0.0.0/8,::1`. The tunnel and Caddy run on the same machine, so the peer is loopback. Caddy passes the `CF-Connecting-IP` header that Cloudflare sets. The container image of the search service is in [Container images](#container-images).
+Optional variables: `CIVIC_LENS_TRUSTED_PROXY_RANGES` (empty in development) and `CIVIC_LENS_REQUESTS_PER_MINUTE` (default 60). In production, set the ranges to `127.0.0.0/8,::1/128`. Each range needs a prefix length, and the service stops at start when one has none. The tunnel and Caddy run on the same machine, so the peer is loopback. Caddy passes the `CF-Connecting-IP` header that Cloudflare sets. The container image of the search service is in [Container images](#container-images).
 
 ## Container images
 
@@ -1006,7 +1006,7 @@ The review workspace uses Tailscale. Cloudflare Access is not used.
 No Terraform manages these steps. Check each one by hand.
 
 - Cloudflare: the zone `civic-lens.info` exists. The tunnel exists and has two DNS routes. A Turnstile widget exists, and its site key and secret are in the env files. An R2 bucket exists for the backups, with an API token that is limited to that bucket.
-- Auth0: a regular web application exists. Its callback and logout URLs use the Tailscale origin. The owner subject and reviewers are in `host.env`.
+- Auth0: a regular web application exists. Its allowed callback URL is `<Tailscale origin>/signin-oidc`. It needs no logout URL, because sign-out clears only the review cookie. The owner subject and reviewers are in `host.env`.
 - Tailscale: HTTPS certificates are on, and `tailscale serve` runs.
 
 ### Backups
@@ -1022,13 +1022,14 @@ Set up the backup one time:
 1. Fill in `/srv/civic-lens/env/backup.secret.env` with the R2 repository URL and the API token.
 2. Make the restic password file: `sudo sh -c 'umask 077; openssl rand -base64 32 > /srv/civic-lens/env/restic-password'`. Keep an offline copy of the password. Without it, no backup can be read.
 3. Create the repository: `sudo deploy/scripts/compose.sh run --rm restic init`.
-4. Set up the failure alert (see [Failure alerts](#failure-alerts)).
-5. Link and enable the timer:
+4. Link the units. The alert test in step 5 needs the alert unit.
 
 ```sh
 sudo systemctl link /opt/civic-lens/deploy/systemd/civic-lens-backup.service /opt/civic-lens/deploy/systemd/civic-lens-backup.timer /opt/civic-lens/deploy/systemd/civic-lens-alert@.service
-sudo systemctl enable --now civic-lens-backup.timer
 ```
+
+5. Set up the failure alert (see [Failure alerts](#failure-alerts)).
+6. Enable the timer: `sudo systemctl enable --now civic-lens-backup.timer`.
 
 Day-to-day commands:
 
