@@ -833,19 +833,20 @@ Optional variables: `CIVIC_LENS_TRUSTED_PROXY_RANGES` (the Cloudflare ranges, em
 
 ## Container images
 
-The `Dockerfile` in the repository root builds two images for linux-arm64. The workflow `.github/workflows/release.yml` builds them on every push to main on a native ARM64 runner. It pushes them to ghcr.io and adds a build provenance attestation to each.
+The `Dockerfile` in the repository root builds two images for linux-arm64. The workflow `.github/workflows/release.yml` builds them on a native ARM64 runner. On a push to main it pushes them to ghcr.io and adds a build provenance attestation to each. On a pull request that changes the build inputs, it builds them and does not push or attest. A newer push can cancel a queued run, so deploy only a commit whose image tag exists.
 
 | Image | Holds | Entry point |
 | --- | --- | --- |
 | `ghcr.io/young-kobe/civic-lens-host` | The host in `/app/host` and the collector in `/app/collector` | `dotnet CivicLens.Host.dll` |
 | `ghcr.io/young-kobe/civic-lens-search` | The search service only, in `/app/search` | `dotnet CivicLens.PublicApi.dll` |
 
-- Run the worker, the review workspace, and the commands `db migrate`, `releases publish`, `releases activate`, and withdraw as arguments of the host image. The worker takes the collector path `/app/collector/CivicLens.Collector.dll` and a capture directory that you mount.
+- Run each host command, the worker and the review workspace as arguments of the host image. The worker takes the collector path `/app/collector/CivicLens.Collector.dll` and a capture directory that you mount.
 - The search image holds no host, application, or infrastructure assembly. This keeps publication isolation.
 - Both images run as user and group 10001:10001. Give each bind-mounted directory to this user.
 - The images hold no secret, no configuration file, and no runtime data. Pass them as environment variables and mounts.
+- After the first run on main, set the packages `civic-lens-host` and `civic-lens-search` to public in the ghcr package settings. Do this one time by hand. The Jetson then pulls without a token.
 - Each image has two tags: the full commit SHA and `main`. Deploy by the commit SHA. Pull one with `docker pull ghcr.io/young-kobe/civic-lens-host:<commit-sha>`. Check its attestation with `gh attestation verify oci://ghcr.io/young-kobe/civic-lens-host:<commit-sha> --repo young-kobe/civic-lens`.
-- Every base image is pinned by digest, and the tag is in a comment. The SDK image must equal the `global.json` version. To update a base image, change the digest and the comment together.
+- Every base image is pinned by digest, and the tag is in a comment. The SDK image must equal the `global.json` version. The aspnet image must equal the runtime of that SDK (see the .NET release notes). To update a base image, change the digest and the comment together.
 
 ## Dev database reset
 

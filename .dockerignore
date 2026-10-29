@@ -7,3 +7,5 @@
 artifacts/
 tests/
 docs/
+.env
+.env.*
