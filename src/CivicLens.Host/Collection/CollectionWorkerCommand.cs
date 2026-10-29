@@ -30,7 +30,8 @@ internal static class CollectionWorkerCommand
         ICollectionJobStore jobs, ICollectionAttemptStore evidence, ILoggerFactory loggers, WorkerBeat beat,
         CancellationToken cancellationToken,
         EvidenceProcessingWorker? evidenceProcessor = null, IWorkerWakeup? wakeup = null,
-        ICollectionScheduleStore? schedules = null, IReadOnlyList<AnalysisStage>? analysis = null)
+        ICollectionScheduleStore? schedules = null, IReadOnlyList<AnalysisStage>? analysis = null,
+        int collectionConcurrency = CollectionLanePolicy.DefaultConcurrency)
     {
         ValidateArguments(arguments);
         var collectorPath = Path.GetFullPath(arguments[1]);
@@ -40,7 +41,8 @@ internal static class CollectionWorkerCommand
                 Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet"),
             loggers.CreateLogger<RunCollectionJob>());
         var once = IsOnce(arguments);
-        var collection = new CollectionJobWorker(queue, runner, loggers.CreateLogger<CollectionJobWorker>(), beat, evidenceProcessor, wakeup, schedules);
+        var collection = new CollectionJobWorker(queue, runner, loggers.CreateLogger<CollectionJobWorker>(), beat, evidenceProcessor, wakeup, schedules,
+            collectionConcurrency);
         var (result, analysisResults) = await RunAsync(collection, analysis ?? [], artifactRoot, once, cancellationToken);
         CollectionCommandOutput.Write(result);
         foreach (var (name, analysisResult) in analysisResults)

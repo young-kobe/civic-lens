@@ -325,11 +325,27 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         await ClosePacingKeyAsync("group:house.gov", TimeSpan.FromHours(1));
 
         var page = await PostgresCollectionWorkerQueue.FromConnectionString(connectionString)
-            .GetEligibleJobIdsAsync(null, 10, default);
+            .GetEligibleJobsAsync(null, 10, default);
 
-        Assert.Equal(open.JobId, Assert.Single(page.JobIds));
+        Assert.Equal(open.JobId, Assert.Single(page.Jobs).JobId);
         Assert.Null(await jobs.TryClaimAsync(paced.JobId, LeaseDuration, default));
         Assert.NotNull(await jobs.TryClaimAsync(open.JobId, LeaseDuration, default));
+    }
+
+    [Fact]
+    public async Task TheQueueGivesHostsOfOneGroupTheSamePacingKeySoLanesNeverRunThemTogether()
+    {
+        var first = await jobs.EnqueueAsync(GroupedSource("a.house.gov"), "same-group-a", default);
+        var second = await jobs.EnqueueAsync(GroupedSource("b.house.gov"), "same-group-b", default);
+        var other = await jobs.EnqueueAsync(GroupedSource("a.senate.gov"), "other-group", default);
+
+        var page = await PostgresCollectionWorkerQueue.FromConnectionString(connectionString)
+            .GetEligibleJobsAsync(null, 10, default);
+
+        var keys = page.Jobs.ToDictionary(job => job.JobId, job => job.PacingKey);
+        Assert.Equal("group:house.gov", keys[first.JobId]);
+        Assert.Equal(keys[first.JobId], keys[second.JobId]);
+        Assert.Equal("group:senate.gov", keys[other.JobId]);
     }
 
     [Fact]
@@ -342,8 +358,8 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         await ClosePacingKeyAsync("group:house.gov", TimeSpan.FromHours(-1));
 
         var page = await PostgresCollectionWorkerQueue.FromConnectionString(connectionString)
-            .GetEligibleJobIdsAsync(null, 10, default);
-        Assert.Equal(paced.JobId, Assert.Single(page.JobIds));
+            .GetEligibleJobsAsync(null, 10, default);
+        Assert.Equal(paced.JobId, Assert.Single(page.Jobs).JobId);
         Assert.NotNull(await jobs.TryClaimAsync(paced.JobId, LeaseDuration, default));
     }
 

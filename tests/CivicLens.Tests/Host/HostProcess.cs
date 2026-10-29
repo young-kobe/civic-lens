@@ -18,7 +18,8 @@ internal static class HostProcess
         "CIVIC_LENS_RELATIONSHIP_DRAFTING_DAILY_TOKENS",
     ];
 
-    private const string EvidenceConcurrencyVariable = "CIVIC_LENS_EVIDENCE_CONCURRENCY";
+    private static readonly string[] ConcurrencyVariables =
+        ["CIVIC_LENS_EVIDENCE_CONCURRENCY", "CIVIC_LENS_COLLECTION_CONCURRENCY"];
 
     public static Task<(int ExitCode, string Output, string Error)> RunWithCollectorHostAsync(
         string? database, string? collectorHost, params string[] arguments) =>
@@ -40,7 +41,7 @@ internal static class HostProcess
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
         start.Environment.Remove("CIVIC_LENS_DATABASE");
         foreach (var name in DraftingVariables) start.Environment.Remove(name);
-        start.Environment.Remove(EvidenceConcurrencyVariable);
+        foreach (var variable in ConcurrencyVariables) start.Environment.Remove(variable);
         foreach (var (name, value) in environment) start.Environment[name] = value;
         if (database is not null) start.Environment["CIVIC_LENS_DATABASE"] = database;
         if (collectorHost is not null) start.Environment["DOTNET_HOST_PATH"] = collectorHost;

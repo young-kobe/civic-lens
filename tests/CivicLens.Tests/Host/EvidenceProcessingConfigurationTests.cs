@@ -12,7 +12,21 @@ public sealed class EvidenceProcessingConfigurationTests
     [InlineData("-1", 2)]
     [InlineData("two", 2)]
     [InlineData("1.5", 2)]
-    public async Task TheWorkerAcceptsOnlyAWholeEvidenceConcurrencyFromOneToFour(string value, int exitCode)
+    public Task TheWorkerAcceptsOnlyAWholeEvidenceConcurrencyFromOneToFour(string value, int exitCode) =>
+        AssertWorkerExitAsync("CIVIC_LENS_EVIDENCE_CONCURRENCY", value, exitCode);
+
+    [Theory]
+    [InlineData("1", 1)]
+    [InlineData("4", 1)]
+    [InlineData("0", 2)]
+    [InlineData("5", 2)]
+    [InlineData("-1", 2)]
+    [InlineData("two", 2)]
+    [InlineData("1.5", 2)]
+    public Task TheWorkerAcceptsOnlyAWholeCollectionConcurrencyFromOneToFour(string value, int exitCode) =>
+        AssertWorkerExitAsync("CIVIC_LENS_COLLECTION_CONCURRENCY", value, exitCode);
+
+    private static async Task AssertWorkerExitAsync(string variable, string value, int exitCode)
     {
         var directory = Path.Combine(Path.GetTempPath(), "civic-evidence-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -27,7 +41,7 @@ public sealed class EvidenceProcessingConfigurationTests
             var environment = new Dictionary<string, string>
             {
                 ["CIVIC_LENS_COLLECTION_CONFIG"] = config,
-                ["CIVIC_LENS_EVIDENCE_CONCURRENCY"] = value
+                [variable] = value
             };
 
             var result = await HostProcess.RunWithEnvironmentAsync(Database, null, environment,

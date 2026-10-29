@@ -179,6 +179,7 @@ try
         if (issues is null && workerConfiguration.Sources.Any(source => source.Enabled && source.ApiParser == ApiParser.CongressBillList))
             throw new ArgumentException("Worker requires CIVIC_LENS_ISSUES_CONFIG when a Congress.gov bill list source is enabled.");
         var evidenceConcurrency = EvidenceProcessingConfiguration.ReadConcurrency();
+        var collectionConcurrency = CollectionLaneConfiguration.ReadConcurrency();
         var jobs = CreateJobs();
         var attempts = CreateDatabase();
         var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!;
@@ -244,7 +245,7 @@ try
                 AnalysisStage.For(WorkerLoopNames.BriefDrafting, briefDrafting.Worker),
                 factPublishing?.Stage,
                 reportPull?.Stage
-            }.OfType<AnalysisStage>()]);
+            }.OfType<AnalysisStage>()], collectionConcurrency);
     }
 
     if (WorkerHealthCommand.Matches(args))
