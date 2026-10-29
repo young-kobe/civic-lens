@@ -20,7 +20,7 @@ public sealed partial class ProposeRosterChanges(IMemberRosterStore roster)
         var takenIds = configuration.People.Select(person => person.Id).ToHashSet(StringComparer.Ordinal);
         var joins = members.Where(member => !configured.ContainsKey(member.BioguideId)).OrderBy(member => member.BioguideId, StringComparer.Ordinal)
             .Select(member => new ProposedMember(ProposeId(member, takenIds), member.FullName, member.BioguideId)).ToArray();
-        var leaves = configured.Values.Where(person => !current.ContainsKey(person.BioguideId!))
+        var leaves = configured.Values.Where(person => person.Offices is null && !current.ContainsKey(person.BioguideId!))
             .OrderBy(person => person.Id, StringComparer.Ordinal).ToArray();
         return new RosterProposal(joins, leaves);
     }
