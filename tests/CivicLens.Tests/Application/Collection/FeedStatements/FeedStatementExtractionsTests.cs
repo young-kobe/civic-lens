@@ -31,7 +31,7 @@ public sealed class FeedStatementExtractionsTests
         var feed = Feed(Item(link: "https://senator.test/news/a", guid: "g-1", title: "Title", pubDate: "Wed, 28 Oct 2026 15:30:00 +0000",
             encoded: "<![CDATA[<p>Body</p>]]>"));
 
-        var extraction = Assert.Single(await ReadAsync(feed)).Extraction;
+        var extraction = Assert.Single((await ReadAsync(feed)).Items).Extraction;
 
         Assert.Equal("Feed item guid: g-1\nLink: https://senator.test/news/a\nTitle: Title\nPublished: Wed, 28 Oct 2026 15:30:00 +0000\n\ntext of <p>Body</p>",
             extraction.Text);
@@ -43,8 +43,8 @@ public sealed class FeedStatementExtractionsTests
     {
         var feed = Feed(Item(link: "https://senator.test/news/a", description: "one"), Item(link: "https://senator.test/news/b", description: "two"));
 
-        var first = await ReadAsync(feed);
-        var rerun = await ReadAsync(feed);
+        var first = (await ReadAsync(feed)).Items;
+        var rerun = (await ReadAsync(feed)).Items;
 
         Assert.Equal(first.Select(item => item.Extraction.ExtractionId), rerun.Select(item => item.Extraction.ExtractionId));
         Assert.Equal(2, first.Select(item => item.Extraction.ExtractionId).Distinct().Count());
@@ -59,7 +59,7 @@ public sealed class FeedStatementExtractionsTests
             Item(link: "https://other.test/news/x", description: "outside origin"),
             Item(link: "https://senator.test/news/ok", description: "inside"));
 
-        var links = (await ReadAsync(feed)).Select(item => item.Link);
+        var links = (await ReadAsync(feed)).Items.Select(item => item.Link);
 
         Assert.Equal(["https://senator.test/news/ok"], links);
     }
@@ -69,7 +69,7 @@ public sealed class FeedStatementExtractionsTests
     {
         var feed = Feed(Item(link: "/news/relative", description: "a"), Item(link: "http://senator.test/news/plain", description: "b"));
 
-        var links = (await ReadAsync(feed)).Select(item => item.Link);
+        var links = (await ReadAsync(feed)).Items.Select(item => item.Link);
 
         Assert.Equal(["https://senator.test/news/relative", "https://senator.test/news/plain"], links);
     }
@@ -82,7 +82,7 @@ public sealed class FeedStatementExtractionsTests
             Item(link: "https://senator.test/news/old", description: "o", pubDate: "Mon, 26 Oct 2026 10:00:00 +0000"),
             Item(link: "https://senator.test/news/new", description: "n", pubDate: "Wed, 28 Oct 2026 10:00:00 +0000"));
 
-        var links = (await ReadAsync(feed)).Select(item => item.Link.Split('/')[^1]);
+        var links = (await ReadAsync(feed)).Items.Select(item => item.Link.Split('/')[^1]);
 
         Assert.Equal(["new", "old", "undated"], links);
     }
@@ -92,7 +92,7 @@ public sealed class FeedStatementExtractionsTests
     {
         var feed = Feed(Item(link: "https://senator.test/news/a", description: "one"), Item(link: "https://senator.test/news/a", description: "two"));
 
-        Assert.Single(await ReadAsync(feed));
+        Assert.Single((await ReadAsync(feed)).Items);
     }
 
     [Fact]
@@ -100,11 +100,47 @@ public sealed class FeedStatementExtractionsTests
     {
         var feed = Feed(Item(link: "https://senator.test/news/a", description: "<img src=x>"));
 
-        Assert.Empty(await FeedStatementExtractions.ReadAsync(feed, Capture, Request, new Extractor(_ => " "), default));
+        Assert.Empty((await FeedStatementExtractions.ReadAsync(feed, Capture, Request, new Extractor(_ => " "), default)).Items);
     }
 
-    private static Task<IReadOnlyList<FeedItemExtraction>> ReadAsync(byte[] feed) =>
-        FeedStatementExtractions.ReadAsync(feed, Capture, Request, new Extractor(markup => "text of " + markup), default);
+    [Fact]
+    public async Task OneItemWithMarkupThatCannotBeReadIsSkippedAndCountedSoItDoesNotBlockTheOtherItems()
+    {
+        var feed = Feed(Item(link: "https://senator.test/news/bad", description: "bad"), Item(link: "https://senator.test/news/good", description: "good"));
+        var extractor = new Extractor(markup => markup == "bad" ? throw new InvalidDataException("unreadable") : markup);
+
+        var reading = await FeedStatementExtractions.ReadAsync(feed, Capture, Request, extractor, default);
+
+        Assert.Equal(["https://senator.test/news/good"], reading.Items.Select(item => item.Link));
+        Assert.Equal(1, reading.UnreadableItems);
+    }
+
+    [Fact]
+    public async Task OnlyTheNewestLinksUpToTheCandidateLimitAreReadSoAHugeFeedCannotCostUnboundedWork()
+    {
+        var feed = Feed(
+            Item(link: "https://senator.test/news/old", description: "o", pubDate: "Mon, 26 Oct 2026 10:00:00 +0000"),
+            Item(link: "https://senator.test/news/new", description: "n", pubDate: "Wed, 28 Oct 2026 10:00:00 +0000"),
+            Item(link: "https://senator.test/news/new", description: "n again", pubDate: "Tue, 27 Oct 2026 10:00:00 +0000"));
+        var limited = new CollectionRequest
+        {
+            JobId = "job",
+            SourceId = "senator",
+            Mode = CollectionMode.Feed,
+            Url = FeedUrl,
+            AllowedOrigin = "https://senator.test",
+            AllowedPathPrefix = "/news",
+            ArtifactDirectory = Path.GetFullPath("captures"),
+            MaxCandidates = 1
+        };
+
+        var links = (await ReadAsync(feed, limited)).Items.Select(item => item.Link);
+
+        Assert.Equal(["https://senator.test/news/new"], links);
+    }
+
+    private static Task<FeedStatementReading> ReadAsync(byte[] feed, CollectionRequest? request = null) =>
+        FeedStatementExtractions.ReadAsync(feed, Capture, request ?? Request, new Extractor(markup => "text of " + markup), default);
 
     private sealed class Extractor(Func<string, string> fragment) : IDocumentTextExtractor
     {

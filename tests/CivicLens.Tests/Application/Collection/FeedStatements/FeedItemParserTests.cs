@@ -51,12 +51,11 @@ public sealed class FeedItemParserTests
     }
 
     [Fact]
-    public void AFeedWithMoreItemsThanTheLimitIsRefusedSoItsSizeStaysBounded()
+    public void ADocumentOverTheCharacterLimitIsRefusedSoAFeedCannotExhaustMemory()
     {
-        var feed = Feed(Item(link: "https://x.test/a", description: "1"), Item(link: "https://x.test/b", description: "2"));
+        var feed = Feed(Item(link: "https://x.test/a", description: new string('a', 10_000_001)));
 
-        Assert.Throws<InvalidDataException>(() => FeedItemParser.Parse(feed, 1));
-        Assert.Equal(2, FeedItemParser.Parse(feed, 2).Count);
+        Assert.Throws<InvalidDataException>(() => Parse(feed));
     }
 
     [Fact]
@@ -64,16 +63,16 @@ public sealed class FeedItemParserTests
     {
         var feed = Encoding.UTF8.GetBytes("""<?xml version="1.0"?><!DOCTYPE rss [<!ENTITY a "aaaa">]><rss version="2.0"><channel/></rss>""");
 
-        Assert.Throws<InvalidDataException>(() => FeedItemParser.Parse(feed, 10));
+        Assert.Throws<InvalidDataException>(() => FeedItemParser.Parse(feed));
     }
 
     [Fact]
     public void ADocumentThatIsNotRssIsRefused()
     {
-        Assert.Throws<InvalidDataException>(() => FeedItemParser.Parse(Encoding.UTF8.GetBytes("<feed/>"), 10));
+        Assert.Throws<InvalidDataException>(() => FeedItemParser.Parse(Encoding.UTF8.GetBytes("<feed/>")));
     }
 
-    private static IReadOnlyList<FeedItem> Parse(byte[] feed) => FeedItemParser.Parse(feed, 100);
+    private static IReadOnlyList<FeedItem> Parse(byte[] feed) => FeedItemParser.Parse(feed);
 
     internal static byte[] Feed(params string[] items) => Encoding.UTF8.GetBytes(
         "<?xml version=\"1.0\"?><rss version=\"2.0\" xmlns:content=\"http://purl.org/rss/1.0/modules/content/\"><channel><title>t</title>"

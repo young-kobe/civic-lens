@@ -16,7 +16,8 @@ public sealed class PublishedStatementTests
         Assert.Equal(1, PublicationProtocol.SchemaVersion);
         Assert.True(json == """{"recordId":"4444444444444444444444444444444444444444444444444444444444444444","revisionNumber":1,"headline":"Headline","summary":"Summary","statementDate":"2026-01-02","statementDateEvidence":{"extractionId":"3333333333333333333333333333333333333333333333333333333333333333","start":0,"length":5,"quote":"Mayor"},"speakers":[{"id":"mayor","name":"Mayor Example"}],"otherSpeakers":["Council Member"],"issueIds":["housing"],"policyAreaIds":["land-use"],"quotations":[{"extractionId":"3333333333333333333333333333333333333333333333333333333333333333","start":15,"length":15,"quote":"housing matters","kind":"directQuotation"}],"billNumbers":["HB 12"],"source":{"extractionId":"3333333333333333333333333333333333333333333333333333333333333333","url":"https://example.test/article","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Mayor said: \uD83D\uDE00 housing matters."},"articleUrl":null,"approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00","corrections":[]}""",
             "The published statement JSON changed. Bump PublicationProtocol.SchemaVersion, update the version table " +
-            "in docs/architecture.md, then update this test. Actual: " + json);
+            "in docs/architecture.md, then update this test. A bump is not needed for an optional field that old files " +
+            "omit and that reads as null, such as ArticleUrl. Any other change needs a bump. Actual: " + json);
     }
 
     [Fact]

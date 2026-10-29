@@ -44,33 +44,41 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
         return extraction;
     }
 
-    public async Task<int> SaveFeedItemsAsync(IReadOnlyList<FeedItemExtraction> newestFirst, int maximumNew,
+    public async Task SaveFeedItemsAsync(IReadOnlyList<FeedItemExtraction> newestFirst, int maximumNew,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(newestFirst);
-        if (newestFirst.Count == 0) return 0;
+        if (newestFirst.Count == 0) return;
         var feed = newestFirst[0].Extraction;
         if (newestFirst.Any(item => !item.Extraction.SourceAttempt.Equals(feed.SourceAttempt)))
             throw new ArgumentException("Feed items must share one captured attempt.", nameof(newestFirst));
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var captured = await RequireImportedAsync(db, feed, cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        await LockFeedAttemptAsync(db, captured, cancellationToken);
         var known = await PostgresStatementCandidateRegistration.ReadKnownAsync(db, captured, newestFirst.Select(item => item.Link),
             cancellationToken);
         var remaining = maximumNew - known.RegisteredForAttempt;
-        var registered = 0;
+        var registeredTexts = new List<string>();
         foreach (var item in newestFirst)
         {
-            if (registered >= remaining) break;
+            if (registeredTexts.Count >= remaining) break;
             if (known.Links.Contains(item.Link)) continue;
             if (await InsertOrReadReplayAsync(db, captured, item.Extraction, cancellationToken) is not null) continue;
             if (await PostgresStatementCandidateRegistration.RegisterFeedItemAsync(db, captured, item.Link,
-                    item.Extraction.ExtractionId, item.Extraction.Text, cancellationToken))
-                registered++;
+                    item.Extraction.ExtractionId, cancellationToken))
+                registeredTexts.Add(item.Extraction.Text);
         }
+        await PostgresStatementCandidateRegistration.RaiseAnalysisPrioritiesAsync(db, captured, registeredTexts, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return registered;
     }
+
+    // Two saves of one attempt run one after the other, so the count of the bound is read after the first save commits.
+    // NO KEY UPDATE still lets job and extraction rows reference the attempt, and no other writer locks this row.
+    private static Task<int> LockFeedAttemptAsync(CollectionAttemptDbContext db, CapturedAttemptResult feed,
+        CancellationToken cancellationToken) =>
+        db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM collection_attempts WHERE attempt_id = {feed.AttemptId} FOR NO KEY UPDATE", cancellationToken);
 
     private static async Task<CapturedAttemptResult> RequireImportedAsync(CollectionAttemptDbContext db,
         DocumentExtraction extraction, CancellationToken cancellationToken)

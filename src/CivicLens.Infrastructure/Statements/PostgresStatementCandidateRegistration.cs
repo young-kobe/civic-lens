@@ -18,12 +18,19 @@ internal static class PostgresStatementCandidateRegistration
         string extractionId, string articleText, CancellationToken cancellationToken)
     {
         if (!await CameFromDiscoveryAdmissionAsync(db, attempt.AttemptId, cancellationToken)) return;
-        _ = await InsertAsync(db, attempt, attempt.RequestedUrl, extractionId, articleText, cancellationToken);
+        if (await InsertAsync(db, attempt, attempt.RequestedUrl, extractionId, cancellationToken))
+            await RaiseAnalysisPrioritiesAsync(db, attempt, [articleText], cancellationToken);
     }
 
     public static Task<bool> RegisterFeedItemAsync(CollectionAttemptDbContext db, CapturedAttemptResult feed, string link,
-        string extractionId, string articleText, CancellationToken cancellationToken) =>
-        InsertAsync(db, feed, link, extractionId, articleText, cancellationToken);
+        string extractionId, CancellationToken cancellationToken) =>
+        InsertAsync(db, feed, link, extractionId, cancellationToken);
+
+    // One call per attempt: rows lock in key order inside it, so two writers cannot lock rows in opposite orders.
+    public static Task RaiseAnalysisPrioritiesAsync(CollectionAttemptDbContext db, CapturedAttemptResult attempt,
+        IReadOnlyCollection<string> articleTexts, CancellationToken cancellationToken) =>
+        StatementBillMentions.RaiseRowsNamedByAsync(db, DateOnly.FromDateTime(attempt.ObservedAt.UtcDateTime), articleTexts,
+            cancellationToken);
 
     public static async Task<KnownFeedCandidates> ReadKnownAsync(CollectionAttemptDbContext db, CapturedAttemptResult feed,
         IEnumerable<string> links, CancellationToken cancellationToken)
@@ -39,7 +46,7 @@ internal static class PostgresStatementCandidateRegistration
     }
 
     private static async Task<bool> InsertAsync(CollectionAttemptDbContext db, CapturedAttemptResult attempt, string url,
-        string extractionId, string articleText, CancellationToken cancellationToken)
+        string extractionId, CancellationToken cancellationToken)
     {
         var candidateId = PostgresCollectionJobStore.HashCandidate(attempt.SourceId, url);
         var now = (await DatabaseClock.ReadAsync(db, cancellationToken)).Ticks;
@@ -53,8 +60,6 @@ internal static class PostgresStatementCandidateRegistration
             INSERT INTO statement_analysis (candidate_id, task, status, fence, attempts, reserved_tokens, created_at_utc_ticks, priority)
             VALUES ({candidateId}, {GateTask}, 'Pending', 0, 0, 0, {now}, {ReviewPriority.Highest})
             """, cancellationToken);
-        await StatementBillMentions.RaiseRowsNamedByAsync(db, DateOnly.FromDateTime(attempt.ObservedAt.UtcDateTime), articleText,
-            cancellationToken);
         return true;
     }
 

@@ -200,9 +200,8 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
         var feed = await seeder.ImportAsync("feed", FeedUrl, CandidateJobKind.None);
         var items = Items(feed, "a", "b", "c");
 
-        var registered = await extractions.SaveFeedItemsAsync(items, 2, CancellationToken.None);
+        await extractions.SaveFeedItemsAsync(items, 2, CancellationToken.None);
 
-        Assert.Equal(2, registered);
         Assert.Equal([(feed.SourceId, ItemUrl("a"), items[0].Extraction.ExtractionId, feed.AttemptId),
                 (feed.SourceId, ItemUrl("b"), items[1].Extraction.ExtractionId, feed.AttemptId)],
             (await CandidatesAsync()).OrderBy(row => row.Url, StringComparer.Ordinal));
@@ -217,9 +216,8 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
         var items = Items(feed, "a", "b", "c");
         await extractions.SaveFeedItemsAsync(items, 2, CancellationToken.None);
 
-        var replayed = await extractions.SaveFeedItemsAsync(items, 2, CancellationToken.None);
+        await extractions.SaveFeedItemsAsync(items, 2, CancellationToken.None);
 
-        Assert.Equal(0, replayed);
         Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM statement_candidates"));
     }
 
@@ -230,9 +228,8 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
         await extractions.SaveAsync(new DocumentExtraction(page, "p", "Page text."), CancellationToken.None);
         var feed = await seeder.ImportAsync("feed", FeedUrl, CandidateJobKind.None);
 
-        var registered = await extractions.SaveFeedItemsAsync(Items(feed, "a"), 5, CancellationToken.None);
+        await extractions.SaveFeedItemsAsync(Items(feed, "a"), 5, CancellationToken.None);
 
-        Assert.Equal(0, registered);
         Assert.Equal([page.AttemptId], (await CandidatesAsync()).Select(row => row.Attempt));
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM document_extractions"));
     }
@@ -249,6 +246,57 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
 
         Assert.Equal([(feed.SourceId, ItemUrl("a"), items[0].Extraction.ExtractionId, feed.AttemptId)], await CandidatesAsync());
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM statement_analysis"));
+    }
+
+    [Fact]
+    public async Task LinksThatAlreadyHaveACandidateDoNotUseTheBoundSoNewerItemsStillRegister()
+    {
+        var page = await seeder.ImportAsync("Page text.", ItemUrl("a"), CandidateJobKind.DiscoveryAdmitted);
+        await extractions.SaveAsync(new DocumentExtraction(page, "p", "Page text."), CancellationToken.None);
+        var feed = await seeder.ImportAsync("feed", FeedUrl, CandidateJobKind.None);
+
+        await extractions.SaveFeedItemsAsync(Items(feed, "a", "b"), 1, CancellationToken.None);
+
+        Assert.Equal([ItemUrl("a"), ItemUrl("b")], (await CandidatesAsync()).Select(row => row.Url).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task FeedItemsThatNameDifferentBillsRaiseTheirVoteRowsAndLeaveOtherBillsAlone()
+    {
+        await SeedVoteRowAsync(new string('1', 64), roll: 1, congress: 119, billNumber: 14);
+        await SeedVoteRowAsync(new string('2', 64), roll: 2, congress: 119, billNumber: 15);
+        await SeedVoteRowAsync(new string('3', 64), roll: 3, congress: 119, billNumber: 16);
+        var feed = await seeder.ImportAsync("feed", FeedUrl, CandidateJobKind.None, observedAt: In119th);
+        FeedItemExtraction Item(string name, string text, int part) =>
+            new(ItemUrl(name), new DocumentExtraction(feed, "feed-v1", text, part: part));
+
+        await extractions.SaveFeedItemsAsync([Item("a", "I back H.Con.Res. 14.", 0), Item("b", "I back H.Con.Res. 15.", 1)], 5,
+            CancellationToken.None);
+
+        Assert.Equal([1L, 1L, 3L], await PrioritiesOfVoteRowsAsync());
+    }
+
+    [Fact]
+    public async Task TwoParallelSavesOfOneFeedAttemptTogetherRegisterNoMoreThanTheLimit()
+    {
+        var feed = await seeder.ImportAsync("feed", FeedUrl, CandidateJobKind.None);
+        var names = Enumerable.Range(0, 6).Select(index => "item" + index).ToArray();
+        var items = Items(feed, names);
+
+        await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => extractions.SaveFeedItemsAsync(items, 2, CancellationToken.None)));
+
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM statement_candidates"));
+    }
+
+    private async Task<List<long>> PrioritiesOfVoteRowsAsync()
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("SELECT priority::bigint FROM vote_analysis ORDER BY candidate_id", connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        var rows = new List<long>();
+        while (await reader.ReadAsync()) rows.Add(reader.GetInt64(0));
+        return rows;
     }
 
     private static string ItemUrl(string name) => "https://example.test/pages/" + name;

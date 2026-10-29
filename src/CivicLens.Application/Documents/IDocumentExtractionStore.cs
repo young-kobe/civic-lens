@@ -15,7 +15,7 @@ public interface IDocumentExtractionStore
     /// <summary>
     /// Registers a statement candidate for each feed item that has none, newest first, and saves the extraction of each.
     /// All items share one imported captured feed attempt. The attempt gets at most <paramref name="maximumNew"/>
-    /// candidates in total, so a replay never adds more. Returns the count that this call registered.
+    /// candidates in total, so a replay never adds more.
     /// </summary>
-    Task<int> SaveFeedItemsAsync(IReadOnlyList<FeedItemExtraction> newestFirst, int maximumNew, CancellationToken cancellationToken);
+    Task SaveFeedItemsAsync(IReadOnlyList<FeedItemExtraction> newestFirst, int maximumNew, CancellationToken cancellationToken);
 }

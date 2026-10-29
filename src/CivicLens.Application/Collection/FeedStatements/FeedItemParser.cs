@@ -7,12 +7,10 @@ public static class FeedItemParser
 {
     private static readonly XNamespace Content = "http://purl.org/rss/1.0/modules/content/";
 
-    public static IReadOnlyList<FeedItem> Parse(ReadOnlySpan<byte> xml, int maximumItems)
+    public static IReadOnlyList<FeedItem> Parse(ReadOnlySpan<byte> xml)
     {
         var root = BoundedXml.LoadRoot(xml, "Feed", "rss");
         var elements = root.Elements("channel").Elements("item").ToArray();
-        if (elements.Length > maximumItems)
-            throw new InvalidDataException("Feed has more items than the request allows.");
         var items = new List<FeedItem>();
         for (var index = 0; index < elements.Length; index++)
             if (ItemOf(index, elements[index]) is { } item) items.Add(item);

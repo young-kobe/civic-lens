@@ -16,8 +16,7 @@ internal static class BoundedXml
             {
                 DtdProcessing = DtdProcessing.Prohibit,
                 XmlResolver = null,
-                MaxCharactersInDocument = MaximumCharacters,
-                MaxCharactersFromEntities = 0
+                MaxCharactersInDocument = MaximumCharacters
             };
             using var reader = XmlReader.Create(stream, settings);
             var root = XDocument.Load(reader).Root;

@@ -128,12 +128,12 @@ public sealed class JobPreparationFeedStatementTests
 
         public Task<DocumentExtraction> SaveAsync(DocumentExtraction extraction, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-        public Task<int> SaveFeedItemsAsync(IReadOnlyList<FeedItemExtraction> newestFirst, int maximumNew, CancellationToken cancellationToken)
+        public Task SaveFeedItemsAsync(IReadOnlyList<FeedItemExtraction> newestFirst, int maximumNew, CancellationToken cancellationToken)
         {
             SaveCalls++;
             Items.AddRange(newestFirst);
             Limit = maximumNew;
-            return Task.FromResult(newestFirst.Count);
+            return Task.CompletedTask;
         }
     }
 

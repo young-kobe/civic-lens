@@ -80,8 +80,11 @@ public sealed class JobPreparation(
                     deferred += result.DeferredCount;
                     duplicates += result.DuplicateCount;
                     if (configured.StatementTextInFeed)
-                        preparationError ??= await SaveFeedStatementsAsync(configured, jobAttempt.Request, captured, artifactRoot,
+                    {
+                        var feedError = await SaveFeedStatementsAsync(configured, jobAttempt.Request, captured, artifactRoot,
                             cancellationToken);
+                        preparationError ??= feedError;
+                    }
                 }
                 else preparationError = stored.Discovery is null ? NotModified : "discoveryUnavailable";
             }
@@ -98,16 +101,19 @@ public sealed class JobPreparation(
         CapturedAttemptResult feed, string artifactRoot, CancellationToken cancellationToken)
     {
         var body = await bodies.ReadAsync(feed, artifactRoot, cancellationToken);
-        IReadOnlyList<FeedItemExtraction> items;
+        FeedStatementReading reading;
         try
         {
-            items = await FeedStatementExtractions.ReadAsync(body, feed, request, textExtractor, cancellationToken);
+            reading = await FeedStatementExtractions.ReadAsync(body, feed, request, textExtractor, cancellationToken);
         }
         catch (InvalidDataException)
         {
             return FeedStatementTextInvalid;
         }
-        _ = await extractions.SaveFeedItemsAsync(items, configured.MaximumNewFeedStatements, cancellationToken);
+        if (reading.UnreadableItems > 0)
+            logger.LogWarning("Feed {SourceId} skipped {Skipped} items whose markup could not be read.",
+                feed.SourceId, reading.UnreadableItems);
+        await extractions.SaveFeedItemsAsync(reading.Items, configured.MaximumNewFeedStatements, cancellationToken);
         return null;
     }
 

@@ -170,7 +170,7 @@ public sealed class ExtractDocumentTests
             return Task.FromResult(extraction);
         }
 
-        public Task<int> SaveFeedItemsAsync(IReadOnlyList<FeedItemExtraction> newestFirst, int maximumNew, CancellationToken cancellationToken) =>
+        public Task SaveFeedItemsAsync(IReadOnlyList<FeedItemExtraction> newestFirst, int maximumNew, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }
 
