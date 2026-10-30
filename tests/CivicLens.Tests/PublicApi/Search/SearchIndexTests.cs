@@ -287,7 +287,7 @@ public sealed class SearchIndexTests(PostgresCollection postgres) : IAsyncLifeti
             SearchSortKey.Date => ReleaseRecordOrder.Day(entry).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
             SearchSortKey.Published => entry.FirstPublishedAtUtc.UtcDateTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
             SearchSortKey.Headline => entry.Headline.ToLowerInvariant(),
-            _ => RecordKinds.Text(entry.Kind)
+            _ => PublicationProtocol.KindText(entry.Kind)
         };
         var entries = records.Select(record => record.Entry);
         var ordered = descending
