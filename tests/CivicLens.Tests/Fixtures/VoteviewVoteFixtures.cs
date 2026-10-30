@@ -74,6 +74,11 @@ internal static class VoteviewVoteFixtures
         TimeoutSeconds = 30
     };
 
+    public const string RetiredSenateGovMenuUrl = "https://www.senate.gov/legislative/LIS/roll_call_lists/vote_menu_119_1.xml";
+
+    public static CollectionConfiguration RetiredSenateGovConfiguration() =>
+        Configuration() with { Sources = [RetiredSenateGovSource(enabled: true)] };
+
     public static WatchedSourceConfiguration RetiredSenateGovSource(bool enabled) => new()
     {
         Id = "senate-votes",

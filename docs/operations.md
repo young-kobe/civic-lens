@@ -183,7 +183,9 @@ ORDER BY v.congress, v.session_number, v.roll_call_number;
 
 ### Voteview Senate vote stream
 
-The Senate votes come from Voteview. senate.gov blocks the collector with a 403, so no other Senate vote source exists. The source `voteview-senate-votes` in `config/federal-coverage.json` ships with `enabled: false`. A configuration may enable only one Voteview source. The parser name `senateVoteList` still reads in a stored configuration, but no configuration can enable it.
+The Senate votes come from Voteview. senate.gov blocks the collector with a 403, so no other Senate vote source exists. The source `voteview-senate-votes` in `config/federal-coverage.json` ships with `enabled: false`. A configuration may enable only one Voteview source. The parser name `senateVoteList` still reads in a stored configuration, but the Host refuses a live configuration file that enables it.
+
+Before you update a deploy that has the old `senate-votes` source, set `"enabled":false` on the `senate-votes` line in `/srv/civic-lens/config/collection.json`, or remove that line. Do this before you start the new release. The new release stops with an error while the line is enabled.
 
 Do the steps on the machine that runs the worker. On production, this is `/srv/civic-lens/config/collection.json`. Production steps are for the owner to run.
 

@@ -23,15 +23,12 @@ public sealed class VoteviewSourceConfigurationTests
     }
 
     [Fact]
-    public void TheRetiredSenateGovSourceCannotBeEnabledButItsStoredDisabledFormStillValidates()
+    public void AStoredRevisionWithTheRetiredSenateGovSourceStillValidatesWhetherItIsEnabledOrNot()
     {
         var configuration = VoteviewVoteFixtures.Configuration();
 
         (configuration with { Sources = [.. configuration.Sources, VoteviewVoteFixtures.RetiredSenateGovSource(enabled: false)] }).Validate();
-        Assert.Throws<ArgumentException>((configuration with
-        {
-            Sources = [.. configuration.Sources, VoteviewVoteFixtures.RetiredSenateGovSource(enabled: true)]
-        }).Validate);
+        (configuration with { Sources = [.. configuration.Sources, VoteviewVoteFixtures.RetiredSenateGovSource(enabled: true)] }).Validate();
     }
 
     [Fact]

@@ -890,6 +890,32 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         await Assert.ThrowsAsync<InvalidDataException>(() => jobs.GetAsync(job.JobId, default));
     }
 
+    [Fact]
+    public async Task AStoredEnabledSenateGovRevisionAndItsRetiredJobStillLoadButNoNewJobIsMadeForIt()
+    {
+        var retired = VoteviewVoteFixtures.RetiredSenateGovSource(enabled: true);
+        var page = new WatchedSourceConfiguration
+        {
+            Id = "page",
+            Coverage = [new SourceCoverageConfiguration { PersonId = "with-id-a" }],
+            Url = "https://example.test/page",
+            AllowedOrigin = "https://example.test",
+            AllowedPathPrefix = "/"
+        };
+        var configuration = VoteviewVoteFixtures.Configuration() with { Sources = [retired, page] };
+        var senate = new ConfiguredCollectionSource(configuration, retired.Id, VoteviewVoteFixtures.Backfill);
+        var stored = await jobs.EnqueueAsync(new ConfiguredCollectionSource(configuration, "page", VoteviewVoteFixtures.Backfill), "stored-revision", default);
+        var retiredJob = senate.CreateApiJobDefinition(ApiResource.SenateVoteMenu, VoteviewVoteFixtures.RetiredSenateGovMenuUrl,
+            VoteviewVoteFixtures.Backfill, CollectionJobPriority.Check);
+        await SqlAsync($"UPDATE collection_jobs SET source_id = '{retired.Id}', definition_json = '" +
+            JsonSerializer.Serialize(retiredJob with { ConfigurationRevision = null }, CollectionProtocol.JsonOptions) + $"' WHERE job_id = '{stored.JobId}'");
+
+        var loaded = Assert.Single(await jobs.ListAsync(10, default));
+
+        Assert.Equal((retired.Id, ApiResource.SenateVoteMenu), (loaded.Definition.SourceId, loaded.Definition.ApiResource));
+        await Assert.ThrowsAsync<ArgumentException>(() => jobs.EnqueueAsync(senate, "new-retired-job", default));
+    }
+
     private static ConfiguredCollectionSource RevisionSource()
     {
         var configuration = new CollectionConfiguration

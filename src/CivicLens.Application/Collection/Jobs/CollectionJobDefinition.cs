@@ -113,6 +113,7 @@ public sealed record CollectionJobDefinition
         {
             ApiParser.CongressBillList => MatchesBillResource(resource, source.Url, url),
             ApiParser.CongressHouseVoteList => MatchesHouseVoteResource(resource, source.Url, url),
+            ApiParser.SenateVoteList => resource is Collection.ApiResource.SenateVoteMenu or Collection.ApiResource.SenateVote,
             ApiParser.VoteviewSenateVoteList => VoteviewUrl.TryReadCongress(source.Url, resource, url) is not null,
             ApiParser.CongressLegislators => resource == Collection.ApiResource.MemberRoster && url == source.Url,
             ApiParser.CongressLegislatorsExecutive => resource == Collection.ApiResource.ExecutiveRoster && url == source.Url,

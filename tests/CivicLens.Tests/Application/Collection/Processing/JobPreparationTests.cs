@@ -562,7 +562,7 @@ public sealed class JobPreparationTests
     [InlineData(ApiResource.SenateVote)]
     public async Task AJobOfARetiredSenateGovResourceIsBlockedBecauseNoReaderRemainsAndStoredJobsStillParse(ApiResource resource)
     {
-        var result = await Prepare(resource, SourceUrl, "<xml/>", null);
+        var result = await Prepare(resource, VoteviewVoteFixtures.RetiredSenateGovMenuUrl, "<xml/>", null);
 
         Assert.Equal(EvidenceStatus.Blocked, result!.Status);
         Assert.Equal("retiredApiResource", result.ErrorCode);
@@ -613,15 +613,16 @@ public sealed class JobPreparationTests
             ApiResource.MemberPhoto => new ConfiguredCollectionSource(
                 MemberPhotoFixtures.Configuration(RosterFixtures.Person("a-person", "A Person", MemberPhotoFixtures.Bioguide)),
                 MemberPhotoFixtures.SourceId, Backfill),
+            ApiResource.SenateVoteMenu or ApiResource.SenateVote =>
+                new ConfiguredCollectionSource(VoteviewVoteFixtures.RetiredSenateGovConfiguration(), "senate-votes", Backfill),
             ApiResource.VoteviewRollCalls or ApiResource.VoteviewMembers or ApiResource.VoteviewVotes =>
                 new ConfiguredCollectionSource(VoteviewVoteFixtures.Configuration(), VoteviewVoteFixtures.SourceId, Backfill),
             _ when IsHouseVote(resource) => new ConfiguredCollectionSource(HouseVoteFixtures.Configuration(), HouseVoteFixtures.SourceId, Backfill),
             _ => new ConfiguredCollectionSource(CongressBillSourceConfigurationTests.Configuration(), "congress-bills", Backfill)
         };
-        var isRetired = resource is { } named && RetiredResources.Contains(named);
-        var definition = configured.CreateApiJobDefinition(resource is null || isRetired ? ApiResource.BillList : resource.Value, resource is null || isRetired ? ListUrl : url,
+        var definition = configured.CreateApiJobDefinition(resource ?? ApiResource.BillList, resource is null ? ListUrl : url,
             Backfill, CollectionJobPriority.Check);
-        if (resource is null || isRetired) definition = definition with { ApiResource = resource };
+        if (resource is null) definition = definition with { ApiResource = null };
         var attempt = new CollectionJobAttempt("attempt", definition.CreateRequest("job", Path.GetFullPath("captures")),
             new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
         var job = new CollectionJobRecord("job", definition, "key", CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,

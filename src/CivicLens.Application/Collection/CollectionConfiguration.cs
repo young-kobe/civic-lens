@@ -133,7 +133,7 @@ public sealed record CollectionConfiguration
     {
         IEnumerable<string> ids = source.ApiParser switch
         {
-            ApiParser.CongressBillList or ApiParser.CongressHouseVoteList or ApiParser.VoteviewSenateVoteList => asOf < source.BackfillFrom ? [] : BioguidePersonIds(),
+            ApiParser.CongressBillList or ApiParser.CongressHouseVoteList or ApiParser.SenateVoteList or ApiParser.VoteviewSenateVoteList => asOf < source.BackfillFrom ? [] : BioguidePersonIds(),
             ApiParser.CongressLegislators or ApiParser.CongressLegislatorsExecutive or ApiParser.MemberPhotos => [],
             null => source.Coverage!.Where(coverage => new DateRange(coverage.StartsOn, coverage.EndsBefore).Contains(asOf))
                 .Select(coverage => coverage.PersonId),
@@ -178,8 +178,6 @@ public sealed record CollectionConfiguration
                 ValidateCongressApiSource(source);
                 break;
             case ApiParser.SenateVoteList:
-                if (source.Enabled)
-                    throw new ArgumentException($"Source '{source.Id}' uses the retired senate.gov parser and cannot be enabled.");
                 break;
             case ApiParser.VoteviewSenateVoteList:
                 ValidateVoteviewSource(source);

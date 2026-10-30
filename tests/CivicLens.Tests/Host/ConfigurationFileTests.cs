@@ -1,3 +1,7 @@
+using System.Text.Json;
+using CivicLens.Application.Configuration;
+using CivicLens.Tests.Fixtures;
+
 namespace CivicLens.Tests.Host;
 
 public sealed class ConfigurationFileTests
@@ -25,6 +29,29 @@ public sealed class ConfigurationFileTests
 
             Assert.Equal(exitCode, result.ExitCode);
             Assert.Equal(exitCode != 0, result.Error.Contains("1 MB limit", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task TheLiveFileRefusesAnEnabledSenateGovSourceBecauseItsReaderIsGoneAndStoredRevisionsMustKeepLoading()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "civic-config-senate-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var enabled = Path.Combine(directory, "enabled.json");
+            var disabled = Path.Combine(directory, "disabled.json");
+            var configuration = VoteviewVoteFixtures.RetiredSenateGovConfiguration();
+            await File.WriteAllTextAsync(enabled, JsonSerializer.Serialize(configuration, ConfigurationJson.Options));
+            await File.WriteAllTextAsync(disabled, JsonSerializer.Serialize(
+                configuration with { Sources = [configuration.Sources.Single() with { Enabled = false }] }, ConfigurationJson.Options));
+
+            Assert.Equal(0, (await HostProcess.RunAsync(null, "validate", disabled)).ExitCode);
+            Assert.Equal(2, (await HostProcess.RunAsync(null, "validate", enabled)).ExitCode);
         }
         finally
         {

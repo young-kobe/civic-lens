@@ -260,6 +260,7 @@ public sealed class ConfiguredCollectionSource
             case ApiParser.CongressLegislatorsExecutive:
                 return new ApiTarget(ApiResource.ExecutiveRoster, source.Url, CollectionJobPriority.Check);
             case ApiParser.MemberPhotos:
+            case ApiParser.SenateVoteList:
                 return null;
             default:
                 throw new ArgumentOutOfRangeException(nameof(source));
