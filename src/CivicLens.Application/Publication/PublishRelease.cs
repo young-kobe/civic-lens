@@ -51,6 +51,7 @@ public sealed class PublishRelease
         ReviewAuthorization.RequireOwner(actor, allowCode: true);
         var byCode = ReviewAuthor.IsCode(actor.Subject);
         var references = ValidateRequest(request);
+        if (byCode && references.IsEmpty) throw new ArgumentException("The code subject publishes at least one record.", nameof(request));
         var notes = PublicationCorrections.ValidateNotes(request.Notes, references, byCode);
         var withdrawalNotes = PublicationWithdrawals.ValidateNotes(request.Withdrawals, byCode);
         var payloadHash = ReviewValidation.HashPayload(request);

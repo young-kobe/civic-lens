@@ -31,7 +31,7 @@ public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationS
             {
                 return published;
             }
-            catch (Exception exception) when (exception is WithdrawnFactException or MissingCorrectionNoteException or CorrectionLimitException)
+            catch (Exception exception) when (exception is WithdrawnRecordException or MissingCorrectionNoteException)
             {
                 var record = UnpublishableRecord.Of(exception)!;
                 skipped.Add(record);

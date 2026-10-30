@@ -195,7 +195,7 @@ public sealed class PublishWithdrawalsTests
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong."));
         scenario.ReviseAction(action, 2);
 
-        var error = await Assert.ThrowsAsync<WithdrawnFactException>(() =>
+        var error = await Assert.ThrowsAsync<WithdrawnRecordException>(() =>
             scenario.Publisher().ExecuteAsync(Code, PublicationScenario.Request("k3", Reference(action))));
 
         Assert.Contains($"action:{action}", error.Message);
@@ -207,7 +207,7 @@ public sealed class PublishWithdrawalsTests
         var (scenario, action) = await PublishedActionAsync();
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong."));
 
-        await Assert.ThrowsAsync<WithdrawnFactException>(() =>
+        await Assert.ThrowsAsync<WithdrawnRecordException>(() =>
             scenario.Publisher().ExecuteAsync(Code, PublicationScenario.Request("k3", Reference(action))));
     }
 

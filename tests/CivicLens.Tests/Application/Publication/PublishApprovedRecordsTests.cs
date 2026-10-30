@@ -19,6 +19,18 @@ public sealed class PublishApprovedRecordsTests
     private static readonly ReviewActor Code = new(ReviewAuthor.CodeSubject, ReviewRole.Owner);
 
     [Fact]
+    public async Task TheCodeSubjectCannotPublishAnEmptyRequestBecauseTheWorkerPublishesEveryKindOfRecord()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('a', ApprovedByCode('a'));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, action)], "k1"));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(Code, new([], "k2")));
+
+        Assert.Single(scenario.Publications.Committed);
+    }
+
+    [Fact]
     public async Task TheCodeSubjectCanPublishAnyKindBecauseTheWorkerPublishesEveryApprovedRecord()
     {
         var scenario = new PublicationScenario();
@@ -42,14 +54,14 @@ public sealed class PublishApprovedRecordsTests
     }
 
     [Fact]
-    public async Task ATickPublishesEveryReadyFactInBatchesOfTheReleaseLimitAndThenStops()
+    public async Task ATickPublishesEveryReadyRecordInBatchesOfTheReleaseLimitAndThenStops()
     {
         var scenario = new PublicationScenario();
         var total = PublishRelease.MaximumRecords + 6;
         AddReadyActions(scenario, total);
         ListedUntilPublished(scenario);
 
-        var published = await Facts(scenario).ExecuteAsync(default);
+        var published = await Publisher(scenario).ExecuteAsync(default);
 
         Assert.Equal(total, published);
         Assert.Equal([PublishRelease.MaximumRecords, total], scenario.Publications.Committed.Select(release => release.RecordCount));
@@ -61,7 +73,7 @@ public sealed class PublishApprovedRecordsTests
     {
         var scenario = new PublicationScenario();
 
-        Assert.Equal(0, await Facts(scenario).ExecuteAsync(default));
+        Assert.Equal(0, await Publisher(scenario).ExecuteAsync(default));
 
         Assert.Empty(scenario.Publications.Committed);
         Assert.Equal(0, scenario.Releases.BeginCount);
@@ -75,7 +87,7 @@ public sealed class PublishApprovedRecordsTests
         scenario.Statements.Unpublished.Add(StatementCandidate(statement));
         ListedUntilPublished(scenario);
 
-        var published = await Facts(scenario).ExecuteAsync(default);
+        var published = await Publisher(scenario).ExecuteAsync(default);
 
         Assert.Equal(1, published);
         Assert.Equal([new PublishedRecordReference(PublishedRecordKind.Statement, statement)],
@@ -96,7 +108,7 @@ public sealed class PublishApprovedRecordsTests
         ListedUntilPublished(scenario);
         var logger = new CapturingLogger<PublishApprovedRecords>();
 
-        var published = await Facts(scenario, logger).ExecuteAsync(default);
+        var published = await Publisher(scenario, logger).ExecuteAsync(default);
 
         Assert.Equal(1, published);
         Assert.Equal([fresh], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId));
@@ -118,7 +130,7 @@ public sealed class PublishApprovedRecordsTests
         ListedUntilPublished(scenario);
         var logger = new CapturingLogger<PublishApprovedRecords>();
 
-        var published = await Facts(scenario, logger).ExecuteAsync(default);
+        var published = await Publisher(scenario, logger).ExecuteAsync(default);
 
         Assert.Equal(1, published);
         Assert.Empty(logger.Entries);
@@ -130,9 +142,9 @@ public sealed class PublishApprovedRecordsTests
     public async Task EveryKindKeepsItsShareOfABatchSoOneLargeBacklogDoesNotCrowdOutTheOthers()
     {
         var scenario = new PublicationScenario();
-        AddReadyActions(scenario, PublishRelease.MaximumRecords + 6);
-        var statement = scenario.AddStatement('e');
-        scenario.Statements.Unpublished.Add(StatementCandidate(statement));
+        AddReadyStatements(scenario, PublishRelease.MaximumRecords + 6);
+        var action = scenario.AddAction('a', ApprovedByCode('a'));
+        AddUnpublished(scenario, action);
         ListedUntilPublished(scenario);
         var firstBatch = new List<PublishedRecordReference>();
         var removePublished = scenario.Publications.BeforeServe!;
@@ -143,10 +155,10 @@ public sealed class PublishApprovedRecordsTests
             removePublished();
         };
 
-        await Facts(scenario).ExecuteAsync(default);
+        await Publisher(scenario).ExecuteAsync(default);
 
         Assert.Equal(PublishRelease.MaximumRecords, firstBatch.Count);
-        Assert.Contains(firstBatch, record => record.Kind == PublishedRecordKind.Statement);
+        Assert.Contains(firstBatch, record => record.Kind == PublishedRecordKind.Action);
     }
 
     [Fact]
@@ -158,7 +170,7 @@ public sealed class PublishApprovedRecordsTests
         scenario.Publications.ActiveReleaseNumber = 1;
         AddReadyActions(scenario, 1);
 
-        Assert.Equal(0, await Facts(scenario).ExecuteAsync(default));
+        Assert.Equal(0, await Publisher(scenario).ExecuteAsync(default));
 
         Assert.Equal(2, scenario.Publications.Committed.Count);
     }
@@ -170,7 +182,7 @@ public sealed class PublishApprovedRecordsTests
         var scenario = new PublicationScenario();
         AddReadyActions(scenario, PublishRelease.MaximumRecords + 6);
 
-        await Facts(scenario, beat: TestBeat.Create(store, TimeSpan.Zero)).ExecuteAsync(default);
+        await Publisher(scenario, beat: TestBeat.Create(store, TimeSpan.Zero)).ExecuteAsync(default);
 
         Assert.True(store.Beats >= 2);
     }
@@ -188,7 +200,7 @@ public sealed class PublishApprovedRecordsTests
             scenario.Publications.Committed.Add(new(2, "000002", DateTimeOffset.UnixEpoch, 0));
         };
 
-        var published = await Facts(scenario).ExecuteAsync(default);
+        var published = await Publisher(scenario).ExecuteAsync(default);
 
         Assert.Equal(PublishRelease.MaximumRecords, published);
         Assert.Equal([1, 2], scenario.Publications.Committed.Select(release => release.ReleaseNumber));
@@ -206,7 +218,7 @@ public sealed class PublishApprovedRecordsTests
         ListedUntilPublished(scenario);
         var logger = new CapturingLogger<PublishApprovedRecords>();
 
-        var published = await Facts(scenario, logger).ExecuteAsync(default);
+        var published = await Publisher(scenario, logger).ExecuteAsync(default);
 
         Assert.Equal(2, published);
         Assert.Equal([good, other], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId));
@@ -229,7 +241,7 @@ public sealed class PublishApprovedRecordsTests
         ListedUntilPublished(scenario);
         var logger = new CapturingLogger<PublishApprovedRecords>();
 
-        var published = await Facts(scenario, logger).ExecuteAsync(default);
+        var published = await Publisher(scenario, logger).ExecuteAsync(default);
 
         Assert.Equal(1, published);
         Assert.Equal([other], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId));
@@ -258,7 +270,7 @@ public sealed class PublishApprovedRecordsTests
         ListedUntilPublished(scenario);
         var logger = new CapturingLogger<PublishApprovedRecords>();
 
-        var published = await Facts(scenario, logger).ExecuteAsync(default);
+        var published = await Publisher(scenario, logger).ExecuteAsync(default);
 
         Assert.Equal(1, published);
         Assert.Equal([other], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId));
@@ -272,7 +284,7 @@ public sealed class PublishApprovedRecordsTests
         AddReadyActions(scenario, 3);
         scenario.Publications.ConflictOnCommit = true;
 
-        var published = await Facts(scenario).ExecuteAsync(default);
+        var published = await Publisher(scenario).ExecuteAsync(default);
 
         Assert.Equal(0, published);
         Assert.Empty(scenario.Publications.Committed);
@@ -283,7 +295,7 @@ public sealed class PublishApprovedRecordsTests
     {
         var scenario = new PublicationScenario();
         AddReadyActions(scenario, 2);
-        var facts = Facts(scenario);
+        var facts = Publisher(scenario);
 
         var first = await facts.ExecuteAsync(default);
         var retry = await facts.ExecuteAsync(default);
@@ -299,7 +311,7 @@ public sealed class PublishApprovedRecordsTests
         AddReadyActions(scenario, 1);
         scenario.Publications.FailOnCommit = new InvalidOperationException("disk full");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Facts(scenario).ExecuteAsync(default));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Publisher(scenario).ExecuteAsync(default));
     }
 
     [Fact]
@@ -309,13 +321,13 @@ public sealed class PublishApprovedRecordsTests
         var action = scenario.AddAction('a', ApprovedByCode('a'));
         AddUnpublished(scenario, action);
         ListedUntilPublished(scenario);
-        await Facts(scenario).ExecuteAsync(default);
+        await Publisher(scenario).ExecuteAsync(default);
         scenario.ReviseAction(action, 2);
         scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[action].Review, 1));
         var releases = scenario.Publications.Committed.Count;
         var logger = new CapturingLogger<PublishApprovedRecords>();
 
-        await Facts(scenario, logger).ExecuteAsync(default);
+        await Publisher(scenario, logger).ExecuteAsync(default);
 
         Assert.DoesNotContain(logger.Entries, entry => entry.Level == LogLevel.Error);
 
@@ -344,13 +356,13 @@ public sealed class PublishApprovedRecordsTests
         ListedUntilPublished(scenario);
         var logger = new CapturingLogger<PublishApprovedRecords>();
 
-        var published = await Facts(scenario, logger).ExecuteAsync(default);
+        var published = await Publisher(scenario, logger).ExecuteAsync(default);
 
         Assert.Equal(1, published);
         Assert.DoesNotContain(logger.Entries, entry => entry.Level == LogLevel.Error);
     }
 
-    private static PublishApprovedRecords Facts(PublicationScenario scenario, CapturingLogger<PublishApprovedRecords>? logger = null,
+    private static PublishApprovedRecords Publisher(PublicationScenario scenario, CapturingLogger<PublishApprovedRecords>? logger = null,
         WorkerBeat? beat = null) =>
         new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), logger ?? new CapturingLogger<PublishApprovedRecords>(),
             beat ?? TestBeat.Create());
@@ -381,6 +393,26 @@ public sealed class PublishApprovedRecordsTests
 
     private static void AddUnpublished(PublicationScenario scenario, params string[] actionIds) =>
         scenario.Actions.Unpublished.AddRange(actionIds.Select(id => new UnpublishedApprovedAction(scenario.Actions.Publishable[id].Review, null)));
+
+    private static void AddReadyStatements(PublicationScenario scenario, int count)
+    {
+        var template = scenario.Statements.Publishable[scenario.AddStatement('f')];
+        scenario.Statements.Publishable.Clear();
+        for (var index = 0; index < count; index++)
+        {
+            var candidateId = index.ToString("x64");
+            var revision = template.Review.CurrentRevision! with { CandidateId = candidateId };
+            var review = template.Review with
+            {
+                CandidateId = candidateId,
+                CurrentRevision = revision,
+                Revisions = [revision],
+                Decisions = [.. template.Review.Decisions.Select(decision => decision with { DraftId = candidateId })]
+            };
+            scenario.Statements.Publishable[candidateId] = template with { Review = review };
+            scenario.Statements.Unpublished.Add(StatementCandidate(candidateId));
+        }
+    }
 
     private static UnpublishedApprovedStatement StatementCandidate(string candidateId)
     {
