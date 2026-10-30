@@ -517,7 +517,7 @@ public sealed class ReleaseRendererTests
     {
         var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None);
 
-        var link = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='members-title'] tbody td a")!;
+        var link = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='members-title'] li a")!;
         Assert.Equal("../officials/o1.html", link.GetAttribute("href"));
         Assert.Equal("Jane <Doe>", link.TextContent);
     }
@@ -639,9 +639,10 @@ public sealed class ReleaseRendererTests
         var result = document.QuerySelector("[aria-labelledby='result-title']")!;
         Assert.Equal(["Started: 2025-04-10T11:08:00-04:00", "Question: On Passage", "Result: Passed <b>"],
             result.QuerySelectorAll("blockquote").Select(quote => quote.TextContent));
-        var rows = document.QuerySelectorAll("[aria-labelledby='members-title'] tbody tr")
-            .Select(row => string.Join("|", row.QuerySelectorAll("td").Select(cell => cell.QuerySelector("blockquote")?.TextContent ?? cell.TextContent.Trim())));
-        Assert.Equal(["Jane <Doe>|Yea|Member: A000055, Jane Doe, R, AL, Yea"], rows);
+        var members = document.QuerySelector("[aria-labelledby='members-title']")!;
+        Assert.Equal(["Voted Yea (1 member)"], members.QuerySelectorAll("h3").Select(heading => heading.TextContent));
+        Assert.Equal(["Jane <Doe>"], members.QuerySelectorAll("li a:first-child").Select(link => link.TextContent));
+        Assert.Empty(members.QuerySelectorAll("blockquote"));
         var sources = document.QuerySelector("[aria-labelledby='sources-title']")!;
         Assert.Equal(["Source text 1 of 2", "Source text 2 of 2"], sources.QuerySelectorAll("[aria-label]").Select(item => item.GetAttribute("aria-label")));
         Assert.Contains("only the officials that Civic Lens tracks", html, StringComparison.Ordinal);
@@ -744,9 +745,29 @@ public sealed class ReleaseRendererTests
         Assert.Equal(4, links.Length);
         foreach (var link in links)
         {
-            var quote = link.Closest("td, .choice")!.QuerySelector("blockquote")!.TextContent;
+            var quote = link.Closest(".choice, li")!.QuerySelector("blockquote")?.TextContent ?? "Member: A000055, Jane Doe, R, AL, Yea";
             Assert.Equal(quote, document.QuerySelector(link.GetAttribute("href")!)!.TextContent);
         }
+    }
+
+    // A House vote lists about 435 members. A quote for each member once made the page grow past 200 KB.
+    // This page measured 130 KB with 435 members (string length of the rendered page); the budget leaves room for longer names.
+    [Fact]
+    public async Task AHouseVotePageWithEveryMemberStaysWithinItsSizeBudget()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(VoteWithMembers(435), null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.True(html.Length <= 150_000, $"The page is {html.Length} bytes.");
+    }
+
+    [Fact]
+    public async Task TheVotePageGroupsMembersByCastWithTheCountSoAReaderSeesWhoVotedEachWay()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(VoteWithMembers(5), null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var members = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='members-title']")!;
+        Assert.Equal(["Voted Yea (2 members)", "Voted Nay (2 members)", "Did not vote (1 member)"], members.QuerySelectorAll("h3").Select(heading => heading.TextContent));
+        Assert.Equal(["Member 0", "Member 3"], members.QuerySelectorAll(".member-group:nth-of-type(1) li a:first-child").Select(link => link.TextContent));
     }
 
     [Fact]
@@ -1751,7 +1772,7 @@ public sealed class ReleaseRendererTests
             ["policy area"] = 1,
             ["record"] = 1,
             ["statement"] = 1,
-            ["vote"] = 2
+            ["vote"] = 1
         };
         Assert.All(expected, page => Assert.True(tables.GetValueOrDefault(page.Key) >= page.Value, $"{page.Key}: tables"));
     }
@@ -2147,6 +2168,26 @@ public sealed class ReleaseRendererTests
             ],
             ApprovedAtUtc = new DateTimeOffset(2026, 1, 22, 12, 0, 0, TimeSpan.Zero),
             FirstPublishedAtUtc = new DateTimeOffset(2026, 1, 23, 8, 0, 0, TimeSpan.Zero)
+        };
+    }
+
+    private static PublishedVote VoteWithMembers(int count)
+    {
+        var template = Vote();
+        var source = template.Sources[1];
+        var casts = new[] { "Yea", "Nay", "Not Voting" };
+        var lines = Enumerable.Range(0, count).Select(index => $"Member: B{index:D6}, Member {index}, R, AL, {casts[index % 3]}").ToArray();
+        var text = string.Concat(lines.Select(line => line + "\n"));
+        return template with
+        {
+            Sources = [template.Sources[0], source with { Text = text }],
+            Members = [.. lines.Select((line, index) => new PublishedMemberVote
+            {
+                Official = new PublishedOfficial { Id = $"o{index}", Name = $"Member {index}" },
+                Party = "Republican",
+                Cast = casts[index % 3],
+                Citation = new PublishedCitation { ExtractionId = source.ExtractionId, Start = text.IndexOf(line, StringComparison.Ordinal), Length = line.Length, Quote = line }
+            })]
         };
     }
 

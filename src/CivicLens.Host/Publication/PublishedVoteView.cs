@@ -65,6 +65,15 @@ internal static class PublishedVoteView
     public static IEnumerable<PublishedVoteFact> ResultFacts(PublishedVote vote) =>
         vote.Facts.Where(fact => fact.Citation != vote.VotedOnCitation && fact.Citation != vote.KindCitation);
 
+    private static readonly string[] CastOrder = ["Yea", "Aye", "Nay", "No", "Present", PublishedOfficialVote.NotVoting];
+
+    public static IEnumerable<(string Heading, PublishedMemberVote[] Members)> CastGroups(PublishedVote vote) =>
+        vote.Members.GroupBy(member => member.Cast)
+            .OrderBy(group => Array.IndexOf(CastOrder, group.Key) is var index and >= 0 ? index : CastOrder.Length)
+            .Select(group => ($"{CastPhrase(group.Key)} ({group.Count()} {PublishedOfficialView.Noun(group.Count(), "member")})", group.ToArray()));
+
+    private static string CastPhrase(string cast) => cast == PublishedOfficialVote.NotVoting ? "Did not vote" : $"Voted {cast}";
+
     public static string Anchor(PublishedVote vote, PublishedCitation citation) =>
         PublishedRecordView.CitationAnchor(vote.Citations().TakeWhile(item => item != citation).Count());
 
