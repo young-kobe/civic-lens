@@ -495,6 +495,8 @@ internal sealed class FakePublicationStore : IPublicationStore
     public Action? BeforeServe { get; set; }
     public Exception? FailOnPrune { get; set; }
     public bool InsidePrune { get; private set; }
+    public int? PrunedKeep { get; private set; }
+    public TimeSpan? PrunedMinimumAge { get; private set; }
 
     public Task<PublicationState> GetStateAsync(CancellationToken cancellationToken) =>
         Task.FromResult(new PublicationState(Committed.Select(item => item.ReleaseNumber).DefaultIfEmpty().Max(),
@@ -519,10 +521,12 @@ internal sealed class FakePublicationStore : IPublicationStore
         return active;
     }
 
-    public async Task PruneAsync(int keep, Func<int, string?, CancellationToken, Task> retireOlder, CancellationToken cancellationToken)
+    public async Task PruneAsync(int keep, TimeSpan minimumAge, Func<int, string?, CancellationToken, Task> retireOlder, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (FailOnPrune is not null) throw FailOnPrune;
+        PrunedKeep = keep;
+        PrunedMinimumAge = minimumAge;
         if (Committed.Count == 0) return;
         var lowestKept = Committed.OrderByDescending(item => item.ReleaseNumber).Take(keep).Min(item => item.ReleaseNumber);
         InsidePrune = true;

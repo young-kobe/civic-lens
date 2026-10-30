@@ -36,7 +36,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A reservation is set or cleared as a whole. Enforced by `ck_<table>_reservation` on every queue table. No test.
 - A run charges at least the tokens it used. Enforced by `ck_document_change_analysis_runs_tokens` and `AnalysisRun`. Test: `AnalysisRunTests.ARunCannotChargeLessThanTheTokensItUsed`.
 - At most one run exists for each draft revision. Enforced by the unique index `IX_document_change_analysis_runs_draft_id_revision_number` on `(draft_id, revision_number)`. A run without a draft has a null `draft_id`. No test.
-- Only a human owner requeues. Enforced by `RequeueAnalyses`, `RequeueBlockedActionDrafts`, `RequeueBlockedVoteDrafts`, and `RedraftBrief`. Tests: `RequeueAnalysesTests.OnlyAHumanOwnerRequeues`, `ActionCommandTests.TheAiDrafterCannotActAsTheOwner`, `VoteCommandTests.TheAiDrafterCannotActAsTheOwner`, `RelationshipCommandTests.TheAiDrafterCannotActAsTheOwner`, and `RedraftBriefTests.OnlyTheOwnerMayRedraftAWeek`.
+- Only a human owner requeues. Enforced by `RequeueAnalyses`, `RequeueBlockedActionDrafts`, `RedraftActionDrafts`, `RequeueBlockedVoteDrafts`, and `RedraftBrief`. Tests: `RequeueAnalysesTests.OnlyAHumanOwnerRequeues`, `ActionCommandTests.TheAiDrafterCannotActAsTheOwner`, `VoteCommandTests.TheAiDrafterCannotActAsTheOwner`, `RelationshipCommandTests.TheAiDrafterCannotActAsTheOwner`, and `RedraftBriefTests.OnlyTheOwnerMayRedraftAWeek`.
 
 ## Behavior
 
@@ -60,7 +60,7 @@ The states are the values of `ck_<table>_status`, the same for every queue table
 | Running | Succeeded, Blocked, Failed | Settlement |
 | WaitingForBudget | Pending | Budget wait release at worker startup |
 | Failed | Pending | Owner requeue (`analyses requeue`) |
-| Succeeded | Pending | Only where the feature lifecycle allows it: a skipped statement gate (`statements regate`), any brief draft, and a relationship draft whose pair has a new input |
+| Succeeded | Pending | Only where the feature lifecycle allows it: a skipped statement gate (`statements regate`), a drafted or unchanged action draft whose bill used an older prompt (`actions draft redraft`), any brief draft, and a relationship draft whose pair has a new input |
 | Blocked | Pending | Only where the feature lifecycle allows it: an action draft (`actions draft requeue --blocked`), a vote draft (`votes draft requeue --blocked`), a brief draft (`brief redraft`), and a relationship draft that was blocked by an unapproved side |
 
 These events count as attempts: a durable retry, a reclaim of an expired lease, a release with tokens reserved, and a rejected draft. The claim owns the limit. A claim of an entry with eight attempts fails it as `attemptsExhausted` with no call.
@@ -238,7 +238,7 @@ The [roadmap](../roadmap.md) holds the delivery order. These design rules apply 
 - The planned ladder is deterministic rules, then a cheap probability tier, then a stronger model, then a person. The model tiers depend on the R-13 measurement. A bake-off selects the models and thresholds for each tier.
 - Deterministic rules include learned churn regions. A two-state Markov chain (stable or churning) over check history models each page region. Recurring churn, such as timestamps or rotating widgets, then needs no hand-written profile for each source.
 - When the engine is unsure, the change goes to review. The engine never drops a change silently.
-- A version bump has no selective rerun yet (R-39). `analyses requeue` moves Failed entries only, and `statements regate` covers the gate only.
+- A version bump has no selective rerun yet (R-39). `analyses requeue` moves Failed entries only, `statements regate` covers the gate, and `actions draft redraft` covers action drafts that lack issue candidates.
 - The rubric asks narrow typed questions. Examples: navigation or boilerplate, date or timestamp only, a changed number, obligation, named person, or policy claim. Others: removed content and touched configured issues.
 - A label binds to the exact comparison, the rubric version, and the labeler. Model output, also agreement between models, is a prediction, never a label.
 - Labels from the review queue are biased by the gate. False-negative estimates therefore use the random sample of skipped changes, weighted by its selection rate.
