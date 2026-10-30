@@ -205,11 +205,12 @@ public sealed class ReleaseRendererTests
         Assert.Contains("Their statements: ", text, StringComparison.Ordinal);
         Assert.Contains("Bills they sponsored: ", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Too few records", text, StringComparison.Ordinal);
-        Assert.Contains("A missed vote means the official did not vote on it.", text, StringComparison.Ordinal);
-        Assert.Contains("A roll call that was not published is in neither number.", text, StringComparison.Ordinal);
+        Assert.Contains("A missed vote means the official did not vote on it. The count includes procedural votes. It counts only the roll calls on this site, which can be fewer than the chamber held.", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("all roll calls of the current Congress", text, StringComparison.Ordinal);
+        Assert.Contains("A roll call that is not on this site is in neither number.", text, StringComparison.Ordinal);
         Assert.Contains("A split vote is a substantive roll call vote where most Democrats and most Republicans voted on opposite sides.", text, StringComparison.Ordinal);
         Assert.Contains($"on at least {TalkAndActionProfile.MinimumRecordsForShare} split votes", text, StringComparison.Ordinal);
-        Assert.Contains("policy area of the bill in Congress.gov", text, StringComparison.Ordinal);
+        Assert.Contains("gives the possible issues. A model picks which of them the bill is about. No person checks that pick. Older records list every possible issue", text, StringComparison.Ordinal);
         Assert.Contains("Some tags can still be wrong", text, StringComparison.Ordinal);
     }
 
@@ -415,6 +416,45 @@ public sealed class ReleaseRendererTests
         var link = Assert.Single(panel.QuerySelectorAll("a"), anchor => anchor.GetAttribute("href") == "https://senator.example/news/a");
         Assert.Contains("nofollow", link.GetAttribute("rel"), StringComparison.Ordinal);
         Assert.Contains("feed that lists the article", panel.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ACodeApprovedAiStatementIsLabelledAnAiSummaryCheckedByCodeBecauseReadersMustNotThinkAPersonApprovedIt()
+    {
+        var statement = Statement() with { TextOrigin = PublishedTextOrigin.Model, ApprovedBy = PublishedApprover.Code, PolicyAreaIds = ["land-use"] };
+
+        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(statement, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
+        Assert.Contains(PublishedRecordLabels.StatementModelWording, text, StringComparison.Ordinal);
+        Assert.Contains("Checked by code on 2026-05-10 12:00 UTC", text, StringComparison.Ordinal);
+        Assert.Contains("Checked by code, 2026-05-10 12:00 UTC", text, StringComparison.Ordinal);
+        Assert.Contains("Policy areas (chosen by AI)", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Approved 20", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task APersonApprovedStatementKeepsItsApprovedWordingAndShowsNoAiLabel()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None);
+
+        var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
+        Assert.Contains("Approved 2026-05-10 12:00 UTC", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Checked by code", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("AI summary", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("chosen by AI", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnAiStatementThatAPersonApprovedShowsApprovedAndNoAiLabelBecauseAPersonApprovedIt()
+    {
+        var statement = Statement() with { TextOrigin = PublishedTextOrigin.Model, ApprovedBy = PublishedApprover.Person };
+
+        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(statement, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
+        Assert.Contains("Approved 2026-05-10 12:00 UTC", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("AI summary", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2101,6 +2141,7 @@ public sealed class ReleaseRendererTests
             RevisionNumber = 1,
             Headline = "Doe backs a rent cap",
             Summary = "Doe supports a cap.",
+            TextOrigin = PublishedTextOrigin.Person,
             StatementDate = new DateOnly(2026, 5, 1),
             StatementDateEvidence = new PublishedCitation { ExtractionId = AfterId, Start = signed, Length = 18, Quote = "Signed 2026-05-01." },
             Speakers = [new PublishedOfficial { Id = "o1", Name = "Jane <Doe>" }],
@@ -2120,6 +2161,7 @@ public sealed class ReleaseRendererTests
                 ObservedAtUtc = new DateTimeOffset(2026, 5, 3, 10, 45, 0, TimeSpan.Zero),
                 Text = text
             },
+            ApprovedBy = PublishedApprover.Person,
             ApprovedAtUtc = new DateTimeOffset(2026, 5, 10, 12, 0, 0, TimeSpan.Zero),
             FirstPublishedAtUtc = new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero)
         };

@@ -39,6 +39,7 @@ public sealed record WatchedSourceConfiguration
     public DiscoveryAdmissionPolicy? AdmissionPolicy { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool StatementTextInFeed { get; init; }
+    public string? OfficeOf { get; init; }
     public bool Enabled { get; init; } = true;
     public int MaxRequests { get; init; } = 5;
     public long MaxBytes { get; init; } = 2_000_000;

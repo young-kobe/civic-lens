@@ -26,15 +26,7 @@ public sealed record StatementGateRubric(string RevisionId, ImmutableArray<Track
 
     public object ToDocument() => new
     {
-        trackedIssues = Issues.Select(issue => new
-        {
-            id = issue.Id,
-            name = issue.Name,
-            definition = issue.Definition,
-            policyAreaIds = issue.PolicyAreaIds,
-            includes = issue.Includes,
-            excludes = issue.Excludes
-        }),
+        trackedIssues = Issues.Select(TrackedIssuePromptDocument.Of),
         policyAreas = PolicyAreas.Select(area => new { id = area.Id, name = area.Name })
     };
 

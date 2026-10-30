@@ -14,10 +14,41 @@ public sealed class PublishedStatementTests
         var json = JsonSerializer.Serialize(Statement(), PublicationProtocol.JsonOptions);
 
         Assert.Equal(1, PublicationProtocol.SchemaVersion);
-        Assert.True(json == """{"recordId":"4444444444444444444444444444444444444444444444444444444444444444","revisionNumber":1,"headline":"Headline","summary":"Summary","statementDate":"2026-01-02","statementDateEvidence":{"extractionId":"3333333333333333333333333333333333333333333333333333333333333333","start":0,"length":5,"quote":"Mayor"},"speakers":[{"id":"mayor","name":"Mayor Example"}],"otherSpeakers":["Council Member"],"issueIds":["housing"],"policyAreaIds":["land-use"],"quotations":[{"extractionId":"3333333333333333333333333333333333333333333333333333333333333333","start":15,"length":15,"quote":"housing matters","kind":"directQuotation"}],"billNumbers":["HB 12"],"source":{"extractionId":"3333333333333333333333333333333333333333333333333333333333333333","url":"https://example.test/article","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Mayor said: \uD83D\uDE00 housing matters."},"articleUrl":null,"approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00","corrections":[]}""",
-            "The published statement JSON changed. Bump PublicationProtocol.SchemaVersion, update the version table " +
-            "in docs/architecture.md, then update this test. ArticleUrl is the only field added without a bump, because old files " +
-            "omit it and it reads as null. Any other change needs a bump. Actual: " + json);
+        Assert.True(json == """{"recordId":"4444444444444444444444444444444444444444444444444444444444444444","revisionNumber":1,"headline":"Headline","summary":"Summary","textOrigin":"person","statementDate":"2026-01-02","statementDateEvidence":{"extractionId":"3333333333333333333333333333333333333333333333333333333333333333","start":0,"length":5,"quote":"Mayor"},"speakers":[{"id":"mayor","name":"Mayor Example"}],"otherSpeakers":["Council Member"],"issueIds":["housing"],"policyAreaIds":["land-use"],"quotations":[{"extractionId":"3333333333333333333333333333333333333333333333333333333333333333","start":15,"length":15,"quote":"housing matters","kind":"directQuotation"}],"billNumbers":["HB 12"],"source":{"extractionId":"3333333333333333333333333333333333333333333333333333333333333333","url":"https://example.test/article","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Mayor said: \uD83D\uDE00 housing matters."},"articleUrl":null,"approvedBy":"person","approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00","corrections":[]}""",
+            "The published statement JSON changed. Bump PublicationProtocol.SchemaVersion and update this test. " +
+            "ArticleUrl was added without a bump, because old files omit it and it reads as null. textOrigin and approvedBy " +
+            "were added at version 1, because production had no statements. Any other change needs a bump. Actual: " + json);
+    }
+
+    [Fact]
+    public void ACodeApprovedAiStatementKeepsItsOriginAndApproverThroughJson()
+    {
+        var statement = Statement() with { TextOrigin = PublishedTextOrigin.Model, ApprovedBy = PublishedApprover.Code };
+
+        var read = JsonSerializer.Deserialize<PublishedStatement>(
+            JsonSerializer.Serialize(statement, PublicationProtocol.JsonOptions), PublicationProtocol.JsonOptions)!;
+
+        read.Validate();
+        Assert.Equal((PublishedTextOrigin.Model, PublishedApprover.Code), (read.TextOrigin, read.ApprovedBy));
+    }
+
+    [Fact]
+    public void RejectsCodeApprovalOfPersonTextBecauseCodeNeverJudgesWordsThatAPersonWrote()
+    {
+        var statement = Statement() with { TextOrigin = PublishedTextOrigin.Person, ApprovedBy = PublishedApprover.Code };
+
+        Assert.Throws<InvalidDataException>(statement.Validate);
+    }
+
+    [Theory]
+    [InlineData("textOrigin")]
+    [InlineData("approvedBy")]
+    public void ARecordWithoutTheOriginOrApproverIsRefusedBecauseNoReaderGuessesWhoApprovedIt(string field)
+    {
+        var json = JsonSerializer.SerializeToNode(Statement(), PublicationProtocol.JsonOptions)!.AsObject();
+        json.Remove(field);
+
+        Assert.Throws<JsonException>(() => json.Deserialize<PublishedStatement>(PublicationProtocol.JsonOptions));
     }
 
     [Fact]
@@ -177,6 +208,7 @@ public sealed class PublishedStatementTests
         RevisionNumber = 1,
         Headline = "Headline",
         Summary = "Summary",
+        TextOrigin = PublishedTextOrigin.Person,
         StatementDate = new DateOnly(2026, 1, 2),
         StatementDateEvidence = new() { ExtractionId = SourceId, Start = 0, Length = 5, Quote = "Mayor" },
         Speakers = [new() { Id = "mayor", Name = "Mayor Example" }],
@@ -186,6 +218,7 @@ public sealed class PublishedStatementTests
         Quotations = [Quotation(15, 15, "housing matters")],
         BillNumbers = ["HB 12"],
         Source = new() { ExtractionId = SourceId, Url = "https://example.test/article", ObservedAtUtc = DateTimeOffset.UnixEpoch, Text = Text },
+        ApprovedBy = PublishedApprover.Person,
         ApprovedAtUtc = DateTimeOffset.UnixEpoch,
         FirstPublishedAtUtc = DateTimeOffset.UnixEpoch
     };

@@ -50,6 +50,26 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task ARevisionStoredBeforeTheModelChoiceHasNoCandidateSetAndStillPublishesOpensAndTakesAPersonEdit()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+        await ExecuteAsync(connectionString, "UPDATE action_revisions SET revision_json = (revision_json::jsonb - 'issueCandidateIds')::text");
+        var reviews = ActionReviews();
+
+        var unpublished = Assert.Single(await reviews.ListUnpublishedApprovedAsync(10, [], default));
+        var publishable = await reviews.GetForPublicationAsync([RecordId], default);
+        var read = await reviews.GetAsync(RecordId, default);
+        var edited = await SaveAsync(1, SuggestionChoice.Keep, "save-legacy");
+
+        Assert.True(unpublished.Action.CurrentRevision.IssueCandidateIds.IsDefault);
+        Assert.Equal(RecordId, Assert.Single(publishable).Key);
+        Assert.Equal(1, read!.Review.CurrentRevision.RevisionNumber);
+        Assert.Equal((2, ReviewTextOrigin.Person), (edited.RevisionNumber, edited.TextOrigin));
+        Assert.Equal(["rent"], edited.TrackedIssueIds.ToArray());
+        Assert.True(edited.IssueCandidateIds.IsDefault);
+    }
+
+    [Fact]
     public async Task CodeApprovesAWorkerRevisionThatOnlyCopiesTheTextAfterANewSponsorJoins()
     {
         await DraftAsync(UpdatedAt, DraftableOutput);
