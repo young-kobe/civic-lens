@@ -51,7 +51,10 @@ public sealed class ConfigurationFileTests
                 configuration with { Sources = [configuration.Sources.Single() with { Enabled = false }] }, ConfigurationJson.Options));
 
             Assert.Equal(0, (await HostProcess.RunAsync(null, "validate", disabled)).ExitCode);
-            Assert.Equal(2, (await HostProcess.RunAsync(null, "validate", enabled)).ExitCode);
+            var refused = await HostProcess.RunAsync(null, "validate", enabled);
+            Assert.Equal(2, refused.ExitCode);
+            Assert.Contains($"Source '{configuration.Sources.Single().Id}' uses the retired senate.gov parser. Set \"enabled\":false on it or remove it.", refused.Error, StringComparison.Ordinal);
+            Assert.DoesNotContain("Invalid input/configuration", refused.Error, StringComparison.Ordinal);
         }
         finally
         {

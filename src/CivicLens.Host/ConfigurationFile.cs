@@ -15,7 +15,7 @@ internal static class ConfigurationFile
         var configuration = Read<CollectionConfiguration>(path, ConfigurationJson.Options);
         configuration.Validate();
         if (configuration.Sources.FirstOrDefault(source => source is { Enabled: true, ApiParser: ApiParser.SenateVoteList }) is { } retired)
-            throw new ArgumentException($"Source '{retired.Id}' uses the retired senate.gov parser. Set \"enabled\":false on it or remove it.");
+            throw new RetiredSourceException(retired.Id);
         return configuration;
     }
 
