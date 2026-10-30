@@ -17,13 +17,17 @@ public sealed class VoteDraftLifecycleTests
         Assert.True(VoteDraftLifecycle.CanTransition(record, requeue));
     }
 
-    [Fact]
-    public void ASucceededVoteDraftStaysFinalBecauseNoCodeRequeuesItAndANewVersionHasItsOwnCandidate()
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(VoteDraftErrorCodes.Unchanged, true)]
+    [InlineData(VoteDraftErrorCodes.SupersededByNewerCandidate, false)]
+    [InlineData(VoteDraftErrorCodes.NoTrackedMember, false)]
+    public void OnlyASucceededVoteDraftWithADraftToReplaceMayReturnToPendingForARedraft(string? errorCode, bool allowed)
     {
-        var record = new AnalysisRecord(CandidateId, VoteDraftTask.Task, State.Succeeded, null, 1, 1, null, null);
+        var record = new AnalysisRecord(CandidateId, VoteDraftTask.Task, State.Succeeded, null, 1, 1, null, errorCode);
         var requeue = new AnalysisCheckpoint(CandidateId, VoteDraftTask.Task, State.Succeeded, null, 1, State.Pending);
 
-        Assert.False(VoteDraftLifecycle.CanTransition(record, requeue));
+        Assert.Equal(allowed, VoteDraftLifecycle.CanTransition(record, requeue));
     }
 
     [Theory]

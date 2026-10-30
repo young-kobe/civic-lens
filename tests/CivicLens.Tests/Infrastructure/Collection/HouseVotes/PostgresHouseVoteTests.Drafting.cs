@@ -262,6 +262,159 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Contains(pending, (await VoteStore().ListAsync(VoteDraftView.Pending, 10, default)).Select(entry => entry.CandidateId));
     }
 
+    [Fact]
+    public async Task RedraftMovesASettledEntryWhoseNewestDraftRunUsedAnOlderPromptAndLeavesASupersededEntryAndResetsAttempts()
+    {
+        var (older, newer) = await TwoSettledCandidatesAsync(VoteDraftErrorCodes.SupersededByNewerCandidate, null);
+        await InsertRunAsync(older, "vote-draft-prompt-v1", 1);
+        await InsertRunAsync(newer, "vote-draft-prompt-v1", 2);
+
+        Assert.Equal(1, await VoteStore().RequeueOlderPromptAsync(default));
+
+        var queue = await StatusAndAttemptsAsync();
+        Assert.Equal(("Succeeded", 2), queue[older]);
+        Assert.Equal(("Pending", 0), queue[newer]);
+    }
+
+    [Fact]
+    public async Task RedraftMovesNothingWhenTheNewestDraftRunOfTheRollCallUsedTheCurrentPrompt()
+    {
+        var (older, newer) = await TwoSettledCandidatesAsync(VoteDraftErrorCodes.Unchanged, null);
+        await InsertRunAsync(older, "vote-draft-prompt-v1", 1);
+        await InsertRunAsync(newer, VoteDraftTask.PromptVersion, 2);
+
+        Assert.Equal(0, await VoteStore().RequeueOlderPromptAsync(default));
+
+        Assert.All((await StatusAndAttemptsAsync()).Values, entry => Assert.Equal(("Succeeded", 2), entry));
+    }
+
+    [Fact]
+    public async Task RedraftIgnoresANewerBypassedRunBecauseOnlyTheNewestDraftedRunNamesThePromptTheDraftCameFrom()
+    {
+        var (older, newer) = await TwoSettledCandidatesAsync(VoteDraftErrorCodes.SupersededByNewerCandidate, VoteDraftErrorCodes.Unchanged);
+        await InsertRunAsync(newer, "vote-draft-prompt-v1", 1);
+        await InsertRunAsync(newer, VoteDraftTask.PromptVersion, 2, "Bypassed");
+
+        Assert.Equal(1, await VoteStore().RequeueOlderPromptAsync(default));
+
+        var queue = (await QueueAsync()).ToDictionary(row => row.CandidateId, row => row.Status);
+        Assert.Equal("Pending", queue[newer]);
+        Assert.Equal("Succeeded", queue[older]);
+    }
+
+    [Theory]
+    [InlineData("Succeeded", VoteDraftErrorCodes.NoTrackedMember)]
+    [InlineData("Failed", "outputRejected")]
+    [InlineData("Blocked", VoteDraftErrorCodes.FactTooLong)]
+    public async Task RedraftLeavesAnEntryThatIsNotADraftToReplaceEvenWhenItsRunUsedAnOlderPrompt(string status, string errorCode)
+    {
+        var candidate = await PendingCandidateAsync();
+        await ExecuteAsync($"UPDATE vote_analysis SET status = '{status}', error_code = '{errorCode}', attempts = 2");
+        await InsertRunAsync(candidate, "vote-draft-prompt-v1", 1);
+
+        Assert.Equal(0, await VoteStore().RequeueOlderPromptAsync(default));
+
+        Assert.Equal((status, 2), Assert.Single((await StatusAndAttemptsAsync()).Values));
+    }
+
+    [Fact]
+    public async Task RedraftLeavesARollCallWithoutAModelDraftedRunBecauseThereIsNoOldPromptToReplace()
+    {
+        var candidate = await PendingCandidateAsync();
+        await ExecuteAsync($"UPDATE vote_analysis SET status = 'Succeeded', error_code = '{VoteDraftErrorCodes.Unchanged}', attempts = 2");
+        await InsertRunAsync(candidate, "vote-draft-prompt-v1", 1, "Bypassed");
+
+        Assert.Equal(0, await VoteStore().RequeueOlderPromptAsync(default));
+    }
+
+    [Fact]
+    public async Task RedraftLeavesAVoteWithoutABillBecauseNoIssueNarrowingCanChangeIt()
+    {
+        var candidate = await PendingCandidateAsync();
+        await ExecuteAsync("UPDATE vote_candidates SET bill_type = NULL, bill_number = NULL");
+        await ExecuteAsync("UPDATE vote_analysis SET status = 'Succeeded', attempts = 2");
+        await InsertRunAsync(candidate, "vote-draft-prompt-v1", 1);
+
+        Assert.Equal(0, await VoteStore().RequeueOlderPromptAsync(default));
+    }
+
+    [Fact]
+    public async Task RedraftTreatsEachRollCallOfOneBillAlone()
+    {
+        var first = await PendingCandidateAsync();
+        var vote = HouseVoteFixtures.Vote(101, Updated);
+        var (_, members) = await DetailWithMembersJobAsync(vote);
+        await AdmitMembersAsync(members, vote);
+        var second = (string)(await ScalarAsync($"SELECT candidate_id FROM vote_candidates WHERE roll_call_number = 101"))!;
+        await ExecuteAsync("UPDATE vote_analysis SET status = 'Succeeded', attempts = 2");
+        await InsertRunAsync(first, "vote-draft-prompt-v1", 1);
+        await InsertRunAsync(second, VoteDraftTask.PromptVersion, 2);
+
+        Assert.Equal(1, await VoteStore().RequeueOlderPromptAsync(default));
+
+        var queue = (await QueueAsync()).ToDictionary(row => row.CandidateId, row => row.Status);
+        Assert.Equal(("Pending", "Succeeded"), (queue[first], queue[second]));
+    }
+
+    [Fact]
+    public async Task RedraftMovesEveryDraftedEntryOfAStaleRollCallAndCountsEntries()
+    {
+        var (older, newer) = await TwoSettledCandidatesAsync(null, VoteDraftErrorCodes.Unchanged);
+        await InsertRunAsync(older, "vote-draft-prompt-v1", 1);
+        await InsertRunAsync(newer, "vote-draft-prompt-v1", 2, "Bypassed");
+
+        Assert.Equal(2, await VoteStore().RequeueOlderPromptAsync(default));
+
+        Assert.All((await QueueAsync()).Select(row => row.Status), status => Assert.Equal("Pending", status));
+    }
+
+    [Theory]
+    [InlineData("chamber", "Senate")]
+    [InlineData("source_id", "another-source")]
+    [InlineData("congress", "118")]
+    [InlineData("session_number", "2")]
+    public async Task RedraftTreatsAVoteThatDiffersInAnyRollCallKeyTermAsAnotherRollCall(string column, string value)
+    {
+        var (house, other) = await TwoSettledCandidatesAsync(null, null);
+        var literal = int.TryParse(value, out _) ? value : $"'{value}'";
+        await ExecuteAsync($"BEGIN; SET LOCAL session_replication_role = replica; UPDATE vote_candidates SET {column} = {literal} WHERE candidate_id = '{other}'; COMMIT;");
+        await InsertRunAsync(house, "vote-draft-prompt-v1", 1);
+        await InsertRunAsync(other, VoteDraftTask.PromptVersion, 2);
+
+        Assert.Equal(1, await VoteStore().RequeueOlderPromptAsync(default));
+
+        var queue = (await QueueAsync()).ToDictionary(row => row.CandidateId, row => row.Status);
+        Assert.Equal(("Pending", "Succeeded"), (queue[house], queue[other]));
+    }
+
+    private async Task<(string Older, string Newer)> TwoSettledCandidatesAsync(string? olderCode, string? newerCode)
+    {
+        var older = await PendingCandidateAsync();
+        var newer = await PendingCandidateAsync(Updated.AddDays(1));
+        await ExecuteAsync($"""
+            UPDATE vote_analysis SET status = 'Succeeded', attempts = 2,
+                error_code = CASE candidate_id WHEN '{older}' THEN {SqlLiteral(olderCode)} ELSE {SqlLiteral(newerCode)} END
+            """);
+        return (older, newer);
+    }
+
+    private async Task<Dictionary<string, (string Status, int Attempts)>> StatusAndAttemptsAsync()
+    {
+        var entries = new Dictionary<string, (string, int)>();
+        foreach (var row in await QueueAsync())
+            entries[row.CandidateId] = (row.Status, Convert.ToInt32(await ScalarAsync($"SELECT attempts FROM vote_analysis WHERE candidate_id = '{row.CandidateId}'")));
+        return entries;
+    }
+
+    private static string SqlLiteral(string? value) => value is null ? "NULL" : $"'{value}'";
+
+    private async Task InsertRunAsync(string candidate, string promptVersion, long startedAtTicks, string outcome = "Drafted") => await ExecuteAsync($"""
+        INSERT INTO vote_analysis_runs (run_id, candidate_id, task, task_version, model, prompt_version, schema_version, input_hash, outcome,
+            input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, charged_tokens, started_at_utc_ticks, finished_at_utc_ticks)
+        VALUES ('{Guid.NewGuid():N}', '{candidate}', '{VoteDraftTask.Task}', '{VoteDraftTask.TaskVersion}', '{VoteDraftTask.Model}', '{promptVersion}',
+            '{VoteDraftTask.SchemaVersion}', '{new string('1', 64)}', '{outcome}', 0, 0, 0, 0, 0, {startedAtTicks}, {startedAtTicks})
+        """);
+
     private async Task<string> PendingCandidateAsync(DateTimeOffset? updated = null)
     {
         var vote = HouseVoteFixtures.Vote(100, updated ?? Updated);
