@@ -390,7 +390,7 @@ public sealed class ReleaseRendererTests
         Assert.Equal("Aide One", facts["Other people quoted, named as the article writes them"]);
         Assert.Equal("2026-05-01", facts["Statement date"]);
         Assert.Equal("housing, transit", facts["Issues"]);
-        Assert.Equal("None", facts["Policy areas"]);
+        Assert.False(facts.ContainsKey("Policy areas"));
         Assert.Equal("HB 12", facts["Bill numbers"]);
         Assert.Equal(["Inside quotation marks", "Not in quotation marks"],
             document.QuerySelectorAll("[aria-labelledby='quotations-title'] .badge").Select(badge => badge.TextContent));
@@ -747,8 +747,8 @@ public sealed class ReleaseRendererTests
     {
         var renderer = new ReleaseRenderer(null, null);
         var vote = Vote() with { TrackedIssueIds = [] };
-        var action = Action() with { TrackedIssueIds = [] };
-        var statement = Statement() with { OtherSpeakers = [], IssueIds = [] };
+        var action = Action() with { TrackedIssueIds = [], PolicyArea = null, PolicyAreaId = null, PolicyAreaCitation = null };
+        var statement = Statement() with { OtherSpeakers = [], IssueIds = [], PolicyAreaIds = [], BillNumbers = [] };
 
         foreach (var html in new[] { await renderer.RenderVoteAsync(vote, null, [], HousingCatalog, CancellationToken.None),
                      await renderer.RenderActionAsync(action, [], HousingCatalog, CancellationToken.None),
@@ -758,6 +758,10 @@ public sealed class ReleaseRendererTests
             Assert.DoesNotContain("Tracked issues", labels);
             Assert.DoesNotContain("Issues", labels);
             Assert.DoesNotContain(PublishedRecordLabels.OtherPeopleQuoted, labels);
+            Assert.DoesNotContain("Policy area", labels);
+            Assert.DoesNotContain("Policy areas", labels);
+            Assert.DoesNotContain("Bill numbers", labels);
+            Assert.DoesNotContain("None", Facts(html).Values);
         }
     }
 

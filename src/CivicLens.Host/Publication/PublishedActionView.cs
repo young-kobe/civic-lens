@@ -13,12 +13,15 @@ internal static class PublishedActionView
     [
         new("Bill", ActionLabels.Bill(action.Congress, action.BillType, action.BillNumber)),
         new("Title", action.BillTitle),
-        Fact.LinkList("Policy area", [PublishedRecordView.PolicyAreaLink(action.PolicyAreaId, action.PolicyArea ?? "None", catalog)]),
+        .. PolicyArea(action, catalog),
         .. PublishedRecordView.Issues("Tracked issues", action.TrackedIssueIds, catalog),
         new("Published", $"From the official record, checked {Moment.Full(action.ApprovedAtUtc)}; first published {Moment.Full(action.FirstPublishedAtUtc)}"),
         .. PublishedRecordLabels.Wording(action.TextOrigin),
         new("Revision", action.RevisionNumber.ToString(CultureInfo.InvariantCulture))
     ];
+
+    private static IEnumerable<Fact> PolicyArea(PublishedAction action, PublicationCatalog catalog) =>
+        PublishedRecordView.Links("Policy area", action.PolicyArea is null ? [] : [PublishedRecordView.PolicyAreaLink(action.PolicyAreaId, action.PolicyArea, catalog)]);
 
     public static IReadOnlyList<CitedRange> RangesIn(PublishedAction action, PublishedDocumentVersion source) =>
     [.. action.Citations().Select((citation, index) => (citation, anchor: PublishedRecordView.CitationAnchor(index)))
