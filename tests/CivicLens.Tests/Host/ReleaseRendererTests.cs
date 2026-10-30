@@ -299,7 +299,7 @@ public sealed class ReleaseRendererTests
         foreach (var html in pages)
         {
             var names = new HtmlParser().ParseDocument(html).QuerySelectorAll("main a")
-                .Where(link => link.TextContent.StartsWith("Show in the full", StringComparison.Ordinal) || link.TextContent.StartsWith("Why they are linked", StringComparison.Ordinal))
+                .Where(link => link.TextContent.StartsWith("Show ", StringComparison.Ordinal) || link.TextContent.StartsWith("Why they are linked", StringComparison.Ordinal))
                 .Select(link => link.TextContent).ToList();
 
             Assert.NotEmpty(names);
@@ -736,6 +736,20 @@ public sealed class ReleaseRendererTests
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
             .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
         Assert.Equal(label, facts["Kind"]);
+    }
+
+    // The saved line says "Party total D". The label above the exact quote must say which party that is.
+    [Fact]
+    public async Task TheVoteResultPanelNamesEachPartyTotalInWordsAndKeepsTheSavedQuoteExact()
+    {
+        var totals = new[] { "Party total D: Yea 0, Nay 1", "Party total R: Yea 2, Nay 0", "Party total I: Yea 0, Nay 0", "Party total X: Yea 0, Nay 0" };
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote(totals), null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var result = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='result-title']")!;
+        Assert.Equal(["Result", "Democratic party total", "Republican party total", "Independent members' total", "Party total X"],
+            result.QuerySelectorAll(".choice-label").Select(label => label.TextContent).Skip(2));
+        Assert.Equal(totals, result.QuerySelectorAll("blockquote").Select(quote => quote.TextContent).Skip(3));
+        Assert.Contains("Show this quote in the saved text: democratic party total, quote", result.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

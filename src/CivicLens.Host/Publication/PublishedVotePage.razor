@@ -40,9 +40,10 @@
             }
             @foreach (var fact in PublishedVoteView.ResultFacts(Record))
             {
+                var label = PublishedRecordLabels.VoteResultLabel(fact);
                 <li>
-                    <CitationQuote Label="@PublishedVoteView.FactLabel(fact)" Quote="@fact.Text">
-                        <ContextLink Href="@("#" + PublishedVoteView.Anchor(Record, fact.Citation))" Target="@PublishedRecordView.QuoteTarget(PublishedVoteView.FactLabel(fact).ToLowerInvariant())" />
+                    <CitationQuote Label="@label" Quote="@fact.Text">
+                        <ContextLink Href="@("#" + PublishedVoteView.Anchor(Record, fact.Citation))" Target="@PublishedRecordView.QuoteTarget(label.ToLowerInvariant())" />
                     </CitationQuote>
                 </li>
             }

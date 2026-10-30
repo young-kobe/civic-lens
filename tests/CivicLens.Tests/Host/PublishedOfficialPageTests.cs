@@ -581,9 +581,9 @@ public sealed class PublishedOfficialPageTests
 
         var panel = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-issues-they-work-on']")!;
         Assert.Equal(["Issue", "Their statements", "Bills they sponsored", "Votes they cast"], panel.QuerySelectorAll("th").Select(cell => cell.TextContent.Trim()));
-        Assert.Equal(["health", "2", "0", "0"], panel.QuerySelectorAll("tbody tr:nth-child(1) td").Select(cell => cell.TextContent.Trim()));
+        Assert.Equal(["health", "2 statements", "0 bills", "0 votes"], panel.QuerySelectorAll("tbody tr:nth-child(1) td").Select(cell => cell.TextContent.Trim()));
         var housing = panel.QuerySelectorAll("tbody tr:nth-child(2) td").ToArray();
-        Assert.Equal(["housing", "3", "1", "1"], new[] { housing[0], housing[1], housing[2].FirstChild!, housing[3] }.Select(cell => cell.TextContent.Trim()));
+        Assert.Equal(["housing", "3 statements", "1 bill", "1 vote"], new[] { housing[0], housing[1], housing[2].FirstChild!, housing[3] }.Select(cell => cell.TextContent.Trim()));
         Assert.Equal(["Home Act"], housing[2].QuerySelectorAll("li").Select(item => item.TextContent));
         Assert.Equal("../" + PublicationProtocol.RecordPagePath(new string('a', 64)), housing[2].QuerySelector("a")!.GetAttribute("href"));
         Assert.DoesNotContain("%", panel.TextContent, StringComparison.Ordinal);
@@ -1040,7 +1040,8 @@ public sealed class PublishedOfficialPageTests
         foreach (var count in counts)
         {
             var rows = document.QuerySelectorAll("[data-records] tbody tr").Where(row => row.GetAttribute("data-filter-keys")!.Split(' ').Contains(count.GetAttribute("data-count-filter"))).ToArray();
-            Assert.Equal(int.Parse(count.TextContent), rows.Length);
+            Assert.Equal(int.Parse(count.TextContent.Split(' ')[0]), rows.Length);
+            Assert.StartsWith(count.TextContent + ":", count.GetAttribute("data-filter-label"), StringComparison.Ordinal);
             Assert.EndsWith($": {rows.Length} {(rows.Length == 1 ? "record" : "records")}", count.GetAttribute("data-filter-shows"), StringComparison.Ordinal);
         }
     }
@@ -1066,11 +1067,21 @@ public sealed class PublishedOfficialPageTests
         var document = await RenderedWithCountsAsync();
 
         var health = document.QuerySelectorAll("[aria-labelledby='panel-issues-they-work-on'] tbody tr:nth-child(1) td").Select(cell => cell.TextContent.Trim()).ToArray();
-        Assert.Equal(["health", "1", "0", "0"], health);
+        Assert.Equal(["health", "1 statement", "0 bills", "0 votes"], health);
         Assert.Equal(4, document.QuerySelectorAll("[data-count-filter]").Length);
         Assert.Empty(document.QuerySelectorAll("[data-count-filter] button"));
         Assert.Empty(document.QuerySelectorAll("[data-records] tbody tr[hidden]"));
         Assert.Equal(9, document.QuerySelectorAll("[data-records] tbody tr").Length);
+    }
+
+    [Fact]
+    public async Task ABillTitleIsClampedToTwoLinesAndItsLinkKeepsTheFullTitle()
+    {
+        var document = await RenderedWithCountsAsync();
+
+        var link = document.QuerySelector("li.clamp-2 a")!;
+        Assert.Equal("Home Act", link.GetAttribute("title"));
+        Assert.Equal("Home Act", link.TextContent);
     }
 
     [Fact]
@@ -1085,7 +1096,7 @@ public sealed class PublishedOfficialPageTests
             "Showing their statements on housing in the 119th Congress: 3 records",
             "Showing bills they sponsored on housing in the 119th Congress: 1 record",
             "Showing their substantive votes on housing in the 119th Congress: 1 record"], counts.Select(count => count.GetAttribute("data-filter-shows")));
-        Assert.Equal("1: show bills they sponsored on housing", counts[2].GetAttribute("data-filter-label"));
+        Assert.Equal("1 bill: show bills they sponsored on housing", counts[2].GetAttribute("data-filter-label"));
         Assert.Equal("", document.QuerySelector("[data-records] [data-filter-status][role='status']")!.TextContent);
         Assert.False(document.QuerySelector("[data-filter-status]")!.HasAttribute("hidden"));
     }

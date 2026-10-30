@@ -1,3 +1,4 @@
+using CivicLens.Application.Publication;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Publication.Contracts;
 
@@ -114,5 +115,21 @@ public static class PublishedRecordLabels
         PublishedVoteKind.MotionToProceed => "Motion to proceed",
         PublishedVoteKind.Other => OtherQuestion,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Vote kind has no label.")
+    };
+
+    public static string VoteResultLabel(PublishedVoteFact fact)
+    {
+        var label = fact.Text[..fact.Text.IndexOf(':')];
+        return label.StartsWith(PublishedVote.PartyTotalPrefix, StringComparison.Ordinal)
+            ? PartyTotal(label[PublishedVote.PartyTotalPrefix.Length..]) ?? label
+            : label;
+    }
+
+    private static string? PartyTotal(string letter) => PartyLetters.NameOf(letter) switch
+    {
+        PublishedPartyMajority.Democrat => "Democratic party total",
+        PublishedPartyMajority.Republican => "Republican party total",
+        PartyLetters.Independent => "Independent members' total",
+        _ => null
     };
 }

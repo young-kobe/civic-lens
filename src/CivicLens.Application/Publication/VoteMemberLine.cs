@@ -21,13 +21,7 @@ internal sealed record VoteMemberLine(string SourceId, string SourceParty, strin
 
     public VoteCastKind Cast => CastOf(CastText);
 
-    public string? SourcePartyName => SourceParty switch
-    {
-        "R" => PublishedPartyMajority.Republican,
-        "D" => PublishedPartyMajority.Democrat,
-        "I" => "Independent",
-        _ => null
-    };
+    public string? SourcePartyName => PartyLetters.NameOf(SourceParty);
 
     private static VoteCastKind CastOf(string cast) => PublishedOfficialVote.SideOf(cast) switch
     {

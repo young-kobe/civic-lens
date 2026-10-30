@@ -36,7 +36,7 @@
                             <ul class="choices">
                                 @foreach (var bill in bills)
                                 {
-                                    <li><a href="@(Page.RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))">@bill.BillTitle</a></li>
+                                    <li class="clamp-2"><a href="@(Page.RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))" title="@bill.BillTitle">@bill.BillTitle</a></li>
                                 }
                             </ul>
                         }
@@ -170,10 +170,13 @@
 
     private int TalkAndActionCongress => Page.Congress!.Value;
 
-    private RenderFragment IssueCount(int count, string countKind, string issueId, string subject, string issueName) =>
-        @<CountFilter Count="count" Key="@TalkAndActionProfile.CountKey(countKind, issueId)"
-            Label="@PublishedOfficialView.CountFilterLabel(count, subject, issueName)"
+    private RenderFragment IssueCount(int count, string countKind, string issueId, string subject, string issueName)
+    {
+        var counted = PublishedOfficialView.Counted(count, countKind);
+        return @<CountFilter Filterable="count > 0" Text="@counted" Key="@TalkAndActionProfile.CountKey(countKind, issueId)"
+            Label="@PublishedOfficialView.CountFilterLabel(counted, subject, issueName)"
             Notice="@PublishedOfficialView.CountFilterNotice(subject, issueName, TalkAndActionCongress, count)" />;
+    }
 
     private string NoOfficeText => Page.IsTracked
         ? "The rosters and the configuration list no dated office for this official."
