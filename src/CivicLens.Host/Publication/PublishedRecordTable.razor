@@ -57,7 +57,8 @@
         total = Sort.Total,
         filter = Sort.Filter,
         root = RootPath,
-        columns = Columns == RecordTableColumns.Facet ? new[] { "record", "officials", "date" } : ["record", "published"],
+        pageSize = PublicationProtocol.PageSize,
+        columns = Columns.ForSort(),
         kinds = PublishedRecordLabels.KindLabels
     }, PublicationProtocol.JsonOptions);
 }

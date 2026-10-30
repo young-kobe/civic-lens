@@ -178,10 +178,11 @@
         apply();
     };
 
+    const codeUnitOrder = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
     const sortKinds = {
-        text: { first: "asc", words: { asc: "A to Z", desc: "Z to A" }, compare: (a, b) => a.localeCompare(b, "en", { sensitivity: "base", numeric: true }) },
+        text: { first: "asc", words: { asc: "A to Z", desc: "Z to A" }, compare: (a, b) => codeUnitOrder(a.toLowerCase(), b.toLowerCase()) },
         number: { first: "desc", words: { desc: "most first", asc: "fewest first" }, compare: (a, b) => Number(a) - Number(b) },
-        date: { first: "desc", words: { desc: "newest first", asc: "oldest first" }, compare: (a, b) => (a < b ? -1 : a > b ? 1 : 0) }
+        date: { first: "desc", words: { desc: "newest first", asc: "oldest first" }, compare: codeUnitOrder }
     };
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const opposite = direction => (direction === "asc" ? "desc" : "asc");
@@ -208,6 +209,7 @@
             const time = document.createElement("time");
             const [year, month, day] = hit.firstPublishedAtUtc.slice(0, 10).split("-");
             time.dateTime = hit.firstPublishedAtUtc;
+            time.title = `${hit.firstPublishedAtUtc.slice(0, 10)} ${hit.firstPublishedAtUtc.slice(11, 16)} UTC`;
             time.textContent = `${Number(day)} ${months[Number(month) - 1]} ${year}`;
             return time;
         }
@@ -284,31 +286,43 @@
             const value = row => row.cells[column].dataset.sortValue ?? row.cells[column].textContent.trim();
             const sign = current.direction === "asc" ? 1 : -1;
             const order = new Map(staticRows.map((row, index) => [row, index]));
-            body.replaceChildren(...[...staticRows].sort((a, b) => sign * kind.compare(value(a), value(b)) || order.get(a) - order.get(b)));
+            const compare = (a, b) => {
+                const [left, right] = [value(a), value(b)];
+                if (left === right) return 0;
+                if (left === "" || right === "") return left === "" ? 1 : -1;
+                return sign * kind.compare(left, right);
+            };
+            body.replaceChildren(...[...staticRows].sort((a, b) => compare(a, b) || order.get(a) - order.get(b)));
             status.textContent = `Sorted by ${label(current.header, current.direction)}`;
         };
         const fetchRows = async (state, append) => {
             const params = new URLSearchParams(source.filter ?? "");
             params.set("sort", state.header.dataset.sortKey);
             params.set("direction", state.direction);
+            params.set("limit", source.pageSize);
             if (append) params.set("cursor", nextCursor);
             const mine = ++running;
             status.textContent = "Sorting.";
-            let response;
-            try { response = await fetch(`${source.api}/v1/search?${params}`); }
-            catch { response = { ok: false, status: 0 }; }
+            let page, rows;
+            try {
+                const response = await fetch(`${source.api}/v1/search?${params}`);
+                if (mine !== running) return;
+                if (!response.ok) { commit(current); status.textContent = sortFailure(response.status); return; }
+                page = await response.json();
+                rows = page.hits.map(hit => hitRow(hit, source, headers));
+            } catch {
+                if (mine === running) { commit(current); status.textContent = sortFailure(0); }
+                return;
+            }
             if (mine !== running) return;
-            if (!response.ok) { commit(current); status.textContent = sortFailure(response.status); return; }
-            const page = await response.json();
-            if (mine !== running) return;
-            const rows = page.hits.map(hit => hitRow(hit, source, headers));
             if (append) body.append(...rows); else body.replaceChildren(...rows);
             shown = append ? shown + rows.length : rows.length;
             nextCursor = page.nextCursor;
             more.hidden = nextCursor === null;
             if (pager) pager.hidden = true;
             commit(state);
-            status.textContent = `Showing ${shown.toLocaleString("en-US")} of ${source.total.toLocaleString("en-US")} records, sorted by ${label(current.header, current.direction)}.`;
+            const total = source.total, count = Math.min(shown, total);
+            status.textContent = `Showing ${count.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} ${total === 1 ? "record" : "records"}, sorted by ${label(current.header, current.direction)}.`;
         };
         const choose = state => {
             if (!state) { commit(null); restore(); return; }

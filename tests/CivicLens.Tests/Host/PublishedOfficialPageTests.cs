@@ -1012,6 +1012,15 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
+    public async Task TheCastCellsOfTheBreaksTableSortByTheCastWordNeverByThePopoverText()
+    {
+        var document = await RenderedAsync([Split('a', new DateOnly(2026, 4, 1), "Nay")]);
+
+        var cells = document.QuerySelectorAll("[aria-labelledby='panel-votes-with-their-party'] tbody td[data-label='Their vote'], [aria-labelledby='panel-votes-with-their-party'] tbody td[data-label^='Most']");
+        Assert.Equal(["Nay", "Yea"], cells.Select(cell => cell.GetAttribute("data-sort-value")));
+    }
+
+    [Fact]
     public async Task EachSortableTableNamesItsDefaultOrderInItsCaptionSoTheOrderWithoutScriptsIsStated()
     {
         var page = Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)) with { IssueIds = ["housing"] }], [Split('a', new DateOnly(2026, 4, 1), "Nay")]);

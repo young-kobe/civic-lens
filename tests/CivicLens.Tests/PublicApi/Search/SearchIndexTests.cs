@@ -198,14 +198,17 @@ public sealed class SearchIndexTests(PostgresCollection postgres) : IAsyncLifeti
     }
 
     [Fact]
-    public async Task AHeadlineSortUsesByteOrderSoTheOrderDoesNotDependOnTheDatabaseLocale()
+    public async Task AHeadlineSortLowercasesThenUsesCodeOrderSoCaseDoesNotMatterAndTheOrderDoesNotDependOnTheDatabaseLocale()
     {
         await world.PublishAndIngestAsync(1,
-            PublishedSamples.Statement('a', "apple"), PublishedSamples.Statement('b', "Zebra"), PublishedSamples.Statement('c', "Mango"));
+            PublishedSamples.Statement('a', "apple"), PublishedSamples.Statement('b', "Zebra"), PublishedSamples.Statement('c', "Mango"),
+            PublishedSamples.Statement('d', "H.R. 2"), PublishedSamples.Statement('e', "H.R. 10"), PublishedSamples.Statement('f', "\u00E9lan"),
+            PublishedSamples.Statement('1', "Apple"));
 
         var page = await world.SearchAsync(request => request with { Sort = SearchSortKey.Headline });
 
-        Assert.Equal(["Mango", "Zebra", "apple"], page.Hits.Select(hit => hit.Headline));
+        Assert.Equal(["Apple", "apple", "H.R. 10", "H.R. 2", "Mango", "Zebra", "\u00E9lan"], page.Hits.Select(hit => hit.Headline));
+
     }
 
     [Fact]
@@ -240,6 +243,17 @@ public sealed class SearchIndexTests(PostgresCollection postgres) : IAsyncLifeti
     }
 
     [Fact]
+    public async Task AForgedSortedCursorForARecordOutsideTheReleaseGivesAnEmptyPageAndNoError()
+    {
+        await world.PublishAndIngestAsync(1, SortSamples());
+
+        var page = await world.SearchAsync(request => request with { Sort = SearchSortKey.Headline, Cursor = SearchCursor.Sorted(1, new string('9', 64)) });
+
+        Assert.Empty(page.Hits);
+        Assert.Null(page.NextCursor);
+    }
+
+    [Fact]
     public async Task ADefaultOrderSearchStillGivesTheOldDatedCursor()
     {
         await world.PublishAndIngestAsync(1, SortSamples());
@@ -260,6 +274,7 @@ public sealed class SearchIndexTests(PostgresCollection postgres) : IAsyncLifeti
             PublishedSamples.Statement('4', "Budget", date: null, published: noon),
             PublishedSamples.Statement('5', "Budget", date: new DateOnly(2026, 3, 1), published: noon),
             PublishedSamples.Statement('6', "Transit", date: new DateOnly(2026, 2, 1), published: noon.AddHours(1)),
+            PublishedSamples.Statement('7', "APPLE", date: new DateOnly(2026, 3, 2), published: noon),
             PublishedSamples.DocumentChange("Zoning", "A change.", "Afterword text."),
             PublishedSamples.Vote("Budget", "A vote.", "Result: voteword")
         ];
@@ -271,7 +286,7 @@ public sealed class SearchIndexTests(PostgresCollection postgres) : IAsyncLifeti
         {
             SearchSortKey.Date => ReleaseRecordOrder.Day(entry).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
             SearchSortKey.Published => entry.FirstPublishedAtUtc.UtcDateTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
-            SearchSortKey.Headline => entry.Headline,
+            SearchSortKey.Headline => entry.Headline.ToLowerInvariant(),
             _ => RecordKinds.Text(entry.Kind)
         };
         var entries = records.Select(record => record.Entry);
