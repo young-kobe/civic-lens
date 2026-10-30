@@ -1017,7 +1017,7 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task AllRecordsPageLinksEachKindToASearchTheSearchServiceAcceptsSoNoLinkLeavesTheReaderWithAnEmptyResult()
+    public async Task AllRecordsPageLinksEachKindToASearchAddressSoTheServiceAcceptsTheLink()
     {
         var release = ReleaseOf(3);
         release = release with
@@ -1028,15 +1028,25 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer(null, null).RenderAllRecordsAsync(release, 1, CancellationToken.None);
 
         var links = new HtmlParser().ParseDocument(html).QuerySelectorAll("nav[aria-label='Search one kind of record'] a").ToList();
-        Assert.Equal(Enum.GetValues<PublishedRecordKind>().Select(PublishedRecordLabels.KindPlural), links.Select(link => link.TextContent.Trim()));
+        Assert.Equal(["Document changes", "Statements", "Actions", "Weekly briefs", "Votes", "Relationships", "Executive actions"], links.Select(link => link.TextContent.Trim()));
         foreach (var link in links)
         {
-            var value = link.GetAttribute("href")!["search.html?kind=".Length..];
             Assert.StartsWith("search.html?kind=", link.GetAttribute("href"), StringComparison.Ordinal);
+            var value = link.GetAttribute("href")!["search.html?kind=".Length..];
             Assert.True(RecordKinds.TryParse(value, out _), value);
             Assert.Null(link.GetAttribute("aria-current"));
         }
         Assert.Contains("search.html\">Filter by issue or date</a>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AllRecordsPageOfAnEmptyReleaseHasNoKindRowSoNoEmptyNavigationShows()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderAllRecordsAsync(ReleaseOf(0), 1, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.Null(document.QuerySelector("nav[aria-label='Search one kind of record']"));
+        Assert.DoesNotContain("Search by kind", html, StringComparison.Ordinal);
     }
 
     [Fact]
