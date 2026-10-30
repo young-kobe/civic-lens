@@ -19,6 +19,9 @@ public sealed class AnalysisLifecycle(Func<AnalysisCheckpoint, bool> acceptsSucc
         };
     }
 
+    public static bool IsDraftedOrUnchanged(AnalysisRecord record, string unchangedCode) =>
+        record.ErrorCode is null || record.ErrorCode == unchangedCode;
+
     private static bool Matches(AnalysisRecord record, AnalysisCheckpoint update) =>
         record.SubjectId == update.SubjectId && record.Task == update.Task && record.Status == update.ExpectedStatus &&
         record.LeaseToken == update.LeaseToken && record.Fence == update.Fence;

@@ -34,5 +34,5 @@ public sealed record PublishedRecordReference(PublishedRecordKind Kind, string R
         return false;
     }
 
-    private static string NameOf(PublishedRecordKind kind) => JsonNamingPolicy.CamelCase.ConvertName(kind.ToString());
+    public static string NameOf(PublishedRecordKind kind) => JsonNamingPolicy.CamelCase.ConvertName(kind.ToString());
 }

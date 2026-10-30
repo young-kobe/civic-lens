@@ -340,6 +340,48 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
+    public async Task ThePageWithoutAnOfficialKeepsTheSansHeaderBecauseOnlyAProfileIsAboutOnePerson()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None);
+
+        Assert.DoesNotContain("page-header-serif", html);
+        Assert.DoesNotContain("page-header-portrait", html);
+    }
+
+    [Fact]
+    public async Task TheHeaderHoldsTheSerifNameThePortraitAndTheLinksRowSoTheyReadAsOneIntroduction()
+    {
+        var page = Current([], []) with
+        {
+            Profile = WithPhoto("rep", "Rita Rep", "Public domain.") with
+            {
+                Website = "https://rep.example.gov/home",
+                Terms = [new PublishedOfficeTerm { Office = "rep", Kind = PublishedOfficeKind.Representative, State = "WA", District = 9, Party = "Democrat", Start = new(1997, 1, 7) }]
+            }
+        };
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        var header = new HtmlParser().ParseDocument(html).QuerySelector("header.page-header-serif")!;
+        Assert.Equal("Rita Rep", header.QuerySelector("h1")!.TextContent);
+        Assert.NotNull(header.QuerySelector(".page-header-portrait figure.portrait img"));
+        Assert.Contains("Party: Democrat", header.QuerySelector(".page-header-lede")!.TextContent, StringComparison.Ordinal);
+        Assert.Equal("Official website (rep.example.gov)", header.QuerySelector(".page-header-meta a[href='https://rep.example.gov/home']")!.TextContent);
+    }
+
+    [Fact]
+    public async Task APastCongressHeaderKeepsTheSerifNameButHasNoPortraitOrLinksRow()
+    {
+        var past = new ReleaseOfficialPage(Profile() with { Website = "https://mayor.example.gov" }, true, 118, false, [], [], [], ListPublishedAtUtc);
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(past, PublicationCatalogs.None, CancellationToken.None);
+
+        var header = new HtmlParser().ParseDocument(html).QuerySelector("header.page-header-serif")!;
+        Assert.Null(header.QuerySelector(".page-header-portrait"));
+        Assert.Null(header.QuerySelector(".page-header-meta"));
+    }
+
+    [Fact]
     public async Task TheCurrentPageLinksTheOfficialWebsiteNamingItsHostWithNoReferrerAndNoOpener()
     {
         var page = Current([], []) with { Profile = Profile() with { Website = "https://warren.senate.gov/about" } };
