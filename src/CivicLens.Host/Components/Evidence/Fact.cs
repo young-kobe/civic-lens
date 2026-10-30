@@ -4,6 +4,8 @@ public sealed record Fact(string Label, string Value, IReadOnlyList<FactLink>? L
 {
     public string Separator { get; init; } = ", ";
 
+    public string? TermKey { get; init; }
+
     public static Fact List(string label, IEnumerable<string> values) =>
         new(label, values.Any() ? string.Join(", ", values) : "None");
 

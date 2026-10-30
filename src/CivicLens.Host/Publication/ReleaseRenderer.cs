@@ -217,6 +217,9 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
     public Task<string> RenderAboutAsync(CancellationToken cancellationToken) =>
         RenderAsync<PublishedAboutPage>(new Dictionary<string, object?>());
 
+    public Task<string> RenderGlossaryAsync(CancellationToken cancellationToken) =>
+        RenderAsync<PublishedGlossaryPage>(new Dictionary<string, object?>());
+
     public Task<string> RenderSearchAsync(PublicationRelease release, ReleaseFacets facets, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(release);

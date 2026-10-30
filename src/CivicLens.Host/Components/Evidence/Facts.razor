@@ -1,9 +1,14 @@
+@using CivicLens.Host.Publication
 <dl class="facts">
     @foreach (var fact in Items)
     {
         <dt>@fact.Label</dt>
         <dd>
-            @if (fact.Links is null)
+            @if (fact.Links is null && fact.TermKey is { } key)
+            {
+                <Term Key="@key">@fact.Value</Term>
+            }
+            else if (fact.Links is null)
             {
                 @fact.Value
             }
