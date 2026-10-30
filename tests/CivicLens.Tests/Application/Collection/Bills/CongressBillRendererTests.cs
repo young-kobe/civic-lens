@@ -10,7 +10,7 @@ public sealed class CongressBillRendererTests
     private static CongressBill Bill(string title = "A bill", string? policyArea = "Immigration", string[]? sponsors = null,
         DateTimeOffset? updated = null) =>
         new(119, "hr", 1234, title, new DateOnly(2026, 3, 2), updated ?? new DateTimeOffset(2026, 10, 6, 14, 3, 0, TimeSpan.Zero),
-            policyArea, sponsors ?? ["L000595"], 12, 71, 3);
+            policyArea, sponsors ?? ["L000595"], 12, 71, 3, 0);
 
     [Fact]
     public void DetailIsOneFactPerLineInAFixedOrderSoEachFactIsACleanCitationSpan()
@@ -163,11 +163,20 @@ public sealed class CongressBillRendererTests
     }
 
     [Fact]
+    public void ASubjectsPageIsOneSubjectLinePerLineAfterTheBillLine()
+    {
+        var page = new CongressBillSubjectsPage(["Housing finance", "Rent\nand\r\nleases"], null);
+
+        Assert.Equal("Bill: 119 hr 1234\nSubject: Housing finance\nSubject: Rent and leases", CongressBillRenderer.RenderSubjects(Item, page));
+    }
+
+    [Fact]
     public void AnEmptyPageStillNamesItsBillAndEndsWithoutWhitespace()
     {
         Assert.Equal("Bill: 119 hr 1234", CongressBillRenderer.RenderCosponsors(Item, new CongressBillCosponsorsPage([], null)));
         Assert.Equal("Bill: 119 hr 1234", CongressBillRenderer.RenderActions(Item, new CongressBillActionsPage([], null)));
         Assert.Equal("Bill: 119 hr 1234", CongressBillRenderer.RenderSummaries(Item, []));
+        Assert.Equal("Bill: 119 hr 1234", CongressBillRenderer.RenderSubjects(Item, new CongressBillSubjectsPage([], null)));
     }
 
     [Fact]

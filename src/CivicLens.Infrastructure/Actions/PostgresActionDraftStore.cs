@@ -52,8 +52,8 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
         var recordId = PostgresCollectionJobStore.HashActionRecord(row.SourceId, row.Congress, row.BillType, row.BillNumber);
         var revisions = await StoredJobDefinition.LoadRevisionsAsync(db, [row.ConfigurationRevisionId], cancellationToken);
         var candidate = new ActionDraftCandidate(row.CandidateId, recordId, row.SourceId, row.Congress, row.BillType, row.BillNumber,
-            new DateTimeOffset(row.UpdateDateUtcTicks, TimeSpan.Zero), row.IncludesSummaries);
-        return new(candidate, StoredJobDefinition.Find(revisions, row.ConfigurationRevisionId), await ReadPagesAsync(db, row.DetailJobId, row.IncludesSummaries, cancellationToken),
+            new DateTimeOffset(row.UpdateDateUtcTicks, TimeSpan.Zero), row.IncludesSummaries, row.IncludesSubjects);
+        return new(candidate, StoredJobDefinition.Find(revisions, row.ConfigurationRevisionId), await ReadPagesAsync(db, row.DetailJobId, row.IncludesSummaries, row.IncludesSubjects, cancellationToken),
             await ActionDraftRows.ReadCurrentAsync(db, recordId, cancellationToken),
             await ActionDraftRows.HasNewerCandidateAsync(db, candidate, cancellationToken));
     }
@@ -111,12 +111,13 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
     }
 
     private static async Task<IReadOnlyList<ActionDraftPage>> ReadPagesAsync(CollectionAttemptDbContext db, string detailJobId,
-        bool includesSummaries, CancellationToken cancellationToken)
+        bool includesSummaries, bool includesSubjects, CancellationToken cancellationToken)
     {
         var pages = await (from page in db.Set<BillPageRow>().AsNoTracking()
                            join extraction in db.Set<DocumentExtractionRow>().AsNoTracking() on page.ExtractionId equals extraction.ExtractionId
                            where page.DetailJobId == detailJobId && page.Role != BillPageRole.Actions &&
-                               (includesSummaries || page.Role != BillPageRole.Summaries)
+                               (includesSummaries || page.Role != BillPageRole.Summaries) &&
+                               (includesSubjects || page.Role != BillPageRole.Subjects)
                            select new { page.Role, page.PageOrder, page.JobId, page.ExtractionId, extraction.ExtractionVersion, extraction.Text }).ToArrayAsync(cancellationToken);
         return [.. pages.OrderBy(page => ResourceOf(page.Role)).ThenBy(page => page.PageOrder)
             .Select(page => new ActionDraftPage(ResourceOf(page.Role), page.JobId, page.ExtractionId, page.ExtractionVersion, page.Text))];
@@ -128,6 +129,7 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
         BillPageRole.Cosponsors => ApiResource.BillCosponsors,
         BillPageRole.Actions => ApiResource.BillActions,
         BillPageRole.Summaries => ApiResource.BillSummaries,
+        BillPageRole.Subjects => ApiResource.BillSubjects,
         _ => throw new ArgumentOutOfRangeException(nameof(role), role, "Bill page role has no API resource.")
     };
 

@@ -19,7 +19,7 @@ internal static class ActionRevisionFixtures
 
     public static ActionDraftRevision Model(int number = 1, string author = "civic-lens:analysis") => new(
         RecordId, number, author, Updated.AddMinutes(number), "Warren sponsored a bill", "Senator Warren sponsored the bill.",
-        ReviewTextOrigin.Model, null, "congress-bills", 119, "hr", 1, CandidateId, Updated, false,
+        ReviewTextOrigin.Model, null, "congress-bills", 119, "hr", 1, CandidateId, Updated, false, false,
         Fingerprint, null, null,
         null, null, null, [], [], IssueRevisionId, [Sponsorship()], "A housing bill");
 

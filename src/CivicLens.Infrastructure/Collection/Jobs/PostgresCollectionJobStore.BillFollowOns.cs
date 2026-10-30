@@ -70,6 +70,14 @@ public sealed partial class PostgresCollectionJobStore
             cancellationToken);
     }
 
+    public Task<DiscoveryAdmissionResult> AdmitSubjectsPageAsync(ConfiguredCollectionSource source, string pageJobId,
+        CongressBillSubjectsPage page, string extractionId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        return AdmitNextPageAsync(source, pageJobId, BillPageRole.Subjects, ApiResource.BillSubjects, page.Next, extractionId,
+            cancellationToken);
+    }
+
     private Task<DiscoveryAdmissionResult> AdmitNextPageAsync(ConfiguredCollectionSource source, string pageJobId,
         BillPageRole role, ApiResource resource, string? next, string extractionId, CancellationToken cancellationToken)
     {
@@ -109,6 +117,8 @@ public sealed partial class PostgresCollectionJobStore
         var jobs = new List<ApiJob>();
         if (row.HasCosponsorChain)
             jobs.Add(source.CreateFirstPageJob(ApiResource.BillCosponsors, IdentityOf(bill), bill.UpdateDate, Today(now)));
+        if (row.HasSubjectsChain)
+            jobs.Add(source.CreateFirstPageJob(ApiResource.BillSubjects, IdentityOf(bill), bill.UpdateDate, Today(now)));
         if (gate.IsPassed) jobs.AddRange(PassedFirstPages(source, row, now));
         return jobs;
     }
@@ -154,6 +164,7 @@ public sealed partial class PostgresCollectionJobStore
             PolicyArea = bill.PolicyArea,
             CosponsorCount = bill.CosponsorCount,
             SummaryCount = bill.SummaryCount,
+            SubjectCount = bill.SubjectCount,
             IssueRevisionId = issueRevisionId,
             HasTrackedIssue = gate.HasTrackedIssue,
             Decision = gate.Decision,

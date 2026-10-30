@@ -139,7 +139,7 @@ WHERE g.decision = 'Pending'
 ORDER BY g.congress, g.bill_type, g.bill_number;
 ```
 
-To list passed bills that have no action candidate because a cosponsor or actions page job failed or is blocked, run this query. A failed summaries page does not block a candidate, so the query skips it. A test runs this exact query.
+To list passed bills that have no action candidate because a cosponsor or actions page job failed or is blocked, run this query. A failed summaries or subjects page does not block a candidate, so the query skips it. A test runs this exact query.
 
 ```sql
 SELECT g.detail_job_id, g.source_id, g.congress, g.bill_type, g.bill_number,
@@ -158,6 +158,14 @@ WHERE g.decision = 'Passed'
   AND (j.state IN ('Failed', 'Cancelled') OR e.status IN ('Blocked', 'Failed'))
 ORDER BY g.congress, g.bill_type, g.bill_number;
 ```
+
+After the subjects migration, bills that the gate saw earlier have no subjects chain. The owner command below adds the chains of the newest version of each bill. It needs `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_ARTIFACT_DIRECTORY`, the directory of the saved captures.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- bills subjects backfill 100
+```
+
+The limit is 100 when you give none. The command prints `examined`, `admitted`, and `failed`. A bill whose saved detail capture is missing or unreadable counts as failed, and the run goes on with the next bill. Run it again until `examined` equals `failed`. A failed bill keeps a null count and is listed again each run, ahead of the later bills. If `failed` reaches the limit, raise the limit. Look at each failed bill: its saved detail capture is missing or unreadable. Collect the bill again, or leave it. A bill with a new update date gets a new gate row with its own count. It is safe to repeat. The worker fetches the subjects pages. When a chain closes for a bill that already has an action candidate, the worker queues one more action draft for that bill. Each such draft spends model budget. Start with a small limit and watch the daily limit of [action drafting](#action-drafting). Run `votes draft redraft` after the subjects arrive. It selects only votes whose newest draft used an older prompt. A vote drafted under the current prompt before its subjects arrived is not selected. Use `votes draft requeue` for such a vote. [Bills](architecture/bills.md#subjects-backfill) holds the rules. A rollback past the subjects migration is refused when an action revision came from a candidate that includes subjects. After the backfill drafted a bill, such a rollback needs a backup, or a manual delete of that revision first.
 
 ### Federal Register stream
 
@@ -621,7 +629,7 @@ The `worker` command drafts one action record for each bill that has a candidate
 | `CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS` | Daily token limit for action drafting calls, per UTC day (about 2,000,000 is a good start). It is separate from the other limits. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
-Drafting uses Claude Haiku 5.5. The first run can spend up to the daily limit on queued candidates. Start with a low limit. A bill version whose summaries have closed has two queued candidates. The older one settles as `supersededByNewerCandidate` with no call, also when the candidate with summaries blocks. The [outcomes](architecture/actions.md#outcomes) table lists every other code.
+Drafting uses Claude Haiku 5.5. The first run can spend up to the daily limit on queued candidates. Start with a low limit. A bill version whose summaries or subjects have closed has up to three queued candidates. Each older one settles as `supersededByNewerCandidate` with no call, also when the newest candidate blocks. The [outcomes](architecture/actions.md#outcomes) table lists every other code.
 
 The commands below need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
