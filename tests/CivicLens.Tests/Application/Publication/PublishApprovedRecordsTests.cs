@@ -24,8 +24,11 @@ public sealed class PublishApprovedRecordsTests
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('a', ApprovedByCode('a'));
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, action)], "k1"));
+        scenario.OfficialNames["mayor"] = "Mayor Renamed";
 
-        await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(Code, new([], "k2")));
+        var refused = await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(Code, new([], "k2")));
+
+        Assert.Equal("request", refused.ParamName);
 
         Assert.Single(scenario.Publications.Committed);
     }
