@@ -67,7 +67,7 @@
 
     private IReadOnlyList<Card> Cards => cards ??= [.. Officials.Select(official =>
     {
-        var term = PublishedOfficialView.LatestTerm(official.Profile.Terms);
+        var term = PublishedOfficialView.LatestTerm(official.Profile.Terms, PublishedAtUtc);
         return new Card(official, term, term?.Kind ?? PublishedOfficeKind.Other);
     })];
 

@@ -1681,8 +1681,8 @@ public sealed class ReleaseRendererTests
                 IssueIds = ["housing"]
             }
         ];
-        var official = new ReleaseOfficialPage(profile, true, 119, true, [], [.. entries], [.. votes], TalkAndActionProfile.Of(119, entries, votes));
-        var pastOfficial = new ReleaseOfficialPage(profile, true, 118, false, [], [], []);
+        var official = new ReleaseOfficialPage(profile, true, 119, true, [], [.. entries], [.. votes], new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero), TalkAndActionProfile.Of(119, entries, votes));
+        var pastOfficial = new ReleaseOfficialPage(profile, true, 118, false, [], [], [], new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero));
         return
         [
             ("record", PublicationProtocol.RecordPagePath(Record().RecordId), await renderer.RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None), "All records"),
@@ -1727,7 +1727,7 @@ public sealed class ReleaseRendererTests
         AssertTrail(pages["withdrawal"], ["Home|../index.html", "All records|../all.html", "Withdrawn action: cccccccccccc"]);
         AssertTrail(pages["official"], ["Home|../index.html", "Officials|../officials.html", "Mayor Example"]);
         AssertTrail(pages["past congress"], ["Home|../../index.html", "Officials|../../officials.html",
-            "Mayor Example|../../officials/mayor.html", "Mayor Example, Congress 118"]);
+            "Mayor Example|../../officials/mayor.html", "Mayor Example, the 118th Congress"]);
         foreach (var page in pages.Values)
             Assert.Equal(page.Name != "home", new HtmlParser().ParseDocument(page.Html).QuerySelector("nav[aria-label='Breadcrumb']") is not null);
     }
