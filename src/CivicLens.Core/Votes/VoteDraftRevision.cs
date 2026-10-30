@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text.Json.Serialization;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
@@ -9,7 +10,7 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
     string Headline, string Summary, ReviewTextOrigin TextOrigin, ReviewTextSuggestion? Suggestion,
     string SourceId, VoteSource Source, Chamber Chamber, int Congress, int SessionNumber, int RollCallNumber, string? BillType, int? BillNumber,
     string CandidateId, DateTimeOffset CandidateUpdateDate, ImmutableArray<VoteFact> Facts, DateOnly VotedOn, SourceSpan VotedOnCitation, VoteKind Kind, SourceSpan? KindCitation, ImmutableArray<MemberVote> Members,
-    ImmutableArray<string> TrackedIssueIds, string IssueRevisionId)
+    ImmutableArray<string> TrackedIssueIds, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ImmutableArray<string> IssueCandidateIds, string IssueRevisionId)
     : IHeadlineSummaryRevision
 {
     public const int MaximumHeadlineLength = 256;
@@ -41,6 +42,8 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
             throw new ArgumentException($"A bill type has at most {MaximumBillTypeLength} characters and a number, and a number has a type.");
         if (TrackedIssueIds.IsDefault || TrackedIssueIds.Length > StatementDraftRevision.MaximumSelections)
             throw new ArgumentException($"A vote revision needs at most {StatementDraftRevision.MaximumSelections} tracked issues.");
+        if (!IssueCandidateIds.IsDefault && !TrackedIssueIds.All(IssueCandidateIds.Contains))
+            throw new ArgumentException("The tracked issues of a vote revision must come from its issue candidates.");
         ReviewTextRules.ValidateHeadlineAndSummary(this, MaximumHeadlineLength, MaximumSummaryLength);
         if (Facts.IsDefault || Facts.Length > MaximumFacts || Facts.Any(fact => !IsBounded(fact.Citation)))
             throw new ArgumentException($"A vote revision needs at most {MaximumFacts} facts with bounded citations.");
@@ -96,7 +99,8 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
         CandidateId == other.CandidateId && CandidateUpdateDate == other.CandidateUpdateDate && VotedOn == other.VotedOn &&
         VotedOnCitation == other.VotedOnCitation && Facts.SequenceEqual(other.Facts) &&
         Kind == other.Kind && KindCitation == other.KindCitation && Members.SequenceEqual(other.Members) &&
-        TrackedIssueIds.SequenceEqual(other.TrackedIssueIds) && IssueRevisionId == other.IssueRevisionId;
+        TrackedIssueIds.SequenceEqual(other.TrackedIssueIds) && IssueCandidateIds.IsDefault == other.IssueCandidateIds.IsDefault &&
+        (IssueCandidateIds.IsDefault || IssueCandidateIds.SequenceEqual(other.IssueCandidateIds)) && IssueRevisionId == other.IssueRevisionId;
 
     private static bool IsBounded(SourceSpan span) => span is { Start: >= 0, Length: > 0 } && LowercaseHex.Is(span.ExtractionId, 64);
 }

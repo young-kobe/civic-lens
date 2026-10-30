@@ -105,6 +105,14 @@ public sealed class VoteDraftRevisionTests
     }
 
     [Fact]
+    public void TheTrackedIssuesMustComeFromTheIssueCandidatesAndALegacyRevisionWithoutCandidatesStaysValid()
+    {
+        Assert.Throws<ArgumentException>(() => (Revision() with { TrackedIssueIds = ["extra"] }).ValidateShape());
+        (Revision() with { IssueCandidateIds = default }).ValidateShape();
+        (Revision() with { TrackedIssueIds = [], IssueCandidateIds = [] }).ValidateShape();
+    }
+
+    [Fact]
     public void ABillTypeNeedsANumberAndANumberNeedsAType()
     {
         (Revision() with { BillType = null, BillNumber = null }).ValidateShape();
@@ -152,7 +160,8 @@ public sealed class VoteDraftRevisionTests
         Assert.Throws<ArgumentException>(() => (edit with { Members = [Member() with { Cast = "Nay" }] }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (edit with { Kind = VoteKind.Other, KindCitation = null }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (edit with { Facts = [new("Result: Failed", new SourceSpan(ExtractionId, 0, 14))] }).ValidatePersonEditOf(previous));
-        Assert.Throws<ArgumentException>(() => (edit with { TrackedIssueIds = ["extra"] }).ValidatePersonEditOf(previous));
+        Assert.Throws<ArgumentException>(() => (edit with { TrackedIssueIds = [] }).ValidatePersonEditOf(previous));
+        Assert.Throws<ArgumentException>(() => (edit with { IssueCandidateIds = ["rent", "extra"] }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (edit with { BillType = "hr", BillNumber = 1 }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (edit with { KindCitation = new SourceSpan(ExtractionId, 16, 20) }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (edit with { CandidateId = new string('f', 64) }).ValidatePersonEditOf(previous));
@@ -224,5 +233,5 @@ public sealed class VoteDraftRevisionTests
         VoteWorld.RecordId, number, author, VoteWorld.UpdatedAt.AddMinutes(number), "The House voted", "The House decided a question.", ReviewTextOrigin.Model, null,
         "congress-house-votes", VoteSource.CongressGov, Chamber.House, 119, 1, 100, "hconres", 14, VoteWorld.CandidateId, VoteWorld.UpdatedAt,
         [new("Result: Passed", new SourceSpan(ExtractionId, 0, 14))], new DateOnly(2025, 4, 10), new SourceSpan(ExtractionId, 30, 28),
-        VoteKind.Passage, new SourceSpan(ExtractionId, 15, 20), [Member()], ["rent"], new string('e', 64));
+        VoteKind.Passage, new SourceSpan(ExtractionId, 15, 20), [Member()], ["rent"], ["rent"], new string('e', 64));
 }

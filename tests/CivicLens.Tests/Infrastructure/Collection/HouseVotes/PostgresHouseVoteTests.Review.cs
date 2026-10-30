@@ -164,7 +164,7 @@ public sealed partial class PostgresHouseVoteTests
         var recordId = await RecordIdAsync(first);
         var second = await PendingCandidateAsync(Updated.AddDays(1));
         var revised = await RevisionAsync(second, 2);
-        await SettleForReviewAsync(second, revised with { VotedOn = revised.VotedOn.AddDays(3), TrackedIssueIds = ["housing"] });
+        await SettleForReviewAsync(second, revised with { VotedOn = revised.VotedOn.AddDays(3), TrackedIssueIds = ["housing"], IssueCandidateIds = ["housing"] });
 
         var stored = (string)(await ScalarAsync($"""
             SELECT concat_ws('|', candidate_id, event_on::text, array_to_string(issue_ids, ','), array_to_string(official_ids, ','))
@@ -271,6 +271,24 @@ public sealed partial class PostgresHouseVoteTests
 
         Assert.Equal((suggestion.Headline, suggestion.Summary, ReviewTextOrigin.Person), (used.Headline, used.Summary, used.TextOrigin));
         Assert.Null(used.Suggestion);
+    }
+
+    [Fact]
+    public async Task ARevisionStoredBeforeTheModelChoiceHasNoCandidateSetAndStillPublishesOpensAndTakesAPersonEdit()
+    {
+        var recordId = await ApprovedVoteAsync();
+        await ExecuteAsync("UPDATE vote_revisions SET revision_json = (revision_json::jsonb - 'issueCandidateIds')::text");
+        var reviews = VoteReviews();
+
+        var unpublished = Assert.Single(await reviews.ListUnpublishedApprovedAsync(10, [], default));
+        var publishable = await reviews.GetForPublicationAsync([recordId], default);
+        var read = await reviews.GetRevisionAsync(recordId, 1, default);
+        var edited = await SaveAsync(recordId, 1, SuggestionChoice.Keep, "save-legacy");
+
+        Assert.True(unpublished.Vote.CurrentRevision.IssueCandidateIds.IsDefault);
+        Assert.Equal(recordId, Assert.Single(publishable).Key);
+        Assert.True(read!.IssueCandidateIds.IsDefault);
+        Assert.Equal((2, ReviewTextOrigin.Person), (edited.RevisionNumber, edited.TextOrigin));
     }
 
     [Fact]

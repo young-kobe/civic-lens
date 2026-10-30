@@ -624,14 +624,69 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task TheCurrentPageLinksEachEarlierCongressPageFromItsOwnFolder()
+    public async Task TheCurrentPageTabsLinkEachEarlierCongressFromItsOwnFolderAndSayThoseCongressesHoldVotesOnly()
     {
-        var page = Current([], [Vote('3', new DateOnly(2026, 4, 1))]) with { PastCongresses = [118, 117] };
+        var page = Current([], [Vote('3', new DateOnly(2026, 4, 1))]) with { Congresses = [119, 118, 117] };
 
+        var tabs = await TabsOfAsync(page);
+
+        Assert.Equal("Show the 119th Congress or an earlier Congress", tabs.GetAttribute("aria-label"));
+        Assert.Equal(["All records, votes of the 119th Congress (2025 to 2027)", "118th Congress (votes only)", "117th Congress (votes only)"], tabs.QuerySelectorAll("a").Select(link => link.TextContent.Trim()));
+        Assert.Equal(["../officials/mayor.html", "../officials/mayor/118.html", "../officials/mayor/117.html"], tabs.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
+        Assert.Equal(["All records, votes of the 119th Congress (2025 to 2027)"], tabs.QuerySelectorAll("[aria-current]").Select(link => link.TextContent.Trim()));
+    }
+
+    [Fact]
+    public async Task AnEarlierCongressPageKeepsTheTabsWithALinkBackToTheCurrentPageAndMarksItsOwnTab()
+    {
+        var page = new ReleaseOfficialPage(Profile(), true, 118, false, [119, 118, 117], [], [Vote('3', new DateOnly(2024, 4, 1)) with { Congress = 118 }], ListPublishedAtUtc);
+
+        var tabs = await TabsOfAsync(page);
+
+        Assert.Equal(["../../officials/mayor.html", "../../officials/mayor/118.html", "../../officials/mayor/117.html"], tabs.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
+        Assert.Equal(["118th Congress (votes only)"], tabs.QuerySelectorAll("[aria-current]").Select(link => link.TextContent.Trim()));
+    }
+
+    [Fact]
+    public async Task TheFirstTabNamesBothScopesAndTheYearsOfItsCongressWhateverTheCongress()
+    {
+        var page = new ReleaseOfficialPage(Profile(), true, 117, true, [117, 116], [], [Vote('3', new DateOnly(2022, 4, 1)) with { Congress = 117 }], ListPublishedAtUtc);
+
+        var tabs = await TabsOfAsync(page);
+
+        Assert.Equal("All records, votes of the 117th Congress (2021 to 2023)", tabs.QuerySelector("a")!.TextContent.Trim());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TheTabLabelsDoNotDependOnThePublishDateSoACarriedPageStaysTrue(bool isCurrent)
+    {
+        async Task<string[]> LabelsAsync(DateTimeOffset publishedAtUtc)
+        {
+            var page = new ReleaseOfficialPage(Profile(), true, isCurrent ? 119 : 118, isCurrent, [119, 118], [], [Vote('3', new DateOnly(2026, 4, 1))], publishedAtUtc);
+            return [.. (await TabsOfAsync(page)).QuerySelectorAll("a").Select(link => link.TextContent.Trim())];
+        }
+
+        var duringTheCongress = await LabelsAsync(new(2026, 6, 1, 0, 0, 0, TimeSpan.Zero));
+        var afterTheCongress = await LabelsAsync(new(2027, 6, 1, 0, 0, 0, TimeSpan.Zero));
+
+        Assert.Equal(duringTheCongress, afterTheCongress);
+        Assert.DoesNotContain(duringTheCongress, label => label.Contains("now", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AnOfficialWithOneCongressGetsNoTabsBecauseThereIsNothingToSwitchTo()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([], [Vote('3', new DateOnly(2026, 4, 1))]), PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.Null(new HtmlParser().ParseDocument(html).QuerySelector("nav.segmented"));
+    }
+
+    private static async Task<AngleSharp.Dom.IElement> TabsOfAsync(ReleaseOfficialPage page)
+    {
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
-
-        var links = new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-earlier-congresses'] a");
-        Assert.Equal(["../officials/mayor/118.html", "../officials/mayor/117.html"], links.Select(link => link.GetAttribute("href")));
+        return new HtmlParser().ParseDocument(html).QuerySelector("nav.segmented")!;
     }
 
     [Fact]
@@ -1156,7 +1211,7 @@ public sealed class PublishedOfficialPageTests
             .QuerySelector($"[aria-labelledby='{panelId}'] table")!;
 
     private static ReleaseOfficialPage Current(PublishedRecordEntry[] entries, PublishedOfficialVote[] votes) =>
-        new(Profile(), true, 119, true, [], [.. entries], [.. votes], ListPublishedAtUtc);
+        new(Profile(), true, 119, true, [119], [.. entries], [.. votes], ListPublishedAtUtc);
 
     private static PublishedRecordEntry Entry(char id, PublishedRecordKind kind, DateOnly date) => new()
     {
