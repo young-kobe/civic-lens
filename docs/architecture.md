@@ -25,7 +25,7 @@ The system has one repository and three runtime parts. A C# application runs col
 - Coverage is selective. A missing record does not show inactivity. Relevant source failures stay visible as coverage limits.
 - A capture is not a document version, an approval, or a publication.
 - A model prediction is never a human approval. Approval binds to the exact revision and evidence reviewed.
-- Code approves action records, House vote records, and Senate vote records. Their facts come from Congress.gov, the Clerk XML, and the senate.gov or Voteview vote files. A Senate vote from the Voteview source rests on Voteview data. Code checks every citation. People approve all other records. Public pages label the headline and the summary as an AI summary of the official record. Text that a person wrote gets no label.
+- Code approves action records, House vote records, and Senate vote records. Their facts come from Congress.gov, the Clerk XML, and the Voteview vote files. A Senate vote from the Voteview source rests on Voteview data. Code checks every citation. People approve all other records. Public pages label the headline and the summary as an AI summary of the official record. Text that a person wrote gets no label.
 - Approval and publication are separate actions. Public serving reads published releases only.
 
 ### Status
@@ -34,7 +34,7 @@ Implemented:
 
 - configured collection with durable jobs, discovery, and admission
 - the Congress.gov bill stream with its relevance gate and action candidates
-- the Congress.gov House vote stream and the senate.gov Senate vote files, with their vote candidates
+- the Congress.gov House vote stream and the Voteview Senate vote files, with their vote candidates
 - text extraction, history, and comparison
 - AI drafting of document-change accounts
 - the statement gate and statement drafting
@@ -262,7 +262,6 @@ The protocol, configuration, schema, parser, and behavior versions start at the 
 | Bill summaries extraction | `congress-bill-summaries-v1` plus the version of the HTML extraction | `src/CivicLens.Application/Collection/Bills/CongressBillSummariesParser.cs` | Extraction IDs and text of a summaries page | The parse or the rendered text of a summaries page changes |
 | House vote detail extraction | `congress-house-vote-v1` | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteParser.cs` | Extraction IDs, text, and citations of a House vote | The parse or the rendered text of a vote changes |
 | House vote members extraction | `congress-house-vote-members-v1` | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteMembersParser.cs` | Extraction IDs, text, and citations of a House member list | The parse or the rendered text of a member list changes |
-| Senate vote extraction | `congress-senate-vote-v1` | `src/CivicLens.Application/Collection/SenateVotes/SenateVoteParser.cs` | Extraction IDs, text, and citations of a Senate vote | The parse or the rendered text of a vote changes |
 | Feed item statement extraction | `feed-item-statement-v1` plus the version of the HTML extraction | `src/CivicLens.Application/Collection/FeedStatements/FeedStatementExtractions.cs` | Extraction IDs, text, and citations of a feed item | The parse or the rendered text of a feed item changes |
 | Voteview Senate vote extraction | `voteview-senate-vote-v1` | `src/CivicLens.Application/Collection/VoteviewVotes/VoteviewParser.cs` | Extraction IDs, text, and citations of a Voteview Senate vote | The parse or the rendered text of a roll call changes |
 | Comparison algorithm | `line-lcs-context-v1` | `src/CivicLens.Core/Documents/DocumentComparison.cs` | Stored comparison IDs and hunks | Hunk or word-edit output changes |
@@ -277,7 +276,7 @@ The protocol, configuration, schema, parser, and behavior versions start at the 
 | Action draft prompt | `action-draft-prompt-v2` | same file | Action analysis runs | Prompt text or input framing changes |
 | Action draft schema | `action-draft-schema-v2` | same file | Action analysis runs | The model output schema changes |
 | Vote draft task | `vote-draft-v1` | `src/CivicLens.Application/Votes/VoteDraftTask.cs` | Vote analysis runs | Task flow or output handling changes |
-| Vote draft prompt | `vote-draft-prompt-v1` | same file | Vote analysis runs | Prompt text or input framing changes |
+| Vote draft prompt | `vote-draft-prompt-v2` | same file | Vote analysis runs | Prompt text or input framing changes |
 | Vote draft schema | `vote-draft-schema-v1` | same file | Vote analysis runs | The model output schema changes |
 | Vote fingerprint | `vote-fingerprint-v1` | `src/CivicLens.Application/Votes/VoteFingerprint.cs` | The run input hash of a draft that makes no call | The canonical text of the fingerprint changes |
 | Sponsorship fingerprint | `action-fingerprint-v1` | `src/CivicLens.Application/Collection/Bills/ActionFingerprint.cs` | The fingerprint in each action revision | The canonical text of an entry changes |
@@ -360,7 +359,6 @@ This is the only navigation index.
 | Action candidates | [Bills](architecture/bills.md#action-candidate) | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ActionCandidates.cs` |
 | Congress.gov House vote sweep, sessions, URLs | [Votes](architecture/votes.md#daily-sweep) | `src/CivicLens.Application/Collection/Votes/VoteSession.cs` |
 | House vote parsers and admission | [Votes](architecture/votes.md#parsing) | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteParser.cs` |
-| Senate vote parser, menu, and URLs | [Votes](architecture/votes.md#senate-collection) | `src/CivicLens.Application/Collection/SenateVotes/SenateVoteParser.cs` |
 | Voteview Senate vote parsers, URLs, and keys | [Votes](architecture/votes.md#voteview-senate-collection) | `src/CivicLens.Application/Collection/VoteviewVotes/VoteviewParser.cs` |
 | Vote candidates | [Votes](architecture/votes.md#admission) | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.Votes.cs` |
 | Vote tables: versions and candidates | [Votes](architecture/votes.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Collection/Votes/` |

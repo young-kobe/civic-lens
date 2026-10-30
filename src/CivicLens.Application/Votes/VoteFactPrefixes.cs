@@ -14,7 +14,7 @@ public static class VoteFactPrefixes
     public const string CandidateTotal = PublishedVote.CandidateTotalPrefix;
 
     public static readonly string[] SenateDetail =
-        [Started, Question, "Question text: ", "Vote title: ", Result, "Document: ", Count];
+        [Started, Question, "Vote title: ", Result, Count];
     public static readonly string[] Detail = [Started, Question, Result, Legislation, PartyTotal, CandidateTotal];
     public static readonly string[] Bill = [Title, "Policy area: "];
 }

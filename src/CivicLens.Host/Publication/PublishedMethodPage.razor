@@ -38,6 +38,11 @@
     <Panel Title="Where the issues come from" Padded="true">
         <p>A person reviews the issue tags of a statement and approves them. Some tags can still be wrong. For a sponsored bill, the policy area in Congress.gov gives the possible issues. A model picks which of them the bill is about. No person checks that pick. Older records list every possible issue. The issues of a vote come from the policy area of the bill.</p>
     </Panel>
+    <Panel Title="Where the Senate votes come from" Padded="true">
+        <p>Senate votes come from @PublishedRecordLabels.Voteview. Each vote page also links the official roll call page on senate.gov.</p>
+        <p>Code checks the Voteview counts against the casts of the senators before it keeps a roll call. It skips a roll call whose counts differ.</p>
+        <p>Voteview does not list a Vice President tie-break vote. A roll call that ended 50 to 50 shows the result of the vote without the vote of the Vice President. The official roll call page on senate.gov shows that vote.</p>
+    </Panel>
 </PublicPage>
 
 @code {

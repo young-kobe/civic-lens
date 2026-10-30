@@ -50,7 +50,7 @@ public sealed class SenateVoteKindTableTests
     [InlineData("On the Nomination", VoteKind.Nomination)]
     [InlineData("On the Point of Order", VoteKind.Other)]
     [InlineData("On the Resolution", VoteKind.Passage)]
-    public void EveryVoteQuestionVoteviewListsForTheSenateOf2025To2026MapsToTheSameKindAsTheSenateGovQuestion(string question, VoteKind expected)
+    public void EveryVoteQuestionVoteviewListsForTheSenateOf2025To2026MapsToTheSameKindAsTheOfficialSenateQuestion(string question, VoteKind expected)
     {
         var (kind, _) = SenateVoteKindTable.Classify([Fact($"Question: {question}")]);
 
@@ -60,7 +60,7 @@ public sealed class SenateVoteKindTableTests
     [Fact]
     public void AClotureMotionOnANominationIsClotureBecauseTheVoteDecidesToEndDebateNotToConfirm()
     {
-        var (kind, _) = SenateVoteKindTable.Classify([Fact("Question: On the Cloture Motion"), Fact("Document: PN373")]);
+        var (kind, _) = SenateVoteKindTable.Classify([Fact("Question: On the Cloture Motion"), Fact("Vote title: Cloture on the Nomination of Jane Example")]);
 
         Assert.Equal(VoteKind.Cloture, kind);
     }

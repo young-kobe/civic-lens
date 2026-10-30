@@ -2,7 +2,6 @@ using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
-using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Application.Collection.Votes;
 using CivicLens.Collection.Contracts;
 using CivicLens.Tests.Application.Collection.Bills;
@@ -61,14 +60,10 @@ public sealed class CollectionJobPriorityTests
     {
         var earlier = VoteSession.ForYear(2025);
         var house = HouseSource(Today);
-        var senate = new ConfiguredCollectionSource(SenateVoteFixtures.Configuration(), SenateVoteFixtures.SourceId, Today);
 
         Assert.Equal(CollectionJobPriority.Check, house.CreateScheduledJobDefinition(Now, null)!.Priority);
-        Assert.Equal(CollectionJobPriority.Check, senate.CreateScheduledJobDefinition(Now, null)!.Priority);
         Assert.Equal(CollectionJobPriority.Check,
             house.CreateHouseVoteListBatch("list", new HouseVoteListPage(earlier, [], null), Today).Jobs.Single().Definition.Priority);
-        Assert.Equal(CollectionJobPriority.Check,
-            senate.CreateSenateMenuBatch("menu", new SenateVoteMenu(earlier, []), Today).Jobs.Single().Definition.Priority);
     }
 
     [Fact]

@@ -83,7 +83,7 @@ internal sealed class PublicationScenario
     public PublicBaseUrl? BaseUrl { get; set; }
 
     public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events, OfficialPages = OfficialPages, PublicBaseUrl = BaseUrl }, Loaders(),
-        new PublicationCatalog(OfficialNames, Issues), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, null, Photos, () => PhotoReads++), new FixedExecutiveRoster(ExecutiveOfficials)),
+        new PublicationCatalog(OfficialNames, Issues), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, Photos, () => PhotoReads++), new FixedExecutiveRoster(ExecutiveOfficials)),
         Captures.Photos("artifacts"), Clock, new PruneReleases(Publications, Releases, NullLogger<PruneReleases>.Instance));
 
     public BlockedPublishedRecords Blocked() => new(Publications);
@@ -297,7 +297,7 @@ internal sealed class PublicationScenario
     public string AddVote(char id, ImmutableArray<ReviewDecision>? decisions = null, ReviewTextOrigin origin = ReviewTextOrigin.Model,
         string? billType = "hr", ImmutableArray<string>? billActionRecordIds = null, string[]? memberIds = null, int congress = 119,
         string[]? totalLines = null, string[]? otherMemberLines = null, Chamber chamber = Chamber.House,
-        string trackedSourceId = "M000001", string cast = "Yea", string result = "Passed")
+        string trackedSourceId = "M000001", string cast = "Yea", string result = "Passed", VoteSource? source = null)
     {
         var recordId = new string(id, 64);
         string[] memberPersonIds = memberIds ?? ["mayor"];
@@ -311,7 +311,7 @@ internal sealed class PublicationScenario
             new(extraction.ExtractionId, text.IndexOf(line, StringComparison.Ordinal), line.Length);
         VoteFact Fact(string line) => new(line, Line(detail, detailText, line));
         var revision = new VoteDraftRevision(recordId, 1, origin == ReviewTextOrigin.Model ? "civic-lens:analysis" : "auth0|editor", ApprovedAt,
-            $"Vote {id}", "The House voted on passage.", origin, null, "congress-house-votes", chamber, congress, 1, 100, billType, billType is null ? null : 7,
+            $"Vote {id}", "The House voted on passage.", origin, null, "congress-house-votes", source ?? (chamber == Chamber.Senate ? VoteSource.Voteview : VoteSource.CongressGov), chamber, congress, 1, 100, billType, billType is null ? null : 7,
             new string('b', 64), ApprovedAt,
             [Fact("Started: 2025-04-10T11:08:00-04:00"), Fact("Question: On Passage"), Fact($"Result: {result}"), Fact("Legislation: HR 7"), .. totals.Select(Fact)],
             new DateOnly(2025, 4, 10), Line(detail, detailText, "Started: 2025-04-10T11:08:00-04:00"), VoteKind.Passage,
