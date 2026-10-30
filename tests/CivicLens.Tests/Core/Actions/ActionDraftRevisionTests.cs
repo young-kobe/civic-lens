@@ -83,8 +83,14 @@ public sealed class ActionDraftRevisionTests
         Assert.Contains("\"candidateIncludesSubjects\":true", withFlag, StringComparison.Ordinal);
         Assert.False(back.CandidateIncludesSubjects);
         Assert.Equal(oldJson, JsonSerializer.Serialize(back, options));
+        Assert.DoesNotContain("ubjectsHash", oldJson, StringComparison.Ordinal);
+        Assert.Contains("\"subjectsHash\":\"" + new string('a', 64) + "\"", JsonSerializer.Serialize(old with { SubjectsHash = new string('a', 64) }, options), StringComparison.Ordinal);
+        Assert.Null(back.SubjectsHash);
         Assert.Throws<ArgumentException>(() =>
             (PersonEditOf(old, "h", "s") with { CandidateIncludesSubjects = true }).ValidatePersonEditOf(old));
+        Assert.Throws<ArgumentException>(() =>
+            (PersonEditOf(old, "h", "s") with { SubjectsHash = new string('a', 64) }).ValidatePersonEditOf(old));
+        Assert.Throws<ArgumentException>(() => (old with { SubjectsHash = "not-hex" }).ValidateShape());
     }
 
     [Fact]

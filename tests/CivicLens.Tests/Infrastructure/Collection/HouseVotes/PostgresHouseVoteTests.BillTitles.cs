@@ -233,9 +233,9 @@ public sealed partial class PostgresHouseVoteTests
         var withBill = await PendingCandidateAsync();
         Assert.Empty((await VoteStore().ReadEvidenceAsync(withBill, default))!.BillSubjects);
 
-        var older = await AdmitBillDetailAsync(Updated.AddDays(1), subjects: 1);
+        var older = await AdmitBillDetailAsync(Updated.AddDays(1), subjects: 2);
         await AdmitSubjectPageAsync(older, ["Older subject"], next: null);
-        var newer = await AdmitBillDetailAsync(Updated.AddDays(2), subjects: 2);
+        var newer = await AdmitBillDetailAsync(Updated.AddDays(2), subjects: 3);
         var openChain = await AdmitSubjectPageAsync(newer, ["Newer first"], next: SubjectsNext);
         var whileOpen = (await VoteStore().ReadEvidenceAsync(withBill, default))!.BillSubjects;
         await AdmitSubjectPageAsync(newer, ["Newer second"], next: null, pageJobId: openChain.Jobs.Single().JobId);

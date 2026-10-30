@@ -279,13 +279,38 @@ public sealed class ActionDraftStepTests
     }
 
     [Fact]
+    public async Task ACandidateWhosePromptWouldBeByteIdenticalDoesNotDraftAgainButRealSubjectsLaterDoAndAChangedSubjectDoesToo()
+    {
+        var plain = Create(summaries: [Summary]);
+        var policyOnly = Create(summaries: [Summary], subjectPages: [[]]);
+        var real = Create(summaries: [Summary], subjectPages: [["Housing finance and home ownership"]]);
+        var changed = Create(summaries: [Summary], subjectPages: [["Rent and rental housing"]]);
+        var (first, _) = await RunAsync(plain, new FakeHeadlineSummaryModel().Draft(Output()));
+        var before = Assert.Single(first.Revisions);
+
+        var (second, policyOnlyModel) = await RunAsync(policyOnly, new FakeHeadlineSummaryModel(), before);
+        var (third, realModel) = await RunAsync(real, new FakeHeadlineSummaryModel().Draft(Output(headline: "Revised")), before);
+        var withSubjects = Assert.Single(third.Revisions);
+        var (fourth, changedModel) = await RunAsync(changed, new FakeHeadlineSummaryModel().Draft(Output(headline: "Revised again")), withSubjects);
+
+        Assert.Empty(policyOnlyModel.Requests);
+        Assert.Equal((State.Succeeded, "unchanged"), (second.Entries[0].Status, second.Entries[0].ErrorCode));
+        Assert.Single(realModel.Requests);
+        Assert.Matches("^[0-9a-f]{64}$", withSubjects.SubjectsHash);
+        Assert.Single(changedModel.Requests);
+        Assert.NotEqual(withSubjects.SubjectsHash, Assert.Single(fourth.Revisions).SubjectsHash);
+    }
+
+    [Fact]
     public async Task ABillWithNoSubjectsDraftsWithoutThemAndTheRevisionKeepsTheOldShape()
     {
         var (store, model) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
 
         Assert.False(Assert.Single(store.Revisions).CandidateIncludesSubjects);
         Assert.DoesNotContain("subjects", Assert.Single(model.Requests).UserPrompt, StringComparison.Ordinal);
-        Assert.DoesNotContain("CandidateIncludesSubjects", JsonSerializer.Serialize(Assert.Single(store.Revisions)), StringComparison.Ordinal);
+        var json = JsonSerializer.Serialize(Assert.Single(store.Revisions));
+        Assert.DoesNotContain("CandidateIncludesSubjects", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("SubjectsHash", json, StringComparison.Ordinal);
     }
 
     [Theory]

@@ -23,5 +23,5 @@ internal sealed class BillGateRow
 
     public bool HasCosponsorChain => CosponsorCount > 0;
     public bool HasSummariesChain => SummaryCount > 0;
-    public bool HasSubjectsChain => SubjectCount > 0;
+    public bool HasSubjectsChain => CongressBill.HasLegislativeSubjects(SubjectCount, PolicyArea);
 }

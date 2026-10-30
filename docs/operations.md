@@ -159,6 +159,14 @@ WHERE g.decision = 'Passed'
 ORDER BY g.congress, g.bill_type, g.bill_number;
 ```
 
+After the subjects migration, bills that the gate saw earlier have no subjects chain. The owner command below adds the chains of the newest version of each bill. It needs `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_ARTIFACT_DIRECTORY`, the directory of the saved captures.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- bills subjects backfill 100
+```
+
+The limit is 100 when you give none. The command prints `examined` and `admitted`. Run it again until `examined` is 0. It is safe to repeat. The worker fetches the subjects pages. When a chain closes for a bill that already has an action candidate, the worker queues one more action draft for that bill. Each such draft spends model budget. Start with a small limit and watch the daily limit of [action drafting](#action-drafting). Run `votes draft redraft` after the subjects arrive, so that votes on those bills draft again. [Bills](architecture/bills.md#subjects-backfill) holds the rules.
+
 ### Federal Register stream
 
 The source `federal-register-documents` in `config/federal-coverage.json` follows the presidential documents of the Federal Register. It ships with `enabled: false`. It needs no key and no roster. [Executive actions](architecture/executive-actions.md) holds the design. To enable it:

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
@@ -25,6 +26,19 @@ public sealed class VoteDraftRevisionTests
     {
         Assert.Throws<ArgumentException>(() => (Revision() with { Chamber = chamber, Source = source }).ValidateShape());
         (Revision() with { Chamber = Chamber.Senate, Source = VoteSource.Voteview }).ValidateShape();
+    }
+
+    [Fact]
+    public void AnOldRevisionWithoutASubjectsHashWritesTheSameJsonAndAHashMustBeLowercaseHex()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var oldJson = JsonSerializer.Serialize(Revision(), options);
+        var hash = new string('a', 64);
+
+        Assert.DoesNotContain("ubjectsHash", oldJson, StringComparison.Ordinal);
+        Assert.Null(JsonSerializer.Deserialize<VoteDraftRevision>(oldJson, options)!.SubjectsHash);
+        Assert.Contains("\"subjectsHash\":\"" + hash + "\"", JsonSerializer.Serialize(Revision() with { SubjectsHash = hash }, options), StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(() => (Revision() with { SubjectsHash = "not-hex" }).ValidateShape());
     }
 
     [Fact]

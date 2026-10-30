@@ -12,4 +12,7 @@ public sealed record CongressBill(
     int CosponsorCount,
     int ActionCount,
     int SummaryCount,
-    int SubjectCount);
+    int SubjectCount)
+{
+    public static bool HasLegislativeSubjects(int subjectCount, string? policyArea) => subjectCount > (policyArea is null ? 0 : 1);
+}

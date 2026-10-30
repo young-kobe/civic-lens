@@ -756,6 +756,27 @@ public sealed class VoteDraftStepTests
     }
 
     [Fact]
+    public async Task SubjectsThatArriveAfterTheFirstDraftOrChangeDraftAgainAndTheSameSubjectsDoNot()
+    {
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Drafted));
+        var before = Assert.Single(first.Revisions);
+        var subjects = Create(subjects: ["Rent and rental housing"]);
+
+        var (second, secondModel) = await RunAsync(subjects, new FakeHeadlineSummaryModel().Draft(Drafted), before);
+        var withSubjects = Assert.Single(second.Revisions);
+        var (third, thirdModel) = await RunAsync(subjects, new FakeHeadlineSummaryModel(), withSubjects);
+        var (fourth, fourthModel) = await RunAsync(Create(subjects: ["Housing finance and home ownership"]), new FakeHeadlineSummaryModel().Draft(Drafted), withSubjects);
+
+        Assert.Null(before.SubjectsHash);
+        Assert.Matches("^[0-9a-f]{64}$", withSubjects.SubjectsHash);
+        Assert.Single(secondModel.Requests);
+        Assert.Empty(thirdModel.Requests);
+        Assert.Equal((State.Succeeded, "unchanged"), (third.Entries[0].Status, third.Entries[0].ErrorCode));
+        Assert.Single(fourthModel.Requests);
+        Assert.NotEqual(withSubjects.SubjectsHash, Assert.Single(fourth.Revisions).SubjectsHash);
+    }
+
+    [Fact]
     public async Task ABillWithNoSavedSubjectsPageStillDraftsWithTheOldPromptBecauseSubjectsCoverOnlySomeBills()
     {
         var (store, model) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Drafted));

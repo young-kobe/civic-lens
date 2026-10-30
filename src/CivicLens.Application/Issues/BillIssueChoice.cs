@@ -1,4 +1,6 @@
 using System.Collections.Immutable;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Nodes;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection.Bills;
@@ -17,9 +19,12 @@ public sealed class BillIssueChoice
         this.candidates = candidates;
         CandidateIds = [.. candidates.Select(issue => issue.Id)];
         this.subjects = candidates.IsEmpty ? [] : [.. subjects.Distinct(StringComparer.Ordinal)];
+        SubjectsHash = this.subjects.IsEmpty ? null : HashOf(this.subjects);
     }
 
     public ImmutableArray<string> CandidateIds { get; }
+
+    public string? SubjectsHash { get; }
 
     public static BillIssueChoice For(string? policyArea, IEnumerable<string> subjects, DateOnly day, IssueConfiguration issues)
     {
@@ -60,6 +65,9 @@ public sealed class BillIssueChoice
             errors.Add($"issueIds lists \"{Shorten(id)}\" more than once. List each issue once.");
         return [.. chosen.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
     }
+
+    private static string HashOf(ImmutableArray<string> subjects) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', subjects.Order(StringComparer.Ordinal)))));
 
     private ImmutableArray<string> CheckMissing(List<string> errors)
     {

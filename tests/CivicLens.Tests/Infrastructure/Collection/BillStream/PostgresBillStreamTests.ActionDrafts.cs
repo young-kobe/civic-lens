@@ -79,7 +79,7 @@ public sealed partial class PostgresBillStreamTests
     [InlineData(false)]
     public async Task SubjectsAndSummariesThatCloseLaterGiveAtMostThreeCandidatesWhicheverComesFirstAndReplayAddsNoMore(bool subjectsFirst)
     {
-        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1, subjects: 1);
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1, subjects: 2);
         await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
         var empty = new CongressBillSummariesPage([], null);
         var emptySubjects = new CongressBillSubjectsPage([], null);
@@ -107,7 +107,7 @@ public sealed partial class PostgresBillStreamTests
     public async Task ASubjectsChainThatClosesBeforeTheGatePassesIsIncludedInTheFirstCandidate()
     {
         var detail = await EnqueueDetailAsync("pending");
-        var result = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 1, subjects: 1), BillGateOutcome.Pending);
+        var result = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 1, subjects: 2), BillGateOutcome.Pending);
         var subjects = result.Jobs.Single(job => job.Url.Contains("/subjects?")).JobId;
         var cosponsors = result.Jobs.Single(job => job.Url.Contains("/cosponsors?")).JobId;
         await AdmitSubjectsAsync(subjects, new CongressBillSubjectsPage([], null));
@@ -124,7 +124,7 @@ public sealed partial class PostgresBillStreamTests
     [Fact]
     public async Task AnOlderCandidateIsSupersededByTheOneThatCoversItAndEvidenceListsOnlyThePagesItWasBuiltFrom()
     {
-        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1, subjects: 1);
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1, subjects: 2);
         await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
         await AdmitSummariesAsync(bill.Summaries!, new CongressBillSummariesPage([], null));
         await AdmitSubjectsAsync(bill.Subjects!, new CongressBillSubjectsPage([], null));
@@ -148,7 +148,7 @@ public sealed partial class PostgresBillStreamTests
     [Fact]
     public async Task ASubjectsOnlyCandidateIsTheNewestWhileTheSummariesChainStaysOpen()
     {
-        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1, subjects: 1);
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1, subjects: 2);
         await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
         await AdmitSubjectsAsync(bill.Subjects!, new CongressBillSubjectsPage([], null));
         var subjectsOnly = (await CandidatesAsync()).Single(item => item.IncludesSubjects);
@@ -162,7 +162,7 @@ public sealed partial class PostgresBillStreamTests
     [Fact]
     public async Task TheCandidateIdsOfTheOldInputCombinationsStayTheSameAndTheSubjectsSuffixComesLast()
     {
-        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1, subjects: 1);
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1, subjects: 2);
         await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
         await AdmitSummariesAsync(bill.Summaries!, new CongressBillSummariesPage([], null));
         await AdmitSubjectsAsync(bill.Subjects!, new CongressBillSubjectsPage([], null));
@@ -174,9 +174,59 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task TheBackfillAdmitsTheChainOfTheNewestVersionOnceStoresTheCountAndNeverListsAnExaminedBillAgain()
+    {
+        var older = await EnqueueDetailAsync("older");
+        await AdmitDetailAsync(older, DetailBill(UpdatedAt.AddDays(-1), cosponsors: 0), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+        var newest = await EnqueueDetailAsync("newest");
+        await AdmitDetailAsync(newest, DetailBill(UpdatedAt, cosponsors: 0), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+        var backfill = (IBillSubjectsBackfillStore)store;
+
+        Assert.Equal([newest], await backfill.ListNewestBillsWithoutSubjectCountAsync(10, default));
+        var admitted = await backfill.AdmitSubjectsChainAsync(Source(), newest, 5, default);
+        var replay = await backfill.AdmitSubjectsChainAsync(Source(), newest, 5, default);
+
+        Assert.True(admitted);
+        Assert.False(replay);
+        Assert.Equal(5, await ScalarAsync($"SELECT subject_count FROM bill_gates WHERE detail_job_id = '{newest}'"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM bill_follow_on_jobs l JOIN collection_jobs j ON j.job_id = l.job_id WHERE j.definition_json::jsonb ->> 'apiResource' = 'billSubjects'"));
+        Assert.Empty(await backfill.ListNewestBillsWithoutSubjectCountAsync(10, default));
+    }
+
+    [Fact]
+    public async Task TheBackfillOfAPolicyOnlyBillAdmitsNothingButRecordsTheCountSoItIsNotListedAgain()
+    {
+        var first = await EnqueueDetailAsync("first");
+        await AdmitDetailAsync(first, DetailBill(UpdatedAt, cosponsors: 0), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+        var backfill = (IBillSubjectsBackfillStore)store;
+
+        var admitted = await backfill.AdmitSubjectsChainAsync(Source(), first, 1, default);
+
+        Assert.False(admitted);
+        Assert.Equal(1, await ScalarAsync($"SELECT subject_count FROM bill_gates WHERE detail_job_id = '{first}'"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM bill_follow_on_jobs l JOIN collection_jobs j ON j.job_id = l.job_id WHERE j.definition_json::jsonb ->> 'apiResource' = 'billSubjects'"));
+        Assert.Empty(await backfill.ListNewestBillsWithoutSubjectCountAsync(10, default));
+    }
+
+    [Fact]
+    public async Task ASubjectsChainThatTheBackfillClosesAddsTheCandidateWithSubjectsToAPassedBillThatAlreadyHasOne()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+        Assert.Single(await CandidatesAsync());
+        var backfill = (IBillSubjectsBackfillStore)store;
+        await backfill.AdmitSubjectsChainAsync(Source(), bill.Detail, 4, default);
+        var subjectsJob = (await AdmittedJobsAsync()).Single(job => job.Definition.Url.Contains("/subjects?")).JobId;
+
+        await AdmitSubjectsAsync(subjectsJob, new CongressBillSubjectsPage([], null));
+
+        Assert.Equal([false, true], (await CandidatesAsync()).Select(candidate => candidate.IncludesSubjects).Order());
+    }
+
+    [Fact]
     public async Task RollingTheSubjectsMigrationBackDropsTheSubjectRowsFirstSoTheOldIndexCanBeBuiltOnRealData()
     {
-        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1, subjects: 1);
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1, subjects: 2);
         await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
         await AdmitSummariesAsync(bill.Summaries!, new CongressBillSummariesPage([], null));
         await AdmitSubjectsAsync(bill.Subjects!, new CongressBillSubjectsPage([], null));

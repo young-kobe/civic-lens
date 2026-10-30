@@ -700,6 +700,21 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
         Assert.Contains(await LinksAsync(), link => link.Key.Contains("/subjects/") && link.DetailJobId == detail);
     }
 
+    [Theory]
+    [InlineData(BillGateFixtures.TrackedPolicyArea, 1, false)]
+    [InlineData(BillGateFixtures.TrackedPolicyArea, 2, true)]
+    [InlineData(null, 1, true)]
+    [InlineData(null, 0, false)]
+    public async Task TheSubjectsCountIncludesThePolicyAreaSoAPolicyOnlyBillAdmitsNoSubjectsChain(string? policyArea, int count, bool admitted)
+    {
+        var detail = await EnqueueDetailAsync("detail");
+
+        var result = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 0, policyArea: policyArea, subjects: count),
+            BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+
+        Assert.Equal(admitted, result.Jobs.Any(job => job.Url.Contains("/subjects?")));
+    }
+
     [Fact]
     public async Task ABillWithNoSubjectsAdmitsNoSubjectsPageAndAnOldGateRowDefaultsToNone()
     {
