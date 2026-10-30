@@ -4,18 +4,10 @@
 @using CivicLens.Publication.Contracts
 
 <PublicPage Section="PublicSection.Officials" CanonicalPath="@Page.PagePath" Title="@Title" Description="@Description" RootPath="@Page.RootPath" Crumbs="Crumbs">
-    <PageHeader Title="@Page.Profile.Name" Lede="@Lede" />
+    <PageHeader Title="@Page.Profile.Name" Lede="@Lede" Serif="true" Portrait="Portrait" Meta="Links" />
     @if (Page.Congresses.Length > 1)
     {
         <FilterTabs Label="@PublishedOfficialView.CongressTabsLabel(Page)" Tabs="PublishedOfficialView.CongressTabs(Page)" />
-    }
-    @if (Page.IsCurrent)
-    {
-        <OfficialPortrait Profile="Page.Profile" RootPath="@Page.RootPath" />
-        @if (Page.Profile.Website is { } website)
-        {
-            <p><a href="@website" rel="noopener noreferrer">Official website (@PublishedOfficialView.WebsiteHost(website))</a></p>
-        }
     }
     @if (Page.TalkAndAction is { } profile)
     {
@@ -167,6 +159,14 @@
         ? [PublicCrumbs.Home(Page.RootPath), PublicCrumbs.Section(PublicSection.Officials, Page.RootPath), new(Page.Profile.Name)]
         : [PublicCrumbs.Home(Page.RootPath), PublicCrumbs.Section(PublicSection.Officials, Page.RootPath),
             new(Page.Profile.Name, Page.RootPath + PublicationProtocol.OfficialPagePath(Page.Profile.Id)), new(Title)];
+
+    private RenderFragment? Portrait => Page.IsCurrent
+        ? @<OfficialPortrait Profile="Page.Profile" RootPath="@Page.RootPath" />
+        : null;
+
+    private RenderFragment? Links => Page.IsCurrent && Page.Profile.Website is { } website
+        ? @<a href="@website" rel="noopener noreferrer">Official website (@PublishedOfficialView.WebsiteHost(website))</a>
+        : null;
 
     private int TalkAndActionCongress => Page.Congress!.Value;
 
