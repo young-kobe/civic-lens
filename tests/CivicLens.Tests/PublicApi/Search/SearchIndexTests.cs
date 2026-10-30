@@ -203,12 +203,11 @@ public sealed class SearchIndexTests(PostgresCollection postgres) : IAsyncLifeti
         await world.PublishAndIngestAsync(1,
             PublishedSamples.Statement('a', "apple"), PublishedSamples.Statement('b', "Zebra"), PublishedSamples.Statement('c', "Mango"),
             PublishedSamples.Statement('d', "H.R. 2"), PublishedSamples.Statement('e', "H.R. 10"), PublishedSamples.Statement('f', "\u00E9lan"),
-            PublishedSamples.Statement('1', "Apple"));
+            PublishedSamples.Statement('2', "\u00C9lan"), PublishedSamples.Statement('1', "Apple"));
 
         var page = await world.SearchAsync(request => request with { Sort = SearchSortKey.Headline });
 
-        Assert.Equal(["Apple", "apple", "H.R. 10", "H.R. 2", "Mango", "Zebra", "\u00E9lan"], page.Hits.Select(hit => hit.Headline));
-
+        Assert.Equal(["Apple", "apple", "H.R. 10", "H.R. 2", "Mango", "Zebra", "\u00C9lan", "\u00E9lan"], page.Hits.Select(hit => hit.Headline));
     }
 
     [Fact]
@@ -243,11 +242,12 @@ public sealed class SearchIndexTests(PostgresCollection postgres) : IAsyncLifeti
     }
 
     [Fact]
-    public async Task AForgedSortedCursorForARecordOutsideTheReleaseGivesAnEmptyPageAndNoError()
+    public async Task AForgedSortedCursorForARecordThatOnlyALaterReleaseHoldsGivesAnEmptyPageAndNoError()
     {
         await world.PublishAndIngestAsync(1, SortSamples());
+        await world.PublishAndIngestAsync(2, [.. SortSamples(), PublishedSamples.Statement('9', "Only in release two")]);
 
-        var page = await world.SearchAsync(request => request with { Sort = SearchSortKey.Headline, Cursor = SearchCursor.Sorted(1, new string('9', 64)) });
+        var page = await world.SearchAsync(request => request with { Sort = SearchSortKey.Headline, Cursor = SearchCursor.Sorted(1, new string('9', 64)) }, release: 1);
 
         Assert.Empty(page.Hits);
         Assert.Null(page.NextCursor);

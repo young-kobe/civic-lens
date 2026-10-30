@@ -100,7 +100,7 @@ public sealed class SearchIndex(NpgsqlDataSource database)
     {
         SearchSortKey.Date => SortDate,
         SearchSortKey.Published => "r.first_published_at_utc",
-        SearchSortKey.Headline => "lower(r.headline) COLLATE \"C\"",
+        SearchSortKey.Headline => "lower(r.headline COLLATE pg_c_utf8) COLLATE \"C\"",
         SearchSortKey.Kind => "r.kind COLLATE \"C\"",
         _ => throw new ArgumentOutOfRangeException(nameof(sort), sort, "Sort key is not known.")
     };

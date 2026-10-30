@@ -9,7 +9,7 @@ public sealed record SearchRequest
 {
     public const int MaximumQueryLength = 200;
     public const int DefaultLimit = 20;
-    public const int MaximumLimit = 50;
+    public const int MaximumLimit = PublicationProtocol.PageSize;
 
     public string? Text { get; init; }
     public PublishedRecordKind? Kind { get; init; }

@@ -1208,6 +1208,7 @@ public sealed class ReleaseRendererTests
         var source = System.Text.Json.JsonDocument.Parse(document.QuerySelector("table")!.GetAttribute("data-sort-source")!).RootElement;
         Assert.Equal(("https://api.test", 120, "documentChange"), (source.GetProperty("api").GetString(), source.GetProperty("total").GetInt32(),
             source.GetProperty("kinds").EnumerateObject().Single(kind => kind.Value.GetString() == "Document change").Name));
+        Assert.Equal(PublicationProtocol.PageSize, source.GetProperty("pageSize").GetInt32());
         Assert.Equal(["record", "published"], source.GetProperty("columns").EnumerateArray().Select(column => column.GetString()));
         Assert.Equal(release.Records.Take(50).Select(entry => entry.RecordId),
             Regex.Matches(html, "href=\"records/([0-9a-f]{32})\\.html\"").Select(match => match.Groups[1].Value));
@@ -1235,6 +1236,26 @@ public sealed class ReleaseRendererTests
         Assert.Equal(["Record", "Date"], issue.Sortable);
         Assert.Equal("issue=housing", issue.Filter);
         Assert.Equal("policyArea=health-care", (await Read(facets.PolicyAreas.Single())).Filter);
+    }
+
+    [Fact]
+    public async Task EachSortedTableNamesItsColumnsInTheOrderOfItsHeadersBecauseTheScriptBuildsRowsFromThatList()
+    {
+        var release = ReleaseOf(3) with { Records = [.. ReleaseOf(3).Records.Select(entry => entry with { IssueIds = ["housing"] })] };
+        var renderer = new ReleaseRenderer("https://api.test", null);
+        var headerOf = new Dictionary<string, string> { ["record"] = "Record", ["officials"] = "Officials", ["date"] = "Date", ["published"] = "First published" };
+
+        foreach (var html in new[]
+        {
+            await renderer.RenderAllRecordsAsync(release, 1, CancellationToken.None),
+            await renderer.RenderFacetPageAsync(ReleaseFacets.From(release, PublicationCatalogs.None).Issues.Single(), 1, CancellationToken.None)
+        })
+        {
+            var document = new HtmlParser().ParseDocument(html);
+            var source = System.Text.Json.JsonDocument.Parse(document.QuerySelector("table")!.GetAttribute("data-sort-source")!).RootElement;
+            Assert.Equal(document.QuerySelectorAll("thead th").Select(header => header.TextContent.Trim()),
+                source.GetProperty("columns").EnumerateArray().Select(column => headerOf[column.GetString()!]));
+        }
     }
 
     [Fact]
