@@ -18,6 +18,18 @@ public static class PublishedRecordLabels
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no label.")
     };
 
+    public static string KindPlural(PublishedRecordKind kind) => kind switch
+    {
+        PublishedRecordKind.DocumentChange => "Document changes",
+        PublishedRecordKind.Statement => "Statements",
+        PublishedRecordKind.Action => "Actions",
+        PublishedRecordKind.Brief => "Weekly briefs",
+        PublishedRecordKind.Vote => "Votes",
+        PublishedRecordKind.Relationship => "Relationships",
+        PublishedRecordKind.ExecutiveAction => "Executive actions",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no plural label.")
+    };
+
     public static string Badge(PublishedRecordEntry entry) =>
         entry.DocumentType is { } type ? ExecutiveActionKind(type) : Kind(entry.Kind);
 
