@@ -33,6 +33,8 @@ public static class PublicationProtocol
     private const string PhotoFolder = "photos/";
     private const string PhotoExtension = ".jpg";
 
+    public static string KindText(PublishedRecordKind kind) => JsonSerializer.Serialize(kind, JsonOptions).Trim('"');
+    public static string SearchByKindPath(PublishedRecordKind kind) => $"{SearchPagePath}?kind={KindText(kind)}";
     public static string AllRecordsPagePath(int page) => page == 1 ? "all.html" : $"all-{page}.html";
     public static string BriefsPagePath(int page) => page == 1 ? "briefs.html" : $"briefs-{page}.html";
     public static string IssuePagePath(string issueId, int page) => FacetPagePath("issues", issueId, page);

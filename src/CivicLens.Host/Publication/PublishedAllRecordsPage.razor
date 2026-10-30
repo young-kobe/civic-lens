@@ -3,6 +3,14 @@
 
 <PublicPage Section="PublicSection.AllRecords" Title="All published records" CanonicalPath="@PublicationProtocol.AllRecordsPagePath(Page)" Page="Page" PageCount="PageCount" Description="@($"All {Release.Records.Length} published records of Civic Lens, newest first. Each record shows its sources and the exact text it cites.")" Crumbs="Crumbs">
     <PageHeader Title="All published records" Lede="@($"Release {Release.ReleaseNumber}, published {Moment.Full(Release.PublishedAtUtc)}.")" />
+    @if (KindTabs.Count > 0)
+    {
+        <Panel Title="Search by kind" Padded="true">
+            <p>Each link opens the search page with that kind of record chosen.</p>
+            <FilterTabs Label="Search one kind of record" Tabs="KindTabs" />
+            <p><a href="@PublicationProtocol.SearchPagePath">Filter by issue or date</a></p>
+        </Panel>
+    }
     <Panel Label="Records">
         <PublishedRecordTable Records="PageRecords" Caption="Published records" />
         <Pager Label="Pages" Summary="@($"Page {Page} of {PageCount}")" NewerText="Previous" OlderText="Next"
@@ -18,6 +26,13 @@
     [Parameter, EditorRequired] public int Page { get; set; }
 
     private int PageCount => PublicationProtocol.PageCount(Release.Records.Length);
+
+    private IReadOnlyList<FilterTab>? kindTabs;
+
+    private IReadOnlyList<FilterTab> KindTabs => kindTabs ??= [.. Release.Records
+        .GroupBy(entry => entry.Kind)
+        .OrderBy(group => group.Key)
+        .Select(group => FilterTab.Link(PublishedRecordLabels.KindPlural(group.Key), PublicationProtocol.SearchByKindPath(group.Key), selected: false))];
 
     private IReadOnlyList<PublishedRecordEntry> PageRecords =>
         [.. Release.Records.Skip((Page - 1) * PublicationProtocol.PageSize).Take(PublicationProtocol.PageSize)];
