@@ -64,14 +64,9 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
     public Task<int> RequeueOlderPromptAsync(CancellationToken cancellationToken) =>
         queue.RequeueAsync(State.Succeeded, null, null, async (db, settled, token) =>
         {
-            var stale = await BillsDraftedUnderOlderPromptAsync(db, token);
             var ids = settled.Select(row => row.CandidateId).ToArray();
-            var candidates = await db.Set<ActionCandidateRow>().AsNoTracking().Where(candidate => ids.Contains(candidate.CandidateId))
-                .Select(candidate => new { candidate.CandidateId, candidate.SourceId, candidate.Congress, candidate.BillType, candidate.BillNumber })
-                .ToArrayAsync(token);
-            var staleCandidates = candidates.Where(candidate => stale.Contains(new(candidate.SourceId, candidate.Congress, candidate.BillType, candidate.BillNumber)))
-                .Select(candidate => candidate.CandidateId).ToHashSet(StringComparer.Ordinal);
-            return settled.Where(row => staleCandidates.Contains(row.CandidateId));
+            var stale = await StaleCandidateIdsAsync(db, ids, token);
+            return settled.Where(row => stale.Contains(row.CandidateId));
         }, cancellationToken);
 
     public async Task<IReadOnlyList<ActionDraftListItem>> ListAsync(ActionDraftView? view, int limit, CancellationToken cancellationToken)
@@ -98,19 +93,22 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
         return await AnalysisQueueCounts.CountAsync<ActionAnalysisRow, ActionDraftView>(db, ActionDraftTask.Task, ViewOf, cancellationToken);
     }
 
-    private static async Task<HashSet<BillKey>> BillsDraftedUnderOlderPromptAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken)
+    private static async Task<HashSet<string>> StaleCandidateIdsAsync(CollectionAttemptDbContext db, string[] candidateIds,
+        CancellationToken cancellationToken)
     {
-        var runs = await (from run in db.Set<ActionAnalysisRunRow>().AsNoTracking()
-                          join candidate in db.Set<ActionCandidateRow>().AsNoTracking() on run.CandidateId equals candidate.CandidateId
-                          where run.Task == ActionDraftTask.Task && run.Outcome == AnalysisRunOutcome.Drafted
-                          select new { candidate.SourceId, candidate.Congress, candidate.BillType, candidate.BillNumber, run.PromptVersion, run.StartedAtUtcTicks })
-            .ToArrayAsync(cancellationToken);
-        return runs.GroupBy(run => new BillKey(run.SourceId, run.Congress, run.BillType, run.BillNumber))
-            .Where(bill => bill.MaxBy(run => run.StartedAtUtcTicks)!.PromptVersion != ActionDraftTask.PromptVersion)
-            .Select(bill => bill.Key).ToHashSet();
+        var stale = await (from candidate in db.Set<ActionCandidateRow>().AsNoTracking()
+                           where candidateIds.Contains(candidate.CandidateId)
+                           let newestDraftPrompt = (from run in db.Set<ActionAnalysisRunRow>()
+                                                    join sibling in db.Set<ActionCandidateRow>() on run.CandidateId equals sibling.CandidateId
+                                                    where run.Task == ActionDraftTask.Task && run.Outcome == AnalysisRunOutcome.Drafted &&
+                                                        sibling.SourceId == candidate.SourceId && sibling.Congress == candidate.Congress &&
+                                                        sibling.BillType == candidate.BillType && sibling.BillNumber == candidate.BillNumber
+                                                    orderby run.StartedAtUtcTicks descending
+                                                    select run.PromptVersion).FirstOrDefault()
+                           where newestDraftPrompt != null && newestDraftPrompt != ActionDraftTask.PromptVersion
+                           select candidate.CandidateId).ToArrayAsync(cancellationToken);
+        return stale.ToHashSet(StringComparer.Ordinal);
     }
-
-    private sealed record BillKey(string SourceId, int Congress, string BillType, int BillNumber);
 
     private static async Task<IReadOnlyList<ActionDraftPage>> ReadPagesAsync(CollectionAttemptDbContext db, string detailJobId,
         bool includesSummaries, CancellationToken cancellationToken)

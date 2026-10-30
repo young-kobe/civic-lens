@@ -225,8 +225,8 @@ An approved action record with no open concern publishes in a static release, li
 | `actions draft status` | Daily limit, pause, tokens charged today, and the count of entries in each outcome |
 | `actions draft list [view] [limit]` | Entries. Views: `drafted`, `unchanged`, `superseded`, `no-official`, `pending`, `failed` |
 | `actions draft requeue <candidate-id\|--all>` | Failed rows, and no others, back to Pending |
-| `actions draft redraft` | Succeeded `drafted` and `unchanged` rows of bills with an older prompt version, and no others, back to Pending. Needs no argument and calls no model itself |
 | `actions draft requeue --blocked --code <block-code>` | Blocked rows with exactly that code, and no others, back to Pending. The code is required and must not be empty |
+| `actions draft redraft` | Succeeded `drafted` and `unchanged` rows of bills with an older prompt version, and no others, back to Pending. Older entries of a stale bill requeue too and settle as superseded, so the printed count is entries, not bills. Needs no argument and calls no model itself |
 
 All are owner commands. Variables and examples are in [operations](../operations.md#action-drafting).
 
@@ -267,7 +267,8 @@ All are owner commands. Variables and examples are in [operations](../operations
 
 ## Limits and planned work
 
-- `actions draft redraft` draws a new draft only from a stored draft that lacks issue candidates. A later prompt bump with the same inputs settles `unchanged`, because `ActionDraftContext.ChangeSinceCurrent` does not compare the prompt version. Add that comparison with the next prompt bump that must rerun.
+- `actions draft redraft` draws a new draft only when the step 7 inputs differ from the current draft. A missing candidate set is one such difference, so the command serves drafts that lack issue candidates. A later prompt bump with the same inputs settles `unchanged`, because `ActionDraftContext.ChangeSinceCurrent` does not compare the prompt version. The newest `Drafted` run still names the old prompt. The entry stays selected, so each later run requeues it and adds one Bypassed run row. Add the prompt comparison with the next prompt bump that must rerun.
+- Requeued entries keep their created time. A fresh bill at the same priority can wait behind a redraft backlog, as with failed requeue and regate.
 - Action records can produce about 110 revisions a day, about half of them sponsorship changes on approved records. Those revisions copy the text and need no model call. Code approves them.
 - The editor page has no Host test with a drafted record yet. The Host tests cover the Review home panel and missing records.
 - The prompt does not include the candidate update date, and no page renders it yet.
