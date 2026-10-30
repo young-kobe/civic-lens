@@ -371,10 +371,13 @@ public sealed partial class PostgresHouseVoteTests
     [Theory]
     [InlineData("chamber", "Senate")]
     [InlineData("source_id", "another-source")]
-    public async Task RedraftTreatsAVoteOfAnotherChamberOrSourceWithTheSameRollNumberAsAnotherRollCall(string column, string value)
+    [InlineData("congress", "118")]
+    [InlineData("session_number", "2")]
+    public async Task RedraftTreatsAVoteThatDiffersInAnyRollCallKeyTermAsAnotherRollCall(string column, string value)
     {
         var (house, other) = await TwoSettledCandidatesAsync(null, null);
-        await ExecuteAsync($"UPDATE vote_candidates SET {column} = '{value}' WHERE candidate_id = '{other}'");
+        var literal = int.TryParse(value, out _) ? value : $"'{value}'";
+        await ExecuteAsync($"BEGIN; SET LOCAL session_replication_role = replica; UPDATE vote_candidates SET {column} = {literal} WHERE candidate_id = '{other}'; COMMIT;");
         await InsertRunAsync(house, "vote-draft-prompt-v1", 1);
         await InsertRunAsync(other, VoteDraftTask.PromptVersion, 2);
 
