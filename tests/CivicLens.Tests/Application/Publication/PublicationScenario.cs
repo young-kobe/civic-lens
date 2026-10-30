@@ -465,6 +465,8 @@ internal sealed class FakeRenderer : IReleaseRenderer
         Task.FromResult("<html>method</html>");
     public Task<string> RenderAboutAsync(CancellationToken cancellationToken) =>
         Task.FromResult("<html>about</html>");
+    public Task<string> RenderGlossaryAsync(CancellationToken cancellationToken) =>
+        Task.FromResult("<html>glossary</html>");
     public Task<string> RenderSearchAsync(PublicationRelease release, ReleaseFacets facets, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>search {release.Records.Length} {facets.Issues.Length}</html>");
 

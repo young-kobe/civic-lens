@@ -198,7 +198,8 @@ public sealed class ReleaseRendererTests
     {
         var html = await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None);
 
-        var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
+        var document = new HtmlParser().ParseDocument(html);
+        var text = document.QuerySelector("main")!.ShownText();
         Assert.Contains("Amendment, Suspension of the rules, Passage, Conference report, Veto override, Nomination.", text, StringComparison.Ordinal);
         Assert.Contains("A vote is substantive when its kind is one of these:", text, StringComparison.Ordinal);
         Assert.Contains("Votes they cast: the substantive roll call votes on the issue", text, StringComparison.Ordinal);
@@ -388,7 +389,7 @@ public sealed class ReleaseRendererTests
 
         var document = new HtmlParser().ParseDocument(html);
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
-            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
+            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.ShownText());
         Assert.Equal("Jane <Doe>", facts["Speakers"]);
         Assert.Equal("Aide One", facts["Other people quoted, named as the article writes them"]);
         Assert.Equal("2026-05-01", facts["Statement date"]);
@@ -457,7 +458,7 @@ public sealed class ReleaseRendererTests
 
         var document = new HtmlParser().ParseDocument(html);
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
-            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
+            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.ShownText());
         Assert.Equal("2026-05-01. " + PublishedRecordLabels.CodeReadDate + ".", facts["Statement date"]);
     }
 
@@ -551,7 +552,7 @@ public sealed class ReleaseRendererTests
 
         var document = new HtmlParser().ParseDocument(html);
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
-            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
+            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.ShownText());
         Assert.Equal("HR 7, Congress 119", facts["Bill"]);
         Assert.Equal("A <housing> bill", facts["Title"]);
         Assert.Equal("Housing and Community Development", facts["Policy area"]);
@@ -632,7 +633,7 @@ public sealed class ReleaseRendererTests
 
         var document = new HtmlParser().ParseDocument(html);
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
-            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
+            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.ShownText());
         Assert.Equal("2025-04-10", facts["Voted on"]);
         Assert.Equal("Passage", facts["Kind"]);
         Assert.Equal("House", facts["Chamber"]);
@@ -643,7 +644,7 @@ public sealed class ReleaseRendererTests
         Assert.Equal(["Started: 2025-04-10T11:08:00-04:00", "Question: On Passage", "Result: Passed <b>"],
             result.QuerySelectorAll("blockquote").Select(quote => quote.TextContent));
         var members = document.QuerySelector("[aria-labelledby='members-title']")!;
-        Assert.Equal(["Voted Yea (1 tracked House member)"], members.QuerySelectorAll("h3").Select(heading => heading.TextContent));
+        Assert.Equal(["Voted Yea (1 tracked House member)"], members.QuerySelectorAll("h3").Select(heading => heading.ShownText()));
         Assert.Equal(["Jane <Doe>"], members.QuerySelectorAll("li a:first-child").Select(link => link.TextContent));
         Assert.Empty(members.QuerySelectorAll("blockquote"));
         var sources = document.QuerySelector("[aria-labelledby='sources-title']")!;
@@ -684,7 +685,7 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
         var document = new HtmlParser().ParseDocument(html);
         return document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
-            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
+            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.ShownText());
     }
 
     [Theory]
@@ -734,7 +735,7 @@ public sealed class ReleaseRendererTests
 
         var document = new HtmlParser().ParseDocument(html);
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
-            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
+            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.ShownText());
         Assert.Equal(label, facts["Kind"]);
     }
 
@@ -813,7 +814,7 @@ public sealed class ReleaseRendererTests
     {
         var document = new HtmlParser().ParseDocument(html);
         return document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
-            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
+            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.ShownText());
     }
 
     [Fact]
@@ -851,8 +852,150 @@ public sealed class ReleaseRendererTests
 
         var members = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='members-title']")!;
         Assert.Equal(["Voted Yea (2 tracked House members)", "Voted Nay (1 tracked House member)", "Voted for Jeffries (2 tracked House members)", "Voted for Emmer (1 tracked House member)", "Voted Present (1 tracked House member)", "Did not vote (1 tracked House member)"],
-            members.QuerySelectorAll("h3").Select(heading => heading.TextContent));
+            members.QuerySelectorAll("h3").Select(heading => heading.ShownText()));
         Assert.Equal(["Amy", "Carl"], members.QuerySelectorAll(".member-group:first-of-type li a:first-child").Select(link => link.TextContent));
+    }
+
+    [Fact]
+    public async Task EachCastWordOnTheVotePageKeepsItsTermSoAReaderCanLookUpYeaNayPresentAndNotVoting()
+    {
+        var vote = VoteWithCasts([("Zed", "Not Voting"), ("Pat", "Present"), ("Carl", "Yea"), ("Bo", "Nay"), ("Dee", "Emmer")]);
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var members = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='members-title']")!;
+        var terms = members.QuerySelectorAll("h3 button.term").Select(button => (button.TextContent, button.GetAttribute("popovertarget"))).ToArray();
+        Assert.Equal([("Yea", "term-yea"), ("Nay", "term-nay"), ("Present", "term-present"), ("Did not vote", "term-not-voting")], terms);
+        Assert.Contains(Glossary.Term("present").Means, members.QuerySelector("#term-present")!.TextContent);
+    }
+
+    [Theory]
+    [InlineData(PublishedVoteKind.Passage, "term-passage")]
+    [InlineData(PublishedVoteKind.Amendment, "term-amendment")]
+    [InlineData(PublishedVoteKind.Rule, "term-house-rule")]
+    [InlineData(PublishedVoteKind.Suspension, "term-suspension-of-the-rules")]
+    [InlineData(PublishedVoteKind.Nomination, "term-confirmation-vote")]
+    [InlineData(PublishedVoteKind.MotionToProceed, "term-motion-to-proceed")]
+    public async Task TheKindOfAVoteIsATermAndKeepsItsVisibleLabel(PublishedVoteKind kind, string popover)
+    {
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote() with { Kind = kind }, null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var button = new HtmlParser().ParseDocument(html).QuerySelector(".facts button.term")!;
+        Assert.Equal(popover, button.GetAttribute("popovertarget"));
+        Assert.Equal(PublishedRecordLabels.VoteKind(kind), button.TextContent);
+    }
+
+    [Fact]
+    public async Task AnOtherKindVoteHasNoKindTermBecauseTheGlossaryHasNoDefinitionForIt()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote() with { Kind = PublishedVoteKind.Other }, null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.Empty(new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts button.term"));
+    }
+
+    [Fact]
+    public void EveryVoteKindHasItsTermKeyOrNoneForOtherAndEveryKeyIsInTheGlossary()
+    {
+        var expected = new Dictionary<PublishedVoteKind, string?>
+        {
+            [PublishedVoteKind.Rule] = "house-rule",
+            [PublishedVoteKind.PreviousQuestion] = "previous-question",
+            [PublishedVoteKind.MotionToRecommit] = "motion-to-recommit",
+            [PublishedVoteKind.Amendment] = "amendment",
+            [PublishedVoteKind.Suspension] = "suspension-of-the-rules",
+            [PublishedVoteKind.Passage] = "passage",
+            [PublishedVoteKind.ConferenceReport] = "conference-report",
+            [PublishedVoteKind.VetoOverride] = "veto-override",
+            [PublishedVoteKind.Nomination] = "confirmation-vote",
+            [PublishedVoteKind.Cloture] = "cloture",
+            [PublishedVoteKind.MotionToProceed] = "motion-to-proceed",
+            [PublishedVoteKind.Other] = null
+        };
+
+        Assert.Equal(Enum.GetValues<PublishedVoteKind>().Order(), expected.Keys.Order());
+        foreach (var (kind, key) in expected)
+        {
+            Assert.Equal(key, PublishedRecordLabels.VoteKindTermKey(kind));
+            if (key is not null) Assert.Equal(key, Glossary.Term(key).Key);
+        }
+    }
+
+    [Theory]
+    [InlineData(PublishedExecutiveActionKind.ExecutiveOrder, "term-executive-order")]
+    [InlineData(PublishedExecutiveActionKind.Proclamation, "term-proclamation")]
+    [InlineData(PublishedExecutiveActionKind.Memorandum, "term-memorandum")]
+    [InlineData(PublishedExecutiveActionKind.Notice, "term-presidential-notice")]
+    public async Task TheTypeOfAnExecutiveActionIsATermAndANoticeUsesThePresidentialNoticeDefinitionNotTheAgencyOne(PublishedExecutiveActionKind kind, string popover)
+    {
+        var record = (PublishedExecutiveAction)PublicApi.PublishedSamples.ExecutiveAction("Title", "Tail").Body with { Kind = kind };
+        var html = await new ReleaseRenderer(null, null).RenderExecutiveActionAsync(record, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var type = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
+            .Single(pair => pair.First.TextContent == "Type").Second;
+        Assert.Equal(popover, type.QuerySelector("button.term")!.GetAttribute("popovertarget"));
+        Assert.Equal(PublishedRecordLabels.ExecutiveActionKind(kind), type.ShownText());
+    }
+
+    [Fact]
+    public void ANoticeIsLabeledPresidentialSoTheGlossaryLookupFindsTheRightDefinition() =>
+        Assert.Equal(Glossary.Term("presidential-notice").Name, PublishedRecordLabels.ExecutiveActionKind(PublishedExecutiveActionKind.Notice));
+
+    [Fact]
+    public void EveryExecutiveActionKindHasATermInTheGlossary()
+    {
+        foreach (var kind in Enum.GetValues<PublishedExecutiveActionKind>())
+            Assert.Equal(PublishedRecordLabels.ExecutiveActionTermKey(kind), Glossary.Term(PublishedRecordLabels.ExecutiveActionTermKey(kind)).Key);
+    }
+
+    [Fact]
+    public async Task TheExecutiveActionEvidenceTextNamesTheFederalRegisterAsATerm()
+    {
+        var record = (PublishedExecutiveAction)PublicApi.PublishedSamples.ExecutiveAction("Title", "Tail").Body;
+        var html = await new ReleaseRenderer(null, null).RenderExecutiveActionAsync(record, CancellationToken.None);
+
+        var evidence = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='evidence-title']")!;
+        Assert.Equal("term-federal-register", evidence.QuerySelector("button.term")!.GetAttribute("popovertarget"));
+        Assert.Equal("Federal Register", evidence.QuerySelector("button.term")!.TextContent);
+    }
+
+    [Theory]
+    [InlineData("Yea", "yea")]
+    [InlineData("Aye", "yea")]
+    [InlineData("Nay", "nay")]
+    [InlineData("No", "nay")]
+    [InlineData("Present", "present")]
+    [InlineData("Not Voting", "not-voting")]
+    [InlineData("Emmer", null)]
+    public void EveryCastWordMapsToItsTermAndACandidateNameHasNone(string cast, string? key)
+    {
+        Assert.Equal(key, PublishedRecordLabels.CastTermKey(cast));
+    }
+
+    [Fact]
+    public async Task TheWordCorrectionIsATermOnlyWhenTheCorrectionHasANote()
+    {
+        var corrections = new PublishedCorrection[]
+        {
+            new() { ReplacedRevisionNumber = 2, PublishedAtUtc = new DateTimeOffset(2026, 2, 4, 9, 0, 0, TimeSpan.Zero), Note = "Fixed a date." },
+            new() { ReplacedRevisionNumber = 1, PublishedAtUtc = new DateTimeOffset(2026, 2, 2, 9, 0, 0, TimeSpan.Zero) }
+        };
+        var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action() with { RevisionNumber = 3, Corrections = corrections }, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var items = new HtmlParser().ParseDocument(html).QuerySelectorAll("ul.corrections > li strong").ToArray();
+        Assert.Equal("term-correction", items[0].QuerySelector("button.term")!.GetAttribute("popovertarget"));
+        Assert.Equal("Correction", items[0].QuerySelector("button.term")!.TextContent);
+        Assert.Null(items[1].QuerySelector("button.term"));
+    }
+
+    [Fact]
+    public async Task TheRelatedPanelNamesTheStatementAsATerm()
+    {
+        var action = Action();
+        var html = await new ReleaseRenderer(null, null).RenderActionAsync(action, [Relationship(PublishedRecordKind.Action, action.RecordId, '7')], PublicationCatalogs.None, CancellationToken.None);
+
+        var button = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='related-title'] button.term")!;
+        Assert.Equal("term-statement", button.GetAttribute("popovertarget"));
+        Assert.Equal("statement", button.TextContent);
     }
 
     // A bare count could mean all members who voted, so each heading says it counts tracked members of the chamber.
@@ -863,7 +1006,7 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
 
         var members = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='members-title']")!;
-        Assert.Equal(["Voted Yea (2 tracked senators)"], members.QuerySelectorAll("h3").Select(heading => heading.TextContent));
+        Assert.Equal(["Voted Yea (2 tracked senators)"], members.QuerySelectorAll("h3").Select(heading => heading.ShownText()));
         Assert.Equal(["Source line: Amy, member line", "Source line: Bo, member line"], members.QuerySelectorAll("li a.small").Select(link => link.TextContent));
     }
 
@@ -973,7 +1116,7 @@ public sealed class ReleaseRendererTests
         var document = new HtmlParser().ParseDocument(html);
         Assert.Equal("A week of <housing> news", document.QuerySelector("h1")!.TextContent);
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
-            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
+            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.ShownText());
         Assert.Equal("Starts Monday 2026-10-05, New York time", facts["Week"]);
         Assert.Equal("3", facts["Cutoff release"]);
         Assert.Equal(("5", "4", "2"), (facts["Records considered"], facts["Records sent to the drafting model"], facts["Records cited"]));
@@ -1337,7 +1480,7 @@ public sealed class ReleaseRendererTests
                      await renderer.RenderStatementAsync(statement, [], PublicationCatalogs.None, CancellationToken.None) })
         {
             var entries = new HtmlParser().ParseDocument(html).QuerySelectorAll("ul.corrections > li")
-                .Select(item => (item.QuerySelector("strong")!.TextContent, item.QuerySelector("p")?.TextContent)).ToArray();
+                .Select(item => (item.QuerySelector("strong")!.ShownText(), item.QuerySelector("p")?.TextContent)).ToArray();
             Assert.Equal(("Correction, 2026-02-04. Replaces revision 2.", "Fixed the <sponsor> date."), entries[0]);
             Assert.Equal(("Updated from the source, 2026-02-02. Replaces revision 1.", null), entries[1]);
         }
@@ -1368,7 +1511,7 @@ public sealed class ReleaseRendererTests
         foreach (var expected in new[] { "Action", new string('c', 64), "3", "2026-02-01 08:00 UTC", "2026-02-09 09:30 UTC", "Wrong <bill>." })
             Assert.Contains(expected, text, StringComparison.Ordinal);
         Assert.Contains("Wrong &lt;bill&gt;.", html, StringComparison.Ordinal);
-        Assert.Equal("Correction, 2026-02-04. Replaces revision 2.", document.QuerySelector("ul.corrections > li strong")!.TextContent);
+        Assert.Equal("Correction, 2026-02-04. Replaces revision 2.", document.QuerySelector("ul.corrections > li strong")!.ShownText());
         Assert.Empty(document.QuerySelectorAll("main a[href*='report.html?']"));
     }
 
@@ -1611,7 +1754,7 @@ public sealed class ReleaseRendererTests
     [
         PublicationProtocol.HomePath, PublicationProtocol.OfficialsPagePath, PublicationProtocol.FacetsPath,
         PublicationProtocol.AllRecordsPagePath(1), PublicationProtocol.BriefsPagePath(1), PublicationProtocol.SearchPagePath,
-        PublicationProtocol.MethodPagePath, PublicationProtocol.AboutPagePath, PublicationProtocol.ReportPagePath
+        PublicationProtocol.MethodPagePath, PublicationProtocol.AboutPagePath, PublicationProtocol.GlossaryPagePath, PublicationProtocol.ReportPagePath
     ];
 
     [Fact]
@@ -1634,7 +1777,7 @@ public sealed class ReleaseRendererTests
             var links = document.QuerySelectorAll("nav[aria-label='Site'] a, nav[aria-label='Footer'] a")
                 .Select(link => link.GetAttribute("href")!).ToList();
 
-            Assert.Equal(8, links.Count);
+            Assert.Equal(9, links.Count);
             Assert.All(links, href => Assert.True(WrittenRootPages.Contains(ReleasePath(pagePath, href)), $"{name}: {href}"));
         }
     }
@@ -1721,6 +1864,7 @@ public sealed class ReleaseRendererTests
             ("search", PublicationProtocol.SearchPagePath, await renderer.RenderSearchAsync(release, facets, CancellationToken.None), "Search"),
             ("method", PublicationProtocol.MethodPagePath, await renderer.RenderMethodAsync(CancellationToken.None), null),
             ("about", PublicationProtocol.AboutPagePath, await renderer.RenderAboutAsync(CancellationToken.None), null),
+            ("glossary", PublicationProtocol.GlossaryPagePath, await renderer.RenderGlossaryAsync(CancellationToken.None), null),
             ("report", PublicationProtocol.ReportPagePath, await renderer.RenderReportAsync(CancellationToken.None), null)
         ];
     }

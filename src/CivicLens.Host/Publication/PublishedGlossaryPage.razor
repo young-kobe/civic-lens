@@ -1,0 +1,45 @@
+@using CivicLens.Host.Components.Layout
+@using CivicLens.Publication.Contracts
+
+<PublicPage CanonicalPath="@PublicationProtocol.GlossaryPagePath" Title="Glossary" Description="What each term means and why it matters." Crumbs="Crumbs">
+    <PageHeader Title="Glossary" />
+    @foreach (var group in Glossary.Groups)
+    {
+        <Panel Title="@group.Title" Padded="true">
+            @foreach (var term in group.Terms)
+            {
+                <section class="glossary-term" aria-labelledby="@term.AnchorId">
+                    <h3 id="@term.AnchorId">@term.Name</h3>
+                    <dl>
+                        <dt>Means</dt>
+                        <dd>@term.Means</dd>
+                        <dt>Why it matters</dt>
+                        <dd>@term.WhyItMatters</dd>
+                        <dt>Source</dt>
+                        <dd>@term.Source</dd>
+                    </dl>
+                    @if (term.LongForm is not null)
+                    {
+                        <p>@term.LongForm</p>
+                    }
+                </section>
+            }
+            @if (group == Glossary.Groups[0])
+            {
+                <section class="glossary-term" aria-labelledby="glossary-party-count">
+                    <h3 id="glossary-party-count">@Glossary.PartyCountHeading</h3>
+                    <ul>
+                        @foreach (var rule in Glossary.PartyCountRules)
+                        {
+                            <li>@rule</li>
+                        }
+                    </ul>
+                </section>
+            }
+        </Panel>
+    }
+</PublicPage>
+
+@code {
+    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), new("Glossary")];
+}
