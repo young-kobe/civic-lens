@@ -111,6 +111,52 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
+    public async Task TheLedeNamesTheRolePartyAndTenureSoAReaderKnowsWhoThisIsWithoutReadingTheTable()
+    {
+        var page = Current([], []) with
+        {
+            Profile = Profile("rep", "Rita Rep", new PublishedOfficeTerm { Office = "rep", Kind = PublishedOfficeKind.Representative, State = "WA", District = 9, Party = "Democrat", Start = new(1997, 1, 7) }),
+            PublishedAtUtc = ListPublishedAtUtc
+        };
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.Equal("Representative for WA, district 9. Party: Democrat. In the House since January 1997, now in the 1st term.",
+            new HtmlParser().ParseDocument(html).QuerySelector(".page-header-lede")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheRecordsCaptionCountsEachKindAndTheVotesWithTheirCongressSoNoCountHasAnUnstatedScope()
+    {
+        var page = Current(
+            [Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)), Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1))],
+            [Vote('3', new DateOnly(2026, 4, 1)), Vote('4', new DateOnly(2025, 12, 1))]);
+
+        var records = await PanelAsync(page, "panel-records");
+
+        Assert.Equal("4 published records name Mayor Example: 1 statement, 1 action and 2 votes in the 119th Congress.", records.QuerySelector("p.muted")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheOfficesPanelComesLastAndMergesTermsIntoOneRowPerUnbrokenStretchWithANote()
+    {
+        var page = Current([], []) with
+        {
+            Profile = Profile("rep", "Rita Rep",
+                new PublishedOfficeTerm { Office = "rep", Kind = PublishedOfficeKind.Representative, State = "WA", District = 9, Party = "Democrat", Start = new(1997, 1, 7), End = new(1999, 1, 3) },
+                new PublishedOfficeTerm { Office = "rep", Kind = PublishedOfficeKind.Representative, State = "WA", District = 9, Party = "Democrat", Start = new(1999, 1, 6), End = new(2001, 1, 3) })
+        };
+
+        var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None));
+
+        var offices = document.QuerySelector("[aria-labelledby='panel-offices']")!;
+        Assert.Same(offices, document.QuerySelectorAll("main section.panel").Last());
+        Assert.Equal(["1997-01-07"], offices.QuerySelectorAll("tbody td[data-label='From']").Select(cell => cell.TextContent));
+        Assert.Equal(["2001-01-03"], offices.QuerySelectorAll("tbody td[data-label='To']").Select(cell => cell.TextContent));
+        Assert.Contains("Each row is one unbroken stretch in the same office.", offices.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AnOfficialWithNoPartyOnAnyTermGetsNoPartyColumnBecauseItWouldBeEmpty()
     {
         var page = Current([], []) with { Profile = Profile("pres", "Pat President", new PublishedOfficeTerm { Office = "President", Kind = PublishedOfficeKind.Executive, Start = new DateOnly(2025, 1, 20) }) };
@@ -892,6 +938,10 @@ public sealed class PublishedOfficialPageTests
 
     private static async Task<AngleSharp.Dom.IDocument> ListAsync(DateTimeOffset publishedAtUtc, params OfficialListing[] officials) =>
         new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialsAsync(officials, publishedAtUtc, CancellationToken.None));
+
+    private static async Task<AngleSharp.Dom.IElement> PanelAsync(ReleaseOfficialPage page, string panelId) =>
+        new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None))
+            .QuerySelector($"[aria-labelledby='{panelId}']")!;
 
     private static async Task<AngleSharp.Dom.IElement> PanelTableAsync(ReleaseOfficialPage page, string panelId) =>
         new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None))

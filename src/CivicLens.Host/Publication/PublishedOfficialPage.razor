@@ -12,21 +12,6 @@
         {
             <p><a href="@website" rel="noopener noreferrer">Official website (@PublishedOfficialView.WebsiteHost(website))</a></p>
         }
-        <Panel Title="Offices">
-            <DataTable Roles="true" Items="Page.Profile.Terms" Caption="@($"Offices of {Page.Profile.Name}")">
-                <Head><TableCell Header>Office</TableCell>@if (HasParty){<TableCell Header>@PublicColumn.Party</TableCell>}<TableCell Header Class="fit num">@PublicColumn.From</TableCell><TableCell Header Class="fit num">@PublicColumn.To</TableCell></Head>
-                <Row Context="term">
-                    <TableCell Main>@PublishedOfficialView.Office(term)</TableCell>
-                    @if (HasParty)
-                    {
-                        <TableCell Label="@PublicColumn.Party">@term.Party</TableCell>
-                    }
-                    <TableCell Class="fit num" Label="@PublicColumn.From">@Moment.Iso(term.Start)</TableCell>
-                    <TableCell Class="fit num" Label="@PublicColumn.To">@(term.End is { } end ? Moment.Iso(end) : "Present")</TableCell>
-                </Row>
-                <Empty><EmptyState Title="No office on record" Text="@NoOfficeText" /></Empty>
-            </DataTable>
-        </Panel>
     }
     @if (Page.TalkAndAction is { } profile)
     {
@@ -114,6 +99,7 @@
         }
     }
     <Panel Title="Records" Aside="@RecordFilter" data-layout="@(RecordFilter is null ? null : PublishedOfficialView.RecordFilters[0].Value)" data-records="@(Page.TalkAndAction is null ? null : "")">
+        <p class="muted small">@PublishedOfficialView.RecordsCaption(Page)</p>
         @if (Page.TalkAndAction is not null)
         {
             <div class="visually-hidden" role="status" data-filter-status></div>
@@ -153,6 +139,25 @@
             </ul>
         </Panel>
     }
+    @if (Page.IsCurrent)
+    {
+        <Panel Title="Offices">
+            <DataTable Roles="true" Items="OfficeStretches" Caption="@($"Offices of {Page.Profile.Name}")">
+                <Head><TableCell Header>Office</TableCell>@if (HasParty){<TableCell Header>@PublicColumn.Party</TableCell>}<TableCell Header Class="fit num">@PublicColumn.From</TableCell><TableCell Header Class="fit num">@PublicColumn.To</TableCell></Head>
+                <Row Context="stretch">
+                    <TableCell Main>@PublishedOfficialView.Office(stretch.Latest)</TableCell>
+                    @if (HasParty)
+                    {
+                        <TableCell Label="@PublicColumn.Party">@stretch.Latest.Party</TableCell>
+                    }
+                    <TableCell Class="fit num" Label="@PublicColumn.From">@Moment.Iso(stretch.Start)</TableCell>
+                    <TableCell Class="fit num" Label="@PublicColumn.To">@(stretch.End is { } end ? Moment.Iso(end) : "Present")</TableCell>
+                </Row>
+                <Empty><EmptyState Title="No office on record" Text="@NoOfficeText" /></Empty>
+            </DataTable>
+            <p class="muted small">@PublishedOfficialView.OfficeStretchNote</p>
+        </Panel>
+    }
 </PublicPage>
 
 @code {
@@ -181,6 +186,10 @@
 
     private IReadOnlyList<PublishedOfficialRow>? rows;
 
+    private IReadOnlyList<PublishedOfficeStretch> OfficeStretches => officeStretches ??= PublishedOfficialView.OfficeStretches(Page.Profile.Terms);
+
+    private IReadOnlyList<PublishedOfficeStretch>? officeStretches;
+
     private bool HasParty => Page.Profile.Terms.Any(term => term.Party is not null);
 
     private bool HasCast => Rows.Any(row => row.Cast is not null);
@@ -189,19 +198,19 @@
 
     private string Title => Page.IsCurrent ? Page.Profile.Name : $"{Page.Profile.Name}, Congress {Page.Congress}";
 
-    private string Description => OfficeInPage() is { } term
-        ? $"{Page.Profile.Name}, {PublishedOfficialView.Office(term)}. {Lede}"
-        : $"{Page.Profile.Name}. {Lede}";
+    private string Description => Page.IsCurrent
+        ? Lede is null ? Page.Profile.Name : $"{Page.Profile.Name}. {Lede}"
+        : OfficeInPage() is { } term
+            ? $"{Page.Profile.Name}, {PublishedOfficialView.Office(term)}. {Lede}"
+            : $"{Page.Profile.Name}. {Lede}";
 
     private PublishedOfficeTerm? OfficeInPage() =>
-        PublishedOfficialView.LatestTerm(Page.Profile.Terms.Where(term => Page.Congress is not { } congress || HeldIn(term, congress)));
+        PublishedOfficialView.LatestTerm(Page.Profile.Terms.Where(term => HeldIn(term, Page.Congress!.Value)));
 
     private static bool HeldIn(PublishedOfficeTerm term, int congress) =>
         term.Start < CongressCalendar.StartOf(congress + 1) && (term.End is not { } end || end > CongressCalendar.StartOf(congress));
 
-    private string Lede => Page.IsCurrent
-        ? Page.Congress is { } congress
-            ? $"{Page.Records.Length} records name this official. The votes are those of Congress {congress}. Rows are newest first."
-            : $"{Page.Records.Length} records name this official. Rows are newest first."
+    private string? Lede => Page.IsCurrent
+        ? PublishedOfficialView.Lede(Page.Profile.Terms, Page.PublishedAtUtc)
         : $"Votes in Congress {Page.Congress}, newest first.";
 }

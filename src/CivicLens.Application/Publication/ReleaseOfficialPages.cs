@@ -30,7 +30,7 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
             previous.Officials.TryGetValue(profile.Id, out var earlier);
             var tracked = officials.IsConfigured(profile.Id);
             if (!tracked || !SameProfile(earlier, profile) || namedByChange.Contains(profile.Id) || changes.Touches(profile.Id))
-                await WriteTouchedAsync(staging, profile, tracked, entries, release, changes, previous, earlier?.Name != profile.Name, cancellationToken);
+                await WriteTouchedAsync(staging, profile, tracked, entries, release, changes, previous, earlier?.Name != profile.Name, manifest.PublishedAtUtc, cancellationToken);
             else
                 await LinkAsync(staging, profile.Id, previous, cancellationToken);
         }
@@ -70,7 +70,7 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
 
     private async Task WriteTouchedAsync(IReleaseStaging staging, PublishedOfficialProfile profile, bool tracked,
         ImmutableArray<PublishedRecordEntry> entries, IReadOnlyDictionary<(PublishedRecordKind, string), PublishedRecordEntry> release,
-        OfficialVoteChanges changes, PreviousRelease previous, bool nameChanged,
+        OfficialVoteChanges changes, PreviousRelease previous, bool nameChanged, DateTimeOffset publishedAtUtc,
         CancellationToken cancellationToken)
     {
         var files = await votes.ListAsync(previous, profile.Id, cancellationToken);
@@ -113,7 +113,7 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
         var talkAndAction = current is null ? null : TalkAndActionProfile.Of(current.Value, entries, currentRows);
         await WriteAsync(staging, PublicationProtocol.OfficialPagePath(profile.Id), await renderer.RenderOfficialAsync(
             new(profile, tracked, current, true, past, entries, currentRows, talkAndAction,
-                current is { } newestCongress ? LinkedPair.In(profile.Id, newestCongress, entries, release, currentRows) : []), catalog, cancellationToken), cancellationToken);
+                current is { } newestCongress ? LinkedPair.In(profile.Id, newestCongress, entries, release, currentRows) : [], publishedAtUtc), catalog, cancellationToken), cancellationToken);
     }
 
     private static Task WriteAsync(IReleaseStaging staging, string path, string html, CancellationToken cancellationToken) =>

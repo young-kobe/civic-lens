@@ -8,7 +8,7 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Host.Publication;
 
-internal static class PublishedOfficialView
+public static class PublishedOfficialView
 {
     public static string Office(PublishedOfficeTerm term) => term.Office switch
     {
@@ -21,7 +21,77 @@ internal static class PublishedOfficialView
     };
 
     public static string CardOffice(PublishedOfficeTerm term, DateTimeOffset publishedAtUtc) =>
-        term.End is { } end && end < DateOnly.FromDateTime(publishedAtUtc.UtcDateTime) ? $"Former {Office(term)}" : Office(term);
+        HasEnded(term.End, publishedAtUtc) ? $"Former {Office(term)}" : Office(term);
+
+    private static bool HasEnded(DateOnly? end, DateTimeOffset publishedAtUtc) => end is { } day && day < DateOnly.FromDateTime(publishedAtUtc.UtcDateTime);
+
+    public static string? Lede(IEnumerable<PublishedOfficeTerm> terms, DateTimeOffset publishedAtUtc)
+    {
+        if (LatestTerm(terms) is not { } term) return null;
+        var sentences = new[]
+        {
+            $"{CardOffice(term, publishedAtUtc)}.",
+            term.Party is { } party ? $"{PartyLine(party, term.Caucus)}." : null,
+            Tenure(terms, publishedAtUtc)
+        };
+        return string.Join(' ', sentences.OfType<string>());
+    }
+
+    public static string? Tenure(IEnumerable<PublishedOfficeTerm> terms, DateTimeOffset publishedAtUtc)
+    {
+        if (Stretches(terms, (earlier, later) => earlier.Office == later.Office).LastOrDefault() is not { } stretch || ChamberOf(stretch.Latest.Office) is not { } chamber)
+            return null;
+        var since = MonthYear(stretch.Start);
+        return HasEnded(stretch.End, publishedAtUtc)
+            ? $"In {chamber} from {since} to {MonthYear(stretch.End!.Value)}, {Counted(stretch.Terms, "term")}."
+            : $"In {chamber} since {since}, now in the {CongressCalendar.Ordinal(stretch.Terms)} term.";
+    }
+
+    public static IReadOnlyList<PublishedOfficeStretch> OfficeStretches(IEnumerable<PublishedOfficeTerm> terms) =>
+        Stretches(terms, (earlier, later) => earlier.Office == later.Office && earlier.State == later.State
+            && earlier.District == later.District && earlier.Party == later.Party);
+
+    public const string OfficeStretchNote = "Each row is one unbroken stretch in the same office. Source: congress-legislators.";
+
+    private static List<PublishedOfficeStretch> Stretches(IEnumerable<PublishedOfficeTerm> terms, Func<PublishedOfficeTerm, PublishedOfficeTerm, bool> sameSeat)
+    {
+        var stretches = new List<PublishedOfficeStretch>();
+        foreach (var term in terms.OrderBy(term => term.Start))
+        {
+            if (stretches.Count > 0 && stretches[^1] is { } last && sameSeat(last.Latest, term) && Continues(last.End, term.Start))
+                stretches[^1] = last with { Latest = term, End = term.End, Terms = last.Terms + 1 };
+            else
+                stretches.Add(new(term, term.Start, term.End, 1));
+        }
+        return stretches;
+    }
+
+    private static bool Continues(DateOnly? end, DateOnly nextStart) =>
+        end is { } day && (nextStart <= day || CongressCalendar.CongressOn(nextStart) is { } congress && congress == CongressCalendar.CongressOn(day));
+
+    private static string? ChamberOf(string office) => office switch
+    {
+        MemberRosterParser.Senate => "the Senate",
+        MemberRosterParser.House => "the House",
+        _ => null
+    };
+
+    private static string MonthYear(DateOnly day) => day.ToString("MMMM yyyy", CultureInfo.InvariantCulture);
+
+    public static string RecordsCaption(ReleaseOfficialPage page)
+    {
+        var parts = page.Records.GroupBy(entry => entry.Kind).OrderBy(group => group.Key)
+            .Select(group => Counted(group.Count(), PublishedRecordLabels.Kind(group.Key).ToLowerInvariant())).ToList();
+        if (!page.Votes.IsEmpty) parts.Add($"{Counted(page.Votes.Length, "vote")} in the {CongressCalendar.Ordinal(page.Congress!.Value)} Congress");
+        var total = page.Records.Length + page.Votes.Length;
+        return total == 0
+            ? $"No published record names {page.Profile.Name}."
+            : $"{Counted(total, "published record")} {(total == 1 ? "names" : "name")} {page.Profile.Name}: {JoinAnd(parts)}.";
+    }
+
+    private static string Counted(int count, string singular) => $"{count} {Noun(count, singular)}";
+
+    private static string JoinAnd(List<string> parts) => parts.Count == 1 ? parts[0] : $"{string.Join(", ", parts[..^1])} and {parts[^1]}";
 
     public static string PartyLine(string party, string? caucus) =>
         caucus is null || caucus == party ? $"Party: {party}" : $"Party: {party}, caucuses with {Members(caucus)}";
@@ -36,7 +106,7 @@ internal static class PublishedOfficialView
         (PublishedOfficeKind.Judicial, "Justices"), (PublishedOfficeKind.Other, "Other officials")
     ];
 
-    public static string RecordCount(int count) => $"{count} {Noun(count, "record")} other than votes";
+    public static string RecordCount(int count) => $"{Counted(count, "record")} other than votes";
 
     public static string WebsiteHost(string website) => new Uri(website).IdnHost;
 
