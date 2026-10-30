@@ -13,11 +13,11 @@ internal static class PublishedStatementView
     {
         var facts = new List<Fact>
         {
-            PublishedRecordView.Officials("Speakers", statement.Speakers),
-            Fact.List("Other speakers", statement.OtherSpeakers)
+            PublishedRecordView.Officials("Speakers", statement.Speakers)
         };
+        if (statement.OtherSpeakers.Length > 0) facts.Add(Fact.List(PublishedRecordLabels.OtherPeopleQuoted, statement.OtherSpeakers));
         if (statement.StatementDate is { } date) facts.Add(new("Statement date", PublishedRecordLabels.StatementDate(statement, Moment.Iso(date))));
-        facts.Add(PublishedRecordView.Issues("Issues", statement.IssueIds, catalog));
+        facts.AddRange(PublishedRecordView.Issues("Issues", statement.IssueIds, catalog));
         facts.Add(PublishedRecordView.PolicyAreas(PublishedRecordLabels.StatementPolicyAreas(statement.ApprovedBy), statement.PolicyAreaIds, catalog));
         facts.Add(Fact.List("Bill numbers", statement.BillNumbers));
         facts.Add(new("Published", $"{PublishedRecordLabels.ApprovalOn(statement.ApprovedBy, Moment.Full(statement.ApprovedAtUtc))}; first published {Moment.Full(statement.FirstPublishedAtUtc)}"));

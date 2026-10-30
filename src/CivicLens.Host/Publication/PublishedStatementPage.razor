@@ -17,7 +17,7 @@
                 var target = PublishedRecordView.QuoteTarget("statement", index, Record.Quotations.Length);
                 var anchor = "#" + PublishedRecordView.CitationAnchor(index);
                 <li>
-                    <CitationQuote Label="@($"Quotation {number}")" Quote="@quotation.Quote">
+                    <CitationQuote Label="@($"Quote {number}")" Quote="@quotation.Quote">
                         <StatusBadge Text="@PublishedRecordLabels.Quotation(quotation.Kind)" />
                         <ContextLink Href="@anchor" Target="@target" />
                     </CitationQuote>

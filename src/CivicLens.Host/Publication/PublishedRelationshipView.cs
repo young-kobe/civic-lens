@@ -16,7 +16,7 @@ internal static class PublishedRelationshipView
             PublishedRecordView.Officials("Speakers", relationship.Officials)
         };
         if (relationship.StatementDate is { } date) facts.Add(new("Statement date", Moment.Iso(date)));
-        facts.Add(PublishedRecordView.Issues("Issues", relationship.IssueIds, catalog));
+        facts.AddRange(PublishedRecordView.Issues("Issues", relationship.IssueIds, catalog));
         facts.Add(PublishedRecordView.PolicyAreas("Policy areas", relationship.PolicyAreaIds, catalog));
         facts.Add(new("Published", $"Approved {Moment.Full(relationship.ApprovedAtUtc)}; first published {Moment.Full(relationship.FirstPublishedAtUtc)}"));
         facts.Add(new("Revision", relationship.RevisionNumber.ToString(CultureInfo.InvariantCulture)));

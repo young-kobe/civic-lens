@@ -26,8 +26,8 @@ internal static class PublishedRecordView
         ConfiguredNameLink(catalog.HasIssue(issueId), catalog.IssueName(issueId),
             rootPath + PublicationProtocol.IssuePagePath(issueId, 1));
 
-    public static Fact Issues(string label, IEnumerable<string> issueIds, PublicationCatalog catalog) =>
-        Fact.LinkList(label, [.. issueIds.Select(id => IssueLink(id, catalog, "../"))]);
+    public static IEnumerable<Fact> Issues(string label, IEnumerable<string> issueIds, PublicationCatalog catalog) =>
+        issueIds.Any() ? [Fact.LinkList(label, [.. issueIds.Select(id => IssueLink(id, catalog, "../"))])] : [];
 
     public static FactLink PolicyAreaLink(string? policyAreaId, string text, PublicationCatalog catalog) =>
         policyAreaId is null

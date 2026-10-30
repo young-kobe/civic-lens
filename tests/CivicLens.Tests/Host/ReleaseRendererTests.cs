@@ -387,12 +387,12 @@ public sealed class ReleaseRendererTests
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
             .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
         Assert.Equal("Jane <Doe>", facts["Speakers"]);
-        Assert.Equal("Aide One", facts["Other speakers"]);
+        Assert.Equal("Aide One", facts["Other people quoted, named as the article writes them"]);
         Assert.Equal("2026-05-01", facts["Statement date"]);
         Assert.Equal("housing, transit", facts["Issues"]);
         Assert.Equal("None", facts["Policy areas"]);
         Assert.Equal("HB 12", facts["Bill numbers"]);
-        Assert.Equal(["Direct quotation", "Release text"],
+        Assert.Equal(["Inside quotation marks", "Not in quotation marks"],
             document.QuerySelectorAll("[aria-labelledby='quotations-title'] .badge").Select(badge => badge.TextContent));
         Assert.Equal("<b>a rent cap</b>", document.QuerySelector("mark#cite-1")!.TextContent);
         Assert.Equal("Signed 2026-05-01.", document.QuerySelector("mark#cite-2")!.TextContent);
@@ -732,6 +732,51 @@ public sealed class ReleaseRendererTests
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
             .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
         Assert.Equal(label, facts["Kind"]);
+    }
+
+    [Fact]
+    public async Task AnOtherKindVoteIsCalledAnOtherQuestionAndPointsTheReaderToTheQuotedQuestion()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote() with { Kind = PublishedVoteKind.Other, KindCitation = null }, null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.Equal("Other question. The question is quoted in the Result panel.", Facts(html)["Kind"]);
+    }
+
+    [Fact]
+    public async Task APublicPageOmitsFactRowsThatHaveNoValueInsteadOfPrintingNone()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var vote = Vote() with { TrackedIssueIds = [] };
+        var action = Action() with { TrackedIssueIds = [] };
+        var statement = Statement() with { OtherSpeakers = [], IssueIds = [] };
+
+        foreach (var html in new[] { await renderer.RenderVoteAsync(vote, null, [], HousingCatalog, CancellationToken.None),
+                     await renderer.RenderActionAsync(action, [], HousingCatalog, CancellationToken.None),
+                     await renderer.RenderStatementAsync(statement, [], HousingCatalog, CancellationToken.None) })
+        {
+            var labels = Facts(html).Keys;
+            Assert.DoesNotContain("Tracked issues", labels);
+            Assert.DoesNotContain("Issues", labels);
+            Assert.DoesNotContain(PublishedRecordLabels.OtherPeopleQuoted, labels);
+        }
+    }
+
+    [Fact]
+    public async Task StatementQuotesAreNumberedAndSayWhetherTheyLieInsideQuotationMarks()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None);
+
+        var panel = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='quotations-title']")!.TextContent;
+        Assert.Contains("Quote 1", panel, StringComparison.Ordinal);
+        Assert.Contains("Each quote is the exact text of the source.", panel, StringComparison.Ordinal);
+        Assert.DoesNotContain("Quotation 1", panel, StringComparison.Ordinal);
+    }
+
+    private static Dictionary<string, string> Facts(string html)
+    {
+        var document = new HtmlParser().ParseDocument(html);
+        return document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
+            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
     }
 
     [Fact]

@@ -15,7 +15,7 @@ internal static class PublishedVoteView
     public static IReadOnlyList<Fact> Facts(PublishedVote vote, PublicationCatalog catalog) =>
     [
         new("Voted on", Moment.Iso(vote.VotedOn)),
-        new("Kind", PublishedRecordLabels.VoteKind(vote.Kind)),
+        new("Kind", KindValue(vote.Kind)),
         new("Result", vote.Result),
         new("Totals", Totals(vote)),
         new("Chamber", vote.Chamber.ToString()),
@@ -23,11 +23,16 @@ internal static class PublishedVoteView
         new("Data source", PublishedRecordLabels.VoteSource(vote.Source)),
         Fact.LinkList("Official roll call page", [new FactLink($"Roll call on {VoteLabels.RollCallSite(ChamberOf(vote))}",
             SourcePages.RollCall(ChamberOf(vote), vote.Congress, vote.Session, vote.RollCallNumber))]),
-        PublishedRecordView.Issues("Tracked issues", vote.TrackedIssueIds, catalog),
+        .. PublishedRecordView.Issues("Tracked issues", vote.TrackedIssueIds, catalog),
         new("Published", $"From the official record, checked {Moment.Full(vote.ApprovedAtUtc)}; first published {Moment.Full(vote.FirstPublishedAtUtc)}"),
         .. PublishedRecordLabels.Wording(vote.TextOrigin),
         new("Revision", vote.RevisionNumber.ToString(CultureInfo.InvariantCulture))
     ];
+
+    private static string KindValue(PublishedVoteKind kind) =>
+        kind == PublishedVoteKind.Other
+            ? $"{PublishedRecordLabels.OtherQuestion}. The question is quoted in the Result panel."
+            : PublishedRecordLabels.VoteKind(kind);
 
     public static string Totals(PublishedVote vote)
     {
