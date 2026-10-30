@@ -17,6 +17,8 @@ public sealed record PublishedPartyMajority
     public required int NayCount { get; init; }
     public string? Majority { get; init; }
 
+    public static bool IsMajorParty(string party) => party is Democrat or Republican;
+
     public static PublishedPartyMajority Of(string party, int yeaCount, int nayCount) =>
         new() { Party = party, YeaCount = yeaCount, NayCount = nayCount, Majority = MajorityOf(yeaCount, nayCount) };
 
