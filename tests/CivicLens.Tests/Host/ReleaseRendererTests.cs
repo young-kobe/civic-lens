@@ -840,7 +840,17 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task AHouseVotePageWithEveryMemberStaysWithinItsSizeBudget()
     {
-        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(VoteWithCasts([.. Enumerable.Range(0, 435).Select(index => ($"Member {index}", new[] { "Yea", "Nay", "Not Voting" }[index % 3]))]), null, [], PublicationCatalogs.None, CancellationToken.None);
+        // Every fourth member votes against the party. That gives 109 breaks.
+        var voters = Enumerable.Range(0, 435).Select(index =>
+        {
+            var democrat = index % 2 == 0;
+            var breaks = index % 4 == 1;
+            return ($"Member {index}", democrat ? PublishedPartyMajority.Democrat : PublishedPartyMajority.Republican, democrat ^ breaks ? "Yea" : "Nay");
+        }).ToArray();
+        var vote = VoteWithParties([PublishedPartyMajority.Of(PublishedPartyMajority.Democrat, 218, 0), PublishedPartyMajority.Of(PublishedPartyMajority.Republican, 0, 217)], voters);
+
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
+        Assert.True(new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='breakers-title'] li").Length > 100);
 
         var bytes = System.Text.Encoding.UTF8.GetByteCount(html);
         Assert.True(bytes <= 150_000, $"The page is {bytes} bytes.");
@@ -859,7 +869,7 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task APartyLineVoteNamesEachPartySideAndListsOnlyTheMembersWhoBrokeWithTheirPartyByParty()
+    public async Task ASplitVoteNamesEachPartySideAndListsOnlyTheMembersWhoBrokeWithTheirPartyByParty()
     {
         var vote = VoteWithParties([.. DemocratsYeaRepublicansNay, PublishedPartyMajority.Of("Independent", 1, 0), PublishedPartyMajority.Of(PublishedPartyMajority.UnknownParty, 0, 1)],
             ("Dana", "Democrat", "Yea"), ("Dora", "Democrat", "Nay"), ("Rex", "Republican", "Nay"), ("Ruth", "Republican", "Yea"),
@@ -868,40 +878,79 @@ public sealed class ReleaseRendererTests
         var page = await RenderedAsync(vote);
 
         var parties = page.QuerySelector("[aria-labelledby='parties-title']")!;
-        Assert.Equal("Party line vote", parties.QuerySelector(".badge")!.TextContent);
-        Assert.Contains("Party line vote: most House Democrats voted Yea and most House Republicans voted Nay.", parties.TextContent);
+        Assert.Equal("Split vote", parties.QuerySelector(".badge")!.TextContent);
+        Assert.Contains("Split vote: most House Democrats who cast Yea or Nay voted Yea, and most House Republicans who cast Yea or Nay voted Nay.", parties.TextContent);
+        Assert.Contains("House Democrats: 2 Yea, 1 Nay. House Republicans: 1 Yea, 3 Nay. These counts include every member of the party, tracked or not.", parties.TextContent);
         var breakers = page.QuerySelector("[aria-labelledby='breakers-title']")!;
-        Assert.Equal(["House Democrats (1 tracked House member)", "House Republicans (1 tracked House member)"], breakers.QuerySelectorAll("h3").Select(heading => heading.TextContent));
+        Assert.Equal(["House Democrats: 1 tracked member voted against most of the party", "House Republicans: 1 tracked member voted against most of the party"], breakers.QuerySelectorAll("h3").Select(heading => heading.TextContent));
         Assert.Equal(["Dora", "Ruth"], breakers.QuerySelectorAll("li a:first-child").Select(link => link.TextContent));
-        Assert.Contains("House Republicans cast 1 Yea and 3 Nay on this vote.", breakers.TextContent);
-        Assert.DoesNotContain("Ian", breakers.TextContent);
-        Assert.DoesNotContain("Una", breakers.TextContent);
-        Assert.DoesNotContain("Pia", breakers.TextContent);
-        Assert.DoesNotContain("Ned", breakers.TextContent);
+        Assert.DoesNotContain("Yea, ", breakers.TextContent);
+        foreach (var name in new[] { "Ian", "Una", "Pia", "Ned" }) Assert.DoesNotContain(name, breakers.TextContent);
     }
 
     [Fact]
-    public async Task APartyLineVoteWhereNoMemberBrokeSaysSoInsteadOfShowingAnEmptyList()
+    public async Task ASplitVoteWhereNoMemberBrokeSaysSoInsteadOfShowingAnEmptyList()
     {
         var vote = VoteWithParties(DemocratsYeaRepublicansNay, ("Dana", "Democrat", "Yea"), ("Rex", "Republican", "Nay"));
 
         var breakers = (await RenderedAsync(vote)).QuerySelector("[aria-labelledby='breakers-title']")!;
 
         Assert.Empty(breakers.QuerySelectorAll("li"));
-        Assert.Contains("No tracked House member voted against most House Democrats.", breakers.TextContent);
-        Assert.Contains("No tracked House member voted against most House Republicans.", breakers.TextContent);
+        Assert.Contains("No tracked House Democrat voted against most House Democrats.", breakers.TextContent);
+        Assert.Contains("No tracked House Republican voted against most House Republicans.", breakers.TextContent);
+        Assert.Contains("House Democrats: 0 tracked members voted against most of the party", breakers.TextContent);
     }
 
     [Fact]
-    public async Task ABipartisanVoteGetsABadgeAndNoBreakPanelBecauseNoPartyOpposedTheOther()
+    public async Task ASenateSplitVoteNamesTheSenateInEveryPartyLine()
     {
-        var vote = VoteWithParties([PublishedPartyMajority.Of(PublishedPartyMajority.Democrat, 3, 1), PublishedPartyMajority.Of(PublishedPartyMajority.Republican, 4, 0)],
+        var vote = VoteWithParties(DemocratsYeaRepublicansNay, ("Sam", "Democrat", "Nay"), ("Rex", "Republican", "Nay")) with { Chamber = PublishedChamber.Senate };
+
+        var page = await RenderedAsync(vote);
+
+        var parties = page.QuerySelector("[aria-labelledby='parties-title']")!.TextContent;
+        Assert.Contains("most Senate Democrats who cast Yea or Nay voted Yea, and most Senate Republicans who cast Yea or Nay voted Nay.", parties);
+        Assert.Contains("Senate Democrats: 2 Yea, 1 Nay. Senate Republicans: 1 Yea, 3 Nay.", parties);
+        var breakers = page.QuerySelector("[aria-labelledby='breakers-title']")!.TextContent;
+        Assert.Contains("Senate Democrats: 1 tracked member voted against most of the party", breakers);
+        Assert.Contains("No tracked Senate Republican voted against most Senate Republicans.", breakers);
+    }
+
+    [Fact]
+    public async Task AnAyeOrNoCastBreaksFromThePartyLikeAYeaOrNayAndTheRowKeepsTheWordOfTheSource()
+    {
+        var vote = VoteWithParties(DemocratsYeaRepublicansNay, ("Dora", "Democrat", "No"), ("Ruth", "Republican", "Aye"), ("Dana", "Democrat", "Aye"));
+
+        var breakers = (await RenderedAsync(vote)).QuerySelector("[aria-labelledby='breakers-title']")!;
+
+        Assert.Equal(["Dora", "Ruth"], breakers.QuerySelectorAll("li a:first-child").Select(link => link.TextContent));
+        Assert.Equal(["voted No", "voted Aye"], breakers.QuerySelectorAll("li span.small").Select(row => row.TextContent));
+    }
+
+    [Fact]
+    public async Task ASplitVoteSaysWhoCastYeaOrNayBecausePresentMembersDoNotSetTheMajority()
+    {
+        var vote = VoteWithParties(DemocratsYeaRepublicansNay, ("Dana", "Democrat", "Present"), ("Dora", "Democrat", "Present"), ("Rex", "Republican", "Present"));
+
+        var page = await RenderedAsync(vote);
+
+        Assert.Contains("who cast Yea or Nay", page.QuerySelector("[aria-labelledby='parties-title']")!.TextContent);
+        Assert.Empty(page.QuerySelectorAll("[aria-labelledby='breakers-title'] li"));
+        Assert.Contains("Present and Not voting never count as a break.", page.QuerySelector("[aria-labelledby='breakers-title']")!.TextContent);
+    }
+
+    [Fact]
+    public async Task APairOfPartiesThatAgreeByOneMemberShowsTheCountsSoAThinMarginIsNotHidden()
+    {
+        var vote = VoteWithParties([PublishedPartyMajority.Of(PublishedPartyMajority.Democrat, 2, 1), PublishedPartyMajority.Of(PublishedPartyMajority.Republican, 2, 1)],
             ("Dana", "Democrat", "Nay"), ("Rex", "Republican", "Yea"));
 
         var page = await RenderedAsync(vote);
 
-        Assert.Equal("Bipartisan vote", page.QuerySelector("[aria-labelledby='parties-title'] .badge")!.TextContent);
-        Assert.Contains("Bipartisan vote: most House Democrats and most House Republicans both voted Yea.", page.QuerySelector("[aria-labelledby='parties-title']")!.TextContent);
+        var parties = page.QuerySelector("[aria-labelledby='parties-title']")!;
+        Assert.Equal("Both parties agreed", parties.QuerySelector(".badge")!.TextContent);
+        Assert.Contains("Both parties agreed: most House Democrats and most House Republicans who cast Yea or Nay voted Yea.", parties.TextContent);
+        Assert.Contains("House Democrats: 2 Yea, 1 Nay. House Republicans: 2 Yea, 1 Nay. These counts include every member of the party, tracked or not.", parties.TextContent);
         Assert.Null(page.QuerySelector("[aria-labelledby='breakers-title']"));
     }
 
@@ -917,7 +966,7 @@ public sealed class ReleaseRendererTests
     [Theory]
     [InlineData(PublishedVoteKind.Passage, 2, 2)]
     [InlineData(PublishedVoteKind.Cloture, 2, 1)]
-    public async Task ATiedPartyAndAProceduralVoteGetNoBadgeBecauseNeitherCountsAsAPartyLineVote(PublishedVoteKind kind, int democratYea, int democratNay)
+    public async Task ATiedPartyAndAProceduralVoteGetNoBadgeBecauseNeitherCountsAsASplitVote(PublishedVoteKind kind, int democratYea, int democratNay)
     {
         var vote = VoteWithParties([PublishedPartyMajority.Of(PublishedPartyMajority.Democrat, democratYea, democratNay), PublishedPartyMajority.Of(PublishedPartyMajority.Republican, 1, 3)],
             ("Dana", "Democrat", "Nay"), ("Rex", "Republican", "Nay")) with

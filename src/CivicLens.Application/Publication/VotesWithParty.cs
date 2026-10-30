@@ -19,10 +19,11 @@ public sealed record VotesWithParty(PublishedChamber Chamber, string Party, int 
         .GroupBy(vote => (vote.Chamber, vote.Party)).OrderBy(group => group.Key.Chamber).ThenBy(group => group.Key.Party, StringComparer.Ordinal)
         .Select(group => From(group.Key.Chamber, group.Key.Party, group.Where(vote => vote.SplitVote).ToArray()))];
 
-    public static bool IsBreak(PublishedOfficialVote vote) => vote.SplitVote && IsAgainstPartyMajority(vote.Party, vote.Cast, vote.PartyMajority);
+    public static bool IsBreak(PublishedOfficialVote vote) =>
+        vote.SplitVote && vote.PartyMajority is { } majority && IsAgainstPartyMajority(vote.Party, vote.Cast, majority);
 
-    public static bool IsAgainstPartyMajority(string party, string cast, string? partyMajority) =>
-        IsMajorParty(party) && partyMajority is not null && PublishedOfficialVote.SideOf(cast) is { } side && side != partyMajority;
+    public static bool IsAgainstPartyMajority(string party, string cast, string partyMajority) =>
+        IsMajorParty(party) && PublishedOfficialVote.SideOf(cast) is { } side && side != partyMajority;
 
     private static bool HasMajorParty(PublishedOfficialVote vote) => IsMajorParty(vote.Party);
 

@@ -85,12 +85,23 @@ internal static class PublishedVoteView
         var democrats = $"most {PartyOf(vote, PublishedPartyMajority.Democrat)}";
         var republicans = $"most {PartyOf(vote, PublishedPartyMajority.Republican)}";
         var democratSide = vote.MajorityOf(PublishedPartyMajority.Democrat);
+        const string cast = "who cast Yea or Nay";
         if (vote.IsSplit())
-            return new("Party line vote", $"Party line vote: {democrats} voted {democratSide} and {republicans} voted {vote.MajorityOf(PublishedPartyMajority.Republican)}.");
-        return vote.IsBipartisan() ? new("Bipartisan vote", $"Bipartisan vote: {democrats} and {republicans} both voted {democratSide}.") : null;
+            return new("Split vote", $"Split vote: {democrats} {cast} voted {democratSide}, and {republicans} {cast} voted {vote.MajorityOf(PublishedPartyMajority.Republican)}.", PartyCounts(vote));
+        return vote.PartiesAgree() ? new("Both parties agreed", $"Both parties agreed: {democrats} and {republicans} {cast} voted {democratSide}.", PartyCounts(vote)) : null;
     }
 
-    public const string BreakMeaning = "A member is listed when they cast Yea or Nay against the cast of most members of their own party on this vote. An independent counts with the party they caucus with. A party that is tied has no majority, so nobody breaks from it. A member with another party, or with no known party, is not listed. Present and Not voting never count as a break.";
+    private static string PartyCounts(PublishedVote vote) =>
+        string.Join(' ', new[] { PublishedPartyMajority.Democrat, PublishedPartyMajority.Republican }.Select(party => PartyCount(vote, party))) +
+        " These counts include every member of the party, tracked or not.";
+
+    private static string PartyCount(PublishedVote vote, string party)
+    {
+        var count = vote.PartyMajorities.Single(majority => majority.Party == party);
+        return $"{PartyOf(vote, party)}: {count.YeaCount} Yea, {count.NayCount} Nay.";
+    }
+
+    public const string BreakMeaning = "A member is listed when they cast Yea or Nay against the cast of most members of their own party on this vote. A current independent counts with the party they caucus with. A former independent counts with no party. A member with another party, or with no known party, is not listed. Present and Not voting never count as a break.";
 
     public static IEnumerable<PartyBreakers> Breakers(PublishedVote vote) =>
         vote.IsSplit() ? new[] { PublishedPartyMajority.Democrat, PublishedPartyMajority.Republican }.Select(party => BreakersOf(vote, party)) : [];
@@ -98,12 +109,10 @@ internal static class PublishedVoteView
     private static PartyBreakers BreakersOf(PublishedVote vote, string party)
     {
         var members = ByName(vote.Members.Where(member => member.Party == party &&
-            VotesWithParty.IsAgainstPartyMajority(member.Party, member.Cast, vote.MajorityOf(party))));
+            vote.MajorityOf(party) is { } majority && VotesWithParty.IsAgainstPartyMajority(member.Party, member.Cast, majority)));
         var name = PartyOf(vote, party);
-        var count = vote.PartyMajorities.Single(majority => majority.Party == party);
-        return new($"{name} ({members.Length} tracked {PublishedOfficialView.Noun(members.Length, MemberNoun(vote))})",
-            $"{name} cast {count.YeaCount} Yea and {count.NayCount} Nay on this vote.",
-            $"No tracked {MemberNoun(vote)} voted against most {name}.", members);
+        return new($"{name}: {members.Length} tracked {PublishedOfficialView.Noun(members.Length, "member")} voted against most of the party",
+            $"No tracked {PublishedOfficialView.PartyMemberOf(vote.Chamber, party)} voted against most {name}.", members);
     }
 
     private static string PartyOf(PublishedVote vote, string party) => PublishedOfficialView.PartyOf(vote.Chamber, party);

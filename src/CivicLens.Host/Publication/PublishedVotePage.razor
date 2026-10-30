@@ -10,6 +10,7 @@
         <Panel Title="How the parties voted" Id="parties-title" Padded="true">
             <p><StatusBadge Text="@badge.Text" /></p>
             <p>@badge.Meaning</p>
+            <p>@badge.Counts</p>
         </Panel>
     }
 
@@ -66,7 +67,6 @@
             {
                 <section class="member-group">
                     <h3>@party.Heading</h3>
-                    <p class="muted small">@party.Casts</p>
                     @if (party.Members.Length == 0)
                     {
                         <p class="small">@party.None</p>

@@ -200,6 +200,8 @@ internal static class PublishedOfficialView
 
     public static string PartyOf(PublishedChamber chamber, string party) => $"{chamber} {Members(party)}";
 
+    public static string PartyMemberOf(PublishedChamber chamber, string party) => $"{chamber} {party}";
+
     private static string Members(string party) => $"{party}s";
 
     private static string ChamberName(PublishedChamber chamber) => chamber == PublishedChamber.Senate ? "the Senate" : "the House of Representatives";

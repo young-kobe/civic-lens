@@ -318,25 +318,24 @@ public sealed class PublishedVoteTests
     }
 
     [Theory]
-    [InlineData(2, 1, 2, 1, true)]
-    [InlineData(2, 1, 1, 2, false)]
-    [InlineData(1, 1, 2, 1, false)]
-    public void AVoteIsBipartisanOnlyWhenBothPartiesHaveTheSameMajoritySoATieIsNeitherBipartisanNorSplit(int demYea, int demNay, int repYea, int repNay, bool bipartisan)
+    [InlineData(2, 1, 2, 1, true, false)]
+    [InlineData(2, 1, 1, 2, false, true)]
+    [InlineData(1, 1, 2, 1, false, false)]
+    public void PartiesAgreeOnlyWhenBothHaveTheSameMajoritySoATieIsNeitherAgreementNorSplit(int demYea, int demNay, int repYea, int repNay, bool agree, bool split)
     {
         var vote = Vote() with { Kind = PublishedVoteKind.Passage, PartyMajorities = [PublishedPartyMajority.Of(PublishedPartyMajority.Democrat, demYea, demNay), PublishedPartyMajority.Of(PublishedPartyMajority.Republican, repYea, repNay)] };
 
-        Assert.Equal(bipartisan, vote.IsBipartisan());
-        Assert.False(bipartisan && vote.IsSplit());
+        Assert.Equal((agree, split), (vote.PartiesAgree(), vote.IsSplit()));
     }
 
     [Fact]
-    public void AProceduralVoteAndACandidateVoteAreNeverBipartisan()
+    public void AProceduralVoteAndACandidateVoteNeverHavePartiesThatAgree()
     {
         var same = new[] { PublishedPartyMajority.Of(PublishedPartyMajority.Democrat, 2, 1), PublishedPartyMajority.Of(PublishedPartyMajority.Republican, 2, 1) };
 
-        Assert.True((Vote() with { Kind = PublishedVoteKind.Passage, PartyMajorities = same }).IsBipartisan());
-        Assert.False((Vote() with { Kind = PublishedVoteKind.Cloture, PartyMajorities = same }).IsBipartisan());
-        Assert.False(CandidateVote().IsBipartisan());
+        Assert.True((Vote() with { Kind = PublishedVoteKind.Passage, PartyMajorities = same }).PartiesAgree());
+        Assert.False((Vote() with { Kind = PublishedVoteKind.Cloture, PartyMajorities = same }).PartiesAgree());
+        Assert.False(CandidateVote().PartiesAgree());
     }
 
     [Fact]

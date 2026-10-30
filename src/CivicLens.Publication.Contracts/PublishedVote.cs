@@ -55,7 +55,7 @@ public sealed record PublishedVote
 
     public bool IsSplit() => SubstantiveMajorities() is { } pair && pair.Democrat != pair.Republican;
 
-    public bool IsBipartisan() => SubstantiveMajorities() is { } pair && pair.Democrat == pair.Republican;
+    public bool PartiesAgree() => SubstantiveMajorities() is { } pair && pair.Democrat == pair.Republican;
 
     public string? MajorityOf(string party) => PartyMajorities.SingleOrDefault(majority => majority.Party == party)?.Majority;
 
