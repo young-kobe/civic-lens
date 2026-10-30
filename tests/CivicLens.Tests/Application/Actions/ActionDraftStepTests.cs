@@ -573,6 +573,23 @@ public sealed class ActionDraftStepTests
     }
 
     [Fact]
+    public async Task AtTheByteCapTheSubjectsGoBeforeTheSummaryBecauseCitedEvidenceOutranksUncitedInput()
+    {
+        var summary = new SummarySpec("00", "2025-01-03", "2025-01-05T10:00:00Z", "<p>" + new string('x', 2_000) + "</p>");
+        var (_, probe) = await RunAsync(Create(summaries: [summary]), new FakeHeadlineSummaryModel().Draft(Output()));
+        var justFits = new ActionDraftSettings(probe.Requests[0].ReservedTokens + 10, 1);
+        var world = Create(summaries: [summary], subjectPages: [[new string('s', 5_000)]]);
+
+        var (store, model) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output()), settings: justFits);
+
+        var prompt = Assert.Single(model.Requests).UserPrompt;
+        Assert.Contains("xxxxxxxxxx", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("ssssssssss", prompt, StringComparison.Ordinal);
+        Assert.Null(Assert.Single(store.Runs).Reason);
+        Assert.True(Assert.Single(store.Revisions).CandidateIncludesSubjects);
+    }
+
+    [Fact]
     public async Task ASummaryThatFitsIsNeverOmittedAndLeavesNoReasonOnTheRun()
     {
         var (store, model) = await RunAsync(Create(summaries: [Summary]), new FakeHeadlineSummaryModel().Draft(Output()));

@@ -24,6 +24,7 @@ The bills feature follows the Congress.gov bill list each day. It fetches the de
 - The extraction ID is fixed by the attempt and the extraction version, and a replay with different text fails. A change to rendered text or parser output therefore needs a new version.
 - The summaries chain never blocks a candidate, because a record must work without a CRS summary. CRS often publishes weeks after introduction.
 - The subjects chain never blocks a candidate, because Congress.gov gives subjects to only some bills.
+- `subjects.count` of the detail includes the policy area, so a count of 1 can mean a policy area and no legislative subject. The chain is still admitted then, and its page is empty.
 - A subjects chain is admitted at the detail for every bill with `subjects.count` above 0, also when the gate is `notRelevant`. A [vote](votes.md) can name a bill that never passed the gate.
 - A candidate is an immutable input. Late summaries or subjects add a new candidate and never change an older one.
 
@@ -112,7 +113,7 @@ A follow-on `next` link must be inside the source scope and must be the next pag
 
 A summary has `versionCode`, `actionDate`, `actionDesc`, `updateDate` (an exact time), and `text` (HTML).
 
-A subjects page has `subjects.legislativeSubjects`, a list of items with a `name`. The parser keeps the trimmed names and ignores the `policyArea` object of the page, because the detail already holds the policy area. A blank name is invalid data. The page shape comes from the Congress.gov documentation. No live response has checked it yet.
+A subjects page has `subjects.legislativeSubjects`, a list of items with a `name`. The parser keeps the trimmed names and ignores the `policyArea` object of the page, because the detail already holds the policy area. A blank name is invalid data. A live check on 119th bills showed that `legislativeSubjects` is present and empty for a bill that has only a policy area. It also showed that a page can hold fewer names than the limit and still have `next`.
 
 ### Admission
 
@@ -242,7 +243,7 @@ The write that creates a candidate also adds its `action_analysis` queue row in 
 - `bill_gates` holds one row for each bill version, keyed by its detail job.
 - `issue_revision_id` names the issue configuration revision that the gate used. It has no foreign key, because issue revisions are not stored in a table.
 - `summary_count` is 0 or more. Rows written before the column existed have 0, so those bills fetch no summaries until their update date changes.
-- `subject_count` is 0 or more, from `subjects.count` of the detail. Rows written before the column existed have 0, so those bills fetch no subjects until their update date changes. A count above 0 admits the subjects chain whatever the gate decision is.
+- `subject_count` is 0 or more, from `subjects.count` of the detail, which includes the policy area. Rows written before the column existed have 0, so those bills fetch no subjects until their update date changes. A count above 0 admits the subjects chain whatever the gate decision is.
 - `cosponsor_count` stores the detail cosponsor count, because the completeness check must know whether a cosponsor chain exists. Gates written before this column existed have 0 and no detail page row, so they never get a candidate.
 - The decision and reason are stored as PascalCase strings, like other enums.
 - A second detail job for a gated version records nothing, admits nothing, and counts as a duplicate.

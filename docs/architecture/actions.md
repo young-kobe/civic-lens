@@ -12,7 +12,7 @@ The actions feature drafts one record for each bill that has an [action candidat
 - A new revision follows only a change in the compared facts. An update to the actions of a bill alone adds no revision.
 - CRS bill summaries are optional cited evidence. A record must work without one, because CRS often publishes weeks after introduction. Drafting does not wait for a summary.
 - The record cites the newest summary by action date. A new summary version makes a new revision.
-- Congress.gov legislative subjects are optional prompt facts for the issue choice. Only some bills have them, so drafting never waits for them. A bill with no subjects gets the same prompt as before. The record never cites a subject and never stores one.
+- Congress.gov legislative subjects are optional prompt facts for the issue choice. Only some bills have them, so drafting never waits for them. The detail `subjects.count` includes the policy area, so a count of 1 can mean no legislative subject. A bill with no subjects gets the same prompt as before. The record never cites a subject and never stores one.
 - A subject does not choose an issue. Code never maps a subject to an issue. The model reads the subjects beside the title and the summary, and a bill with no fitting issue publishes with no issue.
 - A candidate that includes subjects makes a new revision, because the earlier revision never saw them. Subjects reach the prompt only when the policy area has a candidate issue.
 - Code builds every citation from the saved extraction lines. The model writes none.
@@ -23,7 +23,7 @@ The actions feature drafts one record for each bill that has an [action candidat
 - Each record states the date of its evidence. `ActionDraftRevision.CandidateUpdateDate` holds the update date of the bill version.
 - Approval binds to the revision number, so every new revision needs a new review.
 - The newest candidate of a bill wins. Candidates are ordered by update date. On the same date, a candidate that holds more inputs (summaries, subjects) is newer than one that holds fewer.
-- A prompt over the byte cap drops the summary text, so the model drafts from the structured facts alone.
+- A prompt over the byte cap drops the subjects first, then the summary text, so the model drafts from the structured facts alone. Cited evidence outranks uncited input.
 - A bill with more than 20 summary pages drafts without its summaries. The step never reads those pages.
 - The step verifies saved extractions against current versions before it reads any capture. A version upgrade and changed saved text therefore get different codes.
 - Actions have their own review lock key, `civic-lens-action-review`, last in the publication lock order.
@@ -143,7 +143,7 @@ Code rejects the whole answer on any of these:
 
 The name check cannot find people who are not in the configuration. The [validation loop](analysis.md#validation-loop) gives one more call with the reasons. After a second rejection, the entry fails as `outputRejected`.
 
-A prompt over the byte cap is built again without the summary text, so the model drafts from the structured facts alone. A retry prompt over the cap takes the same fallback. Each run whose own prompt left out the summary has the reason `summaryOmitted`, also when the answer is rejected. The revision keeps its summary version and its code-built citation.
+A prompt over the byte cap is built again without the subjects. If it is still over the cap, it is built again without the summary text, so the model drafts from the structured facts alone. A retry prompt over the cap takes the same fallback. Each run whose own prompt left out the summary has the reason `summaryOmitted`, also when the answer is rejected. The revision keeps its summary version and its code-built citation.
 
 Facts that alone exceed the cap are Blocked as `overByteCap` on the first prompt. On a retry, they fail the entry with the rejection code.
 

@@ -174,6 +174,23 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task RollingTheSubjectsMigrationBackDropsTheSubjectRowsFirstSoTheOldIndexCanBeBuiltOnRealData()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1, subjects: 1);
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+        await AdmitSummariesAsync(bill.Summaries!, new CongressBillSummariesPage([], null));
+        await AdmitSubjectsAsync(bill.Subjects!, new CongressBillSubjectsPage([], null));
+        Assert.Equal(3L, await ScalarAsync("SELECT count(*) FROM action_candidates"));
+        await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
+
+        await db.Database.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>().MigrateAsync("20261030001114_DropRosterLisId");
+
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM action_candidates"));
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM action_analysis"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM bill_pages WHERE role = 'Subjects'"));
+    }
+
+    [Fact]
     public async Task TheOlderCandidateReadsNoSummaryPageEvenAfterTheSummariesArrive()
     {
         var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1);

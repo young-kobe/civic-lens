@@ -57,14 +57,14 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
         var recordId = PostgresCollectionJobStore.HashVoteRecord(row.Chamber, recordKey, row.Congress, row.SessionNumber, row.RollCallNumber);
         var candidate = new VoteDraftCandidate(row.CandidateId, recordId, row.SourceId, row.Chamber, row.Congress, row.SessionNumber, row.RollCallNumber,
             row.BillType, row.BillNumber, new DateTimeOffset(row.UpdateDateUtcTicks, TimeSpan.Zero), row.RosterJobId);
+        var hasNewerCandidate = await VoteDraftRows.HasNewerCandidateAsync(db, row.SourceId, row.Chamber, row.Congress, row.SessionNumber,
+            row.RollCallNumber, row.UpdateDateUtcTicks, cancellationToken);
         return new(candidate, configuration,
             await ReadPageAsync(db, row.DetailJobId, row.DetailExtractionId, cancellationToken),
             await ReadPageAsync(db, row.MembersJobId, row.MembersExtractionId, cancellationToken),
             await ReadBillDetailAsync(db, row, cancellationToken),
-            await ReadBillSubjectsAsync(db, row, cancellationToken),
-            await VoteDraftRows.ReadCurrentAsync(db, recordId, cancellationToken),
-            await VoteDraftRows.HasNewerCandidateAsync(db, row.SourceId, row.Chamber, row.Congress, row.SessionNumber, row.RollCallNumber,
-                row.UpdateDateUtcTicks, cancellationToken));
+            hasNewerCandidate ? [] : await ReadBillSubjectsAsync(db, row, cancellationToken),
+            await VoteDraftRows.ReadCurrentAsync(db, recordId, cancellationToken), hasNewerCandidate);
     }
 
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) =>
@@ -124,11 +124,11 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
         CancellationToken cancellationToken)
     {
         if (candidate.BillType is null) return [];
-        var pages = await BillDetailRows.SubjectPagesOfNewestVersion(db, candidate.Congress, candidate.BillType, candidate.BillNumber!.Value)
-            .ToArrayAsync(cancellationToken);
-        var read = new List<VoteDraftPage>();
-        foreach (var page in pages) read.Add(await ReadPageAsync(db, page.JobId, page.ExtractionId, cancellationToken));
-        return read;
+        var pages = await (from page in BillDetailRows.SubjectPagesOfNewestVersion(db, candidate.Congress, candidate.BillType, candidate.BillNumber!.Value)
+                           join extraction in db.Set<DocumentExtractionRow>().AsNoTracking() on page.ExtractionId equals extraction.ExtractionId
+                           orderby page.PageOrder
+                           select new { page.JobId, page.ExtractionId, extraction.ExtractionVersion, extraction.Text }).ToArrayAsync(cancellationToken);
+        return [.. pages.Select(page => new VoteDraftPage(page.JobId, page.ExtractionId, page.ExtractionVersion, page.Text))];
     }
 
     private static async Task<VoteDraftPage> ReadPageAsync(CollectionAttemptDbContext db, string jobId, string extractionId,

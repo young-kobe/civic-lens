@@ -70,7 +70,10 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
         AnalysisModelRequest? BuildRequest(ImmutableArray<string> errors)
         {
             if (ActionDraftPrompt.Build(snapshot, context.Issues, settings.PromptByteCap, errors) is { } request) return request;
-            var withoutSummary = ActionDraftPrompt.Build(snapshot, context.Issues, settings.PromptByteCap, errors, includeSummary: false);
+            if (context.Issues.HasSubjects &&
+                ActionDraftPrompt.Build(snapshot, context.Issues.WithoutSubjects(), settings.PromptByteCap, errors) is { } withoutSubjects)
+                return withoutSubjects;
+            var withoutSummary = ActionDraftPrompt.Build(snapshot, context.Issues.WithoutSubjects(), settings.PromptByteCap, errors, includeSummary: false);
             if (withoutSummary is not null) summaryOmittedInputHashes.Add(withoutSummary.InputHash);
             return withoutSummary;
         }

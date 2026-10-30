@@ -35,11 +35,15 @@ public sealed class BillIssueChoice
 
     public IEnumerable<object> PromptSection() => candidates.Select(TrackedIssuePromptDocument.Of);
 
+    public bool HasSubjects => !subjects.IsEmpty;
+
+    public BillIssueChoice WithoutSubjects() => new(candidates, []);
+
     public IReadOnlyList<string>? SubjectsSection() => subjects.IsEmpty ? null : subjects;
 
     private string SubjectInstructions => subjects.IsEmpty
         ? ""
-        : " The facts list subjects that Congress.gov gives the bill. A subject helps you see what the bill is about. A subject does not make an issue fit.";
+        : " The facts list subjects that Congress.gov gives the bill. A subject helps you see what the bill is about. A subject does not make an issue fit. Subjects only inform the issue choice. Do not use the wording of a subject in the headline or the summary.";
 
     public JsonObject? AnswerSchema() => candidates.IsEmpty ? null : new()
     {

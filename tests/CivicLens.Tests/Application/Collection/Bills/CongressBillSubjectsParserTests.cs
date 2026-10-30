@@ -4,7 +4,6 @@ using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Collection.Bills;
 
-/// <summary>The page shape comes from the Congress.gov documentation. No live response checked it.</summary>
 public sealed class CongressBillSubjectsParserTests
 {
     private const string FirstPage = "https://api.congress.gov/v3/bill/117/s/3480/subjects?format=json&limit=250";
@@ -27,6 +26,23 @@ public sealed class CongressBillSubjectsParserTests
 
         Assert.Empty(page.Subjects);
         Assert.Null(page.Next);
+    }
+
+    [Fact]
+    public void ABillWithOnlyAPolicyAreaHasAnEmptyListAndACountOfOneBecauseTheCountIncludesThePolicyArea()
+    {
+        var page = Parse("""{"subjects":{"legislativeSubjects":[],"policyArea":{"name":"Health","updateDate":"2025-05-28T10:28:28Z"}},"pagination":{"count":1}}""");
+
+        Assert.Empty(page.Subjects);
+        Assert.Null(page.Next);
+    }
+
+    [Fact]
+    public void APageWithFewerNamesThanTheLimitCanStillHaveANextLink()
+    {
+        var page = Parse($$$"""{"subjects":{"legislativeSubjects":[{"name":"Health"}]},"pagination":{"count":240,"next":"{{{NextPage}}}"}}""");
+
+        Assert.Equal(NextPage, page.Next);
     }
 
     [Theory]

@@ -83,6 +83,7 @@ public sealed class ActionDraftPromptGoldenTests
 
         Assert.Contains("\"Rent and rental housing\"", asked.UserPrompt, StringComparison.Ordinal);
         Assert.Contains("A subject does not make an issue fit.", asked.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("Do not use the wording of a subject in the headline or the summary.", asked.SystemPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("subjects", noCandidateIssue.UserPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("subjects", noCandidateIssue.SystemPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("subjects", noSubjects.UserPrompt, StringComparison.Ordinal);

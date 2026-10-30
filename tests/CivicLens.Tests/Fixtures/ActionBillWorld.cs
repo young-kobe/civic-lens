@@ -66,7 +66,7 @@ internal sealed class ActionBillWorld
         summaries ??= [];
         subjectPages ??= [];
         var bill = new CongressBill(119, "hr", 1, title, Backfill, updatedAt ?? UpdatedAt, policyArea, sponsors, cosponsorPages.Sum(page => page.Length), 1,
-            summaries.Length, subjectPages.Sum(page => page.Length));
+            summaries.Length, subjectPages.Length == 0 ? 0 : subjectPages.Sum(page => page.Length) + 1);
         world.Add(ApiResource.Bill, "detail", $"{SourceUrl}/119/hr/1?format=json", DetailBody(bill));
         for (var index = 0; index < cosponsorPages.Length; index++)
             world.Add(ApiResource.BillCosponsors, $"cosponsors-{index}", PageUrl("cosponsors", index, 250),
@@ -200,7 +200,7 @@ internal sealed class ActionBillWorld
             legislativeSubjects = names.Select(name => new { name, updateDate = "2025-01-04T10:00:00Z" }),
             policyArea = new { name = BillGateFixtures.TrackedPolicyArea, updateDate = "2025-01-04T10:00:00Z" }
         },
-        pagination = new { count = names.Length, next }
+        pagination = new { count = names.Length + 1, next }
     });
 
     public static string SummaryBody(SummarySpec summary, string? next) => JsonSerializer.Serialize(new
