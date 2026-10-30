@@ -42,10 +42,12 @@ public static class PublishedRecordLabels
 
     public const string PersonApproval = "Approved";
 
-    public static string Approval(PublishedApprover approver) => approver == PublishedApprover.Code ? "Checked by code" : PersonApproval;
+    private const string CodeApproval = "Checked by code";
+
+    public static string Approval(PublishedApprover approver) => approver == PublishedApprover.Code ? CodeApproval : PersonApproval;
 
     public static string ApprovalOn(PublishedApprover approver, string moment) =>
-        $"{Approval(approver)}{(approver == PublishedApprover.Code ? " on" : "")} {moment}";
+        approver == PublishedApprover.Code ? $"{CodeApproval} on {moment}" : $"{PersonApproval} {moment}";
 
     public static string StatementPolicyAreas(PublishedApprover approver) =>
         approver == PublishedApprover.Code ? "Policy areas (chosen by AI)" : "Policy areas";
