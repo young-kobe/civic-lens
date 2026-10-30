@@ -752,7 +752,7 @@ public sealed class ReleaseRendererTests
     }
 
     // A House vote lists about 435 members. A quote for each member once made the page grow past 200 KB.
-    // This page measured 130 KB with 435 members (UTF-8 bytes of the rendered page); the budget leaves room for longer names.
+    // The budget leaves room for real names, which are longer than the test names.
     [Fact]
     public async Task AHouseVotePageWithEveryMemberStaysWithinItsSizeBudget()
     {

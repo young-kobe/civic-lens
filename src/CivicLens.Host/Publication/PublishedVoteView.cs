@@ -75,7 +75,7 @@ internal static class PublishedVoteView
             .ThenByDescending(group => CastRank(group.Key) == CandidateRank ? group.Count() : 0)
             .ThenBy(group => group.Key, StringComparer.Ordinal)
             .Select(group => (Heading(vote, group.Key, group.Count()),
-                Members: group.OrderBy(member => member.Official.Name, StringComparer.Ordinal).ThenBy(member => member.Official.Id, StringComparer.Ordinal).ToArray()));
+                Members: group.OrderBy(member => member.Official.Name, StringComparer.OrdinalIgnoreCase).ThenBy(member => member.Official.Id, StringComparer.Ordinal).ToArray()));
 
     private const int CandidateRank = 2;
 
