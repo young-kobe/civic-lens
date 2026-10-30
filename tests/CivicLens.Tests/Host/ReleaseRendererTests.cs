@@ -387,12 +387,12 @@ public sealed class ReleaseRendererTests
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
             .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
         Assert.Equal("Jane <Doe>", facts["Speakers"]);
-        Assert.Equal("Aide One", facts["Other speakers"]);
+        Assert.Equal("Aide One", facts["Other people quoted, named as the article writes them"]);
         Assert.Equal("2026-05-01", facts["Statement date"]);
         Assert.Equal("housing, transit", facts["Issues"]);
-        Assert.Equal("None", facts["Policy areas"]);
+        Assert.False(facts.ContainsKey("Policy areas"));
         Assert.Equal("HB 12", facts["Bill numbers"]);
-        Assert.Equal(["Direct quotation", "Release text"],
+        Assert.Equal(["Inside quotation marks", "Not in quotation marks"],
             document.QuerySelectorAll("[aria-labelledby='quotations-title'] .badge").Select(badge => badge.TextContent));
         Assert.Equal("<b>a rent cap</b>", document.QuerySelector("mark#cite-1")!.TextContent);
         Assert.Equal("Signed 2026-05-01.", document.QuerySelector("mark#cite-2")!.TextContent);
@@ -732,6 +732,70 @@ public sealed class ReleaseRendererTests
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
             .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
         Assert.Equal(label, facts["Kind"]);
+    }
+
+    [Fact]
+    public async Task AnOtherKindVoteWithAQuestionQuoteIsCalledAnOtherQuestionAndPointsTheReaderToTheKindQuote()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote() with { Kind = PublishedVoteKind.Other }, null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.Equal("Other question. The Kind quote in the Result panel gives the question.", Facts(html)["Kind"]);
+    }
+
+    [Fact]
+    public async Task AnOtherKindVoteWithNoQuestionQuoteSaysTheSourceGivesNoQuestionSoTheReaderIsNotSentToANonexistentQuote()
+    {
+        var vote = Vote();
+        vote = vote with { Kind = PublishedVoteKind.Other, KindCitation = null, Facts = [.. vote.Facts.Where(fact => !fact.Text.StartsWith("Question:", StringComparison.Ordinal))] };
+
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.Equal("Other question. The source gives no question.", Facts(html)["Kind"]);
+    }
+
+    [Fact]
+    public async Task APublicPageOmitsFactRowsThatHaveNoValueInsteadOfPrintingNone()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var vote = Vote() with { TrackedIssueIds = [] };
+        var action = Action() with { TrackedIssueIds = [], PolicyArea = null, PolicyAreaId = null, PolicyAreaCitation = null };
+        var statement = Statement() with { OtherSpeakers = [], IssueIds = [], PolicyAreaIds = [], BillNumbers = [] };
+
+        foreach (var html in new[] { await renderer.RenderVoteAsync(vote, null, [], HousingCatalog, CancellationToken.None),
+                     await renderer.RenderActionAsync(action, [], HousingCatalog, CancellationToken.None),
+                     await renderer.RenderStatementAsync(statement, [], HousingCatalog, CancellationToken.None),
+                     await renderer.RenderRecordAsync(Record() with { Officials = [], IssueIds = [] }, HousingCatalog, CancellationToken.None) })
+        {
+            var labels = Facts(html).Keys;
+            Assert.DoesNotContain("Tracked issues", labels);
+            Assert.DoesNotContain("Issues", labels);
+            Assert.DoesNotContain(PublishedRecordLabels.OtherPeopleQuoted, labels);
+            Assert.DoesNotContain("Policy area", labels);
+            Assert.DoesNotContain("Policy areas", labels);
+            Assert.DoesNotContain("Bill numbers", labels);
+            Assert.DoesNotContain("Officials", labels);
+            Assert.DoesNotContain("None", Facts(html).Values);
+        }
+    }
+
+    [Fact]
+    public async Task StatementQuotesAreNumberedAndSayWhetherTheyLieInsideQuotationMarks()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None);
+
+        var panel = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='quotations-title']")!.TextContent;
+        Assert.Contains("Quote 1", panel, StringComparison.Ordinal);
+        Assert.Contains("Each quote is the exact text of the source.", panel, StringComparison.Ordinal);
+        Assert.DoesNotContain("Quotation 1", panel, StringComparison.Ordinal);
+        Assert.Equal(["Inside quotation marks", "Not in quotation marks"],
+            new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='quotations-title'] .badge").Select(badge => badge.TextContent));
+    }
+
+    private static Dictionary<string, string> Facts(string html)
+    {
+        var document = new HtmlParser().ParseDocument(html);
+        return document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
+            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
     }
 
     [Fact]

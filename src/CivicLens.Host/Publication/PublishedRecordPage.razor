@@ -60,8 +60,8 @@
             var facts = new List<Fact> { new("Source institution", Record.Institution) };
             if (Record.ChangeDate is { } date) facts.Add(new("Actual change date", Moment.Iso(date)));
             facts.Add(new("Observed", $"Earlier version {Moment.Full(Record.Before.ObservedAtUtc)}; later version {Moment.Full(Record.After.ObservedAtUtc)}"));
-            facts.Add(PublishedRecordView.Officials("Officials", Record.Officials));
-            facts.Add(PublishedRecordView.Issues("Issues", Record.IssueIds, Catalog));
+            facts.AddRange(PublishedRecordView.Officials("Officials", Record.Officials));
+            facts.AddRange(PublishedRecordView.Issues("Issues", Record.IssueIds, Catalog));
             facts.Add(new("Published", $"Approved {Moment.Full(Record.ApprovedAtUtc)}; first published {Moment.Full(Record.FirstPublishedAtUtc)}"));
             facts.Add(new("Revision", Record.RevisionNumber.ToString(System.Globalization.CultureInfo.InvariantCulture)));
             return facts;

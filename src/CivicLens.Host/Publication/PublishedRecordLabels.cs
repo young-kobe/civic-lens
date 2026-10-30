@@ -41,7 +41,9 @@ public static class PublishedRecordLabels
     };
 
     public static string Quotation(PublishedQuotationKind kind) =>
-        kind == PublishedQuotationKind.DirectQuotation ? "Direct quotation" : "Release text";
+        kind == PublishedQuotationKind.DirectQuotation ? "Inside quotation marks" : "Not in quotation marks";
+
+    public const string OtherPeopleQuoted = "Other people quoted, named as the article writes them";
 
     public const string ModelWording = "An AI summary of the official record";
 
@@ -95,6 +97,8 @@ public static class PublishedRecordLabels
         _ => throw new ArgumentOutOfRangeException(nameof(source), source, "Vote source has no label.")
     };
 
+    public const string OtherQuestion = "Other question";
+
     public static string VoteKind(PublishedVoteKind kind) => kind switch
     {
         PublishedVoteKind.Rule => "Rule",
@@ -108,7 +112,7 @@ public static class PublishedRecordLabels
         PublishedVoteKind.Nomination => "Nomination",
         PublishedVoteKind.Cloture => "Cloture",
         PublishedVoteKind.MotionToProceed => "Motion to proceed",
-        PublishedVoteKind.Other => "Other",
+        PublishedVoteKind.Other => OtherQuestion,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Vote kind has no label.")
     };
 }

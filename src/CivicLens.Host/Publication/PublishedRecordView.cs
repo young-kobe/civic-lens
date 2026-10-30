@@ -19,23 +19,29 @@ internal static class PublishedRecordView
 
     public static string OfficialLink(string officialId) => "../" + PublicationProtocol.OfficialPagePath(officialId);
 
-    public static Fact Officials(string label, IEnumerable<PublishedOfficial> officials) =>
-        Fact.LinkList(label, [.. officials.Select(official => new FactLink(official.Name, OfficialLink(official.Id)))]);
+    public static IEnumerable<Fact> Values(string label, IReadOnlyCollection<string> values) =>
+        values.Count == 0 ? [] : [Fact.List(label, values)];
+
+    public static IEnumerable<Fact> Links(string label, IReadOnlyCollection<FactLink> links) =>
+        links.Count == 0 ? [] : [Fact.LinkList(label, [.. links])];
+
+    public static IEnumerable<Fact> Officials(string label, IEnumerable<PublishedOfficial> officials) =>
+        Links(label, [.. officials.Select(official => new FactLink(official.Name, OfficialLink(official.Id)))]);
 
     public static FactLink IssueLink(string issueId, PublicationCatalog catalog, string rootPath) =>
         ConfiguredNameLink(catalog.HasIssue(issueId), catalog.IssueName(issueId),
             rootPath + PublicationProtocol.IssuePagePath(issueId, 1));
 
-    public static Fact Issues(string label, IEnumerable<string> issueIds, PublicationCatalog catalog) =>
-        Fact.LinkList(label, [.. issueIds.Select(id => IssueLink(id, catalog, "../"))]);
+    public static IEnumerable<Fact> Issues(string label, IEnumerable<string> issueIds, PublicationCatalog catalog) =>
+        Links(label, [.. issueIds.Select(id => IssueLink(id, catalog, "../"))]);
 
     public static FactLink PolicyAreaLink(string? policyAreaId, string text, PublicationCatalog catalog) =>
         policyAreaId is null
             ? new(text)
             : ConfiguredNameLink(catalog.HasPolicyArea(policyAreaId), text, "../" + PublicationProtocol.PolicyAreaPagePath(policyAreaId, 1));
 
-    public static Fact PolicyAreas(string label, IEnumerable<string> policyAreaIds, PublicationCatalog catalog) =>
-        Fact.LinkList(label, [.. policyAreaIds.Select(id => PolicyAreaLink(id, catalog.PolicyAreaName(id), catalog))]);
+    public static IEnumerable<Fact> PolicyAreas(string label, IEnumerable<string> policyAreaIds, PublicationCatalog catalog) =>
+        Links(label, [.. policyAreaIds.Select(id => PolicyAreaLink(id, catalog.PolicyAreaName(id), catalog))]);
 
     public static ImmutableArray<DocumentComparisonHunk> Hunks(PublishedDocumentChange record) =>
         [.. record.Changes.Select(change => new DocumentComparisonHunk(
