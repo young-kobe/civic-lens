@@ -40,8 +40,8 @@ public sealed class PublishOfficialPagesTests
             new PublishedRecordReference(PublishedRecordKind.Vote, vote)));
 
         var files = scenario.Releases.Directories[summary.DirectoryName];
-        Assert.Equal($"<html>official mayor tracked current  past [] records [{statementOfMayor}] votes []</html>", Page(files, MayorPage));
-        Assert.Equal($"<html>official chair tracked current 119 past [] records [{statementOfChair}] votes [{vote}]</html>", Page(files, ChairPage));
+        Assert.Equal($"<html>official mayor tracked current  congresses [] records [{statementOfMayor}] votes []</html>", Page(files, MayorPage));
+        Assert.Equal($"<html>official chair tracked current 119 congresses [119] records [{statementOfChair}] votes [{vote}]</html>", Page(files, ChairPage));
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public sealed class PublishOfficialPagesTests
         var second = await ReplaceAsync(scenario, "k2", PublishedRecordKind.Vote, newer);
 
         var files = scenario.Releases.Directories[second.DirectoryName];
-        Assert.Equal($"<html>official mayor tracked current 118 past [] records [] votes [{older}]</html>", Page(files, MayorPage));
+        Assert.Equal($"<html>official mayor tracked current 118 congresses [118] records [] votes [{older}]</html>", Page(files, MayorPage));
         Assert.DoesNotContain(PublicationProtocol.OfficialCongressPagePath("mayor", 118), files.Keys);
         Assert.DoesNotContain(PublicationProtocol.OfficialVotesPath("mayor", 119), files.Keys);
     }
@@ -271,13 +271,13 @@ public sealed class PublishOfficialPagesTests
             new PublishedRecordReference(PublishedRecordKind.Vote, older), new PublishedRecordReference(PublishedRecordKind.Vote, newer)));
 
         var files = scenario.Releases.Directories[summary.DirectoryName];
-        Assert.Equal($"<html>official mayor tracked current 119 past [118] records [] votes [{newer}]</html>", Page(files, MayorPage));
-        Assert.Equal($"<html>official mayor tracked past 118 past [] records [] votes [{older}]</html>",
+        Assert.Equal($"<html>official mayor tracked current 119 congresses [119,118] records [] votes [{newer}]</html>", Page(files, MayorPage));
+        Assert.Equal($"<html>official mayor tracked past 118 congresses [119,118] records [] votes [{older}]</html>",
             Page(files, PublicationProtocol.OfficialCongressPagePath("mayor", 118)));
     }
 
     [Fact]
-    public async Task ANewVoteOfTheCurrentCongressLeavesTheEarlierCongressFilesLinkedAndANewerCongressWritesThePageOfTheOldCurrent()
+    public async Task ANewVoteOfTheCurrentCongressLeavesTheEarlierCongressFilesLinkedAndANewerCongressRewritesEveryEarlierPageBecauseTheirTabsListEveryCongress()
     {
         var scenario = new PublicationScenario();
         var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
@@ -298,8 +298,9 @@ public sealed class PublishOfficialPagesTests
         var third = await PublishAsync(scenario, "k3", PublishedRecordKind.Vote, scenario.AddVote('d', congress: 120));
 
         Assert.Contains(PublicationProtocol.OfficialCongressPagePath("mayor", 119), scenario.Releases.WriteOrder);
+        Assert.Contains(PublicationProtocol.OfficialCongressPagePath("mayor", 118), scenario.Releases.WriteOrder);
         Assert.Contains((second.DirectoryName, PublicationProtocol.OfficialVotesPath("mayor", 119)), scenario.Releases.Links);
-        Assert.Contains("current 120 past [119,118]", Page(scenario.Releases.Directories[third.DirectoryName], MayorPage));
+        Assert.Contains("current 120 congresses [120,119,118]", Page(scenario.Releases.Directories[third.DirectoryName], MayorPage));
     }
 
     [Fact]

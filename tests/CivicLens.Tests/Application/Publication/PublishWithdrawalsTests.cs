@@ -485,7 +485,7 @@ public sealed class PublishWithdrawalsTests
             new PublishReleaseRequest([], "k2") { Withdrawals = [Note(withdrawn, "Wrong.", PublishedRecordKind.Statement), Note(chairOnly, "Wrong.", PublishedRecordKind.Statement)] });
 
         var files = scenario.Releases.Directories[second.DirectoryName];
-        Assert.Equal($"<html>official mayor tracked current  past [] records [{kept}] votes []</html>", Page(files, PublicationProtocol.OfficialPagePath("mayor")));
+        Assert.Equal($"<html>official mayor tracked current  congresses [] records [{kept}] votes []</html>", Page(files, PublicationProtocol.OfficialPagePath("mayor")));
         Assert.DoesNotContain(PublicationProtocol.OfficialPagePath("chair"), files.Keys);
     }
 
