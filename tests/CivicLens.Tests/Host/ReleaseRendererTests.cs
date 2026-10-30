@@ -198,7 +198,9 @@ public sealed class ReleaseRendererTests
     {
         var html = await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None);
 
-        var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
+        var document = new HtmlParser().ParseDocument(html);
+        foreach (var popover in document.QuerySelectorAll("[popover]")) popover.Remove();
+        var text = document.QuerySelector("main")!.TextContent;
         Assert.Contains("Amendment, Suspension of the rules, Passage, Conference report, Veto override, Nomination.", text, StringComparison.Ordinal);
         Assert.Contains("A vote is substantive when its kind is one of these:", text, StringComparison.Ordinal);
         Assert.Contains("Votes they cast: the substantive roll call votes on the issue", text, StringComparison.Ordinal);
@@ -1597,7 +1599,7 @@ public sealed class ReleaseRendererTests
     [
         PublicationProtocol.HomePath, PublicationProtocol.OfficialsPagePath, PublicationProtocol.FacetsPath,
         PublicationProtocol.AllRecordsPagePath(1), PublicationProtocol.BriefsPagePath(1), PublicationProtocol.SearchPagePath,
-        PublicationProtocol.MethodPagePath, PublicationProtocol.AboutPagePath, PublicationProtocol.ReportPagePath
+        PublicationProtocol.MethodPagePath, PublicationProtocol.AboutPagePath, PublicationProtocol.GlossaryPagePath, PublicationProtocol.ReportPagePath
     ];
 
     [Fact]
@@ -1620,7 +1622,7 @@ public sealed class ReleaseRendererTests
             var links = document.QuerySelectorAll("nav[aria-label='Site'] a, nav[aria-label='Footer'] a")
                 .Select(link => link.GetAttribute("href")!).ToList();
 
-            Assert.Equal(8, links.Count);
+            Assert.Equal(9, links.Count);
             Assert.All(links, href => Assert.True(WrittenRootPages.Contains(ReleasePath(pagePath, href)), $"{name}: {href}"));
         }
     }
@@ -1707,6 +1709,7 @@ public sealed class ReleaseRendererTests
             ("search", PublicationProtocol.SearchPagePath, await renderer.RenderSearchAsync(release, facets, CancellationToken.None), "Search"),
             ("method", PublicationProtocol.MethodPagePath, await renderer.RenderMethodAsync(CancellationToken.None), null),
             ("about", PublicationProtocol.AboutPagePath, await renderer.RenderAboutAsync(CancellationToken.None), null),
+            ("glossary", PublicationProtocol.GlossaryPagePath, await renderer.RenderGlossaryAsync(CancellationToken.None), null),
             ("report", PublicationProtocol.ReportPagePath, await renderer.RenderReportAsync(CancellationToken.None), null)
         ];
     }

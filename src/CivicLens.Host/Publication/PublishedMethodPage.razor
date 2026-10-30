@@ -7,9 +7,9 @@
     <Panel Title="What the issue counts mean" Padded="true">
         <p>The panel "Issues they work on" has one row for each tracked issue. Each row has three counts.</p>
         <ul>
-            <li>Their statements: the published statements of the official on the issue. A statement counts in the Congress of its day. The day is the statement day, or the first publication day when the statement has no day.</li>
-            <li>Bills they sponsored: the published bills on the issue that name the official as sponsor. The row lists the official title of each bill. Cosponsors do not count. A bill counts in the Congress of its latest sponsorship day.</li>
-            <li>Votes they cast: the substantive roll call votes on the issue where the official cast a vote. A roll call counts once. A cast of Not Voting does not count. Any other cast counts.</li>
+            <li><Term Key="statement">Their statements</Term>: the published statements of the official on the issue. A statement counts in the Congress of its day. The day is the statement day, or the first publication day when the statement has no day.</li>
+            <li><Term Key="bill">Bills</Term> they sponsored: the published bills on the issue that name the official as <Term Key="sponsor">sponsor</Term>. The row lists the official title of each bill. <Term Key="cosponsor">Cosponsors</Term> do not count. A bill counts in the Congress of its latest sponsorship day.</li>
+            <li>Votes they cast: the substantive <Term Key="roll-call-vote">roll call votes</Term> on the issue where the official cast a vote. A roll call counts once. A cast of <Term Key="not-voting">Not Voting</Term> does not count. Any other cast counts.</li>
         </ul>
         <p>Each count is a number of records. It is not a share, a rank, or a measure of how much the official cares about the issue. A record on several issues counts once for each issue. A record with no tracked issue is in no row.</p>
     </Panel>
@@ -19,9 +19,9 @@
         <p>The page shows a share only when the total is at least @TalkAndActionProfile.MinimumRecordsForShare roll calls.</p>
     </Panel>
     <Panel Title="Votes with their party" Padded="true">
-        <p>@PublishedOfficialView.SplitVoteMeaning The majority of a party is the Yea or Nay cast that more of its members made. A party with equal Yea and Nay counts has no majority, so its roll call is not a split vote. A vote for a candidate, such as the election of the Speaker, is never a split vote.</p>
+        <p>@PublishedOfficialView.SplitVoteMeaning The majority of a party is the <Term Key="yea">Yea</Term> or <Term Key="nay">Nay</Term> cast that more of its members made. A party with equal Yea and Nay counts has no majority, so its roll call is not a split vote. A vote for a candidate, such as the election of the Speaker, is never a split vote.</p>
         <p>The page counts only split votes where the official cast Yea or Nay. Aye counts as Yea and No counts as Nay. The official votes with the party when the cast equals the majority of the official party in the same chamber. The party is the party of the official on the day of the vote, or the party they caucus with.</p>
-        <p>A cast of Present or Not Voting is not in either number. The page states how many split votes it left out. It shows a percent only when the official cast Yea or Nay on at least @TalkAndActionProfile.MinimumRecordsForShare split votes.</p>
+        <p>A cast of <Term Key="present">Present</Term> or Not Voting is not in either number. The page states how many split votes it left out. It shows a percent only when the official cast Yea or Nay on at least @TalkAndActionProfile.MinimumRecordsForShare split votes.</p>
         <p>An independent who caucuses with the @(PublishedPartyMajority.Democrat)s or the @(PublishedPartyMajority.Republican)s, which means they work with that party in Congress, counts with that party. The page leaves out votes that the official cast while in another party and not caucusing with either. For a member who has left Congress, the page uses the party letter in the vote record, so the page does not count the votes of an independent who left.</p>
     </Panel>
     <Panel Title="What a link is" Padded="true">
@@ -33,10 +33,10 @@
         <p>All three counts use the current Congress. The current Congress of an official is the newest Congress with a published vote of that official.</p>
     </Panel>
     <Panel Title="Substantive votes" Padded="true">
-        <p>A vote is substantive when its kind is one of these: @SubstantiveKinds. The count of votes they cast leaves out all other kinds, such as rules, cloture, and motions. These are procedural votes.</p>
+        <p>A vote is substantive when its kind is one of these: @SubstantiveKinds. The count of votes they cast leaves out all other kinds, such as rules, <Term Key="cloture">cloture</Term>, and motions. These are procedural votes.</p>
     </Panel>
     <Panel Title="Presidential documents" Padded="true">
-        <p>The page of a President lists the executive orders, proclamations, notices, and memoranda that the Federal Register published. The counts above do not include them.</p>
+        <p>The page of a President lists the <Term Key="executive-order">executive orders</Term>, <Term Key="proclamation">proclamations</Term>, <Term Key="notice">notices</Term>, and <Term Key="memorandum">memoranda</Term> that the <Term Key="federal-register">Federal Register</Term> published. The counts above do not include them.</p>
         <p>Each record shows the title and the facts from the Federal Register. Code checks the facts against the saved record. No person or model summarizes the document.</p>
     </Panel>
     <Panel Title="Where the issues come from" Padded="true">

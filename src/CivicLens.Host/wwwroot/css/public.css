@@ -40,6 +40,15 @@
 .public-crumbs a:hover { color: var(--ink); text-decoration: underline; }
 .public-crumbs [aria-current="page"] { color: var(--ink); font-weight: 600; }
 
+.term { padding: 0; border: 0; border-bottom: 1px dotted currentColor; background: none; color: inherit; font: inherit; cursor: help; }
+.term-popover { width: min(32rem, calc(100vw - 32px)); padding: var(--s4); border: 1px solid var(--line-strong); border-radius: var(--r-panel); background: var(--surface); color: var(--ink); font-size: var(--t-sm); }
+.term-popover:popover-open { display: grid; gap: var(--s2); }
+.term-means { font-weight: 600; }
+.glossary-term + .glossary-term { margin-top: var(--s5); }
+.glossary-term h3 { margin: 0 0 var(--s2); }
+.glossary-term dt { color: var(--muted); font-size: var(--t-xs); font-weight: 600; }
+.glossary-term dd { margin: 0 0 var(--s2); }
+
 @media (max-width: 760px) {
     .officials { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .official-card { flex-direction: column; align-items: flex-start; }
