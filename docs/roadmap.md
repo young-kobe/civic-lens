@@ -60,6 +60,9 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 - R-57: Finish the executive and judicial sources, after a check of what shipped. The plan is Cabinet officials from agency pages where the official speaks, then the 9 justices, speeches and remarks only. Opinions wait for a case record kind and a PDF reader. Executive orders as a record kind shipped with the Federal Register work. Depends on: none. [Executive actions](architecture/executive-actions.md#limits-and-planned-work)
 - R-58: More data sources, each from an official API or bulk file, with a terms and robots check. The order is committees, NOMINATE scores, FEC, LDA, and Census. Financial disclosures come last. Depends on: R-47. [Roster](architecture/roster.md#limits-and-planned-work)
 
+- R-61: Finish executive action records. Add the document body text, then an AI summary, then issue tags. Issue tags need a design first, because these documents have no policy area. Depends on: none. [Executive actions](architecture/executive-actions.md#limits-and-planned-work)
+- R-62: Statements from official social accounts, such as Bluesky and YouTube. This needs a list of verified accounts and a new design. X and Meta stay out, because of cost and access limits. Depends on: R-17. [Collection](architecture/collection.md#limits-and-planned-work)
+
 **Operations**
 
 - R-59: Deploy from GitHub Actions. First, the host and worker refuse to start on a missing or unknown `CIVIC_LENS_*` variable. Then a release job, gated by an owner click, reaches a forced command on the host through the tunnel. That command accepts only a full SHA on main, then updates and checks the live site. Depends on: R-44. [Host](architecture/host.md#limits-and-planned-work)
@@ -95,6 +98,7 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 - D-12: Content profiles for the 282 of 1,394 page, HTML, and feed sources that have none. [Documents](architecture/documents.md#limits-and-planned-work)
 - D-13: A classifier benchmark for the statement issue gate, to run as soon as possible. The gate label store, the held-out split, the owner labeling page, and the label export are built ([Statements](architecture/statements.md#gate-labels)). Still to build: a Sonnet pre-label for releases outside the held-out set, and about 100 labels by hand, starting from the 48 measured ones. Then compare Haiku 5.5, Clef-flash, Clef-omni, Clef, a fine-tuned Clef, Strands Decider 2B, a fine-tuned ModernBERT, and a feature baseline. The issue list is configuration. A decision model takes the options in each request, so it needs no retraining when the list changes. A model that runs inside the worker (ONNX Runtime) needs a reviewed boundary change first. The fine-tuning needs the dataset rules of [R-28](#later) agreed first.
 - D-16: Party count for an independent who left Congress. The roster reads only current members, so such a member is left out of "Votes with their party". The options are to read `legislators-historical.json`, to keep the roster terms of a member who leaves, or to store party and caucus on each cast. [Roster](architecture/roster.md#limits-and-planned-work)
+- D-17: Whether the talk and action counts of a President include executive actions. Today they do not. [Executive actions](architecture/executive-actions.md#limits-and-planned-work)
 
 ## Product direction
 
