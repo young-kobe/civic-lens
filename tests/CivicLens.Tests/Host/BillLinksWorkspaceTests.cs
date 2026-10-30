@@ -105,7 +105,7 @@ public sealed class BillLinksWorkspaceTests(PostgresCollection postgres) : IAsyn
     }
 
     [Fact]
-    public async Task TheLookupBoxOpensTheActionDraftOfABillAndTheVoteDraftOfARollCall()
+    public async Task TheLookupBoxOpensTheActionDraftOfABillOrItsRecordIdAndTheVoteDraftOfARollCall()
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var congress = CongressCalendar.CongressOn(today)!.Value;
@@ -116,19 +116,22 @@ public sealed class BillLinksWorkspaceTests(PostgresCollection postgres) : IAsyn
         using var bill = await host.Client.GetAsync("/Review?find=HR+1234");
         using var explicitBill = await host.Client.GetAsync($"/Review?find={congress}+H.R.+1234");
         using var roll = await host.Client.GetAsync("/Review?find=Roll+245");
+        using var recordId = await host.Client.GetAsync($"/Review?find={action.RecordId}");
 
         Assert.Equal(HttpStatusCode.Redirect, bill.StatusCode);
         Assert.Equal($"/Review/Actions/{action.RecordId}", bill.Headers.Location!.AbsolutePath);
         Assert.Equal($"/Review/Actions/{action.RecordId}", explicitBill.Headers.Location!.AbsolutePath);
         Assert.Equal($"/Review/Votes/{Id(245)}", roll.Headers.Location!.AbsolutePath);
+        Assert.Equal($"/Review/Actions/{action.RecordId}", recordId.Headers.Location!.AbsolutePath);
     }
 
     [Theory]
     [InlineData("HR+77", "No draft for “HR 77”.")]
     [InlineData("Roll+9", "No draft for “Roll 9”.")]
-    [InlineData("banana", "Enter a bill such as HR 1234 or 118 HR 1234, or a roll call such as Roll 245.")]
-    [InlineData("118+Roll+9", "Enter a bill such as HR 1234 or 118 HR 1234, or a roll call such as Roll 245.")]
-    public async Task AnUnknownBillOrRollCallAndAnInvalidInputShowAMessageOnTheHomePageWithoutAnError(string query, string message)
+    [InlineData("0000000000000000000000000000000000000000000000000000000000000abc", "No draft for “0000000000000000000000000000000000000000000000000000000000000abc”.")]
+    [InlineData("banana", "Enter a bill such as HR 1234 or 118 HR 1234, a roll call such as Roll 245, or a record ID.")]
+    [InlineData("118+Roll+9", "Enter a bill such as HR 1234 or 118 HR 1234, a roll call such as Roll 245, or a record ID.")]
+    public async Task AnUnknownBillRollCallOrRecordIdAndAnInvalidInputShowAMessageOnTheHomePageWithoutAnError(string query, string message)
     {
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
 
