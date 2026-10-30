@@ -17,6 +17,8 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
         IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken) =>
         votes.ListUnpublishedApprovedAsync(limit, excludedRecordIds, cancellationToken);
 
+    protected override string RecordIdOf(UnpublishedApprovedVote candidate) => candidate.Vote.RecordId;
+
     protected override ReadyToPublishRecord? ToReady(UnpublishedApprovedVote candidate) =>
         Ready(candidate.Vote.CurrentStatus, candidate.Vote.UnresolvedConcerns.Length, candidate.Vote.RecordId,
             candidate.Vote.CurrentRevision.Headline, candidate.Vote.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber);

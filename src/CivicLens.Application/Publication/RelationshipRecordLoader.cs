@@ -14,6 +14,8 @@ internal sealed class RelationshipRecordLoader(IRelationshipReviewStore relation
         IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken) =>
         relationships.ListUnpublishedApprovedAsync(limit, excludedRecordIds, cancellationToken);
 
+    protected override string RecordIdOf(UnpublishedApprovedRelationship candidate) => candidate.Relationship.RecordId;
+
     protected override ReadyToPublishRecord? ToReady(UnpublishedApprovedRelationship candidate) =>
         candidate.CitedRecordsChanged
             ? null

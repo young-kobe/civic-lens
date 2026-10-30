@@ -15,6 +15,8 @@ internal sealed class StatementRecordLoader(IStatementReviewStore statements)
         IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken) =>
         statements.ListUnpublishedApprovedAsync(limit, excludedRecordIds, cancellationToken);
 
+    protected override string RecordIdOf(UnpublishedApprovedStatement candidate) => candidate.Statement.CandidateId;
+
     protected override ReadyToPublishRecord? ToReady(UnpublishedApprovedStatement candidate) =>
         candidate.Statement.CurrentRevision is { } revision
             ? Ready(candidate.Statement.CurrentStatus, candidate.Statement.UnresolvedConcernCount, candidate.Statement.CandidateId,

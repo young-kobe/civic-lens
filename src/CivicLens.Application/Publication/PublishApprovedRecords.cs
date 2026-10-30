@@ -13,7 +13,7 @@ public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationS
     public async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
         var published = 0;
-        var skipped = new HashSet<PublishedRecordReference>();
+        var skipped = new HashSet<string>();
         while (true)
         {
             await beat.BeatIfDueAsync(cancellationToken);
@@ -34,13 +34,13 @@ public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationS
             catch (Exception exception) when (exception is WithdrawnRecordException or MissingCorrectionNoteException)
             {
                 var record = UnpublishableRecord.Of(exception)!;
-                skipped.Add(record);
+                skipped.Add(record.RecordId);
                 logger.LogInformation("{Record} left out of the release: {Reason}", record, exception.Message);
                 continue;
             }
             catch (ArgumentException exception) when (UnpublishableRecord.Of(exception) is { } record)
             {
-                skipped.Add(record);
+                skipped.Add(record.RecordId);
                 logger.LogError(exception, "{Record} left out of the release.", record);
                 continue;
             }
@@ -50,13 +50,28 @@ public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationS
         }
     }
 
-    private async Task<ImmutableArray<ReadyToPublishRecord>> ListReadyAsync(HashSet<PublishedRecordReference> skipped,
-        CancellationToken cancellationToken)
+    private async Task<ImmutableArray<ReadyToPublishRecord>> ListReadyAsync(HashSet<string> skipped, CancellationToken cancellationToken)
     {
         var limit = PublishRelease.MaximumRecords;
-        string[] excluded = [.. skipped.Select(record => record.RecordId)];
-        var reads = await Task.WhenAll(loaders.All.Select(loader => loader.ListReadyAsync(limit, excluded, cancellationToken)));
-        return ShareLimitBetweenKinds([.. reads.Select(read => read.Ready)], limit);
+        var reads = await Task.WhenAll(loaders.All.Select(loader => ListKindAsync(loader, skipped, limit, cancellationToken)));
+        return ShareLimitBetweenKinds(reads, limit);
+    }
+
+    // Rows that are not ready can fill a read. The read repeats without them until the kind has enough ready records or no row is left.
+    // A not ready record may become ready after the next release, so only this read leaves it out.
+    private static async Task<IReadOnlyList<ReadyToPublishRecord>> ListKindAsync(PublishedRecordLoader loader, HashSet<string> skipped, int limit,
+        CancellationToken cancellationToken)
+    {
+        var excluded = new HashSet<string>(skipped);
+        var ready = new List<ReadyToPublishRecord>();
+        while (true)
+        {
+            var read = await loader.ListReadyAsync(limit, [.. excluded], cancellationToken);
+            ready.AddRange(read.Ready);
+            if (!read.HasMore || ready.Count >= limit) return ready;
+            excluded.UnionWith(read.Ready.Select(record => record.RecordId));
+            excluded.UnionWith(read.NotReadyIds);
+        }
     }
 
     // Each kind gets an equal share of the limit. A kind with fewer ready records gives its unused share to the others.

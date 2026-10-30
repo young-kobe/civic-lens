@@ -14,6 +14,8 @@ internal sealed class BriefRecordLoader(IBriefReviewStore briefs)
         IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken) =>
         briefs.ListUnpublishedApprovedAsync(limit, excludedRecordIds, cancellationToken);
 
+    protected override string RecordIdOf(UnpublishedApprovedBrief candidate) => candidate.Brief.RecordId;
+
     protected override ReadyToPublishRecord? ToReady(UnpublishedApprovedBrief candidate) =>
         candidate.CitedRecordsChanged
             ? null

@@ -13,6 +13,8 @@ internal sealed class DocumentChangeRecordLoader(IDocumentChangeReviewStore revi
         IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken) =>
         reviews.ListUnpublishedApprovedDraftsAsync(limit, excludedRecordIds, cancellationToken);
 
+    protected override string RecordIdOf(UnpublishedApprovedDraft candidate) => candidate.Draft.DraftId;
+
     protected override ReadyToPublishRecord? ToReady(UnpublishedApprovedDraft candidate) =>
         Ready(candidate.Draft.CurrentStatus, candidate.Draft.UnresolvedConcernCount, candidate.Draft.DraftId,
             candidate.Draft.CurrentRevision.Headline, candidate.Draft.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber);

@@ -139,6 +139,25 @@ public sealed class PublishApprovedRecordsTests
     }
 
     [Fact]
+    public async Task ManyRowsThatAreNotReadyDoNotHideAnOlderReadyRecordBecauseTheReadRepeatsWithoutThem()
+    {
+        var scenario = new PublicationScenario();
+        for (var index = 0; index < PublishRelease.MaximumRecords + 6; index++)
+        {
+            var blocked = StatementCandidate(index.ToString("x64"));
+            scenario.Statements.Unpublished.Add(blocked with { Statement = blocked.Statement with { UnresolvedConcernCount = 1 } });
+        }
+        var ready = scenario.AddStatement('e');
+        scenario.Statements.Unpublished.Add(StatementCandidate(ready));
+        ListedUntilPublished(scenario);
+
+        var published = await Publisher(scenario).ExecuteAsync(default);
+
+        Assert.Equal(1, published);
+        Assert.Equal(ready, Assert.Single(scenario.Publications.LastCommit!.AddedRecords).RecordId);
+    }
+
+    [Fact]
     public async Task EveryKindKeepsItsShareOfABatchSoOneLargeBacklogDoesNotCrowdOutTheOthers()
     {
         var scenario = new PublicationScenario();
