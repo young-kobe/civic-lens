@@ -322,7 +322,7 @@ internal sealed class PublicationScenario
             new DateOnly(2025, 4, 10), Line(detail, detailText, "Started: 2025-04-10T11:08:00-04:00"), VoteKind.Passage,
             Line(detail, detailText, "Question: On Passage"),
             [.. memberPersonIds.Select((person, index) => new MemberVote(person, "M000001", cast, Line(members, memberText, memberLines[index])))],
-            ["housing"], new string('e', 64));
+            ["housing"], ["housing"], new string('e', 64));
         var all = decisions ?? [Decision(recordId, 1, ReviewDecisionKind.Approve)];
         var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
         var review = new VoteReview(recordId, revision, null, [revision], all.Length, ReviewPolicy.GetCurrentStatus(1, all, concerns), all, concerns);
