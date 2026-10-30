@@ -4,6 +4,7 @@ using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Application.Collection.FederalRegister;
 using CivicLens.Application.Collection.MemberPhotos;
 using CivicLens.Application.Collection.Processing;
 using CivicLens.Application.Collection.VoteviewVotes;
@@ -34,6 +35,7 @@ public sealed class JobPreparationTests
     private static readonly string ListUrl = new BillStreamWindow(Backfill, Backfill).RequestUrl(SourceUrl);
     private readonly RecordingBillAdmissions admissions = new();
     private readonly RecordingVoteAdmissions votes = new();
+    private readonly RecordingFederalRegisterAdmissions federalRegister = new();
     private readonly RecordingRoster roster = new();
     private readonly RecordingExecutive executives = new();
     private readonly ThrowingProcessingStore processing = new();
@@ -285,8 +287,50 @@ public sealed class JobPreparationTests
         { ApiResource.VoteviewVotes, VoteviewUrl.File(VoteviewVoteFixtures.SourceUrl, ApiResource.VoteviewVotes, 119), VoteviewVoteFixtures.DefaultVotes },
         { ApiResource.MemberRoster, RosterFixtures.SourceUrl, RosterFixtures.Json },
         { ApiResource.ExecutiveRoster, ExecutiveFixtures.SourceUrl, ExecutiveFixtures.Json },
-        { ApiResource.MemberPhoto, MemberPhotoFixtures.PhotoUrl(), "the photo fixture replaces this text" }
+        { ApiResource.MemberPhoto, MemberPhotoFixtures.PhotoUrl(), "the photo fixture replaces this text" },
+        { ApiResource.FederalRegisterList, FederalRegisterListUrl, FederalRegisterFixtures.List },
+        { ApiResource.FederalRegisterDocument, FederalRegisterDocumentUrl, FederalRegisterFixtures.TrumpOrder }
     };
+
+    private static readonly string FederalRegisterListUrl = FederalRegisterUrl.List(FederalRegisterFixtures.SourceUrl,
+        new FederalRegisterWindow(FederalRegisterFixtures.Backfill, Backfill));
+
+    private static readonly string FederalRegisterDocumentUrl = FederalRegisterUrl.Document(FederalRegisterFixtures.SourceUrl, "2025-01900");
+
+    [Fact]
+    public async Task AFederalRegisterListIsParsedAndPassedToTheStoreWithoutAnExtraction()
+    {
+        var result = await Prepare(ApiResource.FederalRegisterList, FederalRegisterListUrl, FederalRegisterFixtures.List, null);
+
+        Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
+        Assert.Equal(3, Assert.Single(federalRegister.Lists).Items.Count);
+        Assert.Empty(extractions.Saved);
+    }
+
+    [Fact]
+    public async Task AFederalRegisterDocumentIsExtractedOnceAndTheStoreGetsThatExtractionWithItsSigner()
+    {
+        var result = await Prepare(ApiResource.FederalRegisterDocument, FederalRegisterDocumentUrl, FederalRegisterFixtures.TrumpOrder, null);
+
+        Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
+        var saved = Assert.Single(extractions.Saved);
+        AssertPinned(saved, "federal-register-document-v1", "FederalRegisterDocumentParser.ExtractionVersion",
+            saved.Text.Contains("\nTitle: Ending the Weaponization of the Federal Government\n", StringComparison.Ordinal));
+        var call = Assert.Single(federalRegister.Documents);
+        Assert.Equal(("job", saved.ExtractionId, "donald-trump", saved.Text), (call.JobId, call.Evidence.ExtractionId, call.Evidence.PersonId, call.Evidence.ExtractionText));
+    }
+
+    [Fact]
+    public async Task AFederalRegisterDocumentOfAnotherPresidentThanTheOneInOfficeIsInvalidAndSavesNothing()
+    {
+        var body = FederalRegisterFixtures.TrumpOrder.Replace("\"identifier\":\"donald-trump\"", "\"identifier\":\"joe-biden\"")
+            .Replace("\"signing_date\":\"2025-01-20\"", "\"signing_date\":\"2025-02-01\"");
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => Prepare(ApiResource.FederalRegisterDocument, FederalRegisterDocumentUrl, body, null));
+
+        Assert.Empty(extractions.Saved);
+        Assert.Empty(federalRegister.Documents);
+    }
 
     [Fact]
     public async Task AFinishedRollCallsJobAsksTheStoreForItsFollowOnJobsAndReadsNoBody()
@@ -613,6 +657,8 @@ public sealed class JobPreparationTests
             ApiResource.MemberPhoto => new ConfiguredCollectionSource(
                 MemberPhotoFixtures.Configuration(RosterFixtures.Person("a-person", "A Person", MemberPhotoFixtures.Bioguide)),
                 MemberPhotoFixtures.SourceId, Backfill),
+            ApiResource.FederalRegisterList or ApiResource.FederalRegisterDocument =>
+                new ConfiguredCollectionSource(FederalRegisterFixtures.Configuration(), FederalRegisterFixtures.SourceId, Backfill),
             ApiResource.SenateVoteMenu or ApiResource.SenateVote =>
                 new ConfiguredCollectionSource(VoteviewVoteFixtures.RetiredSenateGovConfiguration(), "senate-votes", Backfill),
             ApiResource.VoteviewRollCalls or ApiResource.VoteviewMembers or ApiResource.VoteviewVotes =>
@@ -628,7 +674,7 @@ public sealed class JobPreparationTests
         var job = new CollectionJobRecord("job", definition, "key", CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,
             false, [attempt]);
         var (jobs, bodyOf) = resource == ApiResource.VoteviewVotes ? VoteviewChainOf(configured, job, bytes) : ([job], _ => bytes);
-        var preparation = new JobPreparation(new SingleJob(jobs), new CapturedAttempts(contentType), new NoDiscoveryAdmissions(), admissions, votes, roster, executives,
+        var preparation = new JobPreparation(new SingleJob(jobs), new CapturedAttempts(contentType), new NoDiscoveryAdmissions(), admissions, votes, federalRegister, roster, executives,
             new FixedBody(bodyOf, bodyReads), processing, extractions, textExtractor, issues, warnings);
         return await preparation.PrepareAsync("job", "artifacts", default);
     }
@@ -727,6 +773,26 @@ public sealed class JobPreparationTests
         {
             SummaryPages.Add((pageJobId, page));
             ExtractionIds.Add(extractionId);
+            return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
+        }
+    }
+
+    private sealed class RecordingFederalRegisterAdmissions : IFederalRegisterAdmissionStore
+    {
+        public List<FederalRegisterListPage> Lists { get; } = [];
+        public List<(string JobId, FederalRegisterEvidence Evidence)> Documents { get; } = [];
+
+        public Task<DiscoveryAdmissionResult> AdmitListPageAsync(ConfiguredCollectionSource source, FederalRegisterListPage page,
+            CancellationToken cancellationToken)
+        {
+            Lists.Add(page);
+            return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
+        }
+
+        public Task<DiscoveryAdmissionResult> AdmitDocumentAsync(ConfiguredCollectionSource source, string documentJobId,
+            FederalRegisterEvidence evidence, CancellationToken cancellationToken)
+        {
+            Documents.Add((documentJobId, evidence));
             return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
         }
     }

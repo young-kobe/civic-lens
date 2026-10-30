@@ -103,12 +103,13 @@ public sealed class PostgresRelationshipReviewStore(IDbContextFactory<Collection
         return new(needsAction, approved);
     }
 
-    public async Task<IReadOnlyList<UnpublishedApprovedRelationship>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<UnpublishedApprovedRelationship>> ListUnpublishedApprovedAsync(int limit,
+        IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken)
     {
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var records = await Records.ReadUnpublishedApprovedAsync(db, RelationshipReviewQueries.UnpublishedApproved, limit, cancellationToken);
+        var records = await Records.ReadUnpublishedApprovedAsync(db, RelationshipReviewQueries.UnpublishedApproved, limit, excludedRecordIds, cancellationToken);
         var citations = records.SelectMany(record => CitationsOf(record.History.CurrentRevision!)).ToArray();
         var headlines = await RelationshipCitedReader.ReadHeadlinesAsync(db, citations, cancellationToken);
         var notCurrent = await CitedRevisions.FindNotCurrentInActiveReleaseAsync(db, citations.Select(RelationshipRecordKinds.BindingOf), cancellationToken);

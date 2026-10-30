@@ -31,7 +31,8 @@ public sealed class PostgresReaderReportStore(IDbContextFactory<CollectionAttemp
             UNION ALL SELECT 'Action', record_id, current_revision_number FROM action_drafts
             UNION ALL SELECT 'Vote', record_id, current_revision_number FROM vote_drafts
             UNION ALL SELECT 'Brief', record_id, current_revision_number FROM brief_drafts
-            UNION ALL SELECT 'Relationship', record_id, current_revision_number FROM relationship_drafts) drafts
+            UNION ALL SELECT 'Relationship', record_id, current_revision_number FROM relationship_drafts
+            UNION ALL SELECT 'ExecutiveAction', record_id, current_revision_number FROM executive_action_drafts) drafts
         WHERE id = ANY({0}) AND current_revision_number >= 1
         """;
 

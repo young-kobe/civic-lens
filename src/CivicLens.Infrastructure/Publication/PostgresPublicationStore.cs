@@ -16,6 +16,7 @@ using CivicLens.Infrastructure.Publication.Persistence;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Review.Persistence;
 using CivicLens.Infrastructure.Statements.Persistence;
+using CivicLens.Infrastructure.ExecutiveActions.Persistence;
 using CivicLens.Infrastructure.Votes.Persistence;
 using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
@@ -262,6 +263,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         await AddStatementStatesAsync(db, IdsOf(named, PublishedRecordKind.Statement), current, cancellationToken);
         await AddActionStatesAsync(db, IdsOf(named, PublishedRecordKind.Action), current, cancellationToken);
         await AddVoteStatesAsync(db, IdsOf(named, PublishedRecordKind.Vote), current, cancellationToken);
+        await AddExecutiveActionStatesAsync(db, IdsOf(named, PublishedRecordKind.ExecutiveAction), current, cancellationToken);
         await AddRelationshipStatesAsync(db, IdsOf(named, PublishedRecordKind.Relationship), current, cancellationToken);
         await AddBriefStatesAsync(db, IdsOf(named, PublishedRecordKind.Brief), current, cancellationToken);
         return current;
@@ -313,6 +315,18 @@ public sealed class PostgresPublicationStore : IPublicationStore
             .ToArrayAsync(cancellationToken);
         foreach (var row in votes)
             current[(PublishedRecordKind.Vote, row.Id)] = new(row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus);
+    }
+
+    private static async Task AddExecutiveActionStatesAsync(CollectionAttemptDbContext db, string[] recordIds,
+        Dictionary<(PublishedRecordKind, string), ReviewState> current, CancellationToken cancellationToken)
+    {
+        if (recordIds.Length == 0) return;
+        var actions = await db.Set<ExecutiveActionDraftRow>().AsNoTracking()
+            .Where(row => recordIds.Contains(row.RecordId))
+            .Select(row => new { Id = row.RecordId, row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus })
+            .ToArrayAsync(cancellationToken);
+        foreach (var row in actions)
+            current[(PublishedRecordKind.ExecutiveAction, row.Id)] = new(row.CurrentRevisionNumber, row.ReviewStateVersion, row.ReviewStatus);
     }
 
     private static async Task AddRelationshipStatesAsync(CollectionAttemptDbContext db, string[] recordIds,

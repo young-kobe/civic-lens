@@ -46,7 +46,7 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal((ReviewDecisionKind.Approve, ReviewAuthor.CodeSubject, 1, 1), (decision.Kind, decision.ActorSubject, decision.RevisionNumber,
             decision.ReviewStateVersion));
         Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
-        Assert.Equal(RecordId, Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, default)).Action.RecordId);
+        Assert.Equal(RecordId, Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, [], default)).Action.RecordId);
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public sealed partial class PostgresBillStreamTests
         await ExecuteAsync(connectionString, "UPDATE action_revisions SET revision_json = (revision_json::jsonb - 'issueCandidateIds')::text");
         var reviews = ActionReviews();
 
-        var unpublished = Assert.Single(await reviews.ListUnpublishedApprovedAsync(10, default));
+        var unpublished = Assert.Single(await reviews.ListUnpublishedApprovedAsync(10, [], default));
         var publishable = await reviews.GetForPublicationAsync([RecordId], default);
         var read = await reviews.GetAsync(RecordId, default);
         var edited = await SaveAsync(1, SuggestionChoice.Keep, "save-legacy");

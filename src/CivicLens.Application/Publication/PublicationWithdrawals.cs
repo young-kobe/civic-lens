@@ -16,7 +16,7 @@ internal static class PublicationWithdrawals
     {
         if (!byCode) return;
         foreach (var record in records.Where(record => previous.IsWithdrawn(record.RecordId)))
-            throw new WithdrawnFactException(record);
+            throw new WithdrawnRecordException(record);
     }
 
     public static List<PublishedWithdrawal> Create(PreviousRelease previous, PublicationCorrections corrections, DateTimeOffset now,

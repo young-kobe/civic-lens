@@ -148,6 +148,43 @@ internal static class PublishedSamples
         return new(record.ToEntry(), record);
     }
 
+    public static SampleRecord ExecutiveAction(string title, string tail)
+    {
+        string[] lines = ["Federal Register document: 2025-01900", $"Title: {title}", "Signed: 2025-01-20", "Published: 2025-01-28", "Citation: 90 FR 8235",
+            "Document URL: https://www.federalregister.gov/documents/2025/01/28/2025-01900/x"];
+        var text = string.Join('\n', lines) + "\n" + tail;
+        PublishedExecutiveActionFact Fact(string line)
+        {
+            var split = line.IndexOf(": ", StringComparison.Ordinal);
+            return new()
+            {
+                Label = line[..split],
+                Value = line[(split + 2)..],
+                Citation = new() { ExtractionId = SourceId, Start = text.IndexOf(line, StringComparison.Ordinal), Length = line.Length, Quote = line }
+            };
+        }
+        var record = new PublishedExecutiveAction
+        {
+            Corrections = [],
+            RecordId = new string('f', 64),
+            RevisionNumber = 1,
+            Headline = title,
+            Kind = PublishedExecutiveActionKind.ExecutiveOrder,
+            DocumentNumber = "2025-01900",
+            SignedOn = new DateOnly(2025, 1, 20),
+            PublishedOn = new DateOnly(2025, 1, 28),
+            FederalRegisterCitation = "90 FR 8235",
+            DocumentUrl = "https://www.federalregister.gov/documents/2025/01/28/2025-01900/x",
+            President = new PublishedOfficial { Id = "o1", Name = "Official o1" },
+            Facts = [.. lines.Select(Fact)],
+            CorrectionNotices = [],
+            Sources = [new PublishedDocumentVersion { ExtractionId = SourceId, Url = "https://www.federalregister.gov/api/v1/documents/2025-01900.json", ObservedAtUtc = Published, Text = text }],
+            ApprovedAtUtc = Published,
+            FirstPublishedAtUtc = Published
+        };
+        return new(record.ToEntry(), record);
+    }
+
     public static SampleRecord Brief(string headline, string paragraph)
     {
         var record = new PublishedBrief

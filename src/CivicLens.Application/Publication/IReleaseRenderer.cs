@@ -12,6 +12,7 @@ public interface IReleaseRenderer
         CancellationToken cancellationToken);
     Task<string> RenderVoteAsync(PublishedVote record, string? billActionRecordId, ImmutableArray<PublishedRelationship> related,
         PublicationCatalog catalog, CancellationToken cancellationToken);
+    Task<string> RenderExecutiveActionAsync(PublishedExecutiveAction record, CancellationToken cancellationToken);
     Task<string> RenderRelationshipAsync(PublishedRelationship record, PublicationCatalog catalog, CancellationToken cancellationToken);
     Task<string> RenderBriefAsync(PublishedBrief record, CancellationToken cancellationToken);
     Task<string> RenderWithdrawalAsync(PublishedWithdrawal withdrawal, CancellationToken cancellationToken);

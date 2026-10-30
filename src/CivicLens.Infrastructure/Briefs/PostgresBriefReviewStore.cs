@@ -90,12 +90,13 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
         return new(needsAction, approved);
     }
 
-    public async Task<IReadOnlyList<UnpublishedApprovedBrief>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<UnpublishedApprovedBrief>> ListUnpublishedApprovedAsync(int limit,
+        IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken)
     {
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var records = await Records.ReadUnpublishedApprovedAsync(db, BriefReviewQueries.UnpublishedApproved, limit, cancellationToken);
+        var records = await Records.ReadUnpublishedApprovedAsync(db, BriefReviewQueries.UnpublishedApproved, limit, excludedRecordIds, cancellationToken);
         var changed = await BriefRecordReader.FindChangedInActiveReleaseAsync(db,
             records.SelectMany(record => record.History.CurrentRevision!.Citations), cancellationToken);
         await transaction.CommitAsync(cancellationToken);

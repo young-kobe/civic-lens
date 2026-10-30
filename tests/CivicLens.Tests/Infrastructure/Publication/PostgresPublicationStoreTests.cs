@@ -478,7 +478,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         var published = await CreateApprovedStatementAsync();
         await publications.CommitAsync(Owner.Subject, StatementCommit(1, published, reviewStateVersion: 1), "key", Hash(1), default);
 
-        var ready = await statementReviews.ListUnpublishedApprovedAsync(10, default);
+        var ready = await statementReviews.ListUnpublishedApprovedAsync(10, [], default);
 
         Assert.Equal([neverPublished], ready.Select(item => item.Statement.CandidateId));
         Assert.Null(ready[0].PublishedRevisionNumber);
@@ -490,7 +490,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         var draft = await CreateApprovedDraftAsync("a");
         await InsertActiveReleaseAsync($$"""[{"kind":"statement","recordId":"{{draft.DraftId}}","revisionNumber":{{draft.RevisionNumber}}}]""");
 
-        var ready = await reviews.ListUnpublishedApprovedDraftsAsync(10, default);
+        var ready = await reviews.ListUnpublishedApprovedDraftsAsync(10, [], default);
 
         var item = Assert.Single(ready);
         Assert.Equal(draft.DraftId, item.Draft.DraftId);
@@ -503,7 +503,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         var draft = await CreateApprovedDraftAsync("a");
         await InsertActiveReleaseAsync($$"""[{"draftId":"{{draft.DraftId}}","revisionNumber":{{draft.RevisionNumber}}}]""");
 
-        Assert.Empty(await reviews.ListUnpublishedApprovedDraftsAsync(10, default));
+        Assert.Empty(await reviews.ListUnpublishedApprovedDraftsAsync(10, [], default));
     }
 
     [Fact]
@@ -516,8 +516,8 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
             [new(PublishedRecordKind.DocumentChange, draft.DraftId, draft.RevisionNumber, 1),
              new(PublishedRecordKind.Statement, statement, 2, 1)]), "key", Hash(1), default);
 
-        Assert.Empty(await reviews.ListUnpublishedApprovedDraftsAsync(10, default));
-        Assert.Empty(await statementReviews.ListUnpublishedApprovedAsync(10, default));
+        Assert.Empty(await reviews.ListUnpublishedApprovedDraftsAsync(10, [], default));
+        Assert.Empty(await statementReviews.ListUnpublishedApprovedAsync(10, [], default));
     }
 
     [Fact]
@@ -550,7 +550,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         var revised = await SaveRevisionAsync(replaced, "b2");
         await Decide(revised, 1, ReviewDecisionKind.Approve);
 
-        var ready = await reviews.ListUnpublishedApprovedDraftsAsync(10, default);
+        var ready = await reviews.ListUnpublishedApprovedDraftsAsync(10, [], default);
 
         Assert.Equivalent(new Dictionary<string, int?>
         {
@@ -561,7 +561,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         Assert.Equal(revised.RevisionNumber, ready.Single(item => item.Draft.DraftId == replaced.DraftId).Draft.CurrentRevision.RevisionNumber);
         Assert.DoesNotContain(ready, item => item.Draft.DraftId == current.DraftId || item.Draft.DraftId == notApproved.DraftId ||
             item.Draft.DraftId == withdrawn.DraftId);
-        Assert.Single(await reviews.ListUnpublishedApprovedDraftsAsync(1, default));
+        Assert.Single(await reviews.ListUnpublishedApprovedDraftsAsync(1, [], default));
     }
 
     public static TheoryData<PublishedRecordKind> AllKinds => new(Enum.GetValues<PublishedRecordKind>());
@@ -706,6 +706,12 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
                     VALUES (@id, '2026-01-05', 1, 1, 'Approved', 0, 0)
                     """, id);
                 break;
+            case PublishedRecordKind.ExecutiveAction:
+                await ExecuteAsync("""
+                    INSERT INTO executive_action_drafts (record_id, current_revision_number, review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
+                    VALUES (@id, 1, 1, 'Approved', 0, 0)
+                    """, id);
+                break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown record kind.");
         }
@@ -722,6 +728,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
             PublishedRecordKind.Vote => ("vote_drafts", "record_id"),
             PublishedRecordKind.Relationship => ("relationship_drafts", "record_id"),
             PublishedRecordKind.Brief => ("brief_drafts", "record_id"),
+            PublishedRecordKind.ExecutiveAction => ("executive_action_drafts", "record_id"),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown record kind.")
         };
         return ExecuteAsync($"UPDATE {table} SET review_status = '{status}' WHERE {column} = @id", recordId);

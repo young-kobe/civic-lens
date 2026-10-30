@@ -1,3 +1,4 @@
+using CivicLens.Infrastructure.ExecutiveActions;
 using Microsoft.Extensions.Logging.Abstractions;
 using CivicLens.Application.Issues;
 using CivicLens.Infrastructure.Relationships;
@@ -100,7 +101,7 @@ public sealed class PublishedReleaseOutlivesDatabaseTests : IAsyncLifetime
             directory, new ReleaseRenderer(null, null),
             new PublishedRecordLoaders(reviews, new PostgresStatementReviewStore(factory), new PostgresActionReviewStore(factory),
                 new PostgresVoteReviewStore(factory), new PostgresRelationshipReviewStore(factory),
-                new PostgresBriefReviewStore(factory)),
+                new PostgresBriefReviewStore(factory), new PostgresExecutiveActionReviewStore(factory)),
             new PublicationCatalog(new Dictionary<string, string> { ["mayor"] = "Mayor Example" }, IssueConfiguration.None), FixedRosters.NamedOnly(["mayor"]), PhotoCaptures.None(), TimeProvider.System,
             new PruneReleases(store, directory, NullLogger<PruneReleases>.Instance));
         return await publish.ExecuteAsync(Owner, new PublishReleaseRequest([new(PublishedRecordKind.DocumentChange, saved.DraftId)], "publish"));

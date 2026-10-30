@@ -94,20 +94,13 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
         return new([.. drafts.Select(row => ToReview(row, histories[row.RecordId]))], total);
     }
 
-    public Task<IReadOnlyList<UnpublishedApprovedVote>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken) =>
-        ListUnpublishedAsync(VoteReviewQueries.UnpublishedApproved, limit, cancellationToken);
-
-    public Task<IReadOnlyList<UnpublishedApprovedVote>> ListCodeApprovedUnpublishedAsync(int limit,
-        IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken) =>
-        ListUnpublishedAsync(VoteReviewQueries.CodeApprovedUnpublished, limit, cancellationToken, [.. excludedRecordIds]);
-
-    private async Task<IReadOnlyList<UnpublishedApprovedVote>> ListUnpublishedAsync(string sql, int limit,
-        CancellationToken cancellationToken, string[]? excludedRecordIds = null)
+    public async Task<IReadOnlyList<UnpublishedApprovedVote>> ListUnpublishedApprovedAsync(int limit,
+        IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken)
     {
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var records = await Records.ReadUnpublishedApprovedAsync(db, sql, limit, cancellationToken, excludedRecordIds);
+        var records = await Records.ReadUnpublishedApprovedAsync(db, VoteReviewQueries.UnpublishedApproved, limit, excludedRecordIds, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return [.. records.Select(record => new UnpublishedApprovedVote(ToReview(record.Draft, record.History), record.PublishedRevisionNumber))];
     }

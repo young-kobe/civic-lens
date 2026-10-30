@@ -173,12 +173,12 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
     }
 
     public async Task<IReadOnlyList<UnpublishedApprovedDraft>> ListUnpublishedApprovedDraftsAsync(int limit,
-        CancellationToken cancellationToken)
+        IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken)
     {
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var records = await Records.ReadUnpublishedApprovedAsync(db, ReviewQueries.UnpublishedApprovedDrafts, limit, cancellationToken);
+        var records = await Records.ReadUnpublishedApprovedAsync(db, ReviewQueries.UnpublishedApprovedDrafts, limit, excludedRecordIds, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return [.. records.Select(record => new UnpublishedApprovedDraft(ToListItem(record.Draft, record.History),
             record.PublishedRevisionNumber))];

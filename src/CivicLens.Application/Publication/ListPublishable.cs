@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 
@@ -10,11 +9,11 @@ public sealed class ListPublishable(PublishedRecordLoaders loaders, IPublication
     {
         ReviewAuthorization.RequireOwner(actor);
         var limit = PublishRelease.MaximumRecords;
-        var reads = await Task.WhenAll(loaders.All.Select(loader => loader.ListReadyAsync(limit, cancellationToken)));
+        var reads = await Task.WhenAll(loaders.All.Select(loader => loader.ListReadyAsync(limit, [], cancellationToken)));
         var ready = reads.Select(read => read.Ready).ToArray();
         var hasMore = reads.Any(read => read.HasMore) || ready.Sum(kind => kind.Count) > limit;
         var withdrawn = await WithdrawnRevisionsAsync(cancellationToken);
-        return new([.. ShareLimitBetweenKinds(ready, limit).Select(item => item with { WithdrawnRevisionNumber = withdrawn.GetValueOrDefault(item.RecordId) })], hasMore);
+        return new([.. PublishApprovedRecords.ShareLimitBetweenKinds(ready, limit).Select(item => item with { WithdrawnRevisionNumber = withdrawn.GetValueOrDefault(item.RecordId) })], hasMore);
     }
 
     private async Task<Dictionary<string, int?>> WithdrawnRevisionsAsync(CancellationToken cancellationToken)
@@ -23,20 +22,5 @@ public sealed class ListPublishable(PublishedRecordLoaders loaders, IPublication
         if (active is null) return [];
         var manifest = await PreviousRelease.LoadManifestAsync(releases, active, cancellationToken);
         return manifest.Withdrawals.ToDictionary(withdrawal => withdrawal.RecordId, withdrawal => (int?)withdrawal.WithdrawnRevisionNumber);
-    }
-
-    // Each kind gets an equal share of the limit. A kind with fewer ready records gives its unused share to the others.
-    private static ImmutableArray<ReadyToPublishRecord> ShareLimitBetweenKinds(IReadOnlyList<ReadyToPublishRecord>[] kinds, int limit)
-    {
-        var counts = new int[kinds.Length];
-        var remaining = limit;
-        var smallestFirst = Enumerable.Range(0, kinds.Length).OrderBy(kind => kinds[kind].Count).ToArray();
-        for (var position = 0; position < smallestFirst.Length; position++)
-        {
-            var kind = smallestFirst[position];
-            counts[kind] = Math.Min(kinds[kind].Count, remaining / (smallestFirst.Length - position));
-            remaining -= counts[kind];
-        }
-        return [.. kinds.SelectMany((ready, kind) => ready.Take(counts[kind]))];
     }
 }

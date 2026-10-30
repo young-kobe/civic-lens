@@ -162,12 +162,12 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
     }
 
     public async Task<IReadOnlyList<UnpublishedApprovedStatement>> ListUnpublishedApprovedAsync(int limit,
-        CancellationToken cancellationToken)
+        IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken)
     {
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var records = await Records.ReadUnpublishedApprovedAsync(db, StatementReviewQueries.UnpublishedApproved, limit, cancellationToken);
+        var records = await Records.ReadUnpublishedApprovedAsync(db, StatementReviewQueries.UnpublishedApproved, limit, excludedRecordIds, cancellationToken);
         var candidates = await ReadCandidatesAsync(db, [.. records.Select(record => record.Draft.CandidateId)], cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return [.. records.Select(record => new UnpublishedApprovedStatement(

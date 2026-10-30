@@ -83,7 +83,7 @@ public sealed class JobPreparationFeedStatementTests
         var stored = new StoredCollectionAttempt(captured, null, null,
             new DiscoveryEvidence(request, new DiscoveryResult { Status = DiscoveryStatus.Parsed, Urls = [], OutOfScopeCount = 0 }));
         var preparation = new JobPreparation(new FixedJobStore { Get = (_, _) => Task.FromResult<CollectionJobRecord?>(job) },
-            new FixedAttempt(stored), admissions, null!, null!, null!, null!, new FixedBody(body), null!, extractions,
+            new FixedAttempt(stored), admissions, null!, null!, null!, null!, null!, new FixedBody(body), null!, extractions,
             new Extractor(), null, NullLogger<JobPreparation>.Instance);
         return await preparation.PrepareAsync("job", "artifacts", default);
     }

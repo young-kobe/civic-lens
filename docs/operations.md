@@ -159,6 +159,20 @@ WHERE g.decision = 'Passed'
 ORDER BY g.congress, g.bill_type, g.bill_number;
 ```
 
+### Federal Register stream
+
+The source `federal-register-documents` in `config/federal-coverage.json` follows the presidential documents of the Federal Register. It ships with `enabled: false`. It needs no key and no roster. [Executive actions](architecture/executive-actions.md) holds the design. To enable it:
+
+1. Check that the configuration holds a person for each President whose documents the window covers. The shipped file holds Joe Biden, from 2021-01-20 to 2025-01-20, and Donald Trump from 2025-01-20. A document with no configured President blocks its job.
+2. Set `enabled` to `true` for `federal-register-documents` and restart the worker. A restart reads the configuration again.
+3. Deploy the search service before the publisher. The search service of an older version refuses a release that holds an executive action.
+
+To stop the source, set `enabled` to `false` and restart the worker.
+
+The first run lists every document from `backfillFrom` 2024-10-29. It admits one job for each document, about 700 over two years. Each check after that runs every 6 hours and lists from 2 days before the newest stored publication date. Run `jobs list` and `jobs get` as in [managed collection jobs](#managed-collection-jobs) to see progress. A blocked job names its reason.
+
+To withdraw a record, open `/Review/ExecutiveActions/{id}` and withdraw approval. Then run `releases publish <key> --withdraw executiveAction:<id> <text>` as in [publish a static release](#publish-a-static-release). The page alone does not change the public site.
+
 ### Congress.gov House vote stream
 
 The source `congress-house-votes` in `config/federal-coverage.json` and `config/federal-pilot.json` follows the House roll-call votes of the Congress.gov `house-vote` API. It ships with `enabled: false`. To enable it:
@@ -711,17 +725,17 @@ Set `"withholdPhoto": true` on the person in the collection configuration and co
 
 The flag does not remove files from old releases. A kept release directory keeps the photo file until a prune removes it; see [release retention](architecture/publication.md#release-retention). Purge the file from the Cloudflare cache if it must leave at once. A rollback with `releases activate` to an older release shows the photo again. See [roster](architecture/roster.md#limits-and-planned-work).
 
-## Automatic publication of facts
+## Automatic publication
 
-The `worker` command can publish code-approved actions and votes. [Publication](architecture/publication.md#automatic-publication-of-facts) holds the rules. A person still publishes statements, relationships, briefs, and document changes. The stage is off by default. It runs when the variable below is `1`. Any other value stops the worker with exit code 2. Code approves an action or a vote only after a model drafts its headline and summary. So the stage publishes nothing until you also set `CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS` and `CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS`.
+The `worker` command can publish every approved record: actions, votes, executive actions, statements, relationships, briefs, and document changes. A person approval needs no owner step. [Publication](architecture/publication.md#automatic-publication) holds the rules. A person approval that replaces a published record needs a correction note, so the stage leaves it out and logs it. Publish that record with `releases publish --note`. The stage is off by default. It runs when the variable below is `1`. Any other value stops the worker with exit code 2. Code approves an action or a vote only after a model drafts its headline and summary. So the stage publishes nothing until you also set `CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS` and `CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS`.
 
 | Variable | Meaning |
 |---|---|
-| `CIVIC_LENS_FACT_PUBLISHING` | Set to `1` to run the stage. Unset means off |
+| `CIVIC_LENS_PUBLISHING` | Set to `1` to run the stage. Unset means off |
 | `CIVIC_LENS_RELEASE_DIRECTORY` | The release root, shared with the review workspace and the `releases` commands. Required when the stage runs |
 | `CIVIC_LENS_ISSUES_CONFIG` | The issue file. Required when the stage runs, as for `releases publish` |
 
-The stage reads new member photos from the artifact directory of the worker command line. The worker also needs `CIVIC_LENS_COLLECTION_CONFIG`, as always. The stage ticks when the worker starts and then at each full hour by the database clock. A tick publishes batches of up to 64 records until no code-approved record is ready. A failure is logged at error level with its exception on stderr, under the stage name `factPublishing`. A failure of the tick counts in the stage result. A record that cannot build is reported and left out, and it does not count. The stage waits after a rollback with `releases activate`. It resumes when you activate the latest release or publish with the CLI. Each release is about 29 MB in development. Each publish prunes old release directories; see [release retention](architecture/publication.md#release-retention).
+The stage reads new member photos from the artifact directory of the worker command line. The worker also needs `CIVIC_LENS_COLLECTION_CONFIG`, as always. The stage ticks when the worker starts and then at each full hour by the database clock. A tick publishes batches of up to 64 records until no approved record is ready. Each kind gets an equal share of a batch. A failure is logged at error level with its exception on stderr, under the stage name `publishing`. A failure of the tick counts in the stage result. A record that cannot build is reported and left out, and it does not count. The stage waits after a rollback with `releases activate`. It resumes when you activate the latest release or publish with the CLI. Each release is about 29 MB in development. Each publish prunes old release directories; see [release retention](architecture/publication.md#release-retention).
 
 ## Reader report queue
 
@@ -828,7 +842,7 @@ The `/internal/*` route is not public. The [Caddyfile](#web-server) answers it w
 
 To use the search page, set `CIVIC_LENS_PUBLIC_API_URL=http://127.0.0.1:8100` in the environment of the process that publishes (the `releases publish` command or the review workspace), and serve the release root from a server that sends no cross-origin limit. The service allows any origin. Without the variable, `search.html` says that search is not available.
 
-To give each page a canonical address, set `CIVIC_LENS_PUBLIC_BASE_URL` in the same environment, for example `https://civic-lens.info`. The value must be a bare origin: https, or http only for `localhost` and `127.0.0.1`, with no user, path, query, or fragment. Use a host name, not an IPv6 address, and do not end the host with a dot. A trailing slash is removed. The stored value is in lower case, with a punycode host and no default port. A blank value counts as unset. An invalid value stops `releases publish` with exit code 2. It also stops the worker at start when fact publishing is on, because that composition reads the value then. It stops the review workspace at start when `CIVIC_LENS_RELEASE_DIRECTORY` is set. With the variable set, a release holds `sitemap.xml`, `robots.txt`, `404.html`, and a canonical link and `og:url` on every page except `404.html`. Without it, a release holds none of these. The process reads the variable once, so restart the review workspace and the worker after a change. Set the variable before the first production publish. A page that a publish carries by hard link keeps the address it was written with.
+To give each page a canonical address, set `CIVIC_LENS_PUBLIC_BASE_URL` in the same environment, for example `https://civic-lens.info`. The value must be a bare origin: https, or http only for `localhost` and `127.0.0.1`, with no user, path, query, or fragment. Use a host name, not an IPv6 address, and do not end the host with a dot. A trailing slash is removed. The stored value is in lower case, with a punycode host and no default port. A blank value counts as unset. An invalid value stops `releases publish` with exit code 2. It also stops the worker at start when publishing is on, because that composition reads the value then. It stops the review workspace at start when `CIVIC_LENS_RELEASE_DIRECTORY` is set. With the variable set, a release holds `sitemap.xml`, `robots.txt`, `404.html`, and a canonical link and `og:url` on every page except `404.html`. Without it, a release holds none of these. The process reads the variable once, so restart the review workspace and the worker after a change. Set the variable before the first production publish. A page that a publish carries by hard link keeps the address it was written with.
 
 To use the report page, also set `CIVIC_LENS_TURNSTILE_SITE_KEY` in the environment of the process that publishes. For a local trial use the Cloudflare test site key `1x00000000000000000000AA`, which always passes. Publish, serve the release root, and open a record page. Use its link "Report a problem with this record". Send the report, then run the pull command above to see it. Without the API address or the site key, `report.html` says that reporting is not available.
 
@@ -928,7 +942,7 @@ A release contract change can add a required field to a published file. Old file
 - Under the root, `env/` holds the env files, `config/` holds `collection.json` and `issues.json`, and `captures/`, `releases/`, `review-keys/` and `postgres/` hold data. `captures/`, `releases/` and `review-keys/` belong to user 10001, the user of our images. The two Postgres directories belong to user 70, the `postgres` user of the Alpine Postgres image.
 - `compose.env` holds the image tag and the three ports (`CIVIC_LENS_CADDY_PORT`, `CIVIC_LENS_API_PORT`, `CIVIC_LENS_REVIEW_PORT`). The search address and the Caddy proxy target come from `CIVIC_LENS_API_PORT`. The release address of the search service comes from `CIVIC_LENS_CADDY_PORT`.
 - Secrets are in files that end in `.secret.env` and have mode 600. Each process reads only its own files. The database password is in two files, the Postgres file and the connection string. Keep the two equal. The report pull token is in the host and search files. Keep these two equal too.
-- The AI stages, fact publishing, and report pull are off while their variables are empty. Set `CIVIC_LENS_FACT_PUBLISHING=1`, `CIVIC_LENS_REPORT_PULL=1`, and the `*_DAILY_TOKENS` values to turn them on. Fact publishing also needs action and vote drafting; see [Automatic publication of facts](#automatic-publication-of-facts).
+- The AI stages, publishing, and report pull are off while their variables are empty. Set `CIVIC_LENS_PUBLISHING=1`, `CIVIC_LENS_REPORT_PULL=1`, and the `*_DAILY_TOKENS` values to turn them on. Publishing also needs the drafting stages; see [Automatic publication](#automatic-publication).
 - The search service reads the release from Caddy at `127.0.0.1` on `CIVIC_LENS_CADDY_PORT`, so it does not need the tunnel.
 
 Run the scripts with `sudo`, because they write under the root and the env files hold secrets.
@@ -956,7 +970,7 @@ This section is for the temporary production machine, a Jetson with Docker Compo
 1. Install Docker with Compose v2. Clone the repository to `/opt/civic-lens` and check out the commit to deploy. The systemd units use this path. It must be on the root filesystem, because systemd loads the linked units at boot, before other disks mount.
 2. Run `sudo deploy/scripts/install.sh`. It creates the directories under `/srv/civic-lens` and the env files from the templates.
 3. Fill in the env files in `/srv/civic-lens/env`, and put `collection.json` and `issues.json` in `/srv/civic-lens/config`.
-   The `api` sources in `config/federal-coverage.json` ship with `enabled: false`. Without them the site has no bills, votes, roster, or photos, so nothing publishes. Set `enabled` to `true` for `congress-members`, `congress-bills`, `congress-house-votes`, `voteview-senate-votes`, `member-photos`, and `executive-officials`. See [Voteview Senate vote stream](#voteview-senate-vote-stream) for the Senate votes. The two Congress.gov sources need `CIVIC_LENS_CONGRESS_API_KEY` in `host.secret.env`. See [Congress.gov bill stream](#congressgov-bill-stream) and [Member roster](#member-roster). The Host refuses a configuration file over 1 MB, and added indentation can push this file past that limit. So save it compact.
+   The `api` sources in `config/federal-coverage.json` ship with `enabled: false`. Without them the site has no bills, votes, roster, or photos, so nothing publishes. Set `enabled` to `true` for `congress-members`, `congress-bills`, `congress-house-votes`, `voteview-senate-votes`, `member-photos`, `executive-officials`, and `federal-register-documents`. See [Voteview Senate vote stream](#voteview-senate-vote-stream) for the Senate votes. The two Congress.gov sources need `CIVIC_LENS_CONGRESS_API_KEY` in `host.secret.env`. See [Congress.gov bill stream](#congressgov-bill-stream) and [Member roster](#member-roster). The Host refuses a configuration file over 1 MB, and added indentation can push this file past that limit. So save it compact.
    Set `CIVIC_LENS_COLLECTION_CONCURRENCY=3` in `/srv/civic-lens/env/host.env`.
 4. Create the tunnel (see [Tunnel](#tunnel)) and the restic password file and repository (see [Backups](#backups)).
 5. Run `sudo deploy/scripts/update.sh <full-commit-sha>`.
@@ -980,7 +994,7 @@ Run `sudo deploy/scripts/check-live.sh` from `/opt/civic-lens` after the first i
 - A reader cannot forge `CF-Connecting-IP`. A request that carries the header gets status 403 from Cloudflare.
 - The search service limits each reader. The script reads `CIVIC_LENS_REQUESTS_PER_MINUTE` from `search.env`, with 60 as the default. It fails if `CIVIC_LENS_TRUSTED_PROXY_RANGES` is empty, because then all readers share one limit. It sends twice the limit plus two requests to the search route, 20 at a time, and one must get 429. The limit counts in fixed one-minute windows, so this number fills one window even when a window ends during the check. This check runs last. It blocks the address of the caller on the search service for up to one minute.
 
-**Withdraw test.** The script does not test withdrawal, because the test changes the live site. Do it by hand at the first launch and after a change to publication code. Do it only when a record is ready to publish, for example an approved statement. The rollback in step 5 pauses fact publishing, and the publish in step 7 ends the pause; see [publication](architecture/publication.md).
+**Withdraw test.** The script does not test withdrawal, because the test changes the live site. Do it by hand at the first launch and after a change to publication code. Do it only when a record is ready to publish, for example an approved statement. The rollback in step 5 pauses the publishing stage, and the publish in step 7 ends the pause; see [publication](architecture/publication.md).
 
 1. Stop the worker, so that no fact release lands during the test: `sudo deploy/scripts/compose.sh stop worker`.
 2. In the review workspace, request changes on one published record. Pick a record that no relationship or brief cites, or the withdrawal stops with exit code 2.
