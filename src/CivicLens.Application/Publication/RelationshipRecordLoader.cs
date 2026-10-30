@@ -21,8 +21,7 @@ internal sealed class RelationshipRecordLoader(IRelationshipReviewStore relation
             ? null
             : Ready(candidate.Relationship.CurrentStatus, candidate.Relationship.UnresolvedConcerns.Length, candidate.Relationship.RecordId,
                 PublishedRelationshipBuilder.HeadlineOf(candidate.StatementHeadline, candidate.TargetHeadline),
-                candidate.Relationship.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber)
-                is { } ready ? ready with { NoLongerMatches = candidate.Relationship.NoLongerMatches } : null;
+                candidate.Relationship.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber);
 
     protected override Task<IReadOnlyDictionary<string, PublishableRelationship>> GetForPublicationAsync(
         ImmutableArray<string> recordIds, PublicationBuild build, CancellationToken cancellationToken) =>

@@ -265,7 +265,7 @@ internal static class ReviewWorkspace
                 PostgresCollectionJobStore.FromConnectionString(connectionString),
                 PostgresCollectionAttemptStore.FromConnectionString(connectionString),
                 CivicLens.Infrastructure.Collection.Processing.PostgresEvidenceProcessingStore.FromConnectionString(connectionString)));
-            if (configuredIssues is not null) ConfigurePublication(services, connectionString, collection, configuredIssues);
+            if (configuredIssues is not null) ConfigurePublication(services, connectionString);
         }
     }
 
@@ -347,21 +347,14 @@ internal static class ReviewWorkspace
         services.AddScoped<GetBriefReviewCounts>();
     }
 
-    // The owner publish section needs a release directory, an artifact directory, and the configured official, issue, and policy area names.
-    private static void ConfigurePublication(IServiceCollection services, string connectionString, CollectionConfiguration collection,
-        IssueConfiguration issues)
+    // The owner release lists need a release directory.
+    private static void ConfigurePublication(IServiceCollection services, string connectionString)
     {
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
         if (releaseRoot is null) return;
-        var artifactRoot = PublicationComposition.RequireArtifactRoot();
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
         var releases = new FileReleaseDirectory(releaseRoot);
         services.AddScoped(_ => new ListPublicationReleases(publications, releases));
-        services.AddSingleton(provider => PublicationComposition.Create(connectionString, publications, releases, collection, issues,
-            artifactRoot, provider.GetRequiredService<ILoggerFactory>()));
-        services.AddSingleton(provider => provider.GetRequiredService<PublicationParts>().Loaders);
-        services.AddSingleton(provider => provider.GetRequiredService<PublicationParts>().Publish);
-        services.AddScoped(provider => new ListPublishable(provider.GetRequiredService<PublishedRecordLoaders>(), publications, releases));
         services.AddScoped(_ => new ListBlockedPublished(publications, releases, new BlockedPublishedRecords(publications)));
     }
 

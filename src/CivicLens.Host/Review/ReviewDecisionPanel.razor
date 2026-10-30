@@ -1,5 +1,6 @@
 @using System.Collections.Immutable
 @using CivicLens.Core.Review
+@using CivicLens.Publication.Contracts
 
 <Panel Title="@($"Decide on revision {RevisionNumber}")" Id="decision" Padded="true">
     @Checklist
@@ -29,6 +30,12 @@
             <Field Label="Note" For="Decision_Note" Hint="Requesting changes and withdrawing approval need a reason. Resolving concerns needs a note.">
                 <textarea id="Decision_Note" class="plain" name="Decision.Note" maxlength="4000" aria-describedby="Decision_Note-hint" value="@Note"></textarea>
             </Field>
+            @if (Status != ReviewStatus.Approved)
+            {
+                <Field Label="Correction note" For="Decision_CorrectionNote" Hint="Write this only if the record replaces one that is already public. Readers see it on the public record page.">
+                    <textarea id="Decision_CorrectionNote" class="plain" name="Decision.CorrectionNote" maxlength="@PublishedCorrection.MaximumNoteLength" aria-describedby="Decision_CorrectionNote-hint" value="@CorrectionNote"></textarea>
+                </Field>
+            }
             <div class="actions">
                 @if (Status != ReviewStatus.Approved)
                 {
@@ -39,7 +46,7 @@
                 {
                     <Button Variant="ButtonVariant.Danger" Type="submit" name="kind" value="WithdrawApproval">Withdraw approval</Button>
                 }
-                <span class="actions-hint">Approval keeps the account private.</span>
+                <span class="actions-hint">Publishes soon.</span>
             </div>
         </FieldSet>
     </form>
@@ -53,6 +60,7 @@
     [Parameter, EditorRequired] public bool CanDecide { get; set; }
     [Parameter, EditorRequired] public string IdempotencyKey { get; set; } = string.Empty;
     [Parameter] public string? Note { get; set; }
+    [Parameter] public string? CorrectionNote { get; set; }
     [Parameter, EditorRequired] public EventCallback OnDecide { get; set; }
     [Parameter] public RenderFragment? Checklist { get; set; }
 }

@@ -4,7 +4,7 @@
 
 The briefs feature drafts one weekly brief from the records that Civic Lens published during one week. A brief is short text with cited records: statements, document changes, and action records. A person reviews and approves each brief. The action records that it cites carry an approval by code or by a person. A model prediction is never a human decision.
 
-The feature stores, queues, selects, drafts, and reviews briefs. A person edits, requests changes, approves, and withdraws approval on private pages. The worker publishes an approved brief in a release, when the active release holds the records that it cites. The owner can also publish it by hand. See [Publication](#publication).
+The feature stores, queues, selects, drafts, and reviews briefs. A person edits, requests changes, approves, and withdraws approval on private pages. The worker publishes an approved brief in a release, when the active release holds the records that it cites. See [Publication](#publication).
 
 ## Decisions
 
@@ -221,7 +221,7 @@ The page differs from the action page: it has no "Change since the last approval
 
 ### Publication
 
-The `publishing` stage publishes a brief with the same ready list as the other kinds, and the owner can publish it by hand; see [publication](publication.md#publish). A flagged brief waits, and a later batch of the same tick publishes it when its citations are current. `BriefRecordLoader` owns the Application side. The rules are:
+The `publishing` stage publishes a brief with the same ready list as the other kinds; see [publication](publication.md#publish). A flagged brief waits, and a later batch of the same tick publishes it when its citations are current. `BriefRecordLoader` owns the Application side. The rules are:
 
 - The ready list holds an approved brief with no open concern. The active release must not hold its current revision. All citations must be current in the active release. `PostgresBriefReviewStore.ListUnpublishedApprovedAsync` reads the flags of the whole page with one `FindChangedAsync` call. A flagged approved brief stays approved but is not listed.
 - A publish reads each requested brief with `GetForPublicationAsync`. The call takes the records of the new release: the records of the base release, with each requested record replaced by its new revision. `PublishRelease` loads the briefs after the other kinds, so a record that the same publish adds or replaces counts. The new release must hold each cited revision. A brief is refused when the same publish replaces a cited record with a newer revision.

@@ -191,13 +191,13 @@ public sealed class PublishVoteTests
             {
                 CurrentRevision = revised,
                 Revisions = review.Revisions.Add(revised),
-                Decisions = review.Decisions.Add(PublicationScenario.Decision(vote, 2, ReviewDecisionKind.Approve) with { RevisionNumber = 2 }),
+                Decisions = review.Decisions.Add(PublicationScenario.Decision(vote, 2, ReviewDecisionKind.Approve) with { RevisionNumber = 2, CorrectionNote = "Fixed the question." }),
                 ReviewStateVersion = 2
             }
         };
         scenario.Clock.Now = firstPublishedAt.AddDays(1);
 
-        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", vote) with { Notes = [new(PublishedRecordKind.Vote, vote, "Fixed the question.")] });
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", vote));
 
         var entry = Assert.Single(ReadManifest(scenario, second.DirectoryName).Records);
         Assert.Equal((2, firstPublishedAt), (entry.RevisionNumber, entry.FirstPublishedAtUtc));
