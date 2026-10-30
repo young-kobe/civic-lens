@@ -12,7 +12,6 @@
 .portrait-compact img, .portrait-compact .portrait-placeholder { border-radius: var(--r-control); }
 
 .officials-filters { display: flex; flex-wrap: wrap; align-items: end; gap: var(--s3); }
-.segmented { flex-wrap: wrap; max-width: 100%; }
 .officials { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--s3); margin: 0; padding: 0; list-style: none; }
 .official-card { display: flex; align-items: center; gap: var(--s3); padding: var(--s3); border: 1px solid var(--line); border-radius: var(--r-panel); background: var(--surface); }
 .official-card-text { display: grid; min-width: 0; }

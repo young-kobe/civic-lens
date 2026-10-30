@@ -78,7 +78,7 @@ a.cell-title:hover { text-decoration: underline; }
 .search:hover { box-shadow: inset 0 0 0 1px var(--muted); }
 .search:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--focus), 0 0 0 3px var(--focus-halo); }
 
-.segmented { position: relative; display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); }
+.segmented { position: relative; display: inline-flex; flex-wrap: wrap; max-width: 100%; gap: 2px; padding: 2px; border-radius: 8px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); }
 .segmented-item { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: var(--r-control); background: transparent; padding: 4px 10px; color: var(--muted); font-size: var(--t-xs); font-weight: 600; text-decoration: none; cursor: pointer; transition: color var(--fast); }
 .segmented-item:hover { color: var(--ink); }
 .segmented-item[aria-pressed="true"], .segmented-item[aria-current="true"] { color: var(--ink); }
