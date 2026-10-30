@@ -22,6 +22,8 @@ internal sealed class FakeVoteDraftStore : FakeAnalysisQueue<VoteDraftRun>, IVot
 
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) => throw new NotSupportedException();
 
+    public Task<int> RequeueOlderPromptAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+
     public Task<int> CountWaitingForBillAsync(CancellationToken cancellationToken) => Task.FromResult(0);
 
     public Task<IReadOnlyList<VoteDraftListItem>> ListAsync(VoteDraftView? view, int limit, CancellationToken cancellationToken) =>

@@ -4,7 +4,7 @@ namespace CivicLens.Application.Votes;
 
 public static class VoteDraftLifecycle
 {
-    private static readonly AnalysisLifecycle Rules = new(AcceptsSuccess, allowsRequeueOfBlocked: _ => true);
+    private static readonly AnalysisLifecycle Rules = new(AcceptsSuccess, record => AnalysisLifecycle.IsDraftedOrUnchanged(record, VoteDraftErrorCodes.Unchanged), _ => true);
 
     public static bool CanTransition(AnalysisRecord record, AnalysisCheckpoint update) =>
         Rules.CanTransition(record, update) && HasConsistentRevision(record, update);

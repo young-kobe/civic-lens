@@ -36,7 +36,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A reservation is set or cleared as a whole. Enforced by `ck_<table>_reservation` on every queue table. No test.
 - A run charges at least the tokens it used. Enforced by `ck_document_change_analysis_runs_tokens` and `AnalysisRun`. Test: `AnalysisRunTests.ARunCannotChargeLessThanTheTokensItUsed`.
 - At most one run exists for each draft revision. Enforced by the unique index `IX_document_change_analysis_runs_draft_id_revision_number` on `(draft_id, revision_number)`. A run without a draft has a null `draft_id`. No test.
-- Only a human owner requeues. Enforced by `RequeueAnalyses`, `RequeueBlockedActionDrafts`, `RedraftActionDrafts`, `RequeueBlockedVoteDrafts`, and `RedraftBrief`. Tests: `RequeueAnalysesTests.OnlyAHumanOwnerRequeues`, `ActionCommandTests.TheAiDrafterCannotActAsTheOwner`, `VoteCommandTests.TheAiDrafterCannotActAsTheOwner`, `RelationshipCommandTests.TheAiDrafterCannotActAsTheOwner`, and `RedraftBriefTests.OnlyTheOwnerMayRedraftAWeek`.
+- Only a human owner requeues. Enforced by `RequeueAnalyses`, `RequeueBlockedActionDrafts`, `RedraftActionDrafts`, `RequeueBlockedVoteDrafts`, `RedraftVoteDrafts`, and `RedraftBrief`. Tests: `RequeueAnalysesTests.OnlyAHumanOwnerRequeues`, `ActionCommandTests.TheAiDrafterCannotActAsTheOwner`, `VoteCommandTests.TheAiDrafterCannotActAsTheOwner`, `RelationshipCommandTests.TheAiDrafterCannotActAsTheOwner`, and `RedraftBriefTests.OnlyTheOwnerMayRedraftAWeek`.
 
 ## Behavior
 
@@ -60,7 +60,7 @@ The states are the values of `ck_<table>_status`, the same for every queue table
 | Running | Succeeded, Blocked, Failed | Settlement |
 | WaitingForBudget | Pending | Budget wait release at worker startup |
 | Failed | Pending | Owner requeue (`analyses requeue`) |
-| Succeeded | Pending | Only where the feature lifecycle allows it: a skipped statement gate (`statements regate`), a drafted or unchanged action draft whose bill used an older prompt (`actions draft redraft`), any brief draft, and a relationship draft whose pair has a new input |
+| Succeeded | Pending | Only where the feature lifecycle allows it: a skipped statement gate (`statements regate`), a drafted or unchanged action draft whose bill used an older prompt (`actions draft redraft`), a drafted or unchanged vote draft whose roll call used an older prompt (`votes draft redraft`), any brief draft, and a relationship draft whose pair has a new input |
 | Blocked | Pending | Only where the feature lifecycle allows it: an action draft (`actions draft requeue --blocked`), a vote draft (`votes draft requeue --blocked`), a brief draft (`brief redraft`), and a relationship draft that was blocked by an unapproved side |
 
 These events count as attempts: a durable retry, a reclaim of an expired lease, a release with tokens reserved, and a rejected draft. The claim owns the limit. A claim of an entry with eight attempts fails it as `attemptsExhausted` with no call.

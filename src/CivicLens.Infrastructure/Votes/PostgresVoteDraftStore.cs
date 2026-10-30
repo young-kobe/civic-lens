@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using CivicLens.Application.Votes;
+using CivicLens.Core.Analysis;
 using CivicLens.Core.Relationships;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
@@ -69,6 +70,14 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) =>
         queue.RequeueAsync(State.Blocked, errorCode, null, null, cancellationToken);
 
+    public Task<int> RequeueOlderPromptAsync(CancellationToken cancellationToken) =>
+        queue.RequeueAsync(State.Succeeded, null, null, async (db, settled, token) =>
+        {
+            var ids = settled.Select(row => row.CandidateId).ToArray();
+            var stale = await StaleCandidateIdsAsync(db, ids, token);
+            return settled.Where(row => stale.Contains(row.CandidateId));
+        }, cancellationToken);
+
     public async Task<int> CountWaitingForBillAsync(CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
@@ -108,6 +117,24 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         return await AnalysisQueueCounts.CountAsync<VoteAnalysisRow, VoteDraftView>(db, VoteDraftTask.Task, ViewOf, cancellationToken);
+    }
+
+    private static async Task<HashSet<string>> StaleCandidateIdsAsync(CollectionAttemptDbContext db, string[] candidateIds,
+        CancellationToken cancellationToken)
+    {
+        var stale = await (from candidate in db.Set<VoteCandidateRow>().AsNoTracking()
+                           where candidateIds.Contains(candidate.CandidateId) && candidate.BillType != null
+                           let newestDraftPrompt = (from run in db.Set<VoteAnalysisRunRow>()
+                                                    join sibling in db.Set<VoteCandidateRow>() on run.CandidateId equals sibling.CandidateId
+                                                    where run.Task == VoteDraftTask.Task && run.Outcome == AnalysisRunOutcome.Drafted &&
+                                                        sibling.SourceId == candidate.SourceId && sibling.Chamber == candidate.Chamber &&
+                                                        sibling.Congress == candidate.Congress && sibling.SessionNumber == candidate.SessionNumber &&
+                                                        sibling.RollCallNumber == candidate.RollCallNumber
+                                                    orderby run.StartedAtUtcTicks descending
+                                                    select run.PromptVersion).FirstOrDefault()
+                           where newestDraftPrompt != null && newestDraftPrompt != VoteDraftTask.PromptVersion
+                           select candidate.CandidateId).ToArrayAsync(cancellationToken);
+        return stale.ToHashSet(StringComparer.Ordinal);
     }
 
     private static async Task<VoteDraftPage?> ReadBillDetailAsync(CollectionAttemptDbContext db, VoteCandidateRow candidate,

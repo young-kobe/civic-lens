@@ -5,10 +5,10 @@ using CivicLens.Host.Analysis;
 namespace CivicLens.Host.Votes;
 
 internal sealed class VoteCommand(AnalysisQueueCommands<VoteDraftRun, VoteDraftView, VoteDraftListItem> drafts, GetVoteDraftStatus status,
-    RequeueBlockedVoteDrafts requeueBlocked, ReviewActor owner)
+    RequeueBlockedVoteDrafts requeueBlocked, RedraftVoteDrafts redraft, ReviewActor owner)
 {
     private const string Usage = "Use votes draft status, votes draft list [drafted|unchanged|superseded|no-member|pending|failed] [limit], " +
-        "votes draft requeue <candidate-id|--all>, or votes draft requeue --blocked --code <block-code>.";
+        "votes draft requeue <candidate-id|--all>, votes draft requeue --blocked --code <block-code>, or votes draft redraft.";
     private const int DefaultListLimit = 100;
 
     public static bool Matches(string[] args) => args is ["votes", ..];
@@ -35,6 +35,9 @@ internal sealed class VoteCommand(AnalysisQueueCommands<VoteDraftRun, VoteDraftV
                     return 0;
                 case ["votes", "draft", "requeue", "--blocked", "--code", var code]:
                     CommandOutput.Write(new { requeued = await requeueBlocked.ExecuteAsync(owner, code, cancellationToken) });
+                    return 0;
+                case ["votes", "draft", "redraft"]:
+                    CommandOutput.Write(new { requeued = await redraft.ExecuteAsync(owner, cancellationToken) });
                     return 0;
                 case ["votes", "draft", "requeue", "--blocked", ..]:
                     Console.Error.WriteLine(Usage);
