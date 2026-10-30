@@ -103,7 +103,7 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
             var path = PublicationProtocol.OfficialCongressPagePath(profile.Id, congress);
             if (nameChanged || rowsInMemory.ContainsKey(congress) || !files.PageCongresses.Contains(congress))
                 await WriteAsync(staging, path, await renderer.RenderOfficialAsync(
-                    new(profile, tracked, congress, false, [], [], await RowsAsync(congress)), catalog, cancellationToken), cancellationToken);
+                    new(profile, tracked, congress, false, [], [], await RowsAsync(congress), publishedAtUtc), catalog, cancellationToken), cancellationToken);
             else
                 await staging.LinkFileAsync(previous.DirectoryName!, path, cancellationToken);
         }
@@ -112,8 +112,8 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
         var currentRows = current is { } newest ? await RowsAsync(newest) : [];
         var talkAndAction = current is null ? null : TalkAndActionProfile.Of(current.Value, entries, currentRows);
         await WriteAsync(staging, PublicationProtocol.OfficialPagePath(profile.Id), await renderer.RenderOfficialAsync(
-            new(profile, tracked, current, true, past, entries, currentRows, talkAndAction,
-                current is { } newestCongress ? LinkedPair.In(profile.Id, newestCongress, entries, release, currentRows) : [], publishedAtUtc), catalog, cancellationToken), cancellationToken);
+            new(profile, tracked, current, true, past, entries, currentRows, publishedAtUtc, talkAndAction,
+                current is { } newestCongress ? LinkedPair.In(profile.Id, newestCongress, entries, release, currentRows) : []), catalog, cancellationToken), cancellationToken);
     }
 
     private static Task WriteAsync(IReleaseStaging staging, string path, string html, CancellationToken cancellationToken) =>

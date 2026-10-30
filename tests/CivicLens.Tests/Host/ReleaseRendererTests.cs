@@ -1580,8 +1580,8 @@ public sealed class ReleaseRendererTests
                 IssueIds = ["housing"]
             }
         ];
-        var official = new ReleaseOfficialPage(profile, true, 119, true, [], [.. entries], [.. votes], TalkAndActionProfile.Of(119, entries, votes));
-        var pastOfficial = new ReleaseOfficialPage(profile, true, 118, false, [], [], []);
+        var official = new ReleaseOfficialPage(profile, true, 119, true, [], [.. entries], [.. votes], new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero), TalkAndActionProfile.Of(119, entries, votes));
+        var pastOfficial = new ReleaseOfficialPage(profile, true, 118, false, [], [], [], new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero));
         return
         [
             ("record", PublicationProtocol.RecordPagePath(Record().RecordId), await renderer.RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None), "All records"),

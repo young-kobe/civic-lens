@@ -8,7 +8,7 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Host.Publication;
 
-public static class PublishedOfficialView
+internal static class PublishedOfficialView
 {
     public static string Office(PublishedOfficeTerm term) => term.Office switch
     {
@@ -27,7 +27,7 @@ public static class PublishedOfficialView
 
     public static string? Lede(IEnumerable<PublishedOfficeTerm> terms, DateTimeOffset publishedAtUtc)
     {
-        if (LatestTerm(terms) is not { } term) return null;
+        if (LatestTerm(terms, publishedAtUtc) is not { } term) return null;
         var sentences = new[]
         {
             $"{CardOffice(term, publishedAtUtc)}.",
@@ -39,19 +39,25 @@ public static class PublishedOfficialView
 
     public static string? Tenure(IEnumerable<PublishedOfficeTerm> terms, DateTimeOffset publishedAtUtc)
     {
-        if (Stretches(terms, (earlier, later) => earlier.Office == later.Office).LastOrDefault() is not { } stretch || ChamberOf(stretch.Latest.Office) is not { } chamber)
+        if (Stretches(Started(terms, publishedAtUtc), (earlier, later) => earlier.Office == later.Office).LastOrDefault() is not { } stretch || ChamberOf(stretch.Latest.Office) is not { } chamber)
             return null;
         var since = MonthYear(stretch.Start);
         return HasEnded(stretch.End, publishedAtUtc)
-            ? $"In {chamber} from {since} to {MonthYear(stretch.End!.Value)}, {Counted(stretch.Terms, "term")}."
-            : $"In {chamber} since {since}, now in the {CongressCalendar.Ordinal(stretch.Terms)} term.";
+            ? $"In {chamber} from {since} to {MonthYear(stretch.End!.Value)}."
+            : $"In {chamber} since {since}.";
     }
 
     public static IReadOnlyList<PublishedOfficeStretch> OfficeStretches(IEnumerable<PublishedOfficeTerm> terms) =>
         Stretches(terms, (earlier, later) => earlier.Office == later.Office && earlier.State == later.State
             && earlier.District == later.District && earlier.Party == later.Party);
 
-    public const string OfficeStretchNote = "Each row is one unbroken stretch in the same office. Source: congress-legislators.";
+    public static string OfficeStretchNote(IEnumerable<PublishedOfficeTerm> terms) => terms.All(term => ChamberOf(term.Office) is not null)
+        ? $"{StretchMeaning} Source: congress-legislators."
+        : StretchMeaning;
+
+    private const string StretchMeaning = "Each row is one unbroken stretch in the same office.";
+
+    private const int MaxSwearingInGapDays = 7;
 
     private static List<PublishedOfficeStretch> Stretches(IEnumerable<PublishedOfficeTerm> terms, Func<PublishedOfficeTerm, PublishedOfficeTerm, bool> sameSeat)
     {
@@ -59,15 +65,14 @@ public static class PublishedOfficialView
         foreach (var term in terms.OrderBy(term => term.Start))
         {
             if (stretches.Count > 0 && stretches[^1] is { } last && sameSeat(last.Latest, term) && Continues(last.End, term.Start))
-                stretches[^1] = last with { Latest = term, End = term.End, Terms = last.Terms + 1 };
+                stretches[^1] = last with { Latest = term, End = term.End };
             else
-                stretches.Add(new(term, term.Start, term.End, 1));
+                stretches.Add(new(term, term.Start, term.End));
         }
         return stretches;
     }
 
-    private static bool Continues(DateOnly? end, DateOnly nextStart) =>
-        end is { } day && (nextStart <= day || CongressCalendar.CongressOn(nextStart) is { } congress && congress == CongressCalendar.CongressOn(day));
+    private static bool Continues(DateOnly? end, DateOnly nextStart) => end is { } day && nextStart <= day.AddDays(MaxSwearingInGapDays);
 
     private static string? ChamberOf(string office) => office switch
     {
@@ -78,16 +83,17 @@ public static class PublishedOfficialView
 
     private static string MonthYear(DateOnly day) => day.ToString("MMMM yyyy", CultureInfo.InvariantCulture);
 
-    public static string RecordsCaption(ReleaseOfficialPage page)
+    public static string? RecordsCaption(ReleaseOfficialPage page)
     {
+        var total = page.Records.Length + page.Votes.Length;
+        if (total == 0) return null;
         var parts = page.Records.GroupBy(entry => entry.Kind).OrderBy(group => group.Key)
             .Select(group => Counted(group.Count(), PublishedRecordLabels.Kind(group.Key).ToLowerInvariant())).ToList();
-        if (!page.Votes.IsEmpty) parts.Add($"{Counted(page.Votes.Length, "vote")} in the {CongressCalendar.Ordinal(page.Congress!.Value)} Congress");
-        var total = page.Records.Length + page.Votes.Length;
-        return total == 0
-            ? $"No published record names {page.Profile.Name}."
-            : $"{Counted(total, "published record")} {(total == 1 ? "names" : "name")} {page.Profile.Name}: {JoinAnd(parts)}.";
+        if (!page.Votes.IsEmpty) parts.Add($"{Counted(page.Votes.Length, "vote")} in {TheCongress(page.Congress!.Value)}");
+        return $"This list holds {Counted(total, "published record")}: {JoinAnd(parts)}. Rows are newest first.";
     }
+
+    public static string TheCongress(int congress) => $"the {CongressCalendar.Ordinal(congress)} Congress";
 
     private static string Counted(int count, string singular) => $"{count} {Noun(count, singular)}";
 
@@ -96,7 +102,11 @@ public static class PublishedOfficialView
     public static string PartyLine(string party, string? caucus) =>
         caucus is null || caucus == party ? $"Party: {party}" : $"Party: {party}, caucuses with {Members(caucus)}";
 
-    public static PublishedOfficeTerm? LatestTerm(IEnumerable<PublishedOfficeTerm> terms) => terms.OrderBy(term => term.Start).LastOrDefault();
+    public static PublishedOfficeTerm? LatestTerm(IEnumerable<PublishedOfficeTerm> terms, DateTimeOffset publishedAtUtc) =>
+        Started(terms, publishedAtUtc).OrderBy(term => term.Start).LastOrDefault();
+
+    private static IEnumerable<PublishedOfficeTerm> Started(IEnumerable<PublishedOfficeTerm> terms, DateTimeOffset publishedAtUtc) =>
+        terms.Where(term => term.Start <= DateOnly.FromDateTime(publishedAtUtc.UtcDateTime));
 
     public static string OfficeKey(PublishedOfficeKind kind) => kind.ToString().ToLowerInvariant();
 

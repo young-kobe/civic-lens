@@ -99,7 +99,10 @@
         }
     }
     <Panel Title="Records" Aside="@RecordFilter" data-layout="@(RecordFilter is null ? null : PublishedOfficialView.RecordFilters[0].Value)" data-records="@(Page.TalkAndAction is null ? null : "")">
-        <p class="muted small">@PublishedOfficialView.RecordsCaption(Page)</p>
+        @if (PublishedOfficialView.RecordsCaption(Page) is { } caption)
+        {
+            <p class="muted small">@caption</p>
+        }
         @if (Page.TalkAndAction is not null)
         {
             <div class="visually-hidden" role="status" data-filter-status></div>
@@ -155,7 +158,10 @@
                 </Row>
                 <Empty><EmptyState Title="No office on record" Text="@NoOfficeText" /></Empty>
             </DataTable>
-            <p class="muted small">@PublishedOfficialView.OfficeStretchNote</p>
+            @if (OfficeStretches.Count > 0)
+            {
+                <p class="muted small">@PublishedOfficialView.OfficeStretchNote(Page.Profile.Terms)</p>
+            }
         </Panel>
     }
 </PublicPage>
@@ -178,7 +184,7 @@
 
     private string NoOfficeText => Page.IsTracked
         ? "The rosters and the configuration list no dated office for this official."
-        : "Civic Lens no longer tracks this official, so it lists no office. The records below stay published.";
+        : "Civic Lens no longer tracks this official, so it lists no office. The records on this page stay published.";
 
     private RenderFragment? RecordFilter => Page.TalkAndAction is not null && Rows.Any(row => row.AgainstParty)
         ? @<LayoutSwitch Label="Show records" Choices="PublishedOfficialView.RecordFilters" />
@@ -205,12 +211,12 @@
             : $"{Page.Profile.Name}. {Lede}";
 
     private PublishedOfficeTerm? OfficeInPage() =>
-        PublishedOfficialView.LatestTerm(Page.Profile.Terms.Where(term => HeldIn(term, Page.Congress!.Value)));
+        PublishedOfficialView.LatestTerm(Page.Profile.Terms.Where(term => HeldIn(term, Page.Congress!.Value)), Page.PublishedAtUtc);
 
     private static bool HeldIn(PublishedOfficeTerm term, int congress) =>
         term.Start < CongressCalendar.StartOf(congress + 1) && (term.End is not { } end || end > CongressCalendar.StartOf(congress));
 
     private string? Lede => Page.IsCurrent
         ? PublishedOfficialView.Lede(Page.Profile.Terms, Page.PublishedAtUtc)
-        : $"Votes in Congress {Page.Congress}, newest first.";
+        : $"Votes in {PublishedOfficialView.TheCongress(Page.Congress!.Value)}, newest first.";
 }

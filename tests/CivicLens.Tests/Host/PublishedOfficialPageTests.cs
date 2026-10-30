@@ -115,13 +115,12 @@ public sealed class PublishedOfficialPageTests
     {
         var page = Current([], []) with
         {
-            Profile = Profile("rep", "Rita Rep", new PublishedOfficeTerm { Office = "rep", Kind = PublishedOfficeKind.Representative, State = "WA", District = 9, Party = "Democrat", Start = new(1997, 1, 7) }),
-            PublishedAtUtc = ListPublishedAtUtc
+            Profile = Profile("rep", "Rita Rep", new PublishedOfficeTerm { Office = "rep", Kind = PublishedOfficeKind.Representative, State = "WA", District = 9, Party = "Democrat", Start = new(1997, 1, 7) })
         };
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
-        Assert.Equal("Representative for WA, district 9. Party: Democrat. In the House since January 1997, now in the 1st term.",
+        Assert.Equal("Representative for WA, district 9. Party: Democrat. In the House since January 1997.",
             new HtmlParser().ParseDocument(html).QuerySelector(".page-header-lede")!.TextContent);
     }
 
@@ -134,7 +133,7 @@ public sealed class PublishedOfficialPageTests
 
         var records = await PanelAsync(page, "panel-records");
 
-        Assert.Equal("4 published records name Mayor Example: 1 statement, 1 action and 2 votes in the 119th Congress.", records.QuerySelector("p.muted")!.TextContent);
+        Assert.Equal("This list holds 4 published records: 1 statement, 1 action and 2 votes in the 119th Congress. Rows are newest first.", records.QuerySelector("p.muted")!.TextContent);
     }
 
     [Fact]
@@ -154,6 +153,147 @@ public sealed class PublishedOfficialPageTests
         Assert.Equal(["1997-01-07"], offices.QuerySelectorAll("tbody td[data-label='From']").Select(cell => cell.TextContent));
         Assert.Equal(["2001-01-03"], offices.QuerySelectorAll("tbody td[data-label='To']").Select(cell => cell.TextContent));
         Assert.Contains("Each row is one unbroken stretch in the same office.", offices.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheRecordsCaptionUsesTheSingularForOneRecordAndItsOwnKind()
+    {
+        var records = await PanelAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []), "panel-records");
+
+        Assert.Equal("This list holds 1 published record: 1 statement. Rows are newest first.", records.QuerySelector("p.muted")!.TextContent);
+    }
+
+    [Fact]
+    public async Task AnEmptyRecordsTableHasNoCaptionBecauseItsEmptyStateAlreadySaysThereAreNoRecords()
+    {
+        var records = await PanelAsync(Current([], []), "panel-records");
+
+        Assert.Null(records.QuerySelector("p.muted"));
+        Assert.Contains("There are no records here.", records.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnEarlierCongressPageCountsItsVotesWithTheSameCongressWordingAsItsLede()
+    {
+        var page = new ReleaseOfficialPage(Profile(), true, 117, false, [], [], [Vote('3', new DateOnly(2022, 4, 1)) with { Congress = 117 }], ListPublishedAtUtc);
+
+        var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None));
+
+        Assert.Equal("Votes in the 117th Congress, newest first.", document.QuerySelector(".page-header-lede")!.TextContent);
+        Assert.Equal("This list holds 1 published record: 1 vote in the 117th Congress. Rows are newest first.", document.QuerySelector("[aria-labelledby='panel-records'] p.muted")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TermsInTheSameSeatThatFollowEachOtherMakeOneRowEvenWhenTheNextOneStartsAfterTheLateSwearingInOfJanuary1997()
+    {
+        var rows = await OfficeRowsAsync(Seat(new(1993, 1, 5), new(1995, 1, 3)), Seat(new(1995, 1, 4), new(1997, 1, 3)), Seat(new(1997, 1, 7), new(2027, 1, 3)));
+
+        Assert.Equal(["1993-01-05 to 2027-01-03"], rows);
+    }
+
+    [Fact]
+    public async Task ATermThatStartsEightDaysAfterTheLastEndedStartsANewRowBecauseNoSwearingInIsThatLate()
+    {
+        var rows = await OfficeRowsAsync(Seat(new(2001, 1, 3), new(2003, 1, 3)), Seat(new(2003, 1, 11), new(2005, 1, 3)));
+
+        Assert.Equal(["2001-01-03 to 2003-01-03", "2003-01-11 to 2005-01-03"], rows);
+    }
+
+    [Theory]
+    [InlineData("2003-01-03", "2003-06-10")]
+    [InlineData("2005-03-01", "2005-09-01")]
+    public async Task AnOfficialWhoLeftOfficeAndCameBackInsideOneCongressGetsTwoRowsBecauseTheStretchWasBroken(string endedOn, string returnedOn)
+    {
+        var rows = await OfficeRowsAsync(Seat(new(2001, 1, 3), DateOnly.Parse(endedOn)), Seat(DateOnly.Parse(returnedOn), new(2007, 1, 3)));
+
+        Assert.Equal(2, rows.Length);
+    }
+
+    [Theory]
+    [InlineData("state")]
+    [InlineData("district")]
+    [InlineData("party")]
+    [InlineData("office")]
+    public async Task ATermWithADifferentStateDistrictPartyOrOfficeStartsANewRowBecauseTheRowNamesOneSeat(string changed)
+    {
+        var next = Seat(new(2003, 1, 3), new(2005, 1, 3));
+        next = changed switch
+        {
+            "state" => next with { State = "OR" },
+            "district" => next with { District = 2 },
+            "party" => next with { Party = "Republican" },
+            _ => next with { Office = "sen", Kind = PublishedOfficeKind.Senator, District = null }
+        };
+
+        var rows = await OfficeRowsAsync(Seat(new(2001, 1, 3), new(2003, 1, 3)), next);
+
+        Assert.Equal(2, rows.Length);
+    }
+
+    [Fact]
+    public async Task TheOfficesNoteNamesTheRosterSourceOnlyWhenEveryTermComesFromTheRoster()
+    {
+        var roster = await OfficialAsync(Seat(new(2001, 1, 3), null));
+        var configured = await OfficialAsync(new PublishedOfficeTerm { Office = "Mayor", Kind = PublishedOfficeKind.Other, Start = new(2025, 1, 20) });
+
+        Assert.Contains("Source: congress-legislators.", roster.QuerySelector("[aria-labelledby='panel-offices'] p.muted")!.TextContent, StringComparison.Ordinal);
+        Assert.Equal("Each row is one unbroken stretch in the same office.", configured.QuerySelector("[aria-labelledby='panel-offices'] p.muted")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheTenureStartsAtTheStartOfTheUnbrokenStretchInTheChamberEvenAfterADistrictChange()
+    {
+        var lede = await LedeAsync(Seat(new(1997, 1, 7), new(1999, 1, 3)), Seat(new(1999, 1, 6), new(2001, 1, 3)) with { District = 8 }, Seat(new(2001, 1, 3), new(2027, 1, 3)));
+
+        Assert.EndsWith("In the House since January 1997.", lede, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ASenatorWhoLeftTheHouseDatesTheTenureFromTheSenateBecauseTheTenureNamesOneChamber()
+    {
+        var lede = await LedeAsync(Seat(new(2001, 1, 3), new(2007, 1, 3)), Senate(new(2007, 1, 4), new(2013, 1, 3)), Senate(new(2013, 1, 3), new(2027, 1, 3)));
+
+        Assert.Equal("Senator for WA. Party: Democrat. In the Senate since January 2007.", lede);
+    }
+
+    [Fact]
+    public async Task AFormerMemberGetsAClosedTenureAndFormerBecauseSinceWouldBeFalse()
+    {
+        var lede = await LedeAsync(Seat(new(2001, 1, 3), new(2003, 1, 3)), Seat(new(2003, 1, 3), new(2005, 1, 3)));
+
+        Assert.Equal("Former Representative for WA, district 9. Party: Democrat. In the House from January 2001 to January 2005.", lede);
+    }
+
+    [Fact]
+    public async Task ATermThatStartsAfterTheReleaseDateIsNotTheLatestTermSoTheLedeDescribesTheOfficeTheyHoldToday()
+    {
+        var lede = await LedeAsync(Seat(new(2025, 1, 3), new(2027, 1, 3)), Seat(new(2027, 1, 3), null) with { District = 3 });
+
+        Assert.Equal("Representative for WA, district 9. Party: Democrat. In the House since January 2025.", lede);
+    }
+
+    [Fact]
+    public async Task AnExecutiveHasNoTenureSentenceBecauseTenureNamesAChamber()
+    {
+        var lede = await LedeAsync(new PublishedOfficeTerm { Office = "President", Kind = PublishedOfficeKind.Executive, Start = new(2025, 1, 20) });
+
+        Assert.Equal("President.", lede);
+    }
+
+    [Fact]
+    public async Task AnOfficialWithNoTermHasNoLedeSoTheHeaderShowsNoEmptyLine()
+    {
+        Assert.Null(await LedeAsync());
+    }
+
+    [Fact]
+    public async Task ACardIgnoresATermThatStartsAfterTheReleaseDateSoTheListMatchesThePage()
+    {
+        var profile = Profile("a", "Ann Able", Term("rep", "MA", "Democratic"), Term("sen", "MA", "Democratic") with { Start = new DateOnly(2027, 1, 3) });
+
+        var card = (await ListAsync(new OfficialListing(profile, 1))).QuerySelector("ul.officials > li")!;
+
+        Assert.Equal("representative", card.GetAttribute("data-office"));
     }
 
     [Fact]
@@ -251,7 +391,7 @@ public sealed class PublishedOfficialPageTests
     [Fact]
     public async Task APastCongressPageShowsNoPortraitBecauseOnlyTheCurrentPageHasOne()
     {
-        var past = new ReleaseOfficialPage(Profile(), true, 118, false, [], [], []);
+        var past = new ReleaseOfficialPage(Profile(), true, 118, false, [], [], [], ListPublishedAtUtc);
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(past, PublicationCatalogs.None, CancellationToken.None);
 
@@ -408,7 +548,7 @@ public sealed class PublishedOfficialPageTests
     [Fact]
     public async Task AnEarlierCongressPageHasNoRecordsSwitchEvenWithAVoteAgainstTheirParty()
     {
-        var page = new ReleaseOfficialPage(Profile(), true, 118, false, [], [], [Split('a', new DateOnly(2024, 4, 1), "Nay") with { Congress = 118 }]);
+        var page = new ReleaseOfficialPage(Profile(), true, 118, false, [], [], [Split('a', new DateOnly(2024, 4, 1), "Nay") with { Congress = 118 }], ListPublishedAtUtc);
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
@@ -487,7 +627,7 @@ public sealed class PublishedOfficialPageTests
     [Fact]
     public async Task AnEarlierCongressPageHoldsOnlyThatCongressVotesAndLinksBackAndResolvesItsAssetsFromTwoFoldersDeep()
     {
-        var page = new ReleaseOfficialPage(Profile(), true, 118, false, [], [], [Vote('3', new DateOnly(2024, 4, 1)) with { Congress = 118 }]);
+        var page = new ReleaseOfficialPage(Profile(), true, 118, false, [], [], [Vote('3', new DateOnly(2024, 4, 1)) with { Congress = 118 }], ListPublishedAtUtc);
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
@@ -502,16 +642,16 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Theory]
-    [InlineData(118, "Mayor Example, Representative for WA, district 1. Votes in Congress 118")]
-    [InlineData(119, "Mayor Example. Votes in Congress 119")]
-    [InlineData(110, "Mayor Example. Votes in Congress 110")]
+    [InlineData(118, "Mayor Example, Representative for WA, district 1. Votes in the 118th Congress")]
+    [InlineData(119, "Mayor Example. Votes in the 119th Congress")]
+    [InlineData(110, "Mayor Example. Votes in the 110th Congress")]
     public async Task AnEarlierCongressDescriptionNamesTheOfficeHeldInThatCongressAndNoneWhenThereWasNone(int congress, string expectedStart)
     {
         var profile = Profile() with
         {
             Terms = [new() { Office = "rep", Kind = PublishedOfficeKind.Representative, State = "WA", District = 1, Party = "Democrat", Start = new(2021, 1, 3), End = new(2025, 1, 3) }]
         };
-        var page = new ReleaseOfficialPage(profile, true, congress, false, [], [], []);
+        var page = new ReleaseOfficialPage(profile, true, congress, false, [], [], [], ListPublishedAtUtc);
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
@@ -655,7 +795,7 @@ public sealed class PublishedOfficialPageTests
     [Fact]
     public async Task ATermEndsByTheReleaseDateNotTheRenderClockSoAListPublishedBeforeTheEndShowsTheOfficeAsCurrent()
     {
-        var term = Term("rep", "MA", "Democratic") with { District = 4, End = new DateOnly(2025, 1, 3) };
+        var term = Term("rep", "MA", "Democratic") with { District = 4, Start = new DateOnly(2023, 1, 3), End = new DateOnly(2025, 1, 3) };
 
         var page = await ListAsync(new DateTimeOffset(2025, 1, 2, 23, 0, 0, TimeSpan.Zero), new OfficialListing(Profile("a", "Ann Able", term), 1));
 
@@ -809,7 +949,7 @@ public sealed class PublishedOfficialPageTests
     [Fact]
     public async Task AnEarlierCongressPageHasNoLinkedPairsPanel()
     {
-        var page = new ReleaseOfficialPage(Profile(), true, 118, false, [], [], [Vote('3', new DateOnly(2024, 4, 1)) with { Congress = 118 }]);
+        var page = new ReleaseOfficialPage(Profile(), true, 118, false, [], [], [Vote('3', new DateOnly(2024, 4, 1)) with { Congress = 118 }], ListPublishedAtUtc);
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
@@ -939,6 +1079,37 @@ public sealed class PublishedOfficialPageTests
     private static async Task<AngleSharp.Dom.IDocument> ListAsync(DateTimeOffset publishedAtUtc, params OfficialListing[] officials) =>
         new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialsAsync(officials, publishedAtUtc, CancellationToken.None));
 
+    private static PublishedOfficeTerm Seat(DateOnly start, DateOnly? end) => new()
+    {
+        Office = "rep",
+        Kind = PublishedOfficeKind.Representative,
+        State = "WA",
+        District = 9,
+        Party = "Democrat",
+        Start = start,
+        End = end
+    };
+
+    private static PublishedOfficeTerm Senate(DateOnly start, DateOnly? end) => new()
+    {
+        Office = "sen",
+        Kind = PublishedOfficeKind.Senator,
+        State = "WA",
+        Party = "Democrat",
+        Start = start,
+        End = end
+    };
+
+    private static async Task<AngleSharp.Dom.IDocument> OfficialAsync(params PublishedOfficeTerm[] terms) =>
+        new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialAsync(
+            Current([], []) with { Profile = Profile("rep", "Rita Rep", terms) }, PublicationCatalogs.None, CancellationToken.None));
+
+    private static async Task<string?> LedeAsync(params PublishedOfficeTerm[] terms) => (await OfficialAsync(terms)).QuerySelector(".page-header-lede")?.TextContent;
+
+    private static async Task<string[]> OfficeRowsAsync(params PublishedOfficeTerm[] terms) =>
+        [.. (await OfficialAsync(terms)).QuerySelectorAll("[aria-labelledby='panel-offices'] tbody tr")
+            .Select(row => $"{row.QuerySelector("td[data-label='From']")!.TextContent} to {row.QuerySelector("td[data-label='To']")!.TextContent}")];
+
     private static async Task<AngleSharp.Dom.IElement> PanelAsync(ReleaseOfficialPage page, string panelId) =>
         new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None))
             .QuerySelector($"[aria-labelledby='{panelId}']")!;
@@ -948,7 +1119,7 @@ public sealed class PublishedOfficialPageTests
             .QuerySelector($"[aria-labelledby='{panelId}'] table")!;
 
     private static ReleaseOfficialPage Current(PublishedRecordEntry[] entries, PublishedOfficialVote[] votes) =>
-        new(Profile(), true, 119, true, [], [.. entries], [.. votes]);
+        new(Profile(), true, 119, true, [], [.. entries], [.. votes], ListPublishedAtUtc);
 
     private static PublishedRecordEntry Entry(char id, PublishedRecordKind kind, DateOnly date) => new()
     {

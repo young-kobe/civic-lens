@@ -3,7 +3,7 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Host.Publication;
 
-public sealed record PublishedOfficialRow(DateOnly Date, string RecordId, string Headline, string Badge, string? Detail, string? Cast,
+internal sealed record PublishedOfficialRow(DateOnly Date, string RecordId, string Headline, string Badge, string? Detail, string? Cast,
     DateTimeOffset PublishedAtUtc, bool AgainstParty, string? FilterKeys = null)
 {
     public static PublishedOfficialRow Of(PublishedRecordEntry entry) => new(
