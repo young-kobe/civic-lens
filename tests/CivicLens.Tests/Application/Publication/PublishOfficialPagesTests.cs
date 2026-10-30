@@ -40,8 +40,8 @@ public sealed class PublishOfficialPagesTests
             new PublishedRecordReference(PublishedRecordKind.Vote, vote)));
 
         var files = scenario.Releases.Directories[summary.DirectoryName];
-        Assert.Equal($"<html>official mayor tracked current  past [] records [{statementOfMayor}] votes []</html>", Page(files, MayorPage));
-        Assert.Equal($"<html>official chair tracked current 119 past [] records [{statementOfChair}] votes [{vote}]</html>", Page(files, ChairPage));
+        Assert.Equal($"<html>official mayor tracked current  congresses [] records [{statementOfMayor}] votes []</html>", Page(files, MayorPage));
+        Assert.Equal($"<html>official chair tracked current 119 congresses [119] records [{statementOfChair}] votes [{vote}]</html>", Page(files, ChairPage));
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public sealed class PublishOfficialPagesTests
         var second = await ReplaceAsync(scenario, "k2", PublishedRecordKind.Vote, newer);
 
         var files = scenario.Releases.Directories[second.DirectoryName];
-        Assert.Equal($"<html>official mayor tracked current 118 past [] records [] votes [{older}]</html>", Page(files, MayorPage));
+        Assert.Equal($"<html>official mayor tracked current 118 congresses [118] records [] votes [{older}]</html>", Page(files, MayorPage));
         Assert.DoesNotContain(PublicationProtocol.OfficialCongressPagePath("mayor", 118), files.Keys);
         Assert.DoesNotContain(PublicationProtocol.OfficialVotesPath("mayor", 119), files.Keys);
     }
@@ -183,6 +183,122 @@ public sealed class PublishOfficialPagesTests
         Assert.DoesNotContain(MayorPage, scenario.Releases.WriteOrder);
         Assert.Contains((first.DirectoryName, MayorPage), scenario.Releases.Links);
     }
+
+    [Fact]
+    public async Task ARewriteOfAllOfficialsWritesTheCurrentAndPastPagesOfEveryOfficialAndLinksNone()
+    {
+        var scenario = await TwoOfficialsWithPastCongressAsync();
+        var mayorPast = PublicationProtocol.OfficialCongressPagePath("mayor", 118);
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteOfficials = true });
+
+        Assert.Contains(MayorPage, scenario.Releases.WriteOrder);
+        Assert.Contains(ChairPage, scenario.Releases.WriteOrder);
+        Assert.Contains(mayorPast, scenario.Releases.WriteOrder);
+        Assert.DoesNotContain(scenario.Releases.Links, link => link.Item2.StartsWith("officials/", StringComparison.Ordinal) && link.Item2.EndsWith(".html", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task WithoutTheRewriteOptionAnUntouchedOfficialKeepsItsCurrentAndPastPagesByLink()
+    {
+        var scenario = await TwoOfficialsWithPastCongressAsync();
+
+        var second = await PublishAsync(scenario, "k2", PublishedRecordKind.Statement, scenario.AddStatement('d', speakerIds: ["chair"]));
+
+        Assert.DoesNotContain(MayorPage, scenario.Releases.WriteOrder);
+        Assert.DoesNotContain(PublicationProtocol.OfficialCongressPagePath("mayor", 118), scenario.Releases.WriteOrder);
+        Assert.Contains(scenario.Releases.Links, link => link.Item2 == MayorPage);
+        Assert.Contains(scenario.Releases.Links, link => link.Item2 == PublicationProtocol.OfficialCongressPagePath("mayor", 118));
+        Assert.Equal(2, second.ReleaseNumber);
+    }
+
+    [Fact]
+    public async Task ARewriteOfAllOfficialsKeepsEveryRecordFirstPublicationDateAndEveryWithdrawal()
+    {
+        var scenario = new PublicationScenario();
+        var wrong = scenario.AddStatement('e');
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('a')),
+            new PublishedRecordReference(PublishedRecordKind.Statement, wrong)));
+        scenario.Publications.ReviewStatuses[new(PublishedRecordKind.Statement, wrong)] = ReviewStatus.ApprovalWithdrawn;
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            new PublishReleaseRequest([], "k2") { Withdrawals = [new(PublishedRecordKind.Statement, wrong, "Wrong.")] });
+
+        var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k3") { RewriteOfficials = true });
+
+        var before = Manifest(scenario.Releases.Directories[second.DirectoryName]);
+        var after = Manifest(scenario.Releases.Directories[third.DirectoryName]);
+        Assert.Equal(3, after.ReleaseNumber);
+        Assert.Equal(before.Records.Select(record => (record.RecordId, record.FirstPublishedAtUtc)), after.Records.Select(record => (record.RecordId, record.FirstPublishedAtUtc)));
+        Assert.Equal(wrong, Assert.Single(after.Withdrawals).RecordId);
+        Assert.Contains(scenario.Releases.Links, link => link.Item2 == PublicationProtocol.RecordPagePath(before.Records[0].RecordId));
+    }
+
+    [Fact]
+    public async Task ARewrittenPastPageHoldsTheVoteRowsOfItsCongress()
+    {
+        var scenario = new PublicationScenario();
+        var older = scenario.AddVote('a', congress: 118);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Vote, older),
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('b'))));
+
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteOfficials = true });
+
+        Assert.Contains($"votes [{older}]", Page(scenario.Releases.Directories[second.DirectoryName], PublicationProtocol.OfficialCongressPagePath("mayor", 118)));
+    }
+
+    [Fact]
+    public async Task ARewriteLeavesAWithdrawnVoteOffTheRewrittenPages()
+    {
+        var scenario = new PublicationScenario();
+        var wrong = scenario.AddVote('a', congress: 118);
+        var kept = scenario.AddVote('b', congress: 118);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Vote, wrong),
+            new PublishedRecordReference(PublishedRecordKind.Vote, kept),
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('c'))));
+        scenario.Publications.ReviewStatuses[new(PublishedRecordKind.Vote, wrong)] = ReviewStatus.ApprovalWithdrawn;
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            new PublishReleaseRequest([], "k2") { Withdrawals = [new(PublishedRecordKind.Vote, wrong, "Wrong.")] });
+
+        var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k3") { RewriteOfficials = true });
+
+        var page = Page(scenario.Releases.Directories[third.DirectoryName], PublicationProtocol.OfficialCongressPagePath("mayor", 118));
+        Assert.Contains($"votes [{kept}]", page);
+        Assert.DoesNotContain(wrong, page);
+    }
+
+    [Fact]
+    public async Task TheRewriteOptionIsInThePayloadHashSoTheSameKeyReplaysWithItAndIsAMismatchWithoutIt()
+    {
+        var scenario = await TwoOfficialsWithPastCongressAsync();
+        var request = new PublishReleaseRequest([], "k2") { RewriteOfficials = true };
+        var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, request);
+        var committed = scenario.Publications.Committed.Count;
+
+        var replay = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, request);
+
+        Assert.Equal(first, replay);
+        Assert.Equal(committed, scenario.Publications.Committed.Count);
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2")));
+    }
+
+    private static async Task<PublicationScenario> TwoOfficialsWithPastCongressAsync()
+    {
+        var scenario = new PublicationScenario();
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('a', congress: 118)),
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('b')),
+            new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('c', speakerIds: ["chair"]))));
+        scenario.Releases.WriteOrder.Clear();
+        scenario.Releases.Links.Clear();
+        return scenario;
+    }
+
+    private static PublicationRelease Manifest(Dictionary<string, byte[]> files) =>
+        JsonSerializer.Deserialize<PublicationRelease>(files[PublicationProtocol.ManifestPath], PublicationProtocol.JsonOptions)!;
 
     [Fact]
     public async Task APublishThatNamesNoOfficialRewritesNoOfficialFile()
@@ -271,13 +387,13 @@ public sealed class PublishOfficialPagesTests
             new PublishedRecordReference(PublishedRecordKind.Vote, older), new PublishedRecordReference(PublishedRecordKind.Vote, newer)));
 
         var files = scenario.Releases.Directories[summary.DirectoryName];
-        Assert.Equal($"<html>official mayor tracked current 119 past [118] records [] votes [{newer}]</html>", Page(files, MayorPage));
-        Assert.Equal($"<html>official mayor tracked past 118 past [] records [] votes [{older}]</html>",
+        Assert.Equal($"<html>official mayor tracked current 119 congresses [119,118] records [] votes [{newer}]</html>", Page(files, MayorPage));
+        Assert.Equal($"<html>official mayor tracked past 118 congresses [119,118] records [] votes [{older}]</html>",
             Page(files, PublicationProtocol.OfficialCongressPagePath("mayor", 118)));
     }
 
     [Fact]
-    public async Task ANewVoteOfTheCurrentCongressLeavesTheEarlierCongressFilesLinkedAndANewerCongressWritesThePageOfTheOldCurrent()
+    public async Task ANewVoteOfTheCurrentCongressLeavesTheEarlierCongressFilesLinkedAndANewerCongressRewritesEveryEarlierPageBecauseTheirTabsListEveryCongress()
     {
         var scenario = new PublicationScenario();
         var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
@@ -298,8 +414,30 @@ public sealed class PublishOfficialPagesTests
         var third = await PublishAsync(scenario, "k3", PublishedRecordKind.Vote, scenario.AddVote('d', congress: 120));
 
         Assert.Contains(PublicationProtocol.OfficialCongressPagePath("mayor", 119), scenario.Releases.WriteOrder);
+        Assert.Contains(PublicationProtocol.OfficialCongressPagePath("mayor", 118), scenario.Releases.WriteOrder);
         Assert.Contains((second.DirectoryName, PublicationProtocol.OfficialVotesPath("mayor", 119)), scenario.Releases.Links);
-        Assert.Contains("current 120 past [119,118]", Page(scenario.Releases.Directories[third.DirectoryName], MayorPage));
+        Assert.Contains("current 120 congresses [120,119,118]", Page(scenario.Releases.Directories[third.DirectoryName], MayorPage));
+    }
+
+    [Fact]
+    public async Task WithdrawingTheOnlyVoteOfAMiddleCongressRewritesTheOtherEarlierPageAndDropsThePageOfTheEmptiedCongress()
+    {
+        var scenario = new PublicationScenario();
+        var middle = scenario.AddVote('b', congress: 118);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('a')),
+            new PublishedRecordReference(PublishedRecordKind.Vote, middle),
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('c', congress: 117))));
+        scenario.Publications.ReviewStatuses[new(PublishedRecordKind.Vote, middle)] = ReviewStatus.ApprovalWithdrawn;
+        scenario.Releases.WriteOrder.Clear();
+
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            new PublishReleaseRequest([], "k2") { Withdrawals = [new(PublishedRecordKind.Vote, middle, "Wrong.")] });
+
+        var oldest = PublicationProtocol.OfficialCongressPagePath("mayor", 117);
+        Assert.Contains(oldest, scenario.Releases.WriteOrder);
+        Assert.Contains("congresses [119,117]", Page(scenario.Releases.Directories[second.DirectoryName], oldest));
+        Assert.DoesNotContain(PublicationProtocol.OfficialCongressPagePath("mayor", 118), scenario.Releases.Directories[second.DirectoryName].Keys);
     }
 
     [Fact]

@@ -183,6 +183,24 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
+    public async Task TheRewriteOfficialsOptionPublishesWithNoRecordAndWritesTheOfficialPageAgain()
+    {
+        var scenario = new PublicationScenario();
+        await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", $"vote:{scenario.AddVote('a')}"], scenario.Publisher(), null!, null!, null!,
+            PublicationScenario.Owner, CancellationToken.None);
+        scenario.Releases.WriteOrder.Clear();
+
+        var plain = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2"], scenario.Publisher(), null!, null!, null!,
+            PublicationScenario.Owner, CancellationToken.None);
+        scenario.Releases.WriteOrder.Clear();
+        var rewritten = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k3", "--rewrite-officials"], scenario.Publisher(), null!, null!, null!,
+            PublicationScenario.Owner, CancellationToken.None);
+
+        Assert.Equal((2, 0), (plain, rewritten));
+        Assert.Contains(PublicationProtocol.OfficialPagePath("mayor"), scenario.Releases.WriteOrder);
+    }
+
+    [Fact]
     public async Task PublishWithOnlyAKeyAfterAWithholdFlagMakesAReleaseWithNoPhotoSoATakedownNeedsNoNewRecord()
     {
         var scenario = new PublicationScenario();
