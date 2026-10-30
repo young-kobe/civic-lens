@@ -72,6 +72,21 @@ public sealed class PublishApprovedRecordsTests
     }
 
     [Fact]
+    public async Task AnActionThatReviewDoesNotApproveIsNotPublishedByATickBecauseOnlyAnApprovedRecordIsReady()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('a', ImmutableArray.Create(
+            PublicationScenario.Decision(new string('a', 64), 1, ReviewDecisionKind.RequestChanges)));
+        AddUnpublished(scenario, action);
+        ListedUntilPublished(scenario);
+
+        var published = await Publisher(scenario).ExecuteAsync(default);
+
+        Assert.Equal(0, published);
+        Assert.Empty(scenario.Publications.Committed);
+    }
+
+    [Fact]
     public async Task NothingReadyMakesNoRelease()
     {
         var scenario = new PublicationScenario();
@@ -99,14 +114,14 @@ public sealed class PublishApprovedRecordsTests
     }
 
     [Fact]
-    public async Task APersonApprovalThatReplacesAPublishedRecordIsLeftOutWithALogUntilTheOwnerGivesANoteWhileTheOthersPublish()
+    public async Task APersonApprovalThatReplacesAPublishedRecordIsLeftOutWithALogUntilAPersonApprovesARevisionWithANoteWhileTheOthersPublish()
     {
         var scenario = new PublicationScenario();
         var replaced = scenario.AddAction('a');
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, replaced)], "k1"));
-        scenario.ReviseAction(replaced, 2, approverSubject: "reviewer");
+        scenario.ReviseAction(replaced, 2, approverSubject: "reviewer", correctionNote: null);
         var fresh = scenario.AddAction('b', ApprovedByCode('b'));
-        scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[replaced].Review, 1));
+        scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[replaced].Review));
         AddUnpublished(scenario, fresh);
         ListedUntilPublished(scenario);
         var logger = new CapturingLogger<PublishApprovedRecords>();
@@ -123,13 +138,41 @@ public sealed class PublishApprovedRecordsTests
     }
 
     [Fact]
+    public async Task APersonReplacementAtTheNotedCorrectionCapIsLeftOutWithALogWhileTheOthersPublish()
+    {
+        var scenario = new PublicationScenario();
+        var capped = scenario.AddAction('a');
+        var reference = new PublishedRecordReference(PublishedRecordKind.Action, capped);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([reference], "k1"));
+        for (var revision = 2; revision <= PublishedCorrection.MaximumNotedEntries + 1; revision++)
+        {
+            scenario.ReviseAction(capped, revision);
+            await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([reference], $"k{revision}"));
+        }
+        scenario.ReviseAction(capped, PublishedCorrection.MaximumNotedEntries + 2);
+        var fresh = scenario.AddAction('b', ApprovedByCode('b'));
+        scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[capped].Review));
+        AddUnpublished(scenario, fresh);
+        ListedUntilPublished(scenario);
+        var logger = new CapturingLogger<PublishApprovedRecords>();
+
+        var published = await Publisher(scenario, logger).ExecuteAsync(default);
+
+        Assert.Equal(1, published);
+        Assert.Equal([fresh], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId));
+        Assert.Equal([capped], scenario.Actions.Unpublished.Select(item => item.Action.RecordId));
+        Assert.DoesNotContain(logger.Entries, entry => entry.Level == LogLevel.Error);
+        Assert.Contains($"action:{capped}", Assert.Single(logger.Entries).Message);
+    }
+
+    [Fact]
     public async Task ABriefWhoseCitedRecordsChangedDoesNotPublishButAStatementBesideItDoes()
     {
         var scenario = new PublicationScenario();
         var statement = scenario.AddStatement('e');
         scenario.Statements.Unpublished.Add(StatementCandidate(statement));
         var brief = scenario.Briefs.Publishable[scenario.AddBrief(BriefFixtures.Week, [new(PublishedRecordKind.Statement, statement, 1)])].Review;
-        scenario.Briefs.Unpublished.Add(new(brief, null, true));
+        scenario.Briefs.Unpublished.Add(new(brief, true));
         ListedUntilPublished(scenario);
         var logger = new CapturingLogger<PublishApprovedRecords>();
 
@@ -274,6 +317,33 @@ public sealed class PublishApprovedRecordsTests
     }
 
     [Fact]
+    public async Task ATickReturnsAWithdrawnRecordThatAPersonApprovedAgainWithANoteAndLeavesOneWithoutANoteWhileTheOthersPublish()
+    {
+        var scenario = new PublicationScenario();
+        var noted = scenario.AddAction('a');
+        var unnoted = scenario.AddAction('b');
+        var fresh = scenario.AddAction('c', ApprovedByCode('c'));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            new([new(PublishedRecordKind.Action, noted), new(PublishedRecordKind.Action, unnoted)], "k1"));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2")
+        {
+            Withdrawals = [new(PublishedRecordKind.Action, noted, "Wrong."), new(PublishedRecordKind.Action, unnoted, "Wrong.")]
+        });
+        scenario.ReviseAction(noted, 2, correctionNote: "Fixed the bill.");
+        scenario.ReviseAction(unnoted, 2, correctionNote: null);
+        AddUnpublished(scenario, noted, unnoted, fresh);
+        ListedUntilPublished(scenario);
+        var logger = new CapturingLogger<PublishApprovedRecords>();
+
+        var published = await Publisher(scenario, logger).ExecuteAsync(default);
+
+        Assert.Equal(2, published);
+        Assert.Equal([noted, fresh], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId).Order());
+        Assert.DoesNotContain(logger.Entries, entry => entry.Level == LogLevel.Error);
+        Assert.Contains($"action:{unnoted}", Assert.Single(logger.Entries).Message);
+    }
+
+    [Fact]
     public async Task AWithdrawnBacklogLargerThanTheBatchLimitDoesNotStarveTheOtherFactRecords()
     {
         var scenario = new PublicationScenario();
@@ -345,7 +415,7 @@ public sealed class PublishApprovedRecordsTests
         ListedUntilPublished(scenario);
         await Publisher(scenario).ExecuteAsync(default);
         scenario.ReviseAction(action, 2);
-        scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[action].Review, 1));
+        scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[action].Review));
         var releases = scenario.Publications.Committed.Count;
         var logger = new CapturingLogger<PublishApprovedRecords>();
 
@@ -369,12 +439,11 @@ public sealed class PublishApprovedRecordsTests
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([reference], "k1"));
         for (var revision = 2; revision <= PublishedCorrection.MaximumNotedEntries + 1; revision++)
         {
-            scenario.ReviseAction(action, revision);
-            await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-                new PublishReleaseRequest([reference], $"k{revision}") { Notes = [new(reference.Kind, action, "Fix.")] });
+            scenario.ReviseAction(action, revision, correctionNote: "Fix.");
+            await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([reference], $"k{revision}"));
         }
         scenario.ReviseAction(action, PublishedCorrection.MaximumNotedEntries + 2, ReviewAuthor.CodeSubject);
-        scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[action].Review, PublishedCorrection.MaximumNotedEntries + 1));
+        scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[action].Review));
         ListedUntilPublished(scenario);
         var logger = new CapturingLogger<PublishApprovedRecords>();
 
@@ -409,12 +478,12 @@ public sealed class PublishApprovedRecordsTests
                 Decisions = decisions
             };
             scenario.Actions.Publishable[recordId] = template with { Review = review };
-            scenario.Actions.Unpublished.Add(new(review, null));
+            scenario.Actions.Unpublished.Add(new(review));
         }
     }
 
     private static void AddUnpublished(PublicationScenario scenario, params string[] actionIds) =>
-        scenario.Actions.Unpublished.AddRange(actionIds.Select(id => new UnpublishedApprovedAction(scenario.Actions.Publishable[id].Review, null)));
+        scenario.Actions.Unpublished.AddRange(actionIds.Select(id => new UnpublishedApprovedAction(scenario.Actions.Publishable[id].Review)));
 
     private static void AddReadyStatements(PublicationScenario scenario, int count)
     {
@@ -440,7 +509,7 @@ public sealed class PublishApprovedRecordsTests
     {
         var revision = new StatementDraftRevision(candidateId, 1, "author", PublicationScenario.ApprovedAt, $"Statement {candidateId[0]}",
             "Summary", null, null, [], [], [], [], [], []);
-        return new(new StatementReviewListItem(candidateId, "source", "https://example.test/", revision, 1, ReviewStatus.Approved, 0), null);
+        return new(new StatementReviewListItem(candidateId, "source", "https://example.test/", revision, 1, ReviewStatus.Approved, 0));
     }
 
     // A published record leaves the ready list, as it does in the database.

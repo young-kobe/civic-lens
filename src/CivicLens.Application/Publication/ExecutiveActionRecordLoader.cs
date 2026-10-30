@@ -18,7 +18,7 @@ internal sealed class ExecutiveActionRecordLoader(IExecutiveActionReviewStore ac
 
     protected override ReadyToPublishRecord? ToReady(UnpublishedApprovedExecutiveAction candidate) =>
         Ready(candidate.Action.CurrentStatus, candidate.Action.UnresolvedConcerns.Length, candidate.Action.RecordId,
-            candidate.Action.CurrentRevision.Title, candidate.Action.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber);
+            candidate.Action.CurrentRevision.RevisionNumber);
 
     protected override Task<IReadOnlyDictionary<string, PublishableExecutiveAction>> GetForPublicationAsync(
         ImmutableArray<string> recordIds, PublicationBuild build, CancellationToken cancellationToken) =>
@@ -27,7 +27,7 @@ internal sealed class ExecutiveActionRecordLoader(IExecutiveActionReviewStore ac
     protected override PendingRecord Build(string recordId, PublishableExecutiveAction addition, PublicationBuild build)
     {
         var review = addition.Review;
-        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
+        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build);
         var record = new PublishedExecutiveActionBuilder(build.Rules).Build(addition, build.Previous.FirstPublishedAt(Kind, recordId),
             build.Corrections.For(Kind, recordId, review.CurrentRevision.RevisionNumber, review.Decisions), build.Now);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,

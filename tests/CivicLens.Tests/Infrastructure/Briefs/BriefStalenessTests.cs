@@ -218,6 +218,29 @@ public sealed class BriefStalenessTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
+    public async Task ACommitAfterARollbackLeavesEveryReleaseAnsweringItsOwnRevisionBecauseTheDiffIsAgainstTheHighestRelease()
+    {
+        await seeder.StatementAsync(S1, 1, "First", "warren");
+        await seeder.StatementAsync(S2, 1, "Rent cap", "warren");
+        await seeder.StatementAsync(S2, 2, "Rent cap amended", "warren");
+        await seeder.DocumentChangeAsync(D1, 1, "A rule changed");
+        await seeder.ActionAsync(A1, 1, 6, "warren");
+        await seeder.DecisionAsync(PublishedRecordKind.Statement, S2, 2, 2, ReviewDecisionKind.Approve);
+        _ = await briefs.RedraftAsync(Week, default);
+        PublishedRevisionBinding[] Others() => [Binding(PublishedRecordKind.Statement, P1, 1), Binding(PublishedRecordKind.Statement, S1, 1),
+            Binding(PublishedRecordKind.DocumentChange, D1, 1), Binding(PublishedRecordKind.Action, A1, 1)];
+        await CommitAsync(3, 2, [.. Others(), Binding(PublishedRecordKind.Statement, S2, 2)]);
+        _ = await publications.ActivateAsync(2, (_, _) => Task.CompletedTask, default);
+
+        await CommitAsync(4, 2, [.. Others(), Binding(PublishedRecordKind.Statement, S2, 1)]);
+        Assert.Equal(1, await ReadRevisionAsync(S2));
+        _ = await publications.ActivateAsync(3, (_, _) => Task.CompletedTask, default);
+        Assert.Equal(2, await ReadRevisionAsync(S2));
+        _ = await publications.ActivateAsync(2, (_, _) => Task.CompletedTask, default);
+        Assert.Equal(1, await ReadRevisionAsync(S2));
+    }
+
+    [Fact]
     public async Task ARollbackToAReleaseWithoutTheRecordsRequeuesTheBriefAndTheRedraftLeavesThemOut()
     {
         _ = await briefs.RedraftAsync(Week, default);

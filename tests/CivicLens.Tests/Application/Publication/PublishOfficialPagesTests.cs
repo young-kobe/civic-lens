@@ -125,7 +125,7 @@ public sealed class PublishOfficialPagesTests
             {
                 CurrentRevision = revised,
                 Revisions = review.Revisions.Add(revised),
-                Decisions = review.Decisions.Add(PublicationScenario.Decision(newer, 2, ReviewDecisionKind.Approve, 2)),
+                Decisions = review.Decisions.Add(PublicationScenario.Decision(newer, 2, ReviewDecisionKind.Approve, 2) with { CorrectionNote = PublicationScenario.PersonNote }),
                 ReviewStateVersion = 2
             }
         };
@@ -329,7 +329,7 @@ public sealed class PublishOfficialPagesTests
             {
                 CurrentRevision = revised,
                 Revisions = review.Revisions.Add(revised),
-                Decisions = review.Decisions.Add(PublicationScenario.Decision(statement, 2, ReviewDecisionKind.Approve, 2)),
+                Decisions = review.Decisions.Add(PublicationScenario.Decision(statement, 2, ReviewDecisionKind.Approve, 2) with { CorrectionNote = PublicationScenario.PersonNote }),
                 ReviewStateVersion = 2
             }
         };
@@ -616,8 +616,8 @@ public sealed class PublishOfficialPagesTests
         scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request(key, new PublishedRecordReference(kind, recordId)));
 
     private static Task<PublicationReleaseSummary> ReplaceAsync(PublicationScenario scenario, string key, PublishedRecordKind kind, string recordId) =>
-        scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.WithNotesFor(
-            PublicationScenario.Request(key, new PublishedRecordReference(kind, recordId)), new PublishedRecordReference(kind, recordId)));
+        scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request(key, new PublishedRecordReference(kind, recordId)));
 
     private static string Page(Dictionary<string, byte[]> files, string path) => Encoding.UTF8.GetString(files[path]);
 

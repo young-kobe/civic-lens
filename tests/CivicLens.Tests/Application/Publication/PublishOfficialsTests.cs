@@ -74,14 +74,14 @@ public sealed class PublishOfficialsTests
             {
                 CurrentRevision = revised,
                 Revisions = review.Revisions.Add(revised),
-                Decisions = review.Decisions.Add(PublicationScenario.Decision(vote, 2, ReviewDecisionKind.Approve) with { RevisionNumber = 2 }),
+                Decisions = review.Decisions.Add(PublicationScenario.Decision(vote, 2, ReviewDecisionKind.Approve) with { RevisionNumber = 2, CorrectionNote = PublicationScenario.PersonNote }),
                 ReviewStateVersion = 2
             }
         };
 
         var reference = new PublishedRecordReference(PublishedRecordKind.Vote, vote);
         var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-            PublicationScenario.WithNotesFor(PublicationScenario.Request("k2", reference), reference));
+            PublicationScenario.Request("k2", reference));
 
         Assert.Equal(["chair"], OfficialsOf(scenario, second.DirectoryName).Officials.Select(official => official.Id));
     }

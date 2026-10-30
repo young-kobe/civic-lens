@@ -1,3 +1,3 @@
 namespace CivicLens.Application.Statements;
 
-public sealed record UnpublishedApprovedStatement(StatementReviewListItem Statement, int? PublishedRevisionNumber);
+public sealed record UnpublishedApprovedStatement(StatementReviewListItem Statement);

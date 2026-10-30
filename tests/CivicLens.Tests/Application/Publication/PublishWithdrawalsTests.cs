@@ -16,9 +16,9 @@ public sealed class PublishWithdrawalsTests
     {
         var (scenario, action) = await PublishedActionAsync();
         var firstPublishedAt = scenario.Clock.Now;
-        scenario.ReviseAction(action, 2);
+        scenario.ReviseAction(action, 2, correctionNote: "Fix.");
         scenario.Clock.Now = scenario.Clock.Now.AddDays(1);
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Correct("k2", action, "Fix."));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Correct("k2", action));
         scenario.Clock.Now = scenario.Clock.Now.AddDays(1);
 
         var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k3", Reference(action), "Wrong bill."));
@@ -189,16 +189,65 @@ public sealed class PublishWithdrawalsTests
     }
 
     [Fact]
-    public async Task TheCodeSubjectCannotBringAWithdrawnRecordBackBecauseOnlyAPersonJudgesThatItMayReturn()
+    public async Task TheCodeSubjectCannotBringAWithdrawnRecordBackWithACodeApprovedRevisionBecauseOnlyAPersonJudgesThatItMayReturn()
     {
         var (scenario, action) = await PublishedActionAsync();
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong."));
-        scenario.ReviseAction(action, 2);
+        scenario.ReviseAction(action, 2, ReviewAuthor.CodeSubject);
 
         var error = await Assert.ThrowsAsync<WithdrawnRecordException>(() =>
             scenario.Publisher().ExecuteAsync(Code, PublicationScenario.Request("k3", Reference(action))));
 
         Assert.Contains($"action:{action}", error.Message);
+    }
+
+    [Fact]
+    public async Task TheOwnerCannotBringAWithdrawnRecordBackWithACodeApprovedRevisionEither()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong."));
+        scenario.ReviseAction(action, 2, ReviewAuthor.CodeSubject);
+
+        await Assert.ThrowsAsync<WithdrawnRecordException>(() =>
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", Reference(action))));
+
+        Assert.Single(ReadManifest(scenario, scenario.Publications.Committed[^1].DirectoryName).Withdrawals);
+    }
+
+    [Fact]
+    public async Task TheWorkerReturnsAWithdrawnRecordWhenAPersonApprovedAHigherRevisionWithANoteAndKeepsTheHistory()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        var firstPublishedAt = scenario.Clock.Now;
+        scenario.Clock.Now = firstPublishedAt.AddDays(1);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong bill."));
+        scenario.ReviseAction(action, 2, correctionNote: "Bill fixed.");
+        scenario.Clock.Now = firstPublishedAt.AddDays(2);
+
+        var returned = await scenario.Publisher().ExecuteAsync(Code, PublicationScenario.Request("k3", Reference(action)));
+
+        var manifest = ReadManifest(scenario, returned.DirectoryName);
+        var entry = Assert.Single(manifest.Records);
+        Assert.Equal((action, 2, firstPublishedAt), (entry.RecordId, entry.RevisionNumber, entry.FirstPublishedAtUtc));
+        Assert.Empty(manifest.Withdrawals);
+        var corrections = ReadAction(scenario.Releases.Directories[returned.DirectoryName], action).Corrections;
+        var correction = Assert.Single(corrections);
+        Assert.Equal((1, "Bill fixed."), (correction.ReplacedRevisionNumber, correction.Note));
+    }
+
+    [Fact]
+    public async Task TheWorkerKeepsAWithdrawnRecordOffTheSiteWhenThePersonApprovalHasNoNote()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong bill."));
+        scenario.ReviseAction(action, 2, correctionNote: null);
+
+        await Assert.ThrowsAsync<MissingCorrectionNoteException>(() =>
+            scenario.Publisher().ExecuteAsync(Code, PublicationScenario.Request("k3", Reference(action))));
+
+        var manifest = ReadManifest(scenario, scenario.Publications.Committed[^1].DirectoryName);
+        Assert.Empty(manifest.Records);
+        Assert.Single(manifest.Withdrawals);
     }
 
     [Fact]
@@ -215,13 +264,13 @@ public sealed class PublishWithdrawalsTests
     public async Task APersonBringsAWithdrawnRecordBackWithANoteAndItsHistoryKeepsTheEarlierCorrectionsAndTheReturn()
     {
         var (scenario, action) = await PublishedActionAsync();
-        scenario.ReviseAction(action, 2);
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Correct("k2", action, "Fix."));
+        scenario.ReviseAction(action, 2, correctionNote: "Fix.");
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Correct("k2", action));
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k3", Reference(action), "Wrong bill."));
-        scenario.ReviseAction(action, 3);
+        scenario.ReviseAction(action, 3, correctionNote: "Bill fixed.");
         scenario.Clock.Now = scenario.Clock.Now.AddDays(1);
 
-        var returned = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Correct("k4", action, "Bill fixed."));
+        var returned = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Correct("k4", action));
 
         var files = scenario.Releases.Directories[returned.DirectoryName];
         var manifest = ReadManifest(scenario, returned.DirectoryName);
@@ -238,7 +287,7 @@ public sealed class PublishWithdrawalsTests
     {
         var (scenario, action) = await PublishedActionAsync();
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong."));
-        scenario.ReviseAction(action, 2);
+        scenario.ReviseAction(action, 2, correctionNote: null);
 
         await Assert.ThrowsAsync<MissingCorrectionNoteException>(() =>
             scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", Reference(action))));
@@ -252,7 +301,7 @@ public sealed class PublishWithdrawalsTests
         var releases = scenario.Publications.Committed.Count;
 
         var error = await Assert.ThrowsAsync<ArgumentException>(() =>
-            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Correct("k3", action, "Back.")));
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Correct("k3", action)));
 
         Assert.Contains("revision 1", error.Message);
         Assert.Equal(releases, scenario.Publications.Committed.Count);
@@ -264,14 +313,14 @@ public sealed class PublishWithdrawalsTests
         var (scenario, action) = await PublishedActionAsync();
         for (var revision = 2; revision <= PublishedCorrection.MaximumNotedEntries + 1; revision++)
         {
-            scenario.ReviseAction(action, revision);
-            await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Correct($"c{revision}", action, "Fix."));
+            scenario.ReviseAction(action, revision, correctionNote: "Fix.");
+            await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Correct($"c{revision}", action));
         }
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("w", Reference(action), "Wrong."));
-        scenario.ReviseAction(action, PublishedCorrection.MaximumNotedEntries + 2);
+        scenario.ReviseAction(action, PublishedCorrection.MaximumNotedEntries + 2, correctionNote: "Back.");
 
         await Assert.ThrowsAsync<CorrectionLimitException>(() =>
-            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Correct("r", action, "Back.")));
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Correct("r", action)));
     }
 
     [Fact]
@@ -281,10 +330,10 @@ public sealed class PublishWithdrawalsTests
         var firstPublishedAt = scenario.Clock.Now;
         scenario.Clock.Now = scenario.Clock.Now.AddDays(3);
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong."));
-        scenario.ReviseAction(action, 2);
+        scenario.ReviseAction(action, 2, correctionNote: "Back.");
         scenario.Clock.Now = scenario.Clock.Now.AddDays(3);
 
-        var returned = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Correct("k3", action, "Back."));
+        var returned = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Correct("k3", action));
 
         var record = Assert.Single(ReadManifest(scenario, returned.DirectoryName).Records);
         Assert.Equal(firstPublishedAt, record.FirstPublishedAtUtc);
@@ -301,10 +350,7 @@ public sealed class PublishWithdrawalsTests
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(withdrawn, PublishedRecordKind.Vote), "Wrong."));
         scenario.ReviseVote(withdrawn, 2);
 
-        var returned = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([Reference(withdrawn, PublishedRecordKind.Vote)], "k3")
-        {
-            Notes = [Note(withdrawn, "Back.", PublishedRecordKind.Vote)]
-        });
+        var returned = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([Reference(withdrawn, PublishedRecordKind.Vote)], "k3"));
 
         var rows = VoteRows(scenario.Releases.Directories[returned.DirectoryName], PublicationProtocol.OfficialVotesPath("mayor", 119));
         Assert.Equal([kept, withdrawn], rows.Select(row => row.RecordId).Order(StringComparer.Ordinal));
@@ -320,9 +366,9 @@ public sealed class PublishWithdrawalsTests
             Reference(action), Reference(vote, PublishedRecordKind.Vote)));
         var withdrawn = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong bill."));
         Assert.Equal($"<html>vote {vote} bill </html>", Page(scenario.Releases.Directories[withdrawn.DirectoryName], PublicationProtocol.RecordPagePath(vote)));
-        scenario.ReviseAction(action, 2);
+        scenario.ReviseAction(action, 2, correctionNote: "Back.");
 
-        var returned = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Correct("k3", action, "Back."));
+        var returned = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Correct("k3", action));
 
         Assert.Equal($"<html>vote {vote} bill {action}</html>", Page(scenario.Releases.Directories[returned.DirectoryName], PublicationProtocol.RecordPagePath(vote)));
     }
@@ -341,7 +387,7 @@ public sealed class PublishWithdrawalsTests
         var relationship = Reference(link, PublishedRecordKind.Relationship);
 
         var returned = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-            new PublishReleaseRequest([Reference(action), relationship], "k3") { Notes = [Note(action, "Back.")] });
+            new PublishReleaseRequest([Reference(action), relationship], "k3"));
 
         var manifest = ReadManifest(scenario, returned.DirectoryName);
         Assert.Contains(manifest.Records, entry => entry.RecordId == link);
@@ -356,23 +402,21 @@ public sealed class PublishWithdrawalsTests
         scenario.ReviseAction(action, 2);
 
         await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-            new PublishReleaseRequest([Reference(action)], "k3") { Notes = [Note(action, "Back.")], Withdrawals = [Note(action, "Again.")] }));
+            new PublishReleaseRequest([Reference(action)], "k3") { Withdrawals = [Note(action, "Again.")] }));
     }
 
     [Fact]
-    public async Task TheReturnNoteIsInThePayloadHashSoTheSameKeyWithAnotherNoteIsAMismatchAndTheSameRequestReplays()
+    public async Task TheSameReturnRequestReplaysItsStoredRelease()
     {
         var (scenario, action) = await PublishedActionAsync();
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong."));
-        scenario.ReviseAction(action, 2);
-        var request = Correct("k3", action, "Back.");
+        scenario.ReviseAction(action, 2, correctionNote: "Back.");
+        var request = Correct("k3", action);
         var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, request);
 
         var replay = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, request);
 
         Assert.Equal(first, replay);
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Correct("k3", action, "Other.")));
     }
 
     [Fact]
@@ -551,15 +595,13 @@ public sealed class PublishWithdrawalsTests
     }
 
     [Fact]
-    public async Task ANullNoteOrNullWithdrawalIsRefusedWithAnArgumentException()
+    public async Task ANullWithdrawalIsRefusedWithAnArgumentException()
     {
         var (scenario, action) = await PublishedActionAsync();
         var request = PublicationScenario.Request("k2", Reference(action));
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, request with { Withdrawals = [null!] }));
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, request with { Notes = [null!] }));
     }
 
     private static async Task<(PublicationScenario Scenario, string Action)> PublishedActionAsync()
@@ -593,8 +635,7 @@ public sealed class PublishWithdrawalsTests
     private static PublishReleaseRequest Withdraw(string key, PublishedRecordReference record, string note) =>
         new([], key) { Withdrawals = [new(record.Kind, record.RecordId, note)] };
 
-    private static PublishReleaseRequest Correct(string key, string actionId, string note) =>
-        new([Reference(actionId)], key) { Notes = [Note(actionId, note)] };
+    private static PublishReleaseRequest Correct(string key, string actionId) => new([Reference(actionId)], key);
 
     private static PublishedAction ReadAction(Dictionary<string, byte[]> files, string recordId) =>
         JsonSerializer.Deserialize<PublishedAction>(files[PublicationProtocol.RecordDataPath(recordId)], PublicationProtocol.JsonOptions)!;

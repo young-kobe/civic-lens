@@ -239,7 +239,7 @@ public sealed class PublishStatementTests
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", reference));
         var review = scenario.Statements.Publishable[statement].Review;
         var revised = review.CurrentRevision! with { RevisionNumber = 2, IssueIds = ["transit"], PolicyAreaIds = ["transportation"] };
-        var decisions = review.Decisions.Add(PublicationScenario.Decision(statement, 2, ReviewDecisionKind.Approve) with { RevisionNumber = 2 });
+        var decisions = review.Decisions.Add(PublicationScenario.Decision(statement, 2, ReviewDecisionKind.Approve) with { RevisionNumber = 2, CorrectionNote = "Fixed the issue." });
         scenario.Statements.Publishable[statement] = scenario.Statements.Publishable[statement] with
         {
             Review = review with
@@ -251,7 +251,7 @@ public sealed class PublishStatementTests
             }
         };
 
-        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", reference) with { Notes = [new(PublishedRecordKind.Statement, statement, "Fixed the issue.")] });
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", reference));
 
         var entry = Assert.Single(ReadManifest(scenario, second.DirectoryName).Records);
         Assert.Equal(2, entry.RevisionNumber);

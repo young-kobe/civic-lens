@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Paging;
+using CivicLens.Application.Publication;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core;
@@ -101,15 +102,19 @@ internal static class ReviewValidation
     }
 
     public static ReviewDecision CreateDecision(ReviewActor actor, string recordId, int expectedRevisionNumber,
-        int expectedReviewStateVersion, ReviewDecisionKind kind, string? note, ImmutableArray<string> resolvedDecisionIds)
+        int expectedReviewStateVersion, ReviewDecisionKind kind, string? note, ImmutableArray<string> resolvedDecisionIds,
+        string? correctionNote)
     {
         if (expectedRevisionNumber < 1) throw new ArgumentOutOfRangeException(nameof(expectedRevisionNumber));
         if (expectedReviewStateVersion < 0) throw new ArgumentOutOfRangeException(nameof(expectedReviewStateVersion));
         if (!Enum.IsDefined(kind)) throw new ArgumentOutOfRangeException(nameof(kind));
         var resolutions = ValidateDecisionIds(resolvedDecisionIds);
         ValidateText(note, 4_000, nameof(note), allowEmpty: true);
+        if (correctionNote is not null && kind != ReviewDecisionKind.Approve)
+            throw new ArgumentException("Only an approval takes a correction note.", nameof(correctionNote));
         return new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, expectedRevisionNumber,
-            expectedReviewStateVersion + 1, kind, actor.Subject, note, resolutions, DateTimeOffset.UtcNow);
+            expectedReviewStateVersion + 1, kind, actor.Subject, note, resolutions, DateTimeOffset.UtcNow,
+            correctionNote is null ? null : CorrectionNoteText.Validate(correctionNote, nameof(correctionNote)));
     }
 
     public static ImmutableArray<string> ValidateDecisionIds(ImmutableArray<string> ids)

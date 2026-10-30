@@ -6,4 +6,4 @@ public enum ReviewDecisionKind { Approve, RequestChanges, WithdrawApproval }
 
 public sealed record ReviewDecision(string DecisionId, string DraftId, int RevisionNumber,
     int ReviewStateVersion, ReviewDecisionKind Kind, string ActorSubject, string? Note,
-    ImmutableArray<string> ResolvedDecisionIds, DateTimeOffset CreatedAtUtc);
+    ImmutableArray<string> ResolvedDecisionIds, DateTimeOffset CreatedAtUtc, string? CorrectionNote = null);

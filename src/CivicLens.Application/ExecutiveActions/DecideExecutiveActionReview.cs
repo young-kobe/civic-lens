@@ -13,7 +13,7 @@ public sealed class DecideExecutiveActionReview(IExecutiveActionReviewStore stor
         ReviewValidation.ValidateIdempotencyKey(request.IdempotencyKey);
         var recordId = ReviewValidation.ValidateHash(request.RecordId, nameof(request.RecordId));
         var decision = ReviewValidation.CreateDecision(actor, recordId, request.ExpectedRevisionNumber,
-            request.ExpectedReviewStateVersion, request.Kind, request.Note, request.ResolvedDecisionIds);
+            request.ExpectedReviewStateVersion, request.Kind, request.Note, request.ResolvedDecisionIds, request.CorrectionNote);
         return store.DecideAsync(actor.Subject, decision, request.ExpectedRevisionNumber, request.ExpectedReviewStateVersion,
             request.IdempotencyKey, ReviewValidation.HashPayload(request), cancellationToken);
     }

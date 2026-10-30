@@ -76,8 +76,7 @@ public sealed class PublishRelationshipTests
         scenario.Releases.WriteOrder.Clear();
         scenario.ReviseAction(action, 2);
 
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.WithNotesFor(
-            PublicationScenario.Request("k3", Reference(PublishedRecordKind.Action, action)), Reference(PublishedRecordKind.Action, action)));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", Reference(PublishedRecordKind.Action, action)));
 
         Assert.Contains(PublicationProtocol.OfficialPagePath("mayor"), scenario.Releases.WriteOrder);
     }
@@ -134,11 +133,11 @@ public sealed class PublishRelationshipTests
         var scenario = new PublicationScenario();
         var (statement, action, _) = await PublishRecordsAsync(scenario);
         var relationship = scenario.AddRelationship('e', statement, action);
-        scenario.AddStatement('c', revisionNumber: 2);
+        scenario.AddStatement('c', revisionNumber: 2, correctionNote: PublicationScenario.PersonNote);
 
         await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-            PublicationScenario.WithNotesFor(PublicationScenario.Request("k2", Reference(PublishedRecordKind.Statement, statement),
-                Reference(PublishedRecordKind.Relationship, relationship)), Reference(PublishedRecordKind.Statement, statement))));
+            PublicationScenario.Request("k2", Reference(PublishedRecordKind.Statement, statement),
+                Reference(PublishedRecordKind.Relationship, relationship))));
 
         Assert.Equal(1, scenario.Releases.BeginCount);
     }
@@ -204,11 +203,10 @@ public sealed class PublishRelationshipTests
         var (statement, action, _) = await PublishRecordsAsync(scenario);
         var relationship = scenario.AddRelationship('e', statement, action);
         var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", relationship));
-        scenario.AddStatement('c', revisionNumber: 2, statementDate: StatementDate);
+        scenario.AddStatement('c', revisionNumber: 2, statementDate: StatementDate, correctionNote: PublicationScenario.PersonNote);
         scenario.Releases.Links.Clear();
 
-        var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.WithNotesFor(
-            PublicationScenario.Request("k3", Reference(PublishedRecordKind.Statement, statement)), Reference(PublishedRecordKind.Statement, statement)));
+        var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", Reference(PublishedRecordKind.Statement, statement)));
 
         Assert.Equal($"<html>statement {statement} related e</html>", PageOf(scenario, third.DirectoryName, statement));
         Assert.Contains((second.DirectoryName, PublicationProtocol.RecordDataPath(relationship)), scenario.Releases.Links);
@@ -224,10 +222,10 @@ public sealed class PublishRelationshipTests
         var (statement, action, _) = await PublishRecordsAsync(scenario);
         var relationship = scenario.AddRelationship('e', statement, action);
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", relationship));
-        scenario.AddRelationship('e', statement, action, revisionNumber: 2);
+        scenario.AddRelationship('e', statement, action, revisionNumber: 2, correctionNote: PublicationScenario.PersonNote);
 
         var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-            PublicationScenario.WithNotesFor(Request("k3", relationship), Reference(PublishedRecordKind.Relationship, relationship)));
+            Request("k3", relationship));
 
         Assert.Equal($"<html>statement {statement} related e</html>", PageOf(scenario, third.DirectoryName, statement));
         Assert.Equal(2, ReadRecord<PublishedRelationship>(scenario, third.DirectoryName, relationship).RevisionNumber);
@@ -299,11 +297,10 @@ public sealed class PublishRelationshipTests
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
             Reference(PublishedRecordKind.Statement, otherStatement), Reference(PublishedRecordKind.Action, otherAction),
             Reference(PublishedRecordKind.Relationship, citing), Reference(PublishedRecordKind.Relationship, unrelated)));
-        scenario.AddStatement('c', revisionNumber: 2, statementDate: StatementDate);
+        scenario.AddStatement('c', revisionNumber: 2, statementDate: StatementDate, correctionNote: PublicationScenario.PersonNote);
         scenario.Releases.ReadPaths.Clear();
 
-        var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.WithNotesFor(
-            PublicationScenario.Request("k3", Reference(PublishedRecordKind.Statement, statement)), Reference(PublishedRecordKind.Statement, statement)));
+        var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", Reference(PublishedRecordKind.Statement, statement)));
 
         Assert.Equal([PublicationProtocol.ManifestPath, PublicationProtocol.OfficialsPath, PublicationProtocol.RecordDataPath(statement), PublicationProtocol.RecordDataPath(citing)], scenario.Releases.ReadPaths);
         Assert.Equal($"<html>statement {statement} related e</html>", PageOf(scenario, third.DirectoryName, statement));
@@ -352,8 +349,7 @@ public sealed class PublishRelationshipTests
         scenario.Releases.WriteOrder.Clear();
         scenario.ReviseAction(action, 2);
 
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.WithNotesFor(
-            PublicationScenario.Request("k3", Reference(PublishedRecordKind.Action, action)), Reference(PublishedRecordKind.Action, action)));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", Reference(PublishedRecordKind.Action, action)));
 
         Assert.Contains(PublicationProtocol.OfficialPagePath("chair"), scenario.Releases.WriteOrder);
         Assert.DoesNotContain(PublicationProtocol.OfficialPagePath("mayor"), scenario.Releases.WriteOrder);
@@ -372,8 +368,7 @@ public sealed class PublishRelationshipTests
         scenario.Releases.WriteOrder.Clear();
         scenario.ReviseVote(vote, 2);
 
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.WithNotesFor(
-            PublicationScenario.Request("k3", Reference(PublishedRecordKind.Vote, vote)), Reference(PublishedRecordKind.Vote, vote)));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", Reference(PublishedRecordKind.Vote, vote)));
 
         Assert.Contains(PublicationProtocol.OfficialPagePath("mayor"), scenario.Releases.WriteOrder);
     }

@@ -570,7 +570,7 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 - Measured on 2026-10-16: 4 of 21 drafts carry a bill number. 2 of them name a bill with a collected House vote, and both members voted on it.
 - Measured on 2026-10-16: some issue tags are doubtful. For example, a post office closure was tagged `elections-and-voting`.
 - Each record page shows a timeline of its own dated events. It needs no review, because it only orders dates that the record file holds. See [publication](publication.md).
-- A relationship that is flagged "no longer matches" can still publish. The flag shows in review, in the owner publish list, and in the summary step.
+- A relationship that is flagged "no longer matches" can still publish. The flag shows in review.
 - Planned after a measurement of the releases that title matching leaves unmatched: code lists the bills and votes of the official in a date window. The model picks one or none. Code checks the quoted span, and a person approves the pair.
 - Measured on 2026-10-17 over 263 gated releases: 38 hold a bill number and 127 name something that ends in "Act". Some of those are listing pages or older laws. No release writes a number without periods, such as `HR 1234`.
 - `BillNumberFinder` finds a bare number only. A number that names its Congress, such as "H.R. 1234 of the 118th Congress", takes the Congress of the statement date.
