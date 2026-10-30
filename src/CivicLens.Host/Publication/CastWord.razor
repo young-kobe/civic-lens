@@ -1,0 +1,15 @@
+@if (PublishedRecordLabels.CastTermKey(Cast) is { } key)
+{
+    <Term Key="@key">@Text</Term>
+}
+else
+{
+    @Text
+}
+
+@code {
+    [Parameter, EditorRequired] public string Cast { get; set; } = string.Empty;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private RenderFragment Text => ChildContent ?? (builder => builder.AddContent(0, Cast));
+}

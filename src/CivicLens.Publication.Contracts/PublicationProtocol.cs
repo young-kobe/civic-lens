@@ -25,6 +25,7 @@ public static class PublicationProtocol
     public const string CatalogPath = "catalog.json";
     public const string OfficialsPagePath = "officials.html";
     public const string AboutPagePath = "about.html";
+    public const string GlossaryPagePath = "glossary.html";
     public const string SitemapPath = "sitemap.xml";
     public const string RobotsPath = "robots.txt";
     public const string NotFoundPagePath = "404.html";

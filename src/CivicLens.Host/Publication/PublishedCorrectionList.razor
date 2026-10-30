@@ -6,7 +6,7 @@
         @foreach (var correction in Corrections)
         {
             <li>
-                <strong>@PublishedCorrectionView.Heading(correction)</strong>
+                <strong>@if (correction.Note is not null) {<Term Key="correction">@PublishedCorrectionView.Title(correction)</Term>} else {<text>@PublishedCorrectionView.Title(correction)</text>}@PublishedCorrectionView.AfterTitle(correction)</strong>
                 @if (correction.Note is not null)
                 {
                     <p>@correction.Note</p>
