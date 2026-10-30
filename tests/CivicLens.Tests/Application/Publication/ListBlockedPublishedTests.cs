@@ -84,6 +84,22 @@ public sealed class ListBlockedPublishedTests
             "It cannot return to the site.", listed.StuckText());
     }
 
+    [Fact]
+    public async Task ARollbackToAReleaseWithAWithdrawnRecordAtTheCapReportsItBecauseItStillCannotReturn()
+    {
+        var (scenario, action) = await PublishedAtCapAsync(PublishedCorrection.MaximumNotedEntries);
+        var withdrawal = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            new PublishReleaseRequest([], "w") { Withdrawals = [new(action.Kind, action.RecordId, "Wrong.")] });
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("later", scenario.AddDraft('a')));
+        ApproveNextRevision(scenario, action, "auth0|editor");
+
+        var result = await scenario.Activator().ExecuteAsync(PublicationScenario.Owner, withdrawal.ReleaseNumber);
+
+        var listed = Assert.Single(result.Blocked);
+        Assert.Equal((action.RecordId, BlockedReason.WithdrawnAtCorrectionLimit), (listed.RecordId, listed.Reason));
+    }
+
     [Theory]
     [InlineData(PublishedCorrection.MaximumNotedEntries - 1, "auth0|editor")]
     [InlineData(PublishedCorrection.MaximumNotedEntries, ReviewAuthor.CodeSubject)]
@@ -162,7 +178,7 @@ public sealed class ListBlockedPublishedTests
     }
 
     [Fact]
-    public async Task ANoticeForAWithdrawnRecordIsNotListedBecauseTheRecordAlreadyLeftTheRelease()
+    public async Task ANoticeBlockedOnlyByReviewStatusIsNotListedBecauseTheRecordAlreadyLeftTheRelease()
     {
         var (scenario, action) = await PublishedActionAsync();
         scenario.Publications.ReviewStatuses[action] = ReviewStatus.ApprovalWithdrawn;
