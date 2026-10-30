@@ -3,6 +3,7 @@ using CivicLens.Application.Actions;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Infrastructure.Actions.Persistence;
+using CivicLens.Core.Analysis;
 using CivicLens.Core.Relationships;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
@@ -60,6 +61,19 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) =>
         queue.RequeueAsync(State.Blocked, errorCode, null, null, cancellationToken);
 
+    public Task<int> RequeueOlderPromptAsync(CancellationToken cancellationToken) =>
+        queue.RequeueAsync(State.Succeeded, null, null, async (db, settled, token) =>
+        {
+            var stale = await BillsDraftedUnderOlderPromptAsync(db, token);
+            var ids = settled.Select(row => row.CandidateId).ToArray();
+            var candidates = await db.Set<ActionCandidateRow>().AsNoTracking().Where(candidate => ids.Contains(candidate.CandidateId))
+                .Select(candidate => new { candidate.CandidateId, candidate.SourceId, candidate.Congress, candidate.BillType, candidate.BillNumber })
+                .ToArrayAsync(token);
+            var staleCandidates = candidates.Where(candidate => stale.Contains(new(candidate.SourceId, candidate.Congress, candidate.BillType, candidate.BillNumber)))
+                .Select(candidate => candidate.CandidateId).ToHashSet(StringComparer.Ordinal);
+            return settled.Where(row => staleCandidates.Contains(row.CandidateId));
+        }, cancellationToken);
+
     public async Task<IReadOnlyList<ActionDraftListItem>> ListAsync(ActionDraftView? view, int limit, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
@@ -83,6 +97,20 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         return await AnalysisQueueCounts.CountAsync<ActionAnalysisRow, ActionDraftView>(db, ActionDraftTask.Task, ViewOf, cancellationToken);
     }
+
+    private static async Task<HashSet<BillKey>> BillsDraftedUnderOlderPromptAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken)
+    {
+        var runs = await (from run in db.Set<ActionAnalysisRunRow>().AsNoTracking()
+                          join candidate in db.Set<ActionCandidateRow>().AsNoTracking() on run.CandidateId equals candidate.CandidateId
+                          where run.Task == ActionDraftTask.Task && run.Outcome == AnalysisRunOutcome.Drafted
+                          select new { candidate.SourceId, candidate.Congress, candidate.BillType, candidate.BillNumber, run.PromptVersion, run.StartedAtUtcTicks })
+            .ToArrayAsync(cancellationToken);
+        return runs.GroupBy(run => new BillKey(run.SourceId, run.Congress, run.BillType, run.BillNumber))
+            .Where(bill => bill.MaxBy(run => run.StartedAtUtcTicks)!.PromptVersion != ActionDraftTask.PromptVersion)
+            .Select(bill => bill.Key).ToHashSet();
+    }
+
+    private sealed record BillKey(string SourceId, int Congress, string BillType, int BillNumber);
 
     private static async Task<IReadOnlyList<ActionDraftPage>> ReadPagesAsync(CollectionAttemptDbContext db, string detailJobId,
         bool includesSummaries, CancellationToken cancellationToken)

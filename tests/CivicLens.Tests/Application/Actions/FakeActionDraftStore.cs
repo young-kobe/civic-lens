@@ -23,6 +23,8 @@ internal sealed class FakeActionDraftStore : FakeAnalysisQueue<ActionDraftRun>, 
 
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) => throw new NotSupportedException();
 
+    public Task<int> RequeueOlderPromptAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+
     public Task<IReadOnlyList<ActionDraftListItem>> ListAsync(ActionDraftView? view, int limit, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<ActionDraftListItem>>([]);
 

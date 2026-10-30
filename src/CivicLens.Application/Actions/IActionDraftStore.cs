@@ -7,4 +7,6 @@ public interface IActionDraftStore : IAnalysisQueueStore<ActionDraftRun, ActionD
     Task<ActionDraftEvidence?> ReadEvidenceAsync(string candidateId, CancellationToken cancellationToken);
 
     Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken);
+
+    Task<int> RequeueOlderPromptAsync(CancellationToken cancellationToken);
 }

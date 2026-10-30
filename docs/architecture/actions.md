@@ -55,6 +55,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - An older candidate never becomes the newest revision. Enforced by `ActionDraftRows.HasNewerCandidateAsync`, checked when the step reads its evidence and again at the append. Tests: `PostgresBillStreamTests.ADelayedOlderCandidateIsSupersededSoItsStaleContentNeverBecomesTheNewestRevision`, `PostgresBillStreamTests.ANewerCandidateThatArrivesAfterTheClaimSupersedesTheAppendSoTheOlderDraftNeverBecomesARevision`, and `PostgresBillStreamTests.ALaterUpdateDateWithoutSummariesSupersedesAnEarlierCandidateWithSummariesBecauseTheDateDecidesFirst`.
 - More than 20 summary pages never block a bill; it drafts without them. Enforced by `ActionDraftStep`. Test: `ActionDraftStepTests.MoreThanTwentySummaryPagesDraftWithoutSummariesAndNeverReadThemBecauseSummariesAreOptionalInput`.
 - An owner requeue of Blocked drafts moves only Blocked drafts with exactly the given code. Enforced by `PostgresAnalysisQueue.RequeueAsync` and `ActionDraftLifecycle`. Tests: `PostgresBillStreamTests.RequeueBlockedMovesOnlyBlockedEntriesWithTheGivenCodeAndResetsTheirAttempts` and `ActionDraftLifecycleTests.GateStatementAndDocumentChangeTasksKeepBlockedFinalBecauseTheirLifecyclesDoNotOptIn`.
+- A redraft moves only a Succeeded `drafted` or `unchanged` entry whose bill has its newest model-drafted run under an older prompt version. Enforced by `PostgresActionDraftStore.RequeueOlderPromptAsync` and `ActionDraftLifecycle`. Tests: `PostgresBillStreamTests.RedraftMovesASettledEntryWhoseNewestDraftRunUsedAnOlderPromptAndLeavesASupersededEntryAndResetsAttempts`, `PostgresBillStreamTests.RedraftMovesNothingWhenTheNewestDraftRunOfTheBillUsedTheCurrentPrompt`, and `ActionDraftLifecycleTests.OnlyASucceededActionDraftWithADraftToReplaceMayReturnToPendingForARedraft`.
 - The vote list of an action page holds only the vote drafts of its own bill. It lists the newest vote day first, at most 25. Enforced by `BillVoteDrafts`. Tests: `BillLinksWorkspaceTests.TheActionPageListsTheVoteDraftsOfItsOwnBillNewestFirstAndSkipsOtherBillsAndCongresses` and `BillLinksWorkspaceTests.TheActionPageShowsOnlyTheNewestVoteDraftsOfABillAndSaysSo`.
 - The congress.gov link is built from the stored bill identity, with the ordinal and the slug of the bill type. Enforced by `SourcePages.Bill`. Test: `BillLinksWorkspaceTests.TheActionPageLinksTheBillOnCongressGovForEachBillTypeAndOrdinal`.
 - Model confidence never reaches a revision. Enforced by `ActionDraftStep`. Test: `ActionDraftStepTests.ConfidenceStaysInTheRunOutputAndNeverReachesTheRevision`.
@@ -99,6 +100,8 @@ Actions pages are not read. A change in a Sponsor-role entry calls the model. An
 The `noTrackedOfficial` and `unchanged` outcomes write a Bypassed run with the reason as its code and the same context as a drafted run. The sponsorship-only append writes a Bypassed run with the reason `sponsorshipsChanged`, and the revision names that run. The queue refuses either code without its run. The `supersededByNewerCandidate` outcome of step 2 writes no run.
 
 A Blocked entry stays Blocked until the owner fixes the cause and requeues it by its code. The command accepts any block code, including an exception type name such as `InvalidDataException` from an unexpected error. The requeue moves only Blocked entries with exactly that code back to Pending, so an unknown code moves none. It clears the attempts, the retry fields, and the lease, like a Failed requeue. A Blocked entry holds no reservation, because the step blocks before it reserves tokens.
+
+An owner redraft queues the settled entries of bills whose newest model-drafted run used an older prompt version. The newest run decides for the whole bill, because a sponsorship-only copy writes a Bypassed run that names the current prompt. The requeue clears the attempts like a Failed requeue. Code approval, the budget gates, and the person-text rule stay as they are. A new revision of a record with person text goes to a person, with the model text as a suggestion. The step calls the model again only when the stored draft differs from the new inputs. A draft that has no stored issue candidates counts as different, so drafts made before issue narrowing get narrowed issues.
 
 ### Tracked officials
 
@@ -222,6 +225,7 @@ An approved action record with no open concern publishes in a static release, li
 | `actions draft status` | Daily limit, pause, tokens charged today, and the count of entries in each outcome |
 | `actions draft list [view] [limit]` | Entries. Views: `drafted`, `unchanged`, `superseded`, `no-official`, `pending`, `failed` |
 | `actions draft requeue <candidate-id\|--all>` | Failed rows, and no others, back to Pending |
+| `actions draft redraft` | Succeeded `drafted` and `unchanged` rows of bills with an older prompt version, and no others, back to Pending. Needs no argument and calls no model itself |
 | `actions draft requeue --blocked --code <block-code>` | Blocked rows with exactly that code, and no others, back to Pending. The code is required and must not be empty |
 
 All are owner commands. Variables and examples are in [operations](../operations.md#action-drafting).
@@ -258,10 +262,12 @@ All are owner commands. Variables and examples are in [operations](../operations
 | Publication | `src/CivicLens.Application/Publication/ActionRecordLoader.cs`, `src/CivicLens.Application/Publication/PublishedActionBuilder.cs`, `src/CivicLens.Publication.Contracts/PublishedAction.cs`, `src/CivicLens.Host/Publication/PublishedActionPage.razor` |
 | Record ID hash | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ActionCandidates.cs` |
 | Owner requeue of Blocked entries | `src/CivicLens.Application/Actions/RequeueBlockedActionDrafts.cs` |
+| Owner redraft | `src/CivicLens.Application/Actions/RedraftActionDrafts.cs` |
 | CLI and composition | `src/CivicLens.Host/Actions/ActionCommand.cs`, `src/CivicLens.Host/Actions/ActionDraftComposition.cs`, `src/CivicLens.Host/Actions/ActionDraftConfiguration.cs` |
 
 ## Limits and planned work
 
+- `actions draft redraft` draws a new draft only from a stored draft that lacks issue candidates. A later prompt bump with the same inputs settles `unchanged`, because `ActionDraftContext.ChangeSinceCurrent` does not compare the prompt version. Add that comparison with the next prompt bump that must rerun.
 - Action records can produce about 110 revisions a day, about half of them sponsorship changes on approved records. Those revisions copy the text and need no model call. Code approves them.
 - The editor page has no Host test with a drafted record yet. The Host tests cover the Review home panel and missing records.
 - The prompt does not include the candidate update date, and no page renders it yet.
