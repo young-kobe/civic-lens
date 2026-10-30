@@ -95,21 +95,23 @@
         }
     }
     <Panel Title="Records" Aside="@RecordFilter" data-records="@(HasRecordFilters ? "" : null)">
-        @if (PublishedOfficialView.RecordsCountLine(Page) is { } countLine)
-        {
-            <p class="muted small">@countLine</p>
-        }
-        @if (HasRecordFilters)
-        {
-            <p class="muted small" role="status" data-filter-status></p>
-        }
-        @if (Page.TalkAndAction is not null)
-        {
-            <div class="notice" data-filter-notice hidden>
-                <span data-filter-text></span>
-                <button class="btn" type="button" data-filter-clear>@PublishedOfficialView.ShowAllRecords</button>
-            </div>
-        }
+        <div class="records-lead">
+            @if (PublishedOfficialView.RecordsCountLine(Page) is { } countLine)
+            {
+                <p class="muted small">@countLine</p>
+            }
+            @if (HasRecordFilters)
+            {
+                <p class="muted small" role="status" data-filter-status></p>
+            }
+            @if (Page.TalkAndAction is not null)
+            {
+                <div class="notice" data-filter-notice hidden>
+                    <span data-filter-text></span>
+                    <button class="btn" type="button" data-filter-clear>@PublishedOfficialView.ShowAllRecords</button>
+                </div>
+            }
+        </div>
         <DataTable Roles="true" Items="Rows" RowClass="PublishedOfficialView.RowClass" RowFilterKeys="@(row => row.FilterKeys)" Caption="@($"Published records of {Page.Profile.Name}")" DefaultOrder="@PublishedRecordLabels.NewestFirst">
             <Head><TableCell Header Class="fit num" Sort="SortKind.Date">@PublicColumn.Date</TableCell><TableCell Header Sort="SortKind.Text">Record</TableCell>@if (HasCast){<TableCell Header Sort="SortKind.Text">@PublicColumn.Cast</TableCell>}</Head>
             <Row Context="row">

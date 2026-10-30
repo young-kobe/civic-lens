@@ -186,6 +186,7 @@
         const counts = Array.from(document.querySelectorAll("[data-count-filter]"));
         const status = panel.querySelector("[data-filter-status]");
         const notice = panel.querySelector("[data-filter-notice]");
+        const clearButton = notice?.querySelector("[data-filter-clear]");
         let kind = "", issue = null;
         const hides = row => (kind !== "" && !row.classList.contains(kind))
             || (issue !== null && !(row.dataset.filterKeys ?? "").split(" ").includes(issue.dataset.countFilter));
@@ -202,8 +203,9 @@
                 notice.hidden = issue === null;
             }
             const total = rows.length;
-            status.textContent = `Showing ${shown.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} ${total === 1 ? "record" : "records"}`
-                + (shown === 0 ? ". No record matches both filters. Use Show all records to see every record." : "");
+            const filtered = kind !== "" || issue !== null;
+            status.textContent = !filtered ? "" : `Showing ${shown.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} ${total === 1 ? "record" : "records"}`
+                + (shown === 0 ? `. No record matches both filters. Use ${clearButton.textContent} to see every record.` : "");
         };
         for (const count of counts) {
             const button = document.createElement("button");
@@ -215,7 +217,7 @@
             button.addEventListener("click", () => { issue = issue === count ? null : count; apply(); });
         }
         for (const button of kindButtons) button.addEventListener("click", () => { kind = button.dataset.filterValue; apply(); });
-        notice?.querySelector("[data-filter-clear]").addEventListener("click", () => {
+        clearButton?.addEventListener("click", () => {
             const pressed = issue?.querySelector("button");
             kind = "";
             issue = null;

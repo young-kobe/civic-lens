@@ -620,7 +620,7 @@ public sealed class PublishedOfficialPageTests
         var withBreak = await RenderedAsync([Split('a', day, "Nay"), Split('b', day, "Yea")]);
         var withoutBreak = await RenderedAsync([Split('a', day, "Yea"), Split('b', day, "Yea")]);
 
-        Assert.Equal(["All records 2", "Votes 2", "Votes against their party 1"],
+        Assert.Equal(["All records 2", "Votes against their party 1"],
             withBreak.QuerySelectorAll("[aria-labelledby='panel-records'] [data-filter-value]").Select(TabText));
         Assert.Null(withoutBreak.QuerySelector("[data-record-filters]"));
         Assert.Equal(1, withBreak.QuerySelectorAll("tbody tr.against-party").Length);
@@ -1241,7 +1241,7 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task APageWithNoProfileHasNoRecordsFilterMarkup()
+    public async Task AnEmptyListHasNoRecordsFilterMarkup()
     {
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([], []), PublicationCatalogs.None, CancellationToken.None);
 
@@ -1249,6 +1249,18 @@ public sealed class PublishedOfficialPageTests
         Assert.Null(document.QuerySelector("[data-records]"));
         Assert.Null(document.QuerySelector("[data-filter-notice]"));
         Assert.Null(document.QuerySelector("tbody tr[data-filter-keys]"));
+    }
+
+    [Fact]
+    public async Task APageWithNoProfileStillFiltersByKindButHasNoIssueNotice()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(
+            Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], [Vote('a', new DateOnly(2026, 4, 1))]), PublicationCatalogs.None, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.Equal(["All records 2", "Statements 1", "Votes 1"], document.QuerySelectorAll("[data-records] [data-record-filters] [data-filter-value]").Select(TabText));
+        Assert.NotNull(document.QuerySelector("[data-records] [data-filter-status][role='status']"));
+        Assert.Null(document.QuerySelector("[data-filter-notice]"));
     }
 
     private static string TabText(AngleSharp.Dom.IElement tab) => $"{tab.FirstChild!.TextContent.Trim()} {tab.QuerySelector(".segmented-count")!.TextContent}";

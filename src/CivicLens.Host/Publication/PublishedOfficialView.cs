@@ -145,7 +145,7 @@ internal static class PublishedOfficialView
             row => row.Date, row => row.PublishedAtUtc, row => row.RecordId)];
     }
 
-    public const string AgainstPartyClass = "against-party";
+    private const string AgainstPartyClass = "against-party";
 
     public static string RowClass(PublishedOfficialRow row) => row.AgainstParty ? $"{KindClass(row.Kind)} {AgainstPartyClass}" : KindClass(row.Kind);
 
@@ -155,9 +155,10 @@ internal static class PublishedOfficialView
     {
         var kinds = rows.GroupBy(row => row.Kind).OrderBy(group => group.Key).ToList();
         var breaks = withBreaks ? rows.Count(row => row.AgainstParty) : 0;
-        if (kinds.Count + (breaks > 0 ? 1 : 0) < 2) return [];
+        var kindTabs = kinds.Count > 1 ? kinds : [];
+        if (kindTabs.Count + breaks == 0) return [];
         var tabs = new List<FilterTab> { FilterTab.Button("All records", "", true, rows.Count) };
-        tabs.AddRange(kinds.Select(group => FilterTab.Button(PublishedRecordLabels.KindPlural(group.Key), KindClass(group.Key), false, group.Count())));
+        tabs.AddRange(kindTabs.Select(group => FilterTab.Button(PublishedRecordLabels.KindPlural(group.Key), KindClass(group.Key), false, group.Count())));
         if (breaks > 0) tabs.Add(FilterTab.Button("Votes against their party", AgainstPartyClass, false, breaks));
         return tabs;
     }

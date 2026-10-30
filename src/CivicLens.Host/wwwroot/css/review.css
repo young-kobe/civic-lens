@@ -50,7 +50,6 @@ tr.is-new td { animation: row-in 1.6s var(--ease); }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); padding: 10px var(--s4); border-bottom: 1px solid var(--line); }
 .list-filter { display: flex; flex-wrap: wrap; align-items: end; gap: var(--s3); padding: 10px var(--s4); border-bottom: 1px solid var(--line); }
 
-
 .tabs { position: relative; display: flex; gap: var(--s4); border-bottom: 1px solid var(--line); }
 .tab { border: 0; background: transparent; padding: 10px 0; color: var(--muted); font-size: var(--t-sm); font-weight: 600; cursor: pointer; transition: color var(--fast); }
 .tab[aria-selected="true"] { color: var(--ink); }
