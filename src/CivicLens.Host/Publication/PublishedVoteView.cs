@@ -67,8 +67,6 @@ internal static class PublishedVoteView
     public static string? Bill(PublishedVote vote) =>
         vote.BillType is null ? null : ActionLabels.Bill(vote.Congress, vote.BillType, vote.BillNumber!.Value);
 
-    public static string FactLabel(PublishedVoteFact fact) => fact.Text[..fact.Text.IndexOf(':')];
-
     public static IEnumerable<PublishedVoteFact> ResultFacts(PublishedVote vote) =>
         vote.Facts.Where(fact => fact.Citation != vote.VotedOnCitation && fact.Citation != vote.KindCitation);
 
