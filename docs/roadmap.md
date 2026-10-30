@@ -10,7 +10,7 @@ Exit criteria for the first deploy:
 
 - [ ] Statements, actions, document changes, and weekly briefs each run from collection to a published static release.
 - [ ] The public release stays usable during an outage of the operational application.
-- [ ] Approval binds to the exact evidence version. Model output never counts as approval, and code approves only official fact records. People review the other kinds.
+- [ ] Approval binds to the exact evidence version. Model output never counts as approval, and code approves only official fact records and statements from the own office of their official. People review the other kinds.
 - [ ] Statements and actions support reviewed relationships and timelines.
 - [ ] A weekly brief publishes with verified citation links, an explicit sample and cutoff, and versioned editorial decisions.
 - [ ] Readers search and filter all published records from the public pages.

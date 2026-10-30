@@ -10,7 +10,7 @@ namespace CivicLens.Infrastructure.Statements;
 internal static class StatementDraftRows
 {
     public static async Task<bool> TryAddAnalysisDraftAsync(CollectionAttemptDbContext db, StatementDraftRevision revision, string runId,
-        CancellationToken cancellationToken)
+        bool codeApproved, CancellationToken cancellationToken)
     {
         revision.ValidateAsFirstAnalysisRevision();
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.StatementReview, cancellationToken);
@@ -19,7 +19,8 @@ internal static class StatementDraftRows
         var draft = NewDraft(revision.CandidateId, 1, revision.CreatedAtUtc.UtcTicks);
         SetListing(draft, revision, capturedOn);
         db.Add(draft);
-        db.Add(NewRevision(revision, runId));
+        await PostgresStatementReviewStore.Records.AppendCodeApprovedAsync(db, draft, revision, NewRevision(revision, runId), [],
+            () => Task.FromResult(codeApproved), PostgresStatementReviewStore.NewDecisionRow);
         return true;
     }
 

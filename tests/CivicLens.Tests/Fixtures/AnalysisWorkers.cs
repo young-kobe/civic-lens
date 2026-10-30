@@ -26,7 +26,7 @@ internal static class AnalysisWorkers
 
     public static AnalysisWorker<StatementDraftRun> StatementDrafting(IStatementDraftStore store, IAnalysisStatusStore status,
         IStatementDraftModel model, StatementDraftSettings settings, TimeProvider clock) =>
-        new(new StatementDraftStep(store, model, settings), status, clock, NullLogger<AnalysisWorker<StatementDraftRun>>.Instance, TestBeat.Create());
+        new(new StatementDraftStep(store, model, settings, new StatementSelectionResolver(StatementGateFixtures.Configuration())), status, clock, NullLogger<AnalysisWorker<StatementDraftRun>>.Instance, TestBeat.Create());
 
     public static AnalysisWorker<ActionDraftRun> ActionDrafting(IActionDraftStore store, IAnalysisStatusStore status, ActionBillReader reader,
         IActionDraftModel model, ActionDraftSettings settings, IssueConfigurationRevision issues, TimeProvider clock) =>

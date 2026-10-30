@@ -21,7 +21,7 @@ namespace CivicLens.Infrastructure.Statements;
 
 public sealed class PostgresStatementReviewStore : IStatementReviewStore
 {
-    private static readonly ReviewRecords<StatementDraftRow, StatementRevisionRow, StatementReviewDecisionRow, StatementDraftRevision>
+    internal static readonly ReviewRecords<StatementDraftRow, StatementRevisionRow, StatementReviewDecisionRow, StatementDraftRevision>
         Records = new(PostgresAdvisoryLock.StatementReview, "Statement", nameof(StatementDraftRow.CandidateId));
 
     private readonly AdmittingRevisionReader admittingRevisions = new();
@@ -218,7 +218,7 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
         allowed.RequireApprovable(revision, article.Extraction);
     }
 
-    private static StatementReviewDecisionRow NewDecisionRow(ReviewDecision decision) => new()
+    internal static StatementReviewDecisionRow NewDecisionRow(ReviewDecision decision) => new()
     {
         DecisionId = decision.DecisionId,
         CandidateId = decision.DraftId,

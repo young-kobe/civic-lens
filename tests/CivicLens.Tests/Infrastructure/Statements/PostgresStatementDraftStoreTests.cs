@@ -2,6 +2,7 @@ using System.Text.Json;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Statements;
+using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents;
@@ -24,6 +25,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
     private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "civic-draft-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
+    private PooledDbContextFactory<CollectionAttemptDbContext> factory = null!;
     private PostgresStatementGateStore gates = null!;
     private PostgresStatementDraftStore drafts = null!;
     private StatementCandidateSeeder seeder = null!;
@@ -31,7 +33,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
-        var factory = new PooledDbContextFactory<CollectionAttemptDbContext>(
+        factory = new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         var attempts = new PostgresCollectionAttemptStore(factory);
         gates = new PostgresStatementGateStore(factory);
@@ -71,13 +73,55 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     }
 
     [Fact]
-    public async Task AStatementAiRevisionIsNeverApprovedByCodeBecauseOnlyAPersonApprovesJudgment()
+    public async Task AStatementAiRevisionFromASourceThatIsNotTheOfficialsOwnOfficeWaitsForAPersonBecauseCoverageIsNotAuthorship()
     {
         var candidate = await PassedCandidateAsync();
 
         await DraftingWorker(new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"]))).ExecuteAsync(once: true);
 
         Assert.Equal(0L, await ScalarAsync($"SELECT count(*) FROM statement_review_decisions WHERE candidate_id = '{candidate}'"));
+        Assert.Equal("AwaitingReview", await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+    }
+
+    [Fact]
+    public async Task AStatementAiRevisionFromTheOfficialsOwnOfficeIsStoredAsApprovedByTheCodeSubjectInTheSameTransaction()
+    {
+        var candidate = await PassedCandidateAsync(admittedBy: AdmittedDefinition(OwnOffice(Warren)));
+
+        await DraftingWorker(new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"]))).ExecuteAsync(once: true);
+
+        Assert.Equal("Approved", await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+        Assert.Equal(("civic-lens:code", "Approve", 1L), (
+            await TextAsync($"SELECT decision_json::jsonb->>'actorSubject' FROM statement_review_decisions WHERE candidate_id = '{candidate}'"),
+            await TextAsync($"SELECT kind FROM statement_review_decisions WHERE candidate_id = '{candidate}'"),
+            await ScalarAsync($"SELECT revision_number FROM statement_review_decisions WHERE candidate_id = '{candidate}'")));
+    }
+
+    [Fact]
+    public async Task ACodeApprovalRunsTheRelationshipHookSoAnApprovedStatementOfTheSponsorQueuesItsPair()
+    {
+        var candidate = await PassedCandidateAsync(admittedBy: AdmittedDefinition(OwnOffice(Warren)));
+        await new RelationshipWorldSeeder(connectionString).ActionAsync(RelationshipFixtures.Action(title: "a rent cap for tenants"));
+
+        await DraftingWorker(new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"]))).ExecuteAsync(once: true);
+
+        Assert.Equal(("Pending", candidate), (await TextAsync("SELECT status FROM relationship_analysis"),
+            await TextAsync("SELECT statement_candidate_id FROM relationship_analysis")));
+    }
+
+    [Fact]
+    public async Task APersonEditAfterACodeApprovalWaitsForAPersonBecauseThePersonRevisionIsNotTheCheckedOne()
+    {
+        var candidate = await PassedCandidateAsync(admittedBy: AdmittedDefinition(OwnOffice(Warren)));
+        await DraftingWorker(new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"]))).ExecuteAsync(once: true);
+        var evidence = (await drafts.ReadEvidenceAsync(candidate, default))!.Article.Extraction;
+        var span = new SourceSpan(evidence.ExtractionId, evidence.Text.IndexOf("a rent cap for tenants", StringComparison.Ordinal), 22);
+        var save = new SaveStatementDraft(new PostgresStatementReviewStore(factory),
+            new StatementReviewContextReader(drafts, new StatementSelectionResolver(StatementGateFixtures.Configuration())));
+
+        await save.ExecuteAsync(Owner, new(candidate, 1, "Warren edit", "The senator announced a rent cap.", null, null, [Warren], [], [RentIssue],
+            [HousingArea], [span], "edit-after-code"));
+
         Assert.Equal("AwaitingReview", await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'"));
     }
 

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The statements feature finds articles that may hold an official's statement and gates them against tracked issues. It then drafts one statement record for each article that passes. People review and approve each record on the statement review pages.
+The statements feature finds articles that may hold an official's statement and gates them against tracked issues. It then drafts one statement record for each article that passes. Code approves a record from the own office of its official when every check passes. People review and approve every other record on the statement review pages.
 
 ## Decisions
 
@@ -22,6 +22,11 @@ The statements feature finds articles that may hold an official's statement and 
 - The speakers come from the configuration revision that admitted the article, not the current file. A later configuration change cannot change the speakers of an admitted article.
 - Code sets the quotation kind and the bill numbers. The model and the reviewer never set them.
 - Code never guesses a statement date. When the article states no date, the draft date is null, and the reviewer sets it.
+- Code approves a statement draft only from the own office of its official. The source must set `officeOf` to the one speaker of the draft. Coverage alone does not show authorship. A statement from a source without `officeOf` waits for a person.
+- Code approves only a draft that names no other speaker. Any other speaker sends the draft to a person.
+- Code approves only a draft whose date comes from the source. The model proposes every statement date today, so a draft with a date waits for a person.
+- Policy areas stay the choice of the model. Relationships stay person-approved. No command approves old drafts by code.
+- A person edit after a code approval is a new revision that waits for a person.
 - A gate label holds the tracked issue IDs and the `namesBillOrVote` answer of one release. It holds no quote, policy area, or pass verdict. The gate rule derives a pass from a label, so the rule keeps one owner.
 - Labels are append-only rows, like revisions. The newest human row of a candidate is the label of record. A model row never replaces it.
 - Code assigns about 30 percent of releases to a held-out set by a hash of the candidate ID. The set is the test set of the gate benchmark ([D-13](../roadmap.md#pending-decisions)). A held-out release never gets a model label.
@@ -62,6 +67,9 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - When a valid answer has no verified issue and namesBillOrVote is false, a bill number in the text still passes the release. Enforced by `StatementGateResolver`. Test: `StatementGateResolverTests.ABillNumberInTheTextPassesWithoutTheModelAnswerSoTheFloorHoldsWhenTheModelMissesIt`.
 - A gate answer must hold `namesBillOrVote`, so a missing answer never reads as false. Enforced by `StatementGateResolver.Parse` with the required constructor parameters of `AnalysisAnswerRules.OutputJson`. Test: `StatementGateResolverTests.AnAnswerWithoutTheBillOrVoteFieldIsRejectedSoAMissingFieldNeverReadsAsFalse`.
 - Each of the three pass paths has its own reason. Enforced by `StatementGateResolver` and `ck_statement_analysis_runs_reason`. Test: `StatementGateResolverTests.TheThreePassPathsRecordThreeDistinctReasonsSoAMeasurementCanCountEachPath`.
+- Code approves a statement draft only when the own office, speaker, gate, quote, and date checks pass. Enforced by `StatementCodeApproval` with `StatementAllowedSelections.RequireApprovable`. Tests: `StatementCodeApprovalTests.ADraftOfTheOwnOfficeSourceThatPassesEveryCheckIsApprovedByCode`, `ADraftFromASourceWithoutOfficeOfWaitsForAPersonBecauseCoverageIsNotAuthorship`, `ADraftFromTheOfficeOfAnotherPersonWaitsForAPersonBecauseTheSpeakerIsNotTheOwner`, `ADraftWithANamedOtherSpeakerWaitsForAPerson`, `ADraftThatNamesAnotherCoveredOfficialAsSpeakerWaitsForAPerson`, `ADraftWithAnAiProposedDateWaitsForAPersonBecauseTheDateIsNotFromTheSource`, `ADraftQueuedAfterAGateThatVerifiedNothingWaitsForAPerson`, `ADraftIssueWithoutAVerifiedGateQuoteIsNotApprovedByCode`, and `ARuleThatAPersonApprovalEnforcesAlsoBlocksCodeApproval`.
+- A statement code approval is stored with the draft and its first revision in one transaction. It runs the hooks of a person approval. Enforced by `StatementDraftRows`, `ReviewRecords.AppendCodeApprovedAsync`, and `StatementDraftQueueMapping`. Tests: `PostgresStatementDraftStoreTests.AStatementAiRevisionFromTheOfficialsOwnOfficeIsStoredAsApprovedByTheCodeSubjectInTheSameTransaction` and `PostgresStatementDraftStoreTests.ACodeApprovalRunsTheRelationshipHookSoAnApprovedStatementOfTheSponsorQueuesItsPair`.
+- A person edit of a code-approved statement waits for a person. Enforced by `ReviewPolicy.GetCurrentStatus`. Test: `PostgresStatementDraftStoreTests.APersonEditAfterACodeApprovalWaitsForAPersonBecauseThePersonRevisionIsNotTheCheckedOne`.
 - A draft from a bill or vote pass accepts an empty issue list. Enforced by the draft step and the revision rules. Test: `StatementDraftStepTests.ADraftFromABillOrVotePassHasNoIssueIdsBecauseNoTrackedIssueMatched`.
 - Only a skipped gate returns from Succeeded to Pending. Enforced by `StatementGateLifecycle`. Test: `StatementGateLifecycleTests.OnlyASkippedGateMayReturnToPendingForRegate`.
 - A pass adds exactly one Pending draft entry in the same transaction. Enforced by `StatementGateQueueMapping`. Test: `PostgresStatementGateStoreTests.APassSettlesTheGateAndInsertsExactlyOnePendingDraftRowInTheSameTransaction`.
@@ -243,6 +251,20 @@ A span is a `DirectQuotation` when it lies entirely inside one quoted passage. E
 | Succeeded | `humanDraftExists`, `draftDiscarded` | A draft already existed |
 | Blocked | `evidenceUnavailable`, `speakersUnavailable` | The input is missing |
 | Failed | `citationRejected`, `outputRejected`, a stop code, or `attemptsExhausted` | Owner requeue needed |
+
+### Statement code approval
+
+`StatementDraftStep` reads the evidence once. It resolves the allowed selections and the covered officials with `StatementSelectionResolver`. After the draft passes the resolver, `StatementCodeApproval.Approves` decides. The result goes in `StatementDraftCheckpoint.CodeApproved`.
+
+Code approves only when all these rules hold. Otherwise the draft waits for a person, as before.
+
+- The source of the article sets `officeOf`, and the draft has that person as its one speaker. The draft names no other speaker.
+- The latest gate run is a pass. A failed-open or over-cap gate gives `StatementGateCarryOver.None`, so it never passes. Each issue of the draft has a verified gate quote.
+- Every quote occurs exactly once in the article text. `StatementDraftResolver` already enforces this.
+- The statement date is null. `StatementDraftRevision.ValidateForApproval` refuses a date that the model proposed.
+- The approval rules of a person pass: `StatementAllowedSelections.RequireApprovable`.
+
+At settlement, `StatementDraftRows` appends the first revision through `ReviewRecords.AppendCodeApprovedAsync`. The Approve decision has the actor `civic-lens:code`. `StatementDraftQueueMapping` then runs `AfterCodeApprovalAsync`, so relationship pairs and brief staleness follow as for a person approval.
 
 ### Statement review
 
@@ -494,7 +516,7 @@ With `--since`, `regate` moves only candidates first captured on or after that U
 | Candidate registration | `src/CivicLens.Infrastructure/Statements/PostgresStatementCandidateRegistration.cs` |
 | Feed item text | `src/CivicLens.Application/Collection/FeedStatements/FeedItemParser.cs`, `src/CivicLens.Application/Collection/FeedStatements/FeedItemRenderer.cs`, `src/CivicLens.Application/Collection/FeedStatements/FeedStatementExtractions.cs`, `src/CivicLens.Application/Documents/FeedItemExtraction.cs` |
 | Gate | `src/CivicLens.Application/Statements/StatementGateStep.cs`, `src/CivicLens.Application/Statements/StatementGatePrompt.cs`, `src/CivicLens.Application/Statements/StatementGateResolver.cs`, `src/CivicLens.Application/Statements/StatementGateLifecycle.cs`, `src/CivicLens.Application/Statements/RegateStatementCandidates.cs` |
-| Drafting | `src/CivicLens.Application/Statements/StatementDraftStep.cs`, `src/CivicLens.Application/Statements/StatementDraftPrompt.cs`, `src/CivicLens.Application/Statements/StatementDraftResolver.cs`, `src/CivicLens.Application/Statements/StatementDraftLifecycle.cs`, `src/CivicLens.Application/Statements/StatementSpeakerRoster.cs`, `src/CivicLens.Application/Statements/StatementGateCarryOver.cs` |
+| Drafting | `src/CivicLens.Application/Statements/StatementDraftStep.cs`, `src/CivicLens.Application/Statements/StatementCodeApproval.cs`, `src/CivicLens.Application/Statements/StatementDraftPrompt.cs`, `src/CivicLens.Application/Statements/StatementDraftResolver.cs`, `src/CivicLens.Application/Statements/StatementDraftLifecycle.cs`, `src/CivicLens.Application/Statements/StatementSpeakerRoster.cs`, `src/CivicLens.Application/Statements/StatementGateCarryOver.cs` |
 | Shared quote check | `src/CivicLens.Application/Statements/ArticleQuote.cs`, `src/CivicLens.Core/Documents/UniqueQuote.cs` |
 | Stores and models | `src/CivicLens.Infrastructure/Statements/PostgresStatementGateStore.cs`, `src/CivicLens.Infrastructure/Statements/StatementAnalysisListing.cs` (queue table name, shared list and article read), `src/CivicLens.Application/Statements/StatementArticle.cs` (article record), `src/CivicLens.Infrastructure/Statements/PostgresStatementDraftStore.cs`, `src/CivicLens.Infrastructure/Statements/StatementGateQueueMapping.cs`, `src/CivicLens.Infrastructure/Statements/StatementDraftQueueMapping.cs`, `src/CivicLens.Infrastructure/Statements/AnthropicStatementGateModel.cs`, `src/CivicLens.Infrastructure/Statements/AnthropicStatementDraftModel.cs` |
 | CLI and composition | `src/CivicLens.Host/Statements/StatementCommand.cs`, `src/CivicLens.Host/Statements/StatementGateComposition.cs`, `src/CivicLens.Host/Statements/StatementDraftComposition.cs` |
@@ -524,6 +546,8 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 - Actions are in [actions](actions.md). Weekly briefs are in [briefs](briefs.md).
 - Two parallel preparations of one source can deadlock when their feed items have an equal `pubDate` and swap order. Postgres aborts one transaction, the worker retries it, and no data is lost. The insert order stays as it is.
 - Planned: structured statement extraction and temporal identity resolution.
+- Planned: code accepts a model date when the quote states it and it lies within 7 days before the capture. The public page then labels it "Date read from the release by code". This needs a new published field.
+- A code-approved statement waits for the owner to publish a release. The `factPublishing` stage publishes only actions and votes.
 - A feed item source still admits page jobs for the same links. A page that returns 403 fails and adds nothing. A page that works adds nothing when the feed text came first.
 - The feed parser reads RSS 2.0 only. It uses the first `link` element of an item and ignores `xml:base` and the charset of the HTTP header. An Atom feed blocks the job with `feedStatementTextInvalid`.
 - `FeedStatementExtractions` converts the HTML of every item before the store skips links that already have a candidate. The application layer has no list of known links, and a new read for it would cost more than the conversion. The `maxCandidates` limit bounds the work.

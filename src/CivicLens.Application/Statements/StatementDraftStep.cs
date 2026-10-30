@@ -6,10 +6,9 @@ using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Application.Statements;
 
-public sealed class StatementDraftStep(IStatementDraftStore store, IStatementDraftModel model, StatementDraftSettings settings) : IAnalysisTaskStep<StatementDraftRun>
+public sealed class StatementDraftStep(IStatementDraftStore store, IStatementDraftModel model, StatementDraftSettings settings,
+    StatementSelectionResolver selections) : IAnalysisTaskStep<StatementDraftRun>
 {
-    private readonly StatementSpeakerRoster roster = new();
-
     public IAnalysisQueue<StatementDraftRun> Queue => store;
 
     public AnalysisSettings Settings => settings;
@@ -25,7 +24,8 @@ public sealed class StatementDraftStep(IStatementDraftStore store, IStatementDra
             return await attempt.CompleteAsync(State.Blocked, StatementDraftErrorCodes.EvidenceUnavailable, cancellationToken);
         if (evidence.ExistingDraftId is not null)
             return await attempt.CompleteAsync(State.Succeeded, StatementDraftErrorCodes.HumanDraftExists, cancellationToken);
-        var officials = roster.OfficialsOn(evidence.ConfigurationRevision, evidence.Article.Extraction.SourceAttempt.SourceId, evidence.Article.FirstCapturedOn);
+        var (allowed, officials) = selections.Resolve(evidence.ConfigurationRevision, evidence.Article.Extraction.SourceAttempt.SourceId,
+            evidence.Article.FirstCapturedOn);
         if (officials.IsEmpty)
             return await attempt.CompleteAsync(State.Blocked, StatementDraftErrorCodes.SpeakersUnavailable, cancellationToken);
         attempt.ContextJson = StatementDraftPrompt.SerializeContext(officials, evidence.CarryOver);
@@ -36,8 +36,8 @@ public sealed class StatementDraftStep(IStatementDraftStore store, IStatementDra
         var result = await loop.RunAsync(cancellationToken);
         return result.End switch
         {
-            AnalysisLoopEnd.Accepted => await attempt.SettleAsync(Wrap(result.Run!),
-                StatementDraftCheckpoint.From(attempt.Claim, result.Accepted!), cancellationToken),
+            AnalysisLoopEnd.Accepted => await attempt.SettleAsync(Wrap(result.Run!), StatementDraftCheckpoint.From(attempt.Claim,
+                result.Accepted!, StatementCodeApproval.Approves(evidence, allowed, result.Accepted!)), cancellationToken),
             AnalysisLoopEnd.NotSent when result.Run is null => await BypassAsync(attempt, evidence, cancellationToken),
             AnalysisLoopEnd.Exhausted or AnalysisLoopEnd.NotSent => await loop.FailAsync(result, cancellationToken),
             _ => result.Progress

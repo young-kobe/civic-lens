@@ -19,6 +19,7 @@ internal sealed class FakeStatementDraftStore : FakeAnalysisQueue<StatementDraft
     public StatementDraftEvidence Evidence { get; }
     public List<StatementDraftRevision> Revisions { get; } = [];
     public List<string> DraftsWithoutRevision { get; } = [];
+    public List<string> CodeApproved { get; } = [];
 
     public Task<StatementDraftEvidence?> ReadEvidenceAsync(string candidateId, CancellationToken cancellationToken) =>
         Task.FromResult<StatementDraftEvidence?>(Evidence);
@@ -47,7 +48,11 @@ internal sealed class FakeStatementDraftStore : FakeAnalysisQueue<StatementDraft
 
     protected override void OnSettled(AnalysisRecord entry, AnalysisCheckpoint checkpoint)
     {
-        if (checkpoint is StatementDraftCheckpoint { Revision: { } revision }) Revisions.Add(revision);
+        if (checkpoint is StatementDraftCheckpoint { Revision: { } revision } settled)
+        {
+            Revisions.Add(revision);
+            if (settled.CodeApproved) CodeApproved.Add(revision.CandidateId);
+        }
         if (checkpoint.Status == State.Succeeded && checkpoint.ErrorCode == StatementDraftErrorCodes.OverByteCap)
             DraftsWithoutRevision.Add(entry.SubjectId);
     }

@@ -48,6 +48,12 @@ internal static class StatementDraftFixtures
         Sources = [Configuration().Sources[0] with { Coverage = [new() { PersonId = personId }] }]
     };
 
+    public static CollectionConfiguration OwnOffice(string personId)
+    {
+        var sole = SoleCoverage(personId);
+        return sole with { Sources = [sole.Sources[0] with { OfficeOf = personId }] };
+    }
+
     public static CollectionJobDefinition AdmittedDefinition(CollectionConfiguration configuration) =>
         CollectionFixtures.Definition(configuration, "source");
 
@@ -58,9 +64,9 @@ internal static class StatementDraftFixtures
         [.. ids.Select(id => new AnalysisOfficial(id, id == Warren ? "Elizabeth Warren" : "Ed Markey"))];
 
     public static StatementDraftEvidence DraftEvidence(string text = Article, StatementGateCarryOver? carryOver = null, string? existingDraftId = null,
-        DateTimeOffset? observed = null) =>
+        DateTimeOffset? observed = null, CollectionConfigurationRevision? configuration = null) =>
         new(StatementGateFixtures.Evidence(text, observed), carryOver ?? new(["rent-affordability"], ["housing-and-community-development"]),
-            existingDraftId, SpeakerRevision());
+            existingDraftId, configuration ?? SpeakerRevision());
 
     public static string Output(string[]? speakers = null, (string Date, string Quote)? date = null, string[]? quotes = null,
         string[]? otherSpeakers = null, double confidence = 0.8, string headline = "Warren announces a rent cap") =>

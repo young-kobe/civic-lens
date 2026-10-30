@@ -3,9 +3,9 @@ using System.Text.Json;
 
 namespace CivicLens.Application.Statements;
 
-public sealed record StatementGateCarryOver(ImmutableArray<string> IssueIds, ImmutableArray<string> PolicyAreaIds)
+public sealed record StatementGateCarryOver(ImmutableArray<string> IssueIds, ImmutableArray<string> PolicyAreaIds, bool GatePassed = true)
 {
-    public static readonly StatementGateCarryOver None = new([], []);
+    public static readonly StatementGateCarryOver None = new([], [], GatePassed: false);
 
     public static StatementGateCarryOver From(StatementGateRun? gateRun)
     {
