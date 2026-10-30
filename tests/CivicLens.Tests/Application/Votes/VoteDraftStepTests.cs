@@ -415,6 +415,19 @@ public sealed class VoteDraftStepTests
     }
 
     [Fact]
+    public async Task ARejectedRunRecordsTheOfferedCandidatesAndTheIssueRevisionInItsContext()
+    {
+        var model = new FakeHeadlineSummaryModel().Draft(Output(issueIds: ["firearms"])).Draft(Drafted);
+
+        var (store, _) = await RunAsync(Create(), model);
+
+        var rejected = store.Runs.First(run => run.Run.Outcome == AnalysisRunOutcome.OutputRejected);
+        using var context = JsonDocument.Parse(rejected.Run.ContextJson!);
+        Assert.Equal(["rent"], context.RootElement.GetProperty("issueCandidateIds").EnumerateArray().Select(id => id.GetString()));
+        Assert.Equal(BillGateFixtures.Revision().Id, context.RootElement.GetProperty("issueRevisionId").GetString());
+    }
+
+    [Fact]
     public async Task ACandidateWithANewerCandidateOfTheSameRollCallIsSupersededWithoutACall()
     {
         var model = new FakeHeadlineSummaryModel();
