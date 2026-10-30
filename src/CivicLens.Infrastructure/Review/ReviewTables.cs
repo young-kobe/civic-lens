@@ -10,6 +10,7 @@ internal static class ReviewTables
         PublishedRecordKind.Statement => ("statement_revisions", "statement_review_decisions", "candidate_id"),
         PublishedRecordKind.Action => ("action_revisions", "action_review_decisions", "record_id"),
         PublishedRecordKind.Vote => ("vote_revisions", "vote_review_decisions", "record_id"),
+        PublishedRecordKind.ExecutiveAction => ("executive_action_revisions", "executive_action_review_decisions", "record_id"),
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no revision tables.")
     };
 }

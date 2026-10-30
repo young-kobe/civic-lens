@@ -17,6 +17,7 @@ public static class RecordReader
             PublishedRecordKind.Vote => Index(Parse<PublishedVote>(json)),
             PublishedRecordKind.Brief => Index(Parse<PublishedBrief>(json)),
             PublishedRecordKind.Relationship => Index(Parse<PublishedRelationship>(json)),
+            PublishedRecordKind.ExecutiveAction => Index(Parse<PublishedExecutiveAction>(json)),
             _ => throw new InvalidDataException("The record kind is unknown.")
         };
         if (indexed.Entry.RecordId != listed.RecordId || indexed.Entry.RevisionNumber != listed.RevisionNumber)
@@ -61,6 +62,12 @@ public static class RecordReader
     {
         record.Validate();
         return Create(record.ToEntry(), [record.Summary], [.. record.Sources.Select(source => source.Text)]);
+    }
+
+    private static IndexedRecord Index(PublishedExecutiveAction record)
+    {
+        record.Validate();
+        return Create(record.ToEntry(), [], [.. record.Sources.Select(source => source.Text)]);
     }
 
     private static IndexedRecord Index(PublishedBrief record)

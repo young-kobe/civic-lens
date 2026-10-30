@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Briefs;
+using CivicLens.Application.ExecutiveActions;
 using CivicLens.Application.Relationships;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
@@ -10,15 +11,18 @@ using CivicLens.Publication.Contracts;
 namespace CivicLens.Application.Publication;
 
 public sealed class PublishedRecordLoaders(IDocumentChangeReviewStore documentChanges, IStatementReviewStore statements,
-    IActionReviewStore actions, IVoteReviewStore votes, IRelationshipReviewStore relationships, IBriefReviewStore briefs)
+    IActionReviewStore actions, IVoteReviewStore votes, IRelationshipReviewStore relationships, IBriefReviewStore briefs,
+    IExecutiveActionReviewStore executiveActions)
 {
     internal ImmutableArray<PublishedRecordLoader> All { get; } =
         [new DocumentChangeRecordLoader(documentChanges), new StatementRecordLoader(statements), new ActionRecordLoader(actions),
-         new VoteRecordLoader(votes), new RelationshipRecordLoader(relationships), new BriefRecordLoader(briefs)];
+         new VoteRecordLoader(votes), new ExecutiveActionRecordLoader(executiveActions), new RelationshipRecordLoader(relationships), new BriefRecordLoader(briefs)];
 
     internal RelationshipRecordLoader Relationships => All.OfType<RelationshipRecordLoader>().Single();
 
     internal ActionRecordLoader Actions => All.OfType<ActionRecordLoader>().Single();
+
+    internal ExecutiveActionRecordLoader ExecutiveActions => All.OfType<ExecutiveActionRecordLoader>().Single();
 
     internal VoteRecordLoader Votes => All.OfType<VoteRecordLoader>().Single();
 

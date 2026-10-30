@@ -132,10 +132,13 @@ public sealed partial class PostgresCollectionJobStore
         ConfiguredCollectionSource configured, WatchedSourceConfiguration source, DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var billCursor = ConfiguredCollectionSource.IsScheduleCollected(source)
-            ? await ReadCursorAsync(db, source.Id, cancellationToken)
-            : null;
-        return configured.CreateScheduledJobDefinition(now, billCursor);
+        var streamCursor = source.ApiParser switch
+        {
+            ApiParser.CongressBillList => await ReadCursorAsync(db, source.Id, cancellationToken),
+            ApiParser.FederalRegisterDocuments => await ReadNewestPublishedOnAsync(db, source.Id, cancellationToken),
+            _ => null
+        };
+        return configured.CreateScheduledJobDefinition(now, streamCursor);
     }
 
     private static async Task<HashSet<string>> ReadSourcesWithActiveRootAsync(CollectionAttemptDbContext db,

@@ -1,5 +1,6 @@
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
+using CivicLens.Application.Collection.FederalRegister;
 using CivicLens.Application.Collection.FeedStatements;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.MemberPhotos;
@@ -7,6 +8,7 @@ using CivicLens.Application.Collection.VoteviewVotes;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Votes;
 using CivicLens.Application.Documents;
+using CivicLens.Application.ExecutiveActions;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Roster;
 using CivicLens.Collection.Contracts;
@@ -22,6 +24,7 @@ public sealed class JobPreparation(
     IDiscoveryAdmissionStore admissions,
     IBillStreamAdmissionStore billAdmissions,
     IVoteAdmissionStore voteAdmissions,
+    IFederalRegisterAdmissionStore federalRegisterAdmissions,
     IMemberRosterStore roster,
     IExecutiveRosterStore executives,
     ICaptureBodyReader bodies,
@@ -135,6 +138,8 @@ public sealed class JobPreparation(
             ApiResource.MemberRoster => AdmitMemberRosterAsync(job, artifactRoot, cancellationToken),
             ApiResource.ExecutiveRoster => AdmitExecutiveRosterAsync(job, artifactRoot, cancellationToken),
             ApiResource.MemberPhoto => AdmitMemberPhotoAsync(job, artifactRoot, cancellationToken),
+            ApiResource.FederalRegisterList => AdmitFederalRegisterListAsync(job, artifactRoot, cancellationToken),
+            ApiResource.FederalRegisterDocument => AdmitFederalRegisterDocumentAsync(job, artifactRoot, cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(job))
         };
 
@@ -236,6 +241,30 @@ public sealed class JobPreparation(
         var extractionId = await SaveExtractionAsync(response.Captured, HouseVoteMembersParser.ExtractionVersion,
             HouseVoteRenderer.RenderMembers(members), cancellationToken);
         return PreparedFrom(await voteAdmissions.AdmitMembersAsync(configured, job.JobId, members.Vote, extractionId, cancellationToken));
+    }
+
+    private async Task<JobPreparationResult> AdmitFederalRegisterListAsync(CollectionJobRecord job, string artifactRoot,
+        CancellationToken cancellationToken)
+    {
+        var configured = ConfiguredSourceOf(job);
+        _ = FederalRegisterUrl.ReadList(configured.SourceUrl, job.Definition.Url);
+        var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
+        var page = FederalRegisterListParser.Parse(response.Body);
+        return PreparedFrom(await federalRegisterAdmissions.AdmitListPageAsync(configured, page, cancellationToken));
+    }
+
+    private async Task<JobPreparationResult> AdmitFederalRegisterDocumentAsync(CollectionJobRecord job, string artifactRoot,
+        CancellationToken cancellationToken)
+    {
+        var configured = ConfiguredSourceOf(job);
+        var number = FederalRegisterUrl.ReadDocument(configured.SourceUrl, job.Definition.Url);
+        var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
+        var document = FederalRegisterDocumentParser.Parse(response.Body, number);
+        var personId = ExecutiveActionSigner.PersonIdOf(configured.Revision.Configuration, document);
+        var text = FederalRegisterRenderer.Render(document);
+        var extractionId = await SaveExtractionAsync(response.Captured, FederalRegisterDocumentParser.ExtractionVersion, text, cancellationToken);
+        return PreparedFrom(await federalRegisterAdmissions.AdmitDocumentAsync(configured, job.JobId,
+            new FederalRegisterEvidence(document, extractionId, text, personId), cancellationToken));
     }
 
     private async Task<JobPreparationResult> AdmitVoteviewFollowOnsAsync(CollectionJobRecord job, CancellationToken cancellationToken)

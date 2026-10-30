@@ -1,0 +1,34 @@
+@using CivicLens.Host.Components.Evidence
+@using CivicLens.Publication.Contracts
+
+<PublishedRecordFrame Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="" Facts="PublishedExecutiveActionView.Facts(Record)"
+                      Caveat="@PublishedExecutiveActionView.Caveat">
+    <PublishedTimeline Events="PublishedTimelineView.For(Record)" />
+
+    <Panel Title="Evidence" Id="evidence-title" Padded="true">
+        <p class="muted small">Each quote is exact text from the saved Federal Register API record as Civic Lens renders it. The source panel marks the quotes in the full saved text.</p>
+        <ul class="choices">
+            @foreach (var fact in Record.Facts)
+            {
+                <li>
+                    <CitationQuote Label="@fact.Label" Quote="@fact.Citation.Quote">
+                        <ContextLink Href="@("#" + PublishedExecutiveActionView.Anchor(Record, fact))" Target="@PublishedRecordView.QuoteTarget(fact.Label.ToLowerInvariant())" />
+                    </CitationQuote>
+                </li>
+            }
+        </ul>
+    </Panel>
+
+    <Panel Title="Sources" Id="sources-title" Padded="true">
+        @for (var index = 0; index < Record.Sources.Length; index++)
+        {
+            var source = Record.Sources[index];
+            <VersionSource Version="source" Linked="false" />
+            <DocumentText Label="@($"Source text {index + 1} of {Record.Sources.Length}")" Runs="CitedText.Split(source.Text, PublishedExecutiveActionView.RangesIn(Record, source))" />
+        }
+    </Panel>
+</PublishedRecordFrame>
+
+@code {
+    [Parameter, EditorRequired] public PublishedExecutiveAction Record { get; set; } = default!;
+}

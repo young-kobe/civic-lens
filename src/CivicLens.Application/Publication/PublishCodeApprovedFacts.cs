@@ -57,7 +57,8 @@ public sealed class PublishCodeApprovedFacts(PublishRelease publish, IPublicatio
         string[] excluded = [.. skipped.Select(record => record.RecordId)];
         var actions = await loaders.Actions.ListCodeApprovedReadyAsync(limit, excluded, cancellationToken);
         var votes = await loaders.Votes.ListCodeApprovedReadyAsync(limit, excluded, cancellationToken);
-        return [.. actions.Concat(votes).Take(limit)];
+        var executiveActions = await loaders.ExecutiveActions.ListCodeApprovedReadyAsync(limit, excluded, cancellationToken);
+        return [.. actions.Concat(votes).Concat(executiveActions).Take(limit)];
     }
 
     // The key names each record and revision, so a retry after a crash replays the stored release.

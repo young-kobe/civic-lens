@@ -6,9 +6,9 @@ The publication feature turns approved revisions into immutable, cumulative stat
 
 ## Decisions
 
-- Only the owner publishes or activates a release. One exception exists: the worker stage `factPublishing` publishes as the code subject, and only actions and votes.
-- A record is published at its current revision, and only when that revision is approved and has no unresolved concerns. Code can approve an action or a vote. People approve the other kinds. The owner publishes all kinds.
-- The `factPublishing` stage publishes an action or a vote when code approved its current revision. A record that a person approved waits for the owner, because a person approval is a judgment that code does not replace. The owner can still publish any approved record with the CLI or the workspace.
+- Only the owner publishes or activates a release. One exception exists: the worker stage `factPublishing` publishes as the code subject, and only actions, votes, and executive actions.
+- A record is published at its current revision, and only when that revision is approved and has no unresolved concerns. Code can approve an action, a vote, or an executive action. People approve the other kinds. The owner publishes all kinds.
+- The `factPublishing` stage publishes an action, a vote, or an executive action when code approved its current revision. A record that a person approved waits for the owner, because a person approval is a judgment that code does not replace. The owner can still publish any approved record with the CLI or the workspace.
 - The stage runs once an hour by the database clock. A tick publishes batches of up to 64 records until no ready record is left, and then it sleeps. A tick with nothing ready makes no release.
 - A publication conflict ends the tick. A race with an owner publish is normal, and the next tick builds again from the latest release. Any other failure is reported and counted as a stage failure.
 - The stage waits while the active release is not the latest release. This is the state after `releases activate` rolls back. It resumes when the owner activates the latest release or publishes from the CLI.
@@ -266,6 +266,7 @@ A document-change record shows both versions, and observation history where need
 
 ### Release content
 
+- An executive action record has the official title as its headline. It carries the facts with their citations, and the saved Federal Register record as its one source. It has no summary. Its page says that the title is the title from the Federal Register. It also says that code checked the facts. It links to the Federal Register page. See [executive actions](executive-actions.md).
 - Each document-change record carries the full extracted text of both versions, their source URLs, and their observation times. Changed regions are offsets into those texts.
 - A citation holds an extraction ID, UTF-16 offsets, and the quoted text. The contract rejects a quote that does not match its offsets.
 - Records show the approval date and the first-publication date. The home and all-records pages show the release date.
@@ -356,7 +357,7 @@ Each publication builds on the recorded active release, not on the link. A repla
 
 The worker runs the stage `factPublishing` when `CIVIC_LENS_FACT_PUBLISHING=1`; see [operations](../operations.md#automatic-publication-of-facts). It acts as the code subject `civic-lens:code` with the owner role. The stage follows the weekly brief stage. It has its own wakeup on the database clock, and the worker runs it beside the other stages.
 
-Before each batch, a tick checks the release state. It stops when the active release is not the latest release. It then lists the ready actions and votes that code approved with `ListCodeApprovedUnpublishedAsync`, up to 64 of each kind. The owner list uses the read of all approved records. The tick publishes up to 64 records with `PublishRelease`. A newer approved revision of a published record is a normal addition, and `RequirePublishable` accepts it. The tick repeats until no ready record is left. Then the stage waits for the next full hour.
+Before each batch, a tick checks the release state. It stops when the active release is not the latest release. It then lists the ready actions, votes, and executive actions that code approved with `ListCodeApprovedUnpublishedAsync`, up to 64 of each kind. The owner list uses the read of all approved records. The tick publishes up to 64 records with `PublishRelease`. A newer approved revision of a published record is a normal addition, and `RequirePublishable` accepts it. The tick repeats until no ready record is left. Then the stage waits for the next full hour.
 
 The tick stops early in two cases. A `PublicationConflictException` ends it, and the next tick builds again. A replay ends it too. A replay happens after a rollback followed by a CLI publish: the rolled-back records list again, and their key finds the stored release.
 

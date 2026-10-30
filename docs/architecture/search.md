@@ -6,6 +6,7 @@ The search service gives readers full-text search over every published record. I
 
 ## Decisions
 
+- The kind `executiveAction` indexes the saved Federal Register record as source text and has no summary text. Deploy the search service before the publisher. An older service refuses a release that holds the new kind.
 - The service is its own Web SDK project, `CivicLens.PublicApi`. It references `CivicLens.Publication.Contracts` and the Npgsql package only. It has no path to operational storage, credentials, job handlers, or unpublished evidence.
 - The service has its own Postgres database, named by `CIVIC_LENS_SEARCH_DATABASE`. It never connects to the operational database.
 - The service reads the public release files over HTTP. The base address is `CIVIC_LENS_RELEASE_BASE_URL`. A dev or test server can serve the release root.
@@ -171,7 +172,7 @@ The poll interval is 2 minutes and the statement timeout is 2 seconds. Both are 
 
 ### Search page
 
-`PublishedSearchPage` renders `search.html`. The form stays hidden until `public.js` runs. The kind filter lists the six kinds. The official and source filters list the distinct values of the release manifest. The issue and policy area filters show catalog names. The script calls `/v1/search`, shows each result with its snippet, and loads more results with the cursor. It builds the snippet with `mark` elements, never with HTML from the service. The page address holds the query as `q` and the filters as `kind`, `official`, `issue`, `policyArea`, `source`, `from`, and `to`, with only the non-empty values. It never holds a cursor, a result page, or a release. The script ignores a `release` parameter. A submit writes history: `pushState` when the parameters change, `replaceState` when they stay the same. Typing does not change the address. Back and forward fill the form from the address and search again, without a history write. An address without parameters clears the results. A page load fills the form from the address, searches when a value is left, and rewrites the address from the form values. A select value that the release does not list becomes Any, and the browser empties a date that is not valid. A new search clears the earlier results and the cursor first. A jump to a fragment, such as the skip link, does not search again. The service owns the limits, and a 400 shows a message to change the words or filters.
+`PublishedSearchPage` renders `search.html`. The form stays hidden until `public.js` runs. The kind filter lists the seven kinds. The official and source filters list the distinct values of the release manifest. The issue and policy area filters show catalog names. The script calls `/v1/search`, shows each result with its snippet, and loads more results with the cursor. It builds the snippet with `mark` elements, never with HTML from the service. The page address holds the query as `q` and the filters as `kind`, `official`, `issue`, `policyArea`, `source`, `from`, and `to`, with only the non-empty values. It never holds a cursor, a result page, or a release. The script ignores a `release` parameter. A submit writes history: `pushState` when the parameters change, `replaceState` when they stay the same. Typing does not change the address. Back and forward fill the form from the address and search again, without a history write. An address without parameters clears the results. A page load fills the form from the address, searches when a value is left, and rewrites the address from the form values. A select value that the release does not list becomes Any, and the browser empties a date that is not valid. A new search clears the earlier results and the cursor first. A jump to a fragment, such as the skip link, does not search again. The service owns the limits, and a 400 shows a message to change the words or filters.
 
 ### Operational pull
 
@@ -191,7 +192,7 @@ The poll interval is 2 minutes and the statement timeout is 2 seconds. Both are 
 - `reader_reports` holds `sequence` (identity), `report_id`, `record_id`, `revision_number`, `kind`, `category`, `body`, `payload_hash`, and `received_at`. CHECK constraints bound the numbers. A unique index covers record ID, revision, and payload hash.
 - `report_pull_state` holds one row: the `epoch` uuid, created once, and the `acked_sequence`.
 - `PulledReport`, `PulledReportBatch`, and `ReaderReportProtocol` define the pull wire format. `ReaderReportProtocol` also owns the retention days that publish shows on `about.html`.
-- The service reads the same contract types as the static site: `PublicationRelease` and the six record types. `PublicationProtocol.SearchSourceTextCharacters` and `PublicationProtocol.SearchPagePath` are shared with the page.
+- The service reads the same contract types as the static site: `PublicationRelease` and the seven record types. `PublicationProtocol.SearchSourceTextCharacters` and `PublicationProtocol.SearchPagePath` are shared with the page.
 
 ## Code map
 

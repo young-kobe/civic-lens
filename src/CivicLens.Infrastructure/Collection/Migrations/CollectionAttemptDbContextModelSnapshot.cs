@@ -2511,6 +2511,210 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionDocumentRow", b =>
+                {
+                    b.Property<string>("SourceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("source_id");
+
+                    b.Property<string>("DocumentNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("document_number");
+
+                    b.Property<string>("DocumentJobId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("document_job_id");
+
+                    b.Property<string>("NoticeJson")
+                        .HasColumnType("text")
+                        .HasColumnName("notice_json");
+
+                    b.Property<DateOnly>("PublishedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("published_on");
+
+                    b.Property<string>("RecordId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<int?>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.HasKey("SourceId", "DocumentNumber");
+
+                    b.HasIndex("DocumentJobId");
+
+                    b.HasIndex("RecordId", "RevisionNumber");
+
+                    b.HasIndex("SourceId", "PublishedOn")
+                        .HasDatabaseName("ix_executive_action_documents_published");
+
+                    b.ToTable("executive_action_documents", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_executive_action_documents_pending", "revision_number IS NOT NULL OR notice_json IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_executive_action_documents_revision", "revision_number >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionDraftRow", b =>
+                {
+                    b.Property<string>("RecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<long>("CreatedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_at_utc_ticks");
+
+                    b.Property<int>("CurrentRevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("current_revision_number");
+
+                    b.Property<DateOnly>("EventOn")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("date")
+                        .HasDefaultValue(new DateOnly(1, 1, 1))
+                        .HasColumnName("event_on");
+
+                    b.PrimitiveCollection<string[]>("IssueIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasColumnName("issue_ids")
+                        .HasDefaultValueSql("'{}'");
+
+                    b.Property<long>("LastRevisedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_revised_at_utc_ticks");
+
+                    b.PrimitiveCollection<string[]>("OfficialIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasColumnName("official_ids")
+                        .HasDefaultValueSql("'{}'");
+
+                    b.Property<int>("ReviewStateVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("review_state_version");
+
+                    b.Property<string>("ReviewStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("review_status");
+
+                    b.HasKey("RecordId");
+
+                    b.HasIndex("IssueIds")
+                        .HasDatabaseName("ix_executive_action_drafts_issue_ids");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("IssueIds"), "gin");
+
+                    b.HasIndex("OfficialIds")
+                        .HasDatabaseName("ix_executive_action_drafts_official_ids");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("OfficialIds"), "gin");
+
+                    b.ToTable("executive_action_drafts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_executive_action_drafts_id", "record_id ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_executive_action_drafts_review_state_version", "review_state_version >= 0");
+
+                            t.HasCheckConstraint("ck_executive_action_drafts_review_status", "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn')");
+
+                            t.HasCheckConstraint("ck_executive_action_drafts_revision", "current_revision_number >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionReviewDecisionRow", b =>
+                {
+                    b.Property<string>("DecisionId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("decision_id");
+
+                    b.Property<long>("CreatedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_at_utc_ticks");
+
+                    b.Property<string>("DecisionJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("decision_json");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("RecordId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<int>("ReviewStateVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("review_state_version");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.HasKey("DecisionId");
+
+                    b.HasIndex("RecordId", "ReviewStateVersion")
+                        .IsUnique();
+
+                    b.HasIndex("RecordId", "RevisionNumber");
+
+                    b.ToTable("executive_action_review_decisions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_executive_action_review_decisions_id", "decision_id ~ '^[0-9a-f]{32}$'");
+
+                            t.HasCheckConstraint("ck_executive_action_review_decisions_versions", "revision_number >= 1 AND review_state_version >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionRow", b =>
+                {
+                    b.Property<string>("RecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<long>("CreatedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_at_utc_ticks");
+
+                    b.Property<string>("RevisionJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("revision_json");
+
+                    b.HasKey("RecordId", "RevisionNumber");
+
+                    b.ToTable("executive_action_revisions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_executive_action_revisions_number", "revision_number >= 1");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", b =>
                 {
                     b.Property<int>("ReleaseNumber")
@@ -4878,6 +5082,38 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Collection.Persistence.AttemptRow", null)
                         .WithMany()
                         .HasForeignKey("AttemptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionDocumentRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Collection.Jobs.Persistence.JobRow", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentJobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("RecordId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionReviewDecisionRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("RecordId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionDraftRow", null)
+                        .WithMany()
+                        .HasForeignKey("RecordId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

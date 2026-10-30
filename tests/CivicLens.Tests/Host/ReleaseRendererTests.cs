@@ -126,7 +126,7 @@ public sealed class ReleaseRendererTests
         Assert.True(form.Closest("section")!.HasAttribute("hidden"));
         Assert.Equal(["q", "kind", "official", "issue", "policyArea", "source", "from", "to"],
             form.QuerySelectorAll("input, select").Select(control => control.GetAttribute("name")));
-        Assert.Equal(["", "documentChange", "statement", "action", "brief", "vote", "relationship"],
+        Assert.Equal(["", "documentChange", "statement", "action", "brief", "vote", "relationship", "executiveAction"],
             document.QuerySelectorAll("#search-kind option").Select(option => option.GetAttribute("value")));
     }
 
