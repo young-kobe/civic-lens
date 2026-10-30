@@ -1,6 +1,6 @@
 # Roadmap
 
-This page holds pending work only. Current behavior and agreed designs are in the feature docs; start at the [architecture lookup table](architecture.md#lookup-table).
+This page holds pending work. A checked step is merged to main, and a merged step reaches the live site at the next deploy. Delete an item when all its steps are checked. Current behavior and agreed designs are in the feature docs; start at the [architecture lookup table](architecture.md#lookup-table).
 
 ## MVP definition
 
@@ -39,22 +39,56 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 **Public site**
 
 - R-44: Finish the public UI gaps from the release 32 check. The PRs are: vote result labels, then count units and two line bill titles, then Congress tabs in the header with the footer panel deleted, then one date form ("27 Mar 2026"), then the profile header layout. Build the date PR alone, because it touches most files. New vote kinds and treaty votes wait for a contract choice. Depends on: none. [Publication](architecture/publication.md#limits-and-planned-work)
-- R-45: Publish on change. An approval sends `pg_notify`. The worker groups approvals for about 1 minute and then publishes. The hourly timer stays as a fallback. The static release flow stays. Fix one scale problem first: stop each `publication_releases` row storing the full `records_json`. The table `publication_record_states` exists, and the readers still use `records_json`. Then cut the page `max-age` from 300 to 60 seconds and the search poll from 2 minutes to 30 seconds. Depends on: none. [Publication](architecture/publication.md#limits-and-planned-work)
+  - [x] Vote result labels (#235)
+  - [x] Count units and two line bill titles (#236)
+  - [x] Congress tabs in the header (#237)
+  - [x] All records links to search by kind (#243)
+  - [x] Profile header layout (#245)
+  - [ ] One date form
+- R-45: Publish on change. An approval sends `pg_notify`. The worker groups approvals for about 1 minute and then publishes. The hourly timer stays as a fallback. The static release flow stays. Fix one scale problem first: stop each `publication_releases` row storing the full `records_json`. The table `publication_record_states` exists, and the readers still use `records_json`. Depends on: none. [Publication](architecture/publication.md#limits-and-planned-work)
+  - [x] Keep releases by age and count (#238)
+  - [x] Add the per-record table (#242)
+  - [x] Page cache of 60 seconds and search poll of 30 seconds (#246)
+  - [ ] Move readers to the per-record table
+  - [ ] Drop `records_json`, after the reader step runs in production
+  - [ ] `pg_notify` on approval
 - R-46: Sortable tables and vote insights. Add header sort buttons with a phone select, default orders, and a filter row. Paged tables sort through new search API sort keys. Vote pages get badges and a panel of members who broke with their party. Issue pages get a summary of votes and bills. Depends on: R-44. [Search](architecture/search.md#limits-and-planned-work)
+  - [ ] Sortable tables and search sort keys (#247 open)
+  - [ ] Vote badges and the party break panel
+  - [ ] Issue summary
+  - [ ] Filter row
 - R-47: Insight boards. One contract PR adds vote fields to vote entries, a per-official summary roll-up, and a cosponsor field on action entries. Then build boards for party breakers, loyalists, and missed votes, as static pages for each chamber and party. Then add list badges and home cards for the closest vote, the most breaks, and the newest executive actions. Then add a bill status line, sponsored bills that moved, and bipartisan cosponsorship. Depends on: R-46. [Publication](architecture/publication.md#limits-and-planned-work)
+  - [ ] Contract PR, with one dev reset
+  - [ ] Boards
+  - [ ] List badges and home cards
+  - [ ] Bill status line and the remaining items
 - R-48: What an official said and how they voted. The profile lists pairs, not totals: the quote with its date, then the cast with its question, date, and result. It shows no Yea or Nay totals and no talk against action quadrant, because a bare total lacks context. Depends on: R-47. [Publication](architecture/publication.md#limits-and-planned-work)
+  - [ ] Said and voted pairs on the profile
 
 **Review and approval**
 
 - R-50: Finish publishing every approval. Move the correction note to the approve step, then delete the owner publish code. Depends on: none. [Publication](architecture/publication.md#limits-and-planned-work)
+  - [ ] Correction note at approve, and delete owner publish code (in build)
 - R-51: Cut the review pages. Make one "Needs a person" queue that says why each record needs a person. Delete the triage files, the relationship and brief list pages, and the home panels that the queue replaces. Add an owner "Take off site" action in the editor, using the existing withdrawal code. Send a reader report correction straight to the editor with its note filled in. Delete the gate label pages after D-13. Depends on: R-50. [Review](architecture/review.md#limits-and-planned-work)
+  - [ ] "Needs a person" queue, and delete triage, list pages and home panels
+  - [ ] "Take off site" action and report to editor
+  - [ ] Delete gate label pages, after D-13
 - R-52: Approve factual links by code. The types are "statement about a vote" and "describes own bill". The types "states position on" and "claims credit for" stay with a person. The public wording "a reviewer approved each link" must change with it. Depends on: R-51. [Review](architecture/review.md#limits-and-planned-work)
+  - [ ] Code approval of factual links, and new public wording
 - R-53: AI brief check. A person still approves each brief. A new model task recommends approval or flags where the brief needs more attention. Its design is still to agree. Depends on: R-51. [Briefs](architecture/briefs.md#limits-and-planned-work)
+  - [ ] Agree the design
+  - [ ] Build the AI brief check
 - R-54: Finish bill issue narrowing. The model gets the Congress.gov legislative subjects when a bill has them, and the redraft commands exist. Still open: run the subjects backfill and the redraft commands on the live site. Then check on a sample that a bill with no fitting issue publishes with no issue. Depends on: none. [Actions](architecture/actions.md#limits-and-planned-work)
+  - [x] Vote issue narrowing (#241)
+  - [x] `actions draft redraft` (#239)
+  - [x] `votes draft redraft` (#244)
+  - [x] Read Congress.gov subjects in drafts (#248)
+  - [ ] Run the subjects backfill and the redraft commands
 
 **Coverage**
 
 - R-55: Stop losing feed items. Items past `maxJobs` are dropped for good today, and every member feed uses `maxJobs` 2. Survey a drain of deferred candidates, then build it. Depends on: none. [Collection](architecture/collection.md#limits-and-planned-work)
+  - [ ] Admit new URLs before rechecks, with a starvation test first
 - R-56: Publish source coverage. Add a coverage field for each official and a "sources we could read" panel, so uneven coverage is visible. Depends on: none. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-57: Finish the executive and judicial sources, after a check of what shipped. The plan is Cabinet officials from agency pages where the official speaks, then the 9 justices, speeches and remarks only. Opinions wait for a case record kind and a PDF reader. Executive orders as a record kind shipped with the Federal Register work. Depends on: none. [Executive actions](architecture/executive-actions.md#limits-and-planned-work)
 - R-58: More data sources, each from an official API or bulk file, with a terms and robots check. The order is committees, NOMINATE scores, FEC, LDA, and Census. Financial disclosures come last. Depends on: R-47. [Roster](architecture/roster.md#limits-and-planned-work)

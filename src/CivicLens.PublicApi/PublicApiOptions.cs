@@ -28,7 +28,7 @@ public sealed record PublicApiOptions
     public TurnstileSettings? Turnstile { get; init; }
     /// <summary>The shared secret of the pull route. Null means that the route does not exist.</summary>
     public string? ReportPullToken { get; init; }
-    public TimeSpan PollInterval { get; init; } = TimeSpan.FromMinutes(2);
+    public TimeSpan PollInterval { get; init; } = TimeSpan.FromSeconds(30);
     public TimeSpan QueryTimeout { get; init; } = TimeSpan.FromSeconds(2);
 
     /// <summary>The connection for searches. It limits the time of every statement, so one slow query cannot hold the database.</summary>
