@@ -54,7 +54,7 @@ internal sealed class BriefWorldSeeder(string connectionString)
             VALUES (@number, @directory, 'auth0|owner', @ticks, @count, @json, @active)
             """, ("number", number), ("directory", $"{number:D6}-{Guid.NewGuid():N}"), ("ticks", publishedAt.UtcTicks), ("count", count),
             ("json", recordsJson), ("active", active));
-        await PublishedRecordStateReader.RebuildFromRecordsJsonAsync(connectionString);
+        await PublishedRecordStateReader.MigrateAsync(connectionString);
     }
 
     public Task StatementAsync(string id, int revision, string headline, params string[] officials) => ExecuteAsync("""

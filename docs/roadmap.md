@@ -50,7 +50,7 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [x] Add the per-record table (#242)
   - [x] Page cache of 60 seconds and search poll of 30 seconds (#246)
   - [x] Move readers to the per-record table
-  - [ ] Drop `records_json`, after the reader step runs in production
+  - [ ] Drop `records_json`, after the reader step runs in production. The same PR deletes the drift check. No PR empties the column first
   - [ ] `pg_notify` on approval
 - R-46: Sortable tables and vote insights. Add a filter row above the tables. Vote pages get badges and a panel of members who broke with their party. Issue pages get a summary of votes and bills. Depends on: R-44. [Search](architecture/search.md#limits-and-planned-work)
   - [x] Sortable tables and search sort keys (#247)

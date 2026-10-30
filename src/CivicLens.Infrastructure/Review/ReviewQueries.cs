@@ -17,7 +17,7 @@ internal static class ReviewQueries
 
     private const string HeldInRelease = "s.first_release <= r.release_number AND (s.last_release IS NULL OR s.last_release >= r.release_number)";
 
-    public const string ActivePublishedRecords = $"""
+    private const string ActivePublishedRecords = $"""
         active AS (
             SELECT s.kind, s.record_id, s.revision_number
             FROM publication_record_states s JOIN publication_releases r ON r.is_active AND {HeldInRelease})

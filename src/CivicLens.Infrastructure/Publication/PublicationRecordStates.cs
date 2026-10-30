@@ -58,13 +58,15 @@ internal static class PublicationRecordStates
         """;
 
     // An old binary that runs during a rollback commits releases without table rows, so the table can fall behind records_json.
-    public static async Task RebuildWhenDriftedAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken)
+    public static async Task<bool> RebuildWhenDriftedAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await db.Database.ExecuteSqlRawAsync(LockReleases, cancellationToken);
-        if (await db.Database.SqlQueryRaw<bool>(Drifted).SingleAsync(cancellationToken))
+        var drifted = await db.Database.SqlQueryRaw<bool>(Drifted).SingleAsync(cancellationToken);
+        if (drifted)
             await db.Database.ExecuteSqlRawAsync(Rebuild, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        return drifted;
     }
 
     public static async Task RecordAsync(CollectionAttemptDbContext db, PublicationCommit commit, CancellationToken cancellationToken)

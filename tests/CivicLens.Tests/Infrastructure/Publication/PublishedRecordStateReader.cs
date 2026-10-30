@@ -27,7 +27,7 @@ public static class PublishedRecordStateReader
             WHERE first_release <= {release} AND (last_release IS NULL OR last_release >= {release})
             """)).Select(row => row[0])];
 
-    public static async Task RebuildFromRecordsJsonAsync(string connectionString) =>
+    public static async Task<bool> MigrateAsync(string connectionString) =>
         await new PostgresCollectionAttemptStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options)).MigrateAsync();
 
