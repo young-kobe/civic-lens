@@ -111,7 +111,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 
 ### Ingest
 
-`IngestWorker` runs `ReleaseIngest` when the service starts and then every 30 seconds. A failed run logs the error and waits for the next interval.
+`IngestWorker` runs `ReleaseIngest` when the service starts and then every 30 seconds. A failed run logs the error and waits for the next interval. A run that lasts longer than the interval starts the next run at once.
 
 1. `ReleaseFeed` sends a conditional GET for `release.json`. A 304 reply ends the run.
 2. It checks the size against `PublicationProtocol.MaximumManifestBytes`. It reads the manifest under `PublicationProtocol.JsonOptions` and calls `PublicationRelease.Validate`.
