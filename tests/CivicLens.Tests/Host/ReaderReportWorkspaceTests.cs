@@ -149,6 +149,17 @@ public sealed class ReaderReportWorkspaceTests(PostgresCollection postgres) : IA
         Assert.Equal("/Review/Reports", stat.GetAttribute("href"));
     }
 
+    [Fact]
+    public async Task TheRailLinksToTheReportQueueAndMarksOnlyThatLinkCurrentOnTheQueuePage()
+    {
+        var queue = await host.GetDocumentAsync("/Review/Reports");
+
+        var links = queue.QuerySelectorAll(".rail .nav-link").Where(link => link.GetAttribute("aria-current") == "page").ToArray();
+        var current = Assert.Single(links);
+        Assert.Equal("/Review/Reports", current.GetAttribute("href"));
+        Assert.Contains("Reader reports", current.TextContent, StringComparison.Ordinal);
+    }
+
     private async Task<PulledReport> SaveReportAsync(PulledReport report)
     {
         await store.SavePulledAsync(Batch(report), default);

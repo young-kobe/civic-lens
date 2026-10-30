@@ -228,7 +228,7 @@ Saving a comparison, the single review read, starting a draft, approval, and pub
 
 ### Reader reports
 
-The queue at `/Review/Reports` holds the reports that readers sent about published records. The worker pulls them from the search service; see [search](search.md#operational-pull). A report stores the record ID and kind, the revision, the category, the reader text, and the received time. It stores nothing about the reporter.
+The rail links to the queue at `/Review/Reports`. The link shows no count, because the layout would then run a query on every page. The home stat card shows the open count. The queue holds the reports that readers sent about published records. The worker pulls them from the search service; see [search](search.md#operational-pull). A report stores the record ID and kind, the revision, the category, the reader text, and the received time. It stores nothing about the reporter.
 
 A reviewer or the owner opens a report and resolves it as Dismissed or CorrectionNeeded. A correction needs a note. A dismissal may have one. A resolved report cannot be resolved again. The resolve command checks the expected version, as a review decision does, and a second command gets a conflict. The queue keeps an open report until a person resolves it. It deletes a closed report 365 days after its resolved time, whether the status is Dismissed or CorrectionNeeded. A correction with no newer published revision is deleted too, and its banner goes with it.
 
