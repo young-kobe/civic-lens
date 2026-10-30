@@ -14,9 +14,10 @@ public sealed class PublishedStatementTests
         var json = JsonSerializer.Serialize(Statement(), PublicationProtocol.JsonOptions);
 
         Assert.Equal(1, PublicationProtocol.SchemaVersion);
-        Assert.True(json == """{"recordId":"4444444444444444444444444444444444444444444444444444444444444444","revisionNumber":1,"headline":"Headline","summary":"Summary","statementDate":"2026-01-02","statementDateEvidence":{"extractionId":"3333333333333333333333333333333333333333333333333333333333333333","start":0,"length":5,"quote":"Mayor"},"speakers":[{"id":"mayor","name":"Mayor Example"}],"otherSpeakers":["Council Member"],"issueIds":["housing"],"policyAreaIds":["land-use"],"quotations":[{"extractionId":"3333333333333333333333333333333333333333333333333333333333333333","start":15,"length":15,"quote":"housing matters","kind":"directQuotation"}],"billNumbers":["HB 12"],"source":{"extractionId":"3333333333333333333333333333333333333333333333333333333333333333","url":"https://example.test/article","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Mayor said: \uD83D\uDE00 housing matters."},"approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00","corrections":[]}""",
+        Assert.True(json == """{"recordId":"4444444444444444444444444444444444444444444444444444444444444444","revisionNumber":1,"headline":"Headline","summary":"Summary","statementDate":"2026-01-02","statementDateEvidence":{"extractionId":"3333333333333333333333333333333333333333333333333333333333333333","start":0,"length":5,"quote":"Mayor"},"speakers":[{"id":"mayor","name":"Mayor Example"}],"otherSpeakers":["Council Member"],"issueIds":["housing"],"policyAreaIds":["land-use"],"quotations":[{"extractionId":"3333333333333333333333333333333333333333333333333333333333333333","start":15,"length":15,"quote":"housing matters","kind":"directQuotation"}],"billNumbers":["HB 12"],"source":{"extractionId":"3333333333333333333333333333333333333333333333333333333333333333","url":"https://example.test/article","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Mayor said: \uD83D\uDE00 housing matters."},"articleUrl":null,"approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00","corrections":[]}""",
             "The published statement JSON changed. Bump PublicationProtocol.SchemaVersion, update the version table " +
-            "in docs/architecture.md, then update this test. Actual: " + json);
+            "in docs/architecture.md, then update this test. ArticleUrl is the only field added without a bump, because old files " +
+            "omit it and it reads as null. Any other change needs a bump. Actual: " + json);
     }
 
     [Fact]
@@ -134,6 +135,39 @@ public sealed class PublishedStatementTests
         var source = Statement().Source with { Url = "file:///etc/passwd" };
 
         Assert.Throws<InvalidDataException>((Statement() with { Source = source }).Validate);
+    }
+
+    [Theory]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("/relative/article")]
+    [InlineData("")]
+    public void RejectsAnArticleLinkThatIsNotAWebUrlBecauseTheReaderFollowsIt(string link)
+    {
+        Assert.Throws<InvalidDataException>((Statement() with { ArticleUrl = link }).Validate);
+    }
+
+    [Fact]
+    public void AcceptsAWebArticleLinkAndKeepsItThroughJson()
+    {
+        var statement = Statement() with { ArticleUrl = "https://senator.example/news/a" };
+        statement.Validate();
+
+        var read = JsonSerializer.Deserialize<PublishedStatement>(
+            JsonSerializer.Serialize(statement, PublicationProtocol.JsonOptions), PublicationProtocol.JsonOptions)!;
+
+        Assert.Equal("https://senator.example/news/a", read.ArticleUrl);
+    }
+
+    [Fact]
+    public void ARecordWrittenBeforeTheArticleLinkExistedStillReadsWithNoLink()
+    {
+        var json = JsonSerializer.SerializeToNode(Statement(), PublicationProtocol.JsonOptions)!.AsObject();
+        json.Remove("articleUrl");
+
+        var read = json.Deserialize<PublishedStatement>(PublicationProtocol.JsonOptions)!;
+
+        Assert.Null(read.ArticleUrl);
+        read.Validate();
     }
 
     internal static PublishedStatement Statement() => new()

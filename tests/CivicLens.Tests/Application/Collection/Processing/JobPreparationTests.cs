@@ -812,6 +812,9 @@ public sealed class JobPreparationTests
             Saved.Add(extraction);
             return Task.FromResult(extraction);
         }
+
+        public Task SaveFeedItemsAsync(IReadOnlyList<FeedItemExtraction> newestFirst, int maximumNew, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class ThrowingProcessingStore : IEvidenceProcessingStore

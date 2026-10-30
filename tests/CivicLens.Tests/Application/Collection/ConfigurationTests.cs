@@ -68,6 +68,35 @@ public sealed class ConfigurationTests
     }
 
     [Theory]
+    [InlineData(CollectionMode.Page)]
+    [InlineData(CollectionMode.Html)]
+    public void StatementTextInFeedIsRefusedOnASourceThatIsNotAFeedBecauseOnlyAFeedHoldsItemText(CollectionMode mode)
+    {
+        var configuration = ValidConfiguration([new PersonConfiguration { Id = "person", Name = "Official" }], ["person"]);
+        configuration = configuration with { Sources = [configuration.Sources[0] with { Mode = mode, StatementTextInFeed = true }] };
+
+        Assert.Throws<ArgumentException>(configuration.Validate);
+    }
+
+    [Fact]
+    public void StatementTextInFeedIsOffByDefaultAndAnOffSourceSavesNoNewField()
+    {
+        var configuration = ValidConfiguration([new PersonConfiguration { Id = "person", Name = "Official" }], ["person"]);
+        configuration = configuration with { Sources = [configuration.Sources[0] with { Mode = CollectionMode.Feed }] };
+        configuration.Validate();
+
+        var off = CollectionConfigurationRevision.Create(configuration);
+        var on = CollectionConfigurationRevision.Create(configuration with
+        {
+            Sources = [configuration.Sources[0] with { StatementTextInFeed = true }]
+        });
+
+        Assert.False(configuration.Sources[0].StatementTextInFeed);
+        Assert.DoesNotContain("statementTextInFeed", off.Json, StringComparison.Ordinal);
+        Assert.True(on.ReadConfiguration().Sources[0].StatementTextInFeed);
+    }
+
+    [Theory]
     [InlineData(null, 3600)]
     [InlineData(60, 60)]
     [InlineData(604800, 604800)]

@@ -5,9 +5,17 @@ internal static class PublishedEvidenceRules
     public static void RequireVersion(PublishedDocumentVersion? version)
     {
         if (version is null || !PublicationProtocol.IsSha256(version.ExtractionId) || version.Text is null ||
-            !Uri.TryCreate(version.Url, UriKind.Absolute, out var url) || url.Scheme is not ("http" or "https"))
+            !IsWebUrl(version.Url))
             throw new InvalidDataException("Published document version is invalid.");
     }
+
+    public static void RequireWebUrl(string value)
+    {
+        if (!IsWebUrl(value)) throw new InvalidDataException("Published web link is invalid.");
+    }
+
+    private static bool IsWebUrl(string value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var url) && url.Scheme is "http" or "https";
 
     public static void RequireSources(PublishedDocumentVersion[]? sources, int maximum, string noun)
     {

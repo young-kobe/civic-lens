@@ -37,6 +37,36 @@ public sealed class PublishStatementTests
     }
 
     [Fact]
+    public async Task AStatementFromAFeedCitesTheFeedCaptureAndLinksTheArticleBecauseTheReaderNeedsBoth()
+    {
+        var scenario = new PublicationScenario();
+        var statement = scenario.AddStatement('b', feedUrl: "https://example.test/feed");
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k",
+            new PublishedRecordReference(PublishedRecordKind.Statement, statement)));
+
+        var record = JsonSerializer.Deserialize<PublishedStatement>(
+            scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.RecordDataPath(statement)], PublicationProtocol.JsonOptions)!;
+        Assert.Equal("https://example.test/feed", record.Source.Url);
+        Assert.Equal(PublicationScenario.StatementArticleUrl, record.ArticleUrl);
+    }
+
+    [Fact]
+    public async Task AStatementFromTheArticlePageHasNoSeparateArticleLinkBecauseItsSourceIsTheArticle()
+    {
+        var scenario = new PublicationScenario();
+        var statement = scenario.AddStatement('b');
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k",
+            new PublishedRecordReference(PublishedRecordKind.Statement, statement)));
+
+        var record = JsonSerializer.Deserialize<PublishedStatement>(
+            scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.RecordDataPath(statement)], PublicationProtocol.JsonOptions)!;
+        Assert.Equal(PublicationScenario.StatementArticleUrl, record.Source.Url);
+        Assert.Null(record.ArticleUrl);
+    }
+
+    [Fact]
     public async Task EachKindFillsItsSearchFiltersFromTheRevisionItPublishes()
     {
         var scenario = new PublicationScenario();
