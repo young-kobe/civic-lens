@@ -418,14 +418,14 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task ACodeApprovedAiStatementSaysNoPersonReviewedItBecauseReadersMustNotThinkAPersonCheckedIt()
+    public async Task ACodeApprovedAiStatementIsLabelledAnAiSummaryCheckedByCodeBecauseReadersMustNotThinkAPersonApprovedIt()
     {
         var statement = Statement() with { TextOrigin = PublishedTextOrigin.Model, ApprovedBy = PublishedApprover.Code, PolicyAreaIds = ["land-use"] };
 
         var html = await new ReleaseRenderer(null, null).RenderStatementAsync(statement, [], PublicationCatalogs.None, CancellationToken.None);
 
         var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
-        Assert.Contains(PublishedRecordLabels.CodeApprovedStatementWording, text, StringComparison.Ordinal);
+        Assert.Contains(PublishedRecordLabels.StatementModelWording, text, StringComparison.Ordinal);
         Assert.Contains("Checked by code on 2026-05-10 12:00 UTC", text, StringComparison.Ordinal);
         Assert.Contains("Checked by code, 2026-05-10 12:00 UTC", text, StringComparison.Ordinal);
         Assert.Contains("Policy areas (chosen by AI)", text, StringComparison.Ordinal);
@@ -440,8 +440,20 @@ public sealed class ReleaseRendererTests
         var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
         Assert.Contains("Approved 2026-05-10 12:00 UTC", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Checked by code", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("No person reviewed it", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("AI summary", text, StringComparison.Ordinal);
         Assert.DoesNotContain("chosen by AI", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnAiStatementThatAPersonApprovedShowsApprovedAndNoAiLabelBecauseAPersonApprovedIt()
+    {
+        var statement = Statement() with { TextOrigin = PublishedTextOrigin.Model, ApprovedBy = PublishedApprover.Person };
+
+        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(statement, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
+        Assert.Contains("Approved 2026-05-10 12:00 UTC", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("AI summary", text, StringComparison.Ordinal);
     }
 
     [Fact]
