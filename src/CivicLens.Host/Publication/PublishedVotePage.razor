@@ -49,18 +49,22 @@
         </ul>
     </Panel>
 
-    <Panel Title="Tracked members" Id="members-title" Padded="true">
-        <DataTable Roles="true" Items="Record.Members" Caption="Votes of tracked members">
-            <Head><TableCell Header>Official</TableCell><TableCell Header>@PublicColumn.Cast</TableCell><TableCell Header>@PublicColumn.Evidence</TableCell></Head>
-            <Row Context="member">
-                <TableCell Main><PublishedOfficialName Official="member.Official" /></TableCell>
-                <TableCell Label="@PublicColumn.Cast">@member.Cast</TableCell>
-                <TableCell Label="@PublicColumn.Evidence">
-                    <blockquote class="quote">@EncodedEvidence.Markup(member.Citation.Quote)</blockquote>
-                    <ContextLink Class="small" Href="@("#" + PublishedVoteView.Anchor(Record, member.Citation))" Target="@PublishedRecordView.QuoteTarget(member.Official.Name)" />
-                </TableCell>
-            </Row>
-        </DataTable>
+    <Panel Title="How each tracked member voted" Id="members-title" Padded="true">
+        @foreach (var group in PublishedVoteView.CastGroups(Record))
+        {
+            <section class="member-group">
+                <h3>@group.Heading</h3>
+                <ul class="member-list">
+                    @foreach (var member in group.Members)
+                    {
+                        <li>
+                            <PublishedOfficialName Official="member.Official" />
+                            <ContextLink Class="small" Text="Source line" Href="@("#" + PublishedVoteView.Anchor(Record, member.Citation))" Target="@($"{member.Official.Name}, member line")" />
+                        </li>
+                    }
+                </ul>
+            </section>
+        }
     </Panel>
 
     <Panel Title="Sources" Id="sources-title" Padded="true">

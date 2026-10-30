@@ -105,7 +105,7 @@ internal static class PublishedOfficialView
 
     private static string ChamberName(PublishedChamber chamber) => chamber == PublishedChamber.Senate ? "the Senate" : "the House of Representatives";
 
-    private static string Noun(int count, string singular) => count == 1 ? singular : singular + "s";
+    public static string Noun(int count, string singular) => count == 1 ? singular : singular + "s";
 
     private static string Percent(double share) => string.Create(CultureInfo.InvariantCulture, $"{share * 100:0}%");
 

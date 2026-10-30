@@ -517,7 +517,7 @@ public sealed class ReleaseRendererTests
     {
         var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None);
 
-        var link = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='members-title'] tbody td a")!;
+        var link = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='members-title'] li a")!;
         Assert.Equal("../officials/o1.html", link.GetAttribute("href"));
         Assert.Equal("Jane <Doe>", link.TextContent);
     }
@@ -639,9 +639,10 @@ public sealed class ReleaseRendererTests
         var result = document.QuerySelector("[aria-labelledby='result-title']")!;
         Assert.Equal(["Started: 2025-04-10T11:08:00-04:00", "Question: On Passage", "Result: Passed <b>"],
             result.QuerySelectorAll("blockquote").Select(quote => quote.TextContent));
-        var rows = document.QuerySelectorAll("[aria-labelledby='members-title'] tbody tr")
-            .Select(row => string.Join("|", row.QuerySelectorAll("td").Select(cell => cell.QuerySelector("blockquote")?.TextContent ?? cell.TextContent.Trim())));
-        Assert.Equal(["Jane <Doe>|Yea|Member: A000055, Jane Doe, R, AL, Yea"], rows);
+        var members = document.QuerySelector("[aria-labelledby='members-title']")!;
+        Assert.Equal(["Voted Yea (1 tracked House member)"], members.QuerySelectorAll("h3").Select(heading => heading.TextContent));
+        Assert.Equal(["Jane <Doe>"], members.QuerySelectorAll("li a:first-child").Select(link => link.TextContent));
+        Assert.Empty(members.QuerySelectorAll("blockquote"));
         var sources = document.QuerySelector("[aria-labelledby='sources-title']")!;
         Assert.Equal(["Source text 1 of 2", "Source text 2 of 2"], sources.QuerySelectorAll("[aria-label]").Select(item => item.GetAttribute("aria-label")));
         Assert.Contains("only the officials that Civic Lens tracks", html, StringComparison.Ordinal);
@@ -801,16 +802,52 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task EveryVoteQuoteLinksToTheMarkOfTheSameTextInTheSource()
     {
-        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None);
+        var vote = Vote();
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         var links = document.QuerySelectorAll("a[href^='#cite-']").ToArray();
         Assert.Equal(4, links.Length);
         foreach (var link in links)
         {
-            var quote = link.Closest("td, .choice")!.QuerySelector("blockquote")!.TextContent;
+            var quote = link.Closest(".choice, li")!.QuerySelector("blockquote")?.TextContent ?? vote.Members.Single().Citation.Quote!;
             Assert.Equal(quote, document.QuerySelector(link.GetAttribute("href")!)!.TextContent);
         }
+    }
+
+    // A House vote lists about 435 members. A quote for each member once made the page grow past 200 KB.
+    // The budget leaves room for real names, which are longer than the test names.
+    [Fact]
+    public async Task AHouseVotePageWithEveryMemberStaysWithinItsSizeBudget()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(VoteWithCasts([.. Enumerable.Range(0, 435).Select(index => ($"Member {index}", new[] { "Yea", "Nay", "Not Voting" }[index % 3]))]), null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var bytes = System.Text.Encoding.UTF8.GetByteCount(html);
+        Assert.True(bytes <= 150_000, $"The page is {bytes} bytes.");
+    }
+
+    [Fact]
+    public async Task TheVotePageGroupsMembersByCastWithTheCountSoAReaderSeesWhoVotedEachWay()
+    {
+        var vote = VoteWithCasts([("Zed", "Not Voting"), ("Pat", "Present"), ("Carl", "Yea"), ("Dee", "Emmer"), ("Eve", "Jeffries"), ("Bo", "Nay"), ("Amy", "Yea"), ("Fay", "Jeffries")]);
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var members = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='members-title']")!;
+        Assert.Equal(["Voted Yea (2 tracked House members)", "Voted Nay (1 tracked House member)", "Voted for Jeffries (2 tracked House members)", "Voted for Emmer (1 tracked House member)", "Voted Present (1 tracked House member)", "Did not vote (1 tracked House member)"],
+            members.QuerySelectorAll("h3").Select(heading => heading.TextContent));
+        Assert.Equal(["Amy", "Carl"], members.QuerySelectorAll(".member-group:first-of-type li a:first-child").Select(link => link.TextContent));
+    }
+
+    // A bare count could mean all members who voted, so each heading says it counts tracked members of the chamber.
+    [Fact]
+    public async Task ASenateVoteCountsTrackedSenatorsAndEachMemberLinkNamesTheMemberLine()
+    {
+        var vote = VoteWithCasts([("Amy", "Yea"), ("Bo", "Yea")]) with { Chamber = PublishedChamber.Senate };
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var members = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='members-title']")!;
+        Assert.Equal(["Voted Yea (2 tracked senators)"], members.QuerySelectorAll("h3").Select(heading => heading.TextContent));
+        Assert.Equal(["Source line: Amy, member line", "Source line: Bo, member line"], members.QuerySelectorAll("li a.small").Select(link => link.TextContent));
     }
 
     [Fact]
@@ -1815,7 +1852,7 @@ public sealed class ReleaseRendererTests
             ["policy area"] = 1,
             ["record"] = 1,
             ["statement"] = 1,
-            ["vote"] = 2
+            ["vote"] = 1
         };
         Assert.All(expected, page => Assert.True(tables.GetValueOrDefault(page.Key) >= page.Value, $"{page.Key}: tables"));
     }
@@ -2211,6 +2248,25 @@ public sealed class ReleaseRendererTests
             ],
             ApprovedAtUtc = new DateTimeOffset(2026, 1, 22, 12, 0, 0, TimeSpan.Zero),
             FirstPublishedAtUtc = new DateTimeOffset(2026, 1, 23, 8, 0, 0, TimeSpan.Zero)
+        };
+    }
+
+    private static PublishedVote VoteWithCasts(IReadOnlyList<(string Name, string Cast)> voters)
+    {
+        var template = Vote();
+        var source = template.Sources[1];
+        var lines = voters.Select((voter, index) => $"Member: B{index:D6}, {voter.Name}, R, AL, {voter.Cast}").ToArray();
+        var text = string.Concat(lines.Select(line => line + "\n"));
+        return template with
+        {
+            Sources = [template.Sources[0], source with { Text = text }],
+            Members = [.. lines.Select((line, index) => new PublishedMemberVote
+            {
+                Official = new PublishedOfficial { Id = $"o{index}", Name = voters[index].Name },
+                Party = "Republican",
+                Cast = voters[index].Cast,
+                Citation = new PublishedCitation { ExtractionId = source.ExtractionId, Start = text.IndexOf(line, StringComparison.Ordinal), Length = line.Length, Quote = line }
+            })]
         };
     }
 
