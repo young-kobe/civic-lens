@@ -35,7 +35,9 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 
 `CaptureDocumentTextExtractor` reads `<sha256>.gz` from the supplied artifact root. It verifies the storage-decoded byte length and hash before it decodes HTTP encodings. It supports `text/plain` and `text/html`. It decodes identity, gzip, deflate, and Brotli in reverse order. Character decoding is strict, and cancellation is supported. Unsupported types or encodings, missing or corrupt files, and exceeded bounds fail. No partial text is saved.
 
-`ExtractHtmlFragmentAsync` converts an HTML string that is not a capture, such as a Congress.gov summary. It uses the same private method as the capture path for parsing, depth checks, and body text. It also validates the text.
+A feed capture can give many extractions, one for each item, with the index of the item as the part. `IDocumentExtractionStore.SaveFeedItemsAsync` saves them. See [statements](statements.md#feed-items).
+
+`ExtractHtmlFragmentAsync` converts an HTML string that is not a capture, such as a Congress.gov summary or a feed item. It uses the same private method as the capture path for parsing, depth checks, and body text. It also validates the text.
 
 Limits:
 
@@ -135,7 +137,7 @@ A malformed link returns 400, and missing evidence returns 404. A storage or rec
 | Use cases and ports | `src/CivicLens.Application/Documents/ExtractDocument.cs`, `src/CivicLens.Application/Documents/GetDocumentHistory.cs`, `src/CivicLens.Application/Documents/CompareDocuments.cs`, `src/CivicLens.Application/Documents/GetDocumentCitation.cs`, `src/CivicLens.Application/Documents/IDocumentTextExtractor.cs` |
 | Profile mapping | `src/CivicLens.Application/Documents/DocumentProfileConfiguration.cs` |
 | Text extraction | `src/CivicLens.Infrastructure/Documents/CaptureDocumentTextExtractor.cs` |
-| Postgres stores | `src/CivicLens.Infrastructure/Documents/PostgresDocumentExtractionStore.cs`, `src/CivicLens.Infrastructure/Documents/PostgresDocumentHistoryStore.cs`, `src/CivicLens.Infrastructure/Documents/PostgresDocumentComparisonStore.cs` |
+| Postgres stores | `src/CivicLens.Infrastructure/Documents/PostgresDocumentExtractionStore.cs` (`SaveAsync` and `SaveFeedItemsAsync` share one insert), `src/CivicLens.Infrastructure/Documents/PostgresDocumentHistoryStore.cs`, `src/CivicLens.Infrastructure/Documents/PostgresDocumentComparisonStore.cs` |
 | Evidence pages and CLI | `src/CivicLens.Host/Documents/ComparisonPage.razor`, `src/CivicLens.Host/Documents/HistoryPage.razor`, `src/CivicLens.Host/Documents/CitationPage.razor`, `src/CivicLens.Host/Documents/ExtractionPage.razor`, `src/CivicLens.Host/Documents/DocumentCommand.cs` |
 | Parser parity test | `tests/CivicLens.Tests/Infrastructure/Documents/HtmlParseParityTests.cs` |
 

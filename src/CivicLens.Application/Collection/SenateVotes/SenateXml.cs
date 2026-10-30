@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
-using System.Xml;
 using System.Xml.Linq;
 using CivicLens.Application.Collection.Votes;
 
@@ -12,23 +11,6 @@ internal static partial class SenateXml
     private const string DayFormat = "d-MMM yyyy";
 
     private static readonly TimeZoneInfo Eastern = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
-
-    public static XElement Load(ReadOnlySpan<byte> xml, string name, string rootName)
-    {
-        try
-        {
-            using var stream = new MemoryStream(xml.ToArray());
-            using var reader = XmlReader.Create(stream, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
-            var root = XDocument.Load(reader).Root;
-            return root is not null && root.Name.LocalName == rootName
-                ? root
-                : throw new InvalidDataException($"{name} must have a {rootName} root.");
-        }
-        catch (XmlException exception)
-        {
-            throw new InvalidDataException($"{name} is not valid XML.", exception);
-        }
-    }
 
     public static VoteSession ReadSession(XElement root, string name) =>
         VoteSession.TryRead(Required(root, "congress", name), Required(root, "session", name))

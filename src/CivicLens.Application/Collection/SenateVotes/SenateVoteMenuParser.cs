@@ -11,7 +11,7 @@ public static class SenateVoteMenuParser
 
     public static SenateVoteMenu Parse(ReadOnlySpan<byte> xml, VoteSession expected)
     {
-        var root = SenateXml.Load(xml, Name, "vote_summary");
+        var root = BoundedXml.LoadRoot(xml, Name, "vote_summary");
         var session = SenateXml.ReadSession(root, Name);
         if (session != expected) throw new InvalidDataException("Senate vote menu is for another session than requested.");
         var year = ReadYear(root, session);

@@ -169,6 +169,9 @@ public sealed class ExtractDocumentTests
             records.Add(extraction.ExtractionId, extraction);
             return Task.FromResult(extraction);
         }
+
+        public Task SaveFeedItemsAsync(IReadOnlyList<FeedItemExtraction> newestFirst, int maximumNew, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class AttemptStore(StoredCollectionAttempt? result, Action? onRead = null) : ICollectionAttemptStore
