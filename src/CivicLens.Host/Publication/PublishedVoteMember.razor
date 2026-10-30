@@ -2,11 +2,15 @@
 
 <li>
     <PublishedOfficialName Official="Member.Official" />
+    @(" ")
     @if (ShowCast)
     {
         <span class="small">voted <CastWord Cast="@Member.Cast" /></span>
     }
-    <ContextLink Class="small" Text="Source line" Href="@("#" + PublishedVoteView.Anchor(Record, Member.Citation))" Target="@($"{Member.Official.Name}, member line")" />
+    else
+    {
+        <ContextLink Class="small" Text="Source line" Href="@("#" + PublishedVoteView.Anchor(Record, Member.Citation))" Target="@($"{Member.Official.Name}, member line")" />
+    }
 </li>
 
 @code {

@@ -93,7 +93,7 @@ internal static class PublishedVoteView
 
     private static string PartyCounts(PublishedVote vote) =>
         string.Join(' ', new[] { PublishedPartyMajority.Democrat, PublishedPartyMajority.Republican }.Select(party => PartyCount(vote, party))) +
-        " These counts include every member of the party, tracked or not.";
+        " These counts include every member of the party, tracked or not. An independent counts with the party they caucus with, so these counts can differ from the source totals. Aye counts as Yea and No counts as Nay.";
 
     private static string PartyCount(PublishedVote vote, string party)
     {
