@@ -52,12 +52,13 @@
         </nav>
         <div class="topbar-tools"><ThemeToggle /></div>
     </header>
-    <main class="public-main" id="main" tabindex="-1"><div class="content"><PublicBreadcrumb Crumbs="Crumbs" />@ChildContent</div></main>
+    <main class="public-main" id="main" tabindex="-1"><div class="content"><PublicBreadcrumb Crumbs="Crumbs" /><CascadingValue Value="glossaryUse" IsFixed="true">@ChildContent</CascadingValue></div></main>
     <footer class="public-footer">
         <p>Each record shows its sources and the exact text it cites.</p>
         <nav class="public-footer-nav" aria-label="Footer">
             <a href="@(RootPath + PublicationProtocol.MethodPagePath)">Method</a>
             <a href="@(RootPath + PublicationProtocol.AboutPagePath)">About</a>
+            <a href="@(RootPath + PublicationProtocol.GlossaryPagePath)">Glossary</a>
             <a href="@(RootPath + PublicationProtocol.ReportPagePath)">Report a problem</a>
         </nav>
     </footer>
@@ -68,6 +69,7 @@
     private string documentTitle = string.Empty;
     private string description = string.Empty;
     private string? canonicalUrl;
+    private readonly GlossaryPageUse glossaryUse = new();
 
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
     [Parameter, EditorRequired] public string Description { get; set; } = string.Empty;

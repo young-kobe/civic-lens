@@ -82,7 +82,16 @@ public sealed class VoteCommandTests(PostgresCollection postgres) : IAsyncLifeti
         Assert.Contains("errorCode", empty.Error, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task RedraftReportsZeroWhenNoDraftCameFromAnOlderPrompt()
+    {
+        var result = await RunAsync("auth0|owner", "votes", "draft", "redraft");
+
+        Assert.Equal((0, """{"requeued":0}"""), (result.ExitCode, result.Output.Trim()));
+    }
+
     [Theory]
+    [InlineData("redraft")]
     [InlineData("requeue", "--all")]
     [InlineData("requeue", "--blocked", "--code", VoteDraftErrorCodes.FactTooLong)]
     public async Task TheAiDrafterCannotActAsTheOwner(params string[] command)
