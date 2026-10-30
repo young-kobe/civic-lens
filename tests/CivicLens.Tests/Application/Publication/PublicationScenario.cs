@@ -493,7 +493,7 @@ internal sealed class FakePublicationStore : IPublicationStore
     public PublicationReleaseSummary? ConcurrentWinner { get; set; }
 
     public Dictionary<PublishedRecordReference, ReviewStatus> ReviewStatuses { get; } = [];
-    public Dictionary<PublishedRecordReference, (int RevisionNumber, string Actor)> UnpublishedApprovals { get; } = [];
+    public Dictionary<PublishedRecordReference, string> UnpublishedApprovalActors { get; } = [];
     public List<IReadOnlyCollection<PublishedRevisionBinding>> StatusReads { get; } = [];
     public int? ActiveReleaseNumber { get; set; }
     public Action? BeforeServe { get; set; }
@@ -550,16 +550,9 @@ internal sealed class FakePublicationStore : IPublicationStore
     {
         StatusReads.Add(published);
         return Task.FromResult<IReadOnlyDictionary<PublishedRecordReference, ReviewedRecord>>(published
-            .Where(record => ReviewStatuses.ContainsKey(new(record.Kind, record.RecordId)))
-            .ToDictionary(record => new PublishedRecordReference(record.Kind, record.RecordId), record => ReviewedRecordOf(record)));
-    }
-
-    private ReviewedRecord ReviewedRecordOf(PublishedRevisionBinding record)
-    {
-        var reference = new PublishedRecordReference(record.Kind, record.RecordId);
-        return UnpublishedApprovals.TryGetValue(reference, out var approval)
-            ? new(ReviewStatuses[reference], approval.RevisionNumber, approval.Actor)
-            : new(ReviewStatuses[reference], record.RevisionNumber, null);
+            .Select(record => new PublishedRecordReference(record.Kind, record.RecordId)).Where(ReviewStatuses.ContainsKey)
+            .ToDictionary(reference => reference, reference => new ReviewedRecord(ReviewStatuses[reference],
+                UnpublishedApprovalActors.GetValueOrDefault(reference))));
     }
 
     public Task<IReadOnlyList<PublicationReleaseSummary>> ListAsync(int limit, CancellationToken cancellationToken) =>

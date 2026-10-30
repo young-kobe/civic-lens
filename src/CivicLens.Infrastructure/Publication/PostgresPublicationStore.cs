@@ -191,7 +191,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
             state.ReviewStatus == ReviewStatus.Approved && state.RevisionNumber != record.RevisionNumber);
         var actors = await ReadApprovalActorsAsync(db, unpublished, cancellationToken);
         return current.ToDictionary(state => new PublishedRecordReference(state.Key.Kind, state.Key.RecordId),
-            state => new ReviewedRecord(state.Value.ReviewStatus, state.Value.RevisionNumber, actors.GetValueOrDefault(state.Key)));
+            state => new ReviewedRecord(state.Value.ReviewStatus, actors.GetValueOrDefault(state.Key)));
     }
 
     // The newest approval of a record opens its review cycle, so one row for each record holds the actor.
@@ -201,7 +201,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         var actors = new Dictionary<(PublishedRecordKind, string), string>();
         foreach (var group in records.GroupBy(record => record.Kind))
         {
-            var (table, idColumn) = ReviewTables.DecisionsFor(group.Key);
+            var (_, table, idColumn) = ReviewTables.For(group.Key);
             var sql = $$"""
                 SELECT DISTINCT ON (d.{{idColumn}}) d.{{idColumn}} AS "RecordId", d.decision_json AS "DecisionJson"
                 FROM {{table}} d WHERE d.{{idColumn}} = ANY({0}) AND d.kind = 'Approve'

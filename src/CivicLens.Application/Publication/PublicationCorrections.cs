@@ -44,7 +44,7 @@ internal sealed class PublicationCorrections
         if (note is null && !PublishedRecordRules.IsApprovedByCode(revisionNumber, decisions))
             throw new MissingCorrectionNoteException(reference);
         var kept = earlier[reference];
-        if (note is not null && PublishedCorrection.NotedCount(kept) >= PublishedCorrection.MaximumNotedEntries)
+        if (note is not null && PublishedCorrection.IsAtNoteLimit(kept))
             throw new CorrectionLimitException(reference);
         return PublishedCorrection.Prepend(kept, new() { ReplacedRevisionNumber = replaced, PublishedAtUtc = now, Note = note });
     }

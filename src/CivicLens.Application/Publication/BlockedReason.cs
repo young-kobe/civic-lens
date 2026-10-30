@@ -1,3 +1,3 @@
 namespace CivicLens.Application.Publication;
 
-public enum BlockedReason { ReviewBlocksIt, CorrectionLimit }
+public enum BlockedReason { ReviewBlocksIt, CorrectionLimit, WithdrawnAtCorrectionLimit }

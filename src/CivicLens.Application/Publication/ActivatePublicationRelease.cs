@@ -43,7 +43,7 @@ public sealed class ActivatePublicationRelease(IPublicationStore publications, I
         var (restored, withdrawnAgain) = await TryReadAsync(() => CompareWithReplacedAsync(replaced, after, cancellationToken),
             ([], []), served, "rollback comparison");
         var blockedRecords = await TryReadAsync<IReadOnlyList<BlockedPublishedRecord>>(
-            () => blocked.FindAsync(served.DirectoryName, after.Records, cancellationToken), [], served, "blocked list");
+            () => blocked.FindAsync(served.DirectoryName, after.Records, after.Withdrawals, cancellationToken), [], served, "blocked list");
         return new(activated, restored, withdrawnAgain, blockedRecords);
     }
 

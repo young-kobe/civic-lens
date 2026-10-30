@@ -173,10 +173,10 @@
                                     <td><a class="cell-title" href="@RecordRoutes.Editor(item.Kind, item.RecordId)">@DraftStatusDisplay.DraftName(item.Headline)</a></td>
                                     <td>@PublishedRecordLabels.Kind(item.Kind)</td>
                                     <td>
-                                        @if (item.Reason == BlockedReason.CorrectionLimit)
+                                        @if (item.StuckText() is { } stuckText)
                                         {
                                             <StatusBadge Tone="Tone.Warn" Text="Cannot publish" />
-                                            <span class="actions-hint">@BlockedPublishedRecord.CorrectionLimitText</span>
+                                            <span class="actions-hint">@stuckText</span>
                                         }
                                         else
                                         {

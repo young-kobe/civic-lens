@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Security.Cryptography;
+using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
@@ -710,14 +711,30 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
 
     [Theory]
     [MemberData(nameof(AllKinds))]
-    public async Task TheApprovalActorQueryRunsForEveryKindAndAKindWithNoDecisionRowGivesNoActor(PublishedRecordKind kind)
+    public async Task TheStatusReadNamesTheApprovalActorFromTheDecisionTableOfEveryKind(PublishedRecordKind kind)
     {
         var recordId = await SeedDraftAsync(kind);
         await SetReviewStatusAsync(kind, recordId, ReviewStatus.Approved);
+        await SeedApprovalAsync(kind, recordId, 100, $"auth0|{kind}");
 
         var read = await publications.ReadReviewStatusesAsync([new(kind, recordId, 0)], default);
 
-        Assert.Equal(ReviewStatus.Approved, Assert.Single(read).Value.ReviewStatus);
+        var state = Assert.Single(read).Value;
+        Assert.Equal((ReviewStatus.Approved, $"auth0|{kind}"), (state.ReviewStatus, state.UnpublishedApprovalActor));
+    }
+
+    [Fact]
+    public async Task TheStatusReadNamesTheNewestApprovalSoACodeApprovalAfterAPersonApprovalGivesTheCodeActor()
+    {
+        const PublishedRecordKind kind = PublishedRecordKind.Action;
+        var recordId = await SeedDraftAsync(kind);
+        await SetReviewStatusAsync(kind, recordId, ReviewStatus.Approved);
+        await SeedApprovalAsync(kind, recordId, 100, "auth0|editor");
+        await SeedApprovalAsync(kind, recordId, 101, ReviewAuthor.CodeSubject);
+
+        var read = await publications.ReadReviewStatusesAsync([new(kind, recordId, 0)], default);
+
+        Assert.Equal(ReviewAuthor.CodeSubject, Assert.Single(read).Value.UnpublishedApprovalActor);
     }
 
     [Fact]
@@ -752,7 +769,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
             FirstPublishedAtUtc = PublishedAt
         };
 
-        var listed = (await new BlockedPublishedRecords(publications, new FileReleaseDirectory(Path.GetTempPath())).FindAsync("none", [entry], default)).Count == 1;
+        var listed = (await new BlockedPublishedRecords(publications, new FileReleaseDirectory(Path.GetTempPath())).FindAsync("none", [entry], [], default)).Count == 1;
         var failure = await Record.ExceptionAsync(() => publications.CommitAsync(Owner.Subject,
             WithdrawalCommit(1, null, kind, recordId), "key", Hash(1), default));
 
@@ -861,21 +878,37 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         return id;
     }
 
+    private Task SeedApprovalAsync(PublishedRecordKind kind, string recordId, int stateVersion, string actor)
+    {
+        var (draftTable, idColumn) = DraftTableOf(kind);
+        var table = draftTable.Replace("_drafts", "_review_decisions", StringComparison.Ordinal);
+        var decisionId = Guid.NewGuid().ToString("N");
+        var json = JsonSerializer.Serialize(new ReviewDecision(decisionId, recordId, 1, stateVersion, ReviewDecisionKind.Approve, actor, null, [],
+            PublishedAt), JsonSerializerOptions.Web);
+        return ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO {table} (decision_id, {idColumn}, revision_number, review_state_version, decision_json, kind, created_at_utc_ticks)
+            VALUES ('{decisionId}', @id, 1, {stateVersion}, '{json}', 'Approve', 1)
+            """, recordId);
+    }
+
     private Task SetReviewStatusAsync(PublishedRecordKind kind, string recordId, ReviewStatus status)
     {
-        var (table, column) = kind switch
-        {
-            PublishedRecordKind.DocumentChange => ("document_change_drafts", "draft_id"),
-            PublishedRecordKind.Statement => ("statement_drafts", "candidate_id"),
-            PublishedRecordKind.Action => ("action_drafts", "record_id"),
-            PublishedRecordKind.Vote => ("vote_drafts", "record_id"),
-            PublishedRecordKind.Relationship => ("relationship_drafts", "record_id"),
-            PublishedRecordKind.Brief => ("brief_drafts", "record_id"),
-            PublishedRecordKind.ExecutiveAction => ("executive_action_drafts", "record_id"),
-            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown record kind.")
-        };
+        var (table, column) = DraftTableOf(kind);
         return ExecuteAsync($"UPDATE {table} SET review_status = '{status}' WHERE {column} = @id", recordId);
     }
+
+    private static (string Table, string IdColumn) DraftTableOf(PublishedRecordKind kind) => kind switch
+    {
+        PublishedRecordKind.DocumentChange => ("document_change_drafts", "draft_id"),
+        PublishedRecordKind.Statement => ("statement_drafts", "candidate_id"),
+        PublishedRecordKind.Action => ("action_drafts", "record_id"),
+        PublishedRecordKind.Vote => ("vote_drafts", "record_id"),
+        PublishedRecordKind.Relationship => ("relationship_drafts", "record_id"),
+        PublishedRecordKind.Brief => ("brief_drafts", "record_id"),
+        PublishedRecordKind.ExecutiveAction => ("executive_action_drafts", "record_id"),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown record kind.")
+    };
 
     private async Task ExecuteAsync(string sql, string id)
     {

@@ -33,8 +33,69 @@ public sealed class ListBlockedPublishedTests
 
         Assert.Equal((action.RecordId, BlockedReason.CorrectionLimit, ReviewStatus.Approved),
             (listed.RecordId, listed.Reason, listed.ReviewStatus));
-        Assert.Contains($"{PublishedCorrection.MaximumNotedEntries} corrections with a note", BlockedPublishedRecord.CorrectionLimitText,
-            StringComparison.Ordinal);
+        Assert.Equal("This record has 20 corrections with a note, the most it can hold. " +
+            "A person revision cannot publish. Only a code-approved revision can.", listed.StuckText());
+    }
+
+    [Fact]
+    public async Task ThePublisherRefusesAPersonRevisionAtTheCapAndTheListHoldsTheSameRecordFromOneState()
+    {
+        var (scenario, action) = await PublishedAtCapAsync(PublishedCorrection.MaximumNotedEntries);
+        scenario.ReviseAction(action.RecordId, PublishedCorrection.MaximumNotedEntries + 2, correctionNote: "One too many.");
+        ApproveNextRevision(scenario, action, "auth0|editor");
+
+        await Assert.ThrowsAsync<CorrectionLimitException>(() =>
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("over", action)));
+        Assert.Equal(action.RecordId, Assert.Single(await scenario.BlockedLister().ExecuteAsync(PublicationScenario.Owner)).RecordId);
+    }
+
+    [Theory]
+    [InlineData(PublishedRecordKind.Action, true)]
+    [InlineData(PublishedRecordKind.Vote, true)]
+    [InlineData(PublishedRecordKind.Statement, true)]
+    [InlineData(PublishedRecordKind.ExecutiveAction, true)]
+    [InlineData(PublishedRecordKind.DocumentChange, false)]
+    [InlineData(PublishedRecordKind.Brief, false)]
+    [InlineData(PublishedRecordKind.Relationship, false)]
+    public void TheReasonTextOffersCodeApprovalOnlyForAKindThatCodeCanApprove(PublishedRecordKind kind, bool codeCanApprove)
+    {
+        var record = new BlockedPublishedRecord(kind, "id", "Headline", 1, ReviewStatus.Approved, BlockedReason.CorrectionLimit);
+
+        var expected = codeCanApprove
+            ? "This record has 20 corrections with a note, the most it can hold. A person revision cannot publish. Only a code-approved revision can."
+            : "This record has 20 corrections with a note, the most it can hold. No new revision can publish.";
+        Assert.Equal(expected, record.StuckText());
+    }
+
+    [Fact]
+    public async Task AWithdrawnRecordAtTheCapWithAPersonRevisionIsListedBecauseItCannotReturn()
+    {
+        var (scenario, action) = await PublishedAtCapAsync(PublishedCorrection.MaximumNotedEntries);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            new PublishReleaseRequest([], "w") { Withdrawals = [new(action.Kind, action.RecordId, "Wrong.")] });
+        ApproveNextRevision(scenario, action, "auth0|editor");
+
+        var listed = Assert.Single(await scenario.BlockedLister().ExecuteAsync(PublicationScenario.Owner));
+
+        Assert.Equal((action.RecordId, BlockedReason.WithdrawnAtCorrectionLimit, PublishedCorrection.MaximumNotedEntries + 1),
+            (listed.RecordId, listed.Reason, listed.PublishedRevisionNumber));
+        Assert.Contains(action.RecordId, listed.Headline, StringComparison.Ordinal);
+        Assert.Equal("This record is off the site and has 20 corrections with a note, the most it can hold. " +
+            "It cannot return to the site.", listed.StuckText());
+    }
+
+    [Theory]
+    [InlineData(PublishedCorrection.MaximumNotedEntries - 1, "auth0|editor")]
+    [InlineData(PublishedCorrection.MaximumNotedEntries, ReviewAuthor.CodeSubject)]
+    public async Task AWithdrawnRecordIsNotListedBelowTheCapOrForACodeRevisionBecauseOnlyAPersonRevisionAtTheCapIsStuck(int notedCorrections,
+        string actor)
+    {
+        var (scenario, action) = await PublishedAtCapAsync(notedCorrections);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            new PublishReleaseRequest([], "w") { Withdrawals = [new(action.Kind, action.RecordId, "Wrong.")] });
+        ApproveNextRevision(scenario, action, actor);
+
+        Assert.Empty(await scenario.BlockedLister().ExecuteAsync(PublicationScenario.Owner));
     }
 
     [Fact]
@@ -143,7 +204,7 @@ public sealed class ListBlockedPublishedTests
     private static void ApproveNextRevision(PublicationScenario scenario, PublishedRecordReference action, string actor)
     {
         scenario.Publications.ReviewStatuses[action] = ReviewStatus.Approved;
-        scenario.Publications.UnpublishedApprovals[action] = (PublishedCorrection.MaximumNotedEntries + 2, actor);
+        scenario.Publications.UnpublishedApprovalActors[action] = actor;
     }
 
     private static async Task<(PublicationScenario Scenario, PublishedRecordReference Action)> PublishedActionAsync()
