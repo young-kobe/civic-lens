@@ -84,6 +84,7 @@ if (args is [] or ["--help"] or ["help"])
           actions draft status
           actions draft list [drafted|unchanged|superseded|no-official|pending|failed] [limit]
           actions draft requeue <candidate-id|--all>
+          actions draft redraft
           votes draft status
           votes draft list [drafted|unchanged|superseded|no-member|pending|failed] [limit]
           votes draft requeue <candidate-id|--all>
@@ -288,7 +289,7 @@ try
         var draftStore = new PostgresActionDraftStore(contexts);
         var draftCommands = new AnalysisQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, ActionDraftTask.Task));
-        var actions = new ActionCommand(draftCommands, new RequeueBlockedActionDrafts(draftStore), owner);
+        var actions = new ActionCommand(draftCommands, new RequeueBlockedActionDrafts(draftStore), new RedraftActionDrafts(draftStore), owner);
         executing = true;
         return await actions.ExecuteAsync(args, cancellation.Token);
     }
