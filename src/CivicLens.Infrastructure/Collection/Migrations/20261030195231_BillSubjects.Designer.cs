@@ -1415,7 +1415,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("source_id");
 
-                    b.Property<int>("SubjectCount")
+                    b.Property<int?>("SubjectCount")
                         .HasColumnType("integer")
                         .HasColumnName("subject_count");
 

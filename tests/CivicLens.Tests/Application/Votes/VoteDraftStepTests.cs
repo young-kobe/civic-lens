@@ -785,6 +785,19 @@ public sealed class VoteDraftStepTests
         Assert.DoesNotContain("subjects", Assert.Single(model.Requests).UserPrompt, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task AtTheByteCapTheSubjectsAreDroppedAndTheVoteStillDraftsFromTheFactLines()
+    {
+        var (_, probe) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Drafted));
+        var justFits = new VoteDraftSettings(probe.Requests[0].ReservedTokens + 10, 1);
+        var world = Create(subjects: [new string('s', 5_000)]);
+
+        var (store, model) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Drafted), settings: justFits);
+
+        Assert.DoesNotContain("ssssssssss", Assert.Single(model.Requests).UserPrompt, StringComparison.Ordinal);
+        Assert.Matches("^[0-9a-f]{64}$", Assert.Single(store.Revisions).SubjectsHash);
+    }
+
     [Theory]
     [InlineData("renderedTextMismatch", true)]
     [InlineData("extractionVersionChanged", false)]

@@ -5,7 +5,7 @@ using CivicLens.Core.Review;
 
 namespace CivicLens.Application.Collection.Bills;
 
-public sealed record BillSubjectsBackfillResult(int Examined, int Admitted);
+public sealed record BillSubjectsBackfillResult(int Examined, int Admitted, int Failed);
 
 public sealed class BackfillBillSubjects(IBillSubjectsBackfillStore store, ICollectionJobStore jobs, ApiResponseReader responses,
     string artifactRoot)
@@ -15,10 +15,19 @@ public sealed class BackfillBillSubjects(IBillSubjectsBackfillStore store, IColl
         ReviewAuthorization.RequireOwner(actor);
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
         var detailJobIds = await store.ListNewestBillsWithoutSubjectCountAsync(limit, cancellationToken);
-        var admitted = 0;
+        int admitted = 0, failed = 0;
         foreach (var detailJobId in detailJobIds)
-            if (await AdmitAsync(detailJobId, cancellationToken)) admitted++;
-        return new(detailJobIds.Count, admitted);
+        {
+            try
+            {
+                if (await AdmitAsync(detailJobId, cancellationToken)) admitted++;
+            }
+            catch (Exception exception) when (exception is InvalidDataException or IOException)
+            {
+                failed++;
+            }
+        }
+        return new(detailJobIds.Count, admitted, failed);
     }
 
     private async Task<bool> AdmitAsync(string detailJobId, CancellationToken cancellationToken)

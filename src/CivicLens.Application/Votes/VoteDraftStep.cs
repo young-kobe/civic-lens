@@ -66,7 +66,7 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
     private async Task<bool> DraftAsync(IAnalysisAttempt<VoteDraftRun> attempt, VoteDraftContext context, CancellationToken cancellationToken)
     {
         var loop = new AnalysisValidationLoop<VoteDraftRun, VoteDraftRevision>(Wrap, attempt, AnalysisRunOutcome.Drafted,
-            VoteDraftTask.MaximumValidationPasses, errors => VoteDraftPrompt.Build(context.Snapshot, context.Issues, settings.PromptByteCap, errors),
+            VoteDraftTask.MaximumValidationPasses, errors => context.Issues.BuildDroppingSubjectsWhenOverTheCap(issues => VoteDraftPrompt.Build(context.Snapshot, issues, settings.PromptByteCap, errors)),
             model.DraftAsync, (json, run) => VoteDraftResolver.Resolve(json, context, run.RunId, run.FinishedAtUtc),
             async (runId, token) => (await store.GetRunAsync(runId, token))?.Run);
         var result = await loop.RunAsync(cancellationToken);

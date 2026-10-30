@@ -18,7 +18,7 @@ public sealed class BackfillBillSubjectsTests
 
         var result = await Backfill(world, store).ExecuteAsync(Owner, 10);
 
-        Assert.Equal(new BillSubjectsBackfillResult(1, 1), result);
+        Assert.Equal(new BillSubjectsBackfillResult(1, 1, 0), result);
         var call = Assert.Single(store.Calls);
         Assert.Equal(("detail", 2, ActionBillWorld.SourceId), (call.DetailJobId, call.SubjectCount, call.Source.SourceId));
         Assert.Equal(10, store.ListedLimit);
@@ -32,8 +32,25 @@ public sealed class BackfillBillSubjectsTests
 
         var result = await Backfill(world, store).ExecuteAsync(Owner, 10);
 
-        Assert.Equal(new BillSubjectsBackfillResult(1, 0), result);
+        Assert.Equal(new BillSubjectsBackfillResult(1, 0, 0), result);
         Assert.Equal(1, Assert.Single(store.Calls).SubjectCount);
+    }
+
+    [Fact]
+    public async Task AMissingOrUnreadableDetailCaptureCountsAsFailedAndTheRunContinuesWithTheNextBill()
+    {
+        var world = ActionBillWorld.Create(subjectPages: [["Housing finance and home ownership"]]);
+        var unreadable = ActionBillWorld.Create(subjectPages: [["Housing finance and home ownership"]]);
+        unreadable.ReplaceCapturedBody("detail", "not json");
+        var missing = new RecordingStore(["no-such-job", "detail"]);
+        var corrupt = new RecordingStore(["detail"]);
+
+        var missingResult = await Backfill(world, missing).ExecuteAsync(Owner, 10);
+        var corruptResult = await Backfill(unreadable, corrupt).ExecuteAsync(Owner, 10);
+
+        Assert.Equal(new BillSubjectsBackfillResult(2, 1, 1), missingResult);
+        Assert.Equal(new BillSubjectsBackfillResult(1, 0, 1), corruptResult);
+        Assert.Empty(corrupt.Calls);
     }
 
     [Fact]

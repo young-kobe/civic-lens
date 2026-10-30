@@ -302,6 +302,27 @@ public sealed class ActionDraftStepTests
     }
 
     [Fact]
+    public async Task ACopiedRevisionFromACandidateWithoutSubjectsKeepsTheHashSoTheLaterCandidateWithTheSameSubjectsIsUnchanged()
+    {
+        var subjects = new[] { new[] { "Rent and rental housing" } };
+        var first = Create(summaries: [Summary], subjectPages: subjects);
+        var withoutSubjects = Create(cosponsorPages: [[MarkeyOriginal]], summaries: [Summary]);
+        var later = Create(cosponsorPages: [[MarkeyOriginal]], summaries: [Summary], subjectPages: subjects);
+        var (drafted, _) = await RunAsync(first, new FakeHeadlineSummaryModel().Draft(Output()));
+        var withHash = Assert.Single(drafted.Revisions);
+
+        var (copied, copyModel) = await RunAsync(withoutSubjects, new FakeHeadlineSummaryModel(), withHash);
+        var copy = Assert.Single(copied.Revisions);
+        var (settled, laterModel) = await RunAsync(later, new FakeHeadlineSummaryModel(), copy);
+
+        Assert.NotNull(withHash.SubjectsHash);
+        Assert.Empty(copyModel.Requests);
+        Assert.Equal(withHash.SubjectsHash, copy.SubjectsHash);
+        Assert.Empty(laterModel.Requests);
+        Assert.Equal((State.Succeeded, "unchanged"), (settled.Entries[0].Status, settled.Entries[0].ErrorCode));
+    }
+
+    [Fact]
     public async Task ABillWithNoSubjectsDraftsWithoutThemAndTheRevisionKeepsTheOldShape()
     {
         var (store, model) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));

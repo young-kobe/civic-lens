@@ -13,7 +13,7 @@ internal sealed class BillGateRow
     public string? PolicyArea { get; set; }
     public int CosponsorCount { get; set; }
     public int SummaryCount { get; set; }
-    public int SubjectCount { get; set; }
+    public int? SubjectCount { get; set; }
     public string IssueRevisionId { get; set; } = "";
     public bool HasTrackedIssue { get; set; }
     public BillGateDecision Decision { get; set; }
@@ -23,5 +23,5 @@ internal sealed class BillGateRow
 
     public bool HasCosponsorChain => CosponsorCount > 0;
     public bool HasSummariesChain => SummaryCount > 0;
-    public bool HasSubjectsChain => CongressBill.HasLegislativeSubjects(SubjectCount, PolicyArea);
+    public bool HasSubjectsChain => SubjectCount is { } count && CongressBill.HasLegislativeSubjects(count, PolicyArea);
 }

@@ -42,7 +42,8 @@ public sealed class BillIssueChoice
 
     public bool HasSubjects => !subjects.IsEmpty;
 
-    public BillIssueChoice WithoutSubjects() => new(candidates, []);
+    public AnalysisModelRequest? BuildDroppingSubjectsWhenOverTheCap(Func<BillIssueChoice, AnalysisModelRequest?> build) =>
+        build(this) ?? (HasSubjects ? build(new BillIssueChoice(candidates, [])) : null);
 
     public IReadOnlyList<string>? SubjectsSection() => subjects.IsEmpty ? null : subjects;
 

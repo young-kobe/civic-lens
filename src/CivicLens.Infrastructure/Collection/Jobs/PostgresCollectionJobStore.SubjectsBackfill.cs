@@ -11,7 +11,7 @@ public sealed partial class PostgresCollectionJobStore : IBillSubjectsBackfillSt
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var gates = db.Set<BillGateRow>().AsNoTracking();
-        return await gates.Where(gate => gate.SubjectCount == 0 && !gates.Any(newer => newer.SourceId == gate.SourceId &&
+        return await gates.Where(gate => gate.SubjectCount == null && !gates.Any(newer => newer.SourceId == gate.SourceId &&
                 newer.Congress == gate.Congress && newer.BillType == gate.BillType && newer.BillNumber == gate.BillNumber &&
                 newer.UpdateDateUtcTicks > gate.UpdateDateUtcTicks))
             .OrderBy(gate => gate.DetailJobId).Select(gate => gate.DetailJobId).Take(limit).ToListAsync(cancellationToken);
@@ -25,7 +25,7 @@ public sealed partial class PostgresCollectionJobStore : IBillSubjectsBackfillSt
         return TransactionAsync(async (db, now) =>
         {
             var gate = await db.Set<BillGateRow>().SingleAsync(row => row.DetailJobId == detailJobId, cancellationToken);
-            if (gate.SubjectCount != 0 || subjectCount == 0) return false;
+            if (gate.SubjectCount is not null) return false;
             gate.SubjectCount = subjectCount;
             if (!gate.HasSubjectsChain) return false;
             var first = source.CreateFirstPageJob(ApiResource.BillSubjects, IdentityOf(gate), UpdateDateOf(gate), Today(now));

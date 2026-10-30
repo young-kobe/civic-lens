@@ -22,8 +22,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 name: "subject_count",
                 table: "bill_gates",
                 type: "integer",
-                nullable: false,
-                defaultValue: 0);
+                nullable: true);
 
             migrationBuilder.AddColumn<bool>(
                 name: "includes_subjects",
@@ -53,12 +52,19 @@ namespace CivicLens.Infrastructure.Collection.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.Sql("""
-                DELETE FROM action_analysis_runs WHERE candidate_id IN (SELECT candidate_id FROM action_candidates WHERE includes_subjects)
-                    AND run_id NOT IN (SELECT run_id FROM action_revisions WHERE run_id IS NOT NULL);
-                DELETE FROM action_analysis WHERE candidate_id IN (SELECT candidate_id FROM action_candidates WHERE includes_subjects)
-                    AND NOT EXISTS (SELECT 1 FROM action_analysis_runs r WHERE r.candidate_id = action_analysis.candidate_id);
-                DELETE FROM action_candidates WHERE includes_subjects
-                    AND NOT EXISTS (SELECT 1 FROM action_analysis a WHERE a.candidate_id = action_candidates.candidate_id);
+                DO $$
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM action_revisions v
+                               JOIN action_analysis_runs r ON r.run_id = v.run_id
+                               JOIN action_candidates c ON c.candidate_id = r.candidate_id
+                               WHERE c.includes_subjects) THEN
+                        RAISE EXCEPTION 'Cannot roll back BillSubjects: an action revision was drafted from a candidate that includes subjects. Restore a backup, or delete that revision by hand, and run the rollback again.';
+                    END IF;
+                END $$;
+                UPDATE action_analysis_runs SET previous_run_id = NULL WHERE candidate_id IN (SELECT candidate_id FROM action_candidates WHERE includes_subjects);
+                DELETE FROM action_analysis_runs WHERE candidate_id IN (SELECT candidate_id FROM action_candidates WHERE includes_subjects);
+                DELETE FROM action_analysis WHERE candidate_id IN (SELECT candidate_id FROM action_candidates WHERE includes_subjects);
+                DELETE FROM action_candidates WHERE includes_subjects;
                 DELETE FROM bill_pages WHERE role = 'Subjects';
                 """);
 
