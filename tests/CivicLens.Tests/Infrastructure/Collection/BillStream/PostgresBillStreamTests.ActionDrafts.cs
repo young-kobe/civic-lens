@@ -251,6 +251,68 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task RedraftMovesASettledEntryWhoseNewestDraftRunUsedAnOlderPromptAndLeavesASupersededEntryAndResetsAttempts()
+    {
+        var (older, newer) = await TwoSettledCandidatesAsync(ActionDraftErrorCodes.SupersededByNewerCandidate, null);
+        await InsertRunAsync(older, "action-draft-prompt-v1", 1);
+        await InsertRunAsync(newer, "action-draft-prompt-v1", 2);
+
+        Assert.Equal(1, await ActionStore().RequeueOlderPromptAsync(default));
+
+        var queue = (await QueueAsync()).ToDictionary(row => row.CandidateId, row => (row.Status, row.Attempts));
+        Assert.Equal(("Succeeded", 2), queue[older]);
+        Assert.Equal(("Pending", 0), queue[newer]);
+    }
+
+    [Fact]
+    public async Task RedraftMovesNothingWhenTheNewestDraftRunOfTheBillUsedTheCurrentPrompt()
+    {
+        var (older, newer) = await TwoSettledCandidatesAsync(ActionDraftErrorCodes.Unchanged, null);
+        await InsertRunAsync(older, "action-draft-prompt-v1", 1);
+        await InsertRunAsync(newer, ActionDraftTask.PromptVersion, 2);
+
+        Assert.Equal(0, await ActionStore().RequeueOlderPromptAsync(default));
+
+        Assert.All(await QueueAsync(), row => Assert.Equal(("Succeeded", 2), (row.Status, row.Attempts)));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(ActionDraftErrorCodes.Unchanged)]
+    public async Task RedraftIgnoresANewerBypassedRunBecauseOnlyTheNewestDraftedRunNamesThePromptTheDraftCameFrom(string? settledCode)
+    {
+        var (older, newer) = await TwoSettledCandidatesAsync(ActionDraftErrorCodes.SupersededByNewerCandidate, settledCode);
+        await InsertRunAsync(newer, "action-draft-prompt-v1", 1);
+        await InsertRunAsync(newer, ActionDraftTask.PromptVersion, 2, "Bypassed");
+
+        Assert.Equal(1, await ActionStore().RequeueOlderPromptAsync(default));
+
+        var queue = (await QueueAsync()).ToDictionary(row => row.CandidateId, row => row.Status);
+        Assert.Equal("Pending", queue[newer]);
+        Assert.Equal("Succeeded", queue[older]);
+    }
+
+    private async Task<(string Older, string Newer)> TwoSettledCandidatesAsync(string? olderCode, string? newerCode)
+    {
+        var older = await ReadableCandidateAsync(sponsor: "A000001");
+        var newer = await ReadableCandidateAsync(sponsor: "A000001", UpdatedAt.AddDays(1));
+        await ExecuteAsync(connectionString, $"""
+            UPDATE action_analysis SET status = 'Succeeded', attempts = 2,
+                error_code = CASE candidate_id WHEN '{older}' THEN {SqlLiteral(olderCode)} ELSE {SqlLiteral(newerCode)} END
+            """);
+        return (older, newer);
+    }
+
+    private static string SqlLiteral(string? value) => value is null ? "NULL" : $"'{value}'";
+
+    private async Task InsertRunAsync(string candidate, string promptVersion, long startedAtTicks, string outcome = "Drafted") => await ExecuteAsync(connectionString, $"""
+        INSERT INTO action_analysis_runs (run_id, candidate_id, task, task_version, model, prompt_version, schema_version, input_hash, outcome,
+            input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, charged_tokens, started_at_utc_ticks, finished_at_utc_ticks)
+        VALUES ('{Guid.NewGuid():N}', '{candidate}', '{ActionDraftTask.Task}', '{ActionDraftTask.TaskVersion}', '{ActionDraftTask.Model}', '{promptVersion}',
+            '{ActionDraftTask.SchemaVersion}', '{new string('1', 64)}', '{outcome}', 0, 0, 0, 0, 0, {startedAtTicks}, {startedAtTicks})
+        """);
+
+    [Fact]
     public async Task ADraftedSettlementWritesTheDraftTheRevisionTheRunAndTheBudgetInOneTransaction()
     {
         var candidate = await CandidateWithoutSummariesAsync();

@@ -67,6 +67,14 @@ public sealed class ActionCommandTests(PostgresCollection postgres) : IAsyncLife
     }
 
     [Fact]
+    public async Task RedraftReportsZeroWhenNoDraftCameFromAnOlderPrompt()
+    {
+        var result = await RunAsync("auth0|owner", "actions", "draft", "redraft");
+
+        Assert.Equal((0, """{"requeued":0}"""), (result.ExitCode, result.Output.Trim()));
+    }
+
+    [Fact]
     public async Task RequeueBlockedReportsTheCountAndRefusesAnEmptyCodeSoItNeverMatchesEveryBlockedRow()
     {
         var known = await RunAsync("auth0|owner", "actions", "draft", "requeue", "--blocked", "--code", ActionDraftErrorCodes.TitleTooLong);
@@ -78,6 +86,7 @@ public sealed class ActionCommandTests(PostgresCollection postgres) : IAsyncLife
     }
 
     [Theory]
+    [InlineData("redraft")]
     [InlineData("requeue", "--all")]
     [InlineData("requeue", "--blocked", "--code", ActionDraftErrorCodes.TitleTooLong)]
     public async Task TheAiDrafterCannotActAsTheOwner(params string[] command)
