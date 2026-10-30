@@ -261,6 +261,7 @@ The protocol, configuration, schema, parser, and behavior versions start at the 
 | Bill detail extraction | `congress-bill-detail-v1` | `src/CivicLens.Application/Collection/Bills/CongressBillParser.cs` | Extraction IDs and text of a bill detail | The parse or the rendered text of a bill detail changes |
 | Bill cosponsors extraction | `congress-bill-cosponsors-v1` | `src/CivicLens.Application/Collection/Bills/CongressBillCosponsorsParser.cs` | Extraction IDs and text of a cosponsors page | The parse or the rendered text of a cosponsors page changes |
 | Bill actions extraction | `congress-bill-actions-v1` | `src/CivicLens.Application/Collection/Bills/CongressBillActionsParser.cs` | Extraction IDs and text of an actions page | The parse or the rendered text of an actions page changes |
+| Bill subjects extraction | `congress-bill-subjects-v1` | `src/CivicLens.Application/Collection/Bills/CongressBillSubjectsParser.cs` | Extraction IDs and text of a subjects page | The parse or the rendered text of a subjects page changes |
 | Bill summaries extraction | `congress-bill-summaries-v1` plus the version of the HTML extraction | `src/CivicLens.Application/Collection/Bills/CongressBillSummariesParser.cs` | Extraction IDs and text of a summaries page | The parse or the rendered text of a summaries page changes |
 | House vote detail extraction | `congress-house-vote-v1` | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteParser.cs` | Extraction IDs, text, and citations of a House vote | The parse or the rendered text of a vote changes |
 | House vote members extraction | `congress-house-vote-members-v1` | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteMembersParser.cs` | Extraction IDs, text, and citations of a House member list | The parse or the rendered text of a member list changes |
@@ -275,10 +276,10 @@ The protocol, configuration, schema, parser, and behavior versions start at the 
 | Statement draft prompt | `statement-draft-prompt-v2` | same file | Statement analysis runs | Prompt text or input framing changes, for either speaker shape |
 | Statement draft schema | `statement-draft-schema-v1` | same file | Statement analysis runs | The model output schema changes, for either speaker shape |
 | Action draft task | `action-draft-v1` | `src/CivicLens.Application/Actions/ActionDraftTask.cs` | Action analysis runs | Task flow or output handling changes |
-| Action draft prompt | `action-draft-prompt-v2` | same file | Action analysis runs | Prompt text or input framing changes |
+| Action draft prompt | `action-draft-prompt-v3` | same file | Action analysis runs | Prompt text or input framing changes |
 | Action draft schema | `action-draft-schema-v2` | same file | Action analysis runs | The model output schema changes |
 | Vote draft task | `vote-draft-v1` | `src/CivicLens.Application/Votes/VoteDraftTask.cs` | Vote analysis runs | Task flow or output handling changes |
-| Vote draft prompt | `vote-draft-prompt-v3` | same file | Vote analysis runs | Prompt text or input framing changes |
+| Vote draft prompt | `vote-draft-prompt-v4` | same file | Vote analysis runs | Prompt text or input framing changes |
 | Vote draft schema | `vote-draft-schema-v2` | same file | Vote analysis runs | The model output schema changes |
 | Vote fingerprint | `vote-fingerprint-v1` | `src/CivicLens.Application/Votes/VoteFingerprint.cs` | The run input hash of a draft that makes no call | The canonical text of the fingerprint changes |
 | Sponsorship fingerprint | `action-fingerprint-v1` | `src/CivicLens.Application/Collection/Bills/ActionFingerprint.cs` | The fingerprint in each action revision | The canonical text of an entry changes |

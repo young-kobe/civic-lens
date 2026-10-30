@@ -685,6 +685,47 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
         Assert.Equal(2, await ScalarAsync("SELECT summary_count FROM bill_gates"));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ASubjectsFirstPageIsAdmittedAtDetailForEveryGateOutcomeBecauseAVoteCanNameABillThatNeverPassedTheGate(bool passed)
+    {
+        var detail = await EnqueueDetailAsync("detail");
+        var gate = passed ? BillGateOutcome.Passed(BillGateReason.CoveredSponsor) : BillGateOutcome.NotRelevant(BillGateReason.UntrackedPolicyArea);
+
+        var result = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 0, subjects: 3), gate);
+
+        Assert.Single(result.Jobs, job => job.Url == "https://api.congress.gov/v3/bill/119/hr/7/subjects?format=json&limit=250");
+        Assert.Equal(3, await ScalarAsync("SELECT subject_count FROM bill_gates"));
+        Assert.Contains(await LinksAsync(), link => link.Key.Contains("/subjects/") && link.DetailJobId == detail);
+    }
+
+    [Theory]
+    [InlineData(BillGateFixtures.TrackedPolicyArea, 1, false)]
+    [InlineData(BillGateFixtures.TrackedPolicyArea, 2, true)]
+    [InlineData(null, 1, true)]
+    [InlineData(null, 0, false)]
+    public async Task TheSubjectsCountIncludesThePolicyAreaSoAPolicyOnlyBillAdmitsNoSubjectsChain(string? policyArea, int count, bool admitted)
+    {
+        var detail = await EnqueueDetailAsync("detail");
+
+        var result = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 0, policyArea: policyArea, subjects: count),
+            BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+
+        Assert.Equal(admitted, result.Jobs.Any(job => job.Url.Contains("/subjects?")));
+    }
+
+    [Fact]
+    public async Task ABillWithNoSubjectsAdmitsNoSubjectsPageAndAnOldGateRowDefaultsToNone()
+    {
+        var detail = await EnqueueDetailAsync("detail");
+
+        var result = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 0, subjects: 0), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+
+        Assert.DoesNotContain(result.Jobs, job => job.Url.Contains("/subjects?"));
+        Assert.Equal(0, await ScalarAsync("SELECT subject_count FROM bill_gates"));
+    }
+
     [Fact]
     public async Task APassedBillWithNoSummariesAdmitsNoSummariesPage()
     {
@@ -1062,15 +1103,15 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
         Assert.Equal(0, await CandidateCountAsync());
     }
 
-    private sealed record StartedBill(string Detail, string? Cosponsors, string Actions, string? Summaries);
+    private sealed record StartedBill(string Detail, string? Cosponsors, string Actions, string? Summaries, string? Subjects = null);
 
-    private async Task<StartedBill> StartPassedBillAsync(int cosponsors, int summaries, bool hasTrackedIssue = false)
+    private async Task<StartedBill> StartPassedBillAsync(int cosponsors, int summaries, bool hasTrackedIssue = false, int subjects = 0)
     {
         var detail = await EnqueueDetailAsync("detail");
-        var result = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors, summaries: summaries),
+        var result = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors, summaries: summaries, subjects: subjects),
             BillGateOutcome.Passed(BillGateReason.CoveredSponsor) with { HasTrackedIssue = hasTrackedIssue });
         string? JobOf(string resource) => result.Jobs.SingleOrDefault(job => job.Url.Contains($"/{resource}?"))?.JobId;
-        return new StartedBill(detail, JobOf("cosponsors"), JobOf("actions")!, JobOf("summaries"));
+        return new StartedBill(detail, JobOf("cosponsors"), JobOf("actions")!, JobOf("summaries"), JobOf("subjects"));
     }
 
     private sealed record PageRecord(string Role, int Order, bool Closes, string ExtractionId);
@@ -1089,7 +1130,7 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     }
 
     private sealed record CandidateRecord(string CandidateId, string SourceId, int Congress, string BillType, int BillNumber,
-        long UpdateTicks, string DetailJobId, string RevisionId, long CreatedTicks, bool IncludesSummaries);
+        long UpdateTicks, string DetailJobId, string RevisionId, long CreatedTicks, bool IncludesSummaries, bool IncludesSubjects);
 
     private async Task<IReadOnlyList<CandidateRecord>> CandidatesAsync()
     {
@@ -1097,7 +1138,7 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""
             SELECT candidate_id, source_id, congress, bill_type, bill_number, update_date_utc_ticks, detail_job_id,
-                   configuration_revision_id, created_at_utc_ticks, includes_summaries
+                   configuration_revision_id, created_at_utc_ticks, includes_summaries, includes_subjects
             FROM action_candidates ORDER BY candidate_id
             """, connection);
         await using var reader = await command.ExecuteReaderAsync();
@@ -1105,7 +1146,7 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
         while (await reader.ReadAsync())
             candidates.Add(new CandidateRecord(reader.GetString(0), reader.GetString(1), reader.GetInt32(2), reader.GetString(3),
                 reader.GetInt32(4), reader.GetInt64(5), reader.GetString(6), reader.GetString(7), reader.GetInt64(8),
-                reader.GetBoolean(9)));
+                reader.GetBoolean(9), reader.GetBoolean(10)));
         return candidates;
     }
 
@@ -1135,8 +1176,8 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     private static readonly DateTimeOffset UpdatedAt = new(2025, 3, 3, 12, 0, 0, TimeSpan.Zero);
 
     private static CongressBill DetailBill(DateTimeOffset updatedAt, int cosponsors,
-        string? policyArea = BillGateFixtures.TrackedPolicyArea, int summaries = 0) =>
-        new(119, "hr", 7, "A bill", Backfill, updatedAt, policyArea, ["Z000009"], cosponsors, 1, summaries);
+        string? policyArea = BillGateFixtures.TrackedPolicyArea, int summaries = 0, int subjects = 0, int number = 7) =>
+        new(119, "hr", number, "A bill", Backfill, updatedAt, policyArea, ["Z000009"], cosponsors, 1, summaries, subjects);
 
     private static string SummariesNext(int offset) =>
         $"https://api.congress.gov/v3/bill/119/hr/7/summaries?offset={offset}&limit=1&format=json";
@@ -1150,10 +1191,10 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     private static CongressBillCosponsorsPage Cosponsors(string[] bioguideIds, string? next) =>
         new([.. bioguideIds.Select(id => new CongressBillCosponsor(id, Backfill, false, null))], next);
 
-    private async Task<string> EnqueueDetailAsync(string name)
+    private async Task<string> EnqueueDetailAsync(string name, int number = 7)
     {
         var detail = await SucceededJobs.BillDetailAsync(store, connectionString, Source(), await ListJobAsync(name),
-            new CongressBillListItem(119, "hr", 7, Backfill.AddDays(++detailSequence)));
+            new CongressBillListItem(119, "hr", number, Backfill.AddDays(++detailSequence)));
         seededJobIds.Add(detail);
         return detail;
     }
@@ -1173,6 +1214,9 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
 
     private async Task<DiscoveryAdmissionResult> AdmitSummariesAsync(string pageJobId, CongressBillSummariesPage page) =>
         await store.AdmitSummariesPageAsync(Source(), pageJobId, page, await ExtractionAsync(pageJobId), default);
+
+    private async Task<DiscoveryAdmissionResult> AdmitSubjectsAsync(string pageJobId, CongressBillSubjectsPage page) =>
+        await store.AdmitSubjectsPageAsync(Source(), pageJobId, page, await ExtractionAsync(pageJobId), default);
 
     private Task<string> ExtractionAsync(string jobId)
     {

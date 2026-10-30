@@ -74,6 +74,254 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal((newer.CandidateId, "action-draft", "Pending", null, 0), queue.Single(row => row.CandidateId == newer.CandidateId));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SubjectsAndSummariesThatCloseLaterGiveAtMostThreeCandidatesWhicheverComesFirstAndReplayAddsNoMore(bool subjectsFirst)
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1, subjects: 2);
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+        var empty = new CongressBillSummariesPage([], null);
+        var emptySubjects = new CongressBillSubjectsPage([], null);
+
+        if (subjectsFirst) await AdmitSubjectsAsync(bill.Subjects!, emptySubjects);
+        else await AdmitSummariesAsync(bill.Summaries!, empty);
+        var afterFirst = await CandidatesAsync();
+        if (subjectsFirst) await AdmitSummariesAsync(bill.Summaries!, empty);
+        else await AdmitSubjectsAsync(bill.Subjects!, emptySubjects);
+        var all = await CandidatesAsync();
+        await AdmitSubjectsAsync(bill.Subjects!, emptySubjects);
+        await AdmitSummariesAsync(bill.Summaries!, empty);
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+
+        Assert.Equal(2, afterFirst.Count);
+        Assert.Equal(3, all.Count);
+        Assert.All(afterFirst, candidate => Assert.Contains(candidate, all));
+        Assert.Equal(all, await CandidatesAsync());
+        Assert.Equal(new[] { (false, false), (!subjectsFirst, subjectsFirst), (true, true) }.Order(),
+            all.Select(candidate => (candidate.IncludesSummaries, candidate.IncludesSubjects)).Order());
+        Assert.Equal(3L, await ScalarAsync("SELECT count(*) FROM action_analysis"));
+    }
+
+    [Fact]
+    public async Task ASubjectsChainThatClosesBeforeTheGatePassesIsIncludedInTheFirstCandidate()
+    {
+        var detail = await EnqueueDetailAsync("pending");
+        var result = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 1, subjects: 2), BillGateOutcome.Pending);
+        var subjects = result.Jobs.Single(job => job.Url.Contains("/subjects?")).JobId;
+        var cosponsors = result.Jobs.Single(job => job.Url.Contains("/cosponsors?")).JobId;
+        await AdmitSubjectsAsync(subjects, new CongressBillSubjectsPage([], null));
+        Assert.Empty(await CandidatesAsync());
+
+        var passed = await AdmitCosponsorPageAsync(cosponsors, Cosponsors(["A000001"], next: null));
+        await AdmitActionsAsync(passed.Jobs.Single(job => job.Url.Contains("/actions?")).JobId, new CongressBillActionsPage([], null));
+
+        var candidate = Assert.Single(await CandidatesAsync());
+        Assert.True(candidate.IncludesSubjects);
+        Assert.False(candidate.IncludesSummaries);
+    }
+
+    [Fact]
+    public async Task AnOlderCandidateIsSupersededByTheOneThatCoversItAndEvidenceListsOnlyThePagesItWasBuiltFrom()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1, subjects: 2);
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+        await AdmitSummariesAsync(bill.Summaries!, new CongressBillSummariesPage([], null));
+        await AdmitSubjectsAsync(bill.Subjects!, new CongressBillSubjectsPage([], null));
+        var candidates = await CandidatesAsync();
+        var store = ActionStore();
+
+        async Task<ActionDraftEvidence> EvidenceOf(bool summaries, bool subjects) => (await store.ReadEvidenceAsync(
+            candidates.Single(item => item.IncludesSummaries == summaries && item.IncludesSubjects == subjects).CandidateId, default))!;
+        var none = await EvidenceOf(false, false);
+        var summariesOnly = await EvidenceOf(true, false);
+        var both = await EvidenceOf(true, true);
+
+        Assert.Equal([true, true, false], [none.HasNewerCandidate, summariesOnly.HasNewerCandidate, both.HasNewerCandidate]);
+        Assert.Equal([ApiResource.Bill], none.Pages.Select(page => page.Resource));
+        Assert.Equal([ApiResource.Bill, ApiResource.BillSummaries], summariesOnly.Pages.Select(page => page.Resource));
+        Assert.Equal([ApiResource.Bill, ApiResource.BillSummaries, ApiResource.BillSubjects], both.Pages.Select(page => page.Resource));
+        Assert.True(both.Candidate.IncludesSubjects);
+        Assert.False(summariesOnly.Candidate.IncludesSubjects);
+    }
+
+    [Fact]
+    public async Task ASubjectsOnlyCandidateIsTheNewestWhileTheSummariesChainStaysOpen()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1, subjects: 2);
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+        await AdmitSubjectsAsync(bill.Subjects!, new CongressBillSubjectsPage([], null));
+        var subjectsOnly = (await CandidatesAsync()).Single(item => item.IncludesSubjects);
+
+        var evidence = (await ActionStore().ReadEvidenceAsync(subjectsOnly.CandidateId, default))!;
+
+        Assert.False(evidence.HasNewerCandidate);
+        Assert.Equal([ApiResource.Bill, ApiResource.BillSubjects], evidence.Pages.Select(page => page.Resource));
+    }
+
+    [Fact]
+    public async Task TheCandidateIdsOfTheOldInputCombinationsStayTheSameAndTheSubjectsSuffixComesLast()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1, subjects: 2);
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+        await AdmitSummariesAsync(bill.Summaries!, new CongressBillSummariesPage([], null));
+        await AdmitSubjectsAsync(bill.Subjects!, new CongressBillSubjectsPage([], null));
+
+        string IdOf(string suffix) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(
+            $"{SourceId.Length}:{SourceId}119:hr:7:{UpdatedAt.UtcTicks}{suffix}")));
+
+        Assert.Equal(new[] { IdOf(""), IdOf(":summaries"), IdOf(":summaries:subjects") }.Order(), (await CandidatesAsync()).Select(item => item.CandidateId).Order());
+    }
+
+    [Fact]
+    public async Task TheBackfillAdmitsTheChainOfTheNewestVersionOnceStoresTheCountAndNeverListsAnExaminedBillAgain()
+    {
+        var older = await EnqueueDetailAsync("older");
+        await AdmitDetailAsync(older, DetailBill(UpdatedAt.AddDays(-1), cosponsors: 0), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+        var newest = await EnqueueDetailAsync("newest");
+        await AdmitDetailAsync(newest, DetailBill(UpdatedAt, cosponsors: 0), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+        await ExecuteAsync(connectionString, "UPDATE bill_gates SET subject_count = NULL");
+        var backfill = (IBillSubjectsBackfillStore)store;
+
+        Assert.Equal([newest], await backfill.ListNewestBillsWithoutSubjectCountAsync(10, default));
+        var admitted = await backfill.AdmitSubjectsChainAsync(Source(), newest, 5, default);
+        var replay = await backfill.AdmitSubjectsChainAsync(Source(), newest, 5, default);
+
+        Assert.True(admitted);
+        Assert.False(replay);
+        Assert.Equal(5, await ScalarAsync($"SELECT subject_count FROM bill_gates WHERE detail_job_id = '{newest}'"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM bill_follow_on_jobs l JOIN collection_jobs j ON j.job_id = l.job_id WHERE j.definition_json::jsonb ->> 'apiResource' = 'billSubjects'"));
+        Assert.Empty(await backfill.ListNewestBillsWithoutSubjectCountAsync(10, default));
+    }
+
+    [Fact]
+    public async Task TheBackfillOfAPolicyOnlyBillAdmitsNothingButRecordsTheCountSoItIsNotListedAgain()
+    {
+        var first = await EnqueueDetailAsync("first");
+        await AdmitDetailAsync(first, DetailBill(UpdatedAt, cosponsors: 0), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+        await ExecuteAsync(connectionString, "UPDATE bill_gates SET subject_count = NULL");
+        var backfill = (IBillSubjectsBackfillStore)store;
+
+        var admitted = await backfill.AdmitSubjectsChainAsync(Source(), first, 1, default);
+
+        Assert.False(admitted);
+        Assert.Equal(1, await ScalarAsync($"SELECT subject_count FROM bill_gates WHERE detail_job_id = '{first}'"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM bill_follow_on_jobs l JOIN collection_jobs j ON j.job_id = l.job_id WHERE j.definition_json::jsonb ->> 'apiResource' = 'billSubjects'"));
+        Assert.Empty(await backfill.ListNewestBillsWithoutSubjectCountAsync(10, default));
+    }
+
+    [Fact]
+    public async Task TheBackfillExaminesEveryRowWhateverTheLimitBecauseARealZeroIsStoredAndLeavesTheList()
+    {
+        var counts = new Dictionary<string, int>();
+        foreach (var (number, count) in new[] { (11, 0), (12, 0), (13, 0), (14, 3) })
+        {
+            var detail = await EnqueueDetailAsync("bill-" + number, number);
+            await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 0, number: number), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+            counts[detail] = count;
+        }
+        await ExecuteAsync(connectionString, "UPDATE bill_gates SET subject_count = NULL");
+        var backfill = (IBillSubjectsBackfillStore)store;
+
+        var examined = new List<string>();
+        for (var ids = await backfill.ListNewestBillsWithoutSubjectCountAsync(2, default); ids.Count > 0;
+            ids = await backfill.ListNewestBillsWithoutSubjectCountAsync(2, default))
+        {
+            Assert.True(ids.Count <= 2);
+            foreach (var id in ids) await backfill.AdmitSubjectsChainAsync(Source(), id, counts[id], default);
+            examined.AddRange(ids);
+        }
+
+        Assert.Equal(counts.Keys.Order(), examined.Order());
+        Assert.Empty(await backfill.ListNewestBillsWithoutSubjectCountAsync(2, default));
+        Assert.Equal(3L, await ScalarAsync("SELECT count(*) FROM bill_gates WHERE subject_count = 0"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM bill_follow_on_jobs l JOIN collection_jobs j ON j.job_id = l.job_id WHERE j.definition_json::jsonb ->> 'apiResource' = 'billSubjects'"));
+    }
+
+    [Fact]
+    public async Task ASubjectsChainThatTheBackfillClosesAddsTheCandidateWithSubjectsToAPassedBillThatAlreadyHasOne()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+        Assert.Single(await CandidatesAsync());
+        await ExecuteAsync(connectionString, "UPDATE bill_gates SET subject_count = NULL");
+        var backfill = (IBillSubjectsBackfillStore)store;
+        await backfill.AdmitSubjectsChainAsync(Source(), bill.Detail, 4, default);
+        var subjectsJob = (await AdmittedJobsAsync()).Single(job => job.Definition.Url.Contains("/subjects?")).JobId;
+
+        await AdmitSubjectsAsync(subjectsJob, new CongressBillSubjectsPage([], null));
+
+        Assert.Equal([false, true], (await CandidatesAsync()).Select(candidate => candidate.IncludesSubjects).Order());
+    }
+
+    [Fact]
+    public async Task RollingTheSubjectsMigrationBackRefusesWithAClearMessageWhenARevisionCameFromACandidateWithSubjectsAndChangesNothing()
+    {
+        var candidate = await ThreeCandidatesWithSubjectsAsync();
+        var claim = (await ActionStore().TryClaimAsync(candidate, Lease, default))!;
+        var run = await ReserveAsync(ActionStore(), claim);
+        Assert.True(await ActionStore().CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(candidate, 1, includesSummaries: true, includesSubjects: true)),
+            DraftedRun(run, candidate), default));
+
+        var exception = await Assert.ThrowsAnyAsync<Exception>(RollBackAsync);
+
+        Assert.Contains("Cannot roll back BillSubjects", exception.ToString(), StringComparison.Ordinal);
+        Assert.Equal(3L, await ScalarAsync("SELECT count(*) FROM action_candidates"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM bill_pages WHERE role = 'Subjects'"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_revisions"));
+    }
+
+    [Fact]
+    public async Task RollingTheSubjectsMigrationBackDeletesAChainOfRunsLinkedByThePreviousRun()
+    {
+        var candidate = await ThreeCandidatesWithSubjectsAsync();
+        var store = ActionStore();
+        var first = (await store.TryClaimAsync(candidate, Lease, default))!;
+        var firstRun = await ReserveAsync(store, first);
+        Assert.True(await store.CheckpointAsync(AnalysisCheckpoint.From(first, State.Blocked, ActionDraftErrorCodes.ExtractionVersionChanged),
+            DraftedRun(firstRun, candidate), default));
+        Assert.Equal(1, await store.RequeueBlockedAsync(ActionDraftErrorCodes.ExtractionVersionChanged, default));
+        var second = (await store.TryClaimAsync(candidate, Lease, default))!;
+        var secondRun = await ReserveAsync(store, second);
+        Assert.True(await store.CheckpointAsync(AnalysisCheckpoint.From(second, State.Blocked, ActionDraftErrorCodes.ExtractionVersionChanged),
+            DraftedRun(secondRun, candidate, previousRunId: firstRun), default));
+        Assert.Equal(2L, await ScalarAsync($"SELECT count(*) FROM action_analysis_runs WHERE candidate_id = '{candidate}'"));
+
+        await RollBackAsync();
+
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM action_candidates"));
+        Assert.Equal(0L, await ScalarAsync($"SELECT count(*) FROM action_analysis_runs WHERE candidate_id = '{candidate}'"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM bill_pages WHERE role = 'Subjects'"));
+    }
+
+    private async Task<string> ThreeCandidatesWithSubjectsAsync()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1, subjects: 2);
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+        await AdmitSummariesAsync(bill.Summaries!, new CongressBillSummariesPage([], null));
+        await AdmitSubjectsAsync(bill.Subjects!, new CongressBillSubjectsPage([], null));
+        return (await CandidatesAsync()).Single(candidate => candidate.IncludesSummaries && candidate.IncludesSubjects).CandidateId;
+    }
+
+    private async Task RollBackAsync()
+    {
+        await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
+        await db.Database.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>().MigrateAsync("20261030001114_DropRosterLisId");
+    }
+
+    [Fact]
+    public async Task RollingTheSubjectsMigrationBackDropsTheSubjectRowsFirstSoTheOldIndexCanBeBuiltOnRealData()
+    {
+        await ThreeCandidatesWithSubjectsAsync();
+        Assert.Equal(3L, await ScalarAsync("SELECT count(*) FROM action_candidates"));
+
+        await RollBackAsync();
+
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM action_candidates"));
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM action_analysis"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM bill_pages WHERE role = 'Subjects'"));
+    }
+
     [Fact]
     public async Task TheOlderCandidateReadsNoSummaryPageEvenAfterTheSummariesArrive()
     {
@@ -563,16 +811,16 @@ public sealed partial class PostgresBillStreamTests
         return runId;
     }
 
-    private static ActionDraftRun DraftedRun(string runId, string candidate) => new(new AnalysisRun(runId, candidate, ActionDraftTask.Task,
-        ActionDraftTask.TaskVersion, ActionDraftTask.Model, ActionDraftTask.PromptVersion, ActionDraftTask.SchemaVersion, new string('1', 64), null,
+    private static ActionDraftRun DraftedRun(string runId, string candidate, string? previousRunId = null) => new(new AnalysisRun(runId, candidate, ActionDraftTask.Task,
+        ActionDraftTask.TaskVersion, ActionDraftTask.Model, ActionDraftTask.PromptVersion, ActionDraftTask.SchemaVersion, new string('1', 64), previousRunId,
         AnalysisRunOutcome.Drafted, new(900, 100, 0, 0), 1_000, "end_turn", "req", "{}", [], "{}", DateTimeOffset.UnixEpoch,
         DateTimeOffset.UnixEpoch), null);
 
-    private static ActionDraftRevision Revision(string candidate, int number, bool includesSummaries = false)
+    private static ActionDraftRevision Revision(string candidate, int number, bool includesSummaries = false, bool includesSubjects = false)
     {
         var extraction = new string('f', 64);
         return new(RecordId, number, "civic-lens:analysis", UpdatedAt.AddMinutes(number), "Headline", "Summary.", ReviewTextOrigin.Model, null,
-            SourceId, 119, "hr", 7, candidate, UpdatedAt, includesSummaries, new string('d', 64), null, null, null, null, null, [], [], BillGateFixtures.Revision().Id,
+            SourceId, 119, "hr", 7, candidate, UpdatedAt, includesSummaries, includesSubjects, new string('d', 64), null, null, null, null, null, [], [], BillGateFixtures.Revision().Id,
             [new("warren", "W000817", ActionSponsorshipRole.Sponsor, false, new DateOnly(2025, 1, 3), null,
                 [new SourceSpan(extraction, 0, 5)])], "A bill");
     }

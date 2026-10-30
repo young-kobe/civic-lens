@@ -10,7 +10,8 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
     string Headline, string Summary, ReviewTextOrigin TextOrigin, ReviewTextSuggestion? Suggestion,
     string SourceId, VoteSource Source, Chamber Chamber, int Congress, int SessionNumber, int RollCallNumber, string? BillType, int? BillNumber,
     string CandidateId, DateTimeOffset CandidateUpdateDate, ImmutableArray<VoteFact> Facts, DateOnly VotedOn, SourceSpan VotedOnCitation, VoteKind Kind, SourceSpan? KindCitation, ImmutableArray<MemberVote> Members,
-    ImmutableArray<string> TrackedIssueIds, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ImmutableArray<string> IssueCandidateIds, string IssueRevisionId)
+    ImmutableArray<string> TrackedIssueIds, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ImmutableArray<string> IssueCandidateIds, string IssueRevisionId,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SubjectsHash = null)
     : IHeadlineSummaryRevision
 {
     public const int MaximumHeadlineLength = 256;
@@ -32,6 +33,8 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
     {
         if (!LowercaseHex.Is(RecordId, 64) || !LowercaseHex.Is(CandidateId, 64) || !LowercaseHex.Is(IssueRevisionId, 64))
             throw new ArgumentException("A vote revision needs valid record, candidate, and issue revision IDs.");
+        if (SubjectsHash is not null && !LowercaseHex.Is(SubjectsHash, 64))
+            throw new ArgumentException("A vote revision subjects hash must be 64 lowercase hex characters.");
         if (!ReviewAuthor.IsValidRevisionHeader(RevisionNumber, AuthorSubject, CreatedAtUtc))
             throw new ArgumentException("A vote revision needs a number, an author, and a UTC creation time.");
         if (string.IsNullOrWhiteSpace(SourceId) || !Enum.IsDefined(Source) || !Enum.IsDefined(Chamber) || Congress < 1 || SessionNumber is not (1 or 2) || RollCallNumber < 1)
@@ -100,7 +103,8 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
         VotedOnCitation == other.VotedOnCitation && Facts.SequenceEqual(other.Facts) &&
         Kind == other.Kind && KindCitation == other.KindCitation && Members.SequenceEqual(other.Members) &&
         TrackedIssueIds.SequenceEqual(other.TrackedIssueIds) && IssueCandidateIds.IsDefault == other.IssueCandidateIds.IsDefault &&
-        (IssueCandidateIds.IsDefault || IssueCandidateIds.SequenceEqual(other.IssueCandidateIds)) && IssueRevisionId == other.IssueRevisionId;
+        (IssueCandidateIds.IsDefault || IssueCandidateIds.SequenceEqual(other.IssueCandidateIds)) && IssueRevisionId == other.IssueRevisionId &&
+        SubjectsHash == other.SubjectsHash;
 
     private static bool IsBounded(SourceSpan span) => span is { Start: >= 0, Length: > 0 } && LowercaseHex.Is(span.ExtractionId, 64);
 }

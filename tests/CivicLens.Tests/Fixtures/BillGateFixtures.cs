@@ -39,5 +39,5 @@ internal static class BillGateFixtures
     public static IssueConfigurationRevision Revision(bool withEviction = false) => IssueConfigurationRevision.Create(Issues(withEviction: withEviction));
 
     public static BillIssueChoice HousingChoice() =>
-        BillIssueChoice.For(TrackedPolicyArea, new DateOnly(2025, 3, 3), Issues());
+        BillIssueChoice.For(TrackedPolicyArea, [], new DateOnly(2025, 3, 3), Issues());
 }

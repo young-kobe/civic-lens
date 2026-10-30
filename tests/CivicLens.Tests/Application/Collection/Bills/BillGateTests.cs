@@ -113,7 +113,7 @@ public sealed class BillGateTests
     }
 
     private static CongressBill Bill(string[]? sponsors = null, string? policyArea = null, int cosponsors = 0) =>
-        new(119, "hr", 1, "A bill", new DateOnly(2025, 1, 3), UpdatedAt, policyArea, sponsors ?? ["Z000009"], cosponsors, 1, 0);
+        new(119, "hr", 1, "A bill", new DateOnly(2025, 1, 3), UpdatedAt, policyArea, sponsors ?? ["Z000009"], cosponsors, 1, 0, 0);
 
     private static CongressBillCosponsor Cosponsor(string bioguideId) =>
         new(bioguideId, new DateOnly(2025, 1, 4), false, null);

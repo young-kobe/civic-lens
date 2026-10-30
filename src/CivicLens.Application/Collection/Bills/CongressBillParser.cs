@@ -23,7 +23,8 @@ public static class CongressBillParser
             throw new InvalidDataException("Bill detail is for another bill than requested.");
         return new CongressBill(bill.Congress.Value, type, bill.Number.Value, bill.Title, bill.IntroducedDate.Value,
             ReadUpdateDate(bill.UpdateDate), ReadPolicyArea(bill.PolicyArea), ReadSponsors(bill.Sponsors),
-            ReadCosponsorCount(bill.Cosponsors), ReadCount(bill.Actions, "action"), ReadCount(bill.Summaries, "summary"));
+            ReadCosponsorCount(bill.Cosponsors), ReadCount(bill.Actions, "action"), ReadCount(bill.Summaries, "summary"),
+            ReadCount(bill.Subjects, "subject"));
     }
 
     internal static DateTimeOffset ReadUpdateDate(string updateDate) =>
@@ -56,7 +57,7 @@ public static class CongressBillParser
     private sealed record WireDetail(WireBill? Bill);
     private sealed record WireBill(int? Congress, string? Type, int? Number, string? Title, DateOnly? IntroducedDate,
         string? UpdateDate, WirePolicyArea? PolicyArea, WireSponsor?[]? Sponsors, WireCosponsors? Cosponsors,
-        WireCount? Actions, WireCount? Summaries);
+        WireCount? Actions, WireCount? Summaries, WireCount? Subjects);
     private sealed record WirePolicyArea(string? Name);
     private sealed record WireSponsor(string? BioguideId);
     private sealed record WireCount(int? Count);

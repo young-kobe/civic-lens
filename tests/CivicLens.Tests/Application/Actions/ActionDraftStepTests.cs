@@ -258,6 +258,99 @@ public sealed class ActionDraftStepTests
     }
 
     [Fact]
+    public async Task ACandidateWithSubjectsDraftsAgainFromARevisionThatNeverSawThemAndALaterRunOfTheSameCandidateIsUnchanged()
+    {
+        var withoutSubjects = Create(summaries: [Summary]);
+        var withSubjects = Create(summaries: [Summary], subjectPages: [["Housing finance and home ownership"], ["Rent and rental housing"]]);
+        var (first, _) = await RunAsync(withoutSubjects, new FakeHeadlineSummaryModel().Draft(Output()));
+        var before = Assert.Single(first.Revisions);
+
+        var (second, model) = await RunAsync(withSubjects, new FakeHeadlineSummaryModel().Draft(Output(headline: "Revised")), before);
+        var (third, thirdModel) = await RunAsync(withSubjects, new FakeHeadlineSummaryModel(), Assert.Single(second.Revisions));
+
+        Assert.False(before.CandidateIncludesSubjects);
+        var revised = Assert.Single(second.Revisions);
+        Assert.True(revised.CandidateIncludesSubjects);
+        var prompt = Assert.Single(model.Requests).UserPrompt;
+        Assert.Contains("\"Housing finance and home ownership\"", prompt, StringComparison.Ordinal);
+        Assert.Contains("\"Rent and rental housing\"", prompt, StringComparison.Ordinal);
+        Assert.Empty(thirdModel.Requests);
+        Assert.Equal((State.Succeeded, "unchanged"), (third.Entries[0].Status, third.Entries[0].ErrorCode));
+    }
+
+    [Fact]
+    public async Task ACandidateWhosePromptWouldBeByteIdenticalDoesNotDraftAgainButRealSubjectsLaterDoAndAChangedSubjectDoesToo()
+    {
+        var plain = Create(summaries: [Summary]);
+        var policyOnly = Create(summaries: [Summary], subjectPages: [[]]);
+        var real = Create(summaries: [Summary], subjectPages: [["Housing finance and home ownership"]]);
+        var changed = Create(summaries: [Summary], subjectPages: [["Rent and rental housing"]]);
+        var (first, _) = await RunAsync(plain, new FakeHeadlineSummaryModel().Draft(Output()));
+        var before = Assert.Single(first.Revisions);
+
+        var (second, policyOnlyModel) = await RunAsync(policyOnly, new FakeHeadlineSummaryModel(), before);
+        var (third, realModel) = await RunAsync(real, new FakeHeadlineSummaryModel().Draft(Output(headline: "Revised")), before);
+        var withSubjects = Assert.Single(third.Revisions);
+        var (fourth, changedModel) = await RunAsync(changed, new FakeHeadlineSummaryModel().Draft(Output(headline: "Revised again")), withSubjects);
+
+        Assert.Empty(policyOnlyModel.Requests);
+        Assert.Equal((State.Succeeded, "unchanged"), (second.Entries[0].Status, second.Entries[0].ErrorCode));
+        Assert.Single(realModel.Requests);
+        Assert.Matches("^[0-9a-f]{64}$", withSubjects.SubjectsHash);
+        Assert.Single(changedModel.Requests);
+        Assert.NotEqual(withSubjects.SubjectsHash, Assert.Single(fourth.Revisions).SubjectsHash);
+    }
+
+    [Fact]
+    public async Task ACopiedRevisionFromACandidateWithoutSubjectsKeepsTheHashSoTheLaterCandidateWithTheSameSubjectsIsUnchanged()
+    {
+        var subjects = new[] { new[] { "Rent and rental housing" } };
+        var first = Create(summaries: [Summary], subjectPages: subjects);
+        var withoutSubjects = Create(cosponsorPages: [[MarkeyOriginal]], summaries: [Summary]);
+        var later = Create(cosponsorPages: [[MarkeyOriginal]], summaries: [Summary], subjectPages: subjects);
+        var (drafted, _) = await RunAsync(first, new FakeHeadlineSummaryModel().Draft(Output()));
+        var withHash = Assert.Single(drafted.Revisions);
+
+        var (copied, copyModel) = await RunAsync(withoutSubjects, new FakeHeadlineSummaryModel(), withHash);
+        var copy = Assert.Single(copied.Revisions);
+        var (settled, laterModel) = await RunAsync(later, new FakeHeadlineSummaryModel(), copy);
+
+        Assert.NotNull(withHash.SubjectsHash);
+        Assert.Empty(copyModel.Requests);
+        Assert.Equal(withHash.SubjectsHash, copy.SubjectsHash);
+        Assert.Empty(laterModel.Requests);
+        Assert.Equal((State.Succeeded, "unchanged"), (settled.Entries[0].Status, settled.Entries[0].ErrorCode));
+    }
+
+    [Fact]
+    public async Task ABillWithNoSubjectsDraftsWithoutThemAndTheRevisionKeepsTheOldShape()
+    {
+        var (store, model) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
+
+        Assert.False(Assert.Single(store.Revisions).CandidateIncludesSubjects);
+        Assert.DoesNotContain("subjects", Assert.Single(model.Requests).UserPrompt, StringComparison.Ordinal);
+        var json = JsonSerializer.Serialize(Assert.Single(store.Revisions));
+        Assert.DoesNotContain("CandidateIncludesSubjects", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("SubjectsHash", json, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ASubjectsPageThatNoLongerMatchesItsCaptureBlocksBeforeAnyCall(bool tamperText)
+    {
+        var world = Create(subjectPages: [["Rent and rental housing"]]);
+        if (tamperText) world.TamperWithSavedText("subjects-0", "Bill: 119 hr 1\nSubject: Changed after capture");
+        else world.SetVersion("subjects-0", "older-version");
+        var model = new FakeHeadlineSummaryModel();
+
+        var (store, _) = await RunAsync(world, model);
+
+        Assert.Equal((State.Blocked, tamperText ? "renderedTextMismatch" : "extractionVersionChanged"), (store.Entries[0].Status, store.Entries[0].ErrorCode));
+        Assert.Empty(model.Requests);
+    }
+
+    [Fact]
     public async Task OnlyTheNewestSummaryGoesToTheModelByActionDateThenUpdateTimeThenVersionCode()
     {
         var world = Create(summaries:
@@ -523,6 +616,23 @@ public sealed class ActionDraftStepTests
         Assert.Contains("xxxxxxxxxx", model.Requests[0].UserPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("xxxxxxxxxx", model.Requests[1].UserPrompt, StringComparison.Ordinal);
         Assert.Equal([null, "summaryOmitted"], store.Runs.Select(run => run.Reason));
+    }
+
+    [Fact]
+    public async Task AtTheByteCapTheSubjectsGoBeforeTheSummaryBecauseCitedEvidenceOutranksUncitedInput()
+    {
+        var summary = new SummarySpec("00", "2025-01-03", "2025-01-05T10:00:00Z", "<p>" + new string('x', 2_000) + "</p>");
+        var (_, probe) = await RunAsync(Create(summaries: [summary]), new FakeHeadlineSummaryModel().Draft(Output()));
+        var justFits = new ActionDraftSettings(probe.Requests[0].ReservedTokens + 10, 1);
+        var world = Create(summaries: [summary], subjectPages: [[new string('s', 5_000)]]);
+
+        var (store, model) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output()), settings: justFits);
+
+        var prompt = Assert.Single(model.Requests).UserPrompt;
+        Assert.Contains("xxxxxxxxxx", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("ssssssssss", prompt, StringComparison.Ordinal);
+        Assert.Null(Assert.Single(store.Runs).Reason);
+        Assert.True(Assert.Single(store.Revisions).CandidateIncludesSubjects);
     }
 
     [Fact]

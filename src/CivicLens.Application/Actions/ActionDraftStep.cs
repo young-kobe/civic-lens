@@ -34,7 +34,7 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
         var read = await reader.ReadAsync(evidence, cancellationToken);
         if (read.Snapshot is not { } snapshot)
             return await attempt.CompleteAsync(State.Blocked, read.ErrorCode!, cancellationToken);
-        var choice = BillIssueChoice.For(snapshot.Bill.PolicyArea, BillGate.DayOf(snapshot.Bill.UpdateDate), issueConfiguration);
+        var choice = BillIssueChoice.For(snapshot.Bill.PolicyArea, snapshot.Subjects, BillGate.DayOf(snapshot.Bill.UpdateDate), issueConfiguration);
         attempt.ContextJson = ActionDraftPrompt.SerializeContext(snapshot, choice, issues.Id);
         if (snapshot.Sponsorships.IsEmpty)
             return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.NoTrackedOfficial, cancellationToken);
@@ -69,8 +69,11 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
         var summaryOmittedInputHashes = new HashSet<string>(StringComparer.Ordinal);
         AnalysisModelRequest? BuildRequest(ImmutableArray<string> errors)
         {
-            if (ActionDraftPrompt.Build(snapshot, context.Issues, settings.PromptByteCap, errors) is { } request) return request;
-            var withoutSummary = ActionDraftPrompt.Build(snapshot, context.Issues, settings.PromptByteCap, errors, includeSummary: false);
+            var request = context.Issues.BuildDroppingSubjectsWhenOverTheCap(
+                issues => ActionDraftPrompt.Build(snapshot, issues, settings.PromptByteCap, errors));
+            if (request is not null) return request;
+            var withoutSummary = context.Issues.BuildDroppingSubjectsWhenOverTheCap(
+                issues => ActionDraftPrompt.Build(snapshot, issues, settings.PromptByteCap, errors, includeSummary: false));
             if (withoutSummary is not null) summaryOmittedInputHashes.Add(withoutSummary.InputHash);
             return withoutSummary;
         }

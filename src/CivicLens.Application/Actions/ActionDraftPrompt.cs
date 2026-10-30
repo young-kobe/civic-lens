@@ -31,7 +31,7 @@ public static class ActionDraftPrompt
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(issues);
         var issueSchema = issues.AnswerSchema();
-        var system = issueSchema is null ? SystemInstructions : SystemInstructions + BillIssueChoice.Instructions("the title or the summary of the bill");
+        var system = issueSchema is null ? SystemInstructions : SystemInstructions + issues.Instructions("the title or the summary of the bill");
         var user = BuildUserPrompt(snapshot, issues, previousErrors, includeSummary);
         var schema = AnalysisSchema.HeadlineAndSummary(issueSchema);
         var bytes = Encoding.UTF8.GetByteCount(system) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
@@ -68,6 +68,7 @@ public static class ActionDraftPrompt
                 policyArea = bill.PolicyArea
             },
             candidateIssues = issues.PromptSection(),
+            subjects = issues.SubjectsSection(),
             sponsors = snapshot.Sponsorships.Where(item => item.Role == ActionSponsorshipRole.Sponsor)
                 .Select(item => snapshot.OfficialNames[item.PersonId]),
             summary = !includeSummary || snapshot.NewestSummary is not { } newest ? null : new

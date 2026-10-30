@@ -12,7 +12,7 @@ internal sealed class BillPageRowConfiguration : IEntityTypeConfiguration<BillPa
         builder.ToTable("bill_pages", table =>
         {
             table.HasCheckConstraint("ck_bill_pages_order", "page_order >= 0");
-            table.HasCheckConstraint("ck_bill_pages_role", "role IN ('Detail','Cosponsors','Actions','Summaries')");
+            table.HasCheckConstraint("ck_bill_pages_role", "role IN ('Detail','Cosponsors','Actions','Summaries','Subjects')");
             table.HasCheckConstraint("ck_bill_pages_detail",
                 "role <> 'Detail' OR (job_id = detail_job_id AND page_order = 0 AND closes_chain)");
         });
