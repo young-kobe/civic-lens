@@ -218,9 +218,11 @@ public sealed class PublishedOfficialPageTests
 
         var paragraphs = new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-missed-votes-in-congress-119'] p")
             .Select(paragraph => paragraph.TextContent.Trim()).ToArray();
-        Assert.Equal(["Missed 1 of 2 roll call votes of all kinds, including procedural votes, held in the House of Representatives while they served, 1 Apr 2026 to 3 Apr 2026 (119th Congress).",
-            "Missed 0 of 1 roll call vote of all kinds, including procedural votes, held in the Senate while they served, on 2 Apr 2026 (119th Congress).",
-            "A missed vote means the official did not vote on it."], paragraphs[..3]);
+        Assert.Equal(["Missed 1 of the 2 roll call votes of the House of Representatives on this site, 1 Apr 2026 to 3 Apr 2026 (119th Congress).",
+            "Missed 0 of the 1 roll call vote of the Senate on this site, on 2 Apr 2026 (119th Congress).",
+            "A missed vote means the official did not vote on it. The count includes procedural votes. It counts only the roll calls on this site, which can be fewer than the chamber held."], paragraphs[..3]);
+        Assert.All(paragraphs[..2], sentence => Assert.DoesNotContain("held in", sentence, StringComparison.Ordinal));
+        Assert.Contains("can be fewer than the chamber held", paragraphs[2], StringComparison.Ordinal);
         Assert.Equal(["muted small"], new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-missed-votes-in-congress-119'] p.muted").Select(paragraph => paragraph.ClassName!));
     }
 
@@ -235,7 +237,7 @@ public sealed class PublishedOfficialPageTests
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
         var text = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-missed-votes-in-congress-119']")!.TextContent;
-        Assert.Contains("Missed 1 of 5 roll call votes of all kinds (20%), including procedural votes, held in the House of Representatives", text, StringComparison.Ordinal);
+        Assert.Contains("Missed 1 of the 5 roll call votes of the House of Representatives on this site (20%)", text, StringComparison.Ordinal);
         Assert.DoesNotContain("the Senate", text, StringComparison.Ordinal);
     }
 
@@ -249,7 +251,7 @@ public sealed class PublishedOfficialPageTests
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
         var text = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-missed-votes-in-congress-119']")!.TextContent;
-        Assert.Contains("Missed 5 of 5 roll call votes of all kinds (100%), including procedural votes", text, StringComparison.Ordinal);
+        Assert.Contains("Missed 5 of the 5 roll call votes of the House of Representatives on this site (100%)", text, StringComparison.Ordinal);
     }
 
     [Fact]

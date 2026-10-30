@@ -77,14 +77,13 @@ internal static class PublishedOfficialView
 
     public static string StatementDay(LinkedPair pair) => pair.StatementDay is { } day ? Moment.Iso(day) : NoStatementDate;
 
-    public const string MissedVoteMeaning = "A missed vote means the official did not vote on it.";
+    public const string MissedVoteMeaning = "A missed vote means the official did not vote on it. The count includes procedural votes. It counts only the roll calls on this site, which can be fewer than the chamber held.";
 
     public static string MissedVotes(MissedVotes missed, int congress)
     {
         var share = missed.Share is { } value ? $" ({Percent(value)})" : "";
         var days = missed.First == missed.Last ? $"on {Moment.Day(missed.First)}" : $"{Moment.Day(missed.First)} to {Moment.Day(missed.Last)}";
-        return $"Missed {missed.Missed} of {missed.Held} roll call {Noun(missed.Held, "vote")} of all kinds{share}, including procedural votes, " +
-            $"held in {ChamberName(missed.Chamber)} while they served, {days} ({CongressCalendar.Ordinal(congress)} Congress).";
+        return $"Missed {missed.Missed} of the {missed.Held} roll call {Noun(missed.Held, "vote")} of {ChamberName(missed.Chamber)} on this site{share}, {days} ({CongressCalendar.Ordinal(congress)} Congress).";
     }
 
     public static readonly string SplitVoteMeaning = $"A split vote is a substantive roll call vote where most {PublishedPartyMajority.Democrat}s and most {PublishedPartyMajority.Republican}s voted on opposite sides.";
