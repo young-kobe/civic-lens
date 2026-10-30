@@ -6,6 +6,7 @@ using CivicLens.Infrastructure.Collection.Discovery;
 using CivicLens.Application.Collection;
 using CivicLens.Core.Collection;
 using CivicLens.Infrastructure.Collection.Persistence;
+using CivicLens.Infrastructure.Publication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -100,11 +101,12 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
     }
 
     /// <summary>Applies checked-in migrations explicitly; imports never run schema changes.</summary>
-    public async Task MigrateAsync(CancellationToken cancellationToken = default)
+    public async Task<bool> MigrateAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         db.Database.SetCommandTimeout(MigrationCommandTimeout);
         await db.Database.MigrateAsync(cancellationToken);
+        return await PublicationRecordStates.RebuildWhenDriftedAsync(db, cancellationToken);
     }
 
     private static async Task RetainCaptureAsync(CollectionAttemptDbContext db, CaptureIdentity capture,

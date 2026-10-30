@@ -126,9 +126,9 @@ public sealed class PostgresBriefDraftStore : PostgresAnalysisStore<BriefDraftRu
         var published = (await ReviewQueries.ReadReleaseRecordsAsync(db, cutoff, cancellationToken))
             .Where(binding => BriefCitationKinds.IsCitable(binding.Kind)).ToImmutableArray();
         var firstPublishedInWeek = (await db.Database.SqlQueryRaw<KindRecordRow>(ReadFirstPublishedInWeekSql,
-            published.Select(binding => binding.Kind.ToString()).ToArray(), published.Select(binding => binding.RecordId).ToArray(),
+            published.Select(binding => PublishedRecordReference.NameOf(binding.Kind)).ToArray(), published.Select(binding => binding.RecordId).ToArray(),
             bounds.StartTicks, bounds.EndTicks).ToArrayAsync(cancellationToken)).Select(row => (row.Kind, row.RecordId)).ToHashSet();
-        return [.. published.Where(binding => firstPublishedInWeek.Contains((binding.Kind.ToString(), binding.RecordId)))];
+        return [.. published.Where(binding => firstPublishedInWeek.Contains((PublishedRecordReference.NameOf(binding.Kind), binding.RecordId)))];
     }
 
     private static async Task<ImmutableArray<PublishedRevisionBinding>> AtActiveRevisionsAsync(CollectionAttemptDbContext db,

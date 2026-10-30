@@ -907,6 +907,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         command.Parameters.AddWithValue("ticks", PublishedAt.UtcTicks);
         command.Parameters.AddWithValue("records", recordsJson);
         await command.ExecuteNonQueryAsync();
+        await PublishedRecordStateReader.MigrateAsync(connectionString);
     }
 
     private static PublicationCommit Commit(int number, string draftId, int revision, int reviewStateVersion) =>

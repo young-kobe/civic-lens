@@ -56,8 +56,8 @@ public sealed partial class PostgresBillStreamTests
         Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, [], default));
     }
 
-    // The statistics describe one draft, as they do after a bulk load. Postgres then counts one release entry
-    // and joins entries row by row, which takes more than 15 s for 15000 drafts.
+    // The statistics describe one draft, as they do after a bulk load. Postgres then counts one published record
+    // and joins records row by row, which takes more than 15 s for 15000 drafts.
     [Fact]
     public async Task TheReadyListStaysFastWhenTheActiveReleaseHoldsThousandsOfActionsBecauseItLooksUpOneMapOfPublishedRevisions()
     {
@@ -66,9 +66,10 @@ public sealed partial class PostgresBillStreamTests
             ALTER TABLE action_drafts SET (autovacuum_enabled = false);
             ALTER TABLE action_review_decisions SET (autovacuum_enabled = false);
             ALTER TABLE publication_releases SET (autovacuum_enabled = false);
+            ALTER TABLE publication_record_states SET (autovacuum_enabled = false);
             INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, records_json, is_active)
             VALUES (1, '000001-' || md5('bulk'), 'bulk', 0, 15000, '[]', true);
-            ANALYZE action_drafts, action_review_decisions, publication_releases;
+            ANALYZE action_drafts, action_review_decisions, publication_releases, publication_record_states;
             CREATE TEMP TABLE seeded AS
             SELECT md5(n::text) || md5('x' || n::text) AS record_id, n FROM generate_series(1, 15000) n;
             INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks,
@@ -79,8 +80,8 @@ public sealed partial class PostgresBillStreamTests
             INSERT INTO action_review_decisions (decision_id, record_id, revision_number, review_state_version, decision_json, kind,
                 created_at_utc_ticks)
             SELECT md5(record_id), record_id, 1, 1, '{"actorSubject":"civic-lens:code"}', 'Approve', 0 FROM seeded;
-            UPDATE publication_releases SET records_json =
-                (SELECT jsonb_agg(jsonb_build_object('kind', 'action', 'recordId', record_id, 'revisionNumber', 1)) FROM seeded)::text;
+            INSERT INTO publication_record_states (kind, record_id, revision_number, first_release)
+            SELECT 'action', record_id, 1, 1 FROM seeded;
             """);
 
         var clock = Stopwatch.StartNew();
