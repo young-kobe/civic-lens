@@ -192,7 +192,7 @@ try
         await using var analysisWakeup = analysis.Wakeup;
         var gate = StatementGateComposition.Create(analysisContexts, connectionString, issues, BeatOf(WorkerLoopNames.Gate), loggers);
         await using var gateWakeup = gate.Wakeup;
-        var statementDrafting = StatementDraftComposition.Create(analysisContexts, connectionString, BeatOf(WorkerLoopNames.StatementDrafting), loggers);
+        var statementDrafting = StatementDraftComposition.Create(analysisContexts, connectionString, issueConfiguration ?? IssueConfiguration.None, BeatOf(WorkerLoopNames.StatementDrafting), loggers);
         await using var statementDraftingWakeup = statementDrafting.Wakeup;
         var textExtractor = new CaptureDocumentTextExtractor();
         var apiResponses = new ApiResponseReader(attempts, new CaptureBodyReader());

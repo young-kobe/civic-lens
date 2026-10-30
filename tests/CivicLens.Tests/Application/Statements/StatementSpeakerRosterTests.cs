@@ -22,6 +22,17 @@ public sealed class StatementSpeakerRosterTests
     }
 
     [Fact]
+    public void TheSameLookupReturnsTheOfficeOwnerOfTheSourceSoCodeApprovalNeedsNoSecondSearch()
+    {
+        var revision = CollectionConfigurationRevision.Create(OwnOffice(Warren));
+
+        var speakers = new StatementSpeakerRoster().SpeakersOn(revision, "source", new DateOnly(2026, 9, 1));
+
+        Assert.Equal(Warren, speakers.OfficeOf);
+        Assert.Equal([Warren], speakers.Officials.Select(official => official.Id).ToArray());
+    }
+
+    [Fact]
     public void AnUnknownSourceCoversNobody() => Assert.Empty(OfficialIds(SpeakerRevision(), "elsewhere", "2026-09-01"));
 
     [Fact]

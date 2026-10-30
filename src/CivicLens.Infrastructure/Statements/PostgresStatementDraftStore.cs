@@ -2,11 +2,14 @@ using System.Linq.Expressions;
 using System.Text.Json;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Statements;
+using CivicLens.Core.Relationships;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Collection.Jobs.Persistence;
+using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Statements.Persistence;
+using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 using State = CivicLens.Application.Analysis.AnalysisState;
 
@@ -18,7 +21,9 @@ public sealed class PostgresStatementDraftStore : PostgresAnalysisStore<Statemen
     private readonly AdmittingRevisionReader admittingRevisions = new();
 
     public PostgresStatementDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
-        : this(contextFactory, new(contextFactory, new StatementDraftQueueMapping())) { }
+        : this(contextFactory, new(contextFactory, new StatementDraftQueueMapping(
+            AfterDecisionHooks.ForRecordKind(contextFactory, RelationshipRecordKind.Statement, PublishedRecordKind.Statement))))
+    { }
 
     private PostgresStatementDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
         PostgresAnalysisQueue<StatementAnalysisRow, StatementAnalysisBudgetRow, StatementDraftRun> queue) : base(queue) =>

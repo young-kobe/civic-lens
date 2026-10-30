@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The statements feature finds articles that may hold an official's statement and gates them against tracked issues. It then drafts one statement record for each article that passes. People review and approve each record on the statement review pages.
+The statements feature finds articles that may hold an official's statement and gates them against tracked issues. It then drafts one statement record for each article that passes. Code approves a record from the own office of its official when every check passes. People review and approve every other record on the statement review pages.
 
 ## Decisions
 
@@ -22,13 +22,18 @@ The statements feature finds articles that may hold an official's statement and 
 - The speakers come from the configuration revision that admitted the article, not the current file. A later configuration change cannot change the speakers of an admitted article.
 - Code sets the quotation kind and the bill numbers. The model and the reviewer never set them.
 - Code never guesses a statement date. When the article states no date, the draft date is null, and the reviewer sets it.
+- Code approves a statement draft only from the own office of its official. The source must set `officeOf` to the one speaker of the draft. Coverage alone does not show authorship. A statement from a source without `officeOf` waits for a person.
+- Code approves only a draft that names no other speaker. Any other speaker sends the draft to a person.
+- Code approves a draft with no date, or with a model date that lies on the capture day or up to 7 days before it. The quote must state the date. An older or later date waits for a person.
+- Policy areas stay the choice of the model. Relationships stay person-approved. No command approves old drafts by code.
+- A person edit after a code approval is a new revision that waits for a person.
 - A gate label holds the tracked issue IDs and the `namesBillOrVote` answer of one release. It holds no quote, policy area, or pass verdict. The gate rule derives a pass from a label, so the rule keeps one owner.
 - Labels are append-only rows, like revisions. The newest human row of a candidate is the label of record. A model row never replaces it.
 - Code assigns about 30 percent of releases to a held-out set by a hash of the candidate ID. The set is the test set of the gate benchmark ([D-13](../roadmap.md#pending-decisions)). A held-out release never gets a model label.
 - Only the owner labels releases and exports labels. `GateLabelEditor` does not extend `ReviewRecordPage`, because that base class serves revisions and decisions and a label has neither.
 - Vendor rule: only public press release text, gate labels, and published releases may go to Cloudflare. Never send review notes, reviewer identity, or credentials. Encrypted backups are the one exception, as [host](host.md#decisions) states.
 - Drafting does not cache the prompt. The article text is most of each request, and the schema changes with the covered officials of each source.
-- A relationship links one approved statement revision to one approved action or vote revision. A person approves the statement, and code or a person approves the action or vote. It has a named type and no verdict. A stance such as consistent or inconsistent needs a method note first.
+- A relationship links one approved statement revision to one approved action or vote revision. A person or code approves the statement, and code or a person approves the action or vote. It has a named type and no verdict. A stance such as consistent or inconsistent needs a method note first.
 - A relationship revision holds the matched official, which is the speaker whose sponsorship or vote made the pair. A person edit never changes it. A changed match makes the pair draft again. An approved relationship also shows as a pair on the current Congress page of that official only. The pair lists the statement, the link type, the bill or vote, and for a vote the cast of the official. The panel states that a reviewer approved the link and that a link does not mean a match. See [publication](publication.md#issue-panel).
 - The types for an action are "describes own bill", "states position on", and "claims credit for". The only type for a vote is "statement about a vote". The model may also answer none. Then the queue row settles. A new pair gets no relationship record. An existing draft stays as it is, its changed-record flag blocks approval, and a person can reject it.
 - An approved statement, by code or by a person, publishes through the `publishing` worker stage with no owner step; see [publication](publication.md#automatic-publication).
@@ -63,6 +68,9 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - When a valid answer has no verified issue and namesBillOrVote is false, a bill number in the text still passes the release. Enforced by `StatementGateResolver`. Test: `StatementGateResolverTests.ABillNumberInTheTextPassesWithoutTheModelAnswerSoTheFloorHoldsWhenTheModelMissesIt`.
 - A gate answer must hold `namesBillOrVote`, so a missing answer never reads as false. Enforced by `StatementGateResolver.Parse` with the required constructor parameters of `AnalysisAnswerRules.OutputJson`. Test: `StatementGateResolverTests.AnAnswerWithoutTheBillOrVoteFieldIsRejectedSoAMissingFieldNeverReadsAsFalse`.
 - Each of the three pass paths has its own reason. Enforced by `StatementGateResolver` and `ck_statement_analysis_runs_reason`. Test: `StatementGateResolverTests.TheThreePassPathsRecordThreeDistinctReasonsSoAMeasurementCanCountEachPath`.
+- Code approves a statement draft only when the own office, speaker, gate, quote, and date checks pass. Enforced by `StatementCodeApproval` with `StatementAllowedSelections.RequireApprovable`. Tests: `StatementCodeApprovalTests.ADraftOfTheOwnOfficeSourceThatPassesEveryCheckIsApprovedByCode`, `ADraftFromASourceWithoutOfficeOfWaitsForAPersonBecauseCoverageIsNotAuthorship`, `ADraftFromTheOfficeOfAnotherPersonWaitsForAPersonBecauseTheSpeakerIsNotTheOwner`, `ADraftWithANamedOtherSpeakerWaitsForAPerson`, `ADraftThatNamesAnotherCoveredOfficialAsSpeakerWaitsForAPerson`, `ADraftWhoseDateIsOnTheCaptureDayIsApprovedByCodeBecauseTheQuoteStatesIt`, `ADraftWhoseDateIsSevenDaysBeforeCaptureIsApprovedByCode`, `ADraftWhoseDateIsMoreThanSevenDaysBeforeCaptureWaitsForAPerson`, `ADraftWhoseDateIsAfterTheCaptureDayWaitsForAPerson`, `ThePersonPathStillRefusesAnAiDateBecauseOnlyCodeMayAcceptADateItRead`, `ADraftFromABillOrVotePassWithNoTrackedIssueIsApprovedByCode`, `ADraftQueuedAfterAGateThatVerifiedNothingWaitsForAPerson`, `ADraftIssueWithoutAVerifiedGateQuoteIsNotApprovedByCode`, and `ARuleThatAPersonApprovalEnforcesAlsoBlocksCodeApproval`.
+- A statement code approval is stored with the draft and its first revision in one transaction. It runs the hooks of a person approval. Enforced by `StatementDraftRows`, `ReviewRecords.AppendCodeApprovedAsync`, and `StatementDraftQueueMapping`. Tests: `PostgresStatementDraftStoreTests.AStatementAiRevisionFromTheOfficialsOwnOfficeIsStoredAsApprovedByTheCodeSubjectInTheSameTransaction` and `PostgresStatementDraftStoreTests.ACodeApprovalRunsTheRelationshipHookSoAnApprovedStatementOfTheSponsorQueuesItsPair`.
+- A person edit of a code-approved statement waits for a person. Enforced by `ReviewPolicy.GetCurrentStatus`. Test: `PostgresStatementDraftStoreTests.APersonEditAfterACodeApprovalWaitsForAPersonBecauseThePersonRevisionIsNotTheCheckedOne`.
 - A draft from a bill or vote pass accepts an empty issue list. Enforced by the draft step and the revision rules. Test: `StatementDraftStepTests.ADraftFromABillOrVotePassHasNoIssueIdsBecauseNoTrackedIssueMatched`.
 - Only a skipped gate returns from Succeeded to Pending. Enforced by `StatementGateLifecycle`. Test: `StatementGateLifecycleTests.OnlyASkippedGateMayReturnToPendingForRegate`.
 - A pass adds exactly one Pending draft entry in the same transaction. Enforced by `StatementGateQueueMapping`. Test: `PostgresStatementGateStoreTests.APassSettlesTheGateAndInsertsExactlyOnePendingDraftRowInTheSameTransaction`.
@@ -245,6 +253,21 @@ A span is a `DirectQuotation` when it lies entirely inside one quoted passage. E
 | Blocked | `evidenceUnavailable`, `speakersUnavailable` | The input is missing |
 | Failed | `citationRejected`, `outputRejected`, a stop code, or `attemptsExhausted` | Owner requeue needed |
 
+### Statement code approval
+
+`StatementDraftStep` reads the evidence once. It resolves the allowed selections and the covered officials with `StatementSelectionResolver`. After the draft passes the resolver, `StatementCodeApproval.Approves` decides. The result goes in `StatementDraftCheckpoint.CodeApproved`.
+
+Code approves only when all these rules hold. Otherwise the draft waits for a person, as before.
+
+- The source of the article sets `officeOf`, and the draft has that person as its one speaker. The draft names no other speaker.
+- The latest gate run is a pass. A failed-open or over-cap gate gives `StatementGateCarryOver.None`, so it never passes. Each issue of the draft has a verified gate quote.
+- Every quote occurs exactly once in the article text. `StatementDraftResolver` already enforces this.
+- The statement date is null. Or its quote states it, and it lies on the capture day or up to 7 days before it. `StatementDraftResolver` checks the quote with `AnalysisAnswerRules.StatesDate`. `StatementCodeApproval` owns this window and passes `dateReadByCode` to `RequireApprovable`. A person approval never passes it, so a person still needs a confirmed date. The public page then says "Date read from the release by code".
+- A gate pass about a bill or vote with no tracked issue can be code-approved. The draft then has an empty issue list.
+- The approval rules of a person pass: `StatementAllowedSelections.RequireApprovable`.
+
+At settlement, `StatementDraftRows` appends the first revision through `ReviewRecords.AppendCodeApprovedAsync`. The Approve decision has the actor `civic-lens:code`. `StatementDraftQueueMapping` then runs `AfterCodeApprovalAsync`, so relationship pairs and brief staleness follow as for a person approval.
+
 ### Statement review
 
 Statement review mirrors document-change review and uses the shared decision rules in [review](review.md#review-decisions). The Host has statement pages on top of the shared handlers.
@@ -266,11 +289,11 @@ Infrastructure/Statements holds `PostgresStatementReviewStore` and `StatementRev
 - Every span must cite the extraction of the candidate and fit in its text. `StatementDraftRevision.ValidateShape` checks the bounds.
 - A stale expected revision raises `ReviewConflictException`.
 
-**Published labels.** A published statement holds `textOrigin` and `approvedBy`. A person approves every statement today, so `approvedBy` is `person`. See [publication](publication.md#release-content).
+**Published labels.** A published statement holds `textOrigin` and `approvedBy`. `approvedBy` is `code` when `StatementCodeApproval` approved the statement, and `person` otherwise. A code approval with a date also shows a date label; see [Statement code approval](#statement-code-approval). See [publication](publication.md#release-content).
 
-**AI date.** An AI-proposed statement date survives a person's save only when the person ticks that it was checked. `AiProposedDate` in Core/Review owns this rule for statements and document changes. An AI revision that has a date cannot be approved.
+**AI date.** An AI-proposed statement date survives a person's save only when the person ticks that it was checked. `AiProposedDate` in Core/Review owns this rule for statements and document changes. A person cannot approve an AI revision that has a date. Only code can, when it read the date from the release; see [Statement code approval](#statement-code-approval).
 
-**Decide.** `DecideStatementReview` checks the expected revision number and review state version, then applies `ReviewPolicy`. `ReviewValidation.CreateDecision` builds the decision for both record types. An approval runs `StatementDraftRevision.ValidateForApproval`. It needs a headline, a summary, at least one speaker, at least one quotation, and a date with evidence or no date. It also checks the allowed selections again and checks the spans against the extraction.
+**Decide.** `DecideStatementReview` checks the expected revision number and review state version, then applies `ReviewPolicy`. `ReviewValidation.CreateDecision` builds the decision for both record types. An approval runs `StatementAllowedSelections.RequireApprovable`, which calls `StatementDraftRevision.ValidateForApproval`. A person approval also runs `RequireConfirmedDate`. The approval needs a headline, a summary, at least one speaker, at least one quotation, and a date with evidence or no date. It also checks the allowed selections again and checks the spans against the extraction.
 
 **Reads.** `GetStatementReview` returns the aggregate, the status, the source ID, the URL, and the extraction for quote display. It also returns the run ID when revision 1 is an AI draft. A candidate with no draft row reads as `NotDrafted`.
 
@@ -497,7 +520,7 @@ With `--since`, `regate` moves only candidates first captured on or after that U
 | Candidate registration | `src/CivicLens.Infrastructure/Statements/PostgresStatementCandidateRegistration.cs` |
 | Feed item text | `src/CivicLens.Application/Collection/FeedStatements/FeedItemParser.cs`, `src/CivicLens.Application/Collection/FeedStatements/FeedItemRenderer.cs`, `src/CivicLens.Application/Collection/FeedStatements/FeedStatementExtractions.cs`, `src/CivicLens.Application/Documents/FeedItemExtraction.cs` |
 | Gate | `src/CivicLens.Application/Statements/StatementGateStep.cs`, `src/CivicLens.Application/Statements/StatementGatePrompt.cs`, `src/CivicLens.Application/Statements/StatementGateResolver.cs`, `src/CivicLens.Application/Statements/StatementGateLifecycle.cs`, `src/CivicLens.Application/Statements/RegateStatementCandidates.cs` |
-| Drafting | `src/CivicLens.Application/Statements/StatementDraftStep.cs`, `src/CivicLens.Application/Statements/StatementDraftPrompt.cs`, `src/CivicLens.Application/Statements/StatementDraftResolver.cs`, `src/CivicLens.Application/Statements/StatementDraftLifecycle.cs`, `src/CivicLens.Application/Statements/StatementSpeakerRoster.cs`, `src/CivicLens.Application/Statements/StatementGateCarryOver.cs` |
+| Drafting | `src/CivicLens.Application/Statements/StatementDraftStep.cs`, `src/CivicLens.Application/Statements/StatementCodeApproval.cs`, `src/CivicLens.Application/Statements/StatementDraftPrompt.cs`, `src/CivicLens.Application/Statements/StatementDraftResolver.cs`, `src/CivicLens.Application/Statements/StatementDraftLifecycle.cs`, `src/CivicLens.Application/Statements/StatementSpeakerRoster.cs`, `src/CivicLens.Application/Statements/StatementGateCarryOver.cs` |
 | Shared quote check | `src/CivicLens.Application/Statements/ArticleQuote.cs`, `src/CivicLens.Core/Documents/UniqueQuote.cs` |
 | Stores and models | `src/CivicLens.Infrastructure/Statements/PostgresStatementGateStore.cs`, `src/CivicLens.Infrastructure/Statements/StatementAnalysisListing.cs` (queue table name, shared list and article read), `src/CivicLens.Application/Statements/StatementArticle.cs` (article record), `src/CivicLens.Infrastructure/Statements/PostgresStatementDraftStore.cs`, `src/CivicLens.Infrastructure/Statements/StatementGateQueueMapping.cs`, `src/CivicLens.Infrastructure/Statements/StatementDraftQueueMapping.cs`, `src/CivicLens.Infrastructure/Statements/AnthropicStatementGateModel.cs`, `src/CivicLens.Infrastructure/Statements/AnthropicStatementDraftModel.cs` |
 | CLI and composition | `src/CivicLens.Host/Statements/StatementCommand.cs`, `src/CivicLens.Host/Statements/StatementGateComposition.cs`, `src/CivicLens.Host/Statements/StatementDraftComposition.cs` |
@@ -526,7 +549,6 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 
 - Actions are in [actions](actions.md). Weekly briefs are in [briefs](briefs.md).
 - Two parallel preparations of one source can deadlock when their feed items have an equal `pubDate` and swap order. Postgres aborts one transaction, the worker retries it, and no data is lost. The insert order stays as it is.
-- Planned: code approval of statements. No worker sets `approvedBy` to `code` yet, so the code labels of a statement page are reachable only in tests. A date that code accepts needs its own field to carry the label "Date read from the release by code". Code approval adds that field.
 - Planned: structured statement extraction and temporal identity resolution.
 - A feed item source still admits page jobs for the same links. A page that returns 403 fails and adds nothing. A page that works adds nothing when the feed text came first.
 - The feed parser reads RSS 2.0 only. It uses the first `link` element of an item and ignores `xml:base` and the charset of the HTTP header. An Atom feed blocks the job with `feedStatementTextInvalid`.

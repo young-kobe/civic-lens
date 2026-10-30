@@ -45,7 +45,7 @@ public sealed class StatementDraftStepTests
     [Fact]
     public async Task ADraftFromABillOrVotePassHasNoIssueIdsBecauseNoTrackedIssueMatched()
     {
-        var carryOver = new StatementGateCarryOver([], ["housing-and-community-development"]);
+        var carryOver = new StatementGateCarryOver([], ["housing-and-community-development"], GatePassed: true);
         var store = new FakeStatementDraftStore(DraftEvidence(carryOver: carryOver));
         var model = new FakeStatementDraftModel().Draft(Output());
 

@@ -51,9 +51,9 @@ public sealed class StatementDraftRevisionTests
     {
         var ai = Revision(ReviewAuthor.AnalysisSubject) with { StatementDate = Date, StatementDateEvidence = Span };
 
-        Assert.Throws<ArgumentException>(ai.ValidateForApproval);
-        (ai with { RevisionNumber = 2, AuthorSubject = "auth0|owner" }).ValidateForApproval();
-        (ai with { StatementDate = null, StatementDateEvidence = null }).ValidateForApproval();
+        Assert.Throws<ArgumentException>(ai.RequireConfirmedDate);
+        (ai with { RevisionNumber = 2, AuthorSubject = "auth0|owner" }).RequireConfirmedDate();
+        (ai with { StatementDate = null, StatementDateEvidence = null }).RequireConfirmedDate();
     }
 
     [Fact]
