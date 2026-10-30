@@ -8,5 +8,7 @@ public interface IVoteDraftStore : IAnalysisQueueStore<VoteDraftRun, VoteDraftVi
 
     Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken);
 
+    Task<int> RequeueOlderPromptAsync(CancellationToken cancellationToken);
+
     Task<int> CountWaitingForBillAsync(CancellationToken cancellationToken);
 }

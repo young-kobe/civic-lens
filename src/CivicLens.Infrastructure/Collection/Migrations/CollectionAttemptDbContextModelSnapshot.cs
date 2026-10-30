@@ -2725,6 +2725,42 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublicationRecordStateRow", b =>
+                {
+                    b.Property<string>("Kind")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("RecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<int>("FirstRelease")
+                        .HasColumnType("integer")
+                        .HasColumnName("first_release");
+
+                    b.Property<int?>("LastRelease")
+                        .HasColumnType("integer")
+                        .HasColumnName("last_release");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.HasKey("Kind", "RecordId", "FirstRelease");
+
+                    b.HasIndex("FirstRelease");
+
+                    b.HasIndex("LastRelease");
+
+                    b.ToTable("publication_record_states", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_publication_record_states_range", "last_release IS NULL OR last_release >= first_release");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", b =>
                 {
                     b.Property<int>("ReleaseNumber")
@@ -5126,6 +5162,20 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasForeignKey("RecordId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublicationRecordStateRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", null)
+                        .WithMany()
+                        .HasForeignKey("FirstRelease")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", null)
+                        .WithMany()
+                        .HasForeignKey("LastRelease")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Relationships.Persistence.RelationshipAnalysisRow", b =>

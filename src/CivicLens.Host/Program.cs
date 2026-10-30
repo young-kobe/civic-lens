@@ -302,7 +302,7 @@ try
         var draftCommands = new AnalysisQueueCommands<VoteDraftRun, VoteDraftView, VoteDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, VoteDraftTask.Task));
         var votes = new VoteCommand(draftCommands, new GetVoteDraftStatus(draftCommands.Status, draftStore),
-            new RequeueBlockedVoteDrafts(draftStore), owner);
+            new RequeueBlockedVoteDrafts(draftStore), new RedraftVoteDrafts(draftStore), owner);
         executing = true;
         return await votes.ExecuteAsync(args, cancellation.Token);
     }
