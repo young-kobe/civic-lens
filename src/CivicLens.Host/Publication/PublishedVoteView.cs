@@ -15,7 +15,7 @@ internal static class PublishedVoteView
     public static IReadOnlyList<Fact> Facts(PublishedVote vote, PublicationCatalog catalog) =>
     [
         new("Voted on", Moment.Iso(vote.VotedOn)),
-        new("Kind", KindValue(vote.Kind)),
+        new("Kind", KindValue(vote)),
         new("Result", vote.Result),
         new("Totals", Totals(vote)),
         new("Chamber", vote.Chamber.ToString()),
@@ -29,10 +29,10 @@ internal static class PublishedVoteView
         new("Revision", vote.RevisionNumber.ToString(CultureInfo.InvariantCulture))
     ];
 
-    private static string KindValue(PublishedVoteKind kind) =>
-        kind == PublishedVoteKind.Other
-            ? $"{PublishedRecordLabels.OtherQuestion}. The question is quoted in the Result panel."
-            : PublishedRecordLabels.VoteKind(kind);
+    private static string KindValue(PublishedVote vote) =>
+        vote.Kind != PublishedVoteKind.Other ? PublishedRecordLabels.VoteKind(vote.Kind)
+            : vote.KindCitation is null ? $"{PublishedRecordLabels.OtherQuestion}. The source gives no question."
+            : $"{PublishedRecordLabels.OtherQuestion}. The Kind quote in the Result panel gives the question.";
 
     public static string Totals(PublishedVote vote)
     {

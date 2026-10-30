@@ -735,11 +735,22 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task AnOtherKindVoteIsCalledAnOtherQuestionAndPointsTheReaderToTheQuotedQuestion()
+    public async Task AnOtherKindVoteWithAQuestionQuoteIsCalledAnOtherQuestionAndPointsTheReaderToTheKindQuote()
     {
-        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote() with { Kind = PublishedVoteKind.Other, KindCitation = null }, null, [], PublicationCatalogs.None, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote() with { Kind = PublishedVoteKind.Other }, null, [], PublicationCatalogs.None, CancellationToken.None);
 
-        Assert.Equal("Other question. The question is quoted in the Result panel.", Facts(html)["Kind"]);
+        Assert.Equal("Other question. The Kind quote in the Result panel gives the question.", Facts(html)["Kind"]);
+    }
+
+    [Fact]
+    public async Task AnOtherKindVoteWithNoQuestionQuoteSaysTheSourceGivesNoQuestionSoTheReaderIsNotSentToANonexistentQuote()
+    {
+        var vote = Vote();
+        vote = vote with { Kind = PublishedVoteKind.Other, KindCitation = null, Facts = [.. vote.Facts.Where(fact => !fact.Text.StartsWith("Question:", StringComparison.Ordinal))] };
+
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.Equal("Other question. The source gives no question.", Facts(html)["Kind"]);
     }
 
     [Fact]
@@ -752,7 +763,8 @@ public sealed class ReleaseRendererTests
 
         foreach (var html in new[] { await renderer.RenderVoteAsync(vote, null, [], HousingCatalog, CancellationToken.None),
                      await renderer.RenderActionAsync(action, [], HousingCatalog, CancellationToken.None),
-                     await renderer.RenderStatementAsync(statement, [], HousingCatalog, CancellationToken.None) })
+                     await renderer.RenderStatementAsync(statement, [], HousingCatalog, CancellationToken.None),
+                     await renderer.RenderRecordAsync(Record() with { Officials = [], IssueIds = [] }, HousingCatalog, CancellationToken.None) })
         {
             var labels = Facts(html).Keys;
             Assert.DoesNotContain("Tracked issues", labels);
@@ -761,6 +773,7 @@ public sealed class ReleaseRendererTests
             Assert.DoesNotContain("Policy area", labels);
             Assert.DoesNotContain("Policy areas", labels);
             Assert.DoesNotContain("Bill numbers", labels);
+            Assert.DoesNotContain("Officials", labels);
             Assert.DoesNotContain("None", Facts(html).Values);
         }
     }
@@ -774,6 +787,8 @@ public sealed class ReleaseRendererTests
         Assert.Contains("Quote 1", panel, StringComparison.Ordinal);
         Assert.Contains("Each quote is the exact text of the source.", panel, StringComparison.Ordinal);
         Assert.DoesNotContain("Quotation 1", panel, StringComparison.Ordinal);
+        Assert.Equal(["Inside quotation marks", "Not in quotation marks"],
+            new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='quotations-title'] .badge").Select(badge => badge.TextContent));
     }
 
     private static Dictionary<string, string> Facts(string html)
