@@ -95,20 +95,19 @@ internal static class PublishedOfficialView
 
     public static IReadOnlyList<FilterTab> CongressTabs(ReleaseOfficialPage page) =>
         [.. page.Congresses.Select((congress, index) => FilterTab.Link(
-            CongressTabLabel(congress, index == 0, page.PublishedAtUtc),
+            CongressTabLabel(congress, index == 0),
             page.RootPath + (index == 0 ? PublicationProtocol.OfficialPagePath(page.Profile.Id) : PublicationProtocol.OfficialCongressPagePath(page.Profile.Id, congress)),
             selected: congress == page.Congress))];
 
     public static string CongressTabsLabel(ReleaseOfficialPage page) =>
         $"Show {TheCongress(page.Congresses[0])} or an earlier Congress";
 
-    private static string CongressTabLabel(int congress, bool isCurrent, DateTimeOffset publishedAtUtc)
+    private static string CongressTabLabel(int congress, bool isCurrent)
     {
         var name = $"{CongressCalendar.Ordinal(congress)} Congress";
         if (!isCurrent) return $"{name} (votes only)";
-        var ongoing = CongressCalendar.CongressOn(DateOnly.FromDateTime(publishedAtUtc.UtcDateTime)) == congress;
-        var end = ongoing ? "now" : CongressCalendar.StartOf(congress + 1).Year.ToString(CultureInfo.InvariantCulture);
-        return $"{name} ({CongressCalendar.StartOf(congress).Year} to {end})";
+        var years = $"{CongressCalendar.StartOf(congress).Year} to {CongressCalendar.StartOf(congress + 1).Year}";
+        return $"All records, votes of the {name} ({years})";
     }
 
     public static string TheCongress(int congress) => $"the {CongressCalendar.Ordinal(congress)} Congress";

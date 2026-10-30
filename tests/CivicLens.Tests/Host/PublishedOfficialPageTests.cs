@@ -621,9 +621,9 @@ public sealed class PublishedOfficialPageTests
         var tabs = await TabsOfAsync(page);
 
         Assert.Equal("Show the 119th Congress or an earlier Congress", tabs.GetAttribute("aria-label"));
-        Assert.Equal(["119th Congress (2025 to now)", "118th Congress (votes only)", "117th Congress (votes only)"], tabs.QuerySelectorAll("a").Select(link => link.TextContent.Trim()));
+        Assert.Equal(["All records, votes of the 119th Congress (2025 to 2027)", "118th Congress (votes only)", "117th Congress (votes only)"], tabs.QuerySelectorAll("a").Select(link => link.TextContent.Trim()));
         Assert.Equal(["../officials/mayor.html", "../officials/mayor/118.html", "../officials/mayor/117.html"], tabs.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
-        Assert.Equal(["119th Congress (2025 to now)"], tabs.QuerySelectorAll("[aria-current]").Select(link => link.TextContent.Trim()));
+        Assert.Equal(["All records, votes of the 119th Congress (2025 to 2027)"], tabs.QuerySelectorAll("[aria-current]").Select(link => link.TextContent.Trim()));
     }
 
     [Fact]
@@ -638,13 +638,31 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task TheNewestCongressOfAnOfficialWhoLeftCongressNamesItsEndYearInsteadOfNow()
+    public async Task TheFirstTabNamesBothScopesAndTheYearsOfItsCongressWhateverTheCongress()
     {
         var page = new ReleaseOfficialPage(Profile(), true, 117, true, [117, 116], [], [Vote('3', new DateOnly(2022, 4, 1)) with { Congress = 117 }], ListPublishedAtUtc);
 
         var tabs = await TabsOfAsync(page);
 
-        Assert.Equal("117th Congress (2021 to 2023)", tabs.QuerySelector("a")!.TextContent.Trim());
+        Assert.Equal("All records, votes of the 117th Congress (2021 to 2023)", tabs.QuerySelector("a")!.TextContent.Trim());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TheTabLabelsDoNotDependOnThePublishDateSoACarriedPageStaysTrue(bool isCurrent)
+    {
+        async Task<string[]> LabelsAsync(DateTimeOffset publishedAtUtc)
+        {
+            var page = new ReleaseOfficialPage(Profile(), true, isCurrent ? 119 : 118, isCurrent, [119, 118], [], [Vote('3', new DateOnly(2026, 4, 1))], publishedAtUtc);
+            return [.. (await TabsOfAsync(page)).QuerySelectorAll("a").Select(link => link.TextContent.Trim())];
+        }
+
+        var duringTheCongress = await LabelsAsync(new(2026, 6, 1, 0, 0, 0, TimeSpan.Zero));
+        var afterTheCongress = await LabelsAsync(new(2027, 6, 1, 0, 0, 0, TimeSpan.Zero));
+
+        Assert.Equal(duringTheCongress, afterTheCongress);
+        Assert.DoesNotContain(duringTheCongress, label => label.Contains("now", StringComparison.Ordinal));
     }
 
     [Fact]

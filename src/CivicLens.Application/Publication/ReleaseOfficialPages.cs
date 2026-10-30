@@ -101,7 +101,7 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
         foreach (var congress in newestFirst.Skip(1))
         {
             var path = PublicationProtocol.OfficialCongressPagePath(profile.Id, congress);
-            if (nameChanged || congressesChanged || rowsInMemory.ContainsKey(congress) || !files.PageCongresses.Contains(congress))
+            if (nameChanged || congressesChanged || rowsInMemory.ContainsKey(congress))
                 await WriteAsync(staging, path, await renderer.RenderOfficialAsync(
                     new(profile, tracked, congress, false, newestFirst, [], await RowsAsync(congress), publishedAtUtc), catalog, cancellationToken), cancellationToken);
             else

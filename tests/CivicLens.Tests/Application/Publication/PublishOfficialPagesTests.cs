@@ -304,6 +304,27 @@ public sealed class PublishOfficialPagesTests
     }
 
     [Fact]
+    public async Task WithdrawingTheOnlyVoteOfAMiddleCongressRewritesTheOtherEarlierPageAndDropsThePageOfTheEmptiedCongress()
+    {
+        var scenario = new PublicationScenario();
+        var middle = scenario.AddVote('b', congress: 118);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('a')),
+            new PublishedRecordReference(PublishedRecordKind.Vote, middle),
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('c', congress: 117))));
+        scenario.Publications.ReviewStatuses[new(PublishedRecordKind.Vote, middle)] = ReviewStatus.ApprovalWithdrawn;
+        scenario.Releases.WriteOrder.Clear();
+
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            new PublishReleaseRequest([], "k2") { Withdrawals = [new(PublishedRecordKind.Vote, middle, "Wrong.")] });
+
+        var oldest = PublicationProtocol.OfficialCongressPagePath("mayor", 117);
+        Assert.Contains(oldest, scenario.Releases.WriteOrder);
+        Assert.Contains("congresses [119,117]", Page(scenario.Releases.Directories[second.DirectoryName], oldest));
+        Assert.DoesNotContain(PublicationProtocol.OfficialCongressPagePath("mayor", 118), scenario.Releases.Directories[second.DirectoryName].Keys);
+    }
+
+    [Fact]
     public async Task ARenamedOfficialRewritesTheEarlierCongressPagesBecauseTheyShowTheName()
     {
         var scenario = new PublicationScenario();

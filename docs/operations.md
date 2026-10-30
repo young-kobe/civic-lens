@@ -776,6 +776,8 @@ To take a record out of the release, give `--withdraw <kind>:<id> <text>`. A req
 
 To list the published records that review blocked, run `releases blocked`. It prints the kind, the ID, the headline, the published revision, and the review status of each record. The list is empty when no release is active. Use it to choose the records to withdraw.
 
+After the deploy that ships the Congress tabs, publish once from an empty release directory. Until then an untouched official keeps the old footer panel. See the [publication limits](architecture/publication.md#limits-and-planned-work).
+
 ### Return a record
 
 To bring a withdrawn record back, first revise it in review and approve the new revision. The revision number must be higher than the withdrawn revision. Return it from the Review page, or with the CLI: publish the withdrawn ID with a note: `releases publish <idempotency-key> <kind>:<id> --note <kind>:<id> <text>`. The note shows on the record page as a correction. The publish exits with code 2 if the note is missing or the revision is not higher. The code subject cannot return a record. The worker only logs the withdrawn record and skips it.
