@@ -119,7 +119,7 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
             HouseVoteFixtures.Updated, [new(question, new SourceSpan(extraction.ExtractionId, 0, question.Length))],
             new DateOnly(2025, 4, 10), new SourceSpan(extraction.ExtractionId, 0, question.Length), kind,
             new SourceSpan(extraction.ExtractionId, 0, question.Length),
-            [new("with-id-a", "A000001", "Yea", new SourceSpan(extraction.ExtractionId, question.Length + 1, member.Length))], [], new string('e', 64));
+            [new("with-id-a", "A000001", "Yea", new SourceSpan(extraction.ExtractionId, question.Length + 1, member.Length))], [], [], new string('e', 64));
         await using var connection = new NpgsqlConnection(host.ConnectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand($"""

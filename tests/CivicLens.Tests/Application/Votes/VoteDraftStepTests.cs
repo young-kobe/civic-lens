@@ -18,6 +18,10 @@ public sealed class VoteDraftStepTests
 {
     private const string HeadlineText = "The House voted on a concurrent resolution";
     private const string SummaryText = "The House decided whether to agree to a Senate amendment.";
+    private static string Output(string headline = "Warren sponsored a housing bill", string summary = "Elizabeth Warren introduced a housing bill on January 3, 2025.",
+        double headlineConfidence = 0.8, double summaryConfidence = 0.7, string[]? issueIds = null) =>
+        HeadlineSummaryOutputs.Output(headline, summary, headlineConfidence, summaryConfidence, issueIds ?? ["rent"]);
+
     private static readonly string Drafted = Output(headline: HeadlineText, summary: SummaryText);
 
     [Fact]
@@ -516,7 +520,7 @@ public sealed class VoteDraftStepTests
     [Fact]
     public async Task ABillDetailWithoutAPolicyAreaCitesTheTitleOnlyAndTracksNoIssue()
     {
-        var (store, _) = await RunAsync(Create(policyArea: null), new FakeHeadlineSummaryModel().Draft(Drafted));
+        var (store, _) = await RunAsync(Create(policyArea: null), new FakeHeadlineSummaryModel().Draft(Output(issueIds: [])));
 
         var revision = Assert.Single(store.Revisions);
         Assert.Equal($"Title: {BillTitle}", revision.Facts[^1].Text);
@@ -527,13 +531,104 @@ public sealed class VoteDraftStepTests
     [Theory]
     [InlineData(BillGateFixtures.TrackedPolicyArea, new[] { "rent" })]
     [InlineData(BillGateFixtures.UntrackedPolicyArea, new string[0])]
-    public async Task TheTrackedIssuesComeFromThePolicyAreaOfTheBillAndTheRevisionNamesTheIssueRevision(string policyArea, string[] expected)
+    public async Task TheIssueCandidatesComeFromThePolicyAreaOfTheBillAndTheRevisionNamesTheIssueRevision(string policyArea, string[] expected)
     {
-        var (store, _) = await RunAsync(Create(policyArea: policyArea), new FakeHeadlineSummaryModel().Draft(Drafted));
+        var (store, _) = await RunAsync(Create(policyArea: policyArea), new FakeHeadlineSummaryModel().Draft(Output(issueIds: expected)));
 
         var revision = Assert.Single(store.Revisions);
-        Assert.Equal(expected, revision.TrackedIssueIds);
+        Assert.Equal(expected, revision.IssueCandidateIds.ToArray());
+        Assert.Equal(expected, revision.TrackedIssueIds.ToArray());
         Assert.Equal(BillGateFixtures.Revision().Id, revision.IssueRevisionId);
+    }
+
+    [Fact]
+    public async Task AModelThatPicksOneOfTwoCandidatesStoresOnlyThatIssueAndBothCandidates()
+    {
+        var model = new FakeHeadlineSummaryModel().Draft(Output(issueIds: ["eviction"]));
+
+        var (store, _) = await RunAsync(Create(), model, issues: BillGateFixtures.Revision(withEviction: true));
+
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal(["eviction"], revision.TrackedIssueIds.ToArray());
+        Assert.Equal(["eviction", "rent"], revision.IssueCandidateIds.ToArray());
+    }
+
+    [Fact]
+    public async Task AModelThatPicksNoIssueLeavesTheVoteWithoutOneAndNeverFallsBackToThePolicyAreaSet()
+    {
+        var (store, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output(issueIds: [])));
+
+        var revision = Assert.Single(store.Revisions);
+        Assert.Empty(revision.TrackedIssueIds);
+        Assert.Equal(["rent"], revision.IssueCandidateIds.ToArray());
+    }
+
+    [Fact]
+    public async Task ASingleCandidateIsStillOfferedToTheModelBecauseThePolicyAreaAloneDoesNotMakeAnIssueFit()
+    {
+        var (_, model) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Drafted));
+
+        var request = Assert.Single(model.Requests);
+        Assert.Contains("\"issueIds\"", request.SchemaJson, StringComparison.Ordinal);
+        Assert.Contains("\"id\": \"rent\"", request.UserPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task APolicyAreaWithNoIssueSendsTheSchemaWithoutIssueIds()
+    {
+        var (_, model) = await RunAsync(Create(policyArea: BillGateFixtures.UntrackedPolicyArea), new FakeHeadlineSummaryModel().Draft(Output(issueIds: [])));
+
+        var request = Assert.Single(model.Requests);
+        Assert.DoesNotContain("issueIds", request.SchemaJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("issueIds", request.SystemPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AVoteThatChangedItsCandidateSetDraftsAgainEvenWhenTheChosenIssuesStayTheSame()
+    {
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Drafted));
+        var model = new FakeHeadlineSummaryModel().Draft(Drafted);
+
+        var (second, _) = await RunAsync(Create(), model, Assert.Single(first.Revisions), issues: BillGateFixtures.Revision(withEviction: true));
+
+        Assert.Equal(["eviction", "rent"], Assert.Single(second.Revisions).IssueCandidateIds.ToArray());
+        Assert.Single(model.Requests);
+    }
+
+    [Fact]
+    public async Task ARevisionThatLacksTheCandidateSetDraftsAgainBecauseItPredatesTheModelChoice()
+    {
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Drafted));
+        var old = Assert.Single(first.Revisions) with { IssueCandidateIds = default };
+        var model = new FakeHeadlineSummaryModel().Draft(Drafted);
+
+        await RunAsync(Create(), model, old);
+
+        Assert.Single(model.Requests);
+    }
+
+    [Fact]
+    public async Task AChoiceOutsideTheCandidatesOrRepeatedIsRejectedWithItsReasonAndRetriedOnce()
+    {
+        var model = new FakeHeadlineSummaryModel().Draft(Output(issueIds: ["firearms"])).Draft(Output(issueIds: ["rent", "rent"]));
+
+        var (store, _) = await RunAsync(Create(), model);
+
+        Assert.Empty(store.Revisions);
+        Assert.Contains("\"firearms\", which is not a candidate issue", model.Requests[1].UserPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnAnswerWithoutIssueIdsIsRejectedWhenCandidatesExist()
+    {
+        var json = System.Text.Json.Nodes.JsonNode.Parse(Drafted)!.AsObject();
+        json.Remove("issueIds");
+        var model = new FakeHeadlineSummaryModel().Draft(json.ToJsonString()).Draft(Drafted);
+
+        var (store, _) = await RunAsync(Create(), model);
+
+        Assert.Contains("issueIds is required", model.Requests[1].UserPrompt, StringComparison.Ordinal);
+        Assert.Single(store.Revisions);
     }
 
     [Fact]
@@ -541,9 +636,11 @@ public sealed class VoteDraftStepTests
     {
         var ended = IssueConfigurationRevision.Create(BillGateFixtures.Issues(endsBefore: new DateOnly(2025, 4, 1)));
 
-        var (store, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Drafted), issues: ended);
+        var (store, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output(issueIds: [])), issues: ended);
 
-        Assert.Empty(Assert.Single(store.Revisions).TrackedIssueIds);
+        var revision = Assert.Single(store.Revisions);
+        Assert.Empty(revision.TrackedIssueIds);
+        Assert.Empty(revision.IssueCandidateIds);
     }
 
     [Fact]
@@ -601,7 +698,7 @@ public sealed class VoteDraftStepTests
         var evidence = world.Evidence();
         evidence = evidence with { Candidate = evidence.Candidate with { BillType = null, BillNumber = null }, BillDetail = null };
 
-        var (store, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Drafted), evidence: evidence);
+        var (store, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output(issueIds: [])), evidence: evidence);
 
         var revision = Assert.Single(store.Revisions);
         Assert.DoesNotContain(revision.Facts, fact => fact.Text.StartsWith("Title: ", StringComparison.Ordinal));

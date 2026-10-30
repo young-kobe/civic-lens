@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Analysis;
-using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Issues;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Votes;
@@ -40,8 +39,8 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
             return await attempt.CompleteAsync(State.Blocked, VoteDraftErrorCodes.FactTooLong, cancellationToken);
         if (HasTooLongField(evidence, snapshot))
             return await attempt.CompleteAsync(State.Blocked, VoteDraftErrorCodes.FieldTooLong, cancellationToken);
-        var trackedIssueIds = BillGate.TrackedIssueIdsFor(snapshot.PolicyArea, snapshot.Day, issueConfiguration);
-        var context = new VoteDraftContext(evidence, snapshot, [.. trackedIssueIds], issues.Id);
+        var choice = BillIssueChoice.For(snapshot.PolicyArea, snapshot.Day, issueConfiguration);
+        var context = new VoteDraftContext(evidence, snapshot, choice, issues.Id);
         return context.ChangeSinceCurrent() switch
         {
             VoteChange.None => await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, VoteDraftErrorCodes.Unchanged, cancellationToken),
@@ -67,7 +66,7 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
     private async Task<bool> DraftAsync(IAnalysisAttempt<VoteDraftRun> attempt, VoteDraftContext context, CancellationToken cancellationToken)
     {
         var loop = new AnalysisValidationLoop<VoteDraftRun, VoteDraftRevision>(Wrap, attempt, AnalysisRunOutcome.Drafted,
-            VoteDraftTask.MaximumValidationPasses, errors => VoteDraftPrompt.Build(context.Snapshot, settings.PromptByteCap, errors),
+            VoteDraftTask.MaximumValidationPasses, errors => VoteDraftPrompt.Build(context.Snapshot, context.Issues, settings.PromptByteCap, errors),
             model.DraftAsync, (json, run) => VoteDraftResolver.Resolve(json, context, run.RunId, run.FinishedAtUtc),
             async (runId, token) => (await store.GetRunAsync(runId, token))?.Run);
         var result = await loop.RunAsync(cancellationToken);
