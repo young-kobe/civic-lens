@@ -196,7 +196,9 @@ internal static class PublishedOfficialView
         return votes.NotCast == 0 ? sentence : $"{sentence} They did not cast Yea or Nay on {votes.NotCast} {other}split {Noun(votes.NotCast, "vote")}.";
     }
 
-    public static string PartyOf(VotesWithParty votes) => $"{votes.Chamber} {Members(votes.Party)}";
+    public static string PartyOf(VotesWithParty votes) => PartyOf(votes.Chamber, votes.Party);
+
+    public static string PartyOf(PublishedChamber chamber, string party) => $"{chamber} {Members(party)}";
 
     private static string Members(string party) => $"{party}s";
 

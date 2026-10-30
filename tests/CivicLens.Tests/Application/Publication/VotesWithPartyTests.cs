@@ -37,6 +37,13 @@ public sealed class VotesWithPartyTests
     public void OnlyAYeaOrNayAgainstTheMajorityOfASplitVoteIsABreak(string cast, bool split, bool expected) =>
         Assert.Equal(expected, VotesWithParty.IsBreak(Vote(1, cast) with { SplitVote = split }));
 
+    [Fact]
+    public void ATiedPartyHasNoMajoritySoNoCastBreaksFromIt()
+    {
+        Assert.False(VotesWithParty.IsAgainstPartyMajority(PublishedPartyMajority.Democrat, "Nay", null));
+        Assert.True(VotesWithParty.IsAgainstPartyMajority(PublishedPartyMajority.Democrat, "Nay", PublishedPartyMajority.Yea));
+    }
+
     [Theory]
     [InlineData("Independent")]
     [InlineData("Unknown")]

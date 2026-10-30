@@ -317,6 +317,28 @@ public sealed class PublishedVoteTests
         Assert.Equal(split, vote.IsSplit());
     }
 
+    [Theory]
+    [InlineData(2, 1, 2, 1, true)]
+    [InlineData(2, 1, 1, 2, false)]
+    [InlineData(1, 1, 2, 1, false)]
+    public void AVoteIsBipartisanOnlyWhenBothPartiesHaveTheSameMajoritySoATieIsNeitherBipartisanNorSplit(int demYea, int demNay, int repYea, int repNay, bool bipartisan)
+    {
+        var vote = Vote() with { Kind = PublishedVoteKind.Passage, PartyMajorities = [PublishedPartyMajority.Of(PublishedPartyMajority.Democrat, demYea, demNay), PublishedPartyMajority.Of(PublishedPartyMajority.Republican, repYea, repNay)] };
+
+        Assert.Equal(bipartisan, vote.IsBipartisan());
+        Assert.False(bipartisan && vote.IsSplit());
+    }
+
+    [Fact]
+    public void AProceduralVoteAndACandidateVoteAreNeverBipartisan()
+    {
+        var same = new[] { PublishedPartyMajority.Of(PublishedPartyMajority.Democrat, 2, 1), PublishedPartyMajority.Of(PublishedPartyMajority.Republican, 2, 1) };
+
+        Assert.True((Vote() with { Kind = PublishedVoteKind.Passage, PartyMajorities = same }).IsBipartisan());
+        Assert.False((Vote() with { Kind = PublishedVoteKind.Cloture, PartyMajorities = same }).IsBipartisan());
+        Assert.False(CandidateVote().IsBipartisan());
+    }
+
     [Fact]
     public void AProceduralVoteWithOppositeMajoritiesIsNotSplitSoARuleVoteCannotMoveTheShare()
     {

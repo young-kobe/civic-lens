@@ -1,5 +1,6 @@
 using CivicLens.Application.Issues;
 using System.Text.RegularExpressions;
+using AngleSharp.Html.Dom;
 using AngleSharp.Html.Parser;
 using CivicLens.Application.Publication;
 using CivicLens.PublicApi;
@@ -855,6 +856,77 @@ public sealed class ReleaseRendererTests
         Assert.Equal(["Voted Yea (2 tracked House members)", "Voted Nay (1 tracked House member)", "Voted for Jeffries (2 tracked House members)", "Voted for Emmer (1 tracked House member)", "Voted Present (1 tracked House member)", "Did not vote (1 tracked House member)"],
             members.QuerySelectorAll("h3").Select(heading => heading.ShownText()));
         Assert.Equal(["Amy", "Carl"], members.QuerySelectorAll(".member-group:first-of-type li a:first-child").Select(link => link.TextContent));
+    }
+
+    [Fact]
+    public async Task APartyLineVoteNamesEachPartySideAndListsOnlyTheMembersWhoBrokeWithTheirPartyByParty()
+    {
+        var vote = VoteWithParties([.. DemocratsYeaRepublicansNay, PublishedPartyMajority.Of("Independent", 1, 0), PublishedPartyMajority.Of(PublishedPartyMajority.UnknownParty, 0, 1)],
+            ("Dana", "Democrat", "Yea"), ("Dora", "Democrat", "Nay"), ("Rex", "Republican", "Nay"), ("Ruth", "Republican", "Yea"),
+            ("Ian", "Independent", "Yea"), ("Una", PublishedPartyMajority.UnknownParty, "Nay"), ("Pia", "Republican", "Present"), ("Ned", "Democrat", PublishedOfficialVote.NotVoting));
+
+        var page = await RenderedAsync(vote);
+
+        var parties = page.QuerySelector("[aria-labelledby='parties-title']")!;
+        Assert.Equal("Party line vote", parties.QuerySelector(".badge")!.TextContent);
+        Assert.Contains("Party line vote: most House Democrats voted Yea and most House Republicans voted Nay.", parties.TextContent);
+        var breakers = page.QuerySelector("[aria-labelledby='breakers-title']")!;
+        Assert.Equal(["House Democrats (1 tracked House member)", "House Republicans (1 tracked House member)"], breakers.QuerySelectorAll("h3").Select(heading => heading.TextContent));
+        Assert.Equal(["Dora", "Ruth"], breakers.QuerySelectorAll("li a:first-child").Select(link => link.TextContent));
+        Assert.Contains("House Republicans cast 1 Yea and 3 Nay on this vote.", breakers.TextContent);
+        Assert.DoesNotContain("Ian", breakers.TextContent);
+        Assert.DoesNotContain("Una", breakers.TextContent);
+        Assert.DoesNotContain("Pia", breakers.TextContent);
+        Assert.DoesNotContain("Ned", breakers.TextContent);
+    }
+
+    [Fact]
+    public async Task APartyLineVoteWhereNoMemberBrokeSaysSoInsteadOfShowingAnEmptyList()
+    {
+        var vote = VoteWithParties(DemocratsYeaRepublicansNay, ("Dana", "Democrat", "Yea"), ("Rex", "Republican", "Nay"));
+
+        var breakers = (await RenderedAsync(vote)).QuerySelector("[aria-labelledby='breakers-title']")!;
+
+        Assert.Empty(breakers.QuerySelectorAll("li"));
+        Assert.Contains("No tracked House member voted against most House Democrats.", breakers.TextContent);
+        Assert.Contains("No tracked House member voted against most House Republicans.", breakers.TextContent);
+    }
+
+    [Fact]
+    public async Task ABipartisanVoteGetsABadgeAndNoBreakPanelBecauseNoPartyOpposedTheOther()
+    {
+        var vote = VoteWithParties([PublishedPartyMajority.Of(PublishedPartyMajority.Democrat, 3, 1), PublishedPartyMajority.Of(PublishedPartyMajority.Republican, 4, 0)],
+            ("Dana", "Democrat", "Nay"), ("Rex", "Republican", "Yea"));
+
+        var page = await RenderedAsync(vote);
+
+        Assert.Equal("Bipartisan vote", page.QuerySelector("[aria-labelledby='parties-title'] .badge")!.TextContent);
+        Assert.Contains("Bipartisan vote: most House Democrats and most House Republicans both voted Yea.", page.QuerySelector("[aria-labelledby='parties-title']")!.TextContent);
+        Assert.Null(page.QuerySelector("[aria-labelledby='breakers-title']"));
+    }
+
+    [Fact]
+    public async Task ASpeakerElectionGetsNoBadgeAndNoBreakPanelBecauseItHasNoYeaOrNayTotals()
+    {
+        var page = await RenderedAsync(Vote("Candidate total Emmer: 1", "Candidate total Johnson (LA): 218") with { Totals = null, PartyMajorities = [] });
+
+        Assert.Null(page.QuerySelector("[aria-labelledby='parties-title']"));
+        Assert.Null(page.QuerySelector("[aria-labelledby='breakers-title']"));
+    }
+
+    [Theory]
+    [InlineData(PublishedVoteKind.Passage, 2, 2)]
+    [InlineData(PublishedVoteKind.Cloture, 2, 1)]
+    public async Task ATiedPartyAndAProceduralVoteGetNoBadgeBecauseNeitherCountsAsAPartyLineVote(PublishedVoteKind kind, int democratYea, int democratNay)
+    {
+        var vote = VoteWithParties([PublishedPartyMajority.Of(PublishedPartyMajority.Democrat, democratYea, democratNay), PublishedPartyMajority.Of(PublishedPartyMajority.Republican, 1, 3)],
+            ("Dana", "Democrat", "Nay"), ("Rex", "Republican", "Nay")) with
+        { Kind = kind };
+
+        var page = await RenderedAsync(vote);
+
+        Assert.Null(page.QuerySelector("[aria-labelledby='parties-title']"));
+        Assert.Null(page.QuerySelector("[aria-labelledby='breakers-title']"));
     }
 
     [Fact]
@@ -2548,6 +2620,23 @@ public sealed class ReleaseRendererTests
             FirstPublishedAtUtc = new DateTimeOffset(2026, 1, 23, 8, 0, 0, TimeSpan.Zero)
         };
     }
+
+    private static PublishedVote VoteWithParties(PublishedPartyMajority[] majorities, params (string Name, string Party, string Cast)[] voters)
+    {
+        var template = VoteWithCasts([.. voters.Select(voter => (voter.Name, voter.Cast))]);
+        return template with
+        {
+            PartyMajorities = majorities,
+            Totals = new() { Yea = majorities.Sum(party => party.YeaCount), Nay = majorities.Sum(party => party.NayCount), Present = 0, NotVoting = 0 },
+            Members = [.. template.Members.Select((member, index) => member with { Party = voters[index].Party })]
+        };
+    }
+
+    private static PublishedPartyMajority[] DemocratsYeaRepublicansNay =>
+        [PublishedPartyMajority.Of(PublishedPartyMajority.Democrat, 2, 1), PublishedPartyMajority.Of(PublishedPartyMajority.Republican, 1, 3)];
+
+    private static async Task<IHtmlDocument> RenderedAsync(PublishedVote vote) =>
+        new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None));
 
     private static PublishedVote VoteWithCasts(IReadOnlyList<(string Name, string Cast)> voters)
     {

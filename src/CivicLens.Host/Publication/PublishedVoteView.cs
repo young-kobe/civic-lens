@@ -75,8 +75,38 @@ internal static class PublishedVoteView
             .OrderBy(group => CastRank(group.Key))
             .ThenByDescending(group => CastRank(group.Key) == CandidateRank ? group.Count() : 0)
             .ThenBy(group => group.Key, StringComparer.Ordinal)
-            .Select(group => Heading(vote, group.Key, group.Count(),
-                group.OrderBy(member => member.Official.Name, StringComparer.OrdinalIgnoreCase).ThenBy(member => member.Official.Id, StringComparer.Ordinal).ToArray()));
+            .Select(group => Heading(vote, group.Key, group.Count(), ByName(group)));
+
+    private static PublishedMemberVote[] ByName(IEnumerable<PublishedMemberVote> members) =>
+        [.. members.OrderBy(member => member.Official.Name, StringComparer.OrdinalIgnoreCase).ThenBy(member => member.Official.Id, StringComparer.Ordinal)];
+
+    public static VoteBadge? Badge(PublishedVote vote)
+    {
+        var democrats = $"most {PartyOf(vote, PublishedPartyMajority.Democrat)}";
+        var republicans = $"most {PartyOf(vote, PublishedPartyMajority.Republican)}";
+        var democratSide = vote.MajorityOf(PublishedPartyMajority.Democrat);
+        if (vote.IsSplit())
+            return new("Party line vote", $"Party line vote: {democrats} voted {democratSide} and {republicans} voted {vote.MajorityOf(PublishedPartyMajority.Republican)}.");
+        return vote.IsBipartisan() ? new("Bipartisan vote", $"Bipartisan vote: {democrats} and {republicans} both voted {democratSide}.") : null;
+    }
+
+    public const string BreakMeaning = "A member is listed when they cast Yea or Nay against the cast of most members of their own party on this vote. An independent counts with the party they caucus with. A party that is tied has no majority, so nobody breaks from it. A member with another party, or with no known party, is not listed. Present and Not voting never count as a break.";
+
+    public static IEnumerable<PartyBreakers> Breakers(PublishedVote vote) =>
+        vote.IsSplit() ? new[] { PublishedPartyMajority.Democrat, PublishedPartyMajority.Republican }.Select(party => BreakersOf(vote, party)) : [];
+
+    private static PartyBreakers BreakersOf(PublishedVote vote, string party)
+    {
+        var members = ByName(vote.Members.Where(member => member.Party == party &&
+            VotesWithParty.IsAgainstPartyMajority(member.Party, member.Cast, vote.MajorityOf(party))));
+        var name = PartyOf(vote, party);
+        var count = vote.PartyMajorities.Single(majority => majority.Party == party);
+        return new($"{name} ({members.Length} tracked {PublishedOfficialView.Noun(members.Length, MemberNoun(vote))})",
+            $"{name} cast {count.YeaCount} Yea and {count.NayCount} Nay on this vote.",
+            $"No tracked {MemberNoun(vote)} voted against most {name}.", members);
+    }
+
+    private static string PartyOf(PublishedVote vote, string party) => PublishedOfficialView.PartyOf(vote.Chamber, party);
 
     private const int CandidateRank = 2;
 

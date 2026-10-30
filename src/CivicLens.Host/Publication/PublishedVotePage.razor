@@ -5,6 +5,14 @@
 
 <PublishedRecordFrame Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="@Record.Summary" Facts="PublishedVoteView.Facts(Record, Catalog)"
                       Caveat="@PublishedVoteView.Caveat(Record)">
+    @if (PublishedVoteView.Badge(Record) is { } badge)
+    {
+        <Panel Title="How the parties voted" Id="parties-title" Padded="true">
+            <p><StatusBadge Text="@badge.Text" /></p>
+            <p>@badge.Meaning</p>
+        </Panel>
+    }
+
     <PublishedRelatedPanel Related="Related" Kind="PublishedRecordKind.Vote" RecordId="@Record.RecordId" />
     <PublishedTimeline Events="PublishedTimelineView.For(Record)" />
 
@@ -50,6 +58,33 @@
         </ul>
     </Panel>
 
+    @if (PublishedVoteView.Breakers(Record).ToArray() is { Length: > 0 } breakers)
+    {
+        <Panel Title="Members who voted against most of their party" Id="breakers-title" Padded="true">
+            <p class="muted small">@PublishedVoteView.BreakMeaning</p>
+            @foreach (var party in breakers)
+            {
+                <section class="member-group">
+                    <h3>@party.Heading</h3>
+                    <p class="muted small">@party.Casts</p>
+                    @if (party.Members.Length == 0)
+                    {
+                        <p class="small">@party.None</p>
+                    }
+                    else
+                    {
+                        <ul class="member-list">
+                            @foreach (var member in party.Members)
+                            {
+                                <PublishedVoteMember Record="Record" Member="member" ShowCast="true" />
+                            }
+                        </ul>
+                    }
+                </section>
+            }
+        </Panel>
+    }
+
     <Panel Title="How each tracked member voted" Id="members-title" Padded="true">
         @foreach (var group in PublishedVoteView.CastGroups(Record))
         {
@@ -58,10 +93,7 @@
                 <ul class="member-list">
                     @foreach (var member in group.Members)
                     {
-                        <li>
-                            <PublishedOfficialName Official="member.Official" />
-                            <ContextLink Class="small" Text="Source line" Href="@("#" + PublishedVoteView.Anchor(Record, member.Citation))" Target="@($"{member.Official.Name}, member line")" />
-                        </li>
+                        <PublishedVoteMember Record="Record" Member="member" />
                     }
                 </ul>
             </section>
