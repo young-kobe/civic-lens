@@ -356,6 +356,34 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal(("Pending", "Succeeded"), (queue[first], queue[second]));
     }
 
+    [Fact]
+    public async Task RedraftMovesEveryDraftedEntryOfAStaleRollCallAndCountsEntries()
+    {
+        var (older, newer) = await TwoSettledCandidatesAsync(null, VoteDraftErrorCodes.Unchanged);
+        await InsertRunAsync(older, "vote-draft-prompt-v1", 1);
+        await InsertRunAsync(newer, "vote-draft-prompt-v1", 2, "Bypassed");
+
+        Assert.Equal(2, await VoteStore().RequeueOlderPromptAsync(default));
+
+        Assert.All((await QueueAsync()).Select(row => row.Status), status => Assert.Equal("Pending", status));
+    }
+
+    [Theory]
+    [InlineData("chamber", "Senate")]
+    [InlineData("source_id", "another-source")]
+    public async Task RedraftTreatsAVoteOfAnotherChamberOrSourceWithTheSameRollNumberAsAnotherRollCall(string column, string value)
+    {
+        var (house, other) = await TwoSettledCandidatesAsync(null, null);
+        await ExecuteAsync($"UPDATE vote_candidates SET {column} = '{value}' WHERE candidate_id = '{other}'");
+        await InsertRunAsync(house, "vote-draft-prompt-v1", 1);
+        await InsertRunAsync(other, VoteDraftTask.PromptVersion, 2);
+
+        Assert.Equal(1, await VoteStore().RequeueOlderPromptAsync(default));
+
+        var queue = (await QueueAsync()).ToDictionary(row => row.CandidateId, row => row.Status);
+        Assert.Equal(("Pending", "Succeeded"), (queue[house], queue[other]));
+    }
+
     private async Task<(string Older, string Newer)> TwoSettledCandidatesAsync(string? olderCode, string? newerCode)
     {
         var older = await PendingCandidateAsync();
