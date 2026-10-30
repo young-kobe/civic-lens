@@ -1037,6 +1037,75 @@ public sealed class ReleaseRendererTests
         Assert.DoesNotMatch(new Regex("(?:href|src)=\"(?:/|//|https?:)"), html);
     }
 
+    [Fact]
+    public async Task WithoutAnApiAddressNoPagedTableHasASortHeaderSoTheStaticPageStaysNewestFirstWithNoDeadControl()
+    {
+        var release = ReleaseOf(3) with { Records = [.. ReleaseOf(3).Records.Select(entry => entry with { IssueIds = ["housing"] })] };
+        var renderer = new ReleaseRenderer(null, null);
+        var facet = ReleaseFacets.From(release, PublicationCatalogs.None).Issues.Single();
+
+        foreach (var html in new[] { await renderer.RenderAllRecordsAsync(release, 1, CancellationToken.None), await renderer.RenderFacetPageAsync(facet, 1, CancellationToken.None) })
+        {
+            Assert.DoesNotContain("data-sort", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("data-default-order", html, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task WithAnApiAddressTheAllRecordsHeadersNameTheSearchSortKeyAndTheStaticRowsStayInManifestOrder()
+    {
+        var release = ReleaseOf(120);
+
+        var html = await new ReleaseRenderer("https://api.test", null).RenderAllRecordsAsync(release, 1, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.Equal([("text", "headline"), ("date", "published")],
+            document.QuerySelectorAll("thead th").Select(header => (header.GetAttribute("data-sort")!, header.GetAttribute("data-sort-key")!)));
+        Assert.Equal("Published records. Newest first.", document.QuerySelector("caption")!.TextContent);
+        var source = System.Text.Json.JsonDocument.Parse(document.QuerySelector("table")!.GetAttribute("data-sort-source")!).RootElement;
+        Assert.Equal(("https://api.test", 120, "documentChange"), (source.GetProperty("api").GetString(), source.GetProperty("total").GetInt32(),
+            source.GetProperty("kinds").EnumerateObject().Single(kind => kind.Value.GetString() == "Document change").Name));
+        Assert.Equal(["record", "published"], source.GetProperty("columns").EnumerateArray().Select(column => column.GetString()));
+        Assert.Equal(release.Records.Take(50).Select(entry => entry.RecordId),
+            Regex.Matches(html, "href=\"records/([0-9a-f]{32})\\.html\"").Select(match => match.Groups[1].Value));
+        Assert.NotNull(document.QuerySelector("nav.pager"));
+    }
+
+    [Fact]
+    public async Task AFacetPageSortsOnlyByRecordAndDateAndFiltersTheSearchByItsOwnIssueOrPolicyArea()
+    {
+        var release = ReleaseOf(3) with
+        {
+            Records = [.. ReleaseOf(3).Records.Select(entry => entry with { IssueIds = ["housing"], PolicyAreaIds = ["health-care"] })]
+        };
+        var facets = ReleaseFacets.From(release, PublicationCatalogs.None);
+        var renderer = new ReleaseRenderer("https://api.test", null);
+
+        async Task<(string[] Sortable, string Filter)> Read(ReleaseFacet facet)
+        {
+            var document = new HtmlParser().ParseDocument(await renderer.RenderFacetPageAsync(facet, 1, CancellationToken.None));
+            var source = System.Text.Json.JsonDocument.Parse(document.QuerySelector("table")!.GetAttribute("data-sort-source")!).RootElement;
+            return ([.. document.QuerySelectorAll("thead th[data-sort]").Select(header => header.TextContent.Trim())], source.GetProperty("filter").GetString()!);
+        }
+
+        var issue = await Read(facets.Issues.Single());
+        Assert.Equal(["Record", "Date"], issue.Sortable);
+        Assert.Equal("issue=housing", issue.Filter);
+        Assert.Equal("policyArea=health-care", (await Read(facets.PolicyAreas.Single())).Filter);
+    }
+
+    [Fact]
+    public async Task TablesThatDoNotPassASortStayPlainEvenWhenTheReleaseHasAnApiAddress()
+    {
+        var renderer = new ReleaseRenderer("https://api.test", null);
+
+        var home = await renderer.RenderHomeAsync(ReleaseOf(2), null, NoFacets, CancellationToken.None);
+        var briefs = await renderer.RenderBriefsAsync(ReleaseOfBriefs(2), [.. ReleaseOfBriefs(2).Records], 1, CancellationToken.None);
+
+        Assert.DoesNotContain("data-sort", home, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-sort", briefs, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(4)]

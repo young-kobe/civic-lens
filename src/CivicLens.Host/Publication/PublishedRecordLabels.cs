@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Publication.Contracts;
@@ -17,6 +18,16 @@ public static class PublishedRecordLabels
         PublishedRecordKind.ExecutiveAction => "Executive action",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no label.")
     };
+
+    public const string NewestFirst = "Newest first";
+
+    public const string DefaultOrder = "Default order";
+
+    public static string KindValue(PublishedRecordKind kind) =>
+        JsonSerializer.Serialize(kind, PublicationProtocol.JsonOptions).Trim('"');
+
+    public static IReadOnlyDictionary<string, string> KindLabels { get; } =
+        Enum.GetValues<PublishedRecordKind>().ToDictionary(KindValue, Kind);
 
     public static string Badge(PublishedRecordEntry entry) =>
         entry.DocumentType is { } type ? ExecutiveActionKind(type) : Kind(entry.Kind);

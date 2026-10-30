@@ -20,16 +20,16 @@
     @if (Page.TalkAndAction is { } profile)
     {
         <Panel Title="Issues they work on">
-            <DataTable Roles="true" Items="profile.IssueIds" Caption="@($"Statements, sponsored bills, and votes of {Page.Profile.Name} on each tracked issue in Congress {Page.Congress}")">
-                <Head><TableCell Header>Issue</TableCell><TableCell Header Class="num">@PublicColumn.TheirStatements</TableCell><TableCell Header>@PublicColumn.BillsTheySponsored</TableCell><TableCell Header Class="num">@PublicColumn.VotesTheyCast</TableCell></Head>
+            <DataTable Roles="true" Items="profile.IssueIds" Caption="@($"Statements, sponsored bills, and votes of {Page.Profile.Name} on each tracked issue in Congress {Page.Congress}")" DefaultOrder="@PublishedRecordLabels.DefaultOrder">
+                <Head><TableCell Header Sort="SortKind.Text">Issue</TableCell><TableCell Header Class="num" Sort="SortKind.Number">@PublicColumn.TheirStatements</TableCell><TableCell Header Sort="SortKind.Number">@PublicColumn.BillsTheySponsored</TableCell><TableCell Header Class="num" Sort="SortKind.Number">@PublicColumn.VotesTheyCast</TableCell></Head>
                 <Row Context="issueId">
                     @{
                         var issue = PublishedRecordView.IssueLink(issueId, Catalog, Page.RootPath);
                         var bills = profile.SponsoredOn(issueId);
                     }
                     <TableCell Main><CellTitle Href="@issue.Href">@issue.Text</CellTitle></TableCell>
-                    <TableCell Class="num" Label="@PublicColumn.TheirStatements">@IssueCount(profile.Statements.CountOf(issueId), TalkAndActionProfile.StatementCount, issueId, PublishedOfficialView.StatementsSubject, issue.Text)</TableCell>
-                    <TableCell Label="@PublicColumn.BillsTheySponsored">
+                    <TableCell Class="num" Label="@PublicColumn.TheirStatements" SortValue="@profile.Statements.CountOf(issueId).ToString()">@IssueCount(profile.Statements.CountOf(issueId), TalkAndActionProfile.StatementCount, issueId, PublishedOfficialView.StatementsSubject, issue.Text)</TableCell>
+                    <TableCell Label="@PublicColumn.BillsTheySponsored" SortValue="@bills.Length.ToString()">
                         @IssueCount(bills.Length, TalkAndActionProfile.BillCount, issueId, PublishedOfficialView.BillsSubject, issue.Text)
                         @if (!bills.IsEmpty)
                         {
@@ -41,7 +41,7 @@
                             </ul>
                         }
                     </TableCell>
-                    <TableCell Class="num" Label="@PublicColumn.VotesTheyCast">@IssueCount(profile.Votes.CountOf(issueId), TalkAndActionProfile.VoteCount, issueId, PublishedOfficialView.VotesSubject, issue.Text)</TableCell>
+                    <TableCell Class="num" Label="@PublicColumn.VotesTheyCast" SortValue="@profile.Votes.CountOf(issueId).ToString()">@IssueCount(profile.Votes.CountOf(issueId), TalkAndActionProfile.VoteCount, issueId, PublishedOfficialView.VotesSubject, issue.Text)</TableCell>
                 </Row>
                 <Empty><EmptyState Title="No tracked issue" Text="None of their statements, sponsored bills, or votes in this Congress is on a tracked issue." /></Empty>
             </DataTable>
@@ -62,10 +62,10 @@
             }
             else
             {
-                <DataTable Roles="true" Items="Page.Pairs" Caption="@($"Reviewed links between statements of {Page.Profile.Name} and their bills or votes")">
-                    <Head><TableCell Header Class="fit num">@PublicColumn.StatementDate</TableCell><TableCell Header>@PublicColumn.WhatTheySaid</TableCell><TableCell Header>@PublicColumn.Link</TableCell><TableCell Header>@PublicColumn.WhatTheyDid</TableCell><TableCell Header>@PublicColumn.TheirVote</TableCell></Head>
+                <DataTable Roles="true" Items="Page.Pairs" Caption="@($"Reviewed links between statements of {Page.Profile.Name} and their bills or votes")" DefaultOrder="@PublishedRecordLabels.NewestFirst">
+                    <Head><TableCell Header Class="fit num" Sort="SortKind.Date">@PublicColumn.StatementDate</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.WhatTheySaid</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.Link</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.WhatTheyDid</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.TheirVote</TableCell></Head>
                     <Row Context="pair">
-                        <TableCell Class="fit num" Label="@PublicColumn.StatementDate">@PublishedOfficialView.StatementDay(pair)</TableCell>
+                        <TableCell Class="fit num" Label="@PublicColumn.StatementDate" SortValue="@(pair.StatementDay is { } day ? Moment.Iso(day) : "")">@PublishedOfficialView.StatementDay(pair)</TableCell>
                         <TableCell Main><PublishedRecordTitle RecordId="@pair.StatementRecordId" RootPath="@Page.RootPath">@pair.StatementHeadline</PublishedRecordTitle></TableCell>
                         <TableCell Label="@PublicColumn.Link">@PublishedRecordLabels.RelationshipType(pair.Type)</TableCell>
                         <TableCell Label="@PublicColumn.WhatTheyDid"><a href="@(Page.RootPath + PublicationProtocol.RecordPagePath(pair.TargetRecordId))">@pair.TargetTitle</a></TableCell>
@@ -88,10 +88,10 @@
                 }
                 @foreach (var withParty in profile.WithPartyByChamber.Where(withParty => !withParty.Breaks.IsEmpty))
                 {
-                    <DataTable Roles="true" Items="withParty.Breaks" Caption="@($"Votes of {Page.Profile.Name} against most {PublishedOfficialView.PartyOf(withParty)}")">
-                        <Head><TableCell Header Class="fit num">@PublicColumn.Date</TableCell><TableCell Header>@PublicColumn.Vote</TableCell><TableCell Header>@PublicColumn.TheirVote</TableCell><TableCell Header>Most @PublishedOfficialView.PartyOf(withParty)</TableCell><TableCell Header>@PublicColumn.Result</TableCell></Head>
+                    <DataTable Roles="true" Items="withParty.Breaks" Caption="@($"Votes of {Page.Profile.Name} against most {PublishedOfficialView.PartyOf(withParty)}")" DefaultOrder="@PublishedRecordLabels.NewestFirst">
+                        <Head><TableCell Header Class="fit num" Sort="SortKind.Date">@PublicColumn.Date</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.Vote</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.TheirVote</TableCell><TableCell Header Sort="SortKind.Text">Most @PublishedOfficialView.PartyOf(withParty)</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.Result</TableCell></Head>
                         <Row Context="vote">
-                            <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Iso(vote.VotedOn)</TableCell>
+                            <TableCell Class="fit num" Label="@PublicColumn.Date" SortValue="@Moment.Iso(vote.VotedOn)">@Moment.Iso(vote.VotedOn)</TableCell>
                             <TableCell Main><PublishedRecordTitle RecordId="@vote.RecordId" RootPath="@Page.RootPath">@vote.Headline</PublishedRecordTitle></TableCell>
                             <TableCell Label="@PublicColumn.TheirVote">@vote.Cast</TableCell>
                             <TableCell Label="@($"Most {PublishedOfficialView.PartyOf(withParty)}")">@vote.PartyMajority</TableCell>
@@ -115,11 +115,11 @@
                 <button class="btn" type="button" data-filter-clear>@PublishedOfficialView.ShowAllRecords</button>
             </div>
         }
-        <DataTable Roles="true" Items="Rows" RowClass="@(row => row.AgainstParty ? "against-party" : null)" RowFilterKeys="@(row => row.FilterKeys)" Caption="@($"Published records of {Page.Profile.Name}")">
-            <Head><TableCell Header Class="fit num">@PublicColumn.Date</TableCell><TableCell Header>Record</TableCell>@if (HasCast){<TableCell Header>@PublicColumn.Cast</TableCell>}</Head>
+        <DataTable Roles="true" Items="Rows" RowClass="@(row => row.AgainstParty ? "against-party" : null)" RowFilterKeys="@(row => row.FilterKeys)" Caption="@($"Published records of {Page.Profile.Name}")" DefaultOrder="@PublishedRecordLabels.NewestFirst">
+            <Head><TableCell Header Class="fit num" Sort="SortKind.Date">@PublicColumn.Date</TableCell><TableCell Header Sort="SortKind.Text">Record</TableCell>@if (HasCast){<TableCell Header Sort="SortKind.Text">@PublicColumn.Cast</TableCell>}</Head>
             <Row Context="row">
-                <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Iso(row.Date)</TableCell>
-                <TableCell Main>
+                <TableCell Class="fit num" Label="@PublicColumn.Date" SortValue="@Moment.Iso(row.Date)">@Moment.Iso(row.Date)</TableCell>
+                <TableCell Main SortValue="@row.Headline">
                     <PublishedRecordTitle RecordId="@row.RecordId" RootPath="@Page.RootPath">@row.Headline</PublishedRecordTitle>
                     <StatusBadge Text="@row.Badge" />
                     @if (row.Detail is not null)
@@ -138,15 +138,15 @@
     @if (Page.IsCurrent)
     {
         <Panel Title="Offices">
-            <DataTable Roles="true" Items="OfficeStretches" Caption="@($"Offices of {Page.Profile.Name}")">
-                <Head><TableCell Header>Office</TableCell>@if (HasParty){<TableCell Header>@PublicColumn.Party</TableCell>}<TableCell Header Class="fit num">@PublicColumn.From</TableCell><TableCell Header Class="fit num">@PublicColumn.To</TableCell></Head>
+            <DataTable Roles="true" Items="OfficeStretches" Caption="@($"Offices of {Page.Profile.Name}")" DefaultOrder="@PublishedRecordLabels.DefaultOrder">
+                <Head><TableCell Header Sort="SortKind.Text">Office</TableCell>@if (HasParty){<TableCell Header Sort="SortKind.Text">@PublicColumn.Party</TableCell>}<TableCell Header Class="fit num" Sort="SortKind.Date">@PublicColumn.From</TableCell><TableCell Header Class="fit num">@PublicColumn.To</TableCell></Head>
                 <Row Context="stretch">
                     <TableCell Main>@PublishedOfficialView.Office(stretch.Latest)</TableCell>
                     @if (HasParty)
                     {
                         <TableCell Label="@PublicColumn.Party">@stretch.Latest.Party</TableCell>
                     }
-                    <TableCell Class="fit num" Label="@PublicColumn.From">@Moment.Iso(stretch.Start)</TableCell>
+                    <TableCell Class="fit num" Label="@PublicColumn.From" SortValue="@Moment.Iso(stretch.Start)">@Moment.Iso(stretch.Start)</TableCell>
                     <TableCell Class="fit num" Label="@PublicColumn.To">@(stretch.End is { } end ? Moment.Iso(end) : "Present")</TableCell>
                 </Row>
                 <Empty><EmptyState Title="No office on record" Text="@NoOfficeText" /></Empty>

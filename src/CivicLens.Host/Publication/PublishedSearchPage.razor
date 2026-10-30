@@ -1,6 +1,5 @@
 @using System.Globalization
 @using CivicLens.Host.Components.Layout
-@using System.Text.Json
 @using CivicLens.Application.Publication
 @using CivicLens.Publication.Contracts
 
@@ -26,7 +25,7 @@
                             <option value="">Any</option>
                             @foreach (var kind in Enum.GetValues<PublishedRecordKind>())
                             {
-                                <option value="@KindValue(kind)">@PublishedRecordLabels.Kind(kind)</option>
+                                <option value="@PublishedRecordLabels.KindValue(kind)">@PublishedRecordLabels.Kind(kind)</option>
                             }
                         </select>
                     </Field>
@@ -90,9 +89,6 @@
     [Parameter, EditorRequired] public PublicationRelease Release { get; set; } = default!;
     [Parameter, EditorRequired] public ReleaseFacets Facets { get; set; } = default!;
     [Parameter] public string? PublicApiUrl { get; set; }
-
-    private static string KindValue(PublishedRecordKind kind) =>
-        JsonSerializer.Serialize(kind, PublicationProtocol.JsonOptions).Trim('"');
 
     private static string SourceTextLimit => PublicationProtocol.SearchSourceTextCharacters.ToString("N0", CultureInfo.InvariantCulture);
 

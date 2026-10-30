@@ -109,6 +109,10 @@ public sealed class SearchEndpointsTests(PostgresCollection postgres)
     [InlineData("release=0")]
     [InlineData("cursor=nonsense")]
     [InlineData("q=a&q=b")]
+    [InlineData("sort=size")]
+    [InlineData("sort=date&direction=up")]
+    [InlineData("direction=asc")]
+    [InlineData("sort=date&sort=kind")]
     public async Task BadParametersAreRefusedWith400(string query)
     {
         await using var host = await StartWithReleasesAsync();

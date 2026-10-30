@@ -178,7 +178,166 @@
         apply();
     };
 
+    const sortKinds = {
+        text: { first: "asc", words: { asc: "A to Z", desc: "Z to A" }, compare: (a, b) => a.localeCompare(b, "en", { sensitivity: "base", numeric: true }) },
+        number: { first: "desc", words: { desc: "most first", asc: "fewest first" }, compare: (a, b) => Number(a) - Number(b) },
+        date: { first: "desc", words: { desc: "newest first", asc: "oldest first" }, compare: (a, b) => (a < b ? -1 : a > b ? 1 : 0) }
+    };
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const opposite = direction => (direction === "asc" ? "desc" : "asc");
+    let sortableTables = 0;
+    const sortFailure = status => status === 429 ? "Too many requests. Try again in a minute." : "Sorting is not available now. Try again later.";
+    const hitCells = {
+        record: (hit, source) => {
+            const cell = document.createElement("td");
+            cell.className = "cell-main";
+            cell.setAttribute("role", "rowheader");
+            const link = document.createElement("a");
+            link.className = "cell-title";
+            link.href = source.root + hit.pagePath;
+            link.textContent = hit.headline;
+            const badge = document.createElement("span");
+            badge.className = "badge badge-neutral";
+            badge.textContent = source.kinds[hit.kind];
+            cell.append(link, " ", badge);
+            return cell;
+        },
+        officials: hit => hit.officials.map(official => official.name).join(", "),
+        date: hit => hit.eventDate ?? hit.firstPublishedAtUtc.slice(0, 10),
+        published: hit => {
+            const time = document.createElement("time");
+            const [year, month, day] = hit.firstPublishedAtUtc.slice(0, 10).split("-");
+            time.dateTime = hit.firstPublishedAtUtc;
+            time.textContent = `${Number(day)} ${months[Number(month) - 1]} ${year}`;
+            return time;
+        }
+    };
+    const hitRow = (hit, source, headers) => {
+        const row = document.createElement("tr");
+        row.setAttribute("role", "row");
+        source.columns.forEach((column, index) => {
+            const content = hitCells[column](hit, source);
+            const cell = content instanceof HTMLTableCellElement ? content : document.createElement("td");
+            if (cell !== content) {
+                cell.className = `${headers[index].className}${column === "published" ? " time" : ""}`.trim();
+                cell.setAttribute("role", "cell");
+                cell.append(content);
+            }
+            if (column !== "record") cell.dataset.label = headers[index].textContent.trim();
+            row.append(cell);
+        });
+        return row;
+    };
+    const initSortable = table => {
+        const source = table.dataset.sortSource ? JSON.parse(table.dataset.sortSource) : null;
+        const body = table.tBodies[0];
+        const headers = Array.from(table.tHead.rows[0].cells);
+        const sortable = headers.filter(header => header.dataset.sort);
+        const names = new Map(headers.map(header => [header, header.textContent.trim()]));
+        const staticRows = Array.from(body.rows);
+        const pager = source && table.closest("section").querySelector(".pager");
+        if (!source && staticRows.length < 2) return;
+        const label = (header, direction) => `${names.get(header)}, ${sortKinds[header.dataset.sort].words[direction]}`;
+        const bar = document.createElement("div");
+        bar.className = "sort-bar";
+        const field = document.createElement("div");
+        field.className = "field sort-field";
+        const select = document.createElement("select");
+        select.id = `sort-by-${++sortableTables}`;
+        const selectLabel = document.createElement("label");
+        selectLabel.className = "field-label";
+        selectLabel.htmlFor = select.id;
+        selectLabel.textContent = "Sort by";
+        select.add(new Option(table.dataset.defaultOrder, ""));
+        for (const header of sortable)
+            for (const direction of [sortKinds[header.dataset.sort].first, opposite(sortKinds[header.dataset.sort].first)])
+                select.add(new Option(label(header, direction), `${headers.indexOf(header)}:${direction}`));
+        field.append(selectLabel, select);
+        const status = document.createElement("p");
+        status.className = "muted small";
+        status.setAttribute("role", "status");
+        bar.append(field, status);
+        const more = document.createElement("button");
+        more.type = "button";
+        more.className = "btn btn-small";
+        more.textContent = "More results";
+        more.hidden = true;
+        const wrap = table.closest(".table-wrap");
+        wrap.before(bar);
+        wrap.after(more);
+        let current = null, nextCursor = null, shown = 0, running = 0;
+        const commit = state => {
+            current = state;
+            for (const header of sortable) header.setAttribute("aria-sort", state?.header === header ? { asc: "ascending", desc: "descending" }[state.direction] : "none");
+            select.value = state ? `${headers.indexOf(state.header)}:${state.direction}` : "";
+        };
+        const restore = () => {
+            running++;
+            body.replaceChildren(...staticRows);
+            more.hidden = true;
+            if (pager) pager.hidden = false;
+            status.textContent = "";
+        };
+        const sortRows = () => {
+            const kind = sortKinds[current.header.dataset.sort];
+            const column = headers.indexOf(current.header);
+            const value = row => row.cells[column].dataset.sortValue ?? row.cells[column].textContent.trim();
+            const sign = current.direction === "asc" ? 1 : -1;
+            const order = new Map(staticRows.map((row, index) => [row, index]));
+            body.replaceChildren(...[...staticRows].sort((a, b) => sign * kind.compare(value(a), value(b)) || order.get(a) - order.get(b)));
+            status.textContent = `Sorted by ${label(current.header, current.direction)}`;
+        };
+        const fetchRows = async (state, append) => {
+            const params = new URLSearchParams(source.filter ?? "");
+            params.set("sort", state.header.dataset.sortKey);
+            params.set("direction", state.direction);
+            if (append) params.set("cursor", nextCursor);
+            const mine = ++running;
+            status.textContent = "Sorting.";
+            let response;
+            try { response = await fetch(`${source.api}/v1/search?${params}`); }
+            catch { response = { ok: false, status: 0 }; }
+            if (mine !== running) return;
+            if (!response.ok) { commit(current); status.textContent = sortFailure(response.status); return; }
+            const page = await response.json();
+            if (mine !== running) return;
+            const rows = page.hits.map(hit => hitRow(hit, source, headers));
+            if (append) body.append(...rows); else body.replaceChildren(...rows);
+            shown = append ? shown + rows.length : rows.length;
+            nextCursor = page.nextCursor;
+            more.hidden = nextCursor === null;
+            if (pager) pager.hidden = true;
+            commit(state);
+            status.textContent = `Showing ${shown.toLocaleString("en-US")} of ${source.total.toLocaleString("en-US")} records, sorted by ${label(current.header, current.direction)}.`;
+        };
+        const choose = state => {
+            if (!state) { commit(null); restore(); return; }
+            if (source) { fetchRows(state, false); return; }
+            commit(state);
+            sortRows();
+        };
+        for (const header of sortable) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "sort-button";
+            button.append(...header.childNodes);
+            header.append(button);
+            button.addEventListener("click", () => {
+                const first = sortKinds[header.dataset.sort].first;
+                if (current?.header !== header) choose({ header, direction: first });
+                else choose(current.direction === first ? { header, direction: opposite(first) } : null);
+            });
+        }
+        select.addEventListener("change", () => {
+            const [index, direction] = select.value.split(":");
+            choose(select.value === "" ? null : { header: headers[Number(index)], direction });
+        });
+        more.addEventListener("click", () => fetchRows(current, true));
+        commit(null);
+    };
+
     document.querySelectorAll("[data-officials-filters]").forEach(initOfficialsFilter);
     document.querySelectorAll("[data-search-api]").forEach(initSearchService);
     document.querySelectorAll("[data-report-api]").forEach(initReportForm);
+    new Set(Array.from(document.querySelectorAll("th[data-sort]"), header => header.closest("table"))).forEach(initSortable);
 })();

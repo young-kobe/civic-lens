@@ -1,4 +1,5 @@
 using CivicLens.Application.Publication;
+using CivicLens.PublicApi;
 using CivicLens.PublicApi.Ingest;
 using CivicLens.PublicApi.Search;
 using CivicLens.Publication.Contracts;
@@ -164,6 +165,120 @@ public sealed class SearchIndexTests(PostgresCollection postgres) : IAsyncLifeti
 
         Assert.Equal(7, all.Length);
         Assert.Equal(all, walked);
+    }
+
+    [Theory]
+    [InlineData(SearchSortKey.Date, true)]
+    [InlineData(SearchSortKey.Date, false)]
+    [InlineData(SearchSortKey.Published, true)]
+    [InlineData(SearchSortKey.Published, false)]
+    [InlineData(SearchSortKey.Headline, true)]
+    [InlineData(SearchSortKey.Headline, false)]
+    [InlineData(SearchSortKey.Kind, true)]
+    [InlineData(SearchSortKey.Kind, false)]
+    public async Task ASortedKeysetWalkVisitsEveryRecordOnceInTheOrderOfTheKeyWithTiesBrokenByRecordId(SearchSortKey sort, bool descending)
+    {
+        var records = SortSamples();
+        await world.PublishAndIngestAsync(1, records);
+        var expected = ExpectedOrder(records, sort, descending);
+
+        var walked = new List<string>();
+        SearchCursor? cursor = null;
+        var pages = 0;
+        do
+        {
+            var page = await world.SearchAsync(request => request with { Sort = sort, Descending = descending, Limit = 3, Cursor = cursor });
+            walked.AddRange(page.Hits.Select(hit => hit.RecordId));
+            cursor = SearchCursor.Parse(page.NextCursor);
+            Assert.True(cursor is null || cursor.IsSorted);
+            Assert.True(++pages <= 4, "The cursor did not end the walk.");
+        } while (cursor is not null);
+
+        Assert.Equal(expected, walked);
+    }
+
+    [Fact]
+    public async Task AHeadlineSortUsesByteOrderSoTheOrderDoesNotDependOnTheDatabaseLocale()
+    {
+        await world.PublishAndIngestAsync(1,
+            PublishedSamples.Statement('a', "apple"), PublishedSamples.Statement('b', "Zebra"), PublishedSamples.Statement('c', "Mango"));
+
+        var page = await world.SearchAsync(request => request with { Sort = SearchSortKey.Headline });
+
+        Assert.Equal(["Mango", "Zebra", "apple"], page.Hits.Select(hit => hit.Headline));
+    }
+
+    [Fact]
+    public async Task ASortedSearchWithTextOnlyHoldsTheRecordsThatMatchTheTextAndKeepsTheKeysetAcrossPages()
+    {
+        await world.PublishAndIngestAsync(1,
+            PublishedSamples.Statement('a', "Beta", source: "Xq rent cap"), PublishedSamples.Statement('b', "Alpha", source: "Xq other words"),
+            PublishedSamples.Statement('c', "Gamma", source: "Xq rent relief"), PublishedSamples.Statement('d', "Delta", source: "Xq rent"));
+
+        var first = await world.SearchAsync(request => request with { Text = "rent", Sort = SearchSortKey.Headline, Limit = 2 });
+        var second = await world.SearchAsync(request => request with { Text = "rent", Sort = SearchSortKey.Headline, Limit = 2, Cursor = SearchCursor.Parse(first.NextCursor) });
+
+        Assert.Equal(["Beta", "Delta", "Gamma"], first.Hits.Concat(second.Hits).Select(hit => hit.Headline));
+        Assert.Null(second.NextCursor);
+    }
+
+    [Fact]
+    public async Task ASortedSearchStillAppliesFiltersAndAPinnedReleaseToTheCursorRow()
+    {
+        await world.PublishAndIngestAsync(1,
+            PublishedSamples.Statement('a', "Alpha", issues: ["housing"]), PublishedSamples.Statement('b', "Beta"),
+            PublishedSamples.Statement('c', "Gamma", issues: ["housing"]), PublishedSamples.Statement('d', "Delta", issues: ["housing"]));
+        await world.PublishAndIngestAsync(2,
+            PublishedSamples.Statement('a', "Alpha", issues: ["housing"]), PublishedSamples.Statement('b', "Beta"),
+            PublishedSamples.Statement('c', "Gamma", issues: ["housing"]), PublishedSamples.Statement('d', "Delta", issues: ["housing"]),
+            PublishedSamples.Statement('e', "Able", issues: ["housing"]));
+
+        var first = await world.SearchAsync(request => request with { Issue = "housing", Sort = SearchSortKey.Headline, Limit = 2 }, release: 1);
+        var second = await world.SearchAsync(request => request with { Issue = "housing", Sort = SearchSortKey.Headline, Limit = 2, Cursor = SearchCursor.Parse(first.NextCursor) }, release: 1);
+
+        Assert.Equal(["Alpha", "Delta", "Gamma"], first.Hits.Concat(second.Hits).Select(hit => hit.Headline));
+    }
+
+    [Fact]
+    public async Task ADefaultOrderSearchStillGivesTheOldDatedCursor()
+    {
+        await world.PublishAndIngestAsync(1, SortSamples());
+
+        var page = await world.SearchAsync(request => request with { Limit = 2 });
+
+        Assert.StartsWith("d.1.", page.NextCursor, StringComparison.Ordinal);
+    }
+
+    private static SampleRecord[] SortSamples()
+    {
+        var noon = new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
+        return
+        [
+            PublishedSamples.Statement('1', "Zoning", date: new DateOnly(2026, 3, 2), published: noon),
+            PublishedSamples.Statement('2', "Zoning", date: new DateOnly(2026, 3, 2), published: noon),
+            PublishedSamples.Statement('3', "apple", date: new DateOnly(2026, 3, 2), published: noon.AddHours(1)),
+            PublishedSamples.Statement('4', "Budget", date: null, published: noon),
+            PublishedSamples.Statement('5', "Budget", date: new DateOnly(2026, 3, 1), published: noon),
+            PublishedSamples.Statement('6', "Transit", date: new DateOnly(2026, 2, 1), published: noon.AddHours(1)),
+            PublishedSamples.DocumentChange("Zoning", "A change.", "Afterword text."),
+            PublishedSamples.Vote("Budget", "A vote.", "Result: voteword")
+        ];
+    }
+
+    private static string[] ExpectedOrder(SampleRecord[] records, SearchSortKey sort, bool descending)
+    {
+        string Key(PublishedRecordEntry entry) => sort switch
+        {
+            SearchSortKey.Date => ReleaseRecordOrder.Day(entry).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+            SearchSortKey.Published => entry.FirstPublishedAtUtc.UtcDateTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+            SearchSortKey.Headline => entry.Headline,
+            _ => RecordKinds.Text(entry.Kind)
+        };
+        var entries = records.Select(record => record.Entry);
+        var ordered = descending
+            ? entries.OrderByDescending(Key, StringComparer.Ordinal).ThenByDescending(entry => entry.RecordId, StringComparer.Ordinal)
+            : entries.OrderBy(Key, StringComparer.Ordinal).ThenBy(entry => entry.RecordId, StringComparer.Ordinal);
+        return [.. ordered.Select(entry => entry.RecordId)];
     }
 
     [Fact]

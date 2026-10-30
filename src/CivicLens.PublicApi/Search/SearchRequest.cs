@@ -20,10 +20,13 @@ public sealed record SearchRequest
     public DateOnly? From { get; init; }
     public DateOnly? To { get; init; }
     public int? Release { get; init; }
+    public SearchSortKey? Sort { get; init; }
+    public bool Descending { get; init; }
     public SearchCursor? Cursor { get; init; }
     public int Limit { get; init; } = DefaultLimit;
 
-    public bool IsRanked => Text is not null;
+    /// <summary>Text ranks the results unless the request names a sort.</summary>
+    public bool IsRanked => Text is not null && Sort is null;
 
     /// <summary>Reads the query string. An invalid value throws <see cref="ArgumentException"/> that names the parameter.</summary>
     public static SearchRequest Parse(IQueryCollection query)
@@ -32,6 +35,7 @@ public sealed record SearchRequest
         var release = ReleaseNumber(query);
         if (cursor is not null && release is not null && release != cursor.Release)
             throw new ArgumentException("The cursor belongs to another release.", "cursor");
+        var (sort, descending) = SortOrder(query);
         var request = new SearchRequest
         {
             Text = QueryText(query),
@@ -43,15 +47,30 @@ public sealed record SearchRequest
             From = Date(query, "from"),
             To = Date(query, "to"),
             Release = release ?? cursor?.Release,
+            Sort = sort,
+            Descending = descending,
             Cursor = cursor,
             Limit = QueryValues.Number(query, "limit", 1, MaximumLimit) ?? DefaultLimit
         };
-        if (cursor is not null && (cursor.Rank is not null) != request.IsRanked)
+        if (cursor is not null && !request.Accepts(cursor))
             throw new ArgumentException("The cursor does not fit this search.", "cursor");
         return request;
     }
 
+    private bool Accepts(SearchCursor cursor) => IsRanked ? cursor.Rank is not null : Sort is null ? cursor.SortDate is not null : cursor.IsSorted;
+
     public static int? ReleaseNumber(IQueryCollection query) => QueryValues.Number(query, "release", 1, int.MaxValue);
+
+    private static (SearchSortKey? Sort, bool Descending) SortOrder(IQueryCollection query)
+    {
+        var direction = QueryValues.Value(query, "direction");
+        if (direction is not (null or "" or "asc" or "desc")) throw new ArgumentException("direction must be asc or desc.", "direction");
+        var name = QueryValues.Value(query, "sort");
+        if (string.IsNullOrEmpty(name))
+            return string.IsNullOrEmpty(direction) ? (null, false) : throw new ArgumentException("direction needs sort.", "direction");
+        if (!SearchSortKeys.TryParse(name, out var key)) throw new ArgumentException("sort must be date, published, headline, or kind.", "sort");
+        return (key, string.IsNullOrEmpty(direction) ? SearchSortKeys.DefaultsToDescending(key) : direction == "desc");
+    }
 
     private static string? QueryText(IQueryCollection query)
     {

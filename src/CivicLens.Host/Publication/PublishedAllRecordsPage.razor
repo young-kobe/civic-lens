@@ -4,7 +4,7 @@
 <PublicPage Section="PublicSection.AllRecords" Title="All published records" CanonicalPath="@PublicationProtocol.AllRecordsPagePath(Page)" Page="Page" PageCount="PageCount" Description="@($"All {Release.Records.Length} published records of Civic Lens, newest first. Each record shows its sources and the exact text it cites.")" Crumbs="Crumbs">
     <PageHeader Title="All published records" Lede="@($"Release {Release.ReleaseNumber}, published {Moment.Full(Release.PublishedAtUtc)}.")" />
     <Panel Label="Records">
-        <PublishedRecordTable Records="PageRecords" Caption="Published records" />
+        <PublishedRecordTable Records="PageRecords" Caption="Published records" Sort="Sort" />
         <Pager Label="Pages" Summary="@($"Page {Page} of {PageCount}")" NewerText="Previous" OlderText="Next"
                NewerHref="@(Page > 1 ? PublicationProtocol.AllRecordsPagePath(Page - 1) : null)"
                OlderHref="@(Page < PageCount ? PublicationProtocol.AllRecordsPagePath(Page + 1) : null)" />
@@ -16,6 +16,9 @@
 
     [Parameter, EditorRequired] public PublicationRelease Release { get; set; } = default!;
     [Parameter, EditorRequired] public int Page { get; set; }
+    [Parameter] public string? PublicApiUrl { get; set; }
+
+    private RecordSort? Sort => PublicApiUrl is null ? null : new(PublicApiUrl, Release.Records.Length);
 
     private int PageCount => PublicationProtocol.PageCount(Release.Records.Length);
 

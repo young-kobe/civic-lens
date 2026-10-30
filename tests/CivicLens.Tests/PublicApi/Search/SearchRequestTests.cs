@@ -63,8 +63,58 @@ public sealed class SearchRequestTests
         Assert.Equal(rank, SearchCursor.Parse(SearchCursor.Ranked(2, new string('a', 64), rank).Encode())!.Rank);
     }
 
+    [Fact]
+    public void WithoutASortTheOrderStaysTheOldOneSoOldClientsAndTheirCursorsKeepWorking()
+    {
+        var old = Parse("cursor=d.4.20260102.100." + new string('a', 64));
+
+        Assert.Null(old.Sort);
+        Assert.False(old.IsRanked);
+        Assert.True(Parse("q=rent").IsRanked);
+    }
+
+    [Theory]
+    [InlineData("sort=date", SearchSortKey.Date, true)]
+    [InlineData("sort=published", SearchSortKey.Published, true)]
+    [InlineData("sort=headline", SearchSortKey.Headline, false)]
+    [InlineData("sort=kind", SearchSortKey.Kind, false)]
+    [InlineData("sort=date&direction=asc", SearchSortKey.Date, false)]
+    [InlineData("sort=headline&direction=desc", SearchSortKey.Headline, true)]
+    public void ASortKeyTakesTheDirectionThatReadsNaturallyUnlessTheRequestNamesOne(string query, SearchSortKey key, bool descending)
+    {
+        var request = Parse(query);
+
+        Assert.Equal((key, descending), (request.Sort, request.Descending));
+    }
+
+    [Fact]
+    public void ANamedSortOverridesTheRankOfASearchWithText()
+    {
+        Assert.False(Parse("q=rent&sort=headline").IsRanked);
+    }
+
+    [Fact]
+    public void ACursorMustFitTheOrderOfTheSearchBecauseAnotherFormMeansAnotherKeyset()
+    {
+        var id = new string('a', 64);
+        var sorted = SearchCursor.Sorted(1, id).Encode();
+        var dated = SearchCursor.Dated(1, id, new DateOnly(2026, 1, 2), 100).Encode();
+        var ranked = SearchCursor.Ranked(1, id, 0.5f).Encode();
+
+        Assert.Equal($"s.1.{id}", sorted);
+        Assert.True(Parse("sort=kind&cursor=" + sorted).Cursor!.IsSorted);
+        Assert.True(Parse("q=rent&sort=kind&cursor=" + sorted).Cursor!.IsSorted);
+        Assert.Throws<ArgumentException>(() => Parse("cursor=" + sorted));
+        Assert.Throws<ArgumentException>(() => Parse("q=rent&cursor=" + sorted));
+        Assert.Throws<ArgumentException>(() => Parse("sort=kind&cursor=" + dated));
+        Assert.Throws<ArgumentException>(() => Parse("sort=kind&cursor=" + ranked));
+    }
+
     [Theory]
     [InlineData("x")]
+    [InlineData("s.1")]
+    [InlineData("s.1.NOTHEX")]
+    [InlineData("s.x.aa")]
     [InlineData("r.1.5")]
     [InlineData("r.1.-5.aa")]
     [InlineData("d.1.20260230.5.aa")]
