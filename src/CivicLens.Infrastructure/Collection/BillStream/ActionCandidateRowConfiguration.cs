@@ -25,8 +25,9 @@ internal sealed class ActionCandidateRowConfiguration : IEntityTypeConfiguration
         builder.Property(row => row.ConfigurationRevisionId).HasColumnName("configuration_revision_id").HasMaxLength(64);
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
         builder.Property(row => row.IncludesSummaries).HasColumnName("includes_summaries");
+        builder.Property(row => row.IncludesSubjects).HasColumnName("includes_subjects");
         builder.HasKey(row => row.CandidateId);
-        builder.HasIndex(row => new { row.DetailJobId, row.IncludesSummaries }).IsUnique().HasDatabaseName("ux_action_candidates_detail_job");
+        builder.HasIndex(row => new { row.DetailJobId, row.IncludesSummaries, row.IncludesSubjects }).IsUnique().HasDatabaseName("ux_action_candidates_detail_job");
         builder.HasIndex(row => new { row.SourceId, row.Congress, row.BillType, row.BillNumber, row.UpdateDateUtcTicks })
             .HasDatabaseName("ix_action_candidates_bill");
         builder.HasOne<BillGateRow>().WithMany().HasForeignKey(row => row.DetailJobId).OnDelete(DeleteBehavior.Restrict);

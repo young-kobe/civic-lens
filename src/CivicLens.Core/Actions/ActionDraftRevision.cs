@@ -10,9 +10,11 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     string Headline, string Summary, ReviewTextOrigin TextOrigin, ReviewTextSuggestion? Suggestion,
     string SourceId, int Congress, string BillType, int BillNumber, string CandidateId, DateTimeOffset CandidateUpdateDate,
     bool CandidateIncludesSummaries,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool CandidateIncludesSubjects,
     string Fingerprint, string? SummaryVersion, SourceSpan? SummaryCitation, string? PolicyArea, SourceSpan? PolicyAreaCitation,
     string? PolicyAreaId, ImmutableArray<string> TrackedIssueIds,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ImmutableArray<string> IssueCandidateIds, string IssueRevisionId, ImmutableArray<ActionSponsorship> Sponsorships, string BillTitle)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ImmutableArray<string> IssueCandidateIds, string IssueRevisionId, ImmutableArray<ActionSponsorship> Sponsorships, string BillTitle,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SubjectsHash = null)
     : IHeadlineSummaryRevision
 {
     public const int MaximumHeadlineLength = 256;
@@ -35,6 +37,8 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         if (!LowercaseHex.Is(RecordId, 64) || !LowercaseHex.Is(CandidateId, 64) || !LowercaseHex.Is(Fingerprint, 64) ||
             !LowercaseHex.Is(IssueRevisionId, 64))
             throw new ArgumentException("An action revision needs valid record, candidate, fingerprint, and issue revision IDs.");
+        if (SubjectsHash is not null && !LowercaseHex.Is(SubjectsHash, 64))
+            throw new ArgumentException("An action revision subjects hash must be 64 lowercase hex characters.");
         if (!ReviewAuthor.IsValidRevisionHeader(RevisionNumber, AuthorSubject, CreatedAtUtc))
             throw new ArgumentException("An action revision needs a number, an author, and a UTC creation time.");
         if (string.IsNullOrWhiteSpace(SourceId) || Congress < 1 || BillNumber < 1 || string.IsNullOrWhiteSpace(BillType))
@@ -101,9 +105,9 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     private bool HasSameStructuredPartAs(ActionDraftRevision other) =>
         RecordId == other.RecordId && SourceId == other.SourceId && Congress == other.Congress && BillType == other.BillType &&
         BillNumber == other.BillNumber && CandidateId == other.CandidateId && CandidateUpdateDate == other.CandidateUpdateDate &&
-        CandidateIncludesSummaries == other.CandidateIncludesSummaries &&
+        CandidateIncludesSummaries == other.CandidateIncludesSummaries && CandidateIncludesSubjects == other.CandidateIncludesSubjects &&
         Fingerprint == other.Fingerprint && SummaryCitation == other.SummaryCitation && PolicyAreaCitation == other.PolicyAreaCitation &&
-        HasSameBillFactsAs(other) && Sponsorships.SequenceEqual(other.Sponsorships);
+        HasSameBillFactsAs(other) && SubjectsHash == other.SubjectsHash && Sponsorships.SequenceEqual(other.Sponsorships);
 
     private bool HasSameBillFactsAs(ActionDraftRevision other) =>
         SummaryVersion == other.SummaryVersion && PolicyArea == other.PolicyArea && PolicyAreaId == other.PolicyAreaId && IssueRevisionId == other.IssueRevisionId &&

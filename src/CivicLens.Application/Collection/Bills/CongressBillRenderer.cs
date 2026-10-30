@@ -39,6 +39,13 @@ public static class CongressBillRenderer
         return Page(bill, page.Actions.Select(ActionLine));
     }
 
+    public static string RenderSubjects(CongressBillListItem bill, CongressBillSubjectsPage page)
+    {
+        ArgumentNullException.ThrowIfNull(bill);
+        ArgumentNullException.ThrowIfNull(page);
+        return Page(bill, page.Subjects.Select(subject => Line("Subject", subject)));
+    }
+
     public static string RenderSummaries(CongressBillListItem bill, IReadOnlyList<CongressBillSummaryText> summaries)
     {
         ArgumentNullException.ThrowIfNull(bill);

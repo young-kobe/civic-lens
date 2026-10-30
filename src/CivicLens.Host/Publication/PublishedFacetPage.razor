@@ -5,7 +5,7 @@
 <PublicPage Section="PublicSection.Issues" Title="@Facet.Name" CanonicalPath="@Facet.PagePath(Page)" Page="Page" PageCount="Facet.PageCount" Description="@($"{KindLabel} {Facet.Name}: {Facet.Records.Length} published records that name it, newest event date first.")" RootPath="../" Crumbs="Crumbs">
     <PageHeader Title="@Facet.Name" Lede="@($"{KindLabel}. {Facet.Records.Length} published records, newest event date first. A record with no event date uses its first publication day.")" />
     <Panel Label="Records">
-        <PublishedRecordTable Records="Facet.RecordsOnPage(Page)" Caption="@Facet.Name" RootPath="../" Columns="RecordTableColumns.Facet" />
+        <PublishedRecordTable Records="Facet.RecordsOnPage(Page)" Caption="@Facet.Name" RootPath="../" Columns="RecordTableColumns.Facet" Sort="Sort" />
         <Pager Label="Pages" Summary="@($"Page {Page} of {Facet.PageCount}")" NewerText="Previous" OlderText="Next"
                NewerHref="@(Page > 1 ? "../" + Facet.PagePath(Page - 1) : null)"
                OlderHref="@(Page < Facet.PageCount ? "../" + Facet.PagePath(Page + 1) : null)" />
@@ -17,6 +17,10 @@
 
     [Parameter, EditorRequired] public ReleaseFacet Facet { get; set; } = default!;
     [Parameter, EditorRequired] public int Page { get; set; }
+    [Parameter] public string? PublicApiUrl { get; set; }
+
+    private RecordSort? Sort => PublicApiUrl is null ? null
+        : new(PublicApiUrl, Facet.Records.Length, $"{(Facet.Kind == FacetKind.Issue ? "issue" : "policyArea")}={Facet.Id}");
 
     private string KindLabel => Facet.Kind == FacetKind.Issue ? "Issue" : "Policy area";
 }

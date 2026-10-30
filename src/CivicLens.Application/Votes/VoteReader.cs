@@ -28,7 +28,9 @@ public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader respo
             bill = await LoadBillAsync(billPage, cancellationToken);
             if (TextError(billPage, CongressBillRenderer.RenderDetail(bill)) is { } billTextError) return new(null, billTextError);
         }
-        return new(Assemble(evidence, chamberRead, bill?.PolicyArea), null);
+        var (subjects, subjectsError) = await ReadSubjectsAsync(evidence.BillSubjects, cancellationToken);
+        if (subjectsError is not null) return new(null, subjectsError);
+        return new(Assemble(evidence, chamberRead, bill?.PolicyArea, subjects), null);
     }
 
     private Task<(ChamberRead?, string? Error)> ReadChamberAsync(VoteDraftEvidence evidence, CancellationToken cancellationToken) =>
@@ -81,7 +83,7 @@ public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader respo
     private static PersonConfiguration[] TrackedOn(VoteDraftEvidence evidence, DateOnly day) =>
         evidence.ConfigurationRevision.Configuration.CoveredBioguidePeopleOf(SourceOf(evidence), day);
 
-    private static VoteSnapshot Assemble(VoteDraftEvidence evidence, ChamberRead read, string? policyArea)
+    private static VoteSnapshot Assemble(VoteDraftEvidence evidence, ChamberRead read, string? policyArea, ImmutableArray<string> subjects)
     {
         var configuredPeople = evidence.ConfigurationRevision.Configuration.People;
         var facts = FactsOf(evidence.Detail, read.DetailPrefixes);
@@ -91,7 +93,7 @@ public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader respo
         var (kind, kindCitation) = chamber == Chamber.Senate ? SenateVoteKindTable.Classify(facts) : VoteKindTable.Classify(facts);
         var votedOnCitation = VoteFacts.Find(facts, VoteFactPrefixes.Started)!.Citation;
         return new(chamber, VoteSources.Of(SourceOf(evidence)), facts, votedOnCitation, kind, kindCitation, read.Members, VoteFingerprint.Compute(facts, read.Members),
-            policyArea, read.Day,
+            policyArea, subjects, read.Day,
             configuredPeople.Where(person => involved.Contains(person.Id)).ToImmutableDictionary(person => person.Id, person => person.Name),
             [.. configuredPeople.Select(person => person.Name)]);
     }
@@ -121,6 +123,21 @@ public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader respo
         return [.. roll.Votes.Join(tracked, vote => vote.Member.BioguideId, person => person.BioguideId,
                 (vote, person) => new MemberVote(person.Id, vote.Member.BioguideId, RenderedText.SingleLine(vote.Cast), citations[VoteviewRenderer.MemberLineOf(vote)]))
             .OrderBy(vote => vote.BioguideId, StringComparer.Ordinal)];
+    }
+
+    private async Task<(ImmutableArray<string> Subjects, string? Error)> ReadSubjectsAsync(IReadOnlyList<VoteDraftPage> pages,
+        CancellationToken cancellationToken)
+    {
+        var subjects = ImmutableArray.CreateBuilder<string>();
+        foreach (var page in pages)
+        {
+            if (page.ExtractionVersion != CongressBillSubjectsParser.ExtractionVersion) return (default, VoteDraftErrorCodes.ExtractionVersionChanged);
+            var job = await jobs.GetAsync(page.JobId, cancellationToken) ?? throw new InvalidDataException("A bill subjects job is missing.");
+            var (bill, parsed) = CongressBillSubjectsJob.Parse(job, await responses.ReadAsync(job, artifactRoot, cancellationToken));
+            if (TextError(page, CongressBillRenderer.RenderSubjects(bill, parsed)) is { } error) return (default, error);
+            subjects.AddRange(parsed.Subjects);
+        }
+        return (subjects.ToImmutable(), null);
     }
 
     private async Task<CongressBill> LoadBillAsync(VoteDraftPage page, CancellationToken cancellationToken)

@@ -1,4 +1,6 @@
 using System.Collections.Immutable;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Nodes;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection.Bills;
@@ -10,27 +12,44 @@ public sealed class BillIssueChoice
 {
     private readonly ImmutableArray<TrackedIssueConfiguration> candidates;
 
-    private BillIssueChoice(ImmutableArray<TrackedIssueConfiguration> candidates)
+    private readonly ImmutableArray<string> subjects;
+
+    private BillIssueChoice(ImmutableArray<TrackedIssueConfiguration> candidates, IEnumerable<string> subjects)
     {
         this.candidates = candidates;
         CandidateIds = [.. candidates.Select(issue => issue.Id)];
+        this.subjects = candidates.IsEmpty ? [] : [.. subjects.Distinct(StringComparer.Ordinal)];
+        SubjectsHash = this.subjects.IsEmpty ? null : HashOf(this.subjects);
     }
 
     public ImmutableArray<string> CandidateIds { get; }
 
-    public static BillIssueChoice For(string? policyArea, DateOnly day, IssueConfiguration issues)
+    public string? SubjectsHash { get; }
+
+    public static BillIssueChoice For(string? policyArea, IEnumerable<string> subjects, DateOnly day, IssueConfiguration issues)
     {
         var ids = BillGate.TrackedIssueIdsFor(policyArea, day, issues);
-        return new([.. ids.Select(id => issues.Issues.Single(issue => issue.Id == id))]);
+        return new([.. ids.Select(id => issues.Issues.Single(issue => issue.Id == id))], subjects);
     }
 
-    public static string Instructions(string evidence) => $"""
+    public string Instructions(string evidence) => $"""
 
         Issues:
-        - issueIds: the ids of the candidate issues that the bill is about. Choose from the candidate issues only. List each id once. The policy area of the bill is a hint and does not make an issue fit. Read the definition, the includes, and the excludes of each candidate, and choose an issue only when {evidence} is about it. Use an empty list when no candidate fits.
+        - issueIds: the ids of the candidate issues that the bill is about. Choose from the candidate issues only. List each id once. The policy area of the bill is a hint and does not make an issue fit. Read the definition, the includes, and the excludes of each candidate, and choose an issue only when {evidence} is about it. Use an empty list when no candidate fits.{SubjectInstructions}
         """;
 
     public IEnumerable<object> PromptSection() => candidates.Select(TrackedIssuePromptDocument.Of);
+
+    public bool HasSubjects => !subjects.IsEmpty;
+
+    public AnalysisModelRequest? BuildDroppingSubjectsWhenOverTheCap(Func<BillIssueChoice, AnalysisModelRequest?> build) =>
+        build(this) ?? (HasSubjects ? build(new BillIssueChoice(candidates, [])) : null);
+
+    public IReadOnlyList<string>? SubjectsSection() => subjects.IsEmpty ? null : subjects;
+
+    private string SubjectInstructions => subjects.IsEmpty
+        ? ""
+        : " The facts list subjects that Congress.gov gives the bill. A subject helps you see what the bill is about. A subject does not make an issue fit. Subjects only inform the issue choice. Do not use the wording of a subject in the headline or the summary.";
 
     public JsonObject? AnswerSchema() => candidates.IsEmpty ? null : new()
     {
@@ -47,6 +66,9 @@ public sealed class BillIssueChoice
             errors.Add($"issueIds lists \"{Shorten(id)}\" more than once. List each issue once.");
         return [.. chosen.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
     }
+
+    private static string HashOf(ImmutableArray<string> subjects) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', subjects.Order(StringComparer.Ordinal)))));
 
     private ImmutableArray<string> CheckMissing(List<string> errors)
     {

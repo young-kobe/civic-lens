@@ -134,7 +134,8 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
         return RenderAsync<PublishedAllRecordsPage>(new Dictionary<string, object?>
         {
             [nameof(PublishedAllRecordsPage.Release)] = release,
-            [nameof(PublishedAllRecordsPage.Page)] = page
+            [nameof(PublishedAllRecordsPage.Page)] = page,
+            [nameof(PublishedAllRecordsPage.PublicApiUrl)] = publicApiUrl
         });
     }
 
@@ -161,7 +162,8 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
         return RenderAsync<PublishedFacetPage>(new Dictionary<string, object?>
         {
             [nameof(PublishedFacetPage.Facet)] = facet,
-            [nameof(PublishedFacetPage.Page)] = page
+            [nameof(PublishedFacetPage.Page)] = page,
+            [nameof(PublishedFacetPage.PublicApiUrl)] = publicApiUrl
         });
     }
 

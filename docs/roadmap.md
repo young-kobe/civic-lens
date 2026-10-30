@@ -52,8 +52,8 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [ ] Move readers to the per-record table
   - [ ] Drop `records_json`, after the reader step runs in production
   - [ ] `pg_notify` on approval
-- R-46: Sortable tables and vote insights. Add header sort buttons with a phone select, default orders, and a filter row. Paged tables sort through new search API sort keys. Vote pages get badges and a panel of members who broke with their party. Issue pages get a summary of votes and bills. Depends on: R-44. [Search](architecture/search.md#limits-and-planned-work)
-  - [ ] Sortable tables and search sort keys (#247 open)
+- R-46: Sortable tables and vote insights. Add a filter row above the tables. Vote pages get badges and a panel of members who broke with their party. Issue pages get a summary of votes and bills. Depends on: R-44. [Search](architecture/search.md#limits-and-planned-work)
+  - [x] Sortable tables and search sort keys (#247)
   - [ ] Vote badges and the party break panel
   - [ ] Issue summary
   - [ ] Filter row
@@ -76,12 +76,12 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 - R-53: AI brief check. A person still approves each brief. A new model task recommends approval or flags where the brief needs more attention. Its design is still to agree. Depends on: R-51. [Briefs](architecture/briefs.md#limits-and-planned-work)
   - [ ] Agree the design
   - [ ] Build the AI brief check
-- R-54: Finish bill issue narrowing. Give the model the Congress.gov legislative subjects when a bill has them. A bill with no fitting issue publishes with no issue. Depends on: none. [Actions](architecture/actions.md#limits-and-planned-work)
+- R-54: Finish bill issue narrowing. The model gets the Congress.gov legislative subjects when a bill has them, and the redraft commands exist. Still open: run the subjects backfill and the redraft commands on the live site. Then check on a sample that a bill with no fitting issue publishes with no issue. Depends on: none. [Actions](architecture/actions.md#limits-and-planned-work)
   - [x] Vote issue narrowing (#241)
   - [x] `actions draft redraft` (#239)
   - [x] `votes draft redraft` (#244)
-  - [ ] Read Congress.gov subjects in drafts (#248 open)
-  - [ ] Run the redraft commands
+  - [x] Read Congress.gov subjects in drafts (#248)
+  - [ ] Run the subjects backfill and the redraft commands
 
 **Coverage**
 

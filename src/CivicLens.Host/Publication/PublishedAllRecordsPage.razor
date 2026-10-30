@@ -12,7 +12,7 @@
         </Panel>
     }
     <Panel Label="Records">
-        <PublishedRecordTable Records="PageRecords" Caption="Published records" />
+        <PublishedRecordTable Records="PageRecords" Caption="Published records" Sort="Sort" />
         <Pager Label="Pages" Summary="@($"Page {Page} of {PageCount}")" NewerText="Previous" OlderText="Next"
                NewerHref="@(Page > 1 ? PublicationProtocol.AllRecordsPagePath(Page - 1) : null)"
                OlderHref="@(Page < PageCount ? PublicationProtocol.AllRecordsPagePath(Page + 1) : null)" />
@@ -24,6 +24,9 @@
 
     [Parameter, EditorRequired] public PublicationRelease Release { get; set; } = default!;
     [Parameter, EditorRequired] public int Page { get; set; }
+    [Parameter] public string? PublicApiUrl { get; set; }
+
+    private RecordSort? Sort => PublicApiUrl is null ? null : new(PublicApiUrl, Release.Records.Length);
 
     private int PageCount => PublicationProtocol.PageCount(Release.Records.Length);
 

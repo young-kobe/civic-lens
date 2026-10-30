@@ -129,6 +129,7 @@ public sealed class JobPreparation(
             ApiResource.BillCosponsors => AdmitCosponsorPageAsync(job, artifactRoot, cancellationToken),
             ApiResource.BillActions => AdmitActionsPageAsync(job, artifactRoot, cancellationToken),
             ApiResource.BillSummaries => AdmitSummariesPageAsync(job, artifactRoot, cancellationToken),
+            ApiResource.BillSubjects => AdmitSubjectsPageAsync(job, artifactRoot, cancellationToken),
             ApiResource.HouseVoteList => AdmitHouseVoteListAsync(job, artifactRoot, cancellationToken),
             ApiResource.HouseVoteDetail => AdmitHouseVoteDetailAsync(job, artifactRoot, cancellationToken),
             ApiResource.HouseVoteMembers => AdmitHouseVoteMembersAsync(job, artifactRoot, cancellationToken),
@@ -208,6 +209,18 @@ public sealed class JobPreparation(
         var extractionId = await SaveExtractionAsync(response.Captured, CongressBillSummariesParser.ExtractionVersion(textExtractor),
             CongressBillRenderer.RenderSummaries(bill, texts), cancellationToken);
         return PreparedFrom(await billAdmissions.AdmitSummariesPageAsync(configured, job.JobId, page, extractionId, cancellationToken));
+    }
+
+    private async Task<JobPreparationResult> AdmitSubjectsPageAsync(CollectionJobRecord job, string artifactRoot,
+        CancellationToken cancellationToken)
+    {
+        var configured = ConfiguredSourceOf(job);
+        var bill = ReadPageBill(configured, job, ApiResource.BillSubjects);
+        var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
+        var page = CongressBillSubjectsParser.Parse(response.Body, response.Request, configured.SourceUrl, bill);
+        var extractionId = await SaveExtractionAsync(response.Captured, CongressBillSubjectsParser.ExtractionVersion,
+            CongressBillRenderer.RenderSubjects(bill, page), cancellationToken);
+        return PreparedFrom(await billAdmissions.AdmitSubjectsPageAsync(configured, job.JobId, page, extractionId, cancellationToken));
     }
 
     private async Task<JobPreparationResult> AdmitHouseVoteListAsync(CollectionJobRecord job, string artifactRoot,

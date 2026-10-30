@@ -8,6 +8,7 @@ using CivicLens.Application.Issues;
 using CivicLens.Core.Analysis;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.Processing;
@@ -89,6 +90,8 @@ if (args is [] or ["--help"] or ["help"])
           votes draft list [drafted|unchanged|superseded|no-member|pending|failed] [limit]
           votes draft requeue <candidate-id|--all>
           votes draft requeue --blocked --code <block-code>
+          votes draft redraft
+          bills subjects backfill [limit]
           relationships draft status
           relationships draft list [drafted|unchanged|none|unmatched|pending|failed] [limit]
           relationships draft requeue <pair-id|--all>
@@ -155,7 +158,7 @@ if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _]
     or ["discovery", "get", _] or ["discovery", "admit", _, _, _, _]
     or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args) &&
     !CollectionWorkerCommand.Matches(args) && !WorkerHealthCommand.Matches(args) && !DocumentCommand.Matches(args) && !ReleaseCommand.Matches(args) &&
-    !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args) && !ActionCommand.Matches(args) && !VoteCommand.Matches(args) && !RelationshipCommand.Matches(args) && !BriefCommand.Matches(args) && !RosterCommand.Matches(args))
+    !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args) && !ActionCommand.Matches(args) && !VoteCommand.Matches(args) && !RelationshipCommand.Matches(args) && !BillSubjectsCommand.Matches(args) && !BriefCommand.Matches(args) && !RosterCommand.Matches(args))
 {
     Console.Error.WriteLine("Unknown command. Use --help.");
     return 2;
@@ -317,6 +320,16 @@ try
         var relationships = new RelationshipCommand(draftCommands, new GetRelationshipDraftStatus(draftCommands.Status, draftStore), new RefreshRelationshipPairs(draftStore), owner);
         executing = true;
         return await relationships.ExecuteAsync(args, cancellation.Token);
+    }
+
+    if (BillSubjectsCommand.Matches(args))
+    {
+        var (_, owner) = OwnerCommand.ReadEnvironment();
+        var jobs = CreateJobs();
+        var backfill = new BackfillBillSubjects(jobs, jobs, new ApiResponseReader(CreateDatabase(), new CaptureBodyReader()),
+            PublicationComposition.RequireArtifactRoot());
+        executing = true;
+        return await new BillSubjectsCommand(backfill, owner).ExecuteAsync(args, cancellation.Token);
     }
 
     if (BriefCommand.Matches(args))

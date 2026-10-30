@@ -46,6 +46,7 @@ public readonly record struct BillPageUrl(CongressBillListItem Bill, int Offset)
         ApiResource.BillCosponsors => "cosponsors",
         ApiResource.BillActions => "actions",
         ApiResource.BillSummaries => "summaries",
+        ApiResource.BillSubjects => "subjects",
         _ => null
     };
 }

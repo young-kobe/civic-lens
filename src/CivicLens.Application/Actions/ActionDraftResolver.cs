@@ -25,17 +25,18 @@ public static class ActionDraftResolver
         var issueIds = context.Issues.Check(output.IssueIds, errors);
         if (errors.Count > 0) return AnalysisResolution<ActionDraftRevision>.Reject(Bound(errors), false);
         return AnalysisResolution<ActionDraftRevision>.Accept(Assemble(context, createdAtUtc, ReviewText.AfterModelDraft(context.Evidence.Current,
-            output.Headline.Text, output.Summary.Text, runId, snapshot.Fingerprint), issueIds));
+            output.Headline.Text, output.Summary.Text, runId, snapshot.Fingerprint), issueIds, context.Issues.SubjectsHash));
     }
 
     public static ActionDraftRevision CopyText(ActionDraftContext context, DateTimeOffset createdAtUtc)
     {
         var current = context.Evidence.Current ?? throw new ArgumentException("Copied text needs a current revision.", nameof(context));
-        return Assemble(context, createdAtUtc, ReviewText.CopyOf(current), current.TrackedIssueIds);
+        var subjectsHash = context.Evidence.Candidate.IncludesSubjects ? context.Issues.SubjectsHash : current.SubjectsHash;
+        return Assemble(context, createdAtUtc, ReviewText.CopyOf(current), current.TrackedIssueIds, subjectsHash);
     }
 
     private static ActionDraftRevision Assemble(ActionDraftContext context, DateTimeOffset createdAtUtc, ReviewText text,
-        ImmutableArray<string> trackedIssueIds)
+        ImmutableArray<string> trackedIssueIds, string? subjectsHash)
     {
         var (evidence, snapshot, issues, policyAreaId, issueRevisionId) = context;
         var current = evidence.Current;
@@ -43,9 +44,9 @@ public static class ActionDraftResolver
         var revision = new ActionDraftRevision(candidate.RecordId, (current?.RevisionNumber ?? 0) + 1, ReviewAuthor.AnalysisSubject,
             createdAtUtc, text.Headline, text.Summary, text.Origin, text.Suggestion,
             candidate.SourceId, candidate.Congress, candidate.BillType, candidate.BillNumber, candidate.CandidateId, candidate.UpdateDate,
-            candidate.IncludesSummaries,
+            candidate.IncludesSummaries, candidate.IncludesSubjects,
             snapshot.Fingerprint, snapshot.SummaryVersion, snapshot.SummaryCitation, snapshot.Bill.PolicyArea, snapshot.PolicyAreaCitation,
-            policyAreaId, trackedIssueIds, issues.CandidateIds, issueRevisionId, snapshot.Sponsorships, snapshot.Bill.Title);
+            policyAreaId, trackedIssueIds, issues.CandidateIds, issueRevisionId, snapshot.Sponsorships, snapshot.Bill.Title, subjectsHash);
         revision.ValidateAsAnalysisRevision(current);
         return revision;
     }

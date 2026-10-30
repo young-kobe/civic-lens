@@ -36,7 +36,7 @@ public static class VoteDraftPrompt
         ArgumentNullException.ThrowIfNull(issues);
         var issueSchema = issues.AnswerSchema();
         var instructions = snapshot.Chamber == Chamber.Senate ? SenateInstructions : HouseInstructions;
-        var system = issueSchema is null ? instructions : instructions + BillIssueChoice.Instructions("the title of the measure");
+        var system = issueSchema is null ? instructions : instructions + issues.Instructions("the title of the measure");
         var user = BuildUserPrompt(snapshot, issues, previousErrors);
         var schema = AnalysisSchema.HeadlineAndSummary(issueSchema);
         var bytes = Encoding.UTF8.GetByteCount(system) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
@@ -61,7 +61,8 @@ public static class VoteDraftPrompt
         var document = new
         {
             lines = snapshot.Facts.Select(fact => fact.Text),
-            candidateIssues = issues.PromptSection()
+            candidateIssues = issues.PromptSection(),
+            subjects = issues.SubjectsSection()
         };
         var builder = new StringBuilder("Facts:\n").Append(JsonSerializer.Serialize(document, AnalysisPromptText.EvidenceJson));
         return AnalysisPromptText.WithRejectionReasons(builder, previousErrors);

@@ -14,9 +14,9 @@ public sealed partial class PostgresCollectionJobStore
     private sealed record PageState(BillPageRole Role, int Order, bool ClosesChain);
 
     internal static string HashActionCandidate(string sourceId, int congress, string billType, int billNumber,
-        long updateDateUtcTicks, bool includesSummaries) =>
+        long updateDateUtcTicks, bool includesSummaries, bool includesSubjects) =>
         HashIdentity($"{sourceId.Length}:{sourceId}{congress}:{billType}:{billNumber}:{updateDateUtcTicks}" +
-            (includesSummaries ? ":summaries" : ""));
+            (includesSummaries ? ":summaries" : "") + (includesSubjects ? ":subjects" : ""));
 
     internal static string HashActionRecord(string sourceId, int congress, string billType, int billNumber) =>
         HashIdentity($"{sourceId.Length}:{sourceId}{congress}:{billType}:{billNumber}");
@@ -60,8 +60,9 @@ public sealed partial class PostgresCollectionJobStore
             .Select(row => new PageState(row.Role, row.PageOrder, row.ClosesChain)).ToListAsync(cancellationToken);
         if (!HasCompleteEvidence(gate, pages)) return;
         var includesSummaries = IsClosed(pages, BillPageRole.Summaries);
-        if (await HasCandidateWithAtLeastTheseInputsAsync(db, gate.DetailJobId, includesSummaries, cancellationToken)) return;
-        var candidate = NewActionCandidate(source, gate, includesSummaries, now);
+        var includesSubjects = IsClosed(pages, BillPageRole.Subjects);
+        if (await HasCandidateWithAtLeastTheseInputsAsync(db, gate.DetailJobId, includesSummaries, includesSubjects, cancellationToken)) return;
+        var candidate = NewActionCandidate(source, gate, includesSummaries, includesSubjects, now);
         db.Add(candidate);
         var priority = await StatementBillMentions.PriorityOfBillAsync(db, gate.Congress, gate.BillType, gate.BillNumber, gate.HasTrackedIssue,
             cancellationToken);
@@ -69,9 +70,9 @@ public sealed partial class PostgresCollectionJobStore
     }
 
     private static Task<bool> HasCandidateWithAtLeastTheseInputsAsync(CollectionAttemptDbContext db, string detailJobId,
-        bool includesSummaries, CancellationToken cancellationToken) =>
-        db.Set<ActionCandidateRow>().AnyAsync(row => row.DetailJobId == detailJobId &&
-            (row.IncludesSummaries || row.IncludesSummaries == includesSummaries), cancellationToken);
+        bool includesSummaries, bool includesSubjects, CancellationToken cancellationToken) =>
+        db.Set<ActionCandidateRow>().Where(row => row.DetailJobId == detailJobId)
+            .Where(ActionCandidateInputs.AtLeast(includesSummaries, includesSubjects)).AnyAsync(cancellationToken);
 
     private static bool HasCompleteEvidence(BillGateRow gate, IReadOnlyList<PageState> pages) =>
         IsClosed(pages, BillPageRole.Detail) && IsClosed(pages, BillPageRole.Actions) &&
@@ -85,10 +86,10 @@ public sealed partial class PostgresCollectionJobStore
     }
 
     private static ActionCandidateRow NewActionCandidate(ConfiguredCollectionSource source, BillGateRow gate, bool includesSummaries,
-        DateTimeOffset now) => new()
+        bool includesSubjects, DateTimeOffset now) => new()
         {
             CandidateId = HashActionCandidate(gate.SourceId, gate.Congress, gate.BillType, gate.BillNumber, gate.UpdateDateUtcTicks,
-                includesSummaries),
+                includesSummaries, includesSubjects),
             SourceId = gate.SourceId,
             Congress = gate.Congress,
             BillType = gate.BillType,
@@ -97,6 +98,7 @@ public sealed partial class PostgresCollectionJobStore
             DetailJobId = gate.DetailJobId,
             ConfigurationRevisionId = source.Revision.Id,
             CreatedAtUtcTicks = Ticks(now),
-            IncludesSummaries = includesSummaries
+            IncludesSummaries = includesSummaries,
+            IncludesSubjects = includesSubjects
         };
 }
