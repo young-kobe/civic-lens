@@ -340,7 +340,16 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task TheHeaderHoldsTheSerifNameThePortraitAndTheLinksRowSoTheyShowBesideEachOther()
+    public async Task ThePageWithoutAnOfficialKeepsTheSansHeaderBecauseOnlyAProfileIsAboutOnePerson()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None);
+
+        Assert.DoesNotContain("page-header-serif", html);
+        Assert.DoesNotContain("page-header-portrait", html);
+    }
+
+    [Fact]
+    public async Task TheHeaderHoldsTheSerifNameThePortraitAndTheLinksRowSoTheyReadAsOneIntroduction()
     {
         var page = Current([], []) with
         {
