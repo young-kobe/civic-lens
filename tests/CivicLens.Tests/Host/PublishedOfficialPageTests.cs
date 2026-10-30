@@ -471,7 +471,7 @@ public sealed class PublishedOfficialPageTests
         Assert.Equal(["Date", "Vote", "Their vote", "Most House Republicans", "Result"], table.QuerySelectorAll("th").Select(cell => cell.TextContent.Trim()));
         Assert.Equal(["2026-04-03", "2026-04-02"], table.QuerySelectorAll("tbody tr").Select(row => row.QuerySelector("td")!.TextContent.Trim()));
         var first = table.QuerySelector("tbody tr")!.QuerySelectorAll("td");
-        Assert.Equal(["Vote b", "Nay", "Yea", "Passed"], first.Skip(1).Select(cell => cell.TextContent.Trim()));
+        Assert.Equal(["Vote b", "Nay", "Yea", "Passed"], first.Skip(1).Select(cell => cell.ShownText().Trim()));
         Assert.EndsWith(PublicationProtocol.RecordPagePath(new string('b', 64)), first[1].QuerySelector("a")!.GetAttribute("href"));
         Assert.Single(panel.QuerySelectorAll("table"));
         var titles = document.QuerySelectorAll("h2").Select(title => title.TextContent.Trim()).ToArray();

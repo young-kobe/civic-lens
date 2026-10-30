@@ -13,7 +13,7 @@ internal static class PublishedExecutiveActionView
 
     public static IReadOnlyList<Fact> Facts(PublishedExecutiveAction action) =>
     [
-        new("Type", PublishedRecordLabels.ExecutiveActionKind(action.Kind)),
+        new("Type", PublishedRecordLabels.ExecutiveActionKind(action.Kind)) { TermKey = PublishedRecordLabels.ExecutiveActionTermKey(action.Kind) },
         .. PublishedRecordView.Officials("President", [action.President]),
         new("Signed", Moment.Iso(action.SignedOn)),
         new("Published in the Federal Register", Moment.Iso(action.PublishedOn)),

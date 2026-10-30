@@ -117,6 +117,45 @@ public static class PublishedRecordLabels
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Vote kind has no label.")
     };
 
+    public static string? VoteKindTermKey(PublishedVoteKind kind) => kind switch
+    {
+        PublishedVoteKind.Rule => "house-rule",
+        PublishedVoteKind.PreviousQuestion => "previous-question",
+        PublishedVoteKind.MotionToRecommit => "motion-to-recommit",
+        PublishedVoteKind.Amendment => "amendment",
+        PublishedVoteKind.Suspension => "suspension-of-the-rules",
+        PublishedVoteKind.Passage => "passage",
+        PublishedVoteKind.ConferenceReport => "conference-report",
+        PublishedVoteKind.VetoOverride => "veto-override",
+        PublishedVoteKind.Nomination => "confirmation-vote",
+        PublishedVoteKind.Cloture => "cloture",
+        PublishedVoteKind.MotionToProceed => "motion-to-proceed",
+        _ => null
+    };
+
+    public static string ExecutiveActionTermKey(PublishedExecutiveActionKind kind) => kind switch
+    {
+        PublishedExecutiveActionKind.ExecutiveOrder => "executive-order",
+        PublishedExecutiveActionKind.Proclamation => "proclamation",
+        PublishedExecutiveActionKind.Notice => "notice",
+        PublishedExecutiveActionKind.Memorandum => "memorandum",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Executive action kind has no term.")
+    };
+
+    public const string Present = "Present";
+
+    public static string? CastTermKey(string cast) => cast switch
+    {
+        PublishedOfficialVote.NotVoting => "not-voting",
+        Present => "present",
+        _ => PublishedOfficialVote.SideOf(cast) switch
+        {
+            PublishedPartyMajority.Yea => "yea",
+            PublishedPartyMajority.Nay => "nay",
+            _ => null
+        }
+    };
+
     public static string VoteResultLabel(PublishedVoteFact fact)
     {
         var label = fact.Text[..fact.Text.IndexOf(':')];
