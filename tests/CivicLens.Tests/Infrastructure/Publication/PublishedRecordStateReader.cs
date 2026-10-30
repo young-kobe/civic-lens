@@ -1,4 +1,7 @@
 using System.Text.Json;
+using CivicLens.Infrastructure.Collection;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.Publication;
@@ -23,6 +26,10 @@ public static class PublishedRecordStateReader
             SELECT kind || '|' || record_id || '|' || revision_number FROM publication_record_states
             WHERE first_release <= {release} AND (last_release IS NULL OR last_release >= {release})
             """)).Select(row => row[0])];
+
+    public static async Task RebuildFromRecordsJsonAsync(string connectionString) =>
+        await new PostgresCollectionAttemptStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options)).MigrateAsync();
 
     public static async Task<List<string[]>> ReadAsync(string connectionString, string sql)
     {

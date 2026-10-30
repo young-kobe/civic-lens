@@ -116,6 +116,59 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
         Assert.Equal(releases, await PublishedRecordStateReader.ReadAsync(connectionString, "SELECT * FROM publication_releases ORDER BY release_number"));
     }
 
+    // An old binary runs during a deploy rollback. It commits a release and writes no rows.
+    [Fact]
+    public async Task MigrateRebuildsTheTableWhenAnOldBinaryCommittedAReleaseWithoutRowsBecauseReadersTrustTheTable()
+    {
+        await SeedActionsAsync(A, B);
+        await PublishAsync(1, null, [(A, 1)], added: [A]);
+        await InsertOldBinaryReleaseAsync(2, (A, 1), (B, 1));
+
+        await PublishedRecordStateReader.RebuildFromRecordsJsonAsync(connectionString);
+
+        await PublishedRecordStateReader.AssertEveryReleaseMatchesAsync(connectionString);
+        Assert.Equal(["2|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, B));
+    }
+
+    [Fact]
+    public async Task MigrateLeavesTheRowsUntouchedWhenTheTableMatchesBecauseARebuildTakesLocksForNothing()
+    {
+        await SeedActionsAsync(A, C);
+        await PublishAsync(1, null, [(A, 1)], added: [A]);
+        await PublishAsync(2, 1, [(A, 1), (C, 1)], added: [C]);
+        var before = await VersionedRowsAsync();
+
+        await PublishedRecordStateReader.RebuildFromRecordsJsonAsync(connectionString);
+
+        Assert.Equal(before, await VersionedRowsAsync());
+    }
+
+    [Fact]
+    public async Task ACommitAfterTheRebuildOpensRangesFromTheRebuiltStateBecauseTheStaleRowsNoLongerHideTheDrift()
+    {
+        await SeedActionsAsync(A, B);
+        await PublishAsync(1, null, [(A, 1)], added: [A]);
+        await InsertOldBinaryReleaseAsync(2, (A, 1), (B, 1));
+        await PublishedRecordStateReader.RebuildFromRecordsJsonAsync(connectionString);
+
+        await PublishAsync(3, 2, [(A, 1)]);
+
+        await PublishedRecordStateReader.AssertEveryReleaseMatchesAsync(connectionString);
+        Assert.Equal(["2|2"], await PublishedRecordStateReader.RangesAsync(connectionString, B));
+    }
+
+    private Task InsertOldBinaryReleaseAsync(int number, params (string Id, int Revision)[] records) => ExecuteAsync($"""
+        UPDATE publication_releases SET is_active = false;
+        INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, records_json, is_active)
+        VALUES ({number}, '{number:D6}-' || md5('old'), 'auth0|owner', 0, {records.Length},
+            '[{string.Join(",", records.Select(record => $$"""{"kind":"action","recordId":"{{record.Id}}","revisionNumber":{{record.Revision}}}"""))}]', true)
+        """);
+
+    private async Task<List<string>> VersionedRowsAsync() =>
+        [.. (await PublishedRecordStateReader.ReadAsync(connectionString, """
+            SELECT xmin::text || '|' || kind || record_id || revision_number || '|' || first_release FROM publication_record_states ORDER BY 1
+            """)).Select(row => row[0])];
+
     [Fact]
     public async Task ACommitOfFifteenThousandRecordsStaysFastBecauseTheDiffReadsOneReleaseAndWritesInTwoStatements()
     {

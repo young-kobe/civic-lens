@@ -231,7 +231,7 @@ After you set the variable, run:
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- db migrate
 ```
 
-`db migrate` applies all pending checked-in EF migrations and can be repeated. Each migration command fails after 10 minutes, for example when it waits on a lock. Imports never apply migrations. Capture files stay in the artifact directory. [Managed collection jobs](#managed-collection-jobs) collect and import evidence.
+`db migrate` applies all pending checked-in EF migrations and can be repeated. It then compares `publication_record_states` with `records_json` and rebuilds the table when they differ. A deploy rollback to an old image can cause a difference. Each migration command fails after 10 minutes, for example when it waits on a lock. Imports never apply migrations. Capture files stay in the artifact directory. [Managed collection jobs](#managed-collection-jobs) collect and import evidence.
 
 For other application composition, build `PostgresCollectionAttemptStore` with `FromConnectionString`, or supply an `IDbContextFactory<CollectionAttemptDbContext>`. Call `MigrateAsync` explicitly before you import.
 

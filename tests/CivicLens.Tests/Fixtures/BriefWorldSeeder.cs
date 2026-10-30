@@ -5,6 +5,7 @@ using CivicLens.Core.Briefs;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Infrastructure.Publication;
 using Npgsql;
 
 namespace CivicLens.Tests.Fixtures;
@@ -46,11 +47,15 @@ internal sealed class BriefWorldSeeder(string connectionString)
             """, ("id", id), ("revision", revision), ("version", version), ("kind", decision.ToString()));
     }
 
-    public Task ReleaseJsonAsync(int number, DateTimeOffset publishedAt, bool active, string recordsJson, int count) => ExecuteAsync("""
-        INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, records_json, is_active)
-        VALUES (@number, @directory, 'auth0|owner', @ticks, @count, @json, @active)
-        """, ("number", number), ("directory", $"{number:D6}-{Guid.NewGuid():N}"), ("ticks", publishedAt.UtcTicks), ("count", count),
-        ("json", recordsJson), ("active", active));
+    public async Task ReleaseJsonAsync(int number, DateTimeOffset publishedAt, bool active, string recordsJson, int count)
+    {
+        await ExecuteAsync("""
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, records_json, is_active)
+            VALUES (@number, @directory, 'auth0|owner', @ticks, @count, @json, @active)
+            """, ("number", number), ("directory", $"{number:D6}-{Guid.NewGuid():N}"), ("ticks", publishedAt.UtcTicks), ("count", count),
+            ("json", recordsJson), ("active", active));
+        await PublishedRecordStateReader.RebuildFromRecordsJsonAsync(connectionString);
+    }
 
     public Task StatementAsync(string id, int revision, string headline, params string[] officials) => ExecuteAsync("""
         SET session_replication_role = replica;
