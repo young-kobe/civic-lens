@@ -30,7 +30,8 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
         var read = await reader.ReadAsync(evidence, cancellationToken);
         if (read.Snapshot is not { } snapshot)
             return await attempt.CompleteAsync(State.Blocked, read.ErrorCode!, cancellationToken);
-        attempt.ContextJson = VoteDraftPrompt.SerializeContext(snapshot);
+        var choice = BillIssueChoice.For(snapshot.PolicyArea, snapshot.Day, issueConfiguration);
+        attempt.ContextJson = VoteDraftPrompt.SerializeContext(snapshot, choice, issues.Id);
         if (snapshot.Members.IsEmpty)
             return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, VoteDraftErrorCodes.NoTrackedMember, cancellationToken);
         if (snapshot.Members.Length > VoteDraftRevision.MaximumMembers)
@@ -39,7 +40,6 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
             return await attempt.CompleteAsync(State.Blocked, VoteDraftErrorCodes.FactTooLong, cancellationToken);
         if (HasTooLongField(evidence, snapshot))
             return await attempt.CompleteAsync(State.Blocked, VoteDraftErrorCodes.FieldTooLong, cancellationToken);
-        var choice = BillIssueChoice.For(snapshot.PolicyArea, snapshot.Day, issueConfiguration);
         var context = new VoteDraftContext(evidence, snapshot, choice, issues.Id);
         return context.ChangeSinceCurrent() switch
         {

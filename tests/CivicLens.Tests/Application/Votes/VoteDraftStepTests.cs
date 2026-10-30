@@ -589,9 +589,11 @@ public sealed class VoteDraftStepTests
         var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Drafted));
         var model = new FakeHeadlineSummaryModel().Draft(Drafted);
 
-        var (second, _) = await RunAsync(Create(), model, Assert.Single(first.Revisions), issues: BillGateFixtures.Revision(withEviction: true));
+        var previous = Assert.Single(first.Revisions) with { IssueCandidateIds = ["eviction", "rent"] };
 
-        Assert.Equal(["eviction", "rent"], Assert.Single(second.Revisions).IssueCandidateIds.ToArray());
+        var (second, _) = await RunAsync(Create(), model, previous);
+
+        Assert.Equal(["rent"], Assert.Single(second.Revisions).IssueCandidateIds.ToArray());
         Assert.Single(model.Requests);
     }
 

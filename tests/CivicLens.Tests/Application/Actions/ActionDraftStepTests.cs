@@ -627,9 +627,11 @@ public sealed class ActionDraftStepTests
         var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
         var model = new FakeHeadlineSummaryModel().Draft(Output());
 
-        var (second, _) = await RunAsync(Create(), model, Assert.Single(first.Revisions), issues: BillGateFixtures.Revision(withEviction: true));
+        var previous = Assert.Single(first.Revisions) with { IssueCandidateIds = ["eviction", "rent"] };
 
-        Assert.Equal(["eviction", "rent"], Assert.Single(second.Revisions).IssueCandidateIds.ToArray());
+        var (second, _) = await RunAsync(Create(), model, previous);
+
+        Assert.Equal(["rent"], Assert.Single(second.Revisions).IssueCandidateIds.ToArray());
         Assert.Single(model.Requests);
     }
 

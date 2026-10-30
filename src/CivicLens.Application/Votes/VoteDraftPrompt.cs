@@ -47,10 +47,12 @@ public static class VoteDraftPrompt
             bytes + (long)VoteDraftTask.MaximumOutputTokens);
     }
 
-    public static string SerializeContext(VoteSnapshot snapshot) =>
+    public static string SerializeContext(VoteSnapshot snapshot, BillIssueChoice issues, string issueRevisionId) =>
         JsonSerializer.Serialize(new
         {
             officials = snapshot.Members.Select(item => new { id = item.PersonId, name = snapshot.OfficialNames[item.PersonId] }),
+            issueCandidateIds = issues.CandidateIds,
+            issueRevisionId,
             fingerprint = snapshot.Fingerprint
         }, AnalysisPromptText.CompactJson);
 

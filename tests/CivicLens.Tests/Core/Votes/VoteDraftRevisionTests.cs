@@ -160,6 +160,7 @@ public sealed class VoteDraftRevisionTests
         Assert.Throws<ArgumentException>(() => (edit with { Members = [Member() with { Cast = "Nay" }] }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (edit with { Kind = VoteKind.Other, KindCitation = null }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (edit with { Facts = [new("Result: Failed", new SourceSpan(ExtractionId, 0, 14))] }).ValidatePersonEditOf(previous));
+        Assert.Throws<ArgumentException>(() => (edit with { TrackedIssueIds = [] }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (edit with { IssueCandidateIds = ["rent", "extra"] }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (edit with { BillType = "hr", BillNumber = 1 }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (edit with { KindCitation = new SourceSpan(ExtractionId, 16, 20) }).ValidatePersonEditOf(previous));
