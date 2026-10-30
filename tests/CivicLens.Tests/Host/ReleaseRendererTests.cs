@@ -210,7 +210,7 @@ public sealed class ReleaseRendererTests
         Assert.Contains("A roll call that is not on this site is in neither number.", text, StringComparison.Ordinal);
         Assert.Contains("A split vote is a substantive roll call vote where most Democrats and most Republicans voted on opposite sides.", text, StringComparison.Ordinal);
         Assert.Contains($"on at least {TalkAndActionProfile.MinimumRecordsForShare} split votes", text, StringComparison.Ordinal);
-        Assert.Contains("policy area of the bill in Congress.gov", text, StringComparison.Ordinal);
+        Assert.Contains("gives the possible issues. A model picks which of them the bill is about. No person checks that pick. Older records list every possible issue", text, StringComparison.Ordinal);
         Assert.Contains("Some tags can still be wrong", text, StringComparison.Ordinal);
     }
 

@@ -309,7 +309,7 @@ The source URL of a statement is the URL that the collector requested for the ci
 An action record carries:
 
 - the bill identity (congress, type, and number) and the bill title
-- the policy area with its citation, the policy area ID stored at draft time, and the tracked issue IDs
+- the policy area with its citation, the policy area ID stored at draft time, and the tracked issue IDs. The model chose the tracked issues from the policy area candidates
 - the CRS summary citation, when the revision has one
 - 1 to 600 sponsorships. Each has the official by configured name, the role (`sponsor` or `cosponsor`), and the original flag. It also has the sponsored date, the optional withdrawn date, and one or two citations.
 - 1 to 8 sources, each with the full extracted text of one cited Congress.gov API page, its URL, and its observation time
@@ -470,7 +470,7 @@ Every release holds `report.html`, rendered by `PublishedReportPage`. Every reco
 
 The current page of an official with a vote file shows the panel "Issues they work on". It has a row for each tracked issue and three plain counts: "Their statements", "Bills they sponsored", and "Votes they cast". The row lists the official title of each sponsored bill. The window is the current Congress of the official. A panel, "Missed votes in Congress N", states the missed votes of each chamber. A panel, "What they said and what they did", follows it. It lists the approved links from the statements of the official to bills and votes. A last panel, "Votes with their party", follows that. The issue panel links to `method.html`. The Records panel has a switch that hides every row that is not a vote against most of the party of the official. Each nonzero count of the issue table is a button that filters the Records list to the records of that count. Code builds the profile from the manifest entries of the official and the vote rows of the current Congress. It uses no model.
 
-Every release holds `method.html`, rendered by `PublishedMethodPage`. It states where Senate votes come from, including Voteview and its missing Vice President tie-break vote. It states what the three issue counts mean, the window, the substantive vote kinds, and the source of the issues. It also states how the votes with their party are counted and defines a split vote. It states what a link is and the four link words, and that a link is not a verdict. It also states that a reviewer approves the issue tags of a statement and that some tags can be wrong. The issues of a sponsorship and of a vote come from the policy area of the bill in Congress.gov.
+Every release holds `method.html`, rendered by `PublishedMethodPage`. It states where Senate votes come from, including Voteview and its missing Vice President tie-break vote. It states what the three issue counts mean, the window, the substantive vote kinds, and the source of the issues. It also states how the votes with their party are counted and defines a split vote. It states what a link is and the four link words, and that a link is not a verdict. It also states that a reviewer approves the issue tags of a statement and that some tags can be wrong. For a sponsored bill, the policy area in Congress.gov gives the possible issues. A model picks which of them the bill is about. No person checks that pick. Older records list every possible issue. The issues of a vote come from the policy area of the bill.
 
 ### Search
 
