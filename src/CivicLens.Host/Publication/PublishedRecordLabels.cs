@@ -25,7 +25,7 @@ public static class PublishedRecordLabels
     {
         PublishedExecutiveActionKind.ExecutiveOrder => "Executive order",
         PublishedExecutiveActionKind.Proclamation => "Proclamation",
-        PublishedExecutiveActionKind.Notice => "Notice",
+        PublishedExecutiveActionKind.Notice => "Presidential notice",
         PublishedExecutiveActionKind.Memorandum => "Memorandum",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Executive action kind has no label.")
     };

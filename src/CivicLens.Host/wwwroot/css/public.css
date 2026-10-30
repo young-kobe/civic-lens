@@ -42,7 +42,7 @@
 
 .term { padding: 0; border: 0; border-bottom: 1px dotted currentColor; background: none; color: inherit; font: inherit; cursor: help; }
 .term-popover { font-weight: 400; width: min(32rem, calc(100vw - 32px)); padding: var(--s4); border: 1px solid var(--line-strong); border-radius: var(--r-panel); background: var(--surface); color: var(--ink); font-size: var(--t-sm); }
-@supports not selector(:popover-open) { .term-popover { display: none; } }
+@supports not selector(:popover-open) { .term-popover { display: none; } .term { border-bottom: 0; cursor: text; } }
 .term-popover:popover-open { display: grid; gap: var(--s2); }
 .term-means { font-weight: 600; }
 .glossary-term + .glossary-term { margin-top: var(--s5); }

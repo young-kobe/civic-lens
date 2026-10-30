@@ -929,10 +929,22 @@ public sealed class ReleaseRendererTests
         var record = (PublishedExecutiveAction)PublicApi.PublishedSamples.ExecutiveAction("Title", "Tail").Body with { Kind = kind };
         var html = await new ReleaseRenderer(null, null).RenderExecutiveActionAsync(record, CancellationToken.None);
 
-        var type = new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts dt").Zip(new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts dd"))
+        var document = new HtmlParser().ParseDocument(html);
+        var type = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
             .Single(pair => pair.First.TextContent == "Type").Second;
         Assert.Equal(popover, type.QuerySelector("button.term")!.GetAttribute("popovertarget"));
         Assert.Equal(PublishedRecordLabels.ExecutiveActionKind(kind), type.ShownText());
+    }
+
+    [Fact]
+    public void ANoticeIsLabeledPresidentialSoTheGlossaryLookupFindsTheRightDefinition() =>
+        Assert.Equal(Glossary.Term("presidential-notice").Name, PublishedRecordLabels.ExecutiveActionKind(PublishedExecutiveActionKind.Notice));
+
+    [Fact]
+    public void EveryExecutiveActionKindHasATermInTheGlossary()
+    {
+        foreach (var kind in Enum.GetValues<PublishedExecutiveActionKind>())
+            Assert.Equal(PublishedRecordLabels.ExecutiveActionTermKey(kind), Glossary.Term(PublishedRecordLabels.ExecutiveActionTermKey(kind)).Key);
     }
 
     [Fact]

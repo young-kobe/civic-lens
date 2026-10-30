@@ -72,6 +72,16 @@ public sealed class GlossaryTests
     }
 
     [Fact]
+    public async Task TheMethodPageExplainsPresidentialNoticesWithThePresidentialDefinitionNotTheAgencyOne()
+    {
+        var document = new HtmlParser().ParseDocument(await Renderer.RenderMethodAsync(CancellationToken.None));
+
+        var notices = document.QuerySelectorAll("button.term").Single(button => button.TextContent == "notices");
+
+        Assert.Equal("term-presidential-notice", notices.GetAttribute("popovertarget"));
+    }
+
+    [Fact]
     public async Task ATermIsAButtonWithAPopoverHoldingTheApprovedMeaningAndTheFooterLinksToTheGlossaryPage()
     {
         var document = new HtmlParser().ParseDocument(await Renderer.RenderAboutAsync(CancellationToken.None));
