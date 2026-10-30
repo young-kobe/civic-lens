@@ -15,9 +15,10 @@ public sealed record StatementAllowedSelections(ImmutableHashSet<string> Officia
             throw new ArgumentException("The saved revision includes selections that are no longer configured.");
     }
 
-    public void RequireApprovable(StatementDraftRevision revision, DocumentExtraction extraction)
+    public void RequireApprovable(StatementDraftRevision revision, DocumentExtraction extraction, bool dateReadByCode = false)
     {
         revision.ValidateForApproval();
+        if (!dateReadByCode) revision.RequireConfirmedDate();
         RequireAllowed(revision);
         revision.ValidateAgainst(extraction);
     }

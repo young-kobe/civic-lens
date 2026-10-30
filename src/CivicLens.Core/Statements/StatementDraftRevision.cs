@@ -47,8 +47,9 @@ public sealed record StatementDraftRevision(string CandidateId, int RevisionNumb
             throw new ArgumentException("Approval requires a headline, a summary, at least one speaker, and at least one quotation.");
         if ((StatementDate is null) != (StatementDateEvidence is null))
             throw new ArgumentException("A statement date requires an exact evidence span.");
-        AiProposedDate.RequireConfirmed(AuthorSubject, StatementDate, "statement date");
     }
+
+    public void RequireConfirmedDate() => AiProposedDate.RequireConfirmed(AuthorSubject, StatementDate, "statement date");
 
     public void ValidateShape()
     {

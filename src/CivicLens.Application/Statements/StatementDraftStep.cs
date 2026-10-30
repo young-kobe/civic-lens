@@ -24,7 +24,7 @@ public sealed class StatementDraftStep(IStatementDraftStore store, IStatementDra
             return await attempt.CompleteAsync(State.Blocked, StatementDraftErrorCodes.EvidenceUnavailable, cancellationToken);
         if (evidence.ExistingDraftId is not null)
             return await attempt.CompleteAsync(State.Succeeded, StatementDraftErrorCodes.HumanDraftExists, cancellationToken);
-        var (allowed, officials) = selections.Resolve(evidence.ConfigurationRevision, evidence.Article.Extraction.SourceAttempt.SourceId,
+        var (allowed, officials, officeOf) = selections.Resolve(evidence.ConfigurationRevision, evidence.Article.Extraction.SourceAttempt.SourceId,
             evidence.Article.FirstCapturedOn);
         if (officials.IsEmpty)
             return await attempt.CompleteAsync(State.Blocked, StatementDraftErrorCodes.SpeakersUnavailable, cancellationToken);
@@ -37,7 +37,7 @@ public sealed class StatementDraftStep(IStatementDraftStore store, IStatementDra
         return result.End switch
         {
             AnalysisLoopEnd.Accepted => await attempt.SettleAsync(Wrap(result.Run!), StatementDraftCheckpoint.From(attempt.Claim,
-                result.Accepted!, StatementCodeApproval.Approves(evidence, allowed, result.Accepted!)), cancellationToken),
+                result.Accepted!, StatementCodeApproval.Approves(evidence, allowed, officeOf, result.Accepted!)), cancellationToken),
             AnalysisLoopEnd.NotSent when result.Run is null => await BypassAsync(attempt, evidence, cancellationToken),
             AnalysisLoopEnd.Exhausted or AnalysisLoopEnd.NotSent => await loop.FailAsync(result, cancellationToken),
             _ => result.Progress

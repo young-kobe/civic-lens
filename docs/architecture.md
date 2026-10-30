@@ -270,7 +270,7 @@ The protocol, configuration, schema, parser, and behavior versions start at the 
 | Draft prompt | `document-change-draft-prompt-v1` | same file | Analysis runs | Prompt text or input framing changes |
 | Draft schema | `document-change-draft-schema-v1` | same file | Analysis runs | The model output schema changes |
 | Statement draft task | `statement-draft-v1` | `src/CivicLens.Application/Statements/StatementDraftTask.cs` | Statement analysis runs | Task flow or output handling changes |
-| Statement draft prompt | `statement-draft-prompt-v1` | same file | Statement analysis runs | Prompt text or input framing changes, for either speaker shape |
+| Statement draft prompt | `statement-draft-prompt-v2` | same file | Statement analysis runs | Prompt text or input framing changes, for either speaker shape |
 | Statement draft schema | `statement-draft-schema-v1` | same file | Statement analysis runs | The model output schema changes, for either speaker shape |
 | Action draft task | `action-draft-v1` | `src/CivicLens.Application/Actions/ActionDraftTask.cs` | Action analysis runs | Task flow or output handling changes |
 | Action draft prompt | `action-draft-prompt-v2` | same file | Action analysis runs | Prompt text or input framing changes |

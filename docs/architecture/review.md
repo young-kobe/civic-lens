@@ -135,6 +135,8 @@ The settlement calls `AfterCodeApprovalAsync` after it adds its run row. That ca
 
 A failed check is not stored. The record stays awaiting review for a person.
 
+Statement code approval runs its checks in `StatementDraftStep`, on the extraction that the claim read. This is safe for four reasons. The extraction and the admitting configuration revision never change. The issue configuration is fixed for each process. A regate requeues only gates with `NoTrackedIssue`. A human draft that appears during the call makes `TryAddAnalysisDraftAsync` return false, so the code approval is dropped with the draft. `StatementAllowedSelections.RequireApprovable` is the single path for these checks. Only the date rule differs: code passes `dateReadByCode` when it read the date from the release.
+
 ### Status states
 
 The check constraints on `document_change_drafts`, `statement_drafts`, and `action_drafts` list the stored statuses. Statements add NotDrafted. `ReviewPolicy.GetCurrentStatus` computes it after each write: the latest decision on the current revision sets it, and without one it is awaiting review. `ReviewPolicy.GetInitialStatus` gives the status of a new draft row, which has no decisions.

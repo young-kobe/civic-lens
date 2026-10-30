@@ -7,12 +7,12 @@ namespace CivicLens.Tests.Application.Statements;
 
 public sealed class StatementDraftPromptGoldenTests
 {
-    private const string SingleSystemSha256 = "751b594553e4d748fb07f4afd6c5452f7705464aa7e82081f3cbea022ae14d2a";
+    private const string SingleSystemSha256 = "77a90560e97fb4466621c84acd1245ff05be20abcb19f2d74021a2b2b71d0587";
     private const string SingleSchemaSha256 = "41ea98254bdbd68fd8709959111e16f9abc58c3b2193aa256ed23cc8221b6a9e";
-    private const string SingleInputHash = "9d047fde562366e9df11afc29578e29badfba87de6b7a7f0c9face98175629e8";
-    private const string SeveralSystemSha256 = "dec6b5032681a158ee96de5a2e65096100c25ae2aee517d0d176eea15503290c";
+    private const string SingleInputHash = "d6a6656d454c96d0dc1054ca6570583f038a71fa6b2b8b022a540940c12f2617";
+    private const string SeveralSystemSha256 = "f8f9907f56a36cfdcefe3b0f85842a2264312fba5375427dd088146b5cc08053";
     private const string SeveralSchemaSha256 = "898fc6633ce8ed825bb0a2a5dcab5ab8f84e1ead911bde296f1bfb9b5904a543";
-    private const string SeveralInputHash = "0c778ad41fba28bd463d4f31780a07999d05dd088f8a9e70cddaf3016d5b4b01";
+    private const string SeveralInputHash = "bd82fa5d1b44722d8fb1f080b0c0ef34f03cf6e54684927f0d9f0ec3d6875240";
 
     [Fact]
     public void TheSingleSpeakerPromptAndSchemaMatchTheirPinnedVersions() =>
@@ -30,7 +30,7 @@ public sealed class StatementDraftPromptGoldenTests
             $"({StatementDraftTask.PromptVersion}) or {nameof(StatementDraftTask.SchemaVersion)} " +
             $"({StatementDraftTask.SchemaVersion}), and then update the pinned hashes in this test.";
 
-        Assert.Equal("statement-draft-prompt-v1", StatementDraftTask.PromptVersion);
+        Assert.Equal("statement-draft-prompt-v2", StatementDraftTask.PromptVersion);
         Assert.Equal("statement-draft-schema-v1", StatementDraftTask.SchemaVersion);
         Assert.Equal("statement-draft-v1", StatementDraftTask.TaskVersion);
         Assert.Equal("statement-draft", StatementDraftTask.Task);

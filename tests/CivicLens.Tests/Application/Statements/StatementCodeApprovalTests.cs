@@ -60,13 +60,61 @@ public sealed class StatementCodeApprovalTests
     }
 
     [Fact]
-    public async Task ADraftWithAnAiProposedDateWaitsForAPersonBecauseTheDateIsNotFromTheSource()
+    public async Task ADraftWhoseDateIsOnTheCaptureDayIsApprovedByCodeBecauseTheQuoteStatesIt()
     {
-        var store = await DraftAsync(DraftEvidence(configuration: OwnOfficeOf(Warren)),
-            Output(date: ("2026-10-03", "WASHINGTON, October 3, 2026")));
+        var store = await DraftAsync(DatedEvidence(), Output(date: ("2026-10-03", "WASHINGTON, October 3, 2026")));
+
+        Assert.Equal([store.Evidence.Article.CandidateId], store.CodeApproved);
+        Assert.NotNull(Assert.Single(store.Revisions).StatementDate);
+    }
+
+    [Fact]
+    public async Task ADraftWhoseDateIsSevenDaysBeforeCaptureIsApprovedByCode()
+    {
+        var store = await DraftAsync(DatedEvidence(), Output(date: ("2026-09-26", "September 26, 2026"), quotes: ["a rent cap for tenants"]),
+            Article.Replace("October 3, 2026", "September 26, 2026", StringComparison.Ordinal));
+
+        Assert.Single(store.CodeApproved);
+    }
+
+    [Fact]
+    public async Task ADraftWhoseDateIsMoreThanSevenDaysBeforeCaptureWaitsForAPerson()
+    {
+        var store = await DraftAsync(DatedEvidence(), Output(date: ("2026-09-25", "September 25, 2026")),
+            Article.Replace("October 3, 2026", "September 25, 2026", StringComparison.Ordinal));
 
         Assert.Empty(store.CodeApproved);
-        Assert.NotNull(Assert.Single(store.Revisions).StatementDate);
+        Assert.Single(store.Revisions);
+    }
+
+    [Fact]
+    public async Task ADraftWhoseDateIsAfterTheCaptureDayWaitsForAPerson()
+    {
+        var store = await DraftAsync(DatedEvidence(), Output(date: ("2026-10-05", "October 5, 2026")),
+            Article.Replace("October 3, 2026", "October 5, 2026", StringComparison.Ordinal));
+
+        Assert.Empty(store.CodeApproved);
+    }
+
+    [Fact]
+    public void ThePersonPathStillRefusesAnAiDateBecauseOnlyCodeMayAcceptADateItRead()
+    {
+        var evidence = DatedEvidence();
+        var revision = StatementDraftResolver.Resolve(Output(date: ("2026-10-03", "WASHINGTON, October 3, 2026")), evidence,
+            Officials(Warren), DateTimeOffset.UnixEpoch).Revision!;
+
+        Assert.Throws<ArgumentException>(() => Allowed().RequireApprovable(revision, evidence.Article.Extraction));
+    }
+
+    [Fact]
+    public async Task ADraftFromABillOrVotePassWithNoTrackedIssueIsApprovedByCode()
+    {
+        var carryOver = new StatementGateCarryOver([], [StatementGateFixtures.HousingArea], GatePassed: true);
+
+        var store = await DraftAsync(DraftEvidence(carryOver: carryOver, configuration: OwnOfficeOf(Warren)), Output());
+
+        Assert.Single(store.CodeApproved);
+        Assert.Empty(Assert.Single(store.Revisions).IssueIds);
     }
 
     [Theory]
@@ -84,13 +132,13 @@ public sealed class StatementCodeApprovalTests
     [Fact]
     public void ADraftIssueWithoutAVerifiedGateQuoteIsNotApprovedByCode()
     {
-        var evidence = DraftEvidence(carryOver: new([], [StatementGateFixtures.HousingArea]), configuration: OwnOfficeOf(Warren));
+        var evidence = DraftEvidence(carryOver: new([], [StatementGateFixtures.HousingArea], GatePassed: true), configuration: OwnOfficeOf(Warren));
         var revision = StatementDraftResolver.Resolve(Output(), evidence, Officials(Warren), DateTimeOffset.UnixEpoch).Revision! with
         {
             IssueIds = [StatementGateFixtures.RentIssue]
         };
 
-        Assert.False(StatementCodeApproval.Approves(evidence, Allowed(), revision));
+        Assert.False(StatementCodeApproval.Approves(evidence, Allowed(), Warren, revision));
     }
 
     [Fact]
@@ -100,13 +148,18 @@ public sealed class StatementCodeApprovalTests
         var revision = StatementDraftResolver.Resolve(Output(), evidence, Officials(Warren), DateTimeOffset.UnixEpoch).Revision!;
         var narrower = new StatementAllowedSelections([], [StatementGateFixtures.RentIssue], [StatementGateFixtures.HousingArea]);
 
-        Assert.False(StatementCodeApproval.Approves(evidence, narrower, revision));
+        Assert.False(StatementCodeApproval.Approves(evidence, narrower, Warren, revision));
     }
 
     private static StatementAllowedSelections Allowed() => new([Warren], [StatementGateFixtures.RentIssue], [StatementGateFixtures.HousingArea]);
 
-    private static async Task<FakeStatementDraftStore> DraftAsync(StatementDraftEvidence evidence, string output)
+    private static StatementDraftEvidence DatedEvidence() =>
+        DraftEvidence(observed: new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero), configuration: OwnOfficeOf(Warren));
+
+    private static async Task<FakeStatementDraftStore> DraftAsync(StatementDraftEvidence evidence, string output, string? text = null)
     {
+        if (text is not null) evidence = DraftEvidence(text, evidence.CarryOver, observed: evidence.Article.Extraction.SourceAttempt.ObservedAt,
+            configuration: evidence.ConfigurationRevision);
         var store = new FakeStatementDraftStore(evidence);
         var model = new FakeStatementDraftModel().Draft(output);
         await AnalysisWorkers.StatementDrafting(store, new FakeAnalysisStatusStore(), model, new StatementDraftSettings(10_000_000, concurrency: 1),

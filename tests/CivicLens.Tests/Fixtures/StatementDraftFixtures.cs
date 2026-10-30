@@ -65,7 +65,7 @@ internal static class StatementDraftFixtures
 
     public static StatementDraftEvidence DraftEvidence(string text = Article, StatementGateCarryOver? carryOver = null, string? existingDraftId = null,
         DateTimeOffset? observed = null, CollectionConfigurationRevision? configuration = null) =>
-        new(StatementGateFixtures.Evidence(text, observed), carryOver ?? new(["rent-affordability"], ["housing-and-community-development"]),
+        new(StatementGateFixtures.Evidence(text, observed), carryOver ?? new(["rent-affordability"], ["housing-and-community-development"], GatePassed: true),
             existingDraftId, configuration ?? SpeakerRevision());
 
     public static string Output(string[]? speakers = null, (string Date, string Quote)? date = null, string[]? quotes = null,

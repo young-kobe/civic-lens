@@ -13,9 +13,10 @@ public sealed class StatementSelectionResolver(IssueConfiguration issues)
 
     public StatementResolvedSelections Resolve(CollectionConfigurationRevision? revision, string sourceId, DateOnly capturedOn)
     {
-        var officials = roster.OfficialsOn(revision, sourceId, capturedOn);
-        return new(new([.. officials.Select(official => official.Id)], issueIds, policyAreaIds), officials);
+        var speakers = roster.SpeakersOn(revision, sourceId, capturedOn);
+        return new(new([.. speakers.Officials.Select(official => official.Id)], issueIds, policyAreaIds), speakers.Officials, speakers.OfficeOf);
     }
 }
 
-public sealed record StatementResolvedSelections(StatementAllowedSelections Allowed, ImmutableArray<AnalysisOfficial> Officials);
+public sealed record StatementResolvedSelections(StatementAllowedSelections Allowed, ImmutableArray<AnalysisOfficial> Officials,
+    string? OfficeOf);

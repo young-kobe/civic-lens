@@ -446,6 +446,27 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task ACodeApprovedStatementWithADateSaysCodeReadItBecauseAReaderMustKnowNoPersonConfirmedTheDate()
+    {
+        var statement = Statement() with { TextOrigin = PublishedTextOrigin.Model, ApprovedBy = PublishedApprover.Code };
+
+        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(statement, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
+            .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.TextContent);
+        Assert.Equal("2026-05-01. " + PublishedRecordLabels.CodeReadDate + ".", facts["Statement date"]);
+    }
+
+    [Fact]
+    public async Task APersonApprovedStatementShowsItsDateWithoutTheCodeReadLabel()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.DoesNotContain(PublishedRecordLabels.CodeReadDate, html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AnAiStatementThatAPersonApprovedShowsApprovedAndNoAiLabelBecauseAPersonApprovedIt()
     {
         var statement = Statement() with { TextOrigin = PublishedTextOrigin.Model, ApprovedBy = PublishedApprover.Person };

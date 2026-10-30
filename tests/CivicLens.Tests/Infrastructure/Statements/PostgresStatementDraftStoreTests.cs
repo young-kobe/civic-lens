@@ -76,9 +76,11 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     public async Task AStatementAiRevisionFromASourceThatIsNotTheOfficialsOwnOfficeWaitsForAPersonBecauseCoverageIsNotAuthorship()
     {
         var candidate = await PassedCandidateAsync();
+        await new RelationshipWorldSeeder(connectionString).ActionAsync(RelationshipFixtures.Action(title: "a rent cap for tenants"));
 
         await DraftingWorker(new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"]))).ExecuteAsync(once: true);
 
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM relationship_analysis"));
         Assert.Equal(0L, await ScalarAsync($"SELECT count(*) FROM statement_review_decisions WHERE candidate_id = '{candidate}'"));
         Assert.Equal("AwaitingReview", await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'"));
     }
