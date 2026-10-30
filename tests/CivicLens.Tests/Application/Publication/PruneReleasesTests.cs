@@ -7,13 +7,24 @@ namespace CivicLens.Tests.Application.Publication;
 public sealed class PruneReleasesTests
 {
     [Fact]
-    public async Task KeepsTheThirtyHighestReleasesPlusTheActiveOneSoRecentRollbacksStayPossible()
+    public async Task RetiresReleasesBelowTheKeptNumbersButNotTheActiveOneSoARollbackTargetSurvives()
     {
         var scenario = Seed(35, active: 2);
 
         await Prune(scenario).ExecuteAsync();
 
         Assert.Equal(["release-1", "release-3", "release-4", "release-5"], scenario.Releases.RetiredEver.Order().ToArray());
+    }
+
+    [Fact]
+    public async Task AsksTheStoreToKeepThirtyReleasesAndEveryReleaseFromTheLastFortyEightHours()
+    {
+        var scenario = Seed(1, active: 1);
+
+        await Prune(scenario).ExecuteAsync();
+
+        Assert.Equal(30, scenario.Publications.PrunedKeep);
+        Assert.Equal(TimeSpan.FromHours(48), scenario.Publications.PrunedMinimumAge);
     }
 
     [Fact]
@@ -89,7 +100,7 @@ public sealed class PruneReleasesTests
     }
 
     [Fact]
-    public async Task EveryPublishPrunesSoTheOldestFolderIsGoneOnceMoreThanThirtyReleasesExist()
+    public async Task EveryPublishPrunesSoTheOldestFolderIsGoneOncePastTheKeepLimit()
     {
         var scenario = new PublicationScenario();
         var publisher = scenario.Publisher();

@@ -723,7 +723,7 @@ The output lists the members to add and the configured people who left the roste
 
 Set `"withholdPhoto": true` on the person in the collection configuration and commit it. Restart the worker and the review workspace, because each reads the configuration only at start. A worker with the old configuration writes the photo back at its next automatic publish. Then run `releases publish <idempotency-key>` with no record. The command makes a release that applies the flag. When the person has no published record, no release shows their photo. The command then refuses with "Nothing to publish", and nothing needs to be done. The new release shows no photo for the person, and the official page shows the neutral line "No portrait is shown for this official." Collection continues, so removing the flag, restarting, and publishing again restores the newest photo.
 
-The flag does not remove files from old releases. A kept release directory keeps the photo file until a prune removes it; see [release retention](architecture/publication.md#release-retention). Purge the file from the Cloudflare cache if it must leave at once. A rollback with `releases activate` to an older release shows the photo again. See [roster](architecture/roster.md#limits-and-planned-work).
+The flag does not remove files from old releases. A kept release directory keeps the photo file until a prune removes it; see [release retention](architecture/publication.md#release-retention). Purge the file from the Cloudflare cache if it must leave at once. A withheld photo can stay in kept release folders for at least 48 hours. A rollback with `releases activate` to an older release shows the photo again. See [roster](architecture/roster.md#limits-and-planned-work).
 
 ## Automatic publication
 

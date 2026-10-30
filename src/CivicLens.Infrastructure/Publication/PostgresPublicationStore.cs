@@ -116,7 +116,9 @@ public sealed class PostgresPublicationStore : IPublicationStore
             .Select(row => (int?)row.ReleaseNumber).MinAsync(cancellationToken);
         var lowestByAge = await releases.Where(row => row.PublishedAtUtcTicks >= youngestAllowedTicks)
             .Select(row => (int?)row.ReleaseNumber).MinAsync(cancellationToken);
-        var lowestKept = lowestByAge is null ? lowestByCount : Math.Min(lowestByCount!.Value, lowestByAge.Value);
+        var newestBeforeWindow = await releases.Where(row => row.PublishedAtUtcTicks < youngestAllowedTicks)
+            .Select(row => (int?)row.ReleaseNumber).MaxAsync(cancellationToken);
+        var lowestKept = new[] { lowestByCount, lowestByAge, newestBeforeWindow }.Min();
         var active = await releases.Where(row => row.IsActive).Select(row => row.DirectoryName).SingleOrDefaultAsync(cancellationToken);
         if (lowestKept is not null) await retireOlder(lowestKept.Value, active, cancellationToken);
         await transaction.CommitAsync(cancellationToken);

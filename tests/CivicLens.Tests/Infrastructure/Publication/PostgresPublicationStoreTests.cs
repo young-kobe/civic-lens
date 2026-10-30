@@ -37,6 +37,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     private PostgresStatementDraftStore statementDrafts = null!;
     private StatementCandidateSeeder statementSeeder = null!;
     private string connectionString = null!;
+    private static readonly TimeSpan PruneAge = TimeSpan.FromHours(48);
     private const string DatabaseClockTicksSql =
         "((EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint)";
     private int statementCount;
@@ -250,18 +251,46 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     }
 
     [Fact]
-    public async Task PruneKeepsEveryReleaseYoungerThanTheMinimumAgeEvenPastTheCountSoACachedPageOrSearchPollCanStillReadIt()
+    public async Task PruneKeepsEveryReleaseYoungerThanTheMinimumAgeEvenPastTheCountSoFrequentPublishesCannotPushOutARecentRollbackTarget()
     {
         var draft = await CreateDraftAsync();
         for (var number = 1; number <= 4; number++)
             await publications.CommitAsync(Owner.Subject, Commit(number, draft, 1, 0), $"key-{number}", Hash(number), default);
-        await AgeReleaseAsync(1, PruneReleases.MinimumAge + TimeSpan.FromMinutes(1));
-        await AgeReleaseAsync(2, PruneReleases.MinimumAge + TimeSpan.FromMinutes(1));
-        await AgeReleaseAsync(3, PruneReleases.MinimumAge - TimeSpan.FromMinutes(1));
+        await AgeReleaseAsync(1, PruneAge + TimeSpan.FromMinutes(1));
+        await AgeReleaseAsync(2, PruneAge + TimeSpan.FromMinutes(1));
+        await AgeReleaseAsync(3, PruneAge - TimeSpan.FromMinutes(1));
 
         var below = await LowestKeptAsync(keep: 1);
 
-        Assert.Equal(3, below);
+        Assert.Equal(2, below);
+    }
+
+    [Fact]
+    public async Task PruneKeepsTheCountLimitWhenAYoungReleaseExistsSoAnOldReleaseInsideTheCountSurvives()
+    {
+        var draft = await CreateDraftAsync();
+        for (var number = 1; number <= 4; number++)
+            await publications.CommitAsync(Owner.Subject, Commit(number, draft, 1, 0), $"key-{number}", Hash(number), default);
+        for (var number = 1; number <= 3; number++)
+            await AgeReleaseAsync(number, PruneAge + TimeSpan.FromMinutes(1));
+
+        var below = await LowestKeptAsync(keep: 3);
+
+        Assert.Equal(2, below);
+    }
+
+    [Fact]
+    public async Task PruneKeepsTheNewestReleaseOlderThanTheWindowAfterABurstBecauseItWasLiveWhenTheWindowOpened()
+    {
+        var draft = await CreateDraftAsync();
+        for (var number = 1; number <= 33; number++)
+            await publications.CommitAsync(Owner.Subject, Commit(number, draft, 1, 0), $"key-{number}", Hash(number), default);
+        for (var number = 1; number <= 2; number++)
+            await AgeReleaseAsync(number, PruneAge + TimeSpan.FromMinutes(1));
+
+        var below = await LowestKeptAsync(keep: 30);
+
+        Assert.Equal(2, below);
     }
 
     [Fact]
@@ -271,7 +300,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         for (var number = 1; number <= 3; number++)
             await publications.CommitAsync(Owner.Subject, Commit(number, draft, 1, 0), $"key-{number}", Hash(number), default);
         for (var number = 1; number <= 3; number++)
-            await AgeReleaseAsync(number, PruneReleases.MinimumAge + TimeSpan.FromMinutes(1));
+            await AgeReleaseAsync(number, PruneAge + TimeSpan.FromMinutes(1));
 
         var below = await LowestKeptAsync(keep: 2);
 
@@ -285,11 +314,11 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         var first = await publications.CommitAsync(Owner.Subject, Commit(1, draft, 1, 0), "key-1", Hash(1), default);
         await publications.CommitAsync(Owner.Subject, Commit(2, draft, 1, 0), "key-2", Hash(2), default);
         await publications.ActivateAsync(1, (_, _) => Task.CompletedTask, default);
-        await AgeReleaseAsync(1, PruneReleases.MinimumAge + TimeSpan.FromDays(30));
-        await AgeReleaseAsync(2, PruneReleases.MinimumAge + TimeSpan.FromDays(30));
+        await AgeReleaseAsync(1, PruneAge + TimeSpan.FromDays(30));
+        await AgeReleaseAsync(2, PruneAge + TimeSpan.FromDays(30));
         string? active = null;
 
-        await publications.PruneAsync(1, PruneReleases.MinimumAge, (_, name, _) => { active = name; return Task.CompletedTask; }, default);
+        await publications.PruneAsync(1, PruneAge, (_, name, _) => { active = name; return Task.CompletedTask; }, default);
 
         Assert.Equal(first.DirectoryName, active);
     }
@@ -297,7 +326,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     private async Task<int> LowestKeptAsync(int keep)
     {
         var below = 0;
-        await publications.PruneAsync(keep, PruneReleases.MinimumAge, (lowest, _, _) => { below = lowest; return Task.CompletedTask; }, default);
+        await publications.PruneAsync(keep, PruneAge, (lowest, _, _) => { below = lowest; return Task.CompletedTask; }, default);
         return below;
     }
 
@@ -831,7 +860,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     }
 
     private async Task<long> DatabaseTicksAsync() => await ScalarTicksAsync(
-        "SELECT (EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint");
+        $"SELECT {DatabaseClockTicksSql}");
 
     private async Task<long> StoredPublishedTicksAsync() => await ScalarTicksAsync("SELECT published_at_utc_ticks FROM publication_releases");
 
