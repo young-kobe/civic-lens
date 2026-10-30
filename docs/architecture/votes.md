@@ -336,7 +336,7 @@ Its variables are in [operations](../operations.md#vote-drafting). A daily limit
 
 ### Voteview Senate collection
 
-Senate votes come from the Voteview CSV files, because senate.gov returns a 403 to the collector. Voteview publishes three files for each Congress: roll calls, votes, and members. The files are public, and the host has no `robots.txt`. The shipped source `voteview-senate-votes` sets `apiParser` `voteviewSenateVoteList`, `backfillFrom` 2025-01-03, `minimumCongress` 119, and `maxBytes` 4,000,000. It ships with `enabled: false`. A configuration may enable only one Voteview source. The parser name `senateVoteList` of the retired senate.gov source still reads in a stored configuration, but the Host refuses a live configuration file that enables it.
+Senate votes come from the Voteview CSV files, because senate.gov returns a 403 to the collector. Voteview publishes three files for each Congress: roll calls, votes, and members. The files are public, and the host has no `robots.txt`. The shipped source `voteview-senate-votes` sets `apiParser` `voteviewSenateVoteList`, `backfillFrom` 2025-01-03, `minimumCongress` 119, and `maxBytes` 4,000,000. It ships with `enabled: false`. A configuration may enable only one Voteview source. The parser name `senateVoteList` of the retired senate.gov source still reads in a stored configuration. The Host refuses a live configuration file that enables it.
 
 The source URL is `https://voteview.com/static/data/out`. The file URL is `{source url}/{kind}/S{congress}_{kind}.csv` with the kind `rollcalls`, `votes`, or `members`. `VoteviewUrl` owns it. The resources are `voteviewRollCalls`, `voteviewMembers`, and `voteviewVotes`.
 
