@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Publication.Contracts;
 
@@ -35,5 +36,12 @@ public sealed class PublishedRecordReferenceTests
     public void TheIdKeepsAnyFurtherSeparatorSoTheIdValidatorOwnsItsShape()
     {
         Assert.Equal("a:b", PublishedRecordReference.Parse("statement:a:b").RecordId);
+    }
+
+    [Fact]
+    public void TheKindSpellingMatchesTheWireSpellingOfRecordsJson()
+    {
+        foreach (var kind in Enum.GetValues<PublishedRecordKind>())
+            Assert.Equal(JsonSerializer.Serialize(kind), $"\"{PublishedRecordReference.NameOf(kind)}\"");
     }
 }

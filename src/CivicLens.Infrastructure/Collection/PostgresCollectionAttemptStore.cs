@@ -17,6 +17,8 @@ namespace CivicLens.Infrastructure.Collection;
 public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
     : ICollectionAttemptStore
 {
+    private static readonly TimeSpan MigrationCommandTimeout = TimeSpan.FromMinutes(10);
+
     public async Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(attemptId);
@@ -101,6 +103,7 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
     public async Task MigrateAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        db.Database.SetCommandTimeout(MigrationCommandTimeout);
         await db.Database.MigrateAsync(cancellationToken);
     }
 
