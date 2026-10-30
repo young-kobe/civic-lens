@@ -1,14 +1,14 @@
 using System.Text.Json;
 using Npgsql;
 
-namespace CivicLens.Tests.Fixtures;
+namespace CivicLens.Tests.Infrastructure.Publication;
 
 public static class PublishedRecordStateReader
 {
-    public static async Task<SortedSet<string>> ReadReleaseNumbersAsync(string connectionString) =>
+    private static async Task<SortedSet<string>> ReadReleaseNumbersAsync(string connectionString) =>
         [.. (await ReadAsync(connectionString, "SELECT release_number::text FROM publication_releases")).Select(row => row[0])];
 
-    public static async Task<SortedSet<string>> ReadFromRecordsJsonAsync(string connectionString, int release)
+    private static async Task<SortedSet<string>> ReadFromRecordsJsonAsync(string connectionString, int release)
     {
         var json = await ReadAsync(connectionString, $"SELECT records_json FROM publication_releases WHERE release_number = {release}");
         using var document = JsonDocument.Parse(json.Single()[0]);
@@ -18,7 +18,7 @@ public static class PublishedRecordStateReader
             entry.GetProperty("revisionNumber").GetInt32()))];
     }
 
-    public static async Task<SortedSet<string>> ReadFromStateTableAsync(string connectionString, int release) =>
+    private static async Task<SortedSet<string>> ReadFromStateTableAsync(string connectionString, int release) =>
         [.. (await ReadAsync(connectionString, $"""
             SELECT kind || '|' || record_id || '|' || revision_number FROM publication_record_states
             WHERE first_release <= {release} AND (last_release IS NULL OR last_release >= {release})
@@ -35,6 +35,12 @@ public static class PublishedRecordStateReader
             rows.Add([.. Enumerable.Range(0, reader.FieldCount).Select(index => reader.GetValue(index).ToString() ?? "NULL")]);
         return rows;
     }
+
+    public static async Task<List<string>> RangesAsync(string connectionString, string recordId) =>
+        [.. (await ReadAsync(connectionString, $"""
+            SELECT first_release || '|' || COALESCE(last_release::text, 'NULL') FROM publication_record_states
+            WHERE record_id = '{recordId}' ORDER BY first_release
+            """)).Select(row => row[0])];
 
     public static async Task AssertEveryReleaseMatchesAsync(string connectionString)
     {

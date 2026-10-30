@@ -10,7 +10,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql("LOCK TABLE publication_releases");
+            migrationBuilder.Sql("LOCK TABLE publication_releases IN SHARE ROW EXCLUSIVE MODE");
 
             migrationBuilder.CreateTable(
                 name: "publication_record_states",
@@ -18,12 +18,13 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 {
                     kind = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
                     record_id = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
-                    revision_number = table.Column<int>(type: "integer", nullable: false),
                     first_release = table.Column<int>(type: "integer", nullable: false),
+                    revision_number = table.Column<int>(type: "integer", nullable: false),
                     last_release = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
+                    table.PrimaryKey("PK_publication_record_states", x => new { x.kind, x.record_id, x.first_release });
                     table.CheckConstraint("ck_publication_record_states_range", "last_release IS NULL OR last_release >= first_release");
                     table.ForeignKey(
                         name: "FK_publication_record_states_publication_releases_first_release",
@@ -42,21 +43,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_publication_record_states_first_release",
                 table: "publication_record_states",
-                column: "first_release",
-                filter: "last_release IS NULL");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_publication_record_states_kind_record_id_first_release",
-                table: "publication_record_states",
-                columns: new[] { "kind", "record_id", "first_release" },
-                unique: true)
-                .Annotation("Npgsql:IndexInclude", new[] { "last_release", "revision_number" });
+                column: "first_release");
 
             migrationBuilder.CreateIndex(
                 name: "IX_publication_record_states_last_release",
                 table: "publication_record_states",
-                column: "last_release",
-                filter: "last_release IS NOT NULL");
+                column: "last_release");
 
             migrationBuilder.Sql("""
                 INSERT INTO publication_record_states (kind, record_id, revision_number, first_release, last_release)

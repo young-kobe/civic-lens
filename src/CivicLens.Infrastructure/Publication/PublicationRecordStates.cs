@@ -22,7 +22,7 @@ internal static class PublicationRecordStates
     {
         var highest = commit.ReleaseNumber - 1;
         var before = await db.Set<PublicationRecordStateRow>().AsNoTracking()
-            .Where(row => row.FirstRelease <= highest && (row.LastRelease == null || row.LastRelease >= highest))
+            .Where(row => row.LastRelease == null)
             .ToDictionaryAsync(row => (row.Kind, row.RecordId), row => row.RevisionNumber, cancellationToken);
         var after = commit.Records.ToDictionary(record => (Kind: PublishedRecordReference.NameOf(record.Kind), record.RecordId),
             record => record.RevisionNumber);

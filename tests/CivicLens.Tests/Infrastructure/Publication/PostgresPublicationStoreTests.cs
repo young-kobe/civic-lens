@@ -768,6 +768,23 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
             WithdrawalCommit(1, null, PublishedRecordKind.Action, new string('9', 64)), "key", Hash(1), default));
     }
 
+    [Fact]
+    public async Task TheStateTableMatchesEveryReleaseForTheCamelCaseKindsOfADocumentChangeAndAnExecutiveAction()
+    {
+        var change = await CreateApprovedDraftAsync("a");
+        var executive = await SeedDraftAsync(PublishedRecordKind.ExecutiveAction);
+        var changeRecord = new PublishedRevisionBinding(PublishedRecordKind.DocumentChange, change.DraftId, change.RevisionNumber);
+        var executiveRecord = new PublishedRevisionBinding(PublishedRecordKind.ExecutiveAction, executive, 1);
+        await publications.CommitAsync(Owner.Subject, new(1, null, $"000001-{Guid.NewGuid():N}", [changeRecord, executiveRecord],
+            [new(changeRecord.Kind, change.DraftId, change.RevisionNumber, 1), new(executiveRecord.Kind, executive, 1, 1)]),
+            "key-1", Hash(1), default);
+        await SetReviewStatusAsync(PublishedRecordKind.ExecutiveAction, executive, ReviewStatus.ApprovalWithdrawn);
+        await publications.CommitAsync(Owner.Subject, WithdrawalCommit(2, 1, PublishedRecordKind.ExecutiveAction, executive) with { Records = [changeRecord] },
+            "key-2", Hash(2), default);
+
+        await PublishedRecordStateReader.AssertEveryReleaseMatchesAsync(connectionString);
+    }
+
     private static PublicationCommit ReturnCommit(int number, DocumentChangeDraftRevision draft, int reviewStateVersion) =>
         new(number, number - 1, $"{number:D6}-{Guid.NewGuid():N}",
             [new(PublishedRecordKind.DocumentChange, draft.DraftId, draft.RevisionNumber)],

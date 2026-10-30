@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CivicLens.Infrastructure.Collection.Migrations
 {
     [DbContext(typeof(CollectionAttemptDbContext))]
-    [Migration("20261030173111_PublicationRecordStates")]
+    [Migration("20261030182714_PublicationRecordStates")]
     partial class PublicationRecordStates
     {
         /// <inheritdoc />
@@ -2720,40 +2720,33 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublicationRecordStateRow", b =>
                 {
-                    b.Property<int>("FirstRelease")
-                        .HasColumnType("integer")
-                        .HasColumnName("first_release");
-
                     b.Property<string>("Kind")
-                        .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("kind");
+
+                    b.Property<string>("RecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<int>("FirstRelease")
+                        .HasColumnType("integer")
+                        .HasColumnName("first_release");
 
                     b.Property<int?>("LastRelease")
                         .HasColumnType("integer")
                         .HasColumnName("last_release");
 
-                    b.Property<string>("RecordId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("record_id");
-
                     b.Property<int>("RevisionNumber")
                         .HasColumnType("integer")
                         .HasColumnName("revision_number");
 
-                    b.HasIndex("FirstRelease")
-                        .HasFilter("last_release IS NULL");
+                    b.HasKey("Kind", "RecordId", "FirstRelease");
 
-                    b.HasIndex("LastRelease")
-                        .HasFilter("last_release IS NOT NULL");
+                    b.HasIndex("FirstRelease");
 
-                    b.HasIndex("Kind", "RecordId", "FirstRelease")
-                        .IsUnique();
-
-                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("Kind", "RecordId", "FirstRelease"), new[] { "LastRelease", "RevisionNumber" });
+                    b.HasIndex("LastRelease");
 
                     b.ToTable("publication_record_states", null, t =>
                         {

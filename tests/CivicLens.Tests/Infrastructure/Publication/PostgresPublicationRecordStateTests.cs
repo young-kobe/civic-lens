@@ -1,9 +1,9 @@
 using System.Diagnostics;
+using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Publication.Contracts;
-using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -53,8 +53,8 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
         await PublishAsync(6, 5, [(A, 3), (X, 1), (C, 1), (B, 1)], added: [A]);
 
         await PublishedRecordStateReader.AssertEveryReleaseMatchesAsync(connectionString);
-        Assert.Equal(["1|3", "5|NULL"], await RangesAsync(X));
-        Assert.Equal(["1|2", "3|5", "6|NULL"], await RangesAsync(A));
+        Assert.Equal(["1|3", "5|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, X));
+        Assert.Equal(["1|2", "3|5", "6|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, A));
     }
 
     [Fact]
@@ -65,8 +65,8 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
         await PublishAsync(2, 1, [(A, 1), (C, 1)], added: [C]);
         await PublishAsync(3, 2, [(A, 1), (C, 1)]);
 
-        Assert.Equal(["1|NULL"], await RangesAsync(A));
-        Assert.Equal(["2|NULL"], await RangesAsync(C));
+        Assert.Equal(["1|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, A));
+        Assert.Equal(["2|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, C));
     }
 
     [Fact]
@@ -82,17 +82,46 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
         Assert.Equal(before, await AllRowsAsync());
     }
 
+    // The seeded row stands for a write that the state table rejects after the release row and the range closing exist.
     [Fact]
-    public async Task AConflictedCommitLeavesNoRowsBecauseTheStateWritesJoinTheCommitTransaction()
+    public async Task AFailureInsideTheStateWritesLeavesNoReleaseAndNoClosedRangeBecauseTheyShareOneTransaction()
     {
         await SeedActionsAsync(A, C);
         await PublishAsync(1, null, [(A, 1)], added: [A]);
-        var before = await AllRowsAsync();
+        await SetRevisionAsync(A, 2);
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO publication_record_states (kind, record_id, revision_number, first_release, last_release) VALUES ('action', '{C}', 1, 2, 2)
+            """);
 
-        await Assert.ThrowsAsync<PublicationConflictException>(() => publications.CommitAsync("auth0|owner",
-            Commit(3, 1, [(A, 1), (C, 1)], [C], []), "late-key", new string('2', 64), default));
+        await Assert.ThrowsAsync<PostgresException>(() => PublishAsync(2, 1, [(A, 2), (C, 1)], added: [A, C]));
 
-        Assert.Equal(before, await AllRowsAsync());
+        Assert.Equal(["1"], (await PublishedRecordStateReader.ReadAsync(connectionString, "SELECT release_number FROM publication_releases")).Select(row => row[0]));
+        Assert.Equal(["1|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, A));
+    }
+
+    [Fact]
+    public async Task PruneLeavesEveryReleaseRowAndStateRowAloneBecauseOldStatesStayForReaders()
+    {
+        await SeedActionsAsync(A, C);
+        await PublishAsync(1, null, [(A, 1)], added: [A]);
+        await SetRevisionAsync(A, 2);
+        await PublishAsync(2, 1, [(A, 2), (C, 1)], added: [A, C]);
+        await PublishAsync(3, 2, [(A, 2)]);
+        var rows = await AllRowsAsync();
+        var releases = await PublishedRecordStateReader.ReadAsync(connectionString, "SELECT * FROM publication_releases ORDER BY release_number");
+
+        await publications.PruneAsync(1, TimeSpan.Zero, (_, _, _) => Task.CompletedTask, default);
+
+        Assert.Equal(rows, await AllRowsAsync());
+        Assert.Equal(releases, await PublishedRecordStateReader.ReadAsync(connectionString, "SELECT * FROM publication_releases ORDER BY release_number"));
+    }
+
+    [Fact]
+    public void TheKindSpellingMatchesTheWireSpellingOfRecordsJson()
+    {
+        foreach (var kind in Enum.GetValues<PublishedRecordKind>())
+            Assert.Equal(JsonSerializer.Serialize(kind), $"\"{PublishedRecordReference.NameOf(kind)}\"");
     }
 
     [Fact]
@@ -120,12 +149,6 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
         await action();
         return clock.Elapsed;
     }
-
-    private async Task<List<string>> RangesAsync(string recordId) =>
-        [.. (await PublishedRecordStateReader.ReadAsync(connectionString, $"""
-            SELECT first_release || '|' || COALESCE(last_release::text, 'NULL') FROM publication_record_states
-            WHERE record_id = '{recordId}' ORDER BY first_release
-            """)).Select(row => row[0])];
 
     private async Task<List<string>> AllRowsAsync() =>
         [.. (await PublishedRecordStateReader.ReadAsync(connectionString, """

@@ -1,5 +1,4 @@
 using CivicLens.Infrastructure.Collection;
-using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -12,7 +11,7 @@ namespace CivicLens.Tests.Infrastructure.Publication;
 [Trait("Category", "Postgres")]
 public sealed class PublicationRecordStatesMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private const string Migration = "20261030173111_PublicationRecordStates";
+    private const string Migration = "20261030182714_PublicationRecordStates";
     private string connectionString = null!;
 
     public async Task InitializeAsync()
@@ -37,10 +36,10 @@ public sealed class PublicationRecordStatesMigrationTests(PostgresCollection pos
         await MigrateForwardAsync();
 
         await PublishedRecordStateReader.AssertEveryReleaseMatchesAsync(connectionString);
-        Assert.Equal(["1|2", "5|NULL"], await RangesAsync("x"));
-        Assert.Equal(["2|NULL"], await RangesAsync("y"));
-        Assert.Equal(["1|1", "2|2"], await RangesAsync("w"));
-        Assert.Equal(["4|NULL"], await RangesAsync("z"));
+        Assert.Equal(["1|2", "5|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, "x"));
+        Assert.Equal(["2|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, "y"));
+        Assert.Equal(["1|1", "2|2"], await PublishedRecordStateReader.RangesAsync(connectionString, "w"));
+        Assert.Equal(["4|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, "z"));
         Assert.Equal(["documentChange"], await KindsAsync(legacyDraft));
     }
 
@@ -81,12 +80,6 @@ public sealed class PublicationRecordStatesMigrationTests(PostgresCollection pos
         command.Parameters.AddWithValue("active", active);
         await command.ExecuteNonQueryAsync();
     }
-
-    private async Task<List<string>> RangesAsync(string recordId) =>
-        [.. (await PublishedRecordStateReader.ReadAsync(connectionString, $"""
-            SELECT first_release || '|' || COALESCE(last_release::text, 'NULL') FROM publication_record_states
-            WHERE record_id = '{recordId}' ORDER BY first_release
-            """)).Select(row => row[0])];
 
     private async Task<List<string>> KindsAsync(string recordId) =>
         [.. (await PublishedRecordStateReader.ReadAsync(connectionString,
