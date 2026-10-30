@@ -16,6 +16,10 @@ namespace CivicLens.Tests.Application.Actions;
 
 public sealed class ActionDraftStepTests
 {
+    private static string Output(string headline = "Warren sponsored a housing bill", string summary = "Elizabeth Warren introduced a housing bill on January 3, 2025.",
+        double headlineConfidence = 0.8, double summaryConfidence = 0.7, string[]? issueIds = null) =>
+        HeadlineSummaryOutputs.Output(headline, summary, headlineConfidence, summaryConfidence, issueIds ?? ["rent"]);
+
     private static readonly string UnnamedOutput = Output(headline: "A housing bill", summary: "A housing bill was introduced.");
     private static readonly CosponsorSpec MarkeyOriginal = new(Markey, "2025-01-04", Original: true);
     private static readonly SummarySpec Summary = new("00", "2025-01-03", "2025-01-05T10:00:00Z", "<p>It funds rent aid.</p>");
@@ -33,6 +37,7 @@ public sealed class ActionDraftStepTests
         Assert.Matches("^[0-9a-f]{64}$", revision.Fingerprint);
         Assert.Equal("00@2025-01-05T10:00:00Z", revision.SummaryVersion);
         Assert.Equal(["rent"], revision.TrackedIssueIds.ToArray());
+        Assert.Equal(["rent"], revision.IssueCandidateIds.ToArray());
         Assert.Equal("housing", revision.PolicyAreaId);
         Assert.Equal(BillGateFixtures.Revision().Id, revision.IssueRevisionId);
         Assert.Single(model.Requests);
@@ -43,7 +48,7 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task APolicyAreaLabelThatTheConfigurationLacksStoresNoAreaIDSoThePublishedFilterNeverGuesses()
     {
-        var (store, _) = await RunAsync(Create(policyArea: "Public Lands"), new FakeHeadlineSummaryModel().Draft(Output()));
+        var (store, _) = await RunAsync(Create(policyArea: "Public Lands"), new FakeHeadlineSummaryModel().Draft(Output(issueIds: [])));
 
         var revision = Assert.Single(store.Revisions);
         Assert.Equal(("Public Lands", null), (revision.PolicyArea, revision.PolicyAreaId));
@@ -275,7 +280,7 @@ public sealed class ActionDraftStepTests
         var (_, model) = await RunAsync(Create(summaries: [Summary]), new FakeHeadlineSummaryModel().Draft(Output()));
 
         using var document = JsonDocument.Parse(model.Requests[0].UserPrompt["Facts:\n".Length..]);
-        Assert.Equal(["bill", "trackedIssues", "sponsors", "summary"], document.RootElement.EnumerateObject().Select(item => item.Name));
+        Assert.Equal(["bill", "candidateIssues", "sponsors", "summary"], document.RootElement.EnumerateObject().Select(item => item.Name));
     }
 
     [Fact]
@@ -577,6 +582,94 @@ public sealed class ActionDraftStepTests
     }
 
     [Fact]
+    public async Task AModelThatPicksOneOfTwoCandidatesStoresOnlyThatIssueAndBothCandidates()
+    {
+        var model = new FakeHeadlineSummaryModel().Draft(Output(issueIds: ["eviction"]));
+
+        var (store, _) = await RunAsync(Create(), model, issues: BillGateFixtures.Revision(withEviction: true));
+
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal(["eviction"], revision.TrackedIssueIds.ToArray());
+        Assert.Equal(["eviction", "rent"], revision.IssueCandidateIds.ToArray());
+    }
+
+    [Fact]
+    public async Task AModelThatPicksNoIssueLeavesTheRecordWithoutOneAndNeverFallsBackToThePolicyAreaSet()
+    {
+        var (store, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output(issueIds: [])));
+
+        var revision = Assert.Single(store.Revisions);
+        Assert.Empty(revision.TrackedIssueIds);
+        Assert.Equal(["rent"], revision.IssueCandidateIds.ToArray());
+    }
+
+    [Fact]
+    public async Task ASingleCandidateIsStillOfferedToTheModelBecauseThePolicyAreaAloneDoesNotMakeAnIssueFit()
+    {
+        var (_, model) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
+
+        var request = Assert.Single(model.Requests);
+        Assert.Contains("\"issueIds\"", request.SchemaJson, StringComparison.Ordinal);
+        Assert.Contains("\"id\": \"rent\"", request.UserPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task APolicyAreaWithNoIssueSendsTheSchemaWithoutIssueIds()
+    {
+        var (_, model) = await RunAsync(Create(policyArea: BillGateFixtures.UntrackedPolicyArea), new FakeHeadlineSummaryModel().Draft(Output(issueIds: [])));
+
+        Assert.DoesNotContain("issueIds", Assert.Single(model.Requests).SchemaJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ABillThatChangedItsCandidateSetDraftsAgainEvenWhenTheChosenIssuesStayTheSame()
+    {
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
+        var model = new FakeHeadlineSummaryModel().Draft(Output());
+
+        var (second, _) = await RunAsync(Create(), model, Assert.Single(first.Revisions), issues: BillGateFixtures.Revision(withEviction: true));
+
+        Assert.Equal(["eviction", "rent"], Assert.Single(second.Revisions).IssueCandidateIds.ToArray());
+        Assert.Single(model.Requests);
+    }
+
+    [Fact]
+    public async Task ARevisionThatLacksTheCandidateSetDraftsAgainBecauseItPredatesTheModelChoice()
+    {
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
+        var old = Assert.Single(first.Revisions) with { IssueCandidateIds = default };
+        var model = new FakeHeadlineSummaryModel().Draft(Output());
+
+        await RunAsync(Create(), model, old);
+
+        Assert.Single(model.Requests);
+    }
+
+    [Fact]
+    public async Task AChoiceOutsideTheCandidatesOrRepeatedIsRejectedWithItsReasonAndRetriedOnce()
+    {
+        var model = new FakeHeadlineSummaryModel().Draft(Output(issueIds: ["firearms"])).Draft(Output(issueIds: ["rent", "rent"]));
+
+        var (store, _) = await RunAsync(Create(), model);
+
+        Assert.Empty(store.Revisions);
+        Assert.Contains("\"firearms\", which is not a candidate issue", model.Requests[1].UserPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnAnswerWithoutIssueIdsIsRejectedWhenCandidatesExist()
+    {
+        var json = System.Text.Json.Nodes.JsonNode.Parse(Output())!.AsObject();
+        json.Remove("issueIds");
+        var model = new FakeHeadlineSummaryModel().Draft(json.ToJsonString()).Draft(Output());
+
+        var (store, _) = await RunAsync(Create(), model);
+
+        Assert.Contains("issueIds is required", model.Requests[1].UserPrompt, StringComparison.Ordinal);
+        Assert.Single(store.Revisions);
+    }
+
+    [Fact]
     public async Task ARenamedIssueWithTheSameIdDraftsAgainBecauseTheRevisionMustNameTheIssueConfigurationItUsed()
     {
         var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
@@ -618,7 +711,7 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task APolicyAreaAssignedLaterDraftsAgain()
     {
-        var (first, _) = await RunAsync(Create(policyArea: null), new FakeHeadlineSummaryModel().Draft(Output()));
+        var (first, _) = await RunAsync(Create(policyArea: null), new FakeHeadlineSummaryModel().Draft(Output(issueIds: [])));
         Assert.Null(Assert.Single(first.Revisions).PolicyArea);
 
         var (second, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()), Assert.Single(first.Revisions));
@@ -633,10 +726,11 @@ public sealed class ActionDraftStepTests
         var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
         var inactive = IssueConfigurationRevision.Create(BillGateFixtures.Issues(startsOn: new DateOnly(2030, 1, 1)));
 
-        var (second, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()), Assert.Single(first.Revisions), issues: inactive);
+        var (second, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output(issueIds: [])), Assert.Single(first.Revisions), issues: inactive);
 
         var revision = Assert.Single(second.Revisions);
         Assert.Empty(revision.TrackedIssueIds);
+        Assert.Empty(revision.IssueCandidateIds);
         Assert.Equal(inactive.Id, revision.IssueRevisionId);
     }
 

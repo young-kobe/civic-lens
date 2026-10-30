@@ -1,0 +1,51 @@
+using System.Collections.Immutable;
+using System.Text.Json.Nodes;
+using CivicLens.Application.Analysis;
+using CivicLens.Application.Collection.Bills;
+using static CivicLens.Application.Analysis.AnalysisAnswerRules;
+
+namespace CivicLens.Application.Issues;
+
+public sealed class BillIssueChoice
+{
+    private readonly ImmutableArray<TrackedIssueConfiguration> candidates;
+
+    private BillIssueChoice(ImmutableArray<TrackedIssueConfiguration> candidates)
+    {
+        this.candidates = candidates;
+        CandidateIds = [.. candidates.Select(issue => issue.Id)];
+    }
+
+    public ImmutableArray<string> CandidateIds { get; }
+
+    public static BillIssueChoice For(string? policyArea, DateOnly day, IssueConfiguration issues)
+    {
+        var ids = BillGate.TrackedIssueIdsFor(policyArea, day, issues);
+        return new([.. ids.Select(id => issues.Issues.Single(issue => issue.Id == id))]);
+    }
+
+    public IEnumerable<object> PromptSection() => candidates.Select(TrackedIssuePromptDocument.Of);
+
+    public JsonObject? AnswerSchema() => candidates.IsEmpty ? null : new()
+    {
+        ["type"] = "array",
+        ["uniqueItems"] = true,
+        ["items"] = AnalysisSchema.IdString(CandidateIds)
+    };
+
+    public ImmutableArray<string> Check(IReadOnlyList<string>? chosen, List<string> errors)
+    {
+        if (chosen is null) return CheckMissing(errors);
+        foreach (var id in chosen.Where(id => !CandidateIds.Contains(id)).Distinct(StringComparer.Ordinal))
+            errors.Add($"issueIds lists \"{Shorten(id)}\", which is not a candidate issue. Choose only from the candidate issues.");
+        foreach (var id in chosen.GroupBy(id => id, StringComparer.Ordinal).Where(group => group.Count() > 1).Select(group => group.Key))
+            errors.Add($"issueIds lists \"{Shorten(id)}\" more than once. List each issue once.");
+        return [.. chosen.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
+    }
+
+    private ImmutableArray<string> CheckMissing(List<string> errors)
+    {
+        if (!candidates.IsEmpty) errors.Add("issueIds is required. Use an empty list when no candidate issue is about the bill.");
+        return [];
+    }
+}

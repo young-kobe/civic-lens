@@ -57,6 +57,16 @@ public sealed class ActionDraftRevisionTests
     }
 
     [Fact]
+    public void TheChosenIssuesMustComeFromTheCandidatesBecauseTheModelMayNotInventOrPickAnUnlistedIssue()
+    {
+        (Model() with { TrackedIssueIds = ["rent"], IssueCandidateIds = ["rent", "eviction"] }).ValidateShape();
+        (Model() with { TrackedIssueIds = [], IssueCandidateIds = ["rent"] }).ValidateShape();
+
+        Assert.Throws<ArgumentException>(() => (Model() with { TrackedIssueIds = ["firearms"], IssueCandidateIds = ["rent"] }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (Model() with { IssueCandidateIds = default }).ValidateShape());
+    }
+
+    [Fact]
     public void ARecordReviewerEditsOnlyTheHeadlineAndTheSummary()
     {
         var previous = Model();
@@ -66,7 +76,8 @@ public sealed class ActionDraftRevisionTests
 
         Assert.Throws<ArgumentException>(() => (edit with { Sponsorships = [] }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (edit with { Fingerprint = new string('f', 64) }).ValidatePersonEditOf(previous));
-        Assert.Throws<ArgumentException>(() => (edit with { TrackedIssueIds = ["extra"] }).ValidatePersonEditOf(previous));
+        Assert.Throws<ArgumentException>(() => (edit with { TrackedIssueIds = ["extra"], IssueCandidateIds = ["extra"] }).ValidatePersonEditOf(previous));
+        Assert.Throws<ArgumentException>(() => (edit with { IssueCandidateIds = ["extra"] }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (edit with { PolicyArea = "Taxation", PolicyAreaCitation = new(ExtractionId, 0, 4) }).ValidatePersonEditOf(previous));
         Assert.Throws<ArgumentException>(() => (edit with { Sponsorships = [Sponsorship() with { WithdrawnOn = new DateOnly(2025, 2, 1) }] }).ValidatePersonEditOf(previous));
     }

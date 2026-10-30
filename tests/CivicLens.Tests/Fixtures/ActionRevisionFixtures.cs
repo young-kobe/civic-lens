@@ -21,7 +21,7 @@ internal static class ActionRevisionFixtures
         RecordId, number, author, Updated.AddMinutes(number), "Warren sponsored a bill", "Senator Warren sponsored the bill.",
         ReviewTextOrigin.Model, null, "congress-bills", 119, "hr", 1, CandidateId, Updated, false,
         Fingerprint, null, null,
-        null, null, null, [], IssueRevisionId, [Sponsorship()], "A housing bill");
+        null, null, null, [], [], IssueRevisionId, [Sponsorship()], "A housing bill");
 
     public static ActionDraftRevision PersonEditOf(ActionDraftRevision previous, string headline, string summary) => previous with
     {

@@ -34,23 +34,22 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
         var read = await reader.ReadAsync(evidence, cancellationToken);
         if (read.Snapshot is not { } snapshot)
             return await attempt.CompleteAsync(State.Blocked, read.ErrorCode!, cancellationToken);
-        var trackedIssues = TrackedIssuesOf(snapshot);
-        attempt.ContextJson = ActionDraftPrompt.SerializeContext(snapshot, trackedIssues, issues.Id);
+        var choice = BillIssueChoice.For(snapshot.Bill.PolicyArea, BillGate.DayOf(snapshot.Bill.UpdateDate), issueConfiguration);
+        attempt.ContextJson = ActionDraftPrompt.SerializeContext(snapshot, choice, issues.Id);
         if (snapshot.Sponsorships.IsEmpty)
             return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.NoTrackedOfficial, cancellationToken);
         if (snapshot.Sponsorships.Length > ActionDraftRevision.MaximumSponsorships)
             return await attempt.CompleteAsync(State.Blocked, ActionDraftErrorCodes.TooManySponsorships, cancellationToken);
         if (snapshot.Bill.Title.Length > ActionDraftRevision.MaximumTitleLength)
             return await attempt.CompleteAsync(State.Blocked, ActionDraftErrorCodes.TitleTooLong, cancellationToken);
-        var trackedIssueIds = trackedIssues.Select(issue => issue.Id).ToImmutableArray();
         var policyAreaId = issueConfiguration.PolicyAreaIdFor(snapshot.Bill.PolicyArea);
-        var context = new ActionDraftContext(evidence, snapshot, trackedIssueIds, policyAreaId, issues.Id);
+        var context = new ActionDraftContext(evidence, snapshot, choice, policyAreaId, issues.Id);
         return context.ChangeSinceCurrent() switch
         {
             ActionChange.None =>
                 await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken),
             ActionChange.SponsorshipsOnly => await CopyTextAsync(attempt, context, cancellationToken),
-            _ => await DraftAsync(attempt, context, trackedIssues, summariesOmitted, cancellationToken)
+            _ => await DraftAsync(attempt, context, summariesOmitted, cancellationToken)
         };
     }
 
@@ -64,14 +63,14 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
     }
 
     private async Task<bool> DraftAsync(IAnalysisAttempt<ActionDraftRun> attempt, ActionDraftContext context,
-        ImmutableArray<TrackedIssueFact> trackedIssues, bool summariesOmitted, CancellationToken cancellationToken)
+        bool summariesOmitted, CancellationToken cancellationToken)
     {
         var snapshot = context.Snapshot;
         var summaryOmittedInputHashes = new HashSet<string>(StringComparer.Ordinal);
         AnalysisModelRequest? BuildRequest(ImmutableArray<string> errors)
         {
-            if (ActionDraftPrompt.Build(snapshot, trackedIssues, settings.PromptByteCap, errors) is { } request) return request;
-            var withoutSummary = ActionDraftPrompt.Build(snapshot, trackedIssues, settings.PromptByteCap, errors, includeSummary: false);
+            if (ActionDraftPrompt.Build(snapshot, context.Issues, settings.PromptByteCap, errors) is { } request) return request;
+            var withoutSummary = ActionDraftPrompt.Build(snapshot, context.Issues, settings.PromptByteCap, errors, includeSummary: false);
             if (withoutSummary is not null) summaryOmittedInputHashes.Add(withoutSummary.InputHash);
             return withoutSummary;
         }
@@ -99,11 +98,5 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
     {
         var run = attempt.BypassRun(ActionDraftTask.Model, inputHash, null);
         return attempt.SettleAsync(new ActionDraftRun(run, code), State.Succeeded, code, cancellationToken);
-    }
-
-    private ImmutableArray<TrackedIssueFact> TrackedIssuesOf(ActionBillSnapshot snapshot)
-    {
-        var ids = BillGate.TrackedIssueIdsFor(snapshot.Bill.PolicyArea, BillGate.DayOf(snapshot.Bill.UpdateDate), issueConfiguration);
-        return [.. ids.Select(id => new TrackedIssueFact(id, issueConfiguration.Issues.Single(issue => issue.Id == id).Name))];
     }
 }

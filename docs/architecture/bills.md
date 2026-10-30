@@ -156,7 +156,7 @@ A decided gate never changes.
 
 The covered people are `CollectionConfiguration.CoveredBioguideIdsOf` for the UTC day of the exact `updateDate` of the detail. They come from the configuration revision of the job.
 
-A policy area is tracked when two conditions hold. Its name equals (ordinal) a policy area name in the issue configuration. At least one tracked issue, active on that UTC day, lists that policy area. `BillGate.TrackedIssueIdsFor` owns this map, and action drafting calls it too.
+A policy area is tracked when two conditions hold. Its name equals (ordinal) a policy area name in the issue configuration. At least one tracked issue, active on that UTC day, lists that policy area. `BillGate.TrackedIssueIdsFor` owns this map. Action drafting uses it for the candidate issues; see [actions](actions.md#prompt-and-output).
 
 The issue configuration comes from `CIVIC_LENS_ISSUES_CONFIG`, as an `IssueConfigurationRevision` given to `JobPreparation`. The worker refuses to start with exit code 2 when a bill list source is enabled and the variable is not set. `JobPreparation` still blocks a detail job with `issuesConfigurationUnavailable` as a defensive path. The gate stores the revision ID.
 
