@@ -1,3 +1,4 @@
+using CivicLens.Infrastructure.ExecutiveActions;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Publication;
@@ -41,7 +42,8 @@ internal static class PublicationComposition
             PostgresActionReviewStore.FromConnectionString(connectionString),
             PostgresVoteReviewStore.FromConnectionString(connectionString),
             new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)),
-            new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString)));
+            new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString)),
+            PostgresExecutiveActionReviewStore.FromConnectionString(connectionString));
         var publish = new PublishRelease(publications, releases, ReleaseRenderer.FromEnvironment(), loaders,
             new PublicationCatalog(ReviewOfficials.From(collection).Names, issues),
             new PublicationOfficials(collection, PostgresMemberRosterStore.FromConnectionString(connectionString),

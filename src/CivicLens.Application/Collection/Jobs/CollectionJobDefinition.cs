@@ -1,4 +1,5 @@
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Application.Collection.FederalRegister;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.MemberPhotos;
 using CivicLens.Application.Collection.VoteviewVotes;
@@ -117,6 +118,7 @@ public sealed record CollectionJobDefinition
             ApiParser.VoteviewSenateVoteList => VoteviewUrl.TryReadCongress(source.Url, resource, url) is not null,
             ApiParser.CongressLegislators => resource == Collection.ApiResource.MemberRoster && url == source.Url,
             ApiParser.CongressLegislatorsExecutive => resource == Collection.ApiResource.ExecutiveRoster && url == source.Url,
+            ApiParser.FederalRegisterDocuments => MatchesFederalRegisterResource(resource, source.Url, url),
             ApiParser.MemberPhotos => resource == Collection.ApiResource.MemberPhoto && MemberPhotoUrl.TryReadBioguideId(source.Url, url) is not null,
             _ => false
         };
@@ -138,6 +140,14 @@ public sealed record CollectionJobDefinition
             Collection.ApiResource.HouseVoteList => HouseVoteListUrl.TryRead(sourceUrl, url) is not null,
             Collection.ApiResource.HouseVoteDetail => HouseVoteRollUrl.TryReadDetail(sourceUrl, url) is not null,
             Collection.ApiResource.HouseVoteMembers => HouseVoteRollUrl.TryReadMembers(sourceUrl, url) is not null,
+            _ => false
+        };
+
+    private static bool MatchesFederalRegisterResource(ApiResource resource, string sourceUrl, string url) =>
+        resource switch
+        {
+            Collection.ApiResource.FederalRegisterList => FederalRegisterUrl.TryReadList(sourceUrl, url) is not null,
+            Collection.ApiResource.FederalRegisterDocument => FederalRegisterUrl.TryReadDocument(sourceUrl, url) is not null,
             _ => false
         };
 

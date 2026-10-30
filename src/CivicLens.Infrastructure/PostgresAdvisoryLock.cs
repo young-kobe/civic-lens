@@ -13,6 +13,7 @@ internal static class PostgresAdvisoryLock
     internal const string StatementReview = "civic-lens-statement-review";
     internal const string ActionReview = "civic-lens-action-review";
     internal const string VoteReview = "civic-lens-vote-review";
+    internal const string ExecutiveActionReview = "civic-lens-executive-action-review";
     internal const string RelationshipReview = "civic-lens-relationship-review";
     internal const string BriefReview = "civic-lens-brief-review";
     // No transaction holds this with another key.
@@ -20,7 +21,7 @@ internal static class PostgresAdvisoryLock
 
     private const string AcquireSql = "SELECT pg_advisory_xact_lock(hashtextextended(@key, 0))";
 
-    internal static readonly IReadOnlyList<string> ReviewKeysBeforeBriefs = [DocumentChangeReview, StatementReview, ActionReview, VoteReview, RelationshipReview];
+    internal static readonly IReadOnlyList<string> ReviewKeysBeforeBriefs = [DocumentChangeReview, StatementReview, ActionReview, VoteReview, ExecutiveActionReview, RelationshipReview];
 
     internal static readonly IReadOnlyList<string> ReviewKeysInOrder = [.. ReviewKeysBeforeBriefs, BriefReview];
 

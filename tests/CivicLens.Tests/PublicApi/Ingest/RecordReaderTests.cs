@@ -29,6 +29,18 @@ public sealed class RecordReaderTests
     }
 
     [Fact]
+    public void AnExecutiveActionIndexesNoSummaryAndItsSavedRecordAsSourceSoSearchAcceptsTheNewKind()
+    {
+        var sample = PublishedSamples.ExecutiveAction("Ending the Weaponization", "Tail text.");
+
+        var read = Read(sample);
+
+        Assert.Equal(PublishedRecordKind.ExecutiveAction, read.Entry.Kind);
+        Assert.Equal("", read.Summary);
+        Assert.EndsWith("Tail text.", read.Source);
+    }
+
+    [Fact]
     public void ACodeApprovedAiStatementIsIndexedBecauseTheSearchServiceMustAcceptTheNewFieldsInTheSameDeploy()
     {
         var sample = PublishedSamples.Statement('a', "Rent cap");

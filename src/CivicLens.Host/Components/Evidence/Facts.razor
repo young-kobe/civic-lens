@@ -11,7 +11,7 @@
             {
                 @for (var index = 0; index < fact.Links.Count; index++)
                 {
-                    @(index > 0 ? ", " : "")
+                    @(index > 0 ? fact.Separator : "")
                     @if (fact.Links[index].Href is { } href)
                     {
                         <a href="@href">@fact.Links[index].Text</a>

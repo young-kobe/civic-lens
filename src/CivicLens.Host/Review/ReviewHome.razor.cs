@@ -11,6 +11,7 @@ using CivicLens.Application.Relationships;
 using CivicLens.Application.Reports;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
+using CivicLens.Application.ExecutiveActions;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Review;
 using CivicLens.Host.Collection;
@@ -60,6 +61,7 @@ public sealed partial class ReviewHome
     [Inject] private GetRelationshipReviewCounts GetRelationshipCounts { get; set; } = default!;
     [Inject] private ListActionsNeedingAction ListActionExceptions { get; set; } = default!;
     [Inject] private ListVotesNeedingAction ListVoteExceptions { get; set; } = default!;
+    [Inject] private ListExecutiveActionsNeedingAction ListExecutiveActionExceptions { get; set; } = default!;
     [Inject] private CountOpenReaderReports CountReports { get; set; } = default!;
     [Inject] private GetRecentActivity GetActivity { get; set; } = default!;
     [Inject] private LookupDraft Lookup { get; set; } = default!;
@@ -144,12 +146,15 @@ public sealed partial class ReviewHome
     {
         var actions = await ListActionExceptions.ExecuteAsync(actor!, PageSize, cancellationToken);
         var votes = await ListVoteExceptions.ExecuteAsync(actor!, PageSize, cancellationToken);
-        unapprovedFactTotal = actions.Total + votes.Total;
+        var executiveActions = await ListExecutiveActionExceptions.ExecuteAsync(actor!, PageSize, cancellationToken);
+        unapprovedFactTotal = actions.Total + votes.Total + executiveActions.Total;
         unapprovedFacts =
         [
             .. actions.Items.Select(item => new UnapprovedFact(PublishedRecordKind.Action, item.RecordId, item.CurrentRevision.Headline,
                 item.CurrentStatus, item.UnresolvedConcerns.Length, item.CurrentRevision.CreatedAtUtc)),
             .. votes.Items.Select(item => new UnapprovedFact(PublishedRecordKind.Vote, item.RecordId, item.CurrentRevision.Headline,
+                item.CurrentStatus, item.UnresolvedConcerns.Length, item.CurrentRevision.CreatedAtUtc)),
+            .. executiveActions.Items.Select(item => new UnapprovedFact(PublishedRecordKind.ExecutiveAction, item.RecordId, item.CurrentRevision.Title,
                 item.CurrentStatus, item.UnresolvedConcerns.Length, item.CurrentRevision.CreatedAtUtc))
         ];
         unapprovedFacts =

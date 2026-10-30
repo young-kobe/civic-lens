@@ -5,6 +5,7 @@ using CivicLens.Application.Analysis;
 using CivicLens.Application.Briefs;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Documents;
+using CivicLens.Application.ExecutiveActions;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Relationships;
 using CivicLens.Application.Reports;
@@ -16,6 +17,7 @@ using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Briefs;
 using CivicLens.Infrastructure.Documents;
+using CivicLens.Infrastructure.ExecutiveActions;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Publication;
@@ -240,6 +242,7 @@ internal static class ReviewWorkspace
         ConfigureStatementReview(services, contexts, issues);
         ConfigureActionReview(services, contexts);
         ConfigureVoteReview(services, contexts);
+        ConfigureExecutiveActionReview(services, contexts);
         ConfigureRelationshipReview(services, contexts);
         ConfigureBriefReview(services, contexts);
         ConfigureReportReview(services, contexts);
@@ -304,6 +307,14 @@ internal static class ReviewWorkspace
         services.AddScoped<DecideVoteReview>();
         services.AddScoped<GetVoteReview>();
         services.AddScoped<ListVotesNeedingAction>();
+    }
+
+    private static void ConfigureExecutiveActionReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)
+    {
+        services.AddSingleton<IExecutiveActionReviewStore>(new PostgresExecutiveActionReviewStore(contexts));
+        services.AddScoped<DecideExecutiveActionReview>();
+        services.AddScoped<GetExecutiveActionReview>();
+        services.AddScoped<ListExecutiveActionsNeedingAction>();
     }
 
     private static void ConfigureRelationshipReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)

@@ -706,6 +706,12 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
                     VALUES (@id, '2026-01-05', 1, 1, 'Approved', 0, 0)
                     """, id);
                 break;
+            case PublishedRecordKind.ExecutiveAction:
+                await ExecuteAsync("""
+                    INSERT INTO executive_action_drafts (record_id, current_revision_number, review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
+                    VALUES (@id, 1, 1, 'Approved', 0, 0)
+                    """, id);
+                break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown record kind.");
         }
@@ -722,6 +728,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
             PublishedRecordKind.Vote => ("vote_drafts", "record_id"),
             PublishedRecordKind.Relationship => ("relationship_drafts", "record_id"),
             PublishedRecordKind.Brief => ("brief_drafts", "record_id"),
+            PublishedRecordKind.ExecutiveAction => ("executive_action_drafts", "record_id"),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown record kind.")
         };
         return ExecuteAsync($"UPDATE {table} SET review_status = '{status}' WHERE {column} = @id", recordId);

@@ -1,0 +1,130 @@
+using System.Text.Json;
+using CivicLens.Core.ExecutiveActions;
+using CivicLens.Publication.Contracts;
+
+namespace CivicLens.Tests.Publication.Contracts;
+
+public sealed class PublishedExecutiveActionTests
+{
+    private const string Text = "Federal Register document: 2025-01900\nTitle: Ending the Weaponization\nSigned: 2025-01-20\nPublished: 2025-01-28\nCitation: 90 FR 8235\nDocument URL: https://www.federalregister.gov/documents/2025/01/28/2025-01900/x\nCorrection notice: R1-2025-00001, published 2025-02-03, https://www.federalregister.gov/x";
+    private static readonly string Id = new('a', 64);
+
+    [Fact]
+    public void ARecordFileUsesTheCamelCaseKindAndTheFactShape()
+    {
+        var json = JsonSerializer.Serialize(Record(), PublicationProtocol.JsonOptions);
+
+        Assert.Contains("\"kind\":\"executiveOrder\"", json);
+        Assert.Contains("\"facts\":[{\"label\":\"Federal Register document\",\"value\":\"2025-01900\",\"citation\":{", json);
+        Assert.Contains("\"kind\":\"executiveAction\"", JsonSerializer.Serialize(Record().ToEntry(), PublicationProtocol.JsonOptions));
+    }
+
+    [Fact]
+    public void AValidRecordPassesAndItsEntryDatesItBySigning()
+    {
+        Record().Validate();
+
+        var entry = Record().ToEntry();
+        entry.Validate();
+        Assert.Equal(new DateOnly(2025, 1, 20), entry.EventDate);
+        Assert.Equal(["o1"], entry.Officials.Select(official => official.Id));
+    }
+
+    [Fact]
+    public void TheLabelsThatTheContractChecksEqualTheLabelsThatCodeWrites()
+    {
+        Assert.Equal(ExecutiveActionFacts.DocumentNumber, PublishedExecutiveAction.DocumentNumberLabel);
+        Assert.Equal(ExecutiveActionFacts.Title, PublishedExecutiveAction.TitleLabel);
+        Assert.Equal(ExecutiveActionFacts.Signed, PublishedExecutiveAction.SignedLabel);
+        Assert.Equal(ExecutiveActionFacts.Published, PublishedExecutiveAction.PublishedLabel);
+        Assert.Equal(ExecutiveActionFacts.Citation, PublishedExecutiveAction.CitationLabel);
+        Assert.Equal(ExecutiveActionFacts.CorrectionNotice, PublishedExecutiveAction.CorrectionNoticeLabel);
+        Assert.Equal(ExecutiveActionFacts.Url, PublishedExecutiveAction.UrlLabel);
+    }
+
+    [Fact]
+    public void AHeadlineThatIsNotTheCitedTitleIsRefusedSoTheOfficialTitleCannotDrift()
+    {
+        Assert.Throws<InvalidDataException>((Record() with { Headline = "A friendlier title" }).Validate);
+    }
+
+    [Fact]
+    public void ASigningDateThatTheEvidenceDoesNotShowIsRefused()
+    {
+        Assert.Throws<InvalidDataException>((Record() with { SignedOn = new DateOnly(2025, 1, 21) }).Validate);
+    }
+
+    [Fact]
+    public void AFactWhoseQuoteIsNotItsLabelAndValueIsRefused()
+    {
+        var facts = Record().Facts;
+        facts[0] = facts[0] with { Value = "2025-99999" };
+
+        Assert.Throws<InvalidDataException>(Record(facts).Validate);
+    }
+
+    [Fact]
+    public void ACorrectionNoticeNeedsItsCitedFactAndAFactNeedsItsNotice()
+    {
+        var notice = new PublishedExecutiveActionNotice { DocumentNumber = "R1-2025-00001", PublishedOn = new DateOnly(2025, 2, 3), Url = "https://www.federalregister.gov/x" };
+
+        Assert.Throws<InvalidDataException>((Record() with { CorrectionNotices = [notice] }).Validate);
+        Assert.Throws<InvalidDataException>(Record([.. Record().Facts, NoticeFact(notice)]).Validate);
+        Assert.Equal("R1-2025-00001, published 2025-02-03, https://www.federalregister.gov/x", notice.Value);
+    }
+
+    [Fact]
+    public void TwoNoticesOfTheSameDocumentAreRefused()
+    {
+        var notice = new PublishedExecutiveActionNotice { DocumentNumber = "R1-2025-00001", PublishedOn = new DateOnly(2025, 2, 3), Url = "https://www.federalregister.gov/x" };
+        var facts = Record().Facts;
+
+        Assert.Throws<InvalidDataException>((Record([.. facts, NoticeFact(notice), NoticeFact(notice)]) with { CorrectionNotices = [notice, notice] }).Validate);
+    }
+
+    [Fact]
+    public void TheEntryNamesTheDocumentTypeSoThePresidentPageShowsTheSpecificBadgeAndOtherKindsNameNone()
+    {
+        var entry = Record().ToEntry();
+        entry.Validate();
+
+        Assert.Equal(PublishedExecutiveActionKind.ExecutiveOrder, entry.DocumentType);
+        Assert.Throws<InvalidDataException>((entry with { DocumentType = null }).Validate);
+        Assert.Throws<InvalidDataException>((entry with { Kind = PublishedRecordKind.Vote }).Validate);
+    }
+
+    private static readonly string ExtractionId = new('e', 64);
+
+    private static PublishedExecutiveActionFact Fact(string label, string value)
+    {
+        var line = $"{label}: {value}";
+        return new() { Label = label, Value = value, Citation = new() { ExtractionId = ExtractionId, Start = Text.IndexOf(line, StringComparison.Ordinal), Length = line.Length, Quote = line } };
+    }
+
+    private static PublishedExecutiveActionFact NoticeFact(PublishedExecutiveActionNotice notice) => Fact(PublishedExecutiveAction.CorrectionNoticeLabel, notice.Value);
+
+    private static PublishedExecutiveAction Record(PublishedExecutiveActionFact[]? facts = null)
+    {
+        return new()
+        {
+            RecordId = Id,
+            RevisionNumber = 1,
+            Headline = "Ending the Weaponization",
+            Kind = PublishedExecutiveActionKind.ExecutiveOrder,
+            DocumentNumber = "2025-01900",
+            SignedOn = new DateOnly(2025, 1, 20),
+            PublishedOn = new DateOnly(2025, 1, 28),
+            FederalRegisterCitation = "90 FR 8235",
+            DocumentUrl = "https://www.federalregister.gov/documents/2025/01/28/2025-01900/x",
+            President = new() { Id = "o1", Name = "Jane Doe" },
+            Facts = facts ?? [Fact("Federal Register document", "2025-01900"), Fact("Title", "Ending the Weaponization"), Fact("Signed", "2025-01-20"),
+                Fact("Published", "2025-01-28"), Fact("Citation", "90 FR 8235"),
+                Fact("Document URL", "https://www.federalregister.gov/documents/2025/01/28/2025-01900/x")],
+            Sources = [new() { ExtractionId = ExtractionId, Url = "https://www.federalregister.gov/api/v1/documents/2025-01900.json", ObservedAtUtc = DateTimeOffset.UnixEpoch, Text = Text }],
+            ApprovedAtUtc = DateTimeOffset.UnixEpoch,
+            FirstPublishedAtUtc = DateTimeOffset.UnixEpoch,
+            CorrectionNotices = [],
+            Corrections = []
+        };
+    }
+}

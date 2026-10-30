@@ -261,7 +261,7 @@ public sealed class ListPublishableTests
 
         var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
-        Assert.Equal([16, 16, 16, 16, 0, 0], KindCounts(list));
+        Assert.Equal([16, 16, 16, 16, 0, 0, 0], KindCounts(list));
         Assert.True(list.HasMore);
         Assert.Equal(PublishRelease.MaximumRecords + 1, scenario.Actions.UnpublishedLimit);
         Assert.Equal(PublishRelease.MaximumRecords + 1, scenario.Briefs.UnpublishedLimit);
@@ -282,7 +282,7 @@ public sealed class ListPublishableTests
 
         var list = await new ListPublishable(scenario.Loaders(), scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
-        Assert.Equal([29, 5, 30, 0, 0, 0], KindCounts(list));
+        Assert.Equal([29, 5, 30, 0, 0, 0, 0], KindCounts(list));
         Assert.True(list.HasMore);
     }
 

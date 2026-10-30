@@ -1,5 +1,6 @@
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
+using CivicLens.Application.Collection.FederalRegister;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.MemberPhotos;
@@ -33,7 +34,7 @@ public sealed class ConfiguredCollectionSource
     public bool IsCollectedBySchedule => IsScheduleCollected(ReadSource());
 
     public static bool IsScheduleCollected(WatchedSourceConfiguration source) =>
-        source.ApiParser == ApiParser.CongressBillList;
+        source.ApiParser is ApiParser.CongressBillList or ApiParser.FederalRegisterDocuments;
 
     public bool IsActiveOn(DateOnly day) => Revision.Configuration.IsActiveOn(ReadSource(), day);
 
@@ -47,13 +48,13 @@ public sealed class ConfiguredCollectionSource
         return PrepareDefinition(source, currentDate, existing, article: false, target);
     }
 
-    public CollectionJobDefinition? CreateScheduledJobDefinition(DateTimeOffset now, DateOnly? billCursor)
+    public CollectionJobDefinition? CreateScheduledJobDefinition(DateTimeOffset now, DateOnly? streamCursor)
     {
         var currentDate = DateOnly.FromDateTime(now.UtcDateTime);
         var source = ReadSource();
         if (source.ApiParser is null) return CreateJobDefinition(currentDate);
         var target = IsScheduleCollected(source)
-            ? NextBillWindowTarget(source, now, billCursor, currentDate)
+            ? NextWindowTarget(source, now, streamCursor, currentDate)
             : FixedApiTarget(source, currentDate);
         return target is { } found ? PrepareDefinition(source, currentDate, null, article: false, found) : null;
     }
@@ -93,14 +94,14 @@ public sealed class ConfiguredCollectionSource
                 {
                     ApiResource = ApiResource.Bill,
                     Url = bill.DetailUrl(source.Url),
-                    Priority = CollectionJobPriority.OfBillDay(bill.UpdateDate, currentDate)
+                    Priority = CollectionJobPriority.OfDay(bill.UpdateDate, currentDate)
                 }))
             .DistinctBy(job => job.IdempotencyKey);
         var nextPage = page.Next is null
             ? null
             : new ApiJob(BillStreamJobKeys.NextPage(SourceId, listJobId),
                 CreateApiJobDefinition(ApiResource.BillList, page.Next, currentDate,
-                    CollectionJobPriority.OfBillDay(window.LastDay, currentDate)));
+                    CollectionJobPriority.OfDay(window.LastDay, currentDate)));
         var policy = source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy();
         return new BillStreamAdmission(SourceId, policy, template, window, page.StartsPass, [.. bills], nextPage);
     }
@@ -116,12 +117,12 @@ public sealed class ConfiguredCollectionSource
         DateOnly currentDate) =>
         new(BillStreamJobKeys.FirstBillPage(SourceId, resource, bill, updateDate),
             CreateApiJobDefinition(resource, BillPageUrl.FirstPage(ReadBillStreamSource().Url, resource, bill),
-                currentDate, CollectionJobPriority.OfBillDay(bill.UpdateDate, currentDate)));
+                currentDate, CollectionJobPriority.OfDay(bill.UpdateDate, currentDate)));
 
     public ApiJob CreateNextPageJob(ApiResource resource, string parentJobId, string nextUrl, DateOnly billDay,
         DateOnly currentDate) =>
         new(BillStreamJobKeys.NextBillPage(SourceId, resource, parentJobId),
-            CreateApiJobDefinition(resource, nextUrl, currentDate, CollectionJobPriority.OfBillDay(billDay, currentDate)));
+            CreateApiJobDefinition(resource, nextUrl, currentDate, CollectionJobPriority.OfDay(billDay, currentDate)));
 
     public ApiJobBatch CreateHouseVoteListBatch(string listJobId, HouseVoteListPage page, DateOnly currentDate)
     {
@@ -150,6 +151,20 @@ public sealed class ConfiguredCollectionSource
         new(HouseVoteJobKeys.Members(SourceId, vote),
             CreateApiJobDefinition(ApiResource.HouseVoteMembers, HouseVoteRollUrl.Members(ReadHouseVoteSource().Url, vote.Roll),
                 currentDate, CollectionJobPriority.OfSession(vote.Roll.Session, currentDate)));
+
+    public ApiJobBatch CreateFederalRegisterListBatch(FederalRegisterListPage page, DateOnly currentDate)
+    {
+        var source = ReadFederalRegisterSource();
+        var template = PrepareDefinition(source, currentDate, null, article: false);
+        var documents = page.Items.Select(item => new ApiJob(FederalRegisterJobKeys.Document(SourceId, item.DocumentNumber),
+            template with
+            {
+                ApiResource = ApiResource.FederalRegisterDocument,
+                Url = FederalRegisterUrl.Document(source.Url, item.DocumentNumber),
+                Priority = CollectionJobPriority.OfDay(item.PublishedOn, currentDate)
+            }));
+        return new ApiJobBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), template, [.. documents]);
+    }
 
     public ApiJobBatch CreateVoteviewFollowOnBatch(ApiResource finished, string jobId, int congress, DateOnly currentDate)
     {
@@ -235,14 +250,25 @@ public sealed class ConfiguredCollectionSource
 
     private static ApiTarget FirstEnqueuedApiTarget(WatchedSourceConfiguration source, DateOnly currentDate) =>
         IsScheduleCollected(source)
-            ? throw new ArgumentException("A bill list source is collected only by its schedule.")
+            ? throw new ArgumentException("A bill list or Federal Register source is collected only by its schedule.")
             : FixedApiTarget(source, currentDate)
                 ?? throw new ArgumentException("The API source has no work to collect now.");
+
+    private static ApiTarget? NextWindowTarget(WatchedSourceConfiguration source, DateTimeOffset now, DateOnly? streamCursor,
+        DateOnly today) =>
+        source.ApiParser == ApiParser.FederalRegisterDocuments
+            ? NextFederalRegisterTarget(source, streamCursor, today)
+            : NextBillWindowTarget(source, now, streamCursor, today);
 
     private static ApiTarget? NextBillWindowTarget(WatchedSourceConfiguration source, DateTimeOffset now,
         DateOnly? billCursor, DateOnly today) =>
         BillStreamWindow.Next(billCursor, source.BackfillFrom!.Value, now) is { } window
-            ? new ApiTarget(ApiResource.BillList, window.RequestUrl(source.Url), CollectionJobPriority.OfBillDay(window.LastDay, today))
+            ? new ApiTarget(ApiResource.BillList, window.RequestUrl(source.Url), CollectionJobPriority.OfDay(window.LastDay, today))
+            : null;
+
+    private static ApiTarget? NextFederalRegisterTarget(WatchedSourceConfiguration source, DateOnly? newestPublishedOn, DateOnly today) =>
+        FederalRegisterWindow.Next(newestPublishedOn, source.BackfillFrom!.Value, today) is { } window
+            ? new ApiTarget(ApiResource.FederalRegisterList, FederalRegisterUrl.List(source.Url, window), CollectionJobPriority.Check)
             : null;
 
     private static ApiTarget? FixedApiTarget(WatchedSourceConfiguration source, DateOnly today)
@@ -264,6 +290,7 @@ public sealed class ConfiguredCollectionSource
             case ApiParser.CongressLegislatorsExecutive:
                 return new ApiTarget(ApiResource.ExecutiveRoster, source.Url, CollectionJobPriority.Check);
             case ApiParser.MemberPhotos:
+            case ApiParser.FederalRegisterDocuments:
             case ApiParser.SenateVoteList:
                 return null;
             default:
@@ -277,6 +304,11 @@ public sealed class ConfiguredCollectionSource
         ReadSource() is { ApiParser: ApiParser.CongressHouseVoteList } source
             ? source
             : throw new ArgumentException("House vote admission requires a configured Congress House vote source.");
+
+    private WatchedSourceConfiguration ReadFederalRegisterSource() =>
+        ReadSource() is { ApiParser: ApiParser.FederalRegisterDocuments } source
+            ? source
+            : throw new ArgumentException("Federal Register admission requires a configured Federal Register source.");
 
     private WatchedSourceConfiguration ReadVoteviewSource() =>
         ReadSource() is { ApiParser: ApiParser.VoteviewSenateVoteList } source

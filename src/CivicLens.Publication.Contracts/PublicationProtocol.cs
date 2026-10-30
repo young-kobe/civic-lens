@@ -80,7 +80,7 @@ public static class PublicationProtocol
     {
         PublishedRecordKind.DocumentChange => IsLowerHex(value, 32),
         PublishedRecordKind.Statement or PublishedRecordKind.Action or PublishedRecordKind.Brief or PublishedRecordKind.Vote
-            or PublishedRecordKind.Relationship => IsSha256(value),
+            or PublishedRecordKind.Relationship or PublishedRecordKind.ExecutiveAction => IsSha256(value),
         _ => false
     };
 

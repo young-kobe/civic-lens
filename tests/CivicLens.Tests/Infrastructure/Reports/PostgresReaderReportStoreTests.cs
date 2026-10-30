@@ -196,6 +196,10 @@ public sealed class PostgresReaderReportStoreTests(PostgresCollection postgres) 
             INSERT INTO relationship_drafts (record_id, current_revision_number, review_state_version, review_status, no_longer_matches, created_at_utc_ticks, last_revised_at_utc_ticks)
             VALUES (@id, 2, 0, 'AwaitingReview', false, 0, 0)
             """,
+        PublishedRecordKind.ExecutiveAction => """
+            INSERT INTO executive_action_drafts (record_id, current_revision_number, review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
+            VALUES (@id, 2, 0, 'AwaitingReview', 0, 0)
+            """,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no draft insert.")
     };
 
