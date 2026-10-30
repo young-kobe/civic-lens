@@ -11,6 +11,7 @@ public enum ApiResource
     BillCosponsors,
     BillActions,
     BillSummaries,
+    BillSubjects,
     HouseVoteList,
     HouseVoteDetail,
     HouseVoteMembers,

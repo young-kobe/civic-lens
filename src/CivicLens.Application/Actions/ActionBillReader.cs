@@ -41,18 +41,25 @@ public sealed class ActionBillReader(ICollectionJobStore jobs, ApiResponseReader
             if (read.ErrorCode is not null) return new(null, read.ErrorCode);
             summaries.AddRange(read.Summaries.Select(text => (page, text)));
         }
-        return new(Assemble(bill, detailPage, detailLines, sponsorships.ToImmutable(), summaries, configuration.People), null);
+        var subjects = new List<string>();
+        foreach (var page in evidence.Pages.Where(page => page.Resource == ApiResource.BillSubjects))
+        {
+            var read = await ReadSubjectPageAsync(page, cancellationToken);
+            if (read.ErrorCode is not null) return new(null, read.ErrorCode);
+            subjects.AddRange(read.Subjects);
+        }
+        return new(Assemble(bill, detailPage, detailLines, sponsorships.ToImmutable(), summaries, [.. subjects], configuration.People), null);
     }
 
     private static ActionBillSnapshot Assemble(CongressBill bill, ActionDraftPage detailPage, ImmutableArray<DocumentLine> detailLines,
         ImmutableArray<ActionSponsorship> found, IReadOnlyList<(ActionDraftPage Page, CongressBillSummaryText Text)> summaries,
-        PersonConfiguration[] configuredPeople)
+        ImmutableArray<string> subjects, PersonConfiguration[] configuredPeople)
     {
         var sponsorships = found.DistinctBy(Identity).OrderBy(item => item.BioguideId, StringComparer.Ordinal).ThenBy(item => item.Role).ToImmutableArray();
         var newest = BillSummarySelection.Newest(summaries.Select(item => item.Text));
         var newestPage = summaries.FirstOrDefault(item => item.Text == newest).Page;
         var involved = sponsorships.Select(item => item.PersonId).ToHashSet(StringComparer.Ordinal);
-        return new(bill, sponsorships, ActionFingerprint.Compute(sponsorships), newest,
+        return new(bill, sponsorships, ActionFingerprint.Compute(sponsorships), subjects, newest,
             newest is null ? null : BillSummarySelection.VersionOf(newest.Summary),
             newestPage is null ? null : ActionCitations.SummaryBlock(newestPage, newest!.Summary),
             bill.PolicyArea is null ? null : LineCitations.Line(detailPage.ExtractionId, detailLines, "Policy area: "),
@@ -100,6 +107,14 @@ public sealed class ActionBillReader(ICollectionJobStore jobs, ApiResponseReader
         return (TextError(page, CongressBillRenderer.RenderSummaries(bill, texts)), texts);
     }
 
+    private async Task<(string? ErrorCode, IReadOnlyList<string> Subjects)> ReadSubjectPageAsync(ActionDraftPage page,
+        CancellationToken cancellationToken)
+    {
+        var (job, response) = await LoadAsync(page, cancellationToken);
+        var (bill, parsed) = CongressBillSubjectsJob.Parse(job, response);
+        return (TextError(page, CongressBillRenderer.RenderSubjects(bill, parsed)), parsed.Subjects);
+    }
+
     private async Task<(CollectionJobRecord Job, ApiResponse Response)> LoadAsync(ActionDraftPage page, CancellationToken cancellationToken)
     {
         var job = await jobs.GetAsync(page.JobId, cancellationToken) ?? throw new InvalidDataException("A bill page job is missing.");
@@ -118,6 +133,7 @@ public sealed class ActionBillReader(ICollectionJobStore jobs, ApiResponseReader
         {
             ApiResource.Bill => CongressBillParser.ExtractionVersion,
             ApiResource.BillCosponsors => CongressBillCosponsorsParser.ExtractionVersion,
+            ApiResource.BillSubjects => CongressBillSubjectsParser.ExtractionVersion,
             _ => CongressBillSummariesParser.ExtractionVersion(textExtractor)
         };
 

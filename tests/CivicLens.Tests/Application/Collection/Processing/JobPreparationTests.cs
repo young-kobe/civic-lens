@@ -28,6 +28,7 @@ public sealed class JobPreparationTests
     private const string CosponsorUrl = SourceUrl + "/119/hr/1/cosponsors?format=json&limit=250";
     private const string ActionsUrl = SourceUrl + "/119/hr/1/actions?format=json&limit=250";
     private const string SummariesUrl = SourceUrl + "/119/hr/1/summaries?format=json&limit=1";
+    private const string SubjectsUrl = SourceUrl + "/119/hr/1/subjects?format=json&limit=250";
     private const string VoteListUrl = HouseVoteFixtures.SourceUrl + "/119/1?format=json&limit=250";
     private const string VoteDetailUrl = HouseVoteFixtures.SourceUrl + "/119/1/100?format=json";
     private const string VoteMembersUrl = HouseVoteFixtures.SourceUrl + "/119/1/100/members?format=json";
@@ -84,6 +85,7 @@ public sealed class JobPreparationTests
     [InlineData(ApiResource.BillCosponsors, CosponsorUrl)]
     [InlineData(ApiResource.BillActions, ActionsUrl)]
     [InlineData(ApiResource.BillSummaries, SummariesUrl)]
+    [InlineData(ApiResource.BillSubjects, SubjectsUrl)]
     public async Task AMalformedBillResponseIsInvalidDataSoTheWorkerBlocksThePermanentFailure(ApiResource resource, string url)
     {
         await Assert.ThrowsAsync<InvalidDataException>(() => Prepare(resource, url, """{"unexpected":true}""", BillGateFixtures.Revision()));
@@ -92,6 +94,23 @@ public sealed class JobPreparationTests
         Assert.Empty(admissions.CosponsorPages);
         Assert.Empty(admissions.ActionPages);
         Assert.Empty(admissions.SummaryPages);
+        Assert.Empty(admissions.SubjectPages);
+    }
+
+    [Fact]
+    public async Task ASubjectsPageIsParsedExtractedAndPassedToTheStoreWithItsNextLink()
+    {
+        var next = SubjectsUrl + "&offset=250";
+
+        _ = await Prepare(ApiResource.BillSubjects, SubjectsUrl,
+            $$$"""{"subjects":{"legislativeSubjects":[{"name":"Rent and rental housing"}]},"pagination":{"next":"{{{next}}}"}}""", BillGateFixtures.Revision());
+
+        var call = Assert.Single(admissions.SubjectPages);
+        Assert.Equal(("job", next, "Rent and rental housing"), (call.JobId, call.Page.Next, Assert.Single(call.Page.Subjects)));
+        var saved = Assert.Single(extractions.Saved);
+        AssertPinned(saved, "congress-bill-subjects-v1", "CongressBillSubjectsParser.ExtractionVersion",
+            saved.Text == "Bill: 119 hr 1\nSubject: Rent and rental housing");
+        Assert.Equal(saved.ExtractionId, Assert.Single(admissions.ExtractionIds));
     }
 
     [Fact]
@@ -279,6 +298,7 @@ public sealed class JobPreparationTests
         { ApiResource.BillCosponsors, CosponsorUrl, Cosponsors("Z000009", next: null) },
         { ApiResource.BillActions, ActionsUrl, """{"actions":[],"pagination":{}}""" },
         { ApiResource.BillSummaries, SummariesUrl, """{"summaries":[],"pagination":{}}""" },
+        { ApiResource.BillSubjects, SubjectsUrl, """{"subjects":{"legislativeSubjects":[]},"pagination":{}}""" },
         { ApiResource.HouseVoteList, VoteListUrl, """{"houseRollCallVotes":[],"pagination":{}}""" },
         { ApiResource.HouseVoteDetail, VoteDetailUrl, HouseVoteFixtures.Detail() },
         { ApiResource.HouseVoteMembers, VoteMembersUrl, HouseVoteFixtures.Members() },
@@ -734,6 +754,7 @@ public sealed class JobPreparationTests
         public List<(string JobId, CongressBillCosponsorsPage Page)> CosponsorPages { get; } = [];
         public List<(string JobId, CongressBillActionsPage Page)> ActionPages { get; } = [];
         public List<(string JobId, CongressBillSummariesPage Page)> SummaryPages { get; } = [];
+        public List<(string JobId, CongressBillSubjectsPage Page)> SubjectPages { get; } = [];
         public List<string> ExtractionIds { get; } = [];
         public bool DuplicatesOnly { get; set; }
 
@@ -772,6 +793,14 @@ public sealed class JobPreparationTests
             CongressBillSummariesPage page, string extractionId, CancellationToken cancellationToken)
         {
             SummaryPages.Add((pageJobId, page));
+            ExtractionIds.Add(extractionId);
+            return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
+        }
+
+        public Task<DiscoveryAdmissionResult> AdmitSubjectsPageAsync(ConfiguredCollectionSource source, string pageJobId,
+            CongressBillSubjectsPage page, string extractionId, CancellationToken cancellationToken)
+        {
+            SubjectPages.Add((pageJobId, page));
             ExtractionIds.Add(extractionId);
             return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
         }

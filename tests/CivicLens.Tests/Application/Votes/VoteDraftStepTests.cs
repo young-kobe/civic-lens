@@ -744,6 +744,76 @@ public sealed class VoteDraftStepTests
         Assert.Empty(model.Requests);
     }
 
+    [Fact]
+    public async Task TheSubjectsOfTheBillReachTheModelAsFactsBesideTheCandidateIssues()
+    {
+        var world = Create(subjects: ["Housing finance and home ownership", "Rent and rental housing"]);
+
+        var (store, model) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Drafted));
+
+        Assert.Single(store.Revisions);
+        Assert.Contains("\"Rent and rental housing\"", Assert.Single(model.Requests).UserPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SubjectsThatArriveAfterTheFirstDraftOrChangeDraftAgainAndTheSameSubjectsDoNot()
+    {
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Drafted));
+        var before = Assert.Single(first.Revisions);
+        var subjects = Create(subjects: ["Rent and rental housing"]);
+
+        var (second, secondModel) = await RunAsync(subjects, new FakeHeadlineSummaryModel().Draft(Drafted), before);
+        var withSubjects = Assert.Single(second.Revisions);
+        var (third, thirdModel) = await RunAsync(subjects, new FakeHeadlineSummaryModel(), withSubjects);
+        var (fourth, fourthModel) = await RunAsync(Create(subjects: ["Housing finance and home ownership"]), new FakeHeadlineSummaryModel().Draft(Drafted), withSubjects);
+
+        Assert.Null(before.SubjectsHash);
+        Assert.Matches("^[0-9a-f]{64}$", withSubjects.SubjectsHash);
+        Assert.Single(secondModel.Requests);
+        Assert.Empty(thirdModel.Requests);
+        Assert.Equal((State.Succeeded, "unchanged"), (third.Entries[0].Status, third.Entries[0].ErrorCode));
+        Assert.Single(fourthModel.Requests);
+        Assert.NotEqual(withSubjects.SubjectsHash, Assert.Single(fourth.Revisions).SubjectsHash);
+    }
+
+    [Fact]
+    public async Task ABillWithNoSavedSubjectsPageStillDraftsWithTheOldPromptBecauseSubjectsCoverOnlySomeBills()
+    {
+        var (store, model) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Drafted));
+
+        Assert.Single(store.Revisions);
+        Assert.DoesNotContain("subjects", Assert.Single(model.Requests).UserPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AtTheByteCapTheSubjectsAreDroppedAndTheVoteStillDraftsFromTheFactLines()
+    {
+        var (_, probe) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Drafted));
+        var justFits = new VoteDraftSettings(probe.Requests[0].ReservedTokens + 10, 1);
+        var world = Create(subjects: [new string('s', 5_000)]);
+
+        var (store, model) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Drafted), settings: justFits);
+
+        Assert.DoesNotContain("ssssssssss", Assert.Single(model.Requests).UserPrompt, StringComparison.Ordinal);
+        Assert.Matches("^[0-9a-f]{64}$", Assert.Single(store.Revisions).SubjectsHash);
+    }
+
+    [Theory]
+    [InlineData("renderedTextMismatch", true)]
+    [InlineData("extractionVersionChanged", false)]
+    public async Task ASubjectsPageThatNoLongerMatchesItsCaptureBlocksBeforeAnyCallBecauseAFactMustBeTrusted(string code, bool tamperText)
+    {
+        var world = Create(subjects: ["Rent and rental housing"]);
+        if (tamperText) world.TamperWithSavedText("subjects", "Bill: 119 hconres 14\nSubject: Changed after capture");
+        else world.SetVersion("subjects", "older-version");
+        var model = new FakeHeadlineSummaryModel();
+
+        var (store, _) = await RunAsync(world, model);
+
+        Assert.Equal((State.Blocked, code), (store.Entries[0].Status, store.Entries[0].ErrorCode));
+        Assert.Empty(model.Requests);
+    }
+
     private static VoteDraftRevision PersonEditOf(VoteDraftRevision previous, string headline, string summary) => previous with
     {
         RevisionNumber = previous.RevisionNumber + 1,

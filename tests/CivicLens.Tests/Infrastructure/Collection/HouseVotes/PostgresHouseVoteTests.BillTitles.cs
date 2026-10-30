@@ -1,5 +1,6 @@
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Tests.Application.Collection.Bills;
 using CivicLens.Tests.Fixtures;
@@ -225,15 +226,45 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal((1, 0), (before, after));
     }
 
-    private async Task<PreparedBillDetail> AdmitBillDetailAsync(DateTimeOffset? updatedAt = null, int congress = 119, int number = 14,
-        bool hasTrackedIssue = false)
+    [Fact]
+    public async Task EvidenceHoldsTheSubjectPagesOfTheNewestBillVersionWhoseSubjectsChainIsClosedAndNoneWhenNoVersionHasOne()
     {
-        var bill = await PrepareBillDetailAsync(updatedAt, congress, number);
-        await AdmitPreparedBillDetailAsync(bill, hasTrackedIssue);
-        return bill;
+        await AdmitBillDetailAsync(Updated);
+        var withBill = await PendingCandidateAsync();
+        Assert.Empty((await VoteStore().ReadEvidenceAsync(withBill, default))!.BillSubjects);
+
+        var older = await AdmitBillDetailAsync(Updated.AddDays(1), subjects: 2);
+        await AdmitSubjectPageAsync(older, ["Older subject"], next: null);
+        var newer = await AdmitBillDetailAsync(Updated.AddDays(2), subjects: 3);
+        var openChain = await AdmitSubjectPageAsync(newer, ["Newer first"], next: SubjectsNext);
+        var whileOpen = (await VoteStore().ReadEvidenceAsync(withBill, default))!.BillSubjects;
+        await AdmitSubjectPageAsync(newer, ["Newer second"], next: null, pageJobId: openChain.Jobs.Single().JobId);
+        var whenClosed = (await VoteStore().ReadEvidenceAsync(withBill, default))!.BillSubjects;
+
+        Assert.Equal(["Subject: Older subject"], whileOpen.Select(page => page.Text.Split('\n')[1]));
+        Assert.Equal(["Subject: Newer first", "Subject: Newer second"], whenClosed.Select(page => page.Text.Split('\n')[1]));
     }
 
-    private async Task<PreparedBillDetail> PrepareBillDetailAsync(DateTimeOffset? updatedAt = null, int congress = 119, int number = 14)
+    private const string SubjectsNext = "https://api.congress.gov/v3/bill/119/hconres/14/subjects?offset=250&limit=250&format=json";
+
+    private async Task<DiscoveryAdmissionResult> AdmitSubjectPageAsync(PreparedBillDetail bill, string[] subjects, string? next, string? pageJobId = null)
+    {
+        pageJobId ??= bill.SubjectsJobId!;
+        var text = $"Bill: 119 hconres 14\n{string.Join('\n', subjects.Select(subject => "Subject: " + subject))}";
+        var extractionId = await extractions.SaveAsync(pageJobId, text, text, "extraction");
+        return await store.AdmitSubjectsPageAsync(bill.Source, pageJobId, new CongressBillSubjectsPage(subjects, next), extractionId, default);
+    }
+
+    private async Task<PreparedBillDetail> AdmitBillDetailAsync(DateTimeOffset? updatedAt = null, int congress = 119, int number = 14,
+        bool hasTrackedIssue = false, int subjects = 0)
+    {
+        var bill = await PrepareBillDetailAsync(updatedAt, congress, number, subjects);
+        var result = await AdmitPreparedBillDetailAsync(bill, hasTrackedIssue);
+        return bill with { SubjectsJobId = result.Jobs.SingleOrDefault(job => job.Url.Contains("/subjects?"))?.JobId };
+    }
+
+    private async Task<PreparedBillDetail> PrepareBillDetailAsync(DateTimeOffset? updatedAt = null, int congress = 119, int number = 14,
+        int subjects = 0)
     {
         var configuration = CongressBillSourceConfigurationTests.Configuration();
         configuration = configuration with
@@ -248,15 +279,15 @@ public sealed partial class PostgresHouseVoteTests
         var text = $"Bill: {congress} hconres {number}\nTitle: A concurrent resolution\n{Guid.NewGuid():N}";
         var extractionId = await extractions.SaveAsync(jobId, text, text, "extraction");
         var bill = new CongressBill(congress, "hconres", number, "A concurrent resolution", Backfill, updatedAt ?? Updated,
-            BillGateFixtures.UntrackedPolicyArea, [], 0, 1, 0);
+            BillGateFixtures.UntrackedPolicyArea, [], 0, 1, 0, subjects);
         return new(source, jobId, bill, extractionId);
     }
 
-    private Task AdmitPreparedBillDetailAsync(PreparedBillDetail prepared, bool hasTrackedIssue = false) =>
+    private Task<DiscoveryAdmissionResult> AdmitPreparedBillDetailAsync(PreparedBillDetail prepared, bool hasTrackedIssue = false) =>
         store.AdmitDetailAsync(prepared.Source, prepared.JobId, prepared.Bill,
             hasTrackedIssue ? BillGateOutcome.Passed(BillGateReason.TrackedPolicyArea) with { HasTrackedIssue = true }
                 : BillGateOutcome.NotRelevant(BillGateReason.UntrackedPolicyArea),
             BillGateFixtures.Revision().Id, prepared.ExtractionId, default);
 
-    private sealed record PreparedBillDetail(ConfiguredCollectionSource Source, string JobId, CongressBill Bill, string ExtractionId);
+    private sealed record PreparedBillDetail(ConfiguredCollectionSource Source, string JobId, CongressBill Bill, string ExtractionId, string? SubjectsJobId = null);
 }

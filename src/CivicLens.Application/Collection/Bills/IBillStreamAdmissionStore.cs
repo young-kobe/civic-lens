@@ -22,4 +22,8 @@ public interface IBillStreamAdmissionStore
     Task<DiscoveryAdmissionResult> AdmitSummariesPageAsync(ConfiguredCollectionSource source, string pageJobId,
         CongressBillSummariesPage page, string extractionId,
         CancellationToken cancellationToken);
+
+    Task<DiscoveryAdmissionResult> AdmitSubjectsPageAsync(ConfiguredCollectionSource source, string pageJobId,
+        CongressBillSubjectsPage page, string extractionId,
+        CancellationToken cancellationToken);
 }
