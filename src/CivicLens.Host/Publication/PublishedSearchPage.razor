@@ -25,7 +25,7 @@
                             <option value="">Any</option>
                             @foreach (var kind in Enum.GetValues<PublishedRecordKind>())
                             {
-                                <option value="@PublishedRecordLabels.KindValue(kind)">@PublishedRecordLabels.Kind(kind)</option>
+                                <option value="@PublicationProtocol.KindText(kind)">@PublishedRecordLabels.Kind(kind)</option>
                             }
                         </select>
                     </Field>

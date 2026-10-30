@@ -2,6 +2,7 @@ using CivicLens.Application.Issues;
 using System.Text.RegularExpressions;
 using AngleSharp.Html.Parser;
 using CivicLens.Application.Publication;
+using CivicLens.PublicApi;
 using CivicLens.Host.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
@@ -1156,6 +1157,52 @@ public sealed class ReleaseRendererTests
             .Select(row => (row.QuerySelector("a")!.GetAttribute("href"), row.QuerySelector(".badge")!.TextContent));
         Assert.Equal([($"records/{release.Records[0].RecordId}.html", "Document change"),
             ($"records/{new string('d', 64)}.html", "Statement"), ($"records/{new string('f', 64)}.html", "Action")], rows);
+    }
+
+    [Fact]
+    public async Task AllRecordsPageLinksEachKindToASearchAddressSoTheServiceAcceptsTheLink()
+    {
+        var release = ReleaseOf(3);
+        release = release with
+        {
+            Records = [.. Enum.GetValues<PublishedRecordKind>().Reverse().Select((kind, index) => release.Records[0] with { Kind = kind, RecordId = new string((char)('a' + index), 64) })]
+        };
+
+        var html = await new ReleaseRenderer(null, null).RenderAllRecordsAsync(release, 1, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var panel = document.QuerySelector("section[aria-labelledby='panel-search-by-kind']")!;
+        Assert.Equal("Search by kind", panel.QuerySelector("h2")!.TextContent);
+        Assert.Contains("Each link opens the search page with that kind of record chosen.", panel.TextContent);
+        var links = document.QuerySelectorAll("nav[aria-label='Search one kind of record'] a").ToList();
+        Assert.Equal(["Document changes", "Statements", "Actions", "Weekly briefs", "Votes", "Relationships", "Executive actions"], links.Select(link => link.TextContent.Trim()));
+        foreach (var link in links)
+        {
+            Assert.StartsWith("search.html?kind=", link.GetAttribute("href"), StringComparison.Ordinal);
+            var value = link.GetAttribute("href")!["search.html?kind=".Length..];
+            Assert.True(RecordKinds.TryParse(value, out _), value);
+            Assert.Null(link.GetAttribute("aria-current"));
+        }
+        Assert.Contains("search.html\">Filter by issue or date</a>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AllRecordsPageOfAnEmptyReleaseHasNoKindRowSoNoEmptyNavigationShows()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderAllRecordsAsync(ReleaseOf(0), 1, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.Null(document.QuerySelector("nav[aria-label='Search one kind of record']"));
+        Assert.DoesNotContain("Search by kind", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AllRecordsPageOffersNoLinkForAKindWithoutRecordsSoNoLinkLeadsToAnEmptySearch()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderAllRecordsAsync(ReleaseOf(2), 1, CancellationToken.None);
+
+        var links = new HtmlParser().ParseDocument(html).QuerySelectorAll("nav[aria-label='Search one kind of record'] a");
+        Assert.Equal(["search.html?kind=documentChange"], links.Select(link => link.GetAttribute("href")));
     }
 
     [Theory]

@@ -121,7 +121,7 @@ public sealed class SearchIndex(NpgsqlDataSource database)
         parameters.AddWithValue("release", release);
         parameters.AddWithValue("take", request.Limit + 1);
         if (request.Text is not null) parameters.AddWithValue("q", request.Text);
-        if (request.Kind is { } kind) parameters.AddWithValue("kind", RecordKinds.Text(kind));
+        if (request.Kind is { } kind) parameters.AddWithValue("kind", PublicationProtocol.KindText(kind));
         if (request.Official is not null) parameters.AddWithValue("official", request.Official);
         if (request.Issue is not null) parameters.AddWithValue("issue", request.Issue);
         if (request.PolicyArea is not null) parameters.AddWithValue("policy_area", request.PolicyArea);
