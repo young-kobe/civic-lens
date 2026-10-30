@@ -13,6 +13,10 @@
         {
             <div class="page-header-meta row">@Meta</div>
         }
+        @if (RecordId is not null)
+        {
+            <p class="page-header-record-id muted small">Record ID <code>@RecordId</code></p>
+        }
     </div>
     @if (Actions is not null)
     {
@@ -22,6 +26,7 @@
 
 @code {
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? RecordId { get; set; }
     [Parameter] public string? Lede { get; set; }
     [Parameter] public bool Serif { get; set; }
     [Parameter] public RenderFragment? Portrait { get; set; }

@@ -247,8 +247,9 @@ internal static class ReviewWorkspace
         ConfigureRelationshipReview(services, contexts);
         ConfigureBriefReview(services, contexts);
         ConfigureReportReview(services, contexts);
+        services.AddSingleton<IRecordKindStore>(new PostgresRecordKindStore(contexts));
         services.AddScoped(provider => new LookupDraft(provider.GetRequiredService<IActionReviewStore>(),
-            provider.GetRequiredService<IVoteReviewStore>(), RecordExistence(provider), TimeProvider.System));
+            provider.GetRequiredService<IVoteReviewStore>(), provider.GetRequiredService<IRecordKindStore>(), TimeProvider.System));
         var collection = ConfigurationFile.ReadCollectionFromEnvironment();
         var officials = ReviewOfficials.From(collection);
         services.AddSingleton(officials);
@@ -290,27 +291,6 @@ internal static class ReviewWorkspace
         services.AddScoped<SaveGateLabel>();
         services.AddScoped<ListGateLabelQueue>();
         services.AddScoped<GetGateLabelTask>();
-    }
-
-    private static Dictionary<PublishedRecordKind, Func<string, CancellationToken, Task<bool>>> RecordExistence(IServiceProvider provider)
-    {
-        var documents = provider.GetRequiredService<IDocumentChangeReviewStore>();
-        var statements = provider.GetRequiredService<IStatementReviewStore>();
-        var actions = provider.GetRequiredService<IActionReviewStore>();
-        var votes = provider.GetRequiredService<IVoteReviewStore>();
-        var executiveActions = provider.GetRequiredService<IExecutiveActionReviewStore>();
-        var briefs = provider.GetRequiredService<IBriefReviewStore>();
-        var relationships = provider.GetRequiredService<IRelationshipReviewStore>();
-        return new()
-        {
-            [PublishedRecordKind.DocumentChange] = async (id, token) => await documents.GetAsync(id, token) is not null,
-            [PublishedRecordKind.Statement] = async (id, token) => await statements.GetAsync(id, token) is not null,
-            [PublishedRecordKind.Action] = async (id, token) => await actions.GetAsync(id, token) is not null,
-            [PublishedRecordKind.Vote] = async (id, token) => await votes.GetAsync(id, token) is not null,
-            [PublishedRecordKind.ExecutiveAction] = async (id, token) => await executiveActions.GetAsync(id, token) is not null,
-            [PublishedRecordKind.Brief] = async (id, token) => await briefs.GetAsync(id, token) is not null,
-            [PublishedRecordKind.Relationship] = async (id, token) => await relationships.GetAsync(id, token) is not null
-        };
     }
 
     private static void ConfigureActionReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)

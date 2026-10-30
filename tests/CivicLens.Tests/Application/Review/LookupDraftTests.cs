@@ -1,3 +1,4 @@
+using System.Globalization;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
@@ -17,12 +18,9 @@ public sealed class LookupDraftTests
     private readonly FakeVoteReviewStore votes = new();
     private readonly FakeClock clock = new(new DateTimeOffset(2026, 10, 19, 0, 0, 0, TimeSpan.Zero));
 
-    private readonly Dictionary<PublishedRecordKind, HashSet<string>> existing =
-        Enum.GetValues<PublishedRecordKind>().ToDictionary(kind => kind, _ => new HashSet<string>());
+    private readonly FakeRecordKindStore kinds = new();
 
-    private LookupDraft Lookup() => new(actions, votes,
-        existing.ToDictionary(pair => pair.Key, pair => (Func<string, CancellationToken, Task<bool>>)((id, _) => Task.FromResult(pair.Value.Contains(id)))),
-        clock);
+    private LookupDraft Lookup() => new(actions, votes, kinds, clock);
 
     [Theory]
     [InlineData("HR 1234")]
@@ -80,19 +78,45 @@ public sealed class LookupDraftTests
     public async Task ARecordIdOpensTheEditorOfTheKindThatOwnsIt(PublishedRecordKind kind)
     {
         var recordId = new string('a', 64);
-        existing[kind].Add(recordId);
+        kinds.Records[recordId] = kind;
 
         Assert.Equal(new DraftLookupHit(kind, recordId), await Lookup().ExecuteAsync(Reviewer, $"  {recordId} "));
     }
 
     [Fact]
-    public async Task ADocumentChangeDraftIdIsShorterThanOtherRecordIdsAndOpensOnlyADocumentChange()
+    public async Task ADocumentChangeDraftIdIsAValidRecordIdBecauseItIsShorterThanOtherRecordIds()
     {
         var draftId = new string('b', 32);
-        existing[PublishedRecordKind.DocumentChange].Add(draftId);
-        existing[PublishedRecordKind.Statement].Add(draftId);
+        kinds.Records[draftId] = PublishedRecordKind.DocumentChange;
 
         Assert.Equal(new DraftLookupHit(PublishedRecordKind.DocumentChange, draftId), await Lookup().ExecuteAsync(Reviewer, draftId));
+        Assert.Null(await Lookup().ExecuteAsync(Reviewer, new string('c', 32)));
+    }
+
+    [Theory]
+    [InlineData("https://review.example.test/Review/Actions/{0}")]
+    [InlineData("https://review.example.test/Review/Actions/{0}?status=saved")]
+    [InlineData("  https://review.example.test/Review/Actions/{0}/  ")]
+    [InlineData("https://civic-lens.info/records/{0}.html")]
+    public async Task AnEditorLinkOrAPublicRecordLinkGivesItsRecordIdSoACopiedAddressWorks(string link)
+    {
+        var recordId = new string('d', 64);
+        kinds.Records[recordId] = PublishedRecordKind.Action;
+
+        Assert.Equal(new DraftLookupHit(PublishedRecordKind.Action, recordId),
+            await Lookup().ExecuteAsync(Reviewer, string.Format(CultureInfo.InvariantCulture, link, recordId)));
+    }
+
+    [Theory]
+    [InlineData("https://example.test/")]
+    [InlineData("https://example.test/news/story.html")]
+    [InlineData("https://example.test/Review/Actions/abc")]
+    [InlineData("ftp://example.test/records/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.html")]
+    public async Task ALinkWithoutARecordIdIsAUserErrorBeforeAnyRead(string link)
+    {
+        await Assert.ThrowsAsync<DraftLookupFormatException>(() => Lookup().ExecuteAsync(Reviewer, link));
+
+        Assert.Equal(0, kinds.Lookups);
     }
 
     [Fact]
@@ -122,11 +146,12 @@ public sealed class LookupDraftTests
     [InlineData("House roll 5")]
     [InlineData("HR 12; DROP TABLE")]
     [InlineData("ABCDEF0123456789ABCDEF0123456789")]
+    [InlineData("0123456789abcdef0123456789abcdef01234567")]
     public async Task AnInputThatNamesNoBillRollCallOrRecordIdIsAUserErrorBeforeAnyRead(string? query)
     {
         await Assert.ThrowsAsync<DraftLookupFormatException>(() => Lookup().ExecuteAsync(Reviewer, query));
 
-        Assert.Equal((0, 0), (actions.BillLookups, votes.RollLookups));
+        Assert.Equal((0, 0, 0), (actions.BillLookups, votes.RollLookups, kinds.Lookups));
     }
 
     [Fact]
@@ -142,5 +167,17 @@ public sealed class LookupDraftTests
     {
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             Lookup().ExecuteAsync(new ReviewActor("auth0|nobody", (ReviewRole)99), "HR 1"));
+    }
+
+    private sealed class FakeRecordKindStore : IRecordKindStore
+    {
+        public Dictionary<string, PublishedRecordKind> Records { get; } = [];
+        public int Lookups { get; private set; }
+
+        public Task<PublishedRecordKind?> FindKindAsync(string recordId, CancellationToken cancellationToken)
+        {
+            Lookups++;
+            return Task.FromResult(Records.TryGetValue(recordId, out var kind) ? kind : (PublishedRecordKind?)null);
+        }
     }
 }

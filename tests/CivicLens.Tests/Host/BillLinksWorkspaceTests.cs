@@ -129,8 +129,8 @@ public sealed class BillLinksWorkspaceTests(PostgresCollection postgres) : IAsyn
     [InlineData("HR+77", "No draft for “HR 77”.")]
     [InlineData("Roll+9", "No draft for “Roll 9”.")]
     [InlineData("0000000000000000000000000000000000000000000000000000000000000abc", "No draft for “0000000000000000000000000000000000000000000000000000000000000abc”.")]
-    [InlineData("banana", "Enter a bill such as HR 1234 or 118 HR 1234, a roll call such as Roll 245, or a record ID.")]
-    [InlineData("118+Roll+9", "Enter a bill such as HR 1234 or 118 HR 1234, a roll call such as Roll 245, or a record ID.")]
+    [InlineData("banana", "Enter a bill such as HR 1234 or 118 HR 1234, a roll call such as Roll 245, a record ID, or a link to the record.")]
+    [InlineData("118+Roll+9", "Enter a bill such as HR 1234 or 118 HR 1234, a roll call such as Roll 245, a record ID, or a link to the record.")]
     public async Task AnUnknownBillRollCallOrRecordIdAndAnInvalidInputShowAMessageOnTheHomePageWithoutAnError(string query, string message)
     {
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
