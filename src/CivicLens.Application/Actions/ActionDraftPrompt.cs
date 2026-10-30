@@ -23,12 +23,6 @@ public static class ActionDraftPrompt
         Each field has a text and a confidence. The confidence is your probability that a careful human reviewer would approve the text without changing its substance. It is a number from 0 to 1. Civic Lens records the values to calibrate them against human review. No rule acts on them. Use the full range honestly.
         """;
 
-    private const string IssueInstructions = """
-
-        Issues:
-        - issueIds: the ids of the candidate issues that the bill is about. Choose from the candidate issues only. List each id once. The policy area of the bill is a hint and does not make an issue fit. Read the definition, the includes, and the excludes of each candidate, and choose an issue only when the title or the summary of the bill is about it. Use an empty list when no candidate fits.
-        """;
-
     public static long MinimumReservation => Encoding.UTF8.GetByteCount(SystemInstructions) + ActionDraftTask.MaximumOutputTokens;
 
     public static AnalysisModelRequest? Build(ActionBillSnapshot snapshot, BillIssueChoice issues, int maximumBytes,
@@ -37,7 +31,7 @@ public static class ActionDraftPrompt
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(issues);
         var issueSchema = issues.AnswerSchema();
-        var system = issueSchema is null ? SystemInstructions : SystemInstructions + IssueInstructions;
+        var system = issueSchema is null ? SystemInstructions : SystemInstructions + BillIssueChoice.Instructions("the title or the summary of the bill");
         var user = BuildUserPrompt(snapshot, issues, previousErrors, includeSummary);
         var schema = AnalysisSchema.HeadlineAndSummary(issueSchema);
         var bytes = Encoding.UTF8.GetByteCount(system) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);

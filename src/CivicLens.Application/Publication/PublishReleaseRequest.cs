@@ -6,4 +6,5 @@ public sealed record PublishReleaseRequest(ImmutableArray<PublishedRecordReferen
 {
     public ImmutableArray<RecordNote> Notes { get; init; } = [];
     public ImmutableArray<RecordNote> Withdrawals { get; init; } = [];
+    public bool RewriteOfficials { get; init; }
 }

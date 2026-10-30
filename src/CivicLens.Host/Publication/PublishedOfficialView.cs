@@ -93,6 +93,23 @@ internal static class PublishedOfficialView
         return $"This list holds {Counted(total, "published record")}: {JoinAnd(parts)}. Rows are newest first.";
     }
 
+    public static IReadOnlyList<FilterTab> CongressTabs(ReleaseOfficialPage page) =>
+        [.. page.Congresses.Select((congress, index) => FilterTab.Link(
+            CongressTabLabel(congress, index == 0),
+            page.RootPath + (index == 0 ? PublicationProtocol.OfficialPagePath(page.Profile.Id) : PublicationProtocol.OfficialCongressPagePath(page.Profile.Id, congress)),
+            selected: congress == page.Congress))];
+
+    public static string CongressTabsLabel(ReleaseOfficialPage page) =>
+        $"Show {TheCongress(page.Congresses[0])} or an earlier Congress";
+
+    private static string CongressTabLabel(int congress, bool isCurrent)
+    {
+        var name = $"{CongressCalendar.Ordinal(congress)} Congress";
+        if (!isCurrent) return $"{name} (votes only)";
+        var years = $"{CongressCalendar.StartOf(congress).Year} to {CongressCalendar.StartOf(congress + 1).Year}";
+        return $"All records, votes of the {name} ({years})";
+    }
+
     public static string TheCongress(int congress) => $"the {CongressCalendar.Ordinal(congress)} Congress";
 
     public static string Counted(int count, string singular) => $"{count} {Noun(count, singular)}";
