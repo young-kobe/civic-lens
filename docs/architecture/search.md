@@ -10,7 +10,7 @@ The search service gives readers full-text search over every published record. I
 - The service is its own Web SDK project, `CivicLens.PublicApi`. It references `CivicLens.Publication.Contracts` and the Npgsql package only. It has no path to operational storage, credentials, job handlers, or unpublished evidence.
 - The service has its own Postgres database, named by `CIVIC_LENS_SEARCH_DATABASE`. It never connects to the operational database.
 - The service reads the public release files over HTTP. The base address is `CIVIC_LENS_RELEASE_BASE_URL`. A dev or test server can serve the release root.
-- The ingest polls `release.json` every 2 minutes with a conditional GET. It sends the ETag and the Last-Modified time that the server gave. An unchanged manifest costs one empty reply.
+- The ingest polls `release.json` every 30 seconds with a conditional GET. It sends the ETag and the Last-Modified time that the server gave. An unchanged manifest costs one empty reply.
 - The ingest reuses the contract rules. `PublicationRelease.Validate` checks the manifest, and the `Validate` method of each record type checks the record. Search copies no contract rule.
 - One release is ingested in one transaction. A release that the service stored already only becomes the active release again. A release that is older than the newest stored release and was never stored is refused, logged, and the service keeps serving the active release.
 - Each row stores a range of a record revision: its first release and its last release. The last release is null while the range is open. A release that drops, withdraws, or replaces a revision closes its range. A revision that returns later gets a new row, so a pinned search in the gap never sees it.
@@ -111,7 +111,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 
 ### Ingest
 
-`IngestWorker` runs `ReleaseIngest` when the service starts and then every 2 minutes. A failed run logs the error and waits for the next interval.
+`IngestWorker` runs `ReleaseIngest` when the service starts and then every 30 seconds. A failed run logs the error and waits for the next interval.
 
 1. `ReleaseFeed` sends a conditional GET for `release.json`. A 304 reply ends the run.
 2. It checks the size against `PublicationProtocol.MaximumManifestBytes`. It reads the manifest under `PublicationProtocol.JsonOptions` and calls `PublicationRelease.Validate`.
@@ -168,7 +168,7 @@ A result has the manifest entry fields, `firstRelease`, `lastRelease`, `pagePath
 | `CIVIC_LENS_PUBLIC_API_URL` | Read by publish, not by the service. The address that `search.html` and `report.html` call. |
 | `CIVIC_LENS_TURNSTILE_SITE_KEY` | Read by publish, not by the service. The public Turnstile site key of `report.html`. |
 
-The poll interval is 2 minutes and the statement timeout is 2 seconds. Both are options of `PublicApiOptions`.
+The poll interval is 30 seconds and the statement timeout is 2 seconds. Both are options of `PublicApiOptions`.
 
 ### Search page
 
