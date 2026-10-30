@@ -20,7 +20,7 @@ internal sealed class StatementRecordLoader(IStatementReviewStore statements)
     protected override ReadyToPublishRecord? ToReady(UnpublishedApprovedStatement candidate) =>
         candidate.Statement.CurrentRevision is { } revision
             ? Ready(candidate.Statement.CurrentStatus, candidate.Statement.UnresolvedConcernCount, candidate.Statement.CandidateId,
-                revision.Headline, revision.RevisionNumber, candidate.PublishedRevisionNumber)
+                revision.RevisionNumber)
             : null;
 
     protected override Task<IReadOnlyDictionary<string, PublishableStatement>> GetForPublicationAsync(
@@ -32,7 +32,7 @@ internal sealed class StatementRecordLoader(IStatementReviewStore statements)
         var review = addition.Review;
         var revision = review.CurrentRevision
             ?? throw new ArgumentException($"Statement {recordId} has no revision.", "recordIds");
-        RequirePublishable(recordId, revision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
+        RequirePublishable(recordId, revision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build);
         var record = new PublishedStatementBuilder(build.Rules).Build(addition, build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId, revision.RevisionNumber, review.Decisions), build.Now);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
             (related, cancellationToken) => build.Renderer.RenderStatementAsync(record, related, build.Catalog, cancellationToken));

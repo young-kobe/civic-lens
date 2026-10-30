@@ -10,40 +10,18 @@ internal sealed class PublicationCorrections
 {
     private readonly PreviousRelease previous;
     private readonly DateTimeOffset now;
-    private readonly IReadOnlyDictionary<PublishedRecordReference, string> notes;
     private readonly IReadOnlyDictionary<PublishedRecordReference, PublishedCorrection[]> earlier;
 
     private PublicationCorrections(PreviousRelease previous, DateTimeOffset now,
-        IReadOnlyDictionary<PublishedRecordReference, string> notes,
         IReadOnlyDictionary<PublishedRecordReference, PublishedCorrection[]> earlier)
     {
         this.previous = previous;
         this.now = now;
-        this.notes = notes;
         this.earlier = earlier;
     }
 
-    public static Dictionary<PublishedRecordReference, string> ValidateNotes(ImmutableArray<RecordNote> notes,
-        ImmutableArray<PublishedRecordReference> records, bool byCode)
-    {
-        if (notes.IsDefault) throw new ArgumentException("Notes must not be default.", nameof(notes));
-        if (byCode && !notes.IsEmpty) throw new ArgumentException("The code subject gives no correction notes.", nameof(notes));
-        var requested = records.ToHashSet();
-        var trimmed = new Dictionary<PublishedRecordReference, string>();
-        foreach (var note in notes)
-        {
-            var text = note.ValidText(nameof(notes));
-            if (!requested.Contains(note.Reference))
-                throw new ArgumentException($"{note.Reference} has a note but is not in the release.", nameof(notes));
-            if (!trimmed.TryAdd(note.Reference, text))
-                throw new ArgumentException($"{note.Reference} has more than one note.", nameof(notes));
-        }
-        return trimmed;
-    }
-
     public static async Task<PublicationCorrections> LoadAsync(IReleaseDirectory releases, PreviousRelease previous, DateTimeOffset now,
-        IReadOnlyDictionary<PublishedRecordReference, string> notes, ImmutableArray<PublishedRecordReference> records,
-        CancellationToken cancellationToken)
+        ImmutableArray<PublishedRecordReference> records, CancellationToken cancellationToken)
     {
         var earlier = new Dictionary<PublishedRecordReference, PublishedCorrection[]>();
         foreach (var record in records)
@@ -52,17 +30,17 @@ internal sealed class PublicationCorrections
             else if (previous.Find(record.Kind, record.RecordId) is not null)
                 earlier[record] = await ReadAsync(releases, previous.DirectoryName!, record, cancellationToken);
         }
-        return new(previous, now, notes, earlier);
+        return new(previous, now, earlier);
     }
 
-    // A code approval needs no note. A person approval that replaces a published record needs one.
+    // A code approval needs no note. A person approval that replaces a published record needs the note that its approval holds.
+    // A note on a first publication is dropped.
     public PublishedCorrection[] For(PublishedRecordKind kind, string recordId, int revisionNumber, ImmutableArray<ReviewDecision> decisions)
     {
         var reference = new PublishedRecordReference(kind, recordId);
-        var note = notes.GetValueOrDefault(reference);
         var replacedRevision = previous.Find(kind, recordId)?.RevisionNumber ?? previous.FindWithdrawal(recordId)?.WithdrawnRevisionNumber;
-        if (replacedRevision is not { } replaced)
-            return note is null ? [] : throw new ArgumentException($"{reference} is not in the active release, so it takes no note.");
+        if (replacedRevision is not { } replaced) return [];
+        var note = PublishedRecordRules.CorrectionNoteOf(revisionNumber, decisions);
         if (note is null && !PublishedRecordRules.IsApprovedByCode(revisionNumber, decisions))
             throw new MissingCorrectionNoteException(reference);
         var kept = earlier[reference];

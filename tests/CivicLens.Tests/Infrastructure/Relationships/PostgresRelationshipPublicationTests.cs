@@ -63,8 +63,7 @@ public sealed class PostgresRelationshipPublicationTests(PostgresCollection post
         await ApproveAsync();
 
         var ready = Assert.Single(await reviews.ListUnpublishedApprovedAsync(10, [], default));
-        Assert.Equal((recordId, null, false), (ready.Relationship.RecordId, ready.PublishedRevisionNumber, ready.CitedRecordsChanged));
-        Assert.Equal(("Warren on rent", ActionRevisionFixtures.Model().Headline), (ready.StatementHeadline, ready.TargetHeadline));
+        Assert.Equal((recordId, false), (ready.Relationship.RecordId, ready.CitedRecordsChanged));
 
         await releases.DecisionAsync(PublishedRecordKind.Statement, StatementId, 1, 2, ReviewDecisionKind.WithdrawApproval);
 

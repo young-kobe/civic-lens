@@ -28,7 +28,6 @@ public sealed partial class PostgresHouseVoteTests
     {
         var recordId = await ApprovedVoteAsync();
         var ready = Assert.Single(await VoteReviews().ListUnpublishedApprovedAsync(10, [], default));
-        Assert.Null(ready.PublishedRevisionNumber);
 
         await PostgresPublicationStore.FromConnectionString(connectionString).CommitAsync(PublicationScenario.Owner.Subject,
             VoteCommit(recordId, reviewStateVersion: 1), "key", Hash(1), default);

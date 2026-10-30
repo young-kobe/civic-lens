@@ -18,7 +18,13 @@
                 @entry.Event
             </td>
             <td class="hide-narrow">@Who(entry.ActorSubject)</td>
-            <td>@entry.Note</td>
+            <td>
+                @entry.Note
+                @if (entry.CorrectionNote is not null)
+                {
+                    <div class="muted small">Correction note: @entry.CorrectionNote</div>
+                }
+            </td>
         </Row>
     </DataTable>
 </Panel>

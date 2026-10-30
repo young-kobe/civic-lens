@@ -32,7 +32,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 
 - Only configured subjects get roles, whatever role claims arrive. Enforced by the Host role mapping. Test: `ReviewAuthorizationTests.OnlyExplicitSubjectsReceiveRolesRegardlessOfSuppliedRoleClaims`.
 - A post without a valid antiforgery token changes nothing. Enforced by ASP.NET Core antiforgery. Test: `ReviewWorkspaceTests.ForgedPostsCachedPagesAndForeignHostsAreRefusedAsync`.
-- A reviewer cannot publish. Enforced by the owner check in the publish handler. Test: `ReviewWorkspaceTests.ReviewerCannotPublishEvenWithAForgedPostAsync`.
+- A reviewer cannot publish. Enforced by `ReviewAuthorization.RequireOwner` in `PublishRelease`. Test: `PublishReleaseTests.ReviewerCannotPublishBecauseOnlyTheOwnerSpeaksForTheSite`.
 - Retained evidence renders as text, never as markup. Enforced by Razor encoding. Test: `ReviewWorkspaceTests.RetainedEvidenceIsShownAsTextNeverAsMarkupAsync`.
 - Markup has no inline styles. Enforced by `PresentationArchitectureTests`. Test: `PresentationArchitectureTests.MarkupCannotStyleItselfSoComponentsStayTheOnlyStyleOwners`.
 

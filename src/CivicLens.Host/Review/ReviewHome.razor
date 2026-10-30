@@ -17,7 +17,7 @@
 <div class="content">
     @if (StatusMessage is not null)
     {
-        <Notice Tone="StatusTone" Dismissible="true">@StatusMessage</Notice>
+        <Notice Tone="Tone.Bad" Dismissible="true">@StatusMessage</Notice>
     }
     @if (error is not null)
     {
@@ -40,21 +40,6 @@
         <input type="hidden" name="idempotencyKey" value="@renderKey" />
     </form>
 
-    @if (canPublish)
-    {
-        <form id="publish-confirm" method="post" @formname="publish-confirm" @onsubmit="PublishAsync">
-            <AntiforgeryToken />
-            <input type="hidden" name="idempotencyKey" value="@renderKey" />
-            @if (selection is not null)
-            {
-                @foreach (var item in selection)
-                {
-                    <input type="hidden" name="records" value="@item.Reference" />
-                }
-            }
-        </form>
-    }
-
     @if (overview is not null && changes is not null && drafts is not null)
     {
         <StatStrip Label="Review summary">
@@ -66,10 +51,6 @@
             <Stat Value="briefCounts!.NeedsAction" Label="Briefs need action" Tone="Tone.Warn" Href="@($"{BriefRoutes.List}?drafts={DraftFilterNames.NeedsAction}")" />
             <Stat Value="relationshipCounts!.NeedsAction" Label="Relationships need action" Tone="Tone.Warn" Href="@($"{RelationshipRoutes.List}?drafts={DraftFilterNames.NeedsAction}")" />
             <Stat Value="openReports" Label="Reader reports open" Tone="Tone.Warn" Href="@ReportRoutes.List" />
-            @if (ready is not null)
-            {
-                <Stat Value="ready.Items.Length" Label="Ready to publish" Tone="Tone.Ok" Href="#publish" />
-            }
             @if (health is not null)
             {
                 <Stat Value="health.AttentionCount" Label="Sources need attention" Tone="Tone.Bad" Href="/Review/Sources" />
@@ -176,105 +157,8 @@
                     </ChildContent>
                 </Panel>
 
-                @if (ready is not null)
+                @if (blocked is not null)
                 {
-                    <Panel Title="Publish" Id="publish">
-                        <Aside>@(ready.HasMore ? $"First {PublishRelease.MaximumRecords} shown" : Count(ready.Items.Length, "record", "records"))</Aside>
-                        <ChildContent>
-                            @if (selectionStale)
-                            {
-                                <Notice Tone="Tone.Warn">Some selected records are no longer ready to publish. Choose again.</Notice>
-                            }
-                            @if (selection is not null)
-                            {
-                                <Notice Tone="Tone.Warn" Title="@($"Confirm release {nextReleaseNumber}")">
-                                    This release holds the records below and every other record in the active release.
-                                </Notice>
-                                <DataTable Items="selection" Caption="Selected records">
-                                    <Head>
-                                        <th>Record</th>
-                                        <th>Kind</th>
-                                        <th>Status</th>
-                                        <th class="num hide-narrow">Revision</th>
-                                        <th>Correction note</th>
-                                    </Head>
-                                    <Row Context="item">
-                                        <td><a class="cell-title" href="@RecordRoutes.Editor(item.Kind, item.RecordId)">@DraftStatusDisplay.DraftName(item.Headline)</a></td>
-                                        <td>@PublishedRecordLabels.Kind(item.Kind)</td>
-                                        <td>
-                                            <StatusBadge Tone="@(item.NeedsNote ? Tone.Warn : Tone.Ok)" Text="@(item.IsWithdrawn ? "Returning" : item.IsReplacement ? "Replacement" : "New")" />
-                                            @if (item.NoLongerMatches)
-                                            {
-                                                <StatusBadge Tone="Tone.Warn" Text="No longer matches" />
-                                            }
-                                        </td>
-                                        <td class="num hide-narrow">@item.RevisionNumber</td>
-                                        <td>
-                                            @if (item.NeedsNote)
-                                            {
-                                                <textarea class="plain" form="publish-confirm" name="@($"notes[{item.Reference}]")" maxlength="@PublishedCorrection.MaximumNoteLength" rows="2" aria-label="@($"Correction note for {DraftStatusDisplay.DraftName(item.Headline)}")"></textarea>
-                                            }
-                                        </td>
-                                    </Row>
-                                </DataTable>
-                                <Toolbar>
-                                    <Button Href="/Review#publish">Change selection</Button>
-                                    <Button Variant="ButtonVariant.Primary" Type="submit" form="publish-confirm">@($"Publish release {nextReleaseNumber}")</Button>
-                                </Toolbar>
-                            }
-                            else
-                            {
-                                <form id="publish-select" method="get" action="/Review#publish"></form>
-                                <DataTable Items="ready.Items" Caption="Records ready to publish">
-                                    <Head>
-                                        <th class="fit"><span class="visually-hidden">Select</span></th>
-                                        <th>Record</th>
-                                        <th>Kind</th>
-                                        <th>Status</th>
-                                        <th class="num hide-narrow">Revision</th>
-                                    </Head>
-                                    <Row Context="item">
-                                        <td class="fit">
-                                            @if (item.IsSelectable)
-                                            {
-                                                <input type="checkbox" form="publish-select" name="publish" value="@item.Reference" aria-label="@($"Select {DraftStatusDisplay.DraftName(item.Headline)}")" />
-                                            }
-                                        </td>
-                                        <td><a class="cell-title" href="@RecordRoutes.Editor(item.Kind, item.RecordId)">@DraftStatusDisplay.DraftName(item.Headline)</a></td>
-                                        <td>@PublishedRecordLabels.Kind(item.Kind)</td>
-                                        <td>
-                                            @if (item.IsWithdrawn)
-                                            {
-                                                <StatusBadge Tone="Tone.Warn" Text="@(item.CanReturn ? "Withdrawn, can return" : "Withdrawn")" />
-                                                @if (!item.CanReturn)
-                                                {
-                                                    <span class="actions-hint">Revise it in review and approve the new revision before it can return.</span>
-                                                }
-                                            }
-                                            else
-                                            {
-                                                <StatusBadge Tone="@(item.IsReplacement ? Tone.Warn : Tone.Ok)" Text="@(item.IsReplacement ? "Replacement" : "New")" />
-                                            }
-                                            @if (item.NoLongerMatches)
-                                            {
-                                                <StatusBadge Tone="Tone.Warn" Text="No longer matches" />
-                                            }
-                                        </td>
-                                        <td class="num hide-narrow">@item.RevisionNumber</td>
-                                    </Row>
-                                    <Empty>
-                                        <EmptyState Title="Nothing is ready to publish" Text="Approved records show here until a release holds them. A new revision of a published record shows as a replacement." />
-                                    </Empty>
-                                </DataTable>
-                                @if (ready.Items.Length > 0)
-                                {
-                                    <Toolbar>
-                                        <Button Variant="ButtonVariant.Primary" Type="submit" form="publish-select">Review selection</Button>
-                                    </Toolbar>
-                                }
-                            }
-                        </ChildContent>
-                    </Panel>
                     <Panel Title="Blocked by review" Id="blocked">
                         <Aside>@Count(blocked!.Count, "record", "records")</Aside>
                         <ChildContent>
@@ -300,12 +184,6 @@
                             </DataTable>
                         </ChildContent>
                     </Panel>
-                }
-                else if (publishingOff)
-                {
-                    <Notice Tone="Tone.Warn" Title="Publishing is off" id="publish">
-                        Set CIVIC_LENS_RELEASE_DIRECTORY, CIVIC_LENS_COLLECTION_CONFIG, and CIVIC_LENS_ISSUES_CONFIG, then restart the workspace.
-                    </Notice>
                 }
             </div>
 

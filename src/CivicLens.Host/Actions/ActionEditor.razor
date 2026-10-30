@@ -172,7 +172,7 @@ else
         </Panel>
 
         <ReviewDecisionPanel RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="review.CurrentStatus"
-                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" OnDecide="DecideAsync">
+                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" CorrectionNote="@Decision?.CorrectionNote" OnDecide="DecideAsync">
             <Checklist>
                 <ul class="checklist">
                     <li>Does the headline name only officials in the sponsorships?</li>

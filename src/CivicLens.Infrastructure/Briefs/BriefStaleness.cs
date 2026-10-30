@@ -67,7 +67,7 @@ internal static class BriefStaleness
     {
         records = [.. records.Where(record => BriefCitationKinds.IsCitable(record.Kind))];
         if (records.Length == 0) return;
-        var briefIds = await db.Database.SqlQueryRaw<string>(ReadStaleBriefIdsSql, records.Select(record => record.Kind.ToString()).ToArray(),
+        var briefIds = await db.Database.SqlQueryRaw<string>(ReadStaleBriefIdsSql, records.Select(record => PublishedRecordReference.NameOf(record.Kind)).ToArray(),
             records.Select(record => record.RecordId).ToArray(), BriefDraftTask.Task).ToArrayAsync(cancellationToken);
         if (briefIds.Length == 0) return;
         _ = await queue.RequeueInAsync(db, RequeuedStates, briefIds, cancellationToken);

@@ -38,6 +38,7 @@ internal sealed class PublicationScenario
 {
     public static readonly ReviewActor Owner = new("owner", ReviewRole.Owner);
     public static readonly ReviewActor Reviewer = new("reviewer", ReviewRole.Reviewer);
+    public const string PersonNote = "Fixed.";
     public static readonly DateTimeOffset ApprovedAt = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     public List<string> Events { get; } = [];
@@ -186,9 +187,6 @@ internal sealed class PublicationScenario
 
     public static PublishReleaseRequest Request(string key, params PublishedRecordReference[] records) => new([.. records], key);
 
-    public static PublishReleaseRequest WithNotesFor(PublishReleaseRequest request, params PublishedRecordReference[] replaced) =>
-        request with { Notes = [.. replaced.Select(record => new RecordNote(record.Kind, record.RecordId, "Fixed."))] };
-
     public string AddDraft(char id, ImmutableArray<ReviewDecision>? decisions = null, string[]? officialIds = null,
         int citationStart = 6)
     {
@@ -210,7 +208,7 @@ internal sealed class PublicationScenario
     }
 
     public string AddStatement(char id, ImmutableArray<ReviewDecision>? decisions = null, string[]? speakerIds = null,
-        int revisionNumber = 1, DateOnly? statementDate = null, string? feedUrl = null, string author = "author")
+        int revisionNumber = 1, DateOnly? statementDate = null, string? feedUrl = null, string author = "author", string? correctionNote = null)
     {
         var candidateId = new string(id, 64);
         var extraction = Extraction($"Mayor said: housing matters.\nOther text {id}.\n", $"statement-{id}", feedUrl ?? StatementArticleUrl);
@@ -218,7 +216,7 @@ internal sealed class PublicationScenario
             statementDate is null ? null : new SourceSpan(extraction.ExtractionId, 0, 5),
             [.. speakerIds ?? ["mayor"]], ["Council Member"], ["housing"], ["land-use"],
             [new(new(extraction.ExtractionId, 12, 15), StatementQuotationKind.DirectQuotation)], ["HB 12"]);
-        var all = decisions ?? [Decision(candidateId, 1, ReviewDecisionKind.Approve, revisionNumber)];
+        var all = decisions ?? [Decision(candidateId, 1, ReviewDecisionKind.Approve, revisionNumber) with { CorrectionNote = correctionNote }];
         var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
         var review = new StatementReview(candidateId, revision, all.Length, ReviewPolicy.GetCurrentStatus(revisionNumber, all, concerns),
             [revision], all, concerns);
@@ -257,10 +255,11 @@ internal sealed class PublicationScenario
         return recordId;
     }
 
-    public void ReviseAction(string recordId, int revisionNumber, string? approverSubject = null)
+    public void ReviseAction(string recordId, int revisionNumber, string? approverSubject = null, string? correctionNote = PersonNote)
     {
         var publishable = Actions.Publishable[recordId];
         var review = publishable.Review;
+        var approver = approverSubject ?? review.Decisions[^1].ActorSubject;
         var revised = review.CurrentRevision with { RevisionNumber = revisionNumber, TrackedIssueIds = [$"issue-{revisionNumber}"], IssueCandidateIds = [$"issue-{revisionNumber}"] };
         Actions.Publishable[recordId] = publishable with
         {
@@ -271,14 +270,15 @@ internal sealed class PublicationScenario
                 Decisions = review.Decisions.Add(Decision(recordId, revisionNumber, ReviewDecisionKind.Approve) with
                 {
                     RevisionNumber = revisionNumber,
-                    ActorSubject = approverSubject ?? review.Decisions[^1].ActorSubject
+                    ActorSubject = approver,
+                    CorrectionNote = ReviewAuthor.IsCode(approver) ? null : correctionNote
                 }),
                 ReviewStateVersion = revisionNumber
             }
         };
     }
 
-    public void ReviseVote(string recordId, int revisionNumber)
+    public void ReviseVote(string recordId, int revisionNumber, string? correctionNote = PersonNote)
     {
         var publishable = Votes.Publishable[recordId];
         var review = publishable.Review;
@@ -289,7 +289,7 @@ internal sealed class PublicationScenario
             {
                 CurrentRevision = revised,
                 Revisions = review.Revisions.Add(revised),
-                Decisions = review.Decisions.Add(Decision(recordId, revisionNumber, ReviewDecisionKind.Approve) with { RevisionNumber = revisionNumber }),
+                Decisions = review.Decisions.Add(Decision(recordId, revisionNumber, ReviewDecisionKind.Approve) with { RevisionNumber = revisionNumber, CorrectionNote = correctionNote }),
                 ReviewStateVersion = revisionNumber
             }
         };
@@ -352,7 +352,7 @@ internal sealed class PublicationScenario
             ReviewPolicy.GetCurrentStatus(1, all, concerns), all, concerns);
         ExecutiveActions.Publishable[recordId] = new(review, ImmutableDictionary.CreateRange(StringComparer.Ordinal,
             extractions.Select(item => KeyValuePair.Create(item.ExtractionId, item))));
-        if (unpublished) ExecutiveActions.Unpublished.Add(new(review, null));
+        if (unpublished) ExecutiveActions.Unpublished.Add(new(review));
         return recordId;
     }
 
@@ -365,7 +365,7 @@ internal sealed class PublicationScenario
     }
 
     public string AddRelationship(char id, string statementId, string targetId, PublishedRecordKind targetKind = PublishedRecordKind.Action,
-        ReviewDecisionKind decision = ReviewDecisionKind.Approve, int statementRevision = 1, int targetRevision = 1, int revisionNumber = 1, SourceSpan? quoteSpan = null)
+        ReviewDecisionKind decision = ReviewDecisionKind.Approve, int statementRevision = 1, int targetRevision = 1, int revisionNumber = 1, SourceSpan? quoteSpan = null, string? correctionNote = null)
     {
         var recordId = new string(id, 64);
         var statement = Statements.Publishable[statementId];
@@ -379,7 +379,7 @@ internal sealed class PublicationScenario
             new(RelationshipMatchBasis.BillNumber, quote),
             targetKind == PublishedRecordKind.Action ? RelationshipType.DescribesOwnBill : RelationshipType.StatementAboutVote,
             $"Statement {id} describes the record.", quote, "F2", statementRevisionRecord.SpeakerOfficialIds[0]);
-        var all = ImmutableArray.Create(Decision(recordId, 1, decision, revisionNumber));
+        var all = ImmutableArray.Create(Decision(recordId, 1, decision, revisionNumber) with { CorrectionNote = correctionNote });
         var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
         var review = new RelationshipReview(recordId, revision, [revision], 1, ReviewPolicy.GetCurrentStatus(revisionNumber, all, concerns), all,
             concerns, false);

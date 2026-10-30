@@ -65,13 +65,11 @@ public sealed class PublishBriefTests
     {
         var scenario = new PublicationScenario();
         var statement = await PublishStatementAsync(scenario);
-        scenario.AddStatement('c', revisionNumber: 2);
+        scenario.AddStatement('c', revisionNumber: 2, correctionNote: PublicationScenario.PersonNote);
         var brief = scenario.AddBrief(Week, [Cite(statement, 1)]);
 
         await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-            PublicationScenario.WithNotesFor(
-                PublicationScenario.Request("k2", Reference(PublishedRecordKind.Statement, statement), Reference(PublishedRecordKind.Brief, brief)),
-                Reference(PublishedRecordKind.Statement, statement))));
+            PublicationScenario.Request("k2", Reference(PublishedRecordKind.Statement, statement), Reference(PublishedRecordKind.Brief, brief))));
 
         Assert.Equal(1, scenario.Releases.BeginCount);
     }
@@ -95,12 +93,11 @@ public sealed class PublishBriefTests
     {
         var scenario = new PublicationScenario();
         var statement = await PublishStatementAsync(scenario);
-        scenario.AddStatement('c', revisionNumber: 2);
+        scenario.AddStatement('c', revisionNumber: 2, correctionNote: PublicationScenario.PersonNote);
         var brief = scenario.AddBrief(Week, [Cite(statement, 2)]);
 
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.WithNotesFor(
-            PublicationScenario.Request("k2", Reference(PublishedRecordKind.Statement, statement), Reference(PublishedRecordKind.Brief, brief)),
-            Reference(PublishedRecordKind.Statement, statement)));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k2", Reference(PublishedRecordKind.Statement, statement), Reference(PublishedRecordKind.Brief, brief)));
 
         Assert.Equal([new PublishedRevisionBinding(PublishedRecordKind.Statement, statement, 2)],
             scenario.Briefs.ReleaseRecordsAtLastRead.Where(binding => binding.Kind == PublishedRecordKind.Statement));

@@ -46,8 +46,6 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
     public PostgresDocumentComparisonStore Comparisons { get; private set; } = null!;
     public string OfficialId { get; init; } = "person";
     public string OfficialName { get; init; } = "Test Official";
-    public bool Publishing { get; init; } = true;
-    public bool IssuesFile { get; init; } = true;
     public IssueConfiguration? Issues { get; init; }
 
     public async Task StartAsync()
@@ -93,18 +91,11 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
                "allowedPathPrefix":"/pages","documentProfileId":"main"}]}
             """);
         start.Environment["CIVIC_LENS_COLLECTION_CONFIG"] = collectionPath;
-        if (Publishing)
-        {
-            start.Environment["CIVIC_LENS_RELEASE_DIRECTORY"] = ReleaseDirectory;
-            start.Environment["CIVIC_LENS_ARTIFACT_DIRECTORY"] = ArtifactDirectory;
-        }
-        var issues = Issues ?? (IssuesFile ? IssueConfiguration.None : null);
-        if (issues is not null)
-        {
-            var issuesPath = Path.Combine(KeyDirectory, "issues.json");
-            await File.WriteAllTextAsync(issuesPath, JsonSerializer.Serialize(issues, CollectionProtocol.JsonOptions));
-            start.Environment["CIVIC_LENS_ISSUES_CONFIG"] = issuesPath;
-        }
+        start.Environment["CIVIC_LENS_RELEASE_DIRECTORY"] = ReleaseDirectory;
+        start.Environment["CIVIC_LENS_ARTIFACT_DIRECTORY"] = ArtifactDirectory;
+        var issuesPath = Path.Combine(KeyDirectory, "issues.json");
+        await File.WriteAllTextAsync(issuesPath, JsonSerializer.Serialize(Issues ?? IssueConfiguration.None, CollectionProtocol.JsonOptions));
+        start.Environment["CIVIC_LENS_ISSUES_CONFIG"] = issuesPath;
         process = Process.Start(start)!;
         output = process.StandardOutput.ReadToEndAsync();
         process.ErrorDataReceived += (_, line) =>

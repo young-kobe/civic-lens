@@ -19,7 +19,7 @@ internal sealed class ActionRecordLoader(IActionReviewStore actions)
 
     protected override ReadyToPublishRecord? ToReady(UnpublishedApprovedAction candidate) =>
         Ready(candidate.Action.CurrentStatus, candidate.Action.UnresolvedConcerns.Length, candidate.Action.RecordId,
-            candidate.Action.CurrentRevision.Headline, candidate.Action.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber);
+            candidate.Action.CurrentRevision.RevisionNumber);
 
     protected override Task<IReadOnlyDictionary<string, PublishableAction>> GetForPublicationAsync(
         ImmutableArray<string> recordIds, PublicationBuild build, CancellationToken cancellationToken) =>
@@ -28,7 +28,7 @@ internal sealed class ActionRecordLoader(IActionReviewStore actions)
     protected override PendingRecord Build(string recordId, PublishableAction addition, PublicationBuild build)
     {
         var review = addition.Review;
-        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
+        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build);
         var record = new PublishedActionBuilder(build.Rules).Build(addition, build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId, review.CurrentRevision.RevisionNumber, review.Decisions), build.Now);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
             (related, cancellationToken) => build.Renderer.RenderActionAsync(record, related, build.Catalog, cancellationToken));

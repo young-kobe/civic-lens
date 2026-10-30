@@ -6,7 +6,7 @@ namespace CivicLens.Application.Publication;
 
 internal sealed class PublishedRelationshipBuilder(PublishedRecordRules rules)
 {
-    public static string HeadlineOf(string statementHeadline, string targetHeadline) => $"{statementHeadline} and {targetHeadline}";
+    private static string HeadlineOf(string statementHeadline, string targetHeadline) => $"{statementHeadline} and {targetHeadline}";
 
     public PublishedRelationship Build(PublishableRelationship relationship, DateTimeOffset? firstPublishedAtUtc, PublishedCorrection[] corrections, DateTimeOffset now)
     {

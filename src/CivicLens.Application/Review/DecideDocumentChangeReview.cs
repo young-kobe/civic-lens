@@ -12,7 +12,7 @@ public sealed class DecideDocumentChangeReview(IDocumentChangeReviewStore store,
         ReviewValidation.ValidateIdempotencyKey(request.IdempotencyKey);
         var draftId = ReviewValidation.ValidateDraftId(request.DraftId);
         var decision = ReviewValidation.CreateDecision(actor, draftId, request.ExpectedRevisionNumber,
-            request.ExpectedReviewStateVersion, request.Kind, request.Note, request.ResolvedDecisionIds);
+            request.ExpectedReviewStateVersion, request.Kind, request.Note, request.ResolvedDecisionIds, request.CorrectionNote);
         return store.DecideAsync(actor.Subject, decision, request.ExpectedRevisionNumber,
             request.ExpectedReviewStateVersion, request.IdempotencyKey, ReviewValidation.HashPayload(request),
             catalog.OfficialIds, catalog.IssueIds, cancellationToken);

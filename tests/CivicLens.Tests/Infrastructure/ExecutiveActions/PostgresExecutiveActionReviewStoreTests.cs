@@ -64,7 +64,6 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         var publishable = (await store.GetForPublicationAsync([recordId], default))[recordId];
 
         Assert.Equal(recordId, listed.Action.RecordId);
-        Assert.Null(listed.PublishedRevisionNumber);
         Assert.Equal(ReviewStatus.Approved, publishable.Review.CurrentStatus);
         Assert.Single(publishable.Extractions);
         Assert.Empty(await store.ListUnpublishedApprovedAsync(10, [recordId], default));
