@@ -23,11 +23,9 @@ public sealed record VotesWithParty(PublishedChamber Chamber, string Party, int 
         vote.SplitVote && vote.PartyMajority is { } majority && IsAgainstPartyMajority(vote.Party, vote.Cast, majority);
 
     public static bool IsAgainstPartyMajority(string party, string cast, string partyMajority) =>
-        IsMajorParty(party) && PublishedOfficialVote.SideOf(cast) is { } side && side != partyMajority;
+        PublishedPartyMajority.IsMajorParty(party) && PublishedOfficialVote.SideOf(cast) is { } side && side != partyMajority;
 
-    private static bool HasMajorParty(PublishedOfficialVote vote) => IsMajorParty(vote.Party);
-
-    private static bool IsMajorParty(string party) => party is PublishedPartyMajority.Democrat or PublishedPartyMajority.Republican;
+    private static bool HasMajorParty(PublishedOfficialVote vote) => PublishedPartyMajority.IsMajorParty(vote.Party);
 
     private static VotesWithParty From(PublishedChamber chamber, string party, PublishedOfficialVote[] splitVotes)
     {
