@@ -206,9 +206,8 @@ public sealed class ReleaseRendererTests
         Assert.Contains("Bills they sponsored: ", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Too few records", text, StringComparison.Ordinal);
         Assert.Contains("A missed vote means the official did not vote on it. The count includes procedural votes. It counts only the roll calls on this site, which can be fewer than the chamber held.", text, StringComparison.Ordinal);
-        Assert.Contains("A roll call that is not on this site is not counted.", text, StringComparison.Ordinal);
         Assert.DoesNotContain("all roll calls of the current Congress", text, StringComparison.Ordinal);
-        Assert.Contains("A roll call that was not published is in neither number.", text, StringComparison.Ordinal);
+        Assert.Contains("A roll call that is not on this site is in neither number.", text, StringComparison.Ordinal);
         Assert.Contains("A split vote is a substantive roll call vote where most Democrats and most Republicans voted on opposite sides.", text, StringComparison.Ordinal);
         Assert.Contains($"on at least {TalkAndActionProfile.MinimumRecordsForShare} split votes", text, StringComparison.Ordinal);
         Assert.Contains("policy area of the bill in Congress.gov", text, StringComparison.Ordinal);
