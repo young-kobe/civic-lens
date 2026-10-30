@@ -1241,7 +1241,7 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task AnEmptyListHasNoRecordsFilterMarkup()
+    public async Task AnEmptyListWithNoProfileHasNoRecordsFilterMarkup()
     {
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([], []), PublicationCatalogs.None, CancellationToken.None);
 
