@@ -159,10 +159,10 @@
 
                 @if (blocked is not null)
                 {
-                    <Panel Title="Blocked by review" Id="blocked">
+                    <Panel Title="Blocked from publishing" Id="blocked">
                         <Aside>@Count(blocked!.Count, "record", "records")</Aside>
                         <ChildContent>
-                            <DataTable Items="blocked" Caption="Published records that review blocked">
+                            <DataTable Items="blocked" Caption="Published records blocked from publishing">
                                 <Head>
                                     <th>Record</th>
                                     <th>Kind</th>
@@ -173,13 +173,21 @@
                                     <td><a class="cell-title" href="@RecordRoutes.Editor(item.Kind, item.RecordId)">@DraftStatusDisplay.DraftName(item.Headline)</a></td>
                                     <td>@PublishedRecordLabels.Kind(item.Kind)</td>
                                     <td>
-                                        <StatusBadge Tone="Tone.Warn" Text="@DraftStatusDisplay.LabelWithoutCount(item.ReviewStatus)" />
-                                        <span class="actions-hint">To take it out of the release, run <code>releases publish &lt;key&gt; --withdraw @item.Reference "note"</code>.</span>
+                                        @if (item.Reason == BlockedReason.CorrectionLimit)
+                                        {
+                                            <StatusBadge Tone="Tone.Warn" Text="Cannot publish" />
+                                            <span class="actions-hint">@BlockedPublishedRecord.CorrectionLimitText</span>
+                                        }
+                                        else
+                                        {
+                                            <StatusBadge Tone="Tone.Warn" Text="@DraftStatusDisplay.LabelWithoutCount(item.ReviewStatus)" />
+                                            <span class="actions-hint">To take it out of the release, run <code>releases publish &lt;key&gt; --withdraw @item.Reference "note"</code>.</span>
+                                        }
                                     </td>
                                     <td class="num hide-narrow">@item.PublishedRevisionNumber</td>
                                 </Row>
                                 <Empty>
-                                    <EmptyState Title="No published record is blocked" Text="A published record shows here when review withdraws its approval, asks for changes, or opens a concern." />
+                                    <EmptyState Title="No published record is blocked" Text="A published record shows here when review withdraws its approval, asks for changes, or opens a concern. It also shows here when a person revision cannot publish because the record holds the most corrections with a note." />
                                 </Empty>
                             </DataTable>
                         </ChildContent>

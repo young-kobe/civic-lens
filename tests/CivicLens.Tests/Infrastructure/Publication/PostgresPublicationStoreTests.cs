@@ -700,11 +700,37 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         {
             await SetReviewStatusAsync(kind, recordId, status);
 
-            var statuses = await publications.ReadReviewStatusesAsync([reference, missing], default);
+            var statuses = await publications.ReadReviewStatusesAsync(
+                [new(kind, recordId, 1), new(kind, missing.RecordId, 1)], default);
 
-            Assert.Equal(status, Assert.Single(statuses).Value);
+            Assert.Equal(status, Assert.Single(statuses).Value.ReviewStatus);
             Assert.Equal(reference, Assert.Single(statuses).Key);
         }
+    }
+
+    [Theory]
+    [MemberData(nameof(AllKinds))]
+    public async Task TheApprovalActorQueryRunsForEveryKindAndAKindWithNoDecisionRowGivesNoActor(PublishedRecordKind kind)
+    {
+        var recordId = await SeedDraftAsync(kind);
+        await SetReviewStatusAsync(kind, recordId, ReviewStatus.Approved);
+
+        var read = await publications.ReadReviewStatusesAsync([new(kind, recordId, 0)], default);
+
+        Assert.Equal(ReviewStatus.Approved, Assert.Single(read).Value.ReviewStatus);
+    }
+
+    [Fact]
+    public async Task TheStatusReadNamesTheActorOfTheLatestApprovalOnlyForAnApprovedRevisionThatTheReleaseDoesNotHold()
+    {
+        var draft = await CreateApprovedDraftAsync("actor");
+        var reference = new PublishedRecordReference(PublishedRecordKind.DocumentChange, draft.DraftId);
+
+        var held = await publications.ReadReviewStatusesAsync([new(reference.Kind, reference.RecordId, draft.RevisionNumber)], default);
+        var unpublished = await publications.ReadReviewStatusesAsync([new(reference.Kind, reference.RecordId, draft.RevisionNumber - 1)], default);
+
+        Assert.Null(held[reference].UnpublishedApprovalActor);
+        Assert.Equal(Owner.Subject, unpublished[reference].UnpublishedApprovalActor);
     }
 
     [Theory]
@@ -726,7 +752,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
             FirstPublishedAtUtc = PublishedAt
         };
 
-        var listed = (await new BlockedPublishedRecords(publications).FindAsync([entry], default)).Count == 1;
+        var listed = (await new BlockedPublishedRecords(publications, new FileReleaseDirectory(Path.GetTempPath())).FindAsync("none", [entry], default)).Count == 1;
         var failure = await Record.ExceptionAsync(() => publications.CommitAsync(Owner.Subject,
             WithdrawalCommit(1, null, kind, recordId), "key", Hash(1), default));
 

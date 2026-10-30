@@ -13,4 +13,11 @@ internal static class ReviewTables
         PublishedRecordKind.ExecutiveAction => ("executive_action_revisions", "executive_action_review_decisions", "record_id"),
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no revision tables.")
     };
+
+    public static (string Table, string IdColumn) DecisionsFor(PublishedRecordKind kind) => kind switch
+    {
+        PublishedRecordKind.Relationship => ("relationship_review_decisions", "record_id"),
+        PublishedRecordKind.Brief => ("brief_review_decisions", "record_id"),
+        _ => (For(kind).Decisions, For(kind).IdColumn)
+    };
 }

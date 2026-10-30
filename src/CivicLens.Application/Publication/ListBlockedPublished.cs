@@ -12,6 +12,6 @@ public sealed class ListBlockedPublished(IPublicationStore publications, IReleas
         var active = (await publications.GetStateAsync(cancellationToken)).Active;
         if (active is null) return [];
         var manifest = await PreviousRelease.LoadManifestAsync(releases, active, cancellationToken);
-        return await blocked.FindAsync(manifest.Records, cancellationToken);
+        return await blocked.FindAsync(active.DirectoryName, manifest.Records, cancellationToken);
     }
 }

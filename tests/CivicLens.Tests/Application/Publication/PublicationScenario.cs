@@ -92,7 +92,7 @@ internal sealed class PublicationScenario
         new PublicationCatalog(OfficialNames, Issues), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, Photos, () => PhotoReads++), new FixedExecutiveRoster(ExecutiveOfficials)),
         Captures.Photos("artifacts"), Clock, new PruneReleases(Publications, Releases, NullLogger<PruneReleases>.Instance));
 
-    public BlockedPublishedRecords Blocked() => new(Publications);
+    public BlockedPublishedRecords Blocked() => new(Publications, Releases);
 
     public ListBlockedPublished BlockedLister() => new(Publications, Releases, Blocked());
 
@@ -493,6 +493,8 @@ internal sealed class FakePublicationStore : IPublicationStore
     public PublicationReleaseSummary? ConcurrentWinner { get; set; }
 
     public Dictionary<PublishedRecordReference, ReviewStatus> ReviewStatuses { get; } = [];
+    public Dictionary<PublishedRecordReference, (int RevisionNumber, string Actor)> UnpublishedApprovals { get; } = [];
+    public List<IReadOnlyCollection<PublishedRevisionBinding>> StatusReads { get; } = [];
     public int? ActiveReleaseNumber { get; set; }
     public Action? BeforeServe { get; set; }
     public Exception? FailOnPrune { get; set; }
@@ -543,10 +545,22 @@ internal sealed class FakePublicationStore : IPublicationStore
         }
     }
 
-    public Task<IReadOnlyDictionary<PublishedRecordReference, ReviewStatus>> ReadReviewStatusesAsync(
-        IReadOnlyCollection<PublishedRecordReference> records, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyDictionary<PublishedRecordReference, ReviewStatus>>(
-            records.Where(ReviewStatuses.ContainsKey).ToDictionary(record => record, record => ReviewStatuses[record]));
+    public Task<IReadOnlyDictionary<PublishedRecordReference, ReviewedRecord>> ReadReviewStatusesAsync(
+        IReadOnlyCollection<PublishedRevisionBinding> published, CancellationToken cancellationToken)
+    {
+        StatusReads.Add(published);
+        return Task.FromResult<IReadOnlyDictionary<PublishedRecordReference, ReviewedRecord>>(published
+            .Where(record => ReviewStatuses.ContainsKey(new(record.Kind, record.RecordId)))
+            .ToDictionary(record => new PublishedRecordReference(record.Kind, record.RecordId), record => ReviewedRecordOf(record)));
+    }
+
+    private ReviewedRecord ReviewedRecordOf(PublishedRevisionBinding record)
+    {
+        var reference = new PublishedRecordReference(record.Kind, record.RecordId);
+        return UnpublishedApprovals.TryGetValue(reference, out var approval)
+            ? new(ReviewStatuses[reference], approval.RevisionNumber, approval.Actor)
+            : new(ReviewStatuses[reference], record.RevisionNumber, null);
+    }
 
     public Task<IReadOnlyList<PublicationReleaseSummary>> ListAsync(int limit, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<PublicationReleaseSummary>>([.. Committed.AsEnumerable().Reverse().Take(limit)]);
