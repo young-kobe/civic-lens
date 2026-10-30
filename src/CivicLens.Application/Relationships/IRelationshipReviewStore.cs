@@ -23,7 +23,8 @@ public interface IRelationshipReviewStore
 
     Task<RelationshipReviewCounts> CountAsync(CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<UnpublishedApprovedRelationship>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken);
+    Task<IReadOnlyList<UnpublishedApprovedRelationship>> ListUnpublishedApprovedAsync(int limit, IReadOnlyCollection<string> excludedRecordIds,
+        CancellationToken cancellationToken);
 
     Task<IReadOnlySet<string>> FindCitingAsync(ImmutableArray<string> relationshipIds, ImmutableArray<PublishedRecordReference> cited,
         CancellationToken cancellationToken);

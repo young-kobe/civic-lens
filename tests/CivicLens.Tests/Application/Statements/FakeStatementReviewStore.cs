@@ -70,11 +70,13 @@ internal sealed class FakeStatementReviewStore : IStatementReviewStore
     public int UnpublishedLimit { get; private set; }
     public int UnpublishedReadCount { get; private set; }
 
-    public Task<IReadOnlyList<UnpublishedApprovedStatement>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<UnpublishedApprovedStatement>> ListUnpublishedApprovedAsync(int limit,
+        IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken)
     {
         UnpublishedReadCount++;
         UnpublishedLimit = limit;
-        return Task.FromResult<IReadOnlyList<UnpublishedApprovedStatement>>([.. Unpublished.Take(limit)]);
+        return Task.FromResult<IReadOnlyList<UnpublishedApprovedStatement>>([.. Unpublished
+            .Where(item => !excludedRecordIds.Contains(item.Statement.CandidateId)).Take(limit)]);
     }
 
     public Task<IReadOnlyDictionary<string, PublishableStatement>> GetForPublicationAsync(ImmutableArray<string> candidateIds,

@@ -23,7 +23,8 @@ public interface IBriefReviewStore
 
     Task<BriefReviewCounts> CountAsync(CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<UnpublishedApprovedBrief>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken);
+    Task<IReadOnlyList<UnpublishedApprovedBrief>> ListUnpublishedApprovedAsync(int limit, IReadOnlyCollection<string> excludedRecordIds,
+        CancellationToken cancellationToken);
 
     Task<IReadOnlyDictionary<string, PublishableBrief>> GetForPublicationAsync(ImmutableArray<string> recordIds,
         ImmutableArray<PublishedRevisionBinding> releaseRecords, CancellationToken cancellationToken);

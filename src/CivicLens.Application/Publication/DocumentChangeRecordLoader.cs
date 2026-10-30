@@ -10,7 +10,8 @@ internal sealed class DocumentChangeRecordLoader(IDocumentChangeReviewStore revi
     public override void ValidateId(string recordId) => ReviewValidation.ValidateDraftId(recordId);
 
     protected override Task<IReadOnlyList<UnpublishedApprovedDraft>> ListCandidatesAsync(int limit,
-        CancellationToken cancellationToken) => reviews.ListUnpublishedApprovedDraftsAsync(limit, cancellationToken);
+        IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken) =>
+        reviews.ListUnpublishedApprovedDraftsAsync(limit, excludedRecordIds, cancellationToken);
 
     protected override ReadyToPublishRecord? ToReady(UnpublishedApprovedDraft candidate) =>
         Ready(candidate.Draft.CurrentStatus, candidate.Draft.UnresolvedConcernCount, candidate.Draft.DraftId,
@@ -24,7 +25,7 @@ internal sealed class DocumentChangeRecordLoader(IDocumentChangeReviewStore revi
     {
         var review = addition.Review;
         RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
-        var record = new PublishedRecordBuilder(build.Rules).Build(addition, build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId), build.Now);
+        var record = new PublishedRecordBuilder(build.Rules).Build(addition, build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId, review.CurrentRevision.RevisionNumber, review.Decisions), build.Now);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
             (_, cancellationToken) => build.Renderer.RenderRecordAsync(record, build.Catalog, cancellationToken));
     }

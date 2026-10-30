@@ -5,8 +5,8 @@ using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Application.Publication;
 
-public sealed class PublishCodeApprovedFacts(PublishRelease publish, IPublicationStore publications, PublishedRecordLoaders loaders,
-    ILogger<PublishCodeApprovedFacts> logger, WorkerBeat beat)
+public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationStore publications, PublishedRecordLoaders loaders,
+    ILogger<PublishApprovedRecords> logger, WorkerBeat beat)
 {
     private static readonly ReviewActor Actor = new(ReviewAuthor.CodeSubject, ReviewRole.Owner);
 
@@ -31,7 +31,7 @@ public sealed class PublishCodeApprovedFacts(PublishRelease publish, IPublicatio
             {
                 return published;
             }
-            catch (WithdrawnFactException exception)
+            catch (Exception exception) when (exception is WithdrawnFactException or MissingCorrectionNoteException or CorrectionLimitException)
             {
                 var record = UnpublishableRecord.Of(exception)!;
                 skipped.Add(record);
@@ -55,13 +55,27 @@ public sealed class PublishCodeApprovedFacts(PublishRelease publish, IPublicatio
     {
         var limit = PublishRelease.MaximumRecords;
         string[] excluded = [.. skipped.Select(record => record.RecordId)];
-        var actions = await loaders.Actions.ListCodeApprovedReadyAsync(limit, excluded, cancellationToken);
-        var votes = await loaders.Votes.ListCodeApprovedReadyAsync(limit, excluded, cancellationToken);
-        return [.. actions.Concat(votes).Take(limit)];
+        var reads = await Task.WhenAll(loaders.All.Select(loader => loader.ListReadyAsync(limit, excluded, cancellationToken)));
+        return ShareLimitBetweenKinds([.. reads.Select(read => read.Ready)], limit);
+    }
+
+    // Each kind gets an equal share of the limit. A kind with fewer ready records gives its unused share to the others.
+    internal static ImmutableArray<ReadyToPublishRecord> ShareLimitBetweenKinds(IReadOnlyList<ReadyToPublishRecord>[] kinds, int limit)
+    {
+        var counts = new int[kinds.Length];
+        var remaining = limit;
+        var smallestFirst = Enumerable.Range(0, kinds.Length).OrderBy(kind => kinds[kind].Count).ToArray();
+        for (var position = 0; position < smallestFirst.Length; position++)
+        {
+            var kind = smallestFirst[position];
+            counts[kind] = Math.Min(kinds[kind].Count, remaining / (smallestFirst.Length - position));
+            remaining -= counts[kind];
+        }
+        return [.. kinds.SelectMany((ready, kind) => ready.Take(counts[kind]))];
     }
 
     // The key names each record and revision, so a retry after a crash replays the stored release.
     private static string KeyOf(ImmutableArray<ReadyToPublishRecord> ready) =>
-        "facts-" + ReviewValidation.HashPayload(ready
+        "approved-" + ReviewValidation.HashPayload(ready
             .Select(record => $"{record.Reference}@{record.RevisionNumber}").Order(StringComparer.Ordinal).ToArray());
 }

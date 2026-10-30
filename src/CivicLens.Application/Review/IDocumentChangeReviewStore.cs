@@ -25,7 +25,7 @@ public interface IDocumentChangeReviewStore
     Task<NewDocumentChangePage> ListEligibleComparisonsAsync(PageCursor? cursor, int limit,
         CancellationToken cancellationToken);
     Task<IReadOnlyList<UnpublishedApprovedDraft>> ListUnpublishedApprovedDraftsAsync(int limit,
-        CancellationToken cancellationToken);
+        IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken);
     Task<ReviewOverview> GetOverviewAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<ReviewActivityEvent>> ListRecentActivityAsync(int limit, CancellationToken cancellationToken);
 }

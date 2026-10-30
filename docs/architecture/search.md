@@ -175,7 +175,7 @@ The poll interval is 2 minutes and the statement timeout is 2 seconds. Both are 
 
 ### Operational pull
 
-- The worker runs the stage `reportPull` when `CIVIC_LENS_REPORT_PULL=1`. It ticks at start and then every 5 minutes by the database clock, from `PostgresIntervalWakeup`. The fact publishing stage uses the same class with a one hour interval. The settings are in [operations](../operations.md#reader-report-queue).
+- The worker runs the stage `reportPull` when `CIVIC_LENS_REPORT_PULL=1`. It ticks at start and then every 5 minutes by the database clock, from `PostgresIntervalWakeup`. The publishing stage uses the same class with a one hour interval. The settings are in [operations](../operations.md#reader-report-queue).
 - `StageWorker` runs `PullReaderReports` for each tick. The handler asks for a page with the saved cursor, checks the page, and stores it. It repeats until a page is empty or until the service sends the same cursor again. The queue is in [review](review.md#reader-reports).
 - `HttpReportPuller` is a concrete class at the service boundary, like `TurnstileVerifier`. It sends the bearer token and the opaque cursor. The service address may hold a path prefix, with or without a trailing slash. A call has a hard limit of 30 seconds. The client reads at most 4 MB of reply, as the release feed of the service caps its reads. A failed status, an unreadable reply, or a timeout throws, and the stage counts one failure. The token is in no message.
 - The application never parses or builds the cursor. It saves `NextCursor` as the service sent it and sends it back as the next `after` value.

@@ -8,17 +8,17 @@ The approved product direction serves regular citizens seeking transparency in U
 
 Each release holds the public pages: officials, official profiles, issues, weekly briefs, all records, about, method, reader reports, and photos. The owner can withdraw a published record from the CLI. The worker keeps a member roster with photos.
 
-Claude drafts document-change accounts and statement records inside daily token limits. A person edits, approves, and publishes each draft in an authenticated review workspace. Approved records publish as immutable static releases. A separate search service, `src/CivicLens.PublicApi`, reads each published release into its own Postgres database. It serves full-text search and a read API, and it takes reader reports; see [search](docs/architecture/search.md). The worker pulls those reports into a review queue, and a person resolves each one; see [review](docs/architecture/review.md#reader-reports).
+Claude drafts document-change accounts and statement records inside daily token limits. A person edits and approves each draft in an authenticated review workspace. Approved records publish as immutable static releases. A separate search service, `src/CivicLens.PublicApi`, reads each published release into its own Postgres database. It serves full-text search and a read API, and it takes reader reports; see [search](docs/architecture/search.md). The worker pulls those reports into a review queue, and a person resolves each one; see [review](docs/architecture/review.md#reader-reports).
 
-The worker drafts one action record for each tracked Congress.gov bill. Each record lists every tracked official's sponsorship and cosponsorship. Code approves each action record after it checks the citations. A person can edit or withdraw a record, and the owner publishes.
+The worker drafts one action record for each tracked Congress.gov bill. Each record lists every tracked official's sponsorship and cosponsorship. Code approves each action record after it checks the citations. A person can edit or withdraw a record.
 
-The worker collects House and Senate roll-call votes and drafts one vote record for each roll call. Each record lists the vote of every tracked member. Code approves each vote record after it checks the citations. A person can edit or withdraw a record on the vote pages. The owner publishes an approved vote record in a static release. When `CIVIC_LENS_FACT_PUBLISHING=1`, the worker publishes code-approved action and vote records each hour; see [publication](docs/architecture/publication.md#automatic-publication-of-facts).
+The worker collects House and Senate roll-call votes and drafts one vote record for each roll call. Each record lists the vote of every tracked member. Code approves each vote record after it checks the citations. A person can edit or withdraw a record on the vote pages. When `CIVIC_LENS_PUBLISHING=1`, the worker publishes every approved record in a static release each hour, whoever approved it; see [publication](docs/architecture/publication.md#automatic-publication). The owner can also publish by hand.
 
 The worker can also capture the public member roster once a day. It keeps offices and dated terms as tables that cite the capture. The `roster propose` command lists members to add to the configuration and people to review.
 
 The worker drafts a relationship for each pair of an approved statement and an approved action or vote that share an official and a bill. A person reviews each relationship. An approved relationship publishes in a static release, and the statement, action, and vote pages list it.
 
-The worker drafts one weekly brief for each closed week. It uses the records that releases published in that week. A person reviews and approves each brief. The owner publishes it with its cited records.
+The worker drafts one weekly brief for each closed week. It uses the records that releases published in that week. A person reviews and approves each brief. The worker publishes it after approval, when its citations are current in the active release.
 
 Live Auth0 verification, production deployment, and MCP are pending. See [status](docs/architecture.md#status) for the full list. The prior implementation is preserved in [civic-lens-legacy](https://github.com/young-kobe/civic-lens-legacy).
 

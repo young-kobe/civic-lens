@@ -16,10 +16,12 @@ internal sealed class FakeBriefReviewStore : IBriefReviewStore
     public int PublicationReadCount { get; private set; }
     public int UnpublishedLimit { get; private set; }
 
-    public Task<IReadOnlyList<UnpublishedApprovedBrief>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<UnpublishedApprovedBrief>> ListUnpublishedApprovedAsync(int limit,
+        IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken)
     {
         UnpublishedLimit = limit;
-        return Task.FromResult<IReadOnlyList<UnpublishedApprovedBrief>>([.. Unpublished.Take(limit)]);
+        return Task.FromResult<IReadOnlyList<UnpublishedApprovedBrief>>([.. Unpublished
+            .Where(item => !excludedRecordIds.Contains(item.Brief.RecordId)).Take(limit)]);
     }
 
     public Task<IReadOnlyDictionary<string, PublishableBrief>> GetForPublicationAsync(ImmutableArray<string> recordIds,

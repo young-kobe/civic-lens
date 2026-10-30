@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CivicLens.Tests.Application.Publication;
 
-public sealed class FactPublishingWorkerTests
+public sealed class PublishingWorkerTests
 {
     [Fact]
     public async Task AFailureThatIsNotAConflictIsReportedAndCountedSoTheOwnerSeesIt()
@@ -44,9 +44,9 @@ public sealed class FactPublishingWorkerTests
         return scenario;
     }
 
-    private static PublishCodeApprovedFacts Facts(PublicationScenario scenario) =>
-        new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), NullLogger<PublishCodeApprovedFacts>.Instance, TestBeat.Create());
+    private static PublishApprovedRecords Facts(PublicationScenario scenario) =>
+        new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), NullLogger<PublishApprovedRecords>.Instance, TestBeat.Create());
 
     private static StageWorker Worker(PublicationScenario scenario, ILogger<StageWorker> logger) =>
-        new("factPublishing", Facts(scenario).ExecuteAsync, new CountingWakeup(() => { }), logger, TestBeat.Create());
+        new("publishing", Facts(scenario).ExecuteAsync, new CountingWakeup(() => { }), logger, TestBeat.Create());
 }

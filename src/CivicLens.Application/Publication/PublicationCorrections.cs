@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Text.Json;
+using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
@@ -9,17 +10,15 @@ internal sealed class PublicationCorrections
 {
     private readonly PreviousRelease previous;
     private readonly DateTimeOffset now;
-    private readonly bool byCode;
     private readonly IReadOnlyDictionary<PublishedRecordReference, string> notes;
     private readonly IReadOnlyDictionary<PublishedRecordReference, PublishedCorrection[]> earlier;
 
-    private PublicationCorrections(PreviousRelease previous, DateTimeOffset now, bool byCode,
+    private PublicationCorrections(PreviousRelease previous, DateTimeOffset now,
         IReadOnlyDictionary<PublishedRecordReference, string> notes,
         IReadOnlyDictionary<PublishedRecordReference, PublishedCorrection[]> earlier)
     {
         this.previous = previous;
         this.now = now;
-        this.byCode = byCode;
         this.notes = notes;
         this.earlier = earlier;
     }
@@ -43,7 +42,7 @@ internal sealed class PublicationCorrections
     }
 
     public static async Task<PublicationCorrections> LoadAsync(IReleaseDirectory releases, PreviousRelease previous, DateTimeOffset now,
-        bool byCode, IReadOnlyDictionary<PublishedRecordReference, string> notes, ImmutableArray<PublishedRecordReference> records,
+        IReadOnlyDictionary<PublishedRecordReference, string> notes, ImmutableArray<PublishedRecordReference> records,
         CancellationToken cancellationToken)
     {
         var earlier = new Dictionary<PublishedRecordReference, PublishedCorrection[]>();
@@ -53,17 +52,18 @@ internal sealed class PublicationCorrections
             else if (previous.Find(record.Kind, record.RecordId) is not null)
                 earlier[record] = await ReadAsync(releases, previous.DirectoryName!, record, cancellationToken);
         }
-        return new(previous, now, byCode, notes, earlier);
+        return new(previous, now, notes, earlier);
     }
 
-    public PublishedCorrection[] For(PublishedRecordKind kind, string recordId)
+    // A code approval needs no note. A person approval that replaces a published record needs one.
+    public PublishedCorrection[] For(PublishedRecordKind kind, string recordId, int revisionNumber, ImmutableArray<ReviewDecision> decisions)
     {
         var reference = new PublishedRecordReference(kind, recordId);
         var note = notes.GetValueOrDefault(reference);
         var replacedRevision = previous.Find(kind, recordId)?.RevisionNumber ?? previous.FindWithdrawal(recordId)?.WithdrawnRevisionNumber;
         if (replacedRevision is not { } replaced)
             return note is null ? [] : throw new ArgumentException($"{reference} is not in the active release, so it takes no note.");
-        if (note is null && !byCode)
+        if (note is null && !PublishedRecordRules.IsApprovedByCode(revisionNumber, decisions))
             throw new MissingCorrectionNoteException(reference);
         var kept = earlier[reference];
         if (note is not null && PublishedCorrection.NotedCount(kept) >= PublishedCorrection.MaximumNotedEntries)

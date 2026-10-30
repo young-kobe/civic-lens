@@ -42,37 +42,24 @@ public sealed partial class PostgresBillStreamTests
     public async Task ACommittedActionLeavesTheReadyListBecauseTheReleaseRowCarriesTheActionKind()
     {
         await DraftAsync(UpdatedAt, DraftableOutput);
-        var ready = Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, default));
+        var ready = Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, [], default));
         Assert.Null(ready.PublishedRevisionNumber);
 
         await PostgresPublicationStore.FromConnectionString(connectionString).CommitAsync(PublicationScenario.Owner.Subject,
             ActionCommit(reviewStateVersion: 1), "key", ReleaseHash(1), default);
 
         Assert.Equal("action", await ScalarAsync("SELECT records_json::jsonb -> 0 ->> 'kind' FROM publication_releases"));
-        Assert.Empty(await ActionReviews().ListUnpublishedApprovedAsync(10, default));
+        Assert.Empty(await ActionReviews().ListUnpublishedApprovedAsync(10, [], default));
 
         await AddSponsorAsync(UpdatedAt.AddDays(1));
 
-        Assert.Equal(1, Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, default)).PublishedRevisionNumber);
-    }
-
-    [Fact]
-    public async Task TheCodeApprovedListFiltersInSqlSoAPersonApprovalNeverFillsItsLimit()
-    {
-        await DraftAsync(UpdatedAt, DraftableOutput);
-        Assert.Equal(RecordId, Assert.Single(await ActionReviews().ListCodeApprovedUnpublishedAsync(1, [], default)).Action.RecordId);
-
-        await ReopenAsync();
-        await DecideAsync(1, 0, ReviewDecisionKind.Approve);
-
-        Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(1, default));
-        Assert.Empty(await ActionReviews().ListCodeApprovedUnpublishedAsync(1, [], default));
+        Assert.Equal(1, Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, [], default)).PublishedRevisionNumber);
     }
 
     // The statistics describe one draft, as they do after a bulk load. Postgres then counts one release entry
     // and joins entries row by row, which takes more than 15 s for 15000 drafts.
     [Fact]
-    public async Task TheCodeApprovedListStaysFastWhenTheActiveReleaseHoldsThousandsOfActionsBecauseItLooksUpOneMapOfPublishedRevisions()
+    public async Task TheReadyListStaysFastWhenTheActiveReleaseHoldsThousandsOfActionsBecauseItLooksUpOneMapOfPublishedRevisions()
     {
         await DraftAsync(UpdatedAt, DraftableOutput);
         await ExecuteAsync(connectionString, """
@@ -97,7 +84,7 @@ public sealed partial class PostgresBillStreamTests
             """);
 
         var clock = Stopwatch.StartNew();
-        var ready = Assert.Single(await ActionReviews().ListCodeApprovedUnpublishedAsync(10, [], default));
+        var ready = Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, [], default));
         clock.Stop();
 
         Assert.Equal(RecordId, ready.Action.RecordId);
@@ -105,12 +92,12 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
-    public async Task TheCodeApprovedListLeavesOutTheExcludedIdsInSqlSoSkippedRecordsNeverFillItsLimit()
+    public async Task TheReadyListLeavesOutTheExcludedIdsInSqlSoSkippedRecordsNeverFillItsLimit()
     {
         await DraftAsync(UpdatedAt, DraftableOutput);
 
-        Assert.Empty(await ActionReviews().ListCodeApprovedUnpublishedAsync(1, [RecordId], default));
-        Assert.Single(await ActionReviews().ListCodeApprovedUnpublishedAsync(1, [new string('0', 64)], default));
+        Assert.Empty(await ActionReviews().ListUnpublishedApprovedAsync(1, [RecordId], default));
+        Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(1, [new string('0', 64)], default));
     }
 
     [Fact]

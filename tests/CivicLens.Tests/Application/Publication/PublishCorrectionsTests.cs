@@ -62,9 +62,9 @@ public sealed class PublishCorrectionsTests
     public async Task ARunOfCodeUpdatesStaysOneEntryThatNamesTheNewestReplacedRevision()
     {
         var (scenario, action) = await PublishedActionAsync();
-        scenario.ReviseAction(action, 2);
+        scenario.ReviseAction(action, 2, ReviewAuthor.CodeSubject);
         await scenario.Publisher().ExecuteAsync(Code, Request("k2", action));
-        scenario.ReviseAction(action, 3);
+        scenario.ReviseAction(action, 3, ReviewAuthor.CodeSubject);
         scenario.Clock.Now = scenario.Clock.Now.AddDays(1);
 
         var third = await scenario.Publisher().ExecuteAsync(Code, Request("k3", action));
@@ -79,7 +79,7 @@ public sealed class PublishCorrectionsTests
         var (scenario, action) = await PublishedActionAsync();
         scenario.ReviseAction(action, 2);
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", action, "Fix."));
-        scenario.ReviseAction(action, 3);
+        scenario.ReviseAction(action, 3, ReviewAuthor.CodeSubject);
 
         var third = await scenario.Publisher().ExecuteAsync(Code, Request("k3", action));
 
@@ -91,7 +91,7 @@ public sealed class PublishCorrectionsTests
     public async Task ACodeUpdateOfARecordAtTheNotedCapStillPublishesSoCodeFactsNeverStall()
     {
         var (scenario, action) = await WithNotedCorrectionsAsync(PublishedCorrection.MaximumNotedEntries);
-        scenario.ReviseAction(action, PublishedCorrection.MaximumNotedEntries + 2);
+        scenario.ReviseAction(action, PublishedCorrection.MaximumNotedEntries + 2, ReviewAuthor.CodeSubject);
 
         var next = await scenario.Publisher().ExecuteAsync(Code, Request("code", action));
 
@@ -193,15 +193,28 @@ public sealed class PublishCorrectionsTests
     }
 
     [Fact]
-    public async Task TheCodeSubjectWritesAnEntryWithoutANoteBecauseItOnlyRefreshesFromTheSource()
+    public async Task ACodeApprovalWritesAnEntryWithoutANoteBecauseItOnlyRefreshesFromTheSource()
     {
         var (scenario, action) = await PublishedActionAsync();
-        scenario.ReviseAction(action, 2);
+        scenario.ReviseAction(action, 2, ReviewAuthor.CodeSubject);
 
         var second = await scenario.Publisher().ExecuteAsync(Code, Request("k2", action));
 
         var entry = Assert.Single(ReadAction(scenario, second.DirectoryName, action).Corrections);
         Assert.Equal((1, null), (entry.ReplacedRevisionNumber, entry.Note));
+    }
+
+    [Fact]
+    public async Task APersonApprovalThatReplacesAPublishedRecordNeedsANoteEvenWhenTheCodeSubjectPublishesIt()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        scenario.ReviseAction(action, 2, "reviewer");
+
+        var exception = await Assert.ThrowsAsync<MissingCorrectionNoteException>(() =>
+            scenario.Publisher().ExecuteAsync(Code, Request("k2", action)));
+
+        Assert.Contains($"action:{action}", exception.Message);
+        Assert.Single(scenario.Publications.Committed);
     }
 
     [Fact]

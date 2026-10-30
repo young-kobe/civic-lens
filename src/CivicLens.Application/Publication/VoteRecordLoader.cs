@@ -14,11 +14,8 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
     public override void ValidateId(string recordId) => ReviewValidation.ValidateHash(recordId, nameof(recordId));
 
     protected override Task<IReadOnlyList<UnpublishedApprovedVote>> ListCandidatesAsync(int limit,
-        CancellationToken cancellationToken) => votes.ListUnpublishedApprovedAsync(limit, cancellationToken);
-
-    public async Task<IReadOnlyList<ReadyToPublishRecord>> ListCodeApprovedReadyAsync(int limit, IReadOnlyCollection<string> excludedRecordIds,
-        CancellationToken cancellationToken) =>
-        ReadyOf(await votes.ListCodeApprovedUnpublishedAsync(limit, excludedRecordIds, cancellationToken));
+        IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken) =>
+        votes.ListUnpublishedApprovedAsync(limit, excludedRecordIds, cancellationToken);
 
     protected override ReadyToPublishRecord? ToReady(UnpublishedApprovedVote candidate) =>
         Ready(candidate.Vote.CurrentStatus, candidate.Vote.UnresolvedConcerns.Length, candidate.Vote.RecordId,
@@ -37,7 +34,7 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
         var review = addition.Vote.Review;
         RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
         var record = new PublishedVoteBuilder(build.Rules).Build(review.CurrentRevision, review.Decisions, addition.Vote.Extractions,
-            build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId), build.Now, addition.Parties);
+            build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId, review.CurrentRevision.RevisionNumber, review.Decisions), build.Now, addition.Parties);
         var billActionRecordId = BillActionRecordIn(addition.Vote.BillActionRecordIds, build);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
             (related, cancellationToken) => build.Renderer.RenderVoteAsync(record, billActionRecordId, related, build.Catalog, cancellationToken));

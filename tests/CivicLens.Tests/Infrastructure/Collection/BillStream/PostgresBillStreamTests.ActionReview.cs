@@ -46,7 +46,7 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal((ReviewDecisionKind.Approve, ReviewAuthor.CodeSubject, 1, 1), (decision.Kind, decision.ActorSubject, decision.RevisionNumber,
             decision.ReviewStateVersion));
         Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
-        Assert.Equal(RecordId, Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, default)).Action.RecordId);
+        Assert.Equal(RecordId, Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, [], default)).Action.RecordId);
     }
 
     [Fact]

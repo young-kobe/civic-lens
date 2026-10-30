@@ -127,7 +127,7 @@ public sealed class PublishWithdrawalsTests
 
         await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(Code,
             new PublishReleaseRequest([Reference(other)], "k2") { Withdrawals = [Note(action, "Wrong.")] }));
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        await Assert.ThrowsAsync<ArgumentException>(() =>
             scenario.Publisher().ExecuteAsync(Code, Withdraw("k3", Reference(action), "Wrong.")));
 
         Assert.Single(scenario.Publications.Committed);

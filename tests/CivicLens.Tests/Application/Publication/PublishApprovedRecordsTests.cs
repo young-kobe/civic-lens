@@ -4,62 +4,35 @@ using CivicLens.Application;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
+using CivicLens.Application.Statements;
+using CivicLens.Core.Briefs;
 using CivicLens.Core.Review;
+using CivicLens.Core.Statements;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Tests.Application.Publication;
 
-public sealed class PublishCodeApprovedFactsTests
+public sealed class PublishApprovedRecordsTests
 {
     private static readonly ReviewActor Code = new(ReviewAuthor.CodeSubject, ReviewRole.Owner);
 
-    public static TheoryData<PublishedRecordKind> JudgmentKinds => new(
-        PublishedRecordKind.Statement, PublishedRecordKind.Relationship, PublishedRecordKind.Brief, PublishedRecordKind.DocumentChange);
-
-    [Theory]
-    [MemberData(nameof(JudgmentKinds))]
-    public async Task TheCodeSubjectCannotPublishAJudgmentRecordBecauseOnlyAPersonApprovesJudgment(PublishedRecordKind kind)
-    {
-        var scenario = new PublicationScenario();
-        var action = scenario.AddAction('a', ApprovedByCode('a'));
-        var judgment = new PublishedRecordReference(kind, new string('b', 64));
-
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => scenario.Publisher().ExecuteAsync(Code,
-            new([new(PublishedRecordKind.Action, action), judgment], "k")));
-
-        Assert.Equal(0, scenario.Releases.BeginCount);
-        Assert.Empty(scenario.Publications.Committed);
-    }
-
     [Fact]
-    public async Task TheCodeSubjectCannotPublishAnEmptyRequestBecauseTheWorkerPublishesFactRecordsOnly()
+    public async Task TheCodeSubjectCanPublishAnyKindBecauseTheWorkerPublishesEveryApprovedRecord()
     {
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('a', ApprovedByCode('a'));
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, action)], "k1"));
-
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => scenario.Publisher().ExecuteAsync(Code, new([], "k2")));
-
-        Assert.Single(scenario.Publications.Committed);
-    }
-
-    [Fact]
-    public async Task TheCodeSubjectCanPublishActionsAndVotes()
-    {
-        var scenario = new PublicationScenario();
-        var action = scenario.AddAction('a', ApprovedByCode('a'));
-        var vote = scenario.AddVote('b', ApprovedByCode('b'));
+        var statement = scenario.AddStatement('b');
 
         var summary = await scenario.Publisher().ExecuteAsync(Code,
-            new([new(PublishedRecordKind.Action, action), new(PublishedRecordKind.Vote, vote)], "k"));
+            new([new(PublishedRecordKind.Action, action), new(PublishedRecordKind.Statement, statement)], "k"));
 
         Assert.Equal(2, summary.RecordCount);
     }
 
     [Fact]
-    public async Task TheAnalysisSubjectStillCannotPublishFactRecords()
+    public async Task TheAnalysisSubjectStillCannotPublish()
     {
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('a', ApprovedByCode('a'));
@@ -95,21 +68,85 @@ public sealed class PublishCodeApprovedFactsTests
     }
 
     [Fact]
-    public async Task ARecordThatAPersonApprovedIsNeverInAnAutomaticReleaseBecauseThePersonOwnsThatApproval()
+    public async Task AStatementThatAPersonApprovedPublishesWithNoOwnerStepBecauseEveryApprovalPublishes()
     {
         var scenario = new PublicationScenario();
-        var byCode = scenario.AddAction('a', ApprovedByCode('a'));
-        var byPerson = scenario.AddAction('b');
-        var voteByPerson = scenario.AddVote('c');
-        AddUnpublished(scenario, byCode, byPerson);
-        scenario.Votes.Unpublished.Add(new(scenario.Votes.Publishable[voteByPerson].Review, null));
+        var statement = scenario.AddStatement('e');
+        scenario.Statements.Unpublished.Add(StatementCandidate(statement));
         ListedUntilPublished(scenario);
+
+        var published = await Facts(scenario).ExecuteAsync(default);
+
+        Assert.Equal(1, published);
+        Assert.Equal([new PublishedRecordReference(PublishedRecordKind.Statement, statement)],
+            scenario.Publications.LastCommit!.AddedRecords.Select(added => new PublishedRecordReference(added.Kind, added.RecordId)));
+        Assert.Empty(scenario.Statements.Unpublished);
+    }
+
+    [Fact]
+    public async Task APersonApprovalThatReplacesAPublishedRecordIsLeftOutWithALogUntilTheOwnerGivesANoteWhileTheOthersPublish()
+    {
+        var scenario = new PublicationScenario();
+        var replaced = scenario.AddAction('a');
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, replaced)], "k1"));
+        scenario.ReviseAction(replaced, 2, approverSubject: "reviewer");
+        var fresh = scenario.AddAction('b', ApprovedByCode('b'));
+        scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[replaced].Review, 1));
+        AddUnpublished(scenario, fresh);
+        ListedUntilPublished(scenario);
+        var logger = new CapturingLogger<PublishApprovedRecords>();
+
+        var published = await Facts(scenario, logger).ExecuteAsync(default);
+
+        Assert.Equal(1, published);
+        Assert.Equal([fresh], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId));
+        Assert.Equal([replaced], scenario.Actions.Unpublished.Select(item => item.Action.RecordId));
+        Assert.DoesNotContain(logger.Entries, entry => entry.Level == LogLevel.Error);
+        var line = Assert.Single(logger.Entries).Message;
+        Assert.Contains($"action:{replaced}", line);
+        Assert.Contains("correction note", line);
+    }
+
+    [Fact]
+    public async Task ABriefWhoseCitedRecordsChangedDoesNotPublishButAStatementBesideItDoes()
+    {
+        var scenario = new PublicationScenario();
+        var statement = scenario.AddStatement('e');
+        scenario.Statements.Unpublished.Add(StatementCandidate(statement));
+        var brief = scenario.Briefs.Publishable[scenario.AddBrief(BriefFixtures.Week, [new(PublishedRecordKind.Statement, statement, 1)])].Review;
+        scenario.Briefs.Unpublished.Add(new(brief, null, true));
+        ListedUntilPublished(scenario);
+        var logger = new CapturingLogger<PublishApprovedRecords>();
+
+        var published = await Facts(scenario, logger).ExecuteAsync(default);
+
+        Assert.Equal(1, published);
+        Assert.Empty(logger.Entries);
+        Assert.Equal(PublishedRecordKind.Statement, Assert.Single(scenario.Publications.LastCommit!.AddedRecords).Kind);
+        Assert.Single(scenario.Briefs.Unpublished);
+    }
+
+    [Fact]
+    public async Task EveryKindKeepsItsShareOfABatchSoOneLargeBacklogDoesNotCrowdOutTheOthers()
+    {
+        var scenario = new PublicationScenario();
+        AddReadyActions(scenario, PublishRelease.MaximumRecords + 6);
+        var statement = scenario.AddStatement('e');
+        scenario.Statements.Unpublished.Add(StatementCandidate(statement));
+        ListedUntilPublished(scenario);
+        var firstBatch = new List<PublishedRecordReference>();
+        var removePublished = scenario.Publications.BeforeServe!;
+        scenario.Publications.BeforeServe = () =>
+        {
+            if (firstBatch.Count == 0)
+                firstBatch.AddRange(scenario.Publications.LastCommit!.AddedRecords.Select(added => new PublishedRecordReference(added.Kind, added.RecordId)));
+            removePublished();
+        };
 
         await Facts(scenario).ExecuteAsync(default);
 
-        Assert.Equal([byCode], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId));
-        Assert.Equal([byPerson], scenario.Actions.Unpublished.Select(item => item.Action.RecordId));
-        Assert.Single(scenario.Votes.Unpublished);
+        Assert.Equal(PublishRelease.MaximumRecords, firstBatch.Count);
+        Assert.Contains(firstBatch, record => record.Kind == PublishedRecordKind.Statement);
     }
 
     [Fact]
@@ -167,7 +204,7 @@ public sealed class PublishCodeApprovedFactsTests
         var other = scenario.AddAction('c', ApprovedByCode('c'));
         AddUnpublished(scenario, good, bad, other);
         ListedUntilPublished(scenario);
-        var logger = new CapturingLogger<PublishCodeApprovedFacts>();
+        var logger = new CapturingLogger<PublishApprovedRecords>();
 
         var published = await Facts(scenario, logger).ExecuteAsync(default);
 
@@ -190,7 +227,7 @@ public sealed class PublishCodeApprovedFactsTests
             new PublishReleaseRequest([], "k2") { Withdrawals = [new(PublishedRecordKind.Action, withdrawn, "Wrong.")] });
         AddUnpublished(scenario, withdrawn, other);
         ListedUntilPublished(scenario);
-        var logger = new CapturingLogger<PublishCodeApprovedFacts>();
+        var logger = new CapturingLogger<PublishApprovedRecords>();
 
         var published = await Facts(scenario, logger).ExecuteAsync(default);
 
@@ -219,7 +256,7 @@ public sealed class PublishCodeApprovedFactsTests
         scenario.Actions.Unpublished.Clear();
         AddUnpublished(scenario, [.. backlog, other]);
         ListedUntilPublished(scenario);
-        var logger = new CapturingLogger<PublishCodeApprovedFacts>();
+        var logger = new CapturingLogger<PublishApprovedRecords>();
 
         var published = await Facts(scenario, logger).ExecuteAsync(default);
 
@@ -276,7 +313,7 @@ public sealed class PublishCodeApprovedFactsTests
         scenario.ReviseAction(action, 2);
         scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[action].Review, 1));
         var releases = scenario.Publications.Committed.Count;
-        var logger = new CapturingLogger<PublishCodeApprovedFacts>();
+        var logger = new CapturingLogger<PublishApprovedRecords>();
 
         await Facts(scenario, logger).ExecuteAsync(default);
 
@@ -305,7 +342,7 @@ public sealed class PublishCodeApprovedFactsTests
         scenario.ReviseAction(action, PublishedCorrection.MaximumNotedEntries + 2, ReviewAuthor.CodeSubject);
         scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[action].Review, PublishedCorrection.MaximumNotedEntries + 1));
         ListedUntilPublished(scenario);
-        var logger = new CapturingLogger<PublishCodeApprovedFacts>();
+        var logger = new CapturingLogger<PublishApprovedRecords>();
 
         var published = await Facts(scenario, logger).ExecuteAsync(default);
 
@@ -313,9 +350,9 @@ public sealed class PublishCodeApprovedFactsTests
         Assert.DoesNotContain(logger.Entries, entry => entry.Level == LogLevel.Error);
     }
 
-    private static PublishCodeApprovedFacts Facts(PublicationScenario scenario, CapturingLogger<PublishCodeApprovedFacts>? logger = null,
+    private static PublishApprovedRecords Facts(PublicationScenario scenario, CapturingLogger<PublishApprovedRecords>? logger = null,
         WorkerBeat? beat = null) =>
-        new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), logger ?? new CapturingLogger<PublishCodeApprovedFacts>(),
+        new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), logger ?? new CapturingLogger<PublishApprovedRecords>(),
             beat ?? TestBeat.Create());
 
     private static ImmutableArray<ReviewDecision> ApprovedByCode(char id) =>
@@ -345,11 +382,19 @@ public sealed class PublishCodeApprovedFactsTests
     private static void AddUnpublished(PublicationScenario scenario, params string[] actionIds) =>
         scenario.Actions.Unpublished.AddRange(actionIds.Select(id => new UnpublishedApprovedAction(scenario.Actions.Publishable[id].Review, null)));
 
+    private static UnpublishedApprovedStatement StatementCandidate(string candidateId)
+    {
+        var revision = new StatementDraftRevision(candidateId, 1, "author", PublicationScenario.ApprovedAt, $"Statement {candidateId[0]}",
+            "Summary", null, null, [], [], [], [], [], []);
+        return new(new StatementReviewListItem(candidateId, "source", "https://example.test/", revision, 1, ReviewStatus.Approved, 0), null);
+    }
+
     // A published record leaves the ready list, as it does in the database.
     private static void ListedUntilPublished(PublicationScenario scenario) =>
         scenario.Publications.BeforeServe = () =>
         {
             var published = scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId).ToHashSet();
             scenario.Actions.Unpublished.RemoveAll(item => published.Contains(item.Action.RecordId));
+            scenario.Statements.Unpublished.RemoveAll(item => published.Contains(item.Statement.CandidateId));
         };
 }

@@ -9,11 +9,11 @@ using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Host.Publication;
 
-internal sealed record FactPublishingComposition(AnalysisStage Stage, IWorkerWakeup Wakeup)
+internal sealed record PublishingComposition(AnalysisStage Stage, IWorkerWakeup Wakeup)
 {
-    private const string EnabledVariable = "CIVIC_LENS_FACT_PUBLISHING";
+    private const string EnabledVariable = "CIVIC_LENS_PUBLISHING";
 
-    public static FactPublishingComposition? Create(string connectionString, CollectionConfiguration collection, IssueConfiguration? issues,
+    public static PublishingComposition? Create(string connectionString, CollectionConfiguration collection, IssueConfiguration? issues,
         string artifactRoot, WorkerBeat beat, ILoggerFactory loggers)
     {
         var setting = Environment.GetEnvironmentVariable(EnabledVariable);
@@ -21,13 +21,13 @@ internal sealed record FactPublishingComposition(AnalysisStage Stage, IWorkerWak
         if (setting != "1") throw new ArgumentException($"{EnabledVariable} must be 1 or unset.");
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
         if (string.IsNullOrWhiteSpace(releaseRoot))
-            throw new ArgumentException("Fact publishing needs CIVIC_LENS_RELEASE_DIRECTORY.");
+            throw new ArgumentException("Publishing needs CIVIC_LENS_RELEASE_DIRECTORY.");
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
         var (publish, loaders) = PublicationComposition.Create(connectionString, publications, new FileReleaseDirectory(releaseRoot),
             collection, PublicationComposition.RequireIssues(issues), artifactRoot, loggers);
-        var wakeup = PostgresIntervalWakeup.FromConnectionString(connectionString, "civic_lens_fact_publishing", TimeSpan.FromHours(1));
-        var publishFacts = new PublishCodeApprovedFacts(publish, publications, loaders, loggers.CreateLogger<PublishCodeApprovedFacts>(), beat);
-        var worker = new StageWorker(WorkerLoopNames.FactPublishing, publishFacts.ExecuteAsync, wakeup, loggers.CreateLogger<StageWorker>(), beat);
-        return new(new AnalysisStage(WorkerLoopNames.FactPublishing, worker.ExecuteAsync), wakeup);
+        var wakeup = PostgresIntervalWakeup.FromConnectionString(connectionString, "civic_lens_publishing", TimeSpan.FromHours(1));
+        var publishApproved = new PublishApprovedRecords(publish, publications, loaders, loggers.CreateLogger<PublishApprovedRecords>(), beat);
+        var worker = new StageWorker(WorkerLoopNames.Publishing, publishApproved.ExecuteAsync, wakeup, loggers.CreateLogger<StageWorker>(), beat);
+        return new(new AnalysisStage(WorkerLoopNames.Publishing, worker.ExecuteAsync), wakeup);
     }
 }

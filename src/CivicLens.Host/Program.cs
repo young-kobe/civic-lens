@@ -206,8 +206,8 @@ try
         await using var relationshipDraftingWakeup = relationshipDrafting.Wakeup;
         var briefDrafting = BriefDraftComposition.Create(analysisContexts, connectionString, workerConfiguration, BeatOf(WorkerLoopNames.BriefDrafting), loggers);
         await using var briefDraftingWakeup = briefDrafting.Wakeup;
-        var factPublishing = FactPublishingComposition.Create(connectionString, workerConfiguration, issueConfiguration, artifactRoot, BeatOf(WorkerLoopNames.FactPublishing), loggers);
-        await using var factPublishingWakeup = factPublishing?.Wakeup;
+        var publishing = PublishingComposition.Create(connectionString, workerConfiguration, issueConfiguration, artifactRoot, BeatOf(WorkerLoopNames.Publishing), loggers);
+        await using var publishingWakeup = publishing?.Wakeup;
         var reportPull = ReportPullComposition.Create(analysisContexts, connectionString, BeatOf(WorkerLoopNames.ReportPull), loggers);
         await using var reportPullWakeup = reportPull?.Wakeup;
         executing = true;
@@ -243,7 +243,7 @@ try
                 AnalysisStage.For(WorkerLoopNames.VoteDrafting, voteDrafting.Worker),
                 AnalysisStage.For(WorkerLoopNames.RelationshipDrafting, relationshipDrafting.Worker),
                 AnalysisStage.For(WorkerLoopNames.BriefDrafting, briefDrafting.Worker),
-                factPublishing?.Stage,
+                publishing?.Stage,
                 reportPull?.Stage
             }.OfType<AnalysisStage>()], collectionConcurrency);
     }
