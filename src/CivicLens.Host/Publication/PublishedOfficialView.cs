@@ -95,7 +95,7 @@ internal static class PublishedOfficialView
 
     public static string TheCongress(int congress) => $"the {CongressCalendar.Ordinal(congress)} Congress";
 
-    private static string Counted(int count, string singular) => $"{count} {Noun(count, singular)}";
+    public static string Counted(int count, string singular) => $"{count} {Noun(count, singular)}";
 
     private static string JoinAnd(List<string> parts) => parts.Count == 1 ? parts[0] : $"{string.Join(", ", parts[..^1])} and {parts[^1]}";
 
@@ -138,7 +138,7 @@ internal static class PublishedOfficialView
 
     public const string VotesSubject = "their substantive votes";
 
-    public static string CountFilterLabel(int count, string subject, string issueName) => $"{count}: show {subject} on {issueName}";
+    public static string CountFilterLabel(string counted, string subject, string issueName) => $"{counted}: show {subject} on {issueName}";
 
     public static string CountFilterNotice(string subject, string issueName, int congress, int count) =>
         $"Showing {subject} on {issueName} in the {CongressCalendar.Ordinal(congress)} Congress: {count} {Noun(count, "record")}";

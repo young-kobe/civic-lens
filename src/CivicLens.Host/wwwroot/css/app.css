@@ -62,7 +62,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .table tbody tr:last-child td { border-bottom: 0; }
 .table tbody tr { transition: background var(--fast); }
 .table tbody tr:hover { background: var(--raised); }
-.table .num { text-align: right; }
+.table .num { text-align: right; white-space: nowrap; }
 .table .fit { width: 1%; white-space: nowrap; }
 .table td:has(> .cell-sub) { width: 100%; max-width: 0; }
 .table .time { color: var(--ink-2); white-space: nowrap; }
@@ -113,6 +113,8 @@ a.cell-title:hover { text-decoration: underline; }
 .field textarea { min-height: 96px; resize: vertical; font-family: var(--read); font-size: var(--t-md); line-height: 1.6; }
 .chip input, .choice input { accent-color: var(--ink); }
 
+.clamp-2 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.clamp-2 a:focus-visible { outline-offset: -2px; }
 .choices { display: grid; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
 .choice { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: var(--s3); padding: var(--s3); border-radius: var(--r-control); box-shadow: inset 0 0 0 1px var(--line); font-size: var(--t-sm); cursor: pointer; transition: box-shadow var(--fast), background var(--fast); }
 .choice:hover, .choice.is-linked { background: var(--raised); box-shadow: inset 0 0 0 1.5px var(--ink); }
