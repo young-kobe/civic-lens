@@ -2715,6 +2715,49 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublicationRecordStateRow", b =>
+                {
+                    b.Property<int>("FirstRelease")
+                        .HasColumnType("integer")
+                        .HasColumnName("first_release");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
+
+                    b.Property<int?>("LastRelease")
+                        .HasColumnType("integer")
+                        .HasColumnName("last_release");
+
+                    b.Property<string>("RecordId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.HasIndex("FirstRelease")
+                        .HasFilter("last_release IS NULL");
+
+                    b.HasIndex("LastRelease")
+                        .HasFilter("last_release IS NOT NULL");
+
+                    b.HasIndex("Kind", "RecordId", "FirstRelease")
+                        .IsUnique();
+
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("Kind", "RecordId", "FirstRelease"), new[] { "LastRelease", "RevisionNumber" });
+
+                    b.ToTable("publication_record_states", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_publication_record_states_range", "last_release IS NULL OR last_release >= first_release");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", b =>
                 {
                     b.Property<int>("ReleaseNumber")
@@ -5116,6 +5159,20 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasForeignKey("RecordId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublicationRecordStateRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", null)
+                        .WithMany()
+                        .HasForeignKey("FirstRelease")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", null)
+                        .WithMany()
+                        .HasForeignKey("LastRelease")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Relationships.Persistence.RelationshipAnalysisRow", b =>

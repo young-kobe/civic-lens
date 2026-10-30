@@ -155,6 +155,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         db.Add(ToRow(actorSubject, commit, publishedAt));
         ReviewIdempotency.Add(db, actorSubject, PublishOperation, idempotencyKey, payloadHash, ReviewJson.Serialize(summary));
         await SaveAsync(db, cancellationToken);
+        await PublicationRecordStates.RecordAsync(db, commit, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return summary;
     }
