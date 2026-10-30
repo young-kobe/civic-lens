@@ -3,21 +3,19 @@
 }
 @if (Use.IsFirstUse(Key))
 {
-    <button type="button" class="term" popovertarget="@term.PopoverId">@Text(term)</button><span class="term-popover" id="@term.PopoverId" popover>
+    <button type="button" class="term" popovertarget="@term.PopoverId">@ChildContent</button><span class="term-popover" id="@term.PopoverId" popover>
         <span class="term-means">@term.Means</span>
         <span class="term-why">@term.WhyItMatters</span>
     </span>
 }
 else
 {
-    @Text(term)
+    @ChildContent
 }
 
 @code {
     [CascadingParameter] private GlossaryPageUse Use { get; set; } = default!;
 
     [Parameter, EditorRequired] public string Key { get; set; } = string.Empty;
-    [Parameter] public RenderFragment? ChildContent { get; set; }
-
-    private RenderFragment Text(GlossaryTerm term) => ChildContent ?? (builder => builder.AddContent(0, term.Name));
+    [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
 }

@@ -7,8 +7,8 @@ namespace CivicLens.Tests.Host;
 
 public sealed class GlossaryTests
 {
-    private const string ApprovedWordingHash = "8BEB42EFCCDA4C5F17F027DBF240AFECD6273BA457F366CF915265D57C84C370";
-    private const int ApprovedTermCount = 38;
+    private const string ApprovedWordingHash = "9D1501E4F6E3E9BDE58C024E82597DB0EA1D4C65C222BB1F830291D732B16C25";
+    private const int ApprovedTermCount = 39;
 
     private static readonly ReleaseRenderer Renderer = new(null, null);
 
@@ -72,7 +72,7 @@ public sealed class GlossaryTests
     }
 
     [Fact]
-    public async Task ThePopoverOpensFromAButtonSoKeyboardAndTouchReadersNeedNoScriptAndTheDefinitionReadsOnTheGlossaryPageWithoutIt()
+    public async Task ATermIsAButtonWithAPopoverHoldingTheApprovedMeaningAndTheFooterLinksToTheGlossaryPage()
     {
         var document = new HtmlParser().ParseDocument(await Renderer.RenderAboutAsync(CancellationToken.None));
 

@@ -199,8 +199,7 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
-        foreach (var popover in document.QuerySelectorAll("[popover]")) popover.Remove();
-        var text = document.QuerySelector("main")!.TextContent;
+        var text = document.QuerySelector("main")!.ShownText();
         Assert.Contains("Amendment, Suspension of the rules, Passage, Conference report, Veto override, Nomination.", text, StringComparison.Ordinal);
         Assert.Contains("A vote is substantive when its kind is one of these:", text, StringComparison.Ordinal);
         Assert.Contains("Votes they cast: the substantive roll call votes on the issue", text, StringComparison.Ordinal);
@@ -891,6 +890,100 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote() with { Kind = PublishedVoteKind.Other }, null, [], PublicationCatalogs.None, CancellationToken.None);
 
         Assert.Empty(new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts button.term"));
+    }
+
+    [Fact]
+    public void EveryVoteKindHasItsTermKeyOrNoneForOtherAndEveryKeyIsInTheGlossary()
+    {
+        var expected = new Dictionary<PublishedVoteKind, string?>
+        {
+            [PublishedVoteKind.Rule] = "house-rule",
+            [PublishedVoteKind.PreviousQuestion] = "previous-question",
+            [PublishedVoteKind.MotionToRecommit] = "motion-to-recommit",
+            [PublishedVoteKind.Amendment] = "amendment",
+            [PublishedVoteKind.Suspension] = "suspension-of-the-rules",
+            [PublishedVoteKind.Passage] = "passage",
+            [PublishedVoteKind.ConferenceReport] = "conference-report",
+            [PublishedVoteKind.VetoOverride] = "veto-override",
+            [PublishedVoteKind.Nomination] = "confirmation-vote",
+            [PublishedVoteKind.Cloture] = "cloture",
+            [PublishedVoteKind.MotionToProceed] = "motion-to-proceed",
+            [PublishedVoteKind.Other] = null
+        };
+
+        Assert.Equal(Enum.GetValues<PublishedVoteKind>().Order(), expected.Keys.Order());
+        foreach (var (kind, key) in expected)
+        {
+            Assert.Equal(key, PublishedRecordLabels.VoteKindTermKey(kind));
+            if (key is not null) Assert.Equal(key, Glossary.Term(key).Key);
+        }
+    }
+
+    [Theory]
+    [InlineData(PublishedExecutiveActionKind.ExecutiveOrder, "term-executive-order")]
+    [InlineData(PublishedExecutiveActionKind.Proclamation, "term-proclamation")]
+    [InlineData(PublishedExecutiveActionKind.Memorandum, "term-memorandum")]
+    [InlineData(PublishedExecutiveActionKind.Notice, "term-presidential-notice")]
+    public async Task TheTypeOfAnExecutiveActionIsATermAndANoticeUsesThePresidentialNoticeDefinitionNotTheAgencyOne(PublishedExecutiveActionKind kind, string popover)
+    {
+        var record = (PublishedExecutiveAction)PublicApi.PublishedSamples.ExecutiveAction("Title", "Tail").Body with { Kind = kind };
+        var html = await new ReleaseRenderer(null, null).RenderExecutiveActionAsync(record, CancellationToken.None);
+
+        var type = new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts dt").Zip(new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts dd"))
+            .Single(pair => pair.First.TextContent == "Type").Second;
+        Assert.Equal(popover, type.QuerySelector("button.term")!.GetAttribute("popovertarget"));
+        Assert.Equal(PublishedRecordLabels.ExecutiveActionKind(kind), type.ShownText());
+    }
+
+    [Fact]
+    public async Task TheExecutiveActionEvidenceTextNamesTheFederalRegisterAsATerm()
+    {
+        var record = (PublishedExecutiveAction)PublicApi.PublishedSamples.ExecutiveAction("Title", "Tail").Body;
+        var html = await new ReleaseRenderer(null, null).RenderExecutiveActionAsync(record, CancellationToken.None);
+
+        var evidence = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='evidence-title']")!;
+        Assert.Equal("term-federal-register", evidence.QuerySelector("button.term")!.GetAttribute("popovertarget"));
+        Assert.Equal("Federal Register", evidence.QuerySelector("button.term")!.TextContent);
+    }
+
+    [Theory]
+    [InlineData("Yea", "yea")]
+    [InlineData("Aye", "yea")]
+    [InlineData("Nay", "nay")]
+    [InlineData("No", "nay")]
+    [InlineData("Present", "present")]
+    [InlineData("Not Voting", "not-voting")]
+    [InlineData("Emmer", null)]
+    public void EveryCastWordMapsToItsTermAndACandidateNameHasNone(string cast, string? key)
+    {
+        Assert.Equal(key, PublishedRecordLabels.CastTermKey(cast));
+    }
+
+    [Fact]
+    public async Task TheWordCorrectionIsATermOnlyWhenTheCorrectionHasANote()
+    {
+        var corrections = new PublishedCorrection[]
+        {
+            new() { ReplacedRevisionNumber = 2, PublishedAtUtc = new DateTimeOffset(2026, 2, 4, 9, 0, 0, TimeSpan.Zero), Note = "Fixed a date." },
+            new() { ReplacedRevisionNumber = 1, PublishedAtUtc = new DateTimeOffset(2026, 2, 2, 9, 0, 0, TimeSpan.Zero) }
+        };
+        var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action() with { RevisionNumber = 3, Corrections = corrections }, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var items = new HtmlParser().ParseDocument(html).QuerySelectorAll("ul.corrections > li strong").ToArray();
+        Assert.Equal("term-correction", items[0].QuerySelector("button.term")!.GetAttribute("popovertarget"));
+        Assert.Equal("Correction", items[0].QuerySelector("button.term")!.TextContent);
+        Assert.Null(items[1].QuerySelector("button.term"));
+    }
+
+    [Fact]
+    public async Task TheRelatedPanelNamesTheStatementAsATerm()
+    {
+        var action = Action();
+        var html = await new ReleaseRenderer(null, null).RenderActionAsync(action, [Relationship(PublishedRecordKind.Action, action.RecordId, '7')], PublicationCatalogs.None, CancellationToken.None);
+
+        var button = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='related-title'] button.term")!;
+        Assert.Equal("term-statement", button.GetAttribute("popovertarget"));
+        Assert.Equal("statement", button.TextContent);
     }
 
     // A bare count could mean all members who voted, so each heading says it counts tracked members of the chamber.

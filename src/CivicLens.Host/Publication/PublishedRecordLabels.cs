@@ -130,14 +130,15 @@ public static class PublishedRecordLabels
         PublishedVoteKind.Nomination => "confirmation-vote",
         PublishedVoteKind.Cloture => "cloture",
         PublishedVoteKind.MotionToProceed => "motion-to-proceed",
-        _ => null
+        PublishedVoteKind.Other => null,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Vote kind has no term.")
     };
 
     public static string ExecutiveActionTermKey(PublishedExecutiveActionKind kind) => kind switch
     {
         PublishedExecutiveActionKind.ExecutiveOrder => "executive-order",
         PublishedExecutiveActionKind.Proclamation => "proclamation",
-        PublishedExecutiveActionKind.Notice => "notice",
+        PublishedExecutiveActionKind.Notice => "presidential-notice",
         PublishedExecutiveActionKind.Memorandum => "memorandum",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Executive action kind has no term.")
     };

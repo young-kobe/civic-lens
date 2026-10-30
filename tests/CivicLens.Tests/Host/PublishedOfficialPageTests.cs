@@ -480,6 +480,16 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
+    public async Task TheCastCellsOfTheBreaksTableAreTermsOnFirstUse()
+    {
+        var day = new DateOnly(2026, 4, 1);
+        var document = await RenderedAsync([Split('a', day, "Nay")]);
+
+        var cells = document.QuerySelectorAll("[aria-labelledby='panel-votes-with-their-party'] tbody td button.term").Select(button => (button.TextContent, button.GetAttribute("popovertarget"))).ToArray();
+        Assert.Equal([("Nay", "term-nay"), ("Yea", "term-yea")], cells);
+    }
+
+    [Fact]
     public async Task AnOfficialWhoNeverBrokeWithThePartyGetsOneLineAndNoTableAndAnOfficialWithNoSplitVoteGetsAPlainSentence()
     {
         var day = new DateOnly(2026, 4, 1);
