@@ -68,6 +68,15 @@ public static class PublishedRecordLabels
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Relationship type has no label.")
     };
 
+    public const string Voteview = "Voteview, an academic database at UCLA";
+
+    public static string VoteSource(PublishedVoteSource source) => source switch
+    {
+        PublishedVoteSource.CongressGov => "Congress.gov House vote data, from the House Clerk",
+        PublishedVoteSource.Voteview => Voteview + " (voteview.com)",
+        _ => throw new ArgumentOutOfRangeException(nameof(source), source, "Vote source has no label.")
+    };
+
     public static string VoteKind(PublishedVoteKind kind) => kind switch
     {
         PublishedVoteKind.Rule => "Rule",

@@ -131,6 +131,7 @@ internal static class PublishedSamples
             Congress = 119,
             Session = 1,
             RollCallNumber = 100,
+            Source = PublishedVoteSource.CongressGov,
             Kind = PublishedVoteKind.Other,
             VotedOn = new DateOnly(2025, 4, 10),
             VotedOnCitation = Cite(started),

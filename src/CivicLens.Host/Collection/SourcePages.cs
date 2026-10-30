@@ -1,5 +1,4 @@
 using System.Globalization;
-using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Application.Collection.Votes;
 using CivicLens.Core.Relationships;
 using CivicLens.Core.Votes;
@@ -26,6 +25,6 @@ internal static class SourcePages
         $"https://www.congress.gov/bill/{CongressCalendar.Ordinal(congress)}-congress/{BillSlugs[billType]}/{billNumber.ToString(CultureInfo.InvariantCulture)}";
 
     public static string RollCall(Chamber chamber, int congress, int sessionNumber, int rollCallNumber) => chamber == Chamber.Senate
-        ? SenateVoteUrl.VotePage(SenateLisUrl, new SenateVoteRoll(new VoteSession(congress, sessionNumber), rollCallNumber))
+        ? $"{SenateLisUrl}/roll_call_votes/vote{congress}{sessionNumber}/vote_{congress}_{sessionNumber}_{rollCallNumber.ToString("00000", CultureInfo.InvariantCulture)}.htm"
         : $"https://clerk.house.gov/Votes/{CongressCalendar.StartOf(congress).Year + sessionNumber - 1}{rollCallNumber.ToString(CultureInfo.InvariantCulture)}";
 }

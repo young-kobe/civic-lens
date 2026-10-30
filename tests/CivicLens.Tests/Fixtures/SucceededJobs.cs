@@ -1,7 +1,6 @@
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Jobs;
-using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Infrastructure.Collection.BillStream;
 using CivicLens.Infrastructure.Collection.Jobs;
 using Npgsql;
@@ -42,16 +41,6 @@ internal static class SucceededJobs
         var detail = Assert.Single(admitted.Jobs);
         await MarkSucceededAsync(connectionString, detail.JobId);
         return detail.JobId;
-    }
-
-    public static async Task<string> SenateVoteAsync(PostgresCollectionJobStore store, string connectionString,
-        ConfiguredCollectionSource source, string menuKey, SenateVoteMenuItem item)
-    {
-        var menuJobId = await RootAsync(store, connectionString, source, menuKey);
-        var admitted = await store.AdmitSenateMenuAsync(source, menuJobId, new SenateVoteMenu(item.Roll.Session, [item]), default);
-        var vote = Assert.Single(admitted.Jobs, job => job.Url == SenateVoteUrl.Vote(source.SourceUrl, item.Roll));
-        await MarkSucceededAsync(connectionString, vote.JobId);
-        return vote.JobId;
     }
 
     public static async Task MarkSucceededAsync(string connectionString, string jobId)
