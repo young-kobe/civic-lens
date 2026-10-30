@@ -44,7 +44,12 @@ public sealed class SearchIndex(NpgsqlDataSource database)
 
     public async Task<SearchPage> SearchAsync(int release, SearchRequest request, CancellationToken cancellationToken)
     {
-        await using var command = database.CreateCommand(request.IsRanked ? RankedSql(request) : DatedSql(request));
+        await using var command = database.CreateCommand(request switch
+        {
+            { IsRanked: true } => RankedSql(request),
+            { Sort: { } sort } => SortedSql(request, sort),
+            _ => DatedSql(request)
+        });
         AddParameters(command, release, request);
         var rows = new List<(RecordHit Hit, float Rank)>();
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
@@ -76,7 +81,32 @@ public sealed class SearchIndex(NpgsqlDataSource database)
         ORDER BY {SortDate} DESC, r.first_published_at_utc DESC, r.record_id LIMIT @take
         """;
 
+    private static string SortedSql(SearchRequest request, SearchSortKey sort)
+    {
+        var key = SortKeyExpression(sort);
+        var direction = request.Descending ? "DESC" : "ASC";
+        var after = request.Cursor is null ? "" : $"""
+             AND ({key}, r.record_id) {(request.Descending ? "<" : ">")}
+                (SELECT {key}, r.record_id FROM records r WHERE r.record_id = @cursor_id AND {InRelease})
+            """;
+        return $"""
+            SELECT {Columns}, NULL::text FROM records r
+            WHERE {InRelease}{Filters(request)}{after}
+            ORDER BY {key} {direction}, r.record_id {direction} LIMIT @take
+            """;
+    }
+
+    private static string SortKeyExpression(SearchSortKey sort) => sort switch
+    {
+        SearchSortKey.Date => SortDate,
+        SearchSortKey.Published => "r.first_published_at_utc",
+        SearchSortKey.Headline => "lower(r.headline COLLATE pg_c_utf8) COLLATE \"C\"",
+        SearchSortKey.Kind => "r.kind COLLATE \"C\"",
+        _ => throw new ArgumentOutOfRangeException(nameof(sort), sort, "Sort key is not known.")
+    };
+
     private static string Filters(SearchRequest request) =>
+        (request.Text is not null && request.Sort is not null ? " AND r.search @@ websearch_to_tsquery('english', @q)" : "") +
         (request.Kind is null ? "" : " AND r.kind = @kind") +
         (request.Official is null ? "" : " AND r.official_ids @> ARRAY[@official]::text[]") +
         (request.Issue is null ? "" : " AND r.issue_ids @> ARRAY[@issue]::text[]") +
@@ -106,9 +136,12 @@ public sealed class SearchIndex(NpgsqlDataSource database)
             parameters.Add(new NpgsqlParameter("cursor_published", NpgsqlDbType.TimestampTz) { Value = new DateTime(ticks, DateTimeKind.Utc) });
     }
 
-    private static SearchCursor NextCursor(int release, SearchRequest request, (RecordHit Hit, float Rank) last) => request.IsRanked
-        ? SearchCursor.Ranked(release, last.Hit.RecordId, last.Rank)
-        : SearchCursor.Dated(release, last.Hit.RecordId, last.Hit.EventDate ?? DateOnly.FromDateTime(last.Hit.FirstPublishedAtUtc.UtcDateTime), last.Hit.FirstPublishedAtUtc.UtcTicks);
+    private static SearchCursor NextCursor(int release, SearchRequest request, (RecordHit Hit, float Rank) last) => request switch
+    {
+        { IsRanked: true } => SearchCursor.Ranked(release, last.Hit.RecordId, last.Rank),
+        { Sort: not null } => SearchCursor.Sorted(release, last.Hit.RecordId),
+        _ => SearchCursor.Dated(release, last.Hit.RecordId, last.Hit.EventDate ?? DateOnly.FromDateTime(last.Hit.FirstPublishedAtUtc.UtcDateTime), last.Hit.FirstPublishedAtUtc.UtcTicks)
+    };
 
     private static RecordHit ReadHit(DbDataReader reader) => new()
     {

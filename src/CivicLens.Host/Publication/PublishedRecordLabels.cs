@@ -18,6 +18,13 @@ public static class PublishedRecordLabels
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no label.")
     };
 
+    public const string NewestFirst = "Newest first";
+
+    public const string DefaultOrder = "Default order";
+
+    public static IReadOnlyDictionary<string, string> KindLabels { get; } =
+        Enum.GetValues<PublishedRecordKind>().ToDictionary(PublicationProtocol.KindText, Kind);
+
     public static string KindPlural(PublishedRecordKind kind) => kind switch
     {
         PublishedRecordKind.DocumentChange => "Document changes",

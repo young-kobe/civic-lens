@@ -53,6 +53,21 @@ public sealed class SearchEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task ASortedRequestAnswersWithHitsInTheOrderOfTheKeyAndACursorThatContinuesIt()
+    {
+        var site = new FakeReleaseSite();
+        site.Publish(1, PublishedSamples.Statement('a', "Alpha"), PublishedSamples.Statement('b', "Beta"));
+        await using var host = await ApiHost.StartAsync(postgres, site);
+        await host.WaitForReleaseAsync();
+
+        using var json = JsonDocument.Parse(await host.Client.GetStringAsync("/v1/search?sort=headline&direction=desc&limit=1"));
+
+        Assert.Equal("Beta", json.RootElement.GetProperty("hits")[0].GetProperty("headline").GetString());
+        using var next = JsonDocument.Parse(await host.Client.GetStringAsync("/v1/search?sort=headline&direction=desc&limit=1&cursor=" + json.RootElement.GetProperty("nextCursor").GetString()));
+        Assert.Equal("Alpha", next.RootElement.GetProperty("hits")[0].GetProperty("headline").GetString());
+    }
+
+    [Fact]
     public async Task EveryResponseAllowsAnyOriginAndSetsNoCookie()
     {
         await using var host = await StartWithReleasesAsync();
@@ -109,6 +124,10 @@ public sealed class SearchEndpointsTests(PostgresCollection postgres)
     [InlineData("release=0")]
     [InlineData("cursor=nonsense")]
     [InlineData("q=a&q=b")]
+    [InlineData("sort=size")]
+    [InlineData("sort=date&direction=up")]
+    [InlineData("direction=asc")]
+    [InlineData("sort=date&sort=kind")]
     public async Task BadParametersAreRefusedWith400(string query)
     {
         await using var host = await StartWithReleasesAsync();

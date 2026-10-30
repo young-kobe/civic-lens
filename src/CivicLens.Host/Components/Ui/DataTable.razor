@@ -7,10 +7,10 @@
 else
 {
     <div class="@(Scroll ? "table-wrap table-wrap-scroll" : "table-wrap")">
-        <table class="table" role="@(Roles ? "table" : null)">
+        <table class="table" role="@(Roles ? "table" : null)" data-default-order="@DefaultOrder" @attributes="TableAttributes">
             @if (Caption is not null)
             {
-                <caption class="visually-hidden">@Caption</caption>
+                <caption class="visually-hidden">@Caption@(DefaultOrder is null ? null : $". {DefaultOrder}.")</caption>
             }
             <CascadingValue Name="@TableCell.RolesCascade" Value="Roles" IsFixed="true">
                 <thead role="@RowGroupRole"><tr role="@RowRole">@Head</tr></thead>
@@ -35,6 +35,8 @@ else
     [Parameter] public Func<TItem, string?>? RowClass { get; set; }
     [Parameter] public Func<TItem, string?>? RowFilterKeys { get; set; }
     [Parameter] public bool Roles { get; set; }
+    [Parameter] public string? DefaultOrder { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? TableAttributes { get; set; }
 
     private string? RowGroupRole => Roles ? "rowgroup" : null;
     private string? RowRole => Roles ? "row" : null;
