@@ -209,7 +209,7 @@ Discovery results carry a required `outOfScopeCount`: the number of distinct res
 
 A 304 has no new discovery result. Retained candidates stay bound to the earlier captured attempt. Failed and deferred outcomes create no candidate list.
 
-**Feed item text.** A feed source can set `statementTextInFeed`. `JobPreparation` then parses the stored feed capture a second time in Application, after it admits the article jobs. Collector and contracts do not change. `BoundedXml` reads the XML for this and for the Senate vote files. It prohibits a DTD, sets no resolver, and caps the document size. The text, the candidate rules, and the limits are in [statements](statements.md#feed-items). The text of an item is a [document extraction](documents.md#extraction) with the index of the item as its part.
+**Feed item text.** A feed source can set `statementTextInFeed`. `JobPreparation` then parses the stored feed capture a second time in Application, after it admits the article jobs. Collector and contracts do not change. `BoundedXml` reads the XML for this. It prohibits a DTD, sets no resolver, and caps the document size. The text, the candidate rules, and the limits are in [statements](statements.md#feed-items). The text of an item is a [document extraction](documents.md#extraction) with the index of the item as its part.
 
 **Evidence.** Application snapshots discovery evidence immutably, with the original request scope. Infrastructure stores it in `collection_discoveries` in the same transaction as the attempt and capture identity. A conflicting replay of candidate URLs, status, or request snapshot is rejected. Receipt replay rebuilds this evidence without another fetch. Discovery creates no document version or editorial claim.
 
