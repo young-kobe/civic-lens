@@ -98,7 +98,8 @@ public sealed partial class RelationshipEditor
     private async Task<string> RecordDecisionAsync()
     {
         var request = new DecideRelationshipReviewRequest(RecordId, DecideExpectedRevision, DecideExpectedStateVersion,
-            ParseDecisionKind(Kind), EmptyToNull(Decision?.Note), [.. Decision?.ResolvedDecisionIds ?? []], DecideKey ?? "");
+            ParseDecisionKind(Kind), EmptyToNull(Decision?.Note), [.. Decision?.ResolvedDecisionIds ?? []], DecideKey ?? "",
+            CorrectionNoteOfApproval());
         _ = await DecideReview.ExecuteAsync(actor, request, RequestAborted);
         return RelationshipRoutes.Editor(RecordId, "decided");
     }

@@ -124,10 +124,10 @@ public sealed class PublishActionTests
         var action = scenario.AddAction('c');
         var firstPublishedAt = scenario.Clock.Now;
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", action));
-        scenario.ReviseAction(action, 2);
+        scenario.ReviseAction(action, 2, correctionNote: "Fixed the tracked issue.");
         scenario.Clock.Now = firstPublishedAt.AddDays(1);
 
-        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", action) with { Notes = [Note(action)] });
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", action));
 
         var entry = Assert.Single(ReadManifest(scenario, second.DirectoryName).Records);
         Assert.Equal(2, entry.RevisionNumber);
@@ -149,8 +149,6 @@ public sealed class PublishActionTests
 
         Assert.Equal(1, scenario.Releases.BeginCount);
     }
-
-    private static RecordNote Note(string actionId) => new(PublishedRecordKind.Action, actionId, "Fixed the tracked issue.");
 
     private static PublishReleaseRequest Request(string key, string actionId) =>
         PublicationScenario.Request(key, new PublishedRecordReference(PublishedRecordKind.Action, actionId));

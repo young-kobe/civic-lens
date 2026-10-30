@@ -52,7 +52,6 @@ public sealed class PublishRelease
         var byCode = ReviewAuthor.IsCode(actor.Subject);
         var references = ValidateRequest(request);
         if (byCode && references.IsEmpty) throw new ArgumentException("The code subject publishes at least one record.", nameof(request));
-        var notes = PublicationCorrections.ValidateNotes(request.Notes, references, byCode);
         var withdrawalNotes = PublicationWithdrawals.ValidateNotes(request.Withdrawals, byCode);
         var payloadHash = ReviewValidation.HashPayload(request);
         var replay = await publications.FindReplayAsync(actor.Subject, request.IdempotencyKey, payloadHash, cancellationToken);
@@ -67,15 +66,14 @@ public sealed class PublishRelease
         var previous = await PreviousRelease.LoadAsync(releases, state.Active, cancellationToken);
         if (previous.DirectoryName is null && references.IsEmpty && request.Withdrawals.IsEmpty)
             throw new ArgumentException("A publish with no record needs an active release.");
-        PublicationWithdrawals.RequireNoReturnByCode(previous, references, byCode);
         var withdrawn = ImmutableArray.CreateRange(withdrawalNotes.Keys);
-        var corrections = await PublicationCorrections.LoadAsync(releases, previous, now, notes, [.. references, .. withdrawn],
+        var corrections = await PublicationCorrections.LoadAsync(releases, previous, now, [.. references, .. withdrawn],
             cancellationToken);
         var newWithdrawals = PublicationWithdrawals.Create(previous, corrections, now, withdrawalNotes);
         var returned = ImmutableArray.CreateRange(references.Where(reference => previous.IsWithdrawn(reference.RecordId)));
         var roster = await officials.ReadRosterAsync(cancellationToken);
         var photos = await officials.ReadPhotosAsync(cancellationToken);
-        var build = new PublicationBuild(previous, now, rules, renderer, catalog, corrections, roster).WithRemoved(withdrawn).WithReturned(returned);
+        var build = new PublicationBuild(previous, now, rules, renderer, catalog, corrections, roster, byCode).WithRemoved(withdrawn).WithReturned(returned);
         var additions = await LoadAdditionsAsync(references, build, cancellationToken);
         var released = build.WithAdded(additions);
         await WithdrawalCascade.RequireNoCitersAsync(releases, loaders, released, additions, cancellationToken);
@@ -113,10 +111,10 @@ public sealed class PublishRelease
         ArgumentNullException.ThrowIfNull(request);
         ReviewValidation.ValidateIdempotencyKey(request.IdempotencyKey);
         var records = request.Records;
-        if (records.IsDefault || request.Notes.IsDefault || request.Withdrawals.IsDefault)
-            throw new ArgumentException("Records, notes, and withdrawals must not be default.", nameof(request));
-        if (request.Notes.Any(note => note is null) || request.Withdrawals.Any(withdrawal => withdrawal is null))
-            throw new ArgumentException("Notes and withdrawals must not hold null.", nameof(request));
+        if (records.IsDefault || request.Withdrawals.IsDefault)
+            throw new ArgumentException("Records and withdrawals must not be default.", nameof(request));
+        if (request.Withdrawals.Any(withdrawal => withdrawal is null))
+            throw new ArgumentException("Withdrawals must not hold null.", nameof(request));
         var named = records.Concat(request.Withdrawals.Select(withdrawal => withdrawal.Reference)).ToArray();
         if (named.Length > MaximumRecords)
             throw new ArgumentException($"Select at most {MaximumRecords} records to publish or withdraw.", nameof(request));

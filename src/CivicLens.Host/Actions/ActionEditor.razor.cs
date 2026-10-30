@@ -92,7 +92,8 @@ public sealed partial class ActionEditor
     private async Task<string> RecordDecisionAsync()
     {
         var request = new DecideActionReviewRequest(RecordId, DecideExpectedRevision, DecideExpectedStateVersion,
-            ParseDecisionKind(Kind), EmptyToNull(Decision?.Note), [.. Decision?.ResolvedDecisionIds ?? []], DecideKey ?? "");
+            ParseDecisionKind(Kind), EmptyToNull(Decision?.Note), [.. Decision?.ResolvedDecisionIds ?? []], DecideKey ?? "",
+            CorrectionNoteOfApproval());
         _ = await DecideReview.ExecuteAsync(actor, request, RequestAborted);
         return ActionRoutes.Editor(RecordId, "decided");
     }

@@ -20,7 +20,7 @@ internal sealed class BriefRecordLoader(IBriefReviewStore briefs)
         candidate.CitedRecordsChanged
             ? null
             : Ready(candidate.Brief.CurrentStatus, candidate.Brief.UnresolvedConcerns.Length, candidate.Brief.RecordId,
-                candidate.Brief.CurrentRevision.Headline, candidate.Brief.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber);
+                candidate.Brief.CurrentRevision.RevisionNumber);
 
     protected override Task<IReadOnlyDictionary<string, PublishableBrief>> GetForPublicationAsync(
         ImmutableArray<string> recordIds, PublicationBuild build, CancellationToken cancellationToken) =>
@@ -29,7 +29,7 @@ internal sealed class BriefRecordLoader(IBriefReviewStore briefs)
     protected override PendingRecord Build(string recordId, PublishableBrief addition, PublicationBuild build)
     {
         var review = addition.Review;
-        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
+        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build);
         if (addition.CitedRecordsChanged)
             throw new ArgumentException(
                 $"Brief {recordId} cites a record that the new release does not hold at the cited revision, or that is not approved.");

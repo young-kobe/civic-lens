@@ -40,7 +40,7 @@ public sealed class PublishingWorkerTests
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('a', [PublicationScenario.Decision(new string('a', 64), 1, ReviewDecisionKind.Approve)
             with { ActorSubject = ReviewAuthor.CodeSubject }]);
-        scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[action].Review, null));
+        scenario.Actions.Unpublished.Add(new(scenario.Actions.Publishable[action].Review));
         return scenario;
     }
 

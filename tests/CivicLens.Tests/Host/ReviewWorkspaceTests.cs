@@ -1,4 +1,6 @@
 using System.Net;
+using System.Text.Json;
+using CivicLens.Publication.Contracts;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using CivicLens.Application.Analysis;
@@ -290,134 +292,25 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
-    public async Task OnlyTheOwnerSeesThePublishSectionAndTheReleaseHistoryAsync()
+    public async Task OnlyTheOwnerSeesTheReleaseHistoryAndNoPageOffersToPublishAsync()
     {
         SignIn(Reviewer);
         var reviewer = await host.GetDocumentAsync("/Review");
-        Assert.Null(reviewer.QuerySelector("#publish"));
         Assert.Null(reviewer.QuerySelector("#releases"));
-        Assert.Null(reviewer.QuerySelector("#publish-confirm"));
         Assert.DoesNotContain("Ready to publish", reviewer.QuerySelector(".stats")!.TextContent, StringComparison.Ordinal);
 
         host.Client.DefaultRequestHeaders.Remove("Cookie");
         SignIn(Owner);
         var owner = await host.GetDocumentAsync("/Review");
-        Assert.Equal("0", StatValue(owner, "Ready to publish"));
-        Assert.Equal("#publish", owner.QuerySelectorAll("a.stat")
-            .Single(stat => stat.QuerySelector(".stat-label")!.TextContent == "Ready to publish").GetAttribute("href"));
-        Assert.Equal("Nothing is ready to publish", owner.QuerySelector("[aria-labelledby='publish'] .empty h3")!.TextContent);
+        Assert.Null(owner.QuerySelector("#publish"));
+        Assert.Null(owner.QuerySelector("form[id^='publish']"));
+        Assert.DoesNotContain("Ready to publish", owner.QuerySelector(".stats")!.TextContent, StringComparison.Ordinal);
         Assert.Equal("No releases yet", owner.QuerySelector("[aria-labelledby='releases'] .empty h3")!.TextContent);
         Assert.Null(owner.QuerySelector("[aria-labelledby='releases'] button, [aria-labelledby='releases'] form"));
     }
 
     [Fact]
-    public async Task OwnerLearnsWhyPublishingIsOffWhenNoIssuesFileIsSetAsync()
-    {
-        var unconfigured = new ReviewWorkspaceHost(postgres) { IssuesFile = false };
-        await unconfigured.StartAsync();
-        try
-        {
-            unconfigured.Client.DefaultRequestHeaders.Add("Cookie", unconfigured.CreateCookie(Owner));
-            var owner = await unconfigured.GetDocumentAsync("/Review");
-            Assert.Contains("CIVIC_LENS_ISSUES_CONFIG", owner.QuerySelector("#publish")!.TextContent, StringComparison.Ordinal);
-            Assert.Null(owner.QuerySelector("#publish-confirm"));
-        }
-        finally
-        {
-            await unconfigured.StopAsync();
-        }
-    }
-
-    [Fact]
-    public async Task OwnerLearnsWhyPublishingIsOffWhenNoReleaseDirectoryIsSetAsync()
-    {
-        // A silently missing section would leave the owner unsure whether publishing exists at all.
-        var unconfigured = new ReviewWorkspaceHost(postgres) { Publishing = false };
-        await unconfigured.StartAsync();
-        try
-        {
-            unconfigured.Client.DefaultRequestHeaders.Add("Cookie", unconfigured.CreateCookie(Owner));
-            var owner = await unconfigured.GetDocumentAsync("/Review");
-            Assert.Contains("CIVIC_LENS_RELEASE_DIRECTORY", owner.QuerySelector("#publish")!.TextContent, StringComparison.Ordinal);
-            Assert.Null(owner.QuerySelector("#publish-confirm"));
-
-            unconfigured.Client.DefaultRequestHeaders.Remove("Cookie");
-            unconfigured.Client.DefaultRequestHeaders.Add("Cookie", unconfigured.CreateCookie(Reviewer));
-            Assert.Null((await unconfigured.GetDocumentAsync("/Review")).QuerySelector("#publish"));
-        }
-        finally
-        {
-            await unconfigured.StopAsync();
-        }
-    }
-
-    [Fact]
-    public async Task SelectingShowsASummaryAndOnlyConfirmingPublishesAReleaseAsync()
-    {
-        await SaveComparisonAsync("Fee: 10 dollars.\n", "Fee: 12 dollars.\n");
-        SignIn(Owner);
-        var draftUrl = await StartFirstDraftAsync();
-        var draftId = draftUrl[("/Review/".Length)..];
-        await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars");
-        using var approved = await DecideAsync(draftUrl, "Approve");
-        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
-        var publications = PostgresPublicationStore.FromConnectionString(host.ConnectionString);
-
-        var home = await host.GetDocumentAsync("/Review");
-        Assert.Equal("1", StatValue(home, "Ready to publish"));
-        var checkbox = home.QuerySelector("input[type=checkbox][name=publish]")!;
-        Assert.Equal($"documentChange:{draftId}", checkbox.GetAttribute("value"));
-        Assert.Null(home.QuerySelector("#publish-confirm input[name=records]"));
-
-        // Choosing drafts is a read. The summary names each draft and the release it would build.
-        var summary = await host.GetDocumentAsync($"/Review?publish=documentChange:{draftId}");
-        var text = summary.QuerySelector("[aria-labelledby='publish']")!.TextContent;
-        Assert.Contains("Confirm release 1", text, StringComparison.Ordinal);
-        Assert.Contains("Fee rose to 12 dollars", text, StringComparison.Ordinal);
-        Assert.Contains("New", summary.QuerySelector("[aria-labelledby='publish'] tbody .badge")!.TextContent, StringComparison.Ordinal);
-        Assert.Equal(0, (await publications.GetStateAsync(default)).LatestReleaseNumber);
-
-        var confirm = Fields(summary.QuerySelector("#publish-confirm")!);
-        Assert.Equal([$"documentChange:{draftId}"], confirm.Where(field => field.Key == "records").Select(field => field.Value));
-        using var published = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(confirm));
-        Assert.Equal(HttpStatusCode.Redirect, published.StatusCode);
-        Assert.Equal("/Review?status=published&release=1", PathOf(published).Split('#')[0]);
-        Assert.Equal(1, (await publications.GetStateAsync(default)).Active!.ReleaseNumber);
-
-        // A repeated confirm replays the stored release instead of building a second one.
-        using var replay = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(confirm));
-        Assert.Equal(HttpStatusCode.Redirect, replay.StatusCode);
-        Assert.Equal(1, (await publications.GetStateAsync(default)).LatestReleaseNumber);
-
-        home = await host.GetDocumentAsync("/Review?status=published&release=1");
-        Assert.Equal("Release 1 is published.", home.QuerySelector(".notice-ok")!.TextContent.Replace("×", "").Trim());
-        Assert.Equal("0", StatValue(home, "Ready to publish"));
-        var row = home.QuerySelector("[aria-labelledby='releases'] tbody tr")!.TextContent;
-        Assert.Contains("Active", row, StringComparison.Ordinal);
-
-        // A new revision of a published draft is offered again, marked as a replacement.
-        await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars, effective now");
-        using var reapproved = await DecideAsync(draftUrl, "Approve");
-        Assert.Equal(HttpStatusCode.Redirect, reapproved.StatusCode);
-        var replacement = await host.GetDocumentAsync($"/Review?publish=documentChange:{draftId}");
-        Assert.Equal("Replacement", replacement.QuerySelector("[aria-labelledby='publish'] tbody .badge")!.TextContent);
-        Assert.Contains("Confirm release 2", replacement.QuerySelector("[aria-labelledby='publish']")!.TextContent, StringComparison.Ordinal);
-
-        // Each replacement row holds a note box that posts with the confirm form. A first publication holds none.
-        var noteBox = replacement.QuerySelector($"textarea[name='notes[documentChange:{draftId}]']")!;
-        Assert.Equal(("publish-confirm", "500"), (noteBox.GetAttribute("form"), noteBox.GetAttribute("maxlength")));
-        Assert.Null(summary.QuerySelector("textarea[name^='notes[']"));
-        var replaceFields = Fields(replacement.QuerySelector("#publish-confirm")!);
-        using var noNote = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(replaceFields));
-        Assert.Equal("/Review?status=publish-note-required", PathOf(noNote).Split('#')[0]);
-        Assert.Equal(1, (await publications.GetStateAsync(default)).LatestReleaseNumber);
-        replaceFields.Add(new($"notes[documentChange:{draftId}]", "Clarified the effective date."));
-        using var corrected = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(replaceFields));
-        Assert.Equal("/Review?status=published&release=2", PathOf(corrected).Split('#')[0]);
-    }
-
-    [Fact]
-    public async Task OnlyAWithdrawnRecordWithAHigherApprovedRevisionCanBeSelectedAndItReturnsWithANote()
+    public async Task ApprovingAReplacementWithACorrectionNoteLetsItPublishWithThatNoteAsync()
     {
         await SaveComparisonAsync("Fee: 10 dollars.\n", "Fee: 12 dollars.\n");
         SignIn(Owner);
@@ -425,43 +318,40 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         var draftId = draftUrl[("/Review/".Length)..];
         var reference = $"documentChange:{draftId}";
         await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars");
+        var firstEditor = await host.GetDocumentAsync(draftUrl);
+        Assert.Equal("500", firstEditor.QuerySelector("textarea[name='Decision.CorrectionNote']")!.GetAttribute("maxlength"));
+        Assert.Contains("Publishes soon.", firstEditor.QuerySelector("#decision-controls .actions-hint")!.TextContent, StringComparison.Ordinal);
         await ApproveAsync(draftUrl);
-        var publications = PostgresPublicationStore.FromConnectionString(host.ConnectionString);
-        var firstSummary = await host.GetDocumentAsync($"/Review?publish={reference}");
-        using var first = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(Fields(firstSummary.QuerySelector("#publish-confirm")!)));
-        Assert.Equal("/Review?status=published&release=1", PathOf(first).Split('#')[0]);
-        using (var withdrawn = await DecideAsync(draftUrl, "WithdrawApproval", "Wrong figure.")) Assert.Equal(HttpStatusCode.Redirect, withdrawn.StatusCode);
-        await WithdrawWithCliAsync(reference, "Wrong figure.");
-        await ApproveAsync(draftUrl);
+        var approvedEditor = await host.GetDocumentAsync(draftUrl);
+        Assert.Null(approvedEditor.QuerySelector("#decision-controls .actions-hint"));
+        Assert.Null(approvedEditor.QuerySelector("textarea[name='Decision.CorrectionNote']"));
+        await PublishWithCliAsync("k1", reference);
 
-        // Review approved the withdrawn revision again. Publish refuses it, so the row offers no checkbox.
-        var blocked = await host.GetDocumentAsync("/Review");
-        var blockedRow = blocked.QuerySelector("[aria-labelledby='publish'] tbody tr")!;
-        Assert.Contains("Withdrawn", blockedRow.TextContent, StringComparison.Ordinal);
-        Assert.Contains("Revise it in review", blockedRow.TextContent, StringComparison.Ordinal);
-        Assert.Null(blocked.QuerySelector("input[type=checkbox][name=publish]"));
-        var stale = await host.GetDocumentAsync($"/Review?publish={reference}");
-        Assert.Null(stale.QuerySelector("#publish-confirm input[name=records]"));
-        Assert.Contains("no longer ready", stale.QuerySelector("[aria-labelledby='publish']")!.TextContent, StringComparison.Ordinal);
-
-        // A new approved revision can return, and the return needs a note like a replacement.
         await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars, effective now");
-        await ApproveAsync(draftUrl);
-        var returnable = await host.GetDocumentAsync("/Review");
-        Assert.Equal(reference, returnable.QuerySelector("input[type=checkbox][name=publish]")!.GetAttribute("value"));
-        var summary = await host.GetDocumentAsync($"/Review?publish={reference}");
-        Assert.Equal("Returning", summary.QuerySelector("[aria-labelledby='publish'] tbody .badge")!.TextContent);
-        Assert.NotNull(summary.QuerySelector($"textarea[name='notes[{reference}]']"));
-        var fields = Fields(summary.QuerySelector("#publish-confirm")!);
-        using var noNote = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(fields));
-        Assert.Equal("/Review?status=publish-note-required", PathOf(noNote).Split('#')[0]);
-        Assert.Equal(2, (await publications.GetStateAsync(default)).LatestReleaseNumber);
-        fields.Add(new($"notes[{reference}]", "The figure is now correct."));
-        using var returned = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(fields));
-        Assert.Equal("/Review?status=published&release=3", PathOf(returned).Split('#')[0]);
-        var after = await host.GetDocumentAsync("/Review");
-        Assert.Equal("0", StatValue(after, "Ready to publish"));
-        Assert.DoesNotContain("Withdrawn", after.QuerySelector("[aria-labelledby='publish']")!.TextContent, StringComparison.Ordinal);
+        using var approved = await DecideAsync(draftUrl, "Approve", "Checked again.", correctionNote: "Clarified the effective date.");
+        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+        await PublishWithCliAsync("k2", reference);
+        var history = (await host.GetDocumentAsync(draftUrl)).QuerySelector("[aria-labelledby='history']")!.TextContent;
+        Assert.Contains("Correction note: Clarified the effective date.", history, StringComparison.Ordinal);
+
+        var record = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(host.ReleaseDirectory, "current", PublicationProtocol.RecordDataPath(draftId))));
+        var correction = Assert.Single(record.RootElement.GetProperty("corrections").EnumerateArray());
+        Assert.Equal("Clarified the effective date.", correction.GetProperty("note").GetString());
+    }
+
+    [Fact]
+    public async Task ATypedCorrectionNoteIsLeftOutOfAnyDecisionButApproveSoItNeverReachesAReaderAsync()
+    {
+        await SaveComparisonAsync("Fee: 10 dollars.\n", "Fee: 12 dollars.\n");
+        SignIn(Owner);
+        var draftUrl = await StartFirstDraftAsync();
+        await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars");
+
+        using var response = await DecideAsync(draftUrl, "RequestChanges", "Cite the notice.", correctionNote: "Not for readers.");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var review = await PostgresDocumentChangeReviewStore.FromConnectionString(host.ConnectionString).GetAsync(draftUrl[("/Review/".Length)..], default);
+        Assert.Null(Assert.Single(review!.Decisions).CorrectionNote);
     }
 
     [Fact]
@@ -474,9 +364,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars");
         using var approved = await DecideAsync(draftUrl, "Approve");
         Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
-        var summary = await host.GetDocumentAsync($"/Review?publish=documentChange:{draftId}");
-        using var published = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(Fields(summary.QuerySelector("#publish-confirm")!)));
-        Assert.Equal(HttpStatusCode.Redirect, published.StatusCode);
+        await PublishWithCliAsync("k1", $"documentChange:{draftId}");
         Assert.Equal("No published record is blocked",
             (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='blocked'] .empty h3")!.TextContent);
 
@@ -492,54 +380,6 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         host.Client.DefaultRequestHeaders.Remove("Cookie");
         SignIn(Reviewer);
         Assert.Null((await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='blocked']"));
-    }
-
-    [Fact]
-    public async Task ReviewerCannotPublishEvenWithAForgedPostAsync()
-    {
-        await SaveComparisonAsync("Fee: 10 dollars.\n", "Fee: 12 dollars.\n");
-        SignIn(Owner);
-        var draftUrl = await StartFirstDraftAsync();
-        await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars");
-        using var approved = await DecideAsync(draftUrl, "Approve");
-        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
-        host.Client.DefaultRequestHeaders.Remove("Cookie");
-        SignIn(Reviewer);
-
-        // The reviewer holds a valid antiforgery token for their own page, but the page offers no publish form.
-        var home = await host.GetDocumentAsync("/Review");
-        var forged = Fields(home.QuerySelector("#start-draft")!);
-        forged.Add(new("_handler", "publish-confirm"));
-        forged.Add(new("records", "documentChange:" + draftUrl[("/Review/".Length)..]));
-        using var response = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(forged));
-
-        Assert.NotEqual(HttpStatusCode.Redirect, response.StatusCode);
-        var publications = PostgresPublicationStore.FromConnectionString(host.ConnectionString);
-        Assert.Equal(0, (await publications.GetStateAsync(default)).LatestReleaseNumber);
-    }
-
-    [Fact]
-    public async Task AConfirmWithAKeyAndNoRecordsIsInvalidAndMakesNoReleaseAsync()
-    {
-        await SaveComparisonAsync("Fee: 10 dollars.\n", "Fee: 12 dollars.\n");
-        SignIn(Owner);
-        var draftUrl = await StartFirstDraftAsync();
-        await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars");
-        using var approved = await DecideAsync(draftUrl, "Approve");
-        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
-        var summary = await host.GetDocumentAsync($"/Review?publish=documentChange:{draftUrl[("/Review/".Length)..]}");
-        var fields = Fields(summary.QuerySelector("#publish-confirm")!);
-        using var published = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(fields));
-        Assert.Equal("/Review?status=published&release=1", PathOf(published).Split('#')[0]);
-        fields.RemoveAll(field => field.Key == "records");
-        fields.RemoveAll(field => field.Key == "idempotencyKey");
-        fields.Add(new("idempotencyKey", "empty-publish"));
-
-        using var empty = await host.Client.PostAsync("/Review", new FormUrlEncodedContent(fields));
-
-        Assert.Equal("/Review?status=publish-invalid", PathOf(empty).Split('#')[0]);
-        var publications = PostgresPublicationStore.FromConnectionString(host.ConnectionString);
-        Assert.Equal(1, (await publications.GetStateAsync(default)).LatestReleaseNumber);
     }
 
     [Fact]
@@ -637,12 +477,13 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     private async Task<HttpResponseMessage> DecideAsync(string editorUrl, string kind, string? note = null,
-        IEnumerable<string>? resolved = null)
+        IEnumerable<string>? resolved = null, string? correctionNote = null)
     {
         var editor = await host.GetDocumentAsync(editorUrl);
         var fields = Fields(editor.QuerySelector("#decision-form")!);
         Set(fields, "kind", kind);
         if (note is not null) Set(fields, "Decision.Note", note);
+        if (correctionNote is not null) Set(fields, "Decision.CorrectionNote", correctionNote);
         foreach (var id in resolved ?? []) fields.Add(new("Decision.ResolvedDecisionIds", id));
         return await host.Client.PostAsync(editorUrl, new FormUrlEncodedContent(fields));
     }
@@ -655,7 +496,9 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
     }
 
-    private async Task WithdrawWithCliAsync(string reference, string note)
+    private Task PublishWithCliAsync(string key, string reference) => RunReleaseCommandAsync(["releases", "publish", key, reference]);
+
+    private async Task RunReleaseCommandAsync(string[] arguments)
     {
         var environment = new Dictionary<string, string>
         {
@@ -665,7 +508,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
             ["CIVIC_LENS_COLLECTION_CONFIG"] = Path.Combine(host.KeyDirectory, "sources.json"),
             ["CIVIC_LENS_ISSUES_CONFIG"] = Path.Combine(host.KeyDirectory, "issues.json")
         };
-        var result = await HostProcess.RunWithEnvironmentAsync(host.ConnectionString, null, environment, ["releases", "publish", "withdraw", "--withdraw", reference, note]);
+        var result = await HostProcess.RunWithEnvironmentAsync(host.ConnectionString, null, environment, arguments);
         Assert.True(result.ExitCode == 0, result.Error + result.Output);
     }
 

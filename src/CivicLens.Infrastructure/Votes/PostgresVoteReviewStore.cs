@@ -102,7 +102,7 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         var records = await Records.ReadUnpublishedApprovedAsync(db, VoteReviewQueries.UnpublishedApproved, limit, excludedRecordIds, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return [.. records.Select(record => new UnpublishedApprovedVote(ToReview(record.Draft, record.History), record.PublishedRevisionNumber))];
+        return [.. records.Select(record => new UnpublishedApprovedVote(ToReview(record.Draft, record.History)))];
     }
 
     public async Task<IReadOnlyDictionary<string, PublishableVote>> GetForPublicationAsync(ImmutableArray<string> recordIds,

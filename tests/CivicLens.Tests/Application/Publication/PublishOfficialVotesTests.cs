@@ -157,7 +157,7 @@ public sealed class PublishOfficialVotesTests
     {
         PublishedRecordReference[] references = [.. votes.Select(vote => new PublishedRecordReference(PublishedRecordKind.Vote, vote))];
         return scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-            PublicationScenario.WithNotesFor(PublicationScenario.Request(key, references), references));
+            PublicationScenario.Request(key, references));
     }
 
     private static void Revise(PublicationScenario scenario, string vote, string headline, string[] members)
@@ -176,7 +176,7 @@ public sealed class PublishOfficialVotesTests
             {
                 CurrentRevision = revised,
                 Revisions = review.Revisions.Add(revised),
-                Decisions = review.Decisions.Add(PublicationScenario.Decision(vote, revised.RevisionNumber, ReviewDecisionKind.Approve) with { RevisionNumber = revised.RevisionNumber }),
+                Decisions = review.Decisions.Add(PublicationScenario.Decision(vote, revised.RevisionNumber, ReviewDecisionKind.Approve) with { RevisionNumber = revised.RevisionNumber, CorrectionNote = PublicationScenario.PersonNote }),
                 ReviewStateVersion = revised.RevisionNumber
             }
         };

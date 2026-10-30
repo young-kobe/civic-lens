@@ -15,23 +15,17 @@ internal static class ReviewQueries
         db.Set<DocumentComparisonRow>().AsNoTracking().Where(comparison => comparison.HasChanges &&
             !db.Set<DocumentChangeDraftRow>().Any(draft => draft.ComparisonId == comparison.ComparisonId));
 
-    internal const string ReleaseRecordColumns = """
-        COALESCE(e ->> 'kind', 'documentChange') AS kind, COALESCE(e ->> 'recordId', e ->> 'draftId') AS record_id,
-        (e ->> 'revisionNumber')::int AS revision_number
-        """;
+    private const string HeldInRelease = "s.first_release <= r.release_number AND (s.last_release IS NULL OR s.last_release >= r.release_number)";
 
-    public const string ActivePublishedRecords = $"""
+    private const string ActivePublishedRecords = $"""
         active AS (
-            SELECT {ReleaseRecordColumns}
-            FROM publication_releases r CROSS JOIN LATERAL jsonb_array_elements(r.records_json::jsonb) e
-            WHERE r.is_active)
+            SELECT s.kind, s.record_id, s.revision_number
+            FROM publication_record_states s JOIN publication_releases r ON r.is_active AND {HeldInRelease})
         """;
 
     private const string ReleaseRecords = $$"""
-        SELECT kind AS "Kind", record_id AS "RecordId", revision_number AS "RevisionNumber" FROM (
-            SELECT {{ReleaseRecordColumns}}
-            FROM publication_releases r CROSS JOIN LATERAL jsonb_array_elements(r.records_json::jsonb) e
-            WHERE r.release_number = {0}) records
+        SELECT s.kind AS "Kind", s.record_id AS "RecordId", s.revision_number AS "RevisionNumber"
+        FROM publication_record_states s JOIN publication_releases r ON r.release_number = {0} AND {{HeldInRelease}}
         """;
 
     private const string ActiveReleaseRecords = $"""
@@ -49,12 +43,12 @@ internal static class ReviewQueries
 
     private const string ActiveRevisionNumber = $$"""
         WITH {{ActivePublishedRecords}}
-        SELECT revision_number AS "Value" FROM active WHERE lower(kind) = lower({0}) AND record_id = {1}
+        SELECT revision_number AS "Value" FROM active WHERE kind = {0} AND record_id = {1}
         """;
 
     public static Task<int?> ReadActiveRevisionNumberAsync(CollectionAttemptDbContext db, PublishedRecordKind kind, string recordId,
         CancellationToken cancellationToken) =>
-        db.Database.SqlQueryRaw<int?>(ActiveRevisionNumber, kind.ToString(), recordId).SingleOrDefaultAsync(cancellationToken);
+        db.Database.SqlQueryRaw<int?>(ActiveRevisionNumber, PublishedRecordReference.NameOf(kind), recordId).SingleOrDefaultAsync(cancellationToken);
 
     private static ImmutableArray<PublishedRevisionBinding> ToBindings(IEnumerable<ReleaseRecordRow> rows) =>
         [.. rows.Select(row => new PublishedRevisionBinding(Enum.Parse<PublishedRecordKind>(row.Kind, ignoreCase: true),
