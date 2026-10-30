@@ -262,6 +262,8 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
         var repaired = await HostProcess.RunAsync(connectionString, "db", "migrate");
         var clean = await HostProcess.RunAsync(connectionString, "db", "migrate");
 
+        Assert.True(repaired.ExitCode == 0, repaired.Error);
+        Assert.True(clean.ExitCode == 0, clean.Error);
         Assert.Contains("Rebuilt published record state from releases.", repaired.Output, StringComparison.Ordinal);
         Assert.DoesNotContain("Rebuilt published record state", clean.Output, StringComparison.Ordinal);
     }
