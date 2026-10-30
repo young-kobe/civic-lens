@@ -2,7 +2,6 @@ namespace CivicLens.Application.Roster;
 
 public static class RosterLimits
 {
-    public const int LisId = 16;
     public const int FullName = 256;
     public const int Office = 256;
     public const int Phone = 64;

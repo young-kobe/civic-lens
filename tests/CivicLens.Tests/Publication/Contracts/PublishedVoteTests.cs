@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using CivicLens.Core.Votes;
 using CivicLens.Publication.Contracts;
 
@@ -36,12 +37,30 @@ public sealed class PublishedVoteTests
     {
         var json = JsonSerializer.Serialize(Vote(), PublicationProtocol.JsonOptions);
 
-        Assert.Equal(["recordId", "revisionNumber", "headline", "summary", "textOrigin", "chamber", "congress", "session", "rollCallNumber", "kind", "kindCitation",
+        Assert.Equal(["recordId", "revisionNumber", "headline", "summary", "textOrigin", "chamber", "congress", "session", "rollCallNumber", "source", "kind", "kindCitation",
             "votedOn", "result", "totals", "partyMajorities", "votedOnCitation", "facts", "members", "billType", "billNumber", "trackedIssueIds", "sources", "approvedAtUtc",
             "firstPublishedAtUtc", "corrections"], JsonDocument.Parse(json).RootElement.EnumerateObject().Select(property => property.Name));
         Assert.Contains("\"kind\":\"passage\"", json, StringComparison.Ordinal);
         Assert.Contains("\"votedOn\":\"2025-04-10\"", json, StringComparison.Ordinal);
         JsonSerializer.Deserialize<PublishedVote>(json, PublicationProtocol.JsonOptions)!.Validate();
+    }
+
+    [Fact]
+    public void AVoteFileFromBeforeTheSourceFieldReadsAsCongressGovBecauseEveryOlderVoteWasAHouseVote()
+    {
+        var json = JsonNode.Parse(JsonSerializer.Serialize(Vote(), PublicationProtocol.JsonOptions))!.AsObject();
+        Assert.True(json.Remove("source"));
+
+        var record = JsonSerializer.Deserialize<PublishedVote>(json.ToJsonString(), PublicationProtocol.JsonOptions)!;
+
+        record.Validate();
+        Assert.Equal(PublishedVoteSource.CongressGov, record.Source);
+    }
+
+    [Fact]
+    public void ARecordWithAnUnknownDataSourceIsRefusedSoThePageNeverNamesASourceThatDoesNotExist()
+    {
+        Assert.Throws<InvalidDataException>((Vote() with { Source = (PublishedVoteSource)99 }).Validate);
     }
 
     // The quote is exact text of the other source, so only a check against the named source finds the wrong name.
@@ -415,6 +434,7 @@ public sealed class PublishedVoteTests
         Congress = 119,
         Session = 1,
         RollCallNumber = 100,
+        Source = PublishedVoteSource.CongressGov,
         Kind = PublishedVoteKind.Passage,
         KindCitation = Cite(DetailId, DetailText, "Question: On Passage"),
         VotedOn = new DateOnly(2025, 4, 10),

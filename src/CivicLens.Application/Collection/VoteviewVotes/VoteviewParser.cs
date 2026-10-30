@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using CivicLens.Application.Collection.Bills;
-using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Application.Collection.Votes;
 
 namespace CivicLens.Application.Collection.VoteviewVotes;

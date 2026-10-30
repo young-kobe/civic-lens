@@ -3593,11 +3593,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("full_name");
 
-                    b.Property<string>("LisId")
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasColumnName("lis_id");
-
                     b.Property<string>("Office")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")

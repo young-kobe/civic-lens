@@ -10,7 +10,7 @@ public static class VoteDraftPrompt
 {
     private static readonly string HouseInstructions = InstructionsOf("United States House of Representatives", "House", "Congress.gov data");
 
-    private static readonly string SenateInstructions = InstructionsOf("United States Senate", "Senate", "senate.gov and Congress.gov data");
+    private static readonly string SenateInstructions = InstructionsOf("United States Senate", "Senate", "Senate roll call data and Congress.gov data");
 
     private static string InstructionsOf(string body, string shortName, string source) => $"""
         You draft the wording of a proposed public record about one roll-call vote of the {body} for Civic Lens, a nonpartisan transparency publication. Civic Lens shows the result, the totals, the date, and the vote of each tracked member in a list beside your text. A human editor reviews, edits, and approves every record. Your draft is never published as you write it.

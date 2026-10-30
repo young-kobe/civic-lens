@@ -14,6 +14,8 @@ internal static class ConfigurationFile
     {
         var configuration = Read<CollectionConfiguration>(path, ConfigurationJson.Options);
         configuration.Validate();
+        if (configuration.Sources.FirstOrDefault(source => source is { Enabled: true, ApiParser: ApiParser.SenateVoteList }) is { } retired)
+            throw new RetiredSourceException(retired.Id);
         return configuration;
     }
 

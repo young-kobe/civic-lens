@@ -39,7 +39,7 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
         var latest = await roster.ReadLatestAsync(RosterFixtures.SourceId, default);
         Assert.Equal(["C000127", "N000147", "W000832"], latest.Select(member => member.BioguideId));
         var cantwell = latest[0];
-        Assert.Equal(("S275", "511 Hart Senate Office Building"), (cantwell.LisId, cantwell.Office));
+        Assert.Equal("511 Hart Senate Office Building", cantwell.Office);
         Assert.Equal([new DateOnly(1993, 1, 5), new DateOnly(2025, 1, 3)], cantwell.Terms.Select(term => term.Start));
         Assert.Equal((3L, 5L), (await CountAsync("roster_members", attemptId), await CountAsync("roster_terms", attemptId)));
         Assert.Equal(1L, await CountAsync("roster_snapshots", attemptId));
@@ -163,61 +163,11 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
         var attemptId = await ImportAsync('a', 0);
         var members = RosterFixtures.Members();
         var broken = members[1] with { Terms = [members[1].Terms[0] with { Chamber = "gov" }] };
-        await SeedBlockedVoteAsync('1', "Senate", "evidenceUnavailable");
 
         await Assert.ThrowsAsync<DbUpdateException>(() => roster.AdmitAsync(attemptId, [members[0], broken], null, default));
 
-        Assert.Equal(["Blocked"], await StatusesAsync());
-
         Assert.Equal((0L, 0L, 0L), (await CountAsync("roster_members", attemptId), await CountAsync("roster_terms", attemptId),
             await CountAsync("roster_snapshots", attemptId)));
-    }
-
-    [Fact]
-    public async Task SenatorLisIdsListOnlySenatorsFromEverySnapshotSoASenatorWhoLeftStillMatchesHisOldVotes()
-    {
-        var first = await ImportAsync('a', 0);
-        var later = await ImportAsync('b', 1);
-        await roster.AdmitAsync(first, RosterFixtures.Members(), null, default);
-        await roster.AdmitAsync(later, [.. RosterFixtures.Members().Skip(1)], null, default);
-
-        var senators = await roster.ReadSenatorLisIdsAsync(RosterFixtures.SourceId, default);
-
-        Assert.Equal([new SenatorLisId("C000127", "S275")], senators);
-        Assert.DoesNotContain(await roster.ReadLatestAsync(RosterFixtures.SourceId, default), member => member.BioguideId == "C000127");
-    }
-
-    [Fact]
-    public async Task ASenatorWithTwoLisIdsInTwoSnapshotsListsBothSoTheCallerCanRefuseTheConflict()
-    {
-        var first = await ImportAsync('a', 0);
-        var later = await ImportAsync('b', 1);
-        var members = RosterFixtures.Members();
-        await roster.AdmitAsync(first, members, null, default);
-        await roster.AdmitAsync(later, [members[0] with { LisId = "S999" }], null, default);
-
-        var senators = await roster.ReadSenatorLisIdsAsync(RosterFixtures.SourceId, default);
-
-        Assert.Equal([new SenatorLisId("C000127", "S275"), new SenatorLisId("C000127", "S999")], senators);
-    }
-
-    [Fact]
-    public async Task ASenatorWithoutALisIdListsWithANullIdSoTheCallerCanBlockInsteadOfSkippingHim()
-    {
-        var attemptId = await ImportAsync('a', 0);
-        var members = RosterFixtures.Members();
-        await roster.AdmitAsync(attemptId, [members[0] with { LisId = null }], null, default);
-
-        Assert.Equal([new SenatorLisId("C000127", null)], await roster.ReadSenatorLisIdsAsync(RosterFixtures.SourceId, default));
-    }
-
-    [Fact]
-    public async Task SenatorLisIdsOfOneSourceExcludeTheSnapshotsOfAnotherSource()
-    {
-        var attemptId = await ImportAsync('a', 0);
-        await roster.AdmitAsync(attemptId, RosterFixtures.Members(), null, default);
-
-        Assert.Empty(await roster.ReadSenatorLisIdsAsync("other-members", default));
     }
 
     [Fact]
@@ -244,39 +194,6 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
         var job = Assert.Single(await jobs.ListAsync(10, default));
         Assert.Equal((ApiResource.MemberRoster, RosterFixtures.SourceUrl, null), (job.Definition.ApiResource, job.Definition.Url,
             job.Definition.Credential));
-    }
-
-    [Fact]
-    public async Task ANewSnapshotRequeuesOnlyTheSenateDraftsBlockedAsEvidenceUnavailableBecauseANewSenatorMayNowMatch()
-    {
-        await SeedBlockedVoteAsync('1', "Senate", "evidenceUnavailable");
-        await SeedBlockedVoteAsync('2', "House", "evidenceUnavailable");
-        await SeedBlockedVoteAsync('3', "Senate", "tooManyMembers");
-
-        await roster.AdmitAsync(await ImportAsync('a', 0), RosterFixtures.Members(), null, default);
-
-        Assert.Equal(["Pending", "Blocked", "Blocked"], await StatusesAsync());
-    }
-
-    private Task SeedBlockedVoteAsync(char id, string chamber, string errorCode) => ExecuteAsync($"""
-        SET session_replication_role = replica;
-        INSERT INTO vote_candidates (candidate_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks,
-            detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
-        VALUES ('{new string(id, 64)}', 'votes', '{chamber}', 119, 1, {id}, 1, 'detail-{id}', 'members-{id}',
-                '{new string('c', 64)}', '{new string('c', 64)}', '{new string('c', 64)}', 1);
-        INSERT INTO vote_analysis (candidate_id, task, status, error_code, fence, attempts, reserved_tokens, created_at_utc_ticks)
-        VALUES ('{new string(id, 64)}', 'vote-draft', 'Blocked', '{errorCode}', 0, 1, 0, 1)
-        """);
-
-    private async Task<string[]> StatusesAsync()
-    {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand("SELECT status FROM vote_analysis ORDER BY candidate_id", connection);
-        await using var reader = await command.ExecuteReaderAsync();
-        var statuses = new List<string>();
-        while (await reader.ReadAsync()) statuses.Add(reader.GetString(0));
-        return [.. statuses];
     }
 
     private Task<string> ImportAsync(char body, int day) =>

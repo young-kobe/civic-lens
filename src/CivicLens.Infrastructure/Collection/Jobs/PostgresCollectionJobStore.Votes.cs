@@ -2,7 +2,6 @@ using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
-using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Application.Collection.Votes;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection.BillStream;
@@ -74,44 +73,6 @@ public sealed partial class PostgresCollectionJobStore : IVoteAdmissionStore
         }, cancellationToken);
     }
 
-    public Task<DiscoveryAdmissionResult> AdmitSenateMenuAsync(ConfiguredCollectionSource source, string menuJobId,
-        SenateVoteMenu menu, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(source);
-        ArgumentNullException.ThrowIfNull(menu);
-        ArgumentException.ThrowIfNullOrWhiteSpace(menuJobId);
-        return TransactionAsync(async (db, now) =>
-        {
-            var batch = source.CreateSenateMenuBatch(menuJobId, menu, Today(now));
-            var (result, _) = await AdmitApiJobsAsync(db, batch, ApiJobSaveBatchSize, now, cancellationToken);
-            if (result.DeferredCount > 0)
-                throw new InvalidDataException($"Source '{source.SourceId}' admission policy cannot hold a full Senate vote menu.");
-            return result;
-        }, cancellationToken);
-    }
-
-    public Task<DiscoveryAdmissionResult> AdmitSenateVoteAsync(ConfiguredCollectionSource source, string voteJobId,
-        SenateVote vote, string extractionId, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(source);
-        ArgumentNullException.ThrowIfNull(vote);
-        ArgumentException.ThrowIfNullOrWhiteSpace(voteJobId);
-        return TransactionAsync(async (db, now) =>
-        {
-            var session = vote.Roll.Session;
-            if (await FindVoteAsync(db, source.SourceId, Chamber.Senate, session, vote.Roll.Number, vote.ModifyDate, cancellationToken) is not null)
-                return NoAdmission with { DuplicateCount = 1 };
-            await EnsureExtractionIsOfJobAsync(db, voteJobId, extractionId, cancellationToken);
-            var row = NewVoteRow(source.SourceId, voteJobId, Chamber.Senate, session, vote.Roll.Number, vote.ModifyDate,
-                vote.BillType, vote.BillNumber, extractionId);
-            db.Add(row);
-            var candidate = NewVoteCandidate(source, row, voteJobId, extractionId, now);
-            db.Add(candidate);
-            await QueueCandidateAsync(db, candidate, now, cancellationToken);
-            return NoAdmission;
-        }, cancellationToken);
-    }
-
     private static async Task QueueCandidateAsync(CollectionAttemptDbContext db, VoteCandidateRow candidate, DateTimeOffset now,
         CancellationToken cancellationToken) =>
         QueueCandidate(db, candidate, now, await ReadQueueInputsAsync(db, candidate, cancellationToken));
@@ -159,8 +120,8 @@ public sealed partial class PostgresCollectionJobStore : IVoteAdmissionStore
         long updateDateUtcTicks) =>
         HashIdentity($"{IdentityPrefix(chamber)}:{sourceId.Length}:{sourceId}{congress}:{sessionNumber}:{rollCallNumber}:{updateDateUtcTicks}");
 
-    internal static string HashVoteRecord(Chamber chamber, string sourceId, int congress, int sessionNumber, int rollCallNumber) =>
-        HashIdentity($"{IdentityPrefix(chamber)}-record:{sourceId.Length}:{sourceId}{congress}:{sessionNumber}:{rollCallNumber}");
+    internal static string HashVoteRecord(Chamber chamber, string recordKey, int congress, int sessionNumber, int rollCallNumber) =>
+        HashIdentity($"{IdentityPrefix(chamber)}-record:{recordKey.Length}:{recordKey}{congress}:{sessionNumber}:{rollCallNumber}");
 
     private static string IdentityPrefix(Chamber chamber) => $"{chamber.ToString().ToLowerInvariant()}-vote";
 

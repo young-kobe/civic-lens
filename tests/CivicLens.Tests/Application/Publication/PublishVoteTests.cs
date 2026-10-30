@@ -2,7 +2,8 @@ using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Collection.HouseVotes;
-using CivicLens.Application.Collection.SenateVotes;
+using CivicLens.Application.Collection.Votes;
+using CivicLens.Application.Collection.VoteviewVotes;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Roster;
 using CivicLens.Core.Votes;
@@ -81,6 +82,22 @@ public sealed class PublishVoteTests
         var vote = scenario.AddVote('d', decisions: [PublicationScenario.Decision(new string('d', 64), 1, ReviewDecisionKind.RequestChanges)]);
 
         await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote)));
+    }
+
+    [Theory]
+    [InlineData(VoteSource.CongressGov, PublishedVoteSource.CongressGov)]
+    [InlineData(VoteSource.Voteview, PublishedVoteSource.Voteview)]
+    public async Task TheRecordNamesTheDataSourceOfItsRevisionSoAReaderKnowsWhoseDataTheCastsRestOn(VoteSource source, PublishedVoteSource expected)
+    {
+        var scenario = new PublicationScenario();
+        var vote = scenario.AddVote('d', source: source, chamber: source == VoteSource.CongressGov ? Chamber.House : Chamber.Senate,
+            totalLines: source == VoteSource.CongressGov ? null : ["Count: Yea 1, Nay 0, Present 0, Not voting 0"]);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
+
+        var record = JsonSerializer.Deserialize<PublishedVote>(scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.RecordDataPath(vote)],
+            PublicationProtocol.JsonOptions)!;
+        Assert.Equal(expected, record.Source);
     }
 
     [Fact]
@@ -368,12 +385,12 @@ public sealed class PublishVoteTests
     }
 
     [Fact]
-    public async Task SenateTotalsComeFromTheCountLineAndPartiesFromTheLisIdsOfTheRoster()
+    public async Task VoteviewSenatorsTakeTheRosterPartyByBioguideIdEvenWhenTheMemberLineNamesAnotherParty()
     {
         var scenario = new PublicationScenario();
-        scenario.RosterMembers = [new RosterMember("M000001", "S1", "Mayor Example", null, null, null, [Term("Democrat", chamber: "sen")]), new RosterMember("R9", "S9", "R9", null, null, null, [Term("Republican", chamber: "sen")])];
-        var vote = scenario.AddVote('d', chamber: Chamber.Senate, totalLines: ["Count: Yea 1, Nay 1, Present 0, Not voting 0"],
-            otherMemberLines: ["Member: S9, A, R, AL, Nay"], trackedSourceId: "S1");
+        scenario.RosterMembers = [new RosterMember("M000001", "Mayor Example", null, null, null, [Term("Democrat", chamber: "sen")]), new RosterMember("R9", "R9", null, null, null, [Term("Republican", chamber: "sen")])];
+        var vote = scenario.AddVote('d', chamber: Chamber.Senate, source: VoteSource.Voteview, totalLines: ["Count: Yea 1, Nay 1, Present 0, Not voting 0"],
+            otherMemberLines: ["Member: R9, A, D, AL, Nay"], trackedSourceId: "M000001");
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
 
@@ -472,13 +489,12 @@ public sealed class PublishVoteTests
     }
 
     [Fact]
-    public async Task SenateLinesFromTheRealRendererPublishWithTheirTotalsAndParties()
+    public async Task VoteviewLinesFromTheRealRendererPublishWithTheirTotalsAndParties()
     {
-        var detail = new SenateVoteDetail(new(SenateVoteFixtures.Roll1, HouseVoteFixtures.Updated, null, null), HouseVoteFixtures.Updated, "On Passage", "Text", "Title",
-            "Passed", null, null, null, null, new(1, 1, 0, 0), [new("S9", "Ann", "Roe", "R", "AL", "Nay")]);
+        var text = VoteviewRenderer.Render(VoteviewRollOf(VoteviewMemberVoteOf("S1", "D", "Yea"), VoteviewMemberVoteOf("S9", "R", "Nay")));
         var scenario = new PublicationScenario();
-        var vote = scenario.AddVote('d', chamber: Chamber.Senate, trackedSourceId: "S1", totalLines: LinesOf(SenateVoteRenderer.Render(detail), "Count: "),
-            otherMemberLines: LinesOf(SenateVoteRenderer.Render(detail), "Member: "));
+        var vote = scenario.AddVote('d', chamber: Chamber.Senate, source: VoteSource.Voteview, trackedSourceId: "S1",
+            totalLines: LinesOf(text, "Count: "), otherMemberLines: [.. LinesOf(text, "Member: ").Where(line => !line.StartsWith("Member: S1,", StringComparison.Ordinal))]);
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
 
@@ -505,17 +521,13 @@ public sealed class PublishVoteTests
     }
 
     [Fact]
-    public async Task EachSenateCountLabelFromTheRealRendererPublishesIntoItsOwnTotal()
+    public async Task EachVoteviewCountLabelFromTheRealRendererPublishesIntoItsOwnTotal()
     {
-        SenateVoteMember[] members =
-        [
-            .. SenateMembers("A", "Yea", 3), .. SenateMembers("B", "Nay", 3), .. SenateMembers("C", "Present", 2), .. SenateMembers("D", "Not Voting", 1)
-        ];
-        var detail = new SenateVoteDetail(new(SenateVoteFixtures.Roll1, HouseVoteFixtures.Updated, null, null), HouseVoteFixtures.Updated, "On Passage", "Text", "Title",
-            "Passed", null, null, null, null, new(4, 3, 2, 1), members);
+        var text = VoteviewRenderer.Render(VoteviewRollOf([
+            VoteviewMemberVoteOf("S1", "D", "Yea"), .. VoteviewMembers("A", "Yea", 3), .. VoteviewMembers("B", "Nay", 3), .. VoteviewMembers("C", "Present", 2), .. VoteviewMembers("D", "Not Voting", 1)]));
         var scenario = new PublicationScenario();
-        var vote = scenario.AddVote('d', chamber: Chamber.Senate, trackedSourceId: "S1", totalLines: LinesOf(SenateVoteRenderer.Render(detail), "Count: "),
-            otherMemberLines: LinesOf(SenateVoteRenderer.Render(detail), "Member: "));
+        var vote = scenario.AddVote('d', chamber: Chamber.Senate, source: VoteSource.Voteview, trackedSourceId: "S1",
+            totalLines: LinesOf(text, "Count: "), otherMemberLines: [.. LinesOf(text, "Member: ").Where(line => !line.StartsWith("Member: S1,", StringComparison.Ordinal))]);
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
 
@@ -525,8 +537,15 @@ public sealed class PublishVoteTests
     private static HouseVoteMember[] Members(string idPrefix, string cast, int count) =>
         [.. Enumerable.Range(1, count).Select(index => new HouseVoteMember($"{idPrefix}{index}", "Ann", "Roe", "R", "AL", cast))];
 
-    private static SenateVoteMember[] SenateMembers(string idPrefix, string cast, int count) =>
-        [.. Enumerable.Range(1, count).Select(index => new SenateVoteMember($"{idPrefix}{index}", "Ann", "Roe", "R", "AL", cast))];
+    private static VoteviewMemberVote[] VoteviewMembers(string idPrefix, string cast, int count) =>
+        [.. Enumerable.Range(1, count).Select(index => VoteviewMemberVoteOf($"{idPrefix}{index}", "R", cast))];
+
+    private static VoteviewMemberVote VoteviewMemberVoteOf(string bioguideId, string party, string cast) =>
+        new(new VoteviewMember(bioguideId.GetHashCode(StringComparison.Ordinal), bioguideId, "Roe", party, "AL"), cast);
+
+    private static VoteviewRoll VoteviewRollOf(params VoteviewMemberVote[] votes) =>
+        new(new VoteviewRollCall(1, new SenateVoteRoll(new VoteSession(119, 1), 1), new DateOnly(2025, 4, 10), "On Passage", "Title", "Passed",
+            null, null, null, 0, 0), votes);
 
     private static string[] LinesOf(string text, string prefix) =>
         [.. text.Split('\n').Where(line => line.StartsWith(prefix, StringComparison.Ordinal))];
@@ -534,7 +553,7 @@ public sealed class PublishVoteTests
     private static RosterTerm Term(string party, string? caucus = null, string chamber = "rep") =>
         new(0, chamber, new(2025, 1, 3), new(2027, 1, 3), "MA", 1, null, party, caucus);
 
-    private static RosterMember Member(string id, params RosterTerm[] terms) => new(id, null, id, null, null, null, terms);
+    private static RosterMember Member(string id, params RosterTerm[] terms) => new(id, id, null, null, null, terms);
 
     private static PublishedVote ReadVote(PublicationScenario scenario, PublicationReleaseSummary summary, string recordId) =>
         JsonSerializer.Deserialize<PublishedVote>(scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.RecordDataPath(recordId)],
