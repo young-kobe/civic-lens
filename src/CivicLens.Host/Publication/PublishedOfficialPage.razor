@@ -99,9 +99,9 @@
         }
     }
     <Panel Title="Records" Aside="@RecordFilter" data-layout="@(RecordFilter is null ? null : PublishedOfficialView.RecordFilters[0].Value)" data-records="@(Page.TalkAndAction is null ? null : "")">
-        @if (PublishedOfficialView.RecordsCaption(Page) is { } caption)
+        @if (PublishedOfficialView.RecordsCountLine(Page) is { } countLine)
         {
-            <p class="muted small">@caption</p>
+            <p class="muted small">@countLine</p>
         }
         @if (Page.TalkAndAction is not null)
         {
@@ -137,7 +137,7 @@
             <ul class="choices">
                 @foreach (var congress in Page.PastCongresses)
                 {
-                    <li><a href="@(Page.RootPath + PublicationProtocol.OfficialCongressPagePath(Page.Profile.Id, congress))">Votes in Congress @congress</a></li>
+                    <li><a href="@(Page.RootPath + PublicationProtocol.OfficialCongressPagePath(Page.Profile.Id, congress))">Votes in @PublishedOfficialView.TheCongress(congress)</a></li>
                 }
             </ul>
         </Panel>
@@ -192,7 +192,7 @@
 
     private IReadOnlyList<PublishedOfficialRow>? rows;
 
-    private IReadOnlyList<PublishedOfficeStretch> OfficeStretches => officeStretches ??= PublishedOfficialView.OfficeStretches(Page.Profile.Terms);
+    private IReadOnlyList<PublishedOfficeStretch> OfficeStretches => officeStretches ??= PublishedOfficialView.OfficeStretches(Page.Profile.Terms, Page.PublishedAtUtc);
 
     private IReadOnlyList<PublishedOfficeStretch>? officeStretches;
 
@@ -202,7 +202,7 @@
 
     private IReadOnlyList<PublishedOfficialRow> Rows => rows ??= PublishedOfficialView.Rows(Page);
 
-    private string Title => Page.IsCurrent ? Page.Profile.Name : $"{Page.Profile.Name}, Congress {Page.Congress}";
+    private string Title => Page.IsCurrent ? Page.Profile.Name : $"{Page.Profile.Name}, {PublishedOfficialView.TheCongress(Page.Congress!.Value)}";
 
     private string Description => Page.IsCurrent
         ? Lede is null ? Page.Profile.Name : $"{Page.Profile.Name}. {Lede}"
@@ -218,5 +218,5 @@
 
     private string? Lede => Page.IsCurrent
         ? PublishedOfficialView.Lede(Page.Profile.Terms, Page.PublishedAtUtc)
-        : $"Votes in {PublishedOfficialView.TheCongress(Page.Congress!.Value)}, newest first.";
+        : $"Votes in {PublishedOfficialView.TheCongress(Page.Congress!.Value)}.";
 }

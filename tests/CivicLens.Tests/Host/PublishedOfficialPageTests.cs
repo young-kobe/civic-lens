@@ -125,7 +125,7 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task TheRecordsCaptionCountsEachKindAndTheVotesWithTheirCongressSoNoCountHasAnUnstatedScope()
+    public async Task TheRecordsCountLineCountsEachKindAndTheVotesWithTheirCongressSoNoCountHasAnUnstatedScope()
     {
         var page = Current(
             [Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)), Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1))],
@@ -156,7 +156,7 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task TheRecordsCaptionUsesTheSingularForOneRecordAndItsOwnKind()
+    public async Task TheRecordsCountLineUsesTheSingularForOneRecordAndItsOwnKind()
     {
         var records = await PanelAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []), "panel-records");
 
@@ -164,7 +164,7 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task AnEmptyRecordsTableHasNoCaptionBecauseItsEmptyStateAlreadySaysThereAreNoRecords()
+    public async Task AnEmptyRecordsTableHasNoCountLineBecauseItsEmptyStateAlreadySaysThereAreNoRecords()
     {
         var records = await PanelAsync(Current([], []), "panel-records");
 
@@ -179,7 +179,7 @@ public sealed class PublishedOfficialPageTests
 
         var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None));
 
-        Assert.Equal("Votes in the 117th Congress, newest first.", document.QuerySelector(".page-header-lede")!.TextContent);
+        Assert.Equal("Votes in the 117th Congress.", document.QuerySelector(".page-header-lede")!.TextContent);
         Assert.Equal("This list holds 1 published record: 1 vote in the 117th Congress. Rows are newest first.", document.QuerySelector("[aria-labelledby='panel-records'] p.muted")!.TextContent);
     }
 
@@ -634,11 +634,11 @@ public sealed class PublishedOfficialPageTests
         var document = new HtmlParser().ParseDocument(html);
         Assert.Equal(["../../index.html", "../../officials.html", "../../officials/mayor.html"],
             document.QuerySelectorAll("nav[aria-label='Breadcrumb'] a").Select(link => link.GetAttribute("href")));
-        Assert.Equal("Mayor Example, Congress 118", document.QuerySelector("nav[aria-label='Breadcrumb'] [aria-current='page']")!.TextContent);
+        Assert.Equal("Mayor Example, the 118th Congress", document.QuerySelector("nav[aria-label='Breadcrumb'] [aria-current='page']")!.TextContent);
         Assert.Equal(["../../records/" + new string('3', 64) + ".html"], document.QuerySelectorAll("tbody a.cell-title").Select(link => link.GetAttribute("href")));
         Assert.Contains("href=\"../../assets/css/theme.css\"", html, StringComparison.Ordinal);
         Assert.Null(document.QuerySelector("[aria-labelledby='panel-offices']"));
-        Assert.Contains("Congress 118", document.QuerySelector("title")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("the 118th Congress", document.QuerySelector("title")!.TextContent, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -813,6 +813,22 @@ public sealed class PublishedOfficialPageTests
 
         Assert.Equal("Party: Independent, caucuses with Democrats", cards[0].QuerySelectorAll(".cell-sub")[1].TextContent);
         Assert.Equal("Party: Republican", cards[1].QuerySelectorAll(".cell-sub")[1].TextContent);
+    }
+
+    [Fact]
+    public async Task AnOfficialWhoseTermsAllStartAfterTheReleaseDateIsInTheOtherOfficialsTabBecauseNoTermIsTheLatest()
+    {
+        var page = await ListAsync(new OfficialListing(Profile("a", "Ann Able", Term("sen", "MA", "Democratic") with { Start = new DateOnly(2027, 1, 3) }), 1));
+
+        Assert.Equal("other", page.QuerySelector("ul.officials > li")!.GetAttribute("data-office"));
+    }
+
+    [Fact]
+    public async Task AnOfficeThatStartsAfterTheReleaseDateIsNotInTheOfficesTableSoItIsNeverShownAsPresent()
+    {
+        var rows = await OfficeRowsAsync(Seat(new(2025, 1, 3), new(2027, 1, 3)), new PublishedOfficeTerm { Office = "Mayor", Kind = PublishedOfficeKind.Other, Start = new(2027, 1, 20) });
+
+        Assert.Equal(["2025-01-03 to 2027-01-03"], rows);
     }
 
     [Fact]

@@ -1626,7 +1626,7 @@ public sealed class ReleaseRendererTests
         AssertTrail(pages["withdrawal"], ["Home|../index.html", "All records|../all.html", "Withdrawn action: cccccccccccc"]);
         AssertTrail(pages["official"], ["Home|../index.html", "Officials|../officials.html", "Mayor Example"]);
         AssertTrail(pages["past congress"], ["Home|../../index.html", "Officials|../../officials.html",
-            "Mayor Example|../../officials/mayor.html", "Mayor Example, Congress 118"]);
+            "Mayor Example|../../officials/mayor.html", "Mayor Example, the 118th Congress"]);
         foreach (var page in pages.Values)
             Assert.Equal(page.Name != "home", new HtmlParser().ParseDocument(page.Html).QuerySelector("nav[aria-label='Breadcrumb']") is not null);
     }

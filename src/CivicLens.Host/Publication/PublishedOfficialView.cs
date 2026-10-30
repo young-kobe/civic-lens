@@ -47,8 +47,8 @@ internal static class PublishedOfficialView
             : $"In {chamber} since {since}.";
     }
 
-    public static IReadOnlyList<PublishedOfficeStretch> OfficeStretches(IEnumerable<PublishedOfficeTerm> terms) =>
-        Stretches(terms, (earlier, later) => earlier.Office == later.Office && earlier.State == later.State
+    public static IReadOnlyList<PublishedOfficeStretch> OfficeStretches(IEnumerable<PublishedOfficeTerm> terms, DateTimeOffset publishedAtUtc) =>
+        Stretches(Started(terms, publishedAtUtc), (earlier, later) => earlier.Office == later.Office && earlier.State == later.State
             && earlier.District == later.District && earlier.Party == later.Party);
 
     public static string OfficeStretchNote(IEnumerable<PublishedOfficeTerm> terms) => terms.All(term => ChamberOf(term.Office) is not null)
@@ -83,7 +83,7 @@ internal static class PublishedOfficialView
 
     private static string MonthYear(DateOnly day) => day.ToString("MMMM yyyy", CultureInfo.InvariantCulture);
 
-    public static string? RecordsCaption(ReleaseOfficialPage page)
+    public static string? RecordsCountLine(ReleaseOfficialPage page)
     {
         var total = page.Records.Length + page.Votes.Length;
         if (total == 0) return null;
