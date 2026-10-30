@@ -275,6 +275,38 @@ public sealed class PublishVoteTests
         Assert.Equal((null, false), (row.PartyMajority, row.SplitVote));
     }
 
+    [Theory]
+    [InlineData("Independent")]
+    [InlineData("Unknown")]
+    public async Task AMemberOfAGroupWithNoYeaOrNayVotesStillPublishesARowOnASplitVote(string party)
+    {
+        var scenario = new PublicationScenario();
+        scenario.RosterMembers = [Member("M000001", Term(party)), Member("D1", Term("Democrat")), Member("R1", Term("Republican"))];
+        var vote = scenario.AddVote('d', cast: "Not Voting",
+            totalLines: ["Party total D: Yea 1, Nay 0, Present 0, Not voting 1", "Party total R: Yea 0, Nay 1, Present 0, Not voting 0"],
+            otherMemberLines: ["Member: D1, A, D, AL, Yea", "Member: R1, A, R, AL, Nay"]);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
+
+        var row = Assert.Single(ReadOfficialVotes(scenario, summary, "mayor").Votes);
+        Assert.Equal((party, null, true), (row.Party, row.PartyMajority, row.SplitVote));
+    }
+
+    [Fact]
+    public async Task ATiedIndependentGroupStillPublishesARowOnASplitVote()
+    {
+        var scenario = new PublicationScenario();
+        scenario.RosterMembers = [Member("M000001", Term("Independent")), Member("I1", Term("Independent")), Member("D1", Term("Democrat")), Member("R1", Term("Republican"))];
+        var vote = scenario.AddVote('d',
+            totalLines: ["Party total D: Yea 2, Nay 0, Present 0, Not voting 0", "Party total R: Yea 0, Nay 1, Present 0, Not voting 0", "Party total I: Yea 0, Nay 1, Present 0, Not voting 0"],
+            otherMemberLines: ["Member: D1, A, D, AL, Yea", "Member: R1, A, R, AL, Nay", "Member: I1, A, I, VT, Nay"]);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
+
+        var row = Assert.Single(ReadOfficialVotes(scenario, summary, "mayor").Votes);
+        Assert.Equal(("Independent", null, true), (row.Party, row.PartyMajority, row.SplitVote));
+    }
+
     // The source gives a bare "I" for an Independent, but the member votes with a party caucus.
     [Fact]
     public async Task AnIndependentWhoCaucusesWithDemocratsCountsAsDemocrat()
