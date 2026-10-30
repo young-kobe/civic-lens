@@ -640,7 +640,7 @@ public sealed class ReleaseRendererTests
         Assert.Equal(["Started: 2025-04-10T11:08:00-04:00", "Question: On Passage", "Result: Passed <b>"],
             result.QuerySelectorAll("blockquote").Select(quote => quote.TextContent));
         var members = document.QuerySelector("[aria-labelledby='members-title']")!;
-        Assert.Equal(["Voted Yea (1 member)"], members.QuerySelectorAll("h3").Select(heading => heading.TextContent));
+        Assert.Equal(["Voted Yea (1 tracked House member)"], members.QuerySelectorAll("h3").Select(heading => heading.TextContent));
         Assert.Equal(["Jane <Doe>"], members.QuerySelectorAll("li a:first-child").Select(link => link.TextContent));
         Assert.Empty(members.QuerySelectorAll("blockquote"));
         var sources = document.QuerySelector("[aria-labelledby='sources-title']")!;
@@ -769,9 +769,21 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
 
         var members = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='members-title']")!;
-        Assert.Equal(["Voted Yea (2 members)", "Voted Nay (1 member)", "Voted for Jeffries (2 members)", "Voted for Emmer (1 member)", "Voted Present (1 member)", "Did not vote (1 member)"],
+        Assert.Equal(["Voted Yea (2 tracked House members)", "Voted Nay (1 tracked House member)", "Voted for Jeffries (2 tracked House members)", "Voted for Emmer (1 tracked House member)", "Voted Present (1 tracked House member)", "Did not vote (1 tracked House member)"],
             members.QuerySelectorAll("h3").Select(heading => heading.TextContent));
         Assert.Equal(["Amy", "Carl"], members.QuerySelectorAll(".member-group:first-of-type li a:first-child").Select(link => link.TextContent));
+    }
+
+    // A bare count could mean all members who voted, so each heading says it counts tracked members of the chamber.
+    [Fact]
+    public async Task ASenateVoteCountsTrackedSenatorsAndEachMemberLinkNamesTheMemberLine()
+    {
+        var vote = VoteWithCasts([("Amy", "Yea"), ("Bo", "Yea")]) with { Chamber = PublishedChamber.Senate };
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var members = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='members-title']")!;
+        Assert.Equal(["Voted Yea (2 tracked senators)"], members.QuerySelectorAll("h3").Select(heading => heading.TextContent));
+        Assert.Equal(["Source line: Amy, member line", "Source line: Bo, member line"], members.QuerySelectorAll("li a.small").Select(link => link.TextContent));
     }
 
     [Fact]
