@@ -266,6 +266,18 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task PruneKeepsEveryReleaseWhenAllAreYoungerThanTheMinimumAgeEvenPastTheCount()
+    {
+        var draft = await CreateDraftAsync();
+        for (var number = 1; number <= 3; number++)
+            await publications.CommitAsync(Owner.Subject, Commit(number, draft, 1, 0), $"key-{number}", Hash(number), default);
+
+        var below = await LowestKeptAsync(keep: 1);
+
+        Assert.Equal(1, below);
+    }
+
+    [Fact]
     public async Task PruneKeepsTheCountLimitWhenAYoungReleaseExistsSoAnOldReleaseInsideTheCountSurvives()
     {
         var draft = await CreateDraftAsync();
