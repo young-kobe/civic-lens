@@ -419,6 +419,45 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task ACodeApprovedAiStatementIsLabelledAnAiSummaryCheckedByCodeBecauseReadersMustNotThinkAPersonApprovedIt()
+    {
+        var statement = Statement() with { TextOrigin = PublishedTextOrigin.Model, ApprovedBy = PublishedApprover.Code, PolicyAreaIds = ["land-use"] };
+
+        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(statement, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
+        Assert.Contains(PublishedRecordLabels.StatementModelWording, text, StringComparison.Ordinal);
+        Assert.Contains("Checked by code on 2026-05-10 12:00 UTC", text, StringComparison.Ordinal);
+        Assert.Contains("Checked by code, 2026-05-10 12:00 UTC", text, StringComparison.Ordinal);
+        Assert.Contains("Policy areas (chosen by AI)", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Approved 20", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task APersonApprovedStatementKeepsItsApprovedWordingAndShowsNoAiLabel()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None);
+
+        var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
+        Assert.Contains("Approved 2026-05-10 12:00 UTC", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Checked by code", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("AI summary", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("chosen by AI", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnAiStatementThatAPersonApprovedShowsApprovedAndNoAiLabelBecauseAPersonApprovedIt()
+    {
+        var statement = Statement() with { TextOrigin = PublishedTextOrigin.Model, ApprovedBy = PublishedApprover.Person };
+
+        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(statement, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
+        Assert.Contains("Approved 2026-05-10 12:00 UTC", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("AI summary", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task StatementPageShowsNoArticleLineWhenTheSourceIsTheArticleItself()
     {
         var html = await new ReleaseRenderer(null, null).RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None);
@@ -2102,6 +2141,7 @@ public sealed class ReleaseRendererTests
             RevisionNumber = 1,
             Headline = "Doe backs a rent cap",
             Summary = "Doe supports a cap.",
+            TextOrigin = PublishedTextOrigin.Person,
             StatementDate = new DateOnly(2026, 5, 1),
             StatementDateEvidence = new PublishedCitation { ExtractionId = AfterId, Start = signed, Length = 18, Quote = "Signed 2026-05-01." },
             Speakers = [new PublishedOfficial { Id = "o1", Name = "Jane <Doe>" }],
@@ -2121,6 +2161,7 @@ public sealed class ReleaseRendererTests
                 ObservedAtUtc = new DateTimeOffset(2026, 5, 3, 10, 45, 0, TimeSpan.Zero),
                 Text = text
             },
+            ApprovedBy = PublishedApprover.Person,
             ApprovedAtUtc = new DateTimeOffset(2026, 5, 10, 12, 0, 0, TimeSpan.Zero),
             FirstPublishedAtUtc = new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero)
         };

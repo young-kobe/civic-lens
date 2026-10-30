@@ -205,11 +205,11 @@ internal sealed class PublicationScenario
     }
 
     public string AddStatement(char id, ImmutableArray<ReviewDecision>? decisions = null, string[]? speakerIds = null,
-        int revisionNumber = 1, DateOnly? statementDate = null, string? feedUrl = null)
+        int revisionNumber = 1, DateOnly? statementDate = null, string? feedUrl = null, string author = "author")
     {
         var candidateId = new string(id, 64);
         var extraction = Extraction($"Mayor said: housing matters.\nOther text {id}.\n", $"statement-{id}", feedUrl ?? StatementArticleUrl);
-        var revision = new StatementDraftRevision(candidateId, revisionNumber, "author", ApprovedAt, $"Statement {id}", "Summary", statementDate,
+        var revision = new StatementDraftRevision(candidateId, revisionNumber, author, ApprovedAt, $"Statement {id}", "Summary", statementDate,
             statementDate is null ? null : new SourceSpan(extraction.ExtractionId, 0, 5),
             [.. speakerIds ?? ["mayor"]], ["Council Member"], ["housing"], ["land-use"],
             [new(new(extraction.ExtractionId, 12, 15), StatementQuotationKind.DirectQuotation)], ["HB 12"]);

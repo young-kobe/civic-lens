@@ -22,6 +22,7 @@ internal static class PublishedSamples
             RevisionNumber = revision,
             Headline = headline,
             Summary = summary,
+            TextOrigin = PublishedTextOrigin.Person,
             StatementDate = date,
             StatementDateEvidence = date is null ? null : new PublishedCitation { ExtractionId = SourceId, Start = 0, Length = 2, Quote = source[..2] },
             Speakers = official is null ? [] : [new PublishedOfficial { Id = official, Name = "Official " + official }],
@@ -31,6 +32,7 @@ internal static class PublishedSamples
             BillNumbers = [],
             Quotations = [new PublishedQuotation { ExtractionId = SourceId, Start = 0, Length = 2, Quote = source[..2], Kind = PublishedQuotationKind.DirectQuotation }],
             Source = new PublishedDocumentVersion { ExtractionId = SourceId, Url = $"https://{host}/story", ObservedAtUtc = Published, Text = source },
+            ApprovedBy = PublishedApprover.Person,
             ApprovedAtUtc = Published,
             FirstPublishedAtUtc = published ?? Published
         };
