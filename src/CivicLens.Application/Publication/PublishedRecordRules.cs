@@ -16,9 +16,15 @@ public sealed class PublishedRecordRules(PublicationCatalog catalog)
     public static bool CanReturn(int revisionNumber, int withdrawnRevisionNumber) => revisionNumber > withdrawnRevisionNumber;
 
     public static DateTimeOffset GetApprovalTime(int revisionNumber, ImmutableArray<ReviewDecision> decisions) =>
+        LatestApproval(revisionNumber, decisions).CreatedAtUtc;
+
+    public static PublishedApprover ApproverOf(int revisionNumber, ImmutableArray<ReviewDecision> decisions) =>
+        ReviewAuthor.IsCode(LatestApproval(revisionNumber, decisions).ActorSubject) ? PublishedApprover.Code : PublishedApprover.Person;
+
+    private static ReviewDecision LatestApproval(int revisionNumber, ImmutableArray<ReviewDecision> decisions) =>
         decisions
             .Where(item => item.RevisionNumber == revisionNumber && item.Kind == ReviewDecisionKind.Approve)
-            .MaxBy(item => item.ReviewStateVersion)!.CreatedAtUtc;
+            .MaxBy(item => item.ReviewStateVersion)!;
 
     public static PublishedTextOrigin TextOriginOf(ReviewTextOrigin origin) =>
         origin == ReviewTextOrigin.Person ? PublishedTextOrigin.Person : PublishedTextOrigin.Model;

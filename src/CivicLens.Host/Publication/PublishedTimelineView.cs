@@ -19,7 +19,7 @@ internal static class PublishedTimelineView
         List<TimelineEvent> events = [];
         if (record.StatementDate is { } said) events.Add(new(said, "Statement made"));
         events.Add(At(record.Source.ObservedAtUtc, "Source observed"));
-        return WithPublication(events, record.ApprovedAtUtc, record.FirstPublishedAtUtc, record.Corrections);
+        return WithPublication(events, record.ApprovedAtUtc, record.FirstPublishedAtUtc, record.Corrections, PublishedRecordLabels.Approval(record.ApprovedBy));
     }
 
     public static IReadOnlyList<TimelineEvent> For(PublishedAction record)
@@ -51,9 +51,9 @@ internal static class PublishedTimelineView
         new(DateOnly.FromDateTime(at.UtcDateTime), $"{text}, {Moment.Full(at)}", TimeOnly.FromDateTime(at.UtcDateTime));
 
     private static IReadOnlyList<TimelineEvent> WithPublication(List<TimelineEvent> events, DateTimeOffset approvedAtUtc,
-        DateTimeOffset firstPublishedAtUtc, PublishedCorrection[] corrections)
+        DateTimeOffset firstPublishedAtUtc, PublishedCorrection[] corrections, string approvalText = PublishedRecordLabels.PersonApproval)
     {
-        events.Add(At(approvedAtUtc, "Approved"));
+        events.Add(At(approvedAtUtc, approvalText));
         events.Add(At(firstPublishedAtUtc, "First published"));
         events.AddRange(corrections.Select(correction => At(correction.PublishedAtUtc, PublishedCorrectionView.TimelineText(correction))));
         return [.. events.OrderBy(item => item.Day).ThenBy(item => item.Time)];

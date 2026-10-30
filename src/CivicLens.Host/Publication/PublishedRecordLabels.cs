@@ -35,6 +35,23 @@ public static class PublishedRecordLabels
     public static IEnumerable<Fact> Wording(PublishedTextOrigin origin) =>
         origin == PublishedTextOrigin.Model ? [new("Wording", ModelWording)] : [];
 
+    public const string CodeApprovedStatementWording = "An AI summary of this release. No person reviewed it.";
+
+    public static IEnumerable<Fact> StatementWording(PublishedStatement statement) =>
+        statement is { ApprovedBy: PublishedApprover.Code, TextOrigin: PublishedTextOrigin.Model }
+            ? [new("Wording", CodeApprovedStatementWording)]
+            : [];
+
+    public const string PersonApproval = "Approved";
+
+    public static string Approval(PublishedApprover approver) => approver == PublishedApprover.Code ? "Checked by code" : PersonApproval;
+
+    public static string ApprovalOn(PublishedApprover approver, string moment) =>
+        approver == PublishedApprover.Code ? $"{Approval(approver)} on {moment}" : $"{Approval(approver)} {moment}";
+
+    public static string StatementPolicyAreas(PublishedApprover approver) =>
+        approver == PublishedApprover.Code ? "Policy areas (chosen by AI)" : "Policy areas";
+
     public static string Role(PublishedSponsorshipRole role) => role switch
     {
         PublishedSponsorshipRole.Sponsor => "Sponsor",

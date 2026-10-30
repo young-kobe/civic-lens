@@ -37,6 +37,23 @@ public sealed class PublishStatementTests
     }
 
     [Fact]
+    public async Task ACodeApprovedAnalysisStatementPublishesAsAiTextCheckedByCodeAndAPersonApprovedOnePublishesAsPersonApproved()
+    {
+        var scenario = new PublicationScenario();
+        var codeDecision = PublicationScenario.Decision(new string('b', 64), 1, ReviewDecisionKind.Approve) with { ActorSubject = ReviewAuthor.CodeSubject };
+        var byCode = scenario.AddStatement('b', [codeDecision], author: ReviewAuthor.AnalysisSubject);
+        var byPerson = scenario.AddStatement('c');
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k",
+            new PublishedRecordReference(PublishedRecordKind.Statement, byCode), new PublishedRecordReference(PublishedRecordKind.Statement, byPerson)));
+
+        PublishedStatement Read(string id) => JsonSerializer.Deserialize<PublishedStatement>(
+            scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.RecordDataPath(id)], PublicationProtocol.JsonOptions)!;
+        Assert.Equal((PublishedTextOrigin.Model, PublishedApprover.Code), (Read(byCode).TextOrigin, Read(byCode).ApprovedBy));
+        Assert.Equal((PublishedTextOrigin.Person, PublishedApprover.Person), (Read(byPerson).TextOrigin, Read(byPerson).ApprovedBy));
+    }
+
+    [Fact]
     public async Task AStatementFromAFeedCitesTheFeedCaptureAndLinksTheArticleBecauseTheReaderNeedsBoth()
     {
         var scenario = new PublicationScenario();
