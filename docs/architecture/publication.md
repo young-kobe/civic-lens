@@ -548,6 +548,7 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - A replacement reads the record file of each replaced record in the active release, to copy its corrections. The cost grows with the number of replaced records, at most 64.
 - A record keeps at most 20 corrections with a note. A person cannot publish a 21st correction of one record yet. Code updates still publish.
 - A rollback followed by a publish drops the rolled-back revision and its note from the history. The list copies forward from the active release. A rollback to a release before a withdrawal restores the record. A publish from there drops the withdrawal history.
+- Only the statement page labels a statement date that code read. The link page, the paired day on an official page, and the link editor show that date with no label. `PublishedRelationship` carries no `approvedBy` for its statements yet.
 - An official page lists every entry that names the official, with no paging. A statement-heavy official can have a long page. A relationship or a document change that names the official appears with the other entries.
 - A replaced vote touches its old members in every Congress of the replaced votes of that publish. The result is correct, but a publish may rewrite identical files.
 - An official who is configured again keeps the "no longer tracked" notice until a publish touches the official. The profile does not record the notice.
