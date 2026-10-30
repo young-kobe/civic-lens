@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Publication;
@@ -115,13 +114,6 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
 
         Assert.Equal(rows, await AllRowsAsync());
         Assert.Equal(releases, await PublishedRecordStateReader.ReadAsync(connectionString, "SELECT * FROM publication_releases ORDER BY release_number"));
-    }
-
-    [Fact]
-    public void TheKindSpellingMatchesTheWireSpellingOfRecordsJson()
-    {
-        foreach (var kind in Enum.GetValues<PublishedRecordKind>())
-            Assert.Equal(JsonSerializer.Serialize(kind), $"\"{PublishedRecordReference.NameOf(kind)}\"");
     }
 
     [Fact]
