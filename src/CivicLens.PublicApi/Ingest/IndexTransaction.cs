@@ -82,7 +82,7 @@ public sealed class IndexTransaction : IAsyncDisposable
                 setweight(to_tsvector('english', @summary), 'B') ||
                 setweight(to_tsvector('english', @source), 'C'), @release)
             """,
-            ("id", entry.RecordId), ("revision", entry.RevisionNumber), ("kind", RecordKinds.Text(entry.Kind)),
+            ("id", entry.RecordId), ("revision", entry.RevisionNumber), ("kind", PublicationProtocol.KindQueryValue(entry.Kind)),
             ("headline", entry.Headline), ("first", entry.FirstPublishedAtUtc.UtcDateTime),
             ("official_ids", entry.Officials.Select(official => official.Id).ToArray()),
             ("issue_ids", entry.IssueIds), ("policy_area_ids", entry.PolicyAreaIds),

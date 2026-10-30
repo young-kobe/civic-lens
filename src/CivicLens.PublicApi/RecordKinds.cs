@@ -1,4 +1,3 @@
-using System.Text.Json;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.PublicApi;
@@ -7,9 +6,7 @@ namespace CivicLens.PublicApi;
 public static class RecordKinds
 {
     private static readonly Dictionary<string, PublishedRecordKind> ByText =
-        Enum.GetValues<PublishedRecordKind>().ToDictionary(Text, StringComparer.Ordinal);
-
-    public static string Text(PublishedRecordKind kind) => JsonSerializer.Serialize(kind, PublicationProtocol.JsonOptions).Trim('"');
+        Enum.GetValues<PublishedRecordKind>().ToDictionary(PublicationProtocol.KindQueryValue, StringComparer.Ordinal);
 
     public static bool TryParse(string? text, out PublishedRecordKind kind)
     {
