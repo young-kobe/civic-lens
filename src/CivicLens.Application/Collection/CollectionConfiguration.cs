@@ -84,6 +84,7 @@ public sealed record CollectionConfiguration
             ValidateApiParser(source);
             ValidateCoverageShape(source);
             ValidateStatementTextInFeed(source);
+            ValidateOfficeOf(source);
             if (!sourceIds.Add(source.Id))
                 throw new ArgumentException($"Duplicate source ID '{source.Id}'.");
             if (source.DocumentProfileId is not null && !profilesById.ContainsKey(source.DocumentProfileId))
@@ -243,6 +244,13 @@ public sealed record CollectionConfiguration
     {
         if (source.StatementTextInFeed && source.Mode != CollectionMode.Feed)
             throw new ArgumentException($"Source '{source.Id}' can read statement text from a feed only in feed mode.");
+    }
+
+    private static void ValidateOfficeOf(WatchedSourceConfiguration source)
+    {
+        if (source.OfficeOf is null) return;
+        if (source.Coverage?.Any(coverage => coverage.PersonId == source.OfficeOf) != true)
+            throw new ArgumentException($"Source '{source.Id}' can be the office of only a person it covers.");
     }
 
     private static void ValidateCoverageShape(WatchedSourceConfiguration source)
