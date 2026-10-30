@@ -43,7 +43,7 @@ public static class ActionDraftResolver
         var revision = new ActionDraftRevision(candidate.RecordId, (current?.RevisionNumber ?? 0) + 1, ReviewAuthor.AnalysisSubject,
             createdAtUtc, text.Headline, text.Summary, text.Origin, text.Suggestion,
             candidate.SourceId, candidate.Congress, candidate.BillType, candidate.BillNumber, candidate.CandidateId, candidate.UpdateDate,
-            candidate.IncludesSummaries,
+            candidate.IncludesSummaries, candidate.IncludesSubjects,
             snapshot.Fingerprint, snapshot.SummaryVersion, snapshot.SummaryCitation, snapshot.Bill.PolicyArea, snapshot.PolicyAreaCitation,
             policyAreaId, trackedIssueIds, issues.CandidateIds, issueRevisionId, snapshot.Sponsorships, snapshot.Bill.Title);
         revision.ValidateAsAnalysisRevision(current);

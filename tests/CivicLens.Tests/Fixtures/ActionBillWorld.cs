@@ -58,14 +58,15 @@ internal sealed class ActionBillWorld
 
     public static ActionBillWorld Create(string[]? sponsors = null, CosponsorSpec[][]? cosponsorPages = null, SummarySpec[]? summaries = null,
         string? policyArea = BillGateFixtures.TrackedPolicyArea, DateTimeOffset? updatedAt = null, string title = "A housing bill", int extraPeople = 0,
-        string warrenPersonId = "warren")
+        string warrenPersonId = "warren", string[][]? subjectPages = null)
     {
         var world = new ActionBillWorld(CollectionConfigurationRevision.Create(Configuration(extraPeople, warrenPersonId)));
         sponsors ??= [Warren];
         cosponsorPages ??= [];
         summaries ??= [];
+        subjectPages ??= [];
         var bill = new CongressBill(119, "hr", 1, title, Backfill, updatedAt ?? UpdatedAt, policyArea, sponsors, cosponsorPages.Sum(page => page.Length), 1,
-            summaries.Length);
+            summaries.Length, subjectPages.Sum(page => page.Length));
         world.Add(ApiResource.Bill, "detail", $"{SourceUrl}/119/hr/1?format=json", DetailBody(bill));
         for (var index = 0; index < cosponsorPages.Length; index++)
             world.Add(ApiResource.BillCosponsors, $"cosponsors-{index}", PageUrl("cosponsors", index, 250),
@@ -73,6 +74,9 @@ internal sealed class ActionBillWorld
         for (var index = 0; index < summaries.Length; index++)
             world.Add(ApiResource.BillSummaries, $"summaries-{index}", PageUrl("summaries", index, 1),
                 SummaryBody(summaries[index], index + 1 < summaries.Length ? PageUrl("summaries", index + 1, 1) : null));
+        for (var index = 0; index < subjectPages.Length; index++)
+            world.Add(ApiResource.BillSubjects, $"subjects-{index}", PageUrl("subjects", index, 250),
+                SubjectsBody(subjectPages[index], index + 1 < subjectPages.Length ? PageUrl("subjects", index + 1, 250) : null));
         world.Stores = new FixtureStores(world.jobs, world.bodies);
         return world;
     }
@@ -81,13 +85,15 @@ internal sealed class ActionBillWorld
 
     public ActionDraftEvidence Evidence(ActionDraftRevision? current = null, DateTimeOffset? updatedAt = null, bool hasNewerCandidate = false) =>
         new(new ActionDraftCandidate(ActionRevisionFixtures.CandidateId, ActionRevisionFixtures.RecordId, SourceId, 119, "hr", 1,
-            updatedAt ?? UpdatedAt, pages.Any(page => page.Resource == ApiResource.BillSummaries)),
+            updatedAt ?? UpdatedAt, pages.Any(page => page.Resource == ApiResource.BillSummaries),
+            pages.Any(page => page.Resource == ApiResource.BillSubjects)),
             Revision, [.. pages.Select(page => new ActionDraftPage(page.Resource, page.JobId, ExtractionIdOf(page.JobId), versionOverrides.GetValueOrDefault(page.JobId) ?? ExtractionVersionOf(page.Resource), page.Text))], current, hasNewerCandidate);
 
     public static string ExtractionVersionOf(ApiResource resource) => resource switch
     {
         ApiResource.Bill => CongressBillParser.ExtractionVersion,
         ApiResource.BillCosponsors => CongressBillCosponsorsParser.ExtractionVersion,
+        ApiResource.BillSubjects => CongressBillSubjectsParser.ExtractionVersion,
         _ => CongressBillSummariesParser.ExtractionVersion(new FragmentExtractor())
     };
 
@@ -116,8 +122,15 @@ internal sealed class ActionBillWorld
     }
 
     private static string PageUrl(string segment, int index, int limit) => index == 0
-        ? BillPageUrl.FirstPage(SourceUrl, segment == "cosponsors" ? ApiResource.BillCosponsors : ApiResource.BillSummaries, new(119, "hr", 1, default))
+        ? BillPageUrl.FirstPage(SourceUrl, ResourceOfSegment(segment), new(119, "hr", 1, default))
         : $"{SourceUrl}/119/hr/1/{segment}?offset={index * limit}&limit={limit}&format=json";
+
+    private static ApiResource ResourceOfSegment(string segment) => segment switch
+    {
+        "cosponsors" => ApiResource.BillCosponsors,
+        "subjects" => ApiResource.BillSubjects,
+        _ => ApiResource.BillSummaries
+    };
 
     private void Add(ApiResource resource, string jobId, string url, string body)
     {
@@ -141,6 +154,8 @@ internal sealed class ActionBillWorld
         var bill = BillPageUrl.TryRead(SourceUrl, resource, url)!.Value.Bill;
         if (resource == ApiResource.BillCosponsors)
             return CongressBillRenderer.RenderCosponsors(bill, CongressBillCosponsorsParser.Parse(bytes, request, SourceUrl, bill));
+        if (resource == ApiResource.BillSubjects)
+            return CongressBillRenderer.RenderSubjects(bill, CongressBillSubjectsParser.Parse(bytes, request, SourceUrl, bill));
         var page = CongressBillSummariesParser.Parse(bytes, request, SourceUrl, bill);
         return CongressBillRenderer.RenderSummaries(bill,
             [.. page.Summaries.Select(summary => new CongressBillSummaryText(summary, FragmentExtractor.Text(summary.Html)))]);
@@ -161,7 +176,8 @@ internal sealed class ActionBillWorld
                 sponsors = bill.SponsorBioguideIds.Select(id => new { bioguideId = id }),
                 cosponsors = new { countIncludingWithdrawnCosponsors = bill.CosponsorCount },
                 actions = new { count = bill.ActionCount },
-                summaries = new { count = bill.SummaryCount }
+                summaries = new { count = bill.SummaryCount },
+                subjects = new { count = bill.SubjectCount }
             }
         });
 
@@ -175,6 +191,16 @@ internal sealed class ActionBillWorld
             sponsorshipWithdrawnDate = item.Withdrawn
         }),
         pagination = new { next }
+    });
+
+    public static string SubjectsBody(string[] names, string? next) => JsonSerializer.Serialize(new
+    {
+        subjects = new
+        {
+            legislativeSubjects = names.Select(name => new { name, updateDate = "2025-01-04T10:00:00Z" }),
+            policyArea = new { name = BillGateFixtures.TrackedPolicyArea, updateDate = "2025-01-04T10:00:00Z" }
+        },
+        pagination = new { count = names.Length, next }
     });
 
     public static string SummaryBody(SummarySpec summary, string? next) => JsonSerializer.Serialize(new

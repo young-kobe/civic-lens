@@ -231,6 +231,8 @@ public sealed class CongressBillSourceConfigurationTests
     [InlineData(ApiResource.BillSummaries, "https://api.congress.gov/v3/bill/119/hr/1?format=json")]
     [InlineData(ApiResource.BillSummaries, "https://api.congress.gov/v3/bill/119/hr/1/summaries?format=json&limit=1&api_key=secret")]
     [InlineData(ApiResource.BillSummaries, "https://api.congress.gov/v3/bill/119/hr/1/summaries?format=json&limit=250")]
+    [InlineData(ApiResource.BillSubjects, "https://api.congress.gov/v3/bill/119/hr/1/summaries?format=json&limit=250")]
+    [InlineData(ApiResource.BillSubjects, "https://api.congress.gov/v3/bill/119/hr/1/subjects?format=json&limit=1")]
     public void AJobUrlMustHaveTheExactFormOfItsResourceSoTheWorkerNeverReadsItAsAnotherKind(ApiResource resource, string url)
     {
         var configured = new ConfiguredCollectionSource(Configuration(), "congress-bills", Backfill);
@@ -245,6 +247,8 @@ public sealed class CongressBillSourceConfigurationTests
     [InlineData(ApiResource.BillActions, "https://api.congress.gov/v3/bill/119/hr/1/actions?limit=250&format=json&offset=500")]
     [InlineData(ApiResource.BillSummaries, "https://api.congress.gov/v3/bill/117/s/3480/summaries?format=json&limit=1")]
     [InlineData(ApiResource.BillSummaries, "https://api.congress.gov/v3/bill/117/s/3480/summaries?limit=1&format=json&offset=250")]
+    [InlineData(ApiResource.BillSubjects, "https://api.congress.gov/v3/bill/119/hr/1/subjects?format=json&limit=250")]
+    [InlineData(ApiResource.BillSubjects, "https://api.congress.gov/v3/bill/119/hr/1/subjects?limit=250&format=json&offset=250")]
     public void FollowOnPageJobsAcceptTheFirstPageFormAndTheApiNextFormSoPagingNeedsNoRewrite(ApiResource resource, string url)
     {
         var configured = new ConfiguredCollectionSource(Configuration(), "congress-bills", Backfill);

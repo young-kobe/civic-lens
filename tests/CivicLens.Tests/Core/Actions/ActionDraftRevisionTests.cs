@@ -70,6 +70,24 @@ public sealed class ActionDraftRevisionTests
     }
 
     [Fact]
+    public void AnOldRevisionWithoutTheSubjectsFlagReadsAsNoSubjectsAndWritesTheSameJsonSoItsMeaningNeverChanges()
+    {
+        var old = Model();
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var oldJson = JsonSerializer.Serialize(old, options);
+
+        var withFlag = JsonSerializer.Serialize(old with { CandidateIncludesSubjects = true }, options);
+        var back = JsonSerializer.Deserialize<ActionDraftRevision>(oldJson, options)!;
+
+        Assert.DoesNotContain("ncludesSubjects", oldJson, StringComparison.Ordinal);
+        Assert.Contains("\"candidateIncludesSubjects\":true", withFlag, StringComparison.Ordinal);
+        Assert.False(back.CandidateIncludesSubjects);
+        Assert.Equal(oldJson, JsonSerializer.Serialize(back, options));
+        Assert.Throws<ArgumentException>(() =>
+            (PersonEditOf(old, "h", "s") with { CandidateIncludesSubjects = true }).ValidatePersonEditOf(old));
+    }
+
+    [Fact]
     public void ARecordReviewerEditsOnlyTheHeadlineAndTheSummary()
     {
         var previous = Model();

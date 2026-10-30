@@ -24,7 +24,7 @@ public sealed class VoteDraftPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(VoteDraftTask.PromptVersion)} ({VoteDraftTask.PromptVersion}) or " +
             $"{nameof(VoteDraftTask.SchemaVersion)} ({VoteDraftTask.SchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("vote-draft", "vote-draft-v1", "vote-draft-prompt-v3", "vote-draft-schema-v2", "claude-haiku-5-5"),
+        Assert.Equal(("vote-draft", "vote-draft-v1", "vote-draft-prompt-v4", "vote-draft-schema-v2", "claude-haiku-5-5"),
             (VoteDraftTask.Task, VoteDraftTask.TaskVersion, VoteDraftTask.PromptVersion, VoteDraftTask.SchemaVersion, VoteDraftTask.Model));
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
         Assert.True(Sha256(request.SchemaJson) == SchemaSha256, $"{bump} Schema: {Sha256(request.SchemaJson)}");
@@ -85,8 +85,26 @@ public sealed class VoteDraftPromptGoldenTests
             new VoteDraftSettings(VoteDraftPrompt.MinimumReservation).PromptByteCap);
     }
 
+    [Fact]
+    public async Task SubjectsReachTheModelAsFactsOnlyWhenTheBillHasThem()
+    {
+        var withSubjects = VoteWorld.Create(subjects: ["Housing finance and home ownership", "Rent and rental housing"]);
+        var snapshot = (await withSubjects.Reader().ReadAsync(withSubjects.Evidence(), default)).Snapshot!;
+        var plain = VoteWorld.Create();
+        var plainSnapshot = (await plain.Reader().ReadAsync(plain.Evidence(), default)).Snapshot!;
+        var choice = BillIssueChoice.For(BillGateFixtures.TrackedPolicyArea, snapshot.Subjects, new DateOnly(2025, 4, 10), BillGateFixtures.Issues());
+
+        var asked = VoteDraftPrompt.Build(snapshot, choice, VoteDraftTask.MaximumPromptBytes)!;
+        var plainRequest = VoteDraftPrompt.Build(plainSnapshot, BillGateFixtures.HousingChoice(), VoteDraftTask.MaximumPromptBytes)!;
+
+        Assert.Contains("\"Rent and rental housing\"", asked.UserPrompt, StringComparison.Ordinal);
+        Assert.Contains("A subject does not make an issue fit.", asked.SystemPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("subjects", plainRequest.UserPrompt, StringComparison.Ordinal);
+        Assert.Equal(SystemSha256, Sha256(plainRequest.SystemPrompt));
+    }
+
     private static BillIssueChoice NoChoice() =>
-        BillIssueChoice.For(BillGateFixtures.UntrackedPolicyArea, new DateOnly(2025, 4, 10), BillGateFixtures.Issues());
+        BillIssueChoice.For(BillGateFixtures.UntrackedPolicyArea, [], new DateOnly(2025, 4, 10), BillGateFixtures.Issues());
 
     private static string Sha256(string text) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
 }

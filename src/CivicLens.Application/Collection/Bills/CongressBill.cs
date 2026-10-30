@@ -11,4 +11,5 @@ public sealed record CongressBill(
     IReadOnlyList<string> SponsorBioguideIds,
     int CosponsorCount,
     int ActionCount,
-    int SummaryCount);
+    int SummaryCount,
+    int SubjectCount);

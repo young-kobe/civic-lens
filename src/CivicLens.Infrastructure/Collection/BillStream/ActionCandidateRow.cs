@@ -12,4 +12,5 @@ internal sealed class ActionCandidateRow
     public string ConfigurationRevisionId { get; set; } = "";
     public long CreatedAtUtcTicks { get; set; }
     public bool IncludesSummaries { get; set; }
+    public bool IncludesSubjects { get; set; }
 }

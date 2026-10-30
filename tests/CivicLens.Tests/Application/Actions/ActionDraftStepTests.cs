@@ -258,6 +258,53 @@ public sealed class ActionDraftStepTests
     }
 
     [Fact]
+    public async Task ACandidateWithSubjectsDraftsAgainFromARevisionThatNeverSawThemAndALaterRunOfTheSameCandidateIsUnchanged()
+    {
+        var withoutSubjects = Create(summaries: [Summary]);
+        var withSubjects = Create(summaries: [Summary], subjectPages: [["Housing finance and home ownership"], ["Rent and rental housing"]]);
+        var (first, _) = await RunAsync(withoutSubjects, new FakeHeadlineSummaryModel().Draft(Output()));
+        var before = Assert.Single(first.Revisions);
+
+        var (second, model) = await RunAsync(withSubjects, new FakeHeadlineSummaryModel().Draft(Output(headline: "Revised")), before);
+        var (third, thirdModel) = await RunAsync(withSubjects, new FakeHeadlineSummaryModel(), Assert.Single(second.Revisions));
+
+        Assert.False(before.CandidateIncludesSubjects);
+        var revised = Assert.Single(second.Revisions);
+        Assert.True(revised.CandidateIncludesSubjects);
+        var prompt = Assert.Single(model.Requests).UserPrompt;
+        Assert.Contains("\"Housing finance and home ownership\"", prompt, StringComparison.Ordinal);
+        Assert.Contains("\"Rent and rental housing\"", prompt, StringComparison.Ordinal);
+        Assert.Empty(thirdModel.Requests);
+        Assert.Equal((State.Succeeded, "unchanged"), (third.Entries[0].Status, third.Entries[0].ErrorCode));
+    }
+
+    [Fact]
+    public async Task ABillWithNoSubjectsDraftsWithoutThemAndTheRevisionKeepsTheOldShape()
+    {
+        var (store, model) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
+
+        Assert.False(Assert.Single(store.Revisions).CandidateIncludesSubjects);
+        Assert.DoesNotContain("subjects", Assert.Single(model.Requests).UserPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("CandidateIncludesSubjects", JsonSerializer.Serialize(Assert.Single(store.Revisions)), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ASubjectsPageThatNoLongerMatchesItsCaptureBlocksBeforeAnyCall(bool tamperText)
+    {
+        var world = Create(subjectPages: [["Rent and rental housing"]]);
+        if (tamperText) world.TamperWithSavedText("subjects-0", "Bill: 119 hr 1\nSubject: Changed after capture");
+        else world.SetVersion("subjects-0", "older-version");
+        var model = new FakeHeadlineSummaryModel();
+
+        var (store, _) = await RunAsync(world, model);
+
+        Assert.Equal((State.Blocked, tamperText ? "renderedTextMismatch" : "extractionVersionChanged"), (store.Entries[0].Status, store.Entries[0].ErrorCode));
+        Assert.Empty(model.Requests);
+    }
+
+    [Fact]
     public async Task OnlyTheNewestSummaryGoesToTheModelByActionDateThenUpdateTimeThenVersionCode()
     {
         var world = Create(summaries:

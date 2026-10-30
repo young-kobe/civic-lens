@@ -18,7 +18,7 @@ internal static class ActionDraftRows
         revision.ValidateShape();
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.ActionReview, cancellationToken);
         var candidate = new ActionDraftCandidate(revision.CandidateId, revision.RecordId, revision.SourceId, revision.Congress, revision.BillType,
-            revision.BillNumber, revision.CandidateUpdateDate, revision.CandidateIncludesSummaries);
+            revision.BillNumber, revision.CandidateUpdateDate, revision.CandidateIncludesSummaries, revision.CandidateIncludesSubjects);
         if (await HasNewerCandidateAsync(db, candidate, cancellationToken)) return ActionDraftErrorCodes.SupersededByNewerCandidate;
         var draft = await db.Set<ActionDraftRow>().SingleOrDefaultAsync(row => row.RecordId == revision.RecordId, cancellationToken);
         if ((draft?.CurrentRevisionNumber ?? 0) != revision.RevisionNumber - 1) return ActionDraftErrorCodes.RevisionConflict;
@@ -35,11 +35,10 @@ internal static class ActionDraftRows
 
     public static Task<bool> HasNewerCandidateAsync(CollectionAttemptDbContext db, ActionDraftCandidate candidate, CancellationToken cancellationToken)
     {
-        var updateDateUtcTicks = candidate.UpdateDate.UtcTicks;
-        return db.Set<ActionCandidateRow>().AsNoTracking().AnyAsync(newer => newer.SourceId == candidate.SourceId &&
-            newer.Congress == candidate.Congress && newer.BillType == candidate.BillType && newer.BillNumber == candidate.BillNumber &&
-            (newer.UpdateDateUtcTicks > updateDateUtcTicks ||
-                newer.UpdateDateUtcTicks == updateDateUtcTicks && newer.IncludesSummaries && !candidate.IncludesSummaries), cancellationToken);
+        return db.Set<ActionCandidateRow>().AsNoTracking().Where(newer => newer.SourceId == candidate.SourceId &&
+                newer.Congress == candidate.Congress && newer.BillType == candidate.BillType && newer.BillNumber == candidate.BillNumber)
+            .Where(ActionCandidateInputs.Supersedes(candidate.UpdateDate.UtcTicks, candidate.IncludesSummaries, candidate.IncludesSubjects))
+            .AnyAsync(cancellationToken);
     }
 
     public static async Task<ActionDraftRevision?> ReadCurrentAsync(CollectionAttemptDbContext db, string recordId,

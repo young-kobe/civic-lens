@@ -10,6 +10,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     string Headline, string Summary, ReviewTextOrigin TextOrigin, ReviewTextSuggestion? Suggestion,
     string SourceId, int Congress, string BillType, int BillNumber, string CandidateId, DateTimeOffset CandidateUpdateDate,
     bool CandidateIncludesSummaries,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool CandidateIncludesSubjects,
     string Fingerprint, string? SummaryVersion, SourceSpan? SummaryCitation, string? PolicyArea, SourceSpan? PolicyAreaCitation,
     string? PolicyAreaId, ImmutableArray<string> TrackedIssueIds,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ImmutableArray<string> IssueCandidateIds, string IssueRevisionId, ImmutableArray<ActionSponsorship> Sponsorships, string BillTitle)
@@ -101,7 +102,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     private bool HasSameStructuredPartAs(ActionDraftRevision other) =>
         RecordId == other.RecordId && SourceId == other.SourceId && Congress == other.Congress && BillType == other.BillType &&
         BillNumber == other.BillNumber && CandidateId == other.CandidateId && CandidateUpdateDate == other.CandidateUpdateDate &&
-        CandidateIncludesSummaries == other.CandidateIncludesSummaries &&
+        CandidateIncludesSummaries == other.CandidateIncludesSummaries && CandidateIncludesSubjects == other.CandidateIncludesSubjects &&
         Fingerprint == other.Fingerprint && SummaryCitation == other.SummaryCitation && PolicyAreaCitation == other.PolicyAreaCitation &&
         HasSameBillFactsAs(other) && Sponsorships.SequenceEqual(other.Sponsorships);
 

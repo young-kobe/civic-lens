@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The bills feature follows the Congress.gov bill list each day. It fetches the detail, cosponsors, actions, and summaries of each bill as durable jobs. A relevance gate decides which bills matter. Each passed bill version with complete evidence becomes an action candidate, which [action drafting](actions.md) drains.
+The bills feature follows the Congress.gov bill list each day. It fetches the detail, cosponsors, actions, summaries, and legislative subjects of each bill as durable jobs. A relevance gate decides which bills matter. Each passed bill version with complete evidence becomes an action candidate, which [action drafting](actions.md) drains.
 
 ## Decisions
 
@@ -23,7 +23,9 @@ The bills feature follows the Congress.gov bill list each day. It fetches the de
 - The summaries extraction version includes the document extractor version. A change to the HTML rules therefore changes the identity of the summary extraction.
 - The extraction ID is fixed by the attempt and the extraction version, and a replay with different text fails. A change to rendered text or parser output therefore needs a new version.
 - The summaries chain never blocks a candidate, because a record must work without a CRS summary. CRS often publishes weeks after introduction.
-- A candidate is an immutable input. Late summaries add a second candidate and never change the first.
+- The subjects chain never blocks a candidate, because Congress.gov gives subjects to only some bills.
+- A subjects chain is admitted at the detail for every bill with `subjects.count` above 0, also when the gate is `notRelevant`. A [vote](votes.md) can name a bill that never passed the gate.
+- A candidate is an immutable input. Late summaries or subjects add a new candidate and never change an older one.
 
 ## Invariants
 
@@ -32,7 +34,8 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - One gate exists for each bill version. Enforced by `ux_bill_gates_bill_version`. Test: `PostgresBillStreamTests.ASecondDetailJobForTheSameBillVersionRecordsNothingAndAdmitsNoFollowOns`.
 - The reason fits the decision, and only a decided gate has a decision time. Enforced by `ck_bill_gates_reason` and `ck_bill_gates_decided`. Test: `PostgresBillStreamTests.TheDatabaseRefusesAReasonThatDoesNotBelongToItsDecision`.
 - A decided gate never changes. Enforced by `PostgresCollectionJobStore`, which settles only a Pending gate. Test: `PostgresBillStreamTests.ALaterCosponsorPageNeverChangesAGateThatAnEarlierStepDecided`.
-- A bill version has at most two action candidates. Enforced by `ux_action_candidates_detail_job`. Test: `PostgresBillStreamTests.SummariesThatCloseAfterTheEvidenceChainAddASecondCandidateAndReplayAddsNoThird`.
+- A bill version has at most three action candidates, one for each growing set of closed chains. Enforced by `ux_action_candidates_detail_job` and `ActionCandidateInputs`. Test: `PostgresBillStreamTests.SubjectsAndSummariesThatCloseLaterGiveAtMostThreeCandidatesWhicheverComesFirstAndReplayAddsNoMore`.
+- A candidate ID of an older input set never changes. Enforced by `PostgresCollectionJobStore.HashActionCandidate`. Test: `PostgresBillStreamTests.TheCandidateIdsOfTheOldInputCombinationsStayTheSameAndTheSubjectsSuffixComesLast`.
 - A candidate needs a Passed gate and closed chains. Enforced by `PostgresCollectionJobStore.RecordActionCandidateAsync`. Test: `PostgresBillStreamTests.NoCandidateIsWrittenForABillTheGateMarksNotRelevant`.
 - Each chain position has one page row, and a Detail row is its own root. Enforced by `ux_bill_pages_chain_order` and `ck_bill_pages_detail`. Test: `PostgresBillStreamTests.TheDatabaseRefusesADetailRowWhoseJobIsNotTheRoot`.
 - A page extraction belongs to the attempt of its job. Enforced by `PostgresCollectionJobStore`. Test: `PostgresBillStreamTests.AnExtractionOfAnotherJobsAttemptIsInvalidDataAndWritesNoPageRowOrCandidate`.
@@ -77,13 +80,13 @@ A malformed list page blocks preparation, and the cursor stays. The next due che
 
 ### Resource kinds and URLs
 
-A job definition of a bill list source carries `apiResource`. The kinds are `billList` (a list page), `bill` (a detail), and `billCosponsors`, `billActions`, and `billSummaries` (the follow-on pages of one bill). A kind needs a source with `apiParser` `congressBillList` and a bound configuration revision. A job without a kind keeps the source URL.
+A job definition of a bill list source carries `apiResource`. The kinds are `billList` (a list page), `bill` (a detail), and `billCosponsors`, `billActions`, `billSummaries`, and `billSubjects` (the follow-on pages of one bill). A kind needs a source with `apiParser` `congressBillList` and a bound configuration revision. A job without a kind keeps the source URL.
 
 The configuration binding check requires the exact URL form of each kind:
 
 - `billList`: the source URL, a query, and a window with the fixed sort (`BillStreamWindow.IsRequestUrl`).
 - `bill`: exactly the detail form `{source url}/{congress}/{type}/{number}?format=json` that `CongressBillListItem.DetailUrl` builds (`CongressBillListItem.IsDetailUrl`).
-- Follow-on pages: `{source url}/{congress}/{type}/{number}/cosponsors`, `/actions`, or `/summaries`, with `format=json&limit=250` and optionally one `offset` of 0 or more.
+- Follow-on pages: `{source url}/{congress}/{type}/{number}/cosponsors`, `/actions`, `/summaries`, or `/subjects`, with `format=json&limit=250` and optionally one `offset` of 0 or more.
 - `billSummaries` uses `limit=1` (`BillPageUrl.SummariesPageLimit`, chosen through `BillPageUrl.LimitOf`). A summaries page with another `limit` is not a valid page URL.
 
 `BillPageUrl` builds the first page and reads every page, including the `next` form of the API, which orders the parameters differently. Numbers must be canonical, and the type must be known. Any other or repeated parameter, including `api_key`, fails. `ApiPageQuery` owns the page parameter rule (`limit`, `format`, and `offset`) and the canonical number rule. It also owns the page split. It owns the next link check too: scope, exact form, same series, and advancing offset. `BillPageUrl` adds the bill identity and resource segment. The list window uses `ApiPageQuery` too.
@@ -97,16 +100,19 @@ Each succeeded page job goes through [preparation](collection.md#preparation). T
 | Parser | Version | Reads |
 |---|---|---|
 | `CongressBillListParser` | none, because a list has no extraction | One list page of at most 250 items |
-| `CongressBillParser` | `congress-bill-detail-v1` | One detail, including `summaries.count` (a missing object means 0) |
+| `CongressBillParser` | `congress-bill-detail-v1` | One detail, including `summaries.count` and `subjects.count` (a missing object means 0) |
 | `CongressBillCosponsorsParser` | `congress-bill-cosponsors-v1` | One cosponsors page of at most 250 items |
 | `CongressBillActionsParser` | `congress-bill-actions-v1` | One actions page of at most 250 items |
 | `CongressBillSummariesParser` | `congress-bill-summaries-v1+html-text-v1` | One summaries page of at most 1 item |
+| `CongressBillSubjectsParser` | `congress-bill-subjects-v1` | One subjects page of at most 250 names |
 
 The list parser checks the type against `hr`, `s`, `hjres`, `sjres`, `hconres`, `sconres`, `hres`, and `sres`. A list `next` link must stay inside the source origin and path prefix. It must carry the same window and must not carry `api_key`.
 
 A follow-on `next` link must be inside the source scope and must be the next page URL form of the same bill and kind. Its offset must be larger than the offset of the current page.
 
 A summary has `versionCode`, `actionDate`, `actionDesc`, `updateDate` (an exact time), and `text` (HTML).
+
+A subjects page has `subjects.legislativeSubjects`, a list of items with a `name`. The parser keeps the trimmed names and ignores the `policyArea` object of the page, because the detail already holds the policy area. A blank name is invalid data. The page shape comes from the Congress.gov documentation. No live response has checked it yet.
 
 ### Admission
 
@@ -116,7 +122,7 @@ For each list item with a congress of at least `minimumCongress`, the store admi
 
 The aggregate budgets come from the source `admissionPolicy` through `DiscoveryAdmissionPolicy`, the same owner as [article admission](collection.md#discovery-and-admission). A page of 250 items plus the next page needs 251 jobs. `CollectionConfiguration.Validate` rejects a bill list source whose policy cannot reserve `ApiPageQuery.PageLimit + 1` jobs. A source without `admissionPolicy` uses the small defaults and fails this check.
 
-The configured source sets `maxJobs` 251, and request, byte, and time totals for 251 jobs with two attempts each. A follow-on page admits at most three jobs, so the 251 job limit holds. The worker treats an admission that throws `InvalidDataException` as a permanent failure.
+The configured source sets `maxJobs` 251, and request, byte, and time totals for 251 jobs with two attempts each. A detail admits at most four follow-on jobs and a follow-on page admits at most three, so the 251 job limit holds. The worker treats an admission that throws `InvalidDataException` as a permanent failure.
 
 These jobs never register statement candidates, because only the key prefix `discovery-admission/` does that.
 
@@ -130,8 +136,8 @@ The detail admission also queues the [vote](votes.md#admission) candidates that 
 |---|---|
 | Detail | `bill-stream/{source}/bill/{congress}/{type}/{number}/{updateDate}` |
 | Next list page | `bill-stream/{source}/page/{list job ID}` |
-| First follow-on page | `bill-stream/{source}/{cosponsors, actions, or summaries}/{congress}/{type}/{number}/{update date}` |
-| Next follow-on page | `bill-stream/{source}/{cosponsors, actions, or summaries}/page/{parent job ID}` |
+| First follow-on page | `bill-stream/{source}/{cosponsors, actions, summaries, or subjects}/{congress}/{type}/{number}/{update date}` |
+| Next follow-on page | `bill-stream/{source}/{cosponsors, actions, summaries, or subjects}/page/{parent job ID}` |
 
 The follow-on update date is the exact UTC time as `yyyy-MM-ddTHH:mm:ssZ`.
 
@@ -162,7 +168,7 @@ The issue configuration comes from `CIVIC_LENS_ISSUES_CONFIG`, as an `IssueConfi
 
 ### Follow-on pages
 
-A detail job with a cosponsor count above 0 always admits the first cosponsor page, as evidence. A detail job whose gate passed also admits the first actions page. It admits the first summaries page when `summaries.count` is above 0.
+A detail job with a cosponsor count above 0 always admits the first cosponsor page, as evidence. It admits the first subjects page the same way when `subjects.count` is above 0. A detail job whose gate passed also admits the first actions page. It admits the first summaries page when `summaries.count` is above 0.
 
 A cosponsor page job reads its page and finds its gate. The gate may be pending, and the page may list a covered cosponsor who is not withdrawn. Then the gate passes with `coveredCosponsor`, and the job admits the first actions page. It admits the first summaries page when the stored `summary_count` is above 0.
 
@@ -170,11 +176,11 @@ A cosponsor page job reads its page and finds its gate. The gate may be pending,
 
 If a cosponsor page has a `next` link, the next cosponsor page is admitted. With no `next` link and a gate that is still pending, the gate becomes `notRelevant`. The reason is `noPolicyArea` or `untrackedPolicyArea` from the stored policy area. A later page never changes a decided gate.
 
-An actions page job or a summaries page job admits the next page of its own kind when it has a `next` link. The next page key uses the parent job ID, like the cosponsor chain.
+An actions, summaries, or subjects page job admits the next page of its own kind when it has a `next` link. The next page key uses the parent job ID, like the cosponsor chain.
 
 ### Extraction
 
-Every captured API page of a bill is saved as one `DocumentExtraction`: the detail and each cosponsor, actions, and summaries page. A bill list page is not saved. API jobs get no processing stage.
+Every captured API page of a bill is saved as one `DocumentExtraction`: the detail and each cosponsor, actions, summaries, and subjects page. A bill list page is not saved. API jobs get no processing stage.
 
 `CongressBillRenderer` has one method for each page kind and owns the text. A renderer change bumps the extraction version of each page kind it renders. The extraction version is the `ExtractionVersion` constant of the parser that read the page. The source attempt of the extraction is the captured attempt of the job.
 
@@ -183,7 +189,8 @@ A summaries page is the exception. Its extraction version is `{CongressBillSumma
 The text has one fact per line, in a fixed order, with invariant culture, `\n` line endings, and no trailing whitespace.
 
 - A detail has the lines `Bill: {congress} {type} {number}`, `Title`, `Introduced`, `Updated` (UTC, `yyyy-MM-ddTHH:mm:ssZ`), and `Policy area` (omitted when missing). Then it has one `Sponsor` line for each sponsor, `Cosponsors (including withdrawn)` (the count), and `Actions` (the count).
-- A cosponsor page and an actions page start with the `Bill` line.
+- A cosponsor page, an actions page, and a subjects page start with the `Bill` line.
+- A subject line is `Subject: {name}`.
 - A cosponsor line is `Cosponsor: {bioguide ID}, [original, ]{date}[, withdrawn {date}]`.
 - An action line is `Action {date}[ {time}][ [type {type}]][ [code {code}]][ [source {code} {name}]]: {text}`. Each tag is omitted when its field is null. The source tag holds the source system code, the name, or both.
 - A summaries page starts with the `Bill` line, then one block for each summary. A blank line separates the blocks.
@@ -216,9 +223,14 @@ A chain is closed when exactly one row closes it, that row has the highest order
 - The actions chain is closed.
 - The cosponsors chain is closed, when `cosponsor_count` is above 0.
 
-When the evidence is complete, the candidate includes summaries if the summaries chain is closed (`summary_count` above 0). If the summaries chain closes first, the bill version gets only the candidate with summaries.
+When the evidence is complete, the candidate includes summaries if the summaries chain is closed (`summary_count` above 0). It includes subjects if the subjects chain is closed (`subject_count` above 0). The subjects chain can close before the gate passes.
 
-If the summaries chain closes after a candidate without summaries exists, the same method adds the candidate with summaries and its queue row. The older candidate and its queue row stay as they are, whatever their state. A candidate with summaries ends the chain: no third candidate follows.
+A new candidate is written only when no candidate of the bill version already holds all of its inputs (`ActionCandidateInputs.AtLeast`). Each later chain closing therefore adds a candidate that holds one input more. The candidate sets only grow, so a bill version has at most three candidates. The order is one of these:
+
+- without summaries or subjects, then with summaries, then with both
+- without summaries or subjects, then with subjects, then with both
+
+The older candidates and their queue rows stay as they are, whatever their state. A candidate with both inputs ends the chain.
 
 The write that creates a candidate also adds its `action_analysis` queue row in the same transaction; see [action drafting](actions.md#queue). A candidate compares nothing. A replay of any admission changes nothing. A bill whose gate is not relevant never gets a candidate.
 
@@ -230,15 +242,16 @@ The write that creates a candidate also adds its `action_analysis` queue row in 
 - `bill_gates` holds one row for each bill version, keyed by its detail job.
 - `issue_revision_id` names the issue configuration revision that the gate used. It has no foreign key, because issue revisions are not stored in a table.
 - `summary_count` is 0 or more. Rows written before the column existed have 0, so those bills fetch no summaries until their update date changes.
+- `subject_count` is 0 or more, from `subjects.count` of the detail. Rows written before the column existed have 0, so those bills fetch no subjects until their update date changes. A count above 0 admits the subjects chain whatever the gate decision is.
 - `cosponsor_count` stores the detail cosponsor count, because the completeness check must know whether a cosponsor chain exists. Gates written before this column existed have 0 and no detail page row, so they never get a candidate.
 - The decision and reason are stored as PascalCase strings, like other enums.
 - A second detail job for a gated version records nothing, admits nothing, and counts as a duplicate.
-- `bill_follow_on_jobs` holds one row for each cosponsor, actions, or summaries page job, first or next. Its `detail_job_id` points to the root row in `bill_gates`.
+- `bill_follow_on_jobs` holds one row for each cosponsor, actions, summaries, or subjects page job, first or next. Its `detail_job_id` points to the root row in `bill_gates`.
 - The store writes the `bill_follow_on_jobs` row in the transaction that inserts the job. A page job without a row is invalid data.
 - `bill_pages` holds one row for the detail and one for each admitted follow-on page. Each row names its chain root, its role, its order, its extraction, and whether it closes the chain.
-- `action_candidates` holds one row for each passed bill version with complete evidence, and a second row when its summaries chain closes later.
-- The candidate ID is a SHA-256 hash of the source and the bill identity plus the exact update date (`PostgresCollectionJobStore.HashActionCandidate`), framed like `HashCandidate`. A candidate with summaries adds the suffix `:summaries` to the hashed text.
-- A bill version has at most two candidates: one without and one with summaries. The evidence of a candidate is the page rows of its root.
+- `action_candidates` holds one row for each passed bill version with complete evidence. A later closing summaries or subjects chain adds a row. `includes_summaries` and `includes_subjects` tell which chains the row holds. Rows written before `includes_subjects` existed have false.
+- The candidate ID is a SHA-256 hash of the source and the bill identity plus the exact update date (`PostgresCollectionJobStore.HashActionCandidate`), framed like `HashCandidate`. A candidate with summaries adds the suffix `:summaries` to the hashed text. A candidate with subjects then adds `:subjects`. The IDs of earlier candidates therefore never change.
+- A bill version has at most three candidates. `ux_action_candidates_detail_job` is unique on the root, `includes_summaries`, and `includes_subjects`. The evidence of a candidate is the page rows of its root, without the roles that the candidate does not include.
 - The index `ix_action_candidates_bill` on the source, the bill, and the update date serves the newest-candidate check of [action drafting](actions.md#queue).
 - Version constants are listed in [Behavior versions](../architecture.md#behavior-versions).
 
@@ -247,7 +260,7 @@ The write that creates a candidate also adds its `action_analysis` queue row in 
 | Concern | Files |
 |---|---|
 | Window, page query, URLs, keys | `src/CivicLens.Application/Collection/Bills/BillStreamWindow.cs`, `src/CivicLens.Application/Collection/ApiPageQuery.cs`, `src/CivicLens.Application/Collection/Bills/BillPageUrl.cs`, `src/CivicLens.Application/Collection/Bills/BillStreamJobKeys.cs`, `src/CivicLens.Application/Collection/ApiJobKeys.cs` |
-| Parsers | `src/CivicLens.Application/Collection/Bills/CongressBillListParser.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillParser.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillCosponsorsParser.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillActionsParser.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillSummariesParser.cs` |
+| Parsers | `src/CivicLens.Application/Collection/Bills/CongressBillListParser.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillParser.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillCosponsorsParser.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillActionsParser.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillSummariesParser.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillSubjectsParser.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillSubjectsJob.cs` |
 | Gate and renderer | `src/CivicLens.Application/Collection/Bills/BillGate.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillRenderer.cs` |
 | Resource kinds and parser list | `src/CivicLens.Application/Collection/ApiResource.cs`, `src/CivicLens.Application/Collection/ApiParser.cs` |
 | Coverage exception | `src/CivicLens.Application/Collection/CollectionConfiguration.cs` |
@@ -262,4 +275,4 @@ The write that creates a candidate also adds its `action_analysis` queue row in 
 - A Blocked cosponsor or actions page leaves its chain open, so the bill gets no candidate. [Operations](../operations.md#congressgov-bill-stream) has queries that list these bills.
 - Planned: list bills for each Congress from `/v3/bill/{congress}`, for each Congress at or above the configured minimum. The date-window bill list pages through thousands of older bills.
 - Planned: pull the shared line-format rules out of the bill renderer when a second renderer needs them.
-- Planned: use Congress.gov bill subjects when the search filters are designed.
+- Planned: use the saved subjects in the search filters when they are designed. Today they only inform action and vote drafting.

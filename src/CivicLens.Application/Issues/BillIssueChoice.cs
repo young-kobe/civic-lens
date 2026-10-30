@@ -10,27 +10,36 @@ public sealed class BillIssueChoice
 {
     private readonly ImmutableArray<TrackedIssueConfiguration> candidates;
 
-    private BillIssueChoice(ImmutableArray<TrackedIssueConfiguration> candidates)
+    private readonly ImmutableArray<string> subjects;
+
+    private BillIssueChoice(ImmutableArray<TrackedIssueConfiguration> candidates, IEnumerable<string> subjects)
     {
         this.candidates = candidates;
         CandidateIds = [.. candidates.Select(issue => issue.Id)];
+        this.subjects = candidates.IsEmpty ? [] : [.. subjects.Distinct(StringComparer.Ordinal)];
     }
 
     public ImmutableArray<string> CandidateIds { get; }
 
-    public static BillIssueChoice For(string? policyArea, DateOnly day, IssueConfiguration issues)
+    public static BillIssueChoice For(string? policyArea, IEnumerable<string> subjects, DateOnly day, IssueConfiguration issues)
     {
         var ids = BillGate.TrackedIssueIdsFor(policyArea, day, issues);
-        return new([.. ids.Select(id => issues.Issues.Single(issue => issue.Id == id))]);
+        return new([.. ids.Select(id => issues.Issues.Single(issue => issue.Id == id))], subjects);
     }
 
-    public static string Instructions(string evidence) => $"""
+    public string Instructions(string evidence) => $"""
 
         Issues:
-        - issueIds: the ids of the candidate issues that the bill is about. Choose from the candidate issues only. List each id once. The policy area of the bill is a hint and does not make an issue fit. Read the definition, the includes, and the excludes of each candidate, and choose an issue only when {evidence} is about it. Use an empty list when no candidate fits.
+        - issueIds: the ids of the candidate issues that the bill is about. Choose from the candidate issues only. List each id once. The policy area of the bill is a hint and does not make an issue fit. Read the definition, the includes, and the excludes of each candidate, and choose an issue only when {evidence} is about it. Use an empty list when no candidate fits.{SubjectInstructions}
         """;
 
     public IEnumerable<object> PromptSection() => candidates.Select(TrackedIssuePromptDocument.Of);
+
+    public IReadOnlyList<string>? SubjectsSection() => subjects.IsEmpty ? null : subjects;
+
+    private string SubjectInstructions => subjects.IsEmpty
+        ? ""
+        : " The facts list subjects that Congress.gov gives the bill. A subject helps you see what the bill is about. A subject does not make an issue fit.";
 
     public JsonObject? AnswerSchema() => candidates.IsEmpty ? null : new()
     {

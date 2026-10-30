@@ -30,7 +30,7 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
         var read = await reader.ReadAsync(evidence, cancellationToken);
         if (read.Snapshot is not { } snapshot)
             return await attempt.CompleteAsync(State.Blocked, read.ErrorCode!, cancellationToken);
-        var choice = BillIssueChoice.For(snapshot.PolicyArea, snapshot.Day, issueConfiguration);
+        var choice = BillIssueChoice.For(snapshot.PolicyArea, snapshot.Subjects, snapshot.Day, issueConfiguration);
         attempt.ContextJson = VoteDraftPrompt.SerializeContext(snapshot, choice, issues.Id);
         if (snapshot.Members.IsEmpty)
             return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, VoteDraftErrorCodes.NoTrackedMember, cancellationToken);

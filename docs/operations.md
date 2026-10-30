@@ -139,7 +139,7 @@ WHERE g.decision = 'Pending'
 ORDER BY g.congress, g.bill_type, g.bill_number;
 ```
 
-To list passed bills that have no action candidate because a cosponsor or actions page job failed or is blocked, run this query. A failed summaries page does not block a candidate, so the query skips it. A test runs this exact query.
+To list passed bills that have no action candidate because a cosponsor or actions page job failed or is blocked, run this query. A failed summaries or subjects page does not block a candidate, so the query skips it. A test runs this exact query.
 
 ```sql
 SELECT g.detail_job_id, g.source_id, g.congress, g.bill_type, g.bill_number,
@@ -621,7 +621,7 @@ The `worker` command drafts one action record for each bill that has a candidate
 | `CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS` | Daily token limit for action drafting calls, per UTC day (about 2,000,000 is a good start). It is separate from the other limits. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
-Drafting uses Claude Haiku 5.5. The first run can spend up to the daily limit on queued candidates. Start with a low limit. A bill version whose summaries have closed has two queued candidates. The older one settles as `supersededByNewerCandidate` with no call, also when the candidate with summaries blocks. The [outcomes](architecture/actions.md#outcomes) table lists every other code.
+Drafting uses Claude Haiku 5.5. The first run can spend up to the daily limit on queued candidates. Start with a low limit. A bill version whose summaries or subjects have closed has up to three queued candidates. Each older one settles as `supersededByNewerCandidate` with no call, also when the newest candidate blocks. The [outcomes](architecture/actions.md#outcomes) table lists every other code.
 
 The commands below need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 

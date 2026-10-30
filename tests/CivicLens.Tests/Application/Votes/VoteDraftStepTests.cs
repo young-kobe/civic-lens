@@ -744,6 +744,42 @@ public sealed class VoteDraftStepTests
         Assert.Empty(model.Requests);
     }
 
+    [Fact]
+    public async Task TheSubjectsOfTheBillReachTheModelAsFactsBesideTheCandidateIssues()
+    {
+        var world = Create(subjects: ["Housing finance and home ownership", "Rent and rental housing"]);
+
+        var (store, model) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Drafted));
+
+        Assert.Single(store.Revisions);
+        Assert.Contains("\"Rent and rental housing\"", Assert.Single(model.Requests).UserPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ABillWithNoSavedSubjectsPageStillDraftsWithTheOldPromptBecauseSubjectsCoverOnlySomeBills()
+    {
+        var (store, model) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Drafted));
+
+        Assert.Single(store.Revisions);
+        Assert.DoesNotContain("subjects", Assert.Single(model.Requests).UserPrompt, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("renderedTextMismatch", true)]
+    [InlineData("extractionVersionChanged", false)]
+    public async Task ASubjectsPageThatNoLongerMatchesItsCaptureBlocksBeforeAnyCallBecauseAFactMustBeTrusted(string code, bool tamperText)
+    {
+        var world = Create(subjects: ["Rent and rental housing"]);
+        if (tamperText) world.TamperWithSavedText("subjects", "Bill: 119 hconres 14\nSubject: Changed after capture");
+        else world.SetVersion("subjects", "older-version");
+        var model = new FakeHeadlineSummaryModel();
+
+        var (store, _) = await RunAsync(world, model);
+
+        Assert.Equal((State.Blocked, code), (store.Entries[0].Status, store.Entries[0].ErrorCode));
+        Assert.Empty(model.Requests);
+    }
+
     private static VoteDraftRevision PersonEditOf(VoteDraftRevision previous, string headline, string summary) => previous with
     {
         RevisionNumber = previous.RevisionNumber + 1,

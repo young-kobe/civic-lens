@@ -1287,6 +1287,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("detail_job_id");
 
+                    b.Property<bool>("IncludesSubjects")
+                        .HasColumnType("boolean")
+                        .HasColumnName("includes_subjects");
+
                     b.Property<bool>("IncludesSummaries")
                         .HasColumnType("boolean")
                         .HasColumnName("includes_summaries");
@@ -1305,7 +1309,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("ConfigurationRevisionId");
 
-                    b.HasIndex("DetailJobId", "IncludesSummaries")
+                    b.HasIndex("DetailJobId", "IncludesSummaries", "IncludesSubjects")
                         .IsUnique()
                         .HasDatabaseName("ux_action_candidates_detail_job");
 
@@ -1408,6 +1412,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("source_id");
 
+                    b.Property<int>("SubjectCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("subject_count");
+
                     b.Property<int>("SummaryCount")
                         .HasColumnType("integer")
                         .HasColumnName("summary_count");
@@ -1435,6 +1443,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_bill_gates_issue_revision", "issue_revision_id ~ '^[0-9a-f]{64}$'");
 
                             t.HasCheckConstraint("ck_bill_gates_reason", "(decision = 'Pending' AND reason IS NULL) OR (decision = 'Passed' AND reason IS NOT NULL AND reason IN ('CoveredSponsor','TrackedPolicyArea','CoveredCosponsor')) OR (decision = 'NotRelevant' AND reason IS NOT NULL AND reason IN ('NoPolicyArea','UntrackedPolicyArea'))");
+
+                            t.HasCheckConstraint("ck_bill_gates_subject_count", "subject_count >= 0");
 
                             t.HasCheckConstraint("ck_bill_gates_summary_count", "summary_count >= 0");
 
@@ -1489,7 +1499,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_bill_pages_order", "page_order >= 0");
 
-                            t.HasCheckConstraint("ck_bill_pages_role", "role IN ('Detail','Cosponsors','Actions','Summaries')");
+                            t.HasCheckConstraint("ck_bill_pages_role", "role IN ('Detail','Cosponsors','Actions','Summaries','Subjects')");
                         });
                 });
 

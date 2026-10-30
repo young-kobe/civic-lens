@@ -42,6 +42,7 @@ internal sealed class VoteWorld
     private readonly Dictionary<string, string> versionOverrides = [];
     private readonly Dictionary<string, CollectionJobRecord> jobs = [];
     private readonly Dictionary<string, string> texts = [];
+    private bool hasSubjects;
 
     private VoteWorld(CollectionConfigurationRevision revision) => Revision = revision;
 
@@ -60,7 +61,7 @@ internal sealed class VoteWorld
 
     public static VoteWorld Create(MemberSpec[]? members = null, string result = "Passed", string? question = null,
         string legislation = HouseVoteFixtures.Legislation, DateOnly? backfillFrom = null, string? totals = null,
-        string billTitle = BillTitle, string? policyArea = BillGateFixtures.TrackedPolicyArea, bool withStartDate = true)
+        string billTitle = BillTitle, string? policyArea = BillGateFixtures.TrackedPolicyArea, bool withStartDate = true, string[]? subjects = null)
     {
         var configuration = Configuration();
         if (backfillFrom is { } from)
@@ -78,12 +79,21 @@ internal sealed class VoteWorld
         var membersBody = MembersBody(members ?? DefaultMembers);
         world.Add("members", ApiResource.HouseVoteMembers, HouseVoteRollUrl.Members(HouseVoteFixtures.SourceUrl, roll), membersBody,
             HouseVoteRenderer.RenderMembers(HouseVoteMembersParser.Parse(Encoding.UTF8.GetBytes(membersBody), roll)));
-        var bill = new CongressBill(119, "hconres", 14, billTitle, ActionBillWorld.Backfill, BillUpdatedAt, policyArea, [], 0, 1, 0);
+        var bill = new CongressBill(119, "hconres", 14, billTitle, ActionBillWorld.Backfill, BillUpdatedAt, policyArea, [], 0, 1, 0, subjects?.Length ?? 0);
         var billBody = ActionBillWorld.DetailBody(bill);
         var billUrl = $"{ActionBillWorld.SourceUrl}/119/hconres/14?format=json";
         world.Add("bill", ApiResource.Bill, billUrl, billBody,
             CongressBillRenderer.RenderDetail(CongressBillParser.Parse(Encoding.UTF8.GetBytes(billBody), CongressBillListItem.TryReadDetailUrl(ActionBillWorld.SourceUrl, billUrl)!)),
             BillRevision, ActionBillWorld.SourceId, ActionBillWorld.Backfill);
+        if (subjects is not null)
+        {
+            var subjectsBody = ActionBillWorld.SubjectsBody(subjects, null);
+            var subjectsUrl = BillPageUrl.FirstPage(ActionBillWorld.SourceUrl, ApiResource.BillSubjects, new(119, "hconres", 14, default));
+            world.Add("subjects", ApiResource.BillSubjects, subjectsUrl, subjectsBody,
+                ActionBillWorld.RenderedText(ApiResource.BillSubjects, subjectsUrl, subjectsBody), BillRevision, ActionBillWorld.SourceId,
+                ActionBillWorld.Backfill);
+            world.hasSubjects = true;
+        }
         world.Stores = new ActionBillWorld.FixtureStores(world.jobs, world.bodies);
         return world;
     }
@@ -94,7 +104,8 @@ internal sealed class VoteWorld
 
     public VoteDraftEvidence Evidence(VoteDraftRevision? current = null, DateTimeOffset? updatedAt = null, bool hasNewerCandidate = false) =>
         new(new VoteDraftCandidate(CandidateId, RecordId, SourceId, Chamber.House, 119, 1, 100, "hconres", 14, updatedAt ?? UpdatedAt, null), Revision,
-            Page("detail", HouseVoteParser.ExtractionVersion), Page("members", HouseVoteMembersParser.ExtractionVersion), BillPage(), current, hasNewerCandidate);
+            Page("detail", HouseVoteParser.ExtractionVersion), Page("members", HouseVoteMembersParser.ExtractionVersion), BillPage(),
+            hasSubjects ? [Page("subjects", CongressBillSubjectsParser.ExtractionVersion)] : [], current, hasNewerCandidate);
 
     public static string ExtractionIdOf(string jobId) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(jobId)));
 

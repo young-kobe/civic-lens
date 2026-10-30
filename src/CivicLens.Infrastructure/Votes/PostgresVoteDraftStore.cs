@@ -61,6 +61,7 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
             await ReadPageAsync(db, row.DetailJobId, row.DetailExtractionId, cancellationToken),
             await ReadPageAsync(db, row.MembersJobId, row.MembersExtractionId, cancellationToken),
             await ReadBillDetailAsync(db, row, cancellationToken),
+            await ReadBillSubjectsAsync(db, row, cancellationToken),
             await VoteDraftRows.ReadCurrentAsync(db, recordId, cancellationToken),
             await VoteDraftRows.HasNewerCandidateAsync(db, row.SourceId, row.Chamber, row.Congress, row.SessionNumber, row.RollCallNumber,
                 row.UpdateDateUtcTicks, cancellationToken));
@@ -117,6 +118,17 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
         var page = await BillDetailRows.PagesNewestFirst(db, candidate.Congress, candidate.BillType, candidate.BillNumber!.Value)
             .FirstOrDefaultAsync(cancellationToken);
         return page is null ? null : await ReadPageAsync(db, page.JobId, page.ExtractionId, cancellationToken);
+    }
+
+    private static async Task<IReadOnlyList<VoteDraftPage>> ReadBillSubjectsAsync(CollectionAttemptDbContext db, VoteCandidateRow candidate,
+        CancellationToken cancellationToken)
+    {
+        if (candidate.BillType is null) return [];
+        var pages = await BillDetailRows.SubjectPagesOfNewestVersion(db, candidate.Congress, candidate.BillType, candidate.BillNumber!.Value)
+            .ToArrayAsync(cancellationToken);
+        var read = new List<VoteDraftPage>();
+        foreach (var page in pages) read.Add(await ReadPageAsync(db, page.JobId, page.ExtractionId, cancellationToken));
+        return read;
     }
 
     private static async Task<VoteDraftPage> ReadPageAsync(CollectionAttemptDbContext db, string jobId, string extractionId,

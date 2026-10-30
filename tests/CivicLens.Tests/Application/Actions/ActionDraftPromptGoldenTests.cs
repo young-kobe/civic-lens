@@ -25,7 +25,7 @@ public sealed class ActionDraftPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(ActionDraftTask.PromptVersion)} ({ActionDraftTask.PromptVersion}) or " +
             $"{nameof(ActionDraftTask.SchemaVersion)} ({ActionDraftTask.SchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("action-draft", "action-draft-v1", "action-draft-prompt-v2", "action-draft-schema-v2", "claude-haiku-5-5"),
+        Assert.Equal(("action-draft", "action-draft-v1", "action-draft-prompt-v3", "action-draft-schema-v2", "claude-haiku-5-5"),
             (ActionDraftTask.Task, ActionDraftTask.TaskVersion, ActionDraftTask.PromptVersion, ActionDraftTask.SchemaVersion, ActionDraftTask.Model));
         Assert.NotEqual(StatementDraftTaskName, ActionDraftTask.Task);
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
@@ -69,8 +69,34 @@ public sealed class ActionDraftPromptGoldenTests
         Assert.DoesNotContain("issueIds", none.SystemPrompt, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task SubjectsReachTheModelAsFactsOnlyWhenTheBillHasThemAndACandidateIssueExists()
+    {
+        var withSubjects = Create(subjectPages: [["Housing finance and home ownership", "Rent and rental housing"]]);
+        var snapshot = (await withSubjects.Reader().ReadAsync(withSubjects.Evidence(), default)).Snapshot!;
+        var plain = Create();
+        var plainSnapshot = (await plain.Reader().ReadAsync(plain.Evidence(), default)).Snapshot!;
+
+        var asked = ActionDraftPrompt.Build(snapshot, ChoiceWith(snapshot.Subjects), ActionDraftTask.MaximumPromptBytes)!;
+        var noCandidateIssue = ActionDraftPrompt.Build(snapshot, NoChoiceWith(snapshot.Subjects), ActionDraftTask.MaximumPromptBytes)!;
+        var noSubjects = ActionDraftPrompt.Build(plainSnapshot, BillGateFixtures.HousingChoice(), ActionDraftTask.MaximumPromptBytes)!;
+
+        Assert.Contains("\"Rent and rental housing\"", asked.UserPrompt, StringComparison.Ordinal);
+        Assert.Contains("A subject does not make an issue fit.", asked.SystemPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("subjects", noCandidateIssue.UserPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("subjects", noCandidateIssue.SystemPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("subjects", noSubjects.UserPrompt, StringComparison.Ordinal);
+        Assert.Equal(SystemSha256, Sha256(noSubjects.SystemPrompt));
+    }
+
+    private static BillIssueChoice ChoiceWith(IEnumerable<string> subjects) =>
+        BillIssueChoice.For(BillGateFixtures.TrackedPolicyArea, subjects, new DateOnly(2025, 3, 3), BillGateFixtures.Issues());
+
+    private static BillIssueChoice NoChoiceWith(IEnumerable<string> subjects) =>
+        BillIssueChoice.For(BillGateFixtures.UntrackedPolicyArea, subjects, new DateOnly(2025, 3, 3), BillGateFixtures.Issues());
+
     private static BillIssueChoice NoChoice() =>
-        BillIssueChoice.For(BillGateFixtures.UntrackedPolicyArea, new DateOnly(2025, 3, 3), BillGateFixtures.Issues());
+        BillIssueChoice.For(BillGateFixtures.UntrackedPolicyArea, [], new DateOnly(2025, 3, 3), BillGateFixtures.Issues());
 
     private const string StatementDraftTaskName = "statement-draft";
 

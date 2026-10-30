@@ -10,7 +10,7 @@ public sealed record ActionDraftContext(ActionDraftEvidence Evidence, ActionBill
         var previous = Evidence.Current;
         if (previous is null || previous.SummaryVersion != Snapshot.SummaryVersion || previous.PolicyArea != Snapshot.Bill.PolicyArea || previous.PolicyAreaId != PolicyAreaId ||
             previous.BillTitle != Snapshot.Bill.Title || previous.IssueCandidateIds.IsDefault || !previous.IssueCandidateIds.SequenceEqual(Issues.CandidateIds) ||
-            previous.IssueRevisionId != IssueRevisionId)
+            previous.IssueRevisionId != IssueRevisionId || previous.CandidateIncludesSubjects != Evidence.Candidate.IncludesSubjects)
             return ActionChange.Other;
         if (previous.Fingerprint != Snapshot.Fingerprint)
             return previous.HasSameSponsorsAs(Snapshot.Sponsorships) ? ActionChange.SponsorshipsOnly : ActionChange.Other;
