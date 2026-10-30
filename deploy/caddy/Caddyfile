@@ -35,10 +35,7 @@ http://civic-lens.info, http://127.0.0.1 {
 	root * {$CIVIC_LENS_RELEASE_DIRECTORY}/current
 	encode zstd gzip
 
-	header ?Cache-Control "public, max-age=300"
-
-	@manifest path /release.json
-	header @manifest Cache-Control "public, max-age=60"
+	header ?Cache-Control "public, max-age=60"
 
 	@photos path_regexp photos ^/photos/[0-9a-f]{64}\.jpg$
 	header @photos Cache-Control "public, max-age=31536000, immutable"

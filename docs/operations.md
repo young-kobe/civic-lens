@@ -823,7 +823,7 @@ Serve the active release root with a plain static server:
 python3 -m http.server 8090 --bind 127.0.0.1 --directory "$CIVIC_LENS_RELEASE_DIRECTORY/current"
 ```
 
-Run the service in a second shell. It applies its schema at startup, ingests the release, and polls every 2 minutes:
+Run the service in a second shell. It applies its schema at startup, ingests the release, and polls every 30 seconds:
 
 ```sh
 export CIVIC_LENS_RELEASE_BASE_URL=http://127.0.0.1:8090/
@@ -889,7 +889,7 @@ The `Dockerfile` in the repository root builds two images for linux-arm64. The w
 
 - `civic-lens.info` serves the static release. `file_server` uses the precompressed `release.json.gz` and `release.json.br`, the only compressed files that a publish writes. Caddy compresses other responses when it sends them. A missing path gets the release `404.html` with status 404. Other error statuses, for example 405, get a plain text body. The same block also answers `127.0.0.1`, so the search service on the same machine can read the release without the tunnel. A request for any other host name gets 404.
 - `api.civic-lens.info` proxies to the search service. `/internal/*` gets 404 and never reaches the service. Caddy passes the `CF-Connecting-IP` header unchanged. Cloudflare sets it on every request. It refuses a request that already carries the header, with status 403 and error code 1000. The service trusts it because the peer is loopback.
-- `Cache-Control` values: `release.json` has `public, max-age=60`, because readers poll it about every 2 minutes. Every other file, HTML pages and assets included, has `public, max-age=300`, because their names do not change when the content changes. Only `photos/<64 hex characters>.jpg` has `public, max-age=31536000, immutable`, because the name is the hash of the content. Error pages have `no-store`.
+- `Cache-Control` values: `release.json` and every other file, HTML pages and assets included, have `public, max-age=60`. A browser that cached a page before a publish can show the old page for up to 60 seconds after the publish. The search service reads Caddy on loopback, not through the CDN. Only `photos/<64 hex characters>.jpg` has `public, max-age=31536000, immutable`, because the name is the hash of the content. Error pages have `no-store`.
 - Every page, asset, and error that Caddy answers from its own blocks has `X-Content-Type-Options: nosniff` and `Referrer-Policy: strict-origin-when-cross-origin`. A 502 from the search proxy and a 404 when the release has no `404.html` carry neither header. No Content-Security-Policy is set.
 - Caddy sends no `X-Robots-Tag` header, so search engines can index the site. The published pages set `noindex` only on the pages that a reader must not land on from a search. `robots.txt` stays as published.
 - Never add a `log` directive to a site block. Without one, Caddy writes no access log. The privacy page says that page reads and searches leave no record. Caddy still writes error lines, for example when `404.html` is missing. The global `log` block in the Caddyfile filters them. They keep the host, method, status, and error. They hold no query string, headers, or IP address. A file error can name the file path of the page, with no reader data. Do not weaken that filter.
@@ -1107,7 +1107,7 @@ sudo mv /srv/civic-lens/postgres/search /srv/civic-lens/postgres/search.old
 sudo install -d -m 700 -o 70 -g 70 /srv/civic-lens/postgres/search
 ```
 
-6. Start the services with `update.sh`. The search service ingests the active release when it starts, and then every 2 minutes. Wait for one poll, then search on the site.
+6. Start the services with `update.sh`. The search service ingests the active release when it starts, and then every 30 seconds. Wait for one poll, then search on the site.
 7. Start the timer: `sudo systemctl start civic-lens-backup.timer`. When the site works, delete `/srv/restore` and the `.old` folders.
 
 The dump file stays in `/srv/civic-lens/backup`, mode 700, until the next run replaces it.
