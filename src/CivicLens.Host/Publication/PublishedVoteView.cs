@@ -15,7 +15,7 @@ internal static class PublishedVoteView
     public static IReadOnlyList<Fact> Facts(PublishedVote vote, PublicationCatalog catalog) =>
     [
         new("Voted on", Moment.Iso(vote.VotedOn)),
-        new("Kind", KindValue(vote)),
+        new("Kind", KindValue(vote)) { TermKey = PublishedRecordLabels.VoteKindTermKey(vote.Kind) },
         new("Result", vote.Result),
         new("Totals", Totals(vote)),
         new("Chamber", vote.Chamber.ToString()),
@@ -70,22 +70,20 @@ internal static class PublishedVoteView
     public static IEnumerable<PublishedVoteFact> ResultFacts(PublishedVote vote) =>
         vote.Facts.Where(fact => fact.Citation != vote.VotedOnCitation && fact.Citation != vote.KindCitation);
 
-    private const string Present = "Present";
-
-    public static IEnumerable<(string Heading, PublishedMemberVote[] Members)> CastGroups(PublishedVote vote) =>
+    public static IEnumerable<CastGroup> CastGroups(PublishedVote vote) =>
         vote.Members.GroupBy(member => member.Cast)
             .OrderBy(group => CastRank(group.Key))
             .ThenByDescending(group => CastRank(group.Key) == CandidateRank ? group.Count() : 0)
             .ThenBy(group => group.Key, StringComparer.Ordinal)
-            .Select(group => (Heading(vote, group.Key, group.Count()),
-                Members: group.OrderBy(member => member.Official.Name, StringComparer.OrdinalIgnoreCase).ThenBy(member => member.Official.Id, StringComparer.Ordinal).ToArray()));
+            .Select(group => Heading(vote, group.Key, group.Count(),
+                group.OrderBy(member => member.Official.Name, StringComparer.OrdinalIgnoreCase).ThenBy(member => member.Official.Id, StringComparer.Ordinal).ToArray()));
 
     private const int CandidateRank = 2;
 
     private static int CastRank(string cast) => cast switch
     {
         PublishedOfficialVote.NotVoting => 4,
-        Present => 3,
+        PublishedRecordLabels.Present => 3,
         _ => PublishedOfficialVote.SideOf(cast) switch
         {
             PublishedPartyMajority.Yea => 0,
@@ -94,15 +92,15 @@ internal static class PublishedVoteView
         }
     };
 
-    private static string Heading(PublishedVote vote, string cast, int count)
+    private static CastGroup Heading(PublishedVote vote, string cast, int count, PublishedMemberVote[] members)
     {
-        var phrase = cast switch
+        var (lead, word) = cast switch
         {
-            PublishedOfficialVote.NotVoting => "Did not vote",
-            Present => "Voted Present",
-            _ => CastRank(cast) == CandidateRank ? $"Voted for {cast}" : $"Voted {cast}"
+            PublishedOfficialVote.NotVoting => ("", "Did not vote"),
+            PublishedRecordLabels.Present => ("Voted ", PublishedRecordLabels.Present),
+            _ => CastRank(cast) == CandidateRank ? ("Voted for ", cast) : ("Voted ", cast)
         };
-        return $"{phrase} ({count} tracked {PublishedOfficialView.Noun(count, MemberNoun(vote))})";
+        return new(lead, word, cast, $" ({count} tracked {PublishedOfficialView.Noun(count, MemberNoun(vote))})", members);
     }
 
     public static string Anchor(PublishedVote vote, PublishedCitation citation) =>

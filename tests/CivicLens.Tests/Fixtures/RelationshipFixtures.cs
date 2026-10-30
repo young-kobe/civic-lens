@@ -58,7 +58,7 @@ internal static class RelationshipFixtures
         return new(VoteId, revision, "auth0|editor", Created, "House vote", "Summary", CivicLens.Core.Review.ReviewTextOrigin.Person, null,
             "congress-house-votes", VoteSource.CongressGov, Chamber.House, congress, 1, 100, "hr", billNumber, new string('d', 64), Created,
             [new("Started: 2025-04-10T11:08:00-04:00", Line(0)), new("Question: On Passage", Line(10)), new("Result: Passed", Line(20))],
-            new DateOnly(2025, 4, 10), Line(0), VoteKind.Passage, Line(10), [new(person, "W000817", cast, Line(30))], ["housing"], new string('e', 64));
+            new DateOnly(2025, 4, 10), Line(0), VoteKind.Passage, Line(10), [new(person, "W000817", cast, Line(30))], ["housing"], ["housing"], new string('e', 64));
     }
 
     public static ApprovedStatement StatementAboutBill(string official, int congress, int billNumber, string citationType = "H.R.",

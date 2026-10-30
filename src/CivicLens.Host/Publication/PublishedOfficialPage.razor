@@ -5,6 +5,10 @@
 
 <PublicPage Section="PublicSection.Officials" CanonicalPath="@Page.PagePath" Title="@Title" Description="@Description" RootPath="@Page.RootPath" Crumbs="Crumbs">
     <PageHeader Title="@Page.Profile.Name" Lede="@Lede" />
+    @if (Page.Congresses.Length > 1)
+    {
+        <FilterTabs Label="@PublishedOfficialView.CongressTabsLabel(Page)" Tabs="PublishedOfficialView.CongressTabs(Page)" />
+    }
     @if (Page.IsCurrent)
     {
         <OfficialPortrait Profile="Page.Profile" RootPath="@Page.RootPath" />
@@ -89,8 +93,8 @@
                         <Row Context="vote">
                             <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Iso(vote.VotedOn)</TableCell>
                             <TableCell Main><PublishedRecordTitle RecordId="@vote.RecordId" RootPath="@Page.RootPath">@vote.Headline</PublishedRecordTitle></TableCell>
-                            <TableCell Label="@PublicColumn.TheirVote">@vote.Cast</TableCell>
-                            <TableCell Label="@($"Most {PublishedOfficialView.PartyOf(withParty)}")">@vote.PartyMajority</TableCell>
+                            <TableCell Label="@PublicColumn.TheirVote"><CastWord Cast="@vote.Cast" /></TableCell>
+                            <TableCell Label="@($"Most {PublishedOfficialView.PartyOf(withParty)}")"><CastWord Cast="@(vote.PartyMajority ?? string.Empty)" /></TableCell>
                             <TableCell Label="@PublicColumn.Result">@vote.Result</TableCell>
                         </Row>
                     </DataTable>
@@ -131,17 +135,6 @@
             <Empty><EmptyState Title="No records yet" Text="There are no records here." /></Empty>
         </DataTable>
     </Panel>
-    @if (!Page.PastCongresses.IsEmpty)
-    {
-        <Panel Title="Earlier Congresses" Padded="true">
-            <ul class="choices">
-                @foreach (var congress in Page.PastCongresses)
-                {
-                    <li><a href="@(Page.RootPath + PublicationProtocol.OfficialCongressPagePath(Page.Profile.Id, congress))">Votes in @PublishedOfficialView.TheCongress(congress)</a></li>
-                }
-            </ul>
-        </Panel>
-    }
     @if (Page.IsCurrent)
     {
         <Panel Title="Offices">

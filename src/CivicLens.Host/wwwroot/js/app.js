@@ -13,7 +13,8 @@
             group.prepend(thumb);
         }
         thumb.style.width = `${selected.offsetWidth}px`;
-        thumb.style.transform = `translateX(${selected.offsetLeft - 2}px)`;
+        thumb.style.height = `${selected.offsetHeight}px`;
+        thumb.style.transform = `translate(${selected.offsetLeft - 2}px, ${selected.offsetTop - 2}px)`;
         group.classList.add("is-measured");
     };
     let measurePending = false;

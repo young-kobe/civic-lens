@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
@@ -21,15 +22,16 @@ public static class VoteDraftResolver
         CheckConfidence(output.Summary.Confidence, "summary confidence", errors);
         CheckNoNames(output.Headline.Text, "headline", snapshot, errors);
         CheckNoNames(output.Summary.Text, "summary", snapshot, errors);
+        var issueIds = context.Issues.Check(output.IssueIds, errors);
         if (errors.Count > 0) return AnalysisResolution<VoteDraftRevision>.Reject(Bound(errors), false);
         return AnalysisResolution<VoteDraftRevision>.Accept(Assemble(context, createdAtUtc, ReviewText.AfterModelDraft(context.Evidence.Current, output.Headline.Text,
-            output.Summary.Text, runId, snapshot.Fingerprint)));
+            output.Summary.Text, runId, snapshot.Fingerprint), issueIds));
     }
 
     public static VoteDraftRevision CopyText(VoteDraftContext context, DateTimeOffset createdAtUtc)
     {
         var current = context.Evidence.Current ?? throw new ArgumentException("Copied text needs a current revision.", nameof(context));
-        return Assemble(context, createdAtUtc, ReviewText.CopyOf(current));
+        return Assemble(context, createdAtUtc, ReviewText.CopyOf(current), current.TrackedIssueIds);
     }
 
     private static void CheckNoNames(string text, string field, VoteSnapshot snapshot, List<string> errors)
@@ -38,14 +40,15 @@ public static class VoteDraftResolver
             errors.Add($"The {field} names \"{Shorten(name)}\". Code lists the tracked members and their votes, so name no person.");
     }
 
-    private static VoteDraftRevision Assemble(VoteDraftContext context, DateTimeOffset createdAtUtc, ReviewText text)
+    private static VoteDraftRevision Assemble(VoteDraftContext context, DateTimeOffset createdAtUtc, ReviewText text,
+        ImmutableArray<string> trackedIssueIds)
     {
-        var (evidence, snapshot, trackedIssueIds, issueRevisionId) = context;
+        var (evidence, snapshot, issues, issueRevisionId) = context;
         var current = evidence.Current;
         var candidate = evidence.Candidate;
         var revision = new VoteDraftRevision(candidate.RecordId, (current?.RevisionNumber ?? 0) + 1, ReviewAuthor.AnalysisSubject, createdAtUtc,
             text.Headline, text.Summary, text.Origin, text.Suggestion, candidate.SourceId, snapshot.Source, candidate.Chamber, candidate.Congress, candidate.SessionNumber, candidate.RollCallNumber, candidate.BillType,
-            candidate.BillNumber, candidate.CandidateId, candidate.UpdateDate, snapshot.Facts, snapshot.Day, snapshot.VotedOnCitation, snapshot.Kind, snapshot.KindCitation, snapshot.Members, trackedIssueIds, issueRevisionId);
+            candidate.BillNumber, candidate.CandidateId, candidate.UpdateDate, snapshot.Facts, snapshot.Day, snapshot.VotedOnCitation, snapshot.Kind, snapshot.KindCitation, snapshot.Members, trackedIssueIds, issues.CandidateIds, issueRevisionId);
         revision.ValidateAsAnalysisRevision(current);
         return revision;
     }

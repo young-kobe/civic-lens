@@ -5,7 +5,7 @@
 @if (!Related.IsDefaultOrEmpty)
 {
     <Panel Title="Related records" Id="related-title" Padded="true">
-        <p class="muted small">Each link was approved by a person. It does not say that the statement is true or consistent with the record.</p>
+        <p class="muted small">Each link was approved by a person. It does not say that the <Term Key="statement">statement</Term> is true or consistent with the record.</p>
         <ul class="choices">
             @foreach (var link in Related)
             {

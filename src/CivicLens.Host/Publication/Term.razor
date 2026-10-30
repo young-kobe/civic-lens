@@ -1,0 +1,21 @@
+@{
+    var term = Glossary.Term(Key);
+}
+@if (Use.IsFirstUse(Key))
+{
+    <button type="button" class="term" popovertarget="@term.PopoverId">@ChildContent</button><span class="term-popover" id="@term.PopoverId" popover>
+        <span class="term-means">@term.Means</span>
+        <span class="term-why">@term.WhyItMatters</span>
+    </span>
+}
+else
+{
+    @ChildContent
+}
+
+@code {
+    [CascadingParameter] private GlossaryPageUse Use { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string Key { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
+}
