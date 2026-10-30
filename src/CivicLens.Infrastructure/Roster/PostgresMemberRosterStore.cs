@@ -115,7 +115,6 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
     {
         AttemptId = attemptId,
         BioguideId = member.BioguideId,
-        LisId = member.LisId,
         FullName = member.FullName,
         Office = member.Office,
         Phone = member.Phone,
@@ -138,7 +137,7 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
     };
 
     private static RosterMember ToMember(RosterMemberRow member, IEnumerable<RosterTermRow> terms) =>
-        new(member.BioguideId, member.LisId, member.FullName, member.Office, member.Phone, member.Url,
+        new(member.BioguideId, member.FullName, member.Office, member.Phone, member.Url,
             [.. terms.Select(term => new RosterTerm(term.TermIndex, term.Chamber, term.StartsOn, term.EndsOn, term.State,
                 term.District, term.SenateClass, term.Party, term.Caucus))]);
 }

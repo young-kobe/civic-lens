@@ -39,7 +39,7 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
         var latest = await roster.ReadLatestAsync(RosterFixtures.SourceId, default);
         Assert.Equal(["C000127", "N000147", "W000832"], latest.Select(member => member.BioguideId));
         var cantwell = latest[0];
-        Assert.Equal(("S275", "511 Hart Senate Office Building"), (cantwell.LisId, cantwell.Office));
+        Assert.Equal("511 Hart Senate Office Building", cantwell.Office);
         Assert.Equal([new DateOnly(1993, 1, 5), new DateOnly(2025, 1, 3)], cantwell.Terms.Select(term => term.Start));
         Assert.Equal((3L, 5L), (await CountAsync("roster_members", attemptId), await CountAsync("roster_terms", attemptId)));
         Assert.Equal(1L, await CountAsync("roster_snapshots", attemptId));

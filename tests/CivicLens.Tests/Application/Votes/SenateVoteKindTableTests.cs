@@ -60,7 +60,7 @@ public sealed class SenateVoteKindTableTests
     [Fact]
     public void AClotureMotionOnANominationIsClotureBecauseTheVoteDecidesToEndDebateNotToConfirm()
     {
-        var (kind, _) = SenateVoteKindTable.Classify([Fact("Question: On the Cloture Motion"), Fact("Document: PN373")]);
+        var (kind, _) = SenateVoteKindTable.Classify([Fact("Question: On the Cloture Motion"), Fact("Vote title: Cloture on the Nomination of Jane Example")]);
 
         Assert.Equal(VoteKind.Cloture, kind);
     }

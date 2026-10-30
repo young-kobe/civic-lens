@@ -21,20 +21,19 @@ public sealed class MemberRosterParserTests
     }
 
     [Fact]
-    public void TheOfficeAndContactComeFromTheLastTermAndTheSenateIdFromTheMember()
+    public void TheOfficeAndContactComeFromTheLastTerm()
     {
         var cantwell = Parse(RosterFixtures.Json).Single(member => member.BioguideId == "C000127");
 
-        Assert.Equal(("S275", "511 Hart Senate Office Building", "202-224-3441", "https://www.cantwell.senate.gov"),
-            (cantwell.LisId, cantwell.Office, cantwell.Phone, cantwell.Url));
+        Assert.Equal(("511 Hart Senate Office Building", "202-224-3441", "https://www.cantwell.senate.gov"),
+            (cantwell.Office, cantwell.Phone, cantwell.Url));
     }
 
     [Fact]
-    public void AHouseMemberHasNoSenateId()
+    public void ADelegateKeepsDistrictZero()
     {
         var norton = Parse(RosterFixtures.Json).Single(member => member.BioguideId == "N000147");
 
-        Assert.Null(norton.LisId);
         Assert.Equal(0, norton.Terms[1].District);
     }
 
@@ -126,7 +125,6 @@ public sealed class MemberRosterParserTests
 
     private static TheoryData<string> Limited(int excess) => new()
     {
-        Member(lis: Text(RosterLimits.LisId + excess)),
         Member(name: $$"""{"official_full":"{{Text(RosterLimits.FullName + excess)}}"}"""),
         Member(term: Term(office: Text(RosterLimits.Office + excess))),
         Member(term: Term(phone: Text(RosterLimits.Phone + excess))),
@@ -152,7 +150,7 @@ public sealed class MemberRosterParserTests
         string party = "Republican", string? caucus = null, string office = "", string phone = "", string url = "") =>
         $$"""{"type":"{{type}}","start":"{{start}}","end":"{{end}}","state":"{{state}}","party":"{{party}}",{{(caucus is null ? "" : $"\"caucus\":\"{caucus}\",")}}"office":"{{office}}","phone":"{{phone}}","url":"{{url}}"}""";
 
-    private static string Member(string bioguide = "A000001", string lis = "", string name = """{"official_full":"A"}""",
+    private static string Member(string bioguide = "A000001", string name = """{"official_full":"A"}""",
         string? terms = null, string? term = null) =>
-        $$"""{"id":{"bioguide":"{{bioguide}}","lis":"{{lis}}"},"name":{{name}},"terms":[{{terms ?? term ?? Term()}}]}""";
+        $$"""{"id":{"bioguide":"{{bioguide}}"},"name":{{name}},"terms":[{{terms ?? term ?? Term()}}]}""";
 }

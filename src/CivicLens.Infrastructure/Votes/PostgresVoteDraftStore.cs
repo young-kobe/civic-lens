@@ -23,7 +23,7 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
     private readonly PostgresAnalysisQueue<VoteAnalysisRow, VoteAnalysisBudgetRow, VoteDraftRun> queue;
 
     public PostgresVoteDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
-        : this(contextFactory, VoteDraftStaleness.NewQueue(contextFactory)) { }
+        : this(contextFactory, NewQueue(contextFactory)) { }
 
     private PostgresVoteDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
         PostgresAnalysisQueue<VoteAnalysisRow, VoteAnalysisBudgetRow, VoteDraftRun> queue) : base(queue)
@@ -31,6 +31,10 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
         this.contextFactory = contextFactory;
         this.queue = queue;
     }
+
+    private static PostgresAnalysisQueue<VoteAnalysisRow, VoteAnalysisBudgetRow, VoteDraftRun> NewQueue(
+        IDbContextFactory<CollectionAttemptDbContext> contextFactory) =>
+        new(contextFactory, new VoteDraftQueueMapping(AfterDecisionHooks.ForRecordKind(contextFactory, RelationshipRecordKind.Vote, PublishedRecordKind.Vote)));
 
     public async Task<VoteDraftRun?> GetRunAsync(string runId, CancellationToken cancellationToken)
     {

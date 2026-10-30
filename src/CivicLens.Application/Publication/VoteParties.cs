@@ -16,10 +16,7 @@ internal sealed class VoteParties
     public VoteParties(IEnumerable<RosterMember> roster)
     {
         foreach (var member in roster)
-        {
             termsBySourceId[member.BioguideId] = member.Terms;
-            if (member.LisId is not null) termsBySourceId[member.LisId] = member.Terms;
-        }
     }
 
     public string PartyOn(VoteMemberLine line, Chamber chamber, DateOnly day) =>
