@@ -18,7 +18,7 @@ public sealed class AnthropicActionDraftLiveTests
             summaries: [new("00", "2025-01-03", "2025-01-05T10:00:00Z", "<p>It funds rent aid.</p>")]);
         var evidence = world.Evidence();
         var snapshot = (await world.Reader().ReadAsync(evidence, default)).Snapshot!;
-        var request = ActionDraftPrompt.Build(snapshot, [new("rent", "Rent")], ActionDraftTask.MaximumPromptBytes)!;
+        var request = ActionDraftPrompt.Build(snapshot, BillGateFixtures.HousingChoice(), ActionDraftTask.MaximumPromptBytes)!;
         Assert.InRange(request.ReservedTokens, 1, TokenCap);
         var model = new AnthropicActionDraftModel(Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")!);
 
@@ -26,7 +26,7 @@ public sealed class AnthropicActionDraftLiveTests
 
         Assert.Equal("end_turn", first.StopReason);
         var resolution = ActionDraftResolver.Resolve(first.OutputJson!,
-            new ActionDraftContext(evidence, snapshot, ["rent"], "housing", BillGateFixtures.Revision().Id), new string('1', 32), DateTimeOffset.UnixEpoch);
+            new ActionDraftContext(evidence, snapshot, BillGateFixtures.HousingChoice(), "housing", BillGateFixtures.Revision().Id), new string('1', 32), DateTimeOffset.UnixEpoch);
         Assert.True(resolution.IsAccepted, string.Join("; ", resolution.Errors));
     }
 }

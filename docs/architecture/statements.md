@@ -265,6 +265,8 @@ Infrastructure/Statements holds `PostgresStatementReviewStore` and `StatementRev
 - Every span must cite the extraction of the candidate and fit in its text. `StatementDraftRevision.ValidateShape` checks the bounds.
 - A stale expected revision raises `ReviewConflictException`.
 
+**Published labels.** A published statement holds `textOrigin` and `approvedBy`. A person approves every statement today, so `approvedBy` is `person`. See [publication](publication.md#release-content).
+
 **AI date.** An AI-proposed statement date survives a person's save only when the person ticks that it was checked. `AiProposedDate` in Core/Review owns this rule for statements and document changes. An AI revision that has a date cannot be approved.
 
 **Decide.** `DecideStatementReview` checks the expected revision number and review state version, then applies `ReviewPolicy`. `ReviewValidation.CreateDecision` builds the decision for both record types. An approval runs `StatementDraftRevision.ValidateForApproval`. It needs a headline, a summary, at least one speaker, at least one quotation, and a date with evidence or no date. It also checks the allowed selections again and checks the spans against the extraction.
@@ -523,6 +525,7 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 
 - Actions are in [actions](actions.md). Weekly briefs are in [briefs](briefs.md).
 - Two parallel preparations of one source can deadlock when their feed items have an equal `pubDate` and swap order. Postgres aborts one transaction, the worker retries it, and no data is lost. The insert order stays as it is.
+- Planned: code approval of statements. No worker sets `approvedBy` to `code` yet, so the code labels of a statement page are reachable only in tests. A date that code accepts needs its own field to carry the label "Date read from the release by code". Code approval adds that field.
 - Planned: structured statement extraction and temporal identity resolution.
 - A feed item source still admits page jobs for the same links. A page that returns 403 fails and adds nothing. A page that works adds nothing when the feed text came first.
 - The feed parser reads RSS 2.0 only. It uses the first `link` element of an item and ignores `xml:base` and the charset of the HTTP header. An Atom feed blocks the job with `feedStatementTextInvalid`.

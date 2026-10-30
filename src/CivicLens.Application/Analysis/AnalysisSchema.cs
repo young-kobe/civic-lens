@@ -19,15 +19,16 @@ public static class AnalysisSchema
         return id;
     }
 
-    public static string HeadlineAndSummary()
+    public static string HeadlineAndSummary(JsonObject? issueIds = null)
     {
-        var schema = new JsonObject
+        var properties = new JsonObject { ["headline"] = TextWithConfidence(), ["summary"] = TextWithConfidence() };
+        var required = new JsonArray("headline", "summary");
+        if (issueIds is not null)
         {
-            ["type"] = "object",
-            ["additionalProperties"] = false,
-            ["required"] = new JsonArray("headline", "summary"),
-            ["properties"] = new JsonObject { ["headline"] = TextWithConfidence(), ["summary"] = TextWithConfidence() }
-        };
+            properties["issueIds"] = issueIds;
+            required.Add("issueIds");
+        }
+        var schema = new JsonObject { ["type"] = "object", ["additionalProperties"] = false, ["required"] = required, ["properties"] = properties };
         return schema.ToJsonString(AnalysisPromptText.CompactJson);
     }
 

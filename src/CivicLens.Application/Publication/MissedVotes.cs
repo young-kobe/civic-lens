@@ -5,7 +5,7 @@ namespace CivicLens.Application.Publication;
 
 /// <summary>
 /// The roll calls that one official missed in one chamber. A roll call is missed when the official did not vote on it.
-/// Held counts the published roll calls of the chamber while the official served.
+/// Held counts the roll calls on this site of the chamber while the official served.
 /// </summary>
 public sealed record MissedVotes(PublishedChamber Chamber, int Missed, int Held, DateOnly First, DateOnly Last)
 {

@@ -415,7 +415,7 @@ public sealed partial class PostgresBillStreamTests
         await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, $"{insert} VALUES ('NOT-A-HASH', '{SourceId}', 119, 'hr', 8, 1, 0, 'AwaitingReview', 0)"));
     }
 
-    private static readonly string DraftableOutput = HeadlineSummaryOutputs.Output(headline: "A sponsored a housing measure", summary: "A filed this measure.");
+    private static readonly string DraftableOutput = HeadlineSummaryOutputs.Output(headline: "A sponsored a housing measure", summary: "A filed this measure.", issueIds: ["rent"]);
 
     private static string RecordId => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"{SourceId.Length}:{SourceId}119:hr:7")));
 
@@ -510,7 +510,7 @@ public sealed partial class PostgresBillStreamTests
     {
         var extraction = new string('f', 64);
         return new(RecordId, number, "civic-lens:analysis", UpdatedAt.AddMinutes(number), "Headline", "Summary.", ReviewTextOrigin.Model, null,
-            SourceId, 119, "hr", 7, candidate, UpdatedAt, includesSummaries, new string('d', 64), null, null, null, null, null, [], BillGateFixtures.Revision().Id,
+            SourceId, 119, "hr", 7, candidate, UpdatedAt, includesSummaries, new string('d', 64), null, null, null, null, null, [], [], BillGateFixtures.Revision().Id,
             [new("warren", "W000817", ActionSponsorshipRole.Sponsor, false, new DateOnly(2025, 1, 3), null,
                 [new SourceSpan(extraction, 0, 5)])], "A bill");
     }

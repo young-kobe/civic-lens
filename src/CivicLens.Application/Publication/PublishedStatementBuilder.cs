@@ -1,5 +1,6 @@
 using CivicLens.Application.Statements;
 using CivicLens.Core.Documents;
+using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Publication.Contracts;
 
@@ -17,6 +18,7 @@ internal sealed class PublishedStatementBuilder(PublishedRecordRules rules)
             RevisionNumber = revision.RevisionNumber,
             Headline = revision.Headline,
             Summary = revision.Summary,
+            TextOrigin = revision.AuthorKind == ReviewAuthorKind.Analysis ? PublishedTextOrigin.Model : PublishedTextOrigin.Person,
             StatementDate = revision.StatementDate,
             StatementDateEvidence = revision.StatementDateEvidence is null ? null : PublishedRecordRules.Cite(revision.StatementDateEvidence, extraction),
             Speakers = rules.MapOfficials(review.CandidateId, revision.SpeakerOfficialIds),
@@ -33,6 +35,7 @@ internal sealed class PublishedStatementBuilder(PublishedRecordRules rules)
                 ObservedAtUtc = extraction.SourceAttempt.ObservedAt,
                 Text = extraction.Text
             },
+            ApprovedBy = PublishedRecordRules.ApproverOf(revision.RevisionNumber, review.Decisions),
             ApprovedAtUtc = PublishedRecordRules.GetApprovalTime(revision.RevisionNumber, review.Decisions),
             FirstPublishedAtUtc = firstPublishedAtUtc ?? now,
             Corrections = corrections

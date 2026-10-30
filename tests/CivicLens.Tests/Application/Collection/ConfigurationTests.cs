@@ -97,6 +97,34 @@ public sealed class ConfigurationTests
     }
 
     [Theory]
+    [InlineData("unknown-person")]
+    [InlineData("other")]
+    public void OfficeOfIsRefusedForAPersonTheSourceDoesNotCoverBecauseCodeApprovesOnlyAnOfficialsOwnOffice(string officeOf)
+    {
+        var configuration = ValidConfiguration([
+            new PersonConfiguration { Id = "person", Name = "Official" },
+            new PersonConfiguration { Id = "other", Name = "Other" }], ["person"]);
+        configuration = configuration with { Sources = [configuration.Sources[0] with { OfficeOf = officeOf }] };
+
+        Assert.Throws<ArgumentException>(configuration.Validate);
+    }
+
+    [Fact]
+    public void OfficeOfIsOptionalAndASourceWithoutItSavesNoNewField()
+    {
+        var configuration = ValidConfiguration([new PersonConfiguration { Id = "person", Name = "Official" }], ["person"]);
+        var without = CollectionConfigurationRevision.Create(configuration);
+        var with = CollectionConfigurationRevision.Create(configuration with
+        {
+            Sources = [configuration.Sources[0] with { OfficeOf = "person" }]
+        });
+
+        Assert.DoesNotContain("officeOf", without.Json, StringComparison.Ordinal);
+        Assert.NotEqual(without.Id, with.Id);
+        Assert.Equal("person", with.ReadConfiguration().Sources[0].OfficeOf);
+    }
+
+    [Theory]
     [InlineData(null, 3600)]
     [InlineData(60, 60)]
     [InlineData(604800, 604800)]

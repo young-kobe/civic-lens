@@ -8,6 +8,7 @@ public sealed record PublishedStatement
     public required int RevisionNumber { get; init; }
     public required string Headline { get; init; }
     public required string Summary { get; init; }
+    public required PublishedTextOrigin TextOrigin { get; init; }
     public DateOnly? StatementDate { get; init; }
     public PublishedCitation? StatementDateEvidence { get; init; }
     public required PublishedOfficial[] Speakers { get; init; }
@@ -18,6 +19,7 @@ public sealed record PublishedStatement
     public required string[] BillNumbers { get; init; }
     public required PublishedDocumentVersion Source { get; init; }
     public string? ArticleUrl { get; init; }
+    public required PublishedApprover ApprovedBy { get; init; }
     public required DateTimeOffset ApprovedAtUtc { get; init; }
     public required DateTimeOffset FirstPublishedAtUtc { get; init; }
     public required PublishedCorrection[] Corrections { get; init; }
@@ -42,6 +44,8 @@ public sealed record PublishedStatement
         if (!PublicationProtocol.IsRecordId(PublishedRecordKind.Statement, RecordId) || RevisionNumber < 1 ||
             string.IsNullOrWhiteSpace(Headline) || string.IsNullOrWhiteSpace(Summary))
             throw new InvalidDataException("Published record identity or wording is invalid.");
+        if (ApprovedBy == PublishedApprover.Code && TextOrigin != PublishedTextOrigin.Model)
+            throw new InvalidDataException("Code approves only text that a model wrote.");
         PublishedEvidenceRules.RequireVersion(Source);
         if (ArticleUrl is not null) PublishedEvidenceRules.RequireWebUrl(ArticleUrl);
         if (Quotations is null || Quotations.Length is 0 or > MaximumQuotations)
