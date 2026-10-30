@@ -1,8 +1,11 @@
 using System.Globalization;
 using CivicLens.Application.Publication;
+using CivicLens.Core.Votes;
 using CivicLens.Host.Actions;
+using CivicLens.Host.Collection;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Ui;
+using CivicLens.Host.Votes;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Host.Publication;
@@ -17,6 +20,9 @@ internal static class PublishedVoteView
         new("Totals", Totals(vote)),
         new("Chamber", vote.Chamber.ToString()),
         new("Roll call", $"{vote.RollCallNumber}, Congress {vote.Congress}, session {vote.Session}"),
+        new("Data source", PublishedRecordLabels.VoteSource(vote.Source)),
+        Fact.LinkList("Official roll call page", [new FactLink($"Roll call on {VoteLabels.RollCallSite(ChamberOf(vote))}",
+            SourcePages.RollCall(ChamberOf(vote), vote.Congress, vote.Session, vote.RollCallNumber))]),
         PublishedRecordView.Issues("Tracked issues", vote.TrackedIssueIds, catalog),
         new("Published", $"From the official record, checked {Moment.Full(vote.ApprovedAtUtc)}; first published {Moment.Full(vote.FirstPublishedAtUtc)}"),
         .. PublishedRecordLabels.Wording(vote.TextOrigin),
@@ -36,7 +42,20 @@ internal static class PublishedVoteView
             .Select(fact => fact.Text[PublishedVote.CandidateTotalPrefix.Length..].Replace(": ", " ", StringComparison.Ordinal));
 
     public static string Caveat(PublishedVote vote) =>
-        $"This record lists only the officials that Civic Lens tracks. Each cast is the wording of the {(vote.Chamber == PublishedChamber.Senate ? "Senate" : "House Clerk")} roll call at the observation time of its source.";
+        "This record lists only the officials that Civic Lens tracks. " + vote.Source switch
+        {
+            PublishedVoteSource.Voteview => "Voteview stores each vote as a number code. Civic Lens shows that code as a word such as Yea or Nay. The Senate roll call may use other words. Voteview does not list a Vice President tie-break vote.",
+            _ => $"Each cast is the wording of the {(vote.Chamber == PublishedChamber.Senate ? "Senate" : "House Clerk")} roll call at the observation time of its source."
+        };
+
+    public static string SavedData(PublishedVote vote) => vote.Source switch
+    {
+        PublishedVoteSource.Voteview => "Voteview files",
+        PublishedVoteSource.CongressGov => "Congress.gov API page",
+        _ => throw new ArgumentOutOfRangeException(nameof(vote), vote.Source, "Vote source has no saved data name.")
+    };
+
+    private static Chamber ChamberOf(PublishedVote vote) => vote.Chamber == PublishedChamber.Senate ? Chamber.Senate : Chamber.House;
 
     public static string? Bill(PublishedVote vote) =>
         vote.BillType is null ? null : ActionLabels.Bill(vote.Congress, vote.BillType, vote.BillNumber!.Value);

@@ -324,7 +324,7 @@ public sealed partial class PostgresHouseVoteTests
         var member = new SourceSpan(evidence.Members.ExtractionId, 0, 5);
         var identity = evidence.Candidate;
         return new(identity.RecordId, number, "civic-lens:analysis", Updated.AddMinutes(number), "Headline", "Summary.", ReviewTextOrigin.Model, null,
-            identity.SourceId, identity.Chamber, identity.Congress, identity.SessionNumber, identity.RollCallNumber, identity.BillType, identity.BillNumber, candidate,
+            identity.SourceId, VoteSource.CongressGov, identity.Chamber, identity.Congress, identity.SessionNumber, identity.RollCallNumber, identity.BillType, identity.BillNumber, candidate,
             identity.UpdateDate, [new("Result: Passed", fact)], new DateOnly(2025, 4, 10), fact, VoteKind.Other, null, [new("with-id-a", "A000001", "Yea", member)], [], new string('e', 64));
     }
 

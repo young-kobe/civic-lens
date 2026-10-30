@@ -3,7 +3,6 @@ using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.MemberPhotos;
-using CivicLens.Application.Collection.SenateVotes;
 using CivicLens.Application.Collection.Votes;
 using CivicLens.Application.Collection.VoteviewVotes;
 using CivicLens.Collection.Contracts;
@@ -152,28 +151,6 @@ public sealed class ConfiguredCollectionSource
             CreateApiJobDefinition(ApiResource.HouseVoteMembers, HouseVoteRollUrl.Members(ReadHouseVoteSource().Url, vote.Roll),
                 currentDate, CollectionJobPriority.OfSession(vote.Roll.Session, currentDate)));
 
-    public ApiJobBatch CreateSenateMenuBatch(string menuJobId, SenateVoteMenu menu, DateOnly currentDate)
-    {
-        var source = ReadSenateVoteSource();
-        var template = PrepareDefinition(source, currentDate, null, article: false);
-        var votes = menu.Votes
-            .Select(item => new ApiJob(SenateVoteJobKeys.Vote(SourceId, item, currentDate),
-                template with
-                {
-                    ApiResource = ApiResource.SenateVote,
-                    Url = SenateVoteUrl.Vote(source.Url, item.Roll),
-                    Priority = CollectionJobPriority.OfSession(item.Roll.Session, currentDate)
-                }));
-        var following = menu.Session.Following(currentDate);
-        var nextMenu = following is not { } nextSession
-            ? null
-            : new ApiJob(SenateVoteJobKeys.NextMenu(SourceId, menuJobId),
-                CreateApiJobDefinition(ApiResource.SenateVoteMenu, SenateVoteUrl.Menu(source.Url, nextSession),
-                    currentDate, CollectionJobPriority.Check));
-        return new ApiJobBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), template,
-            nextMenu is null ? [.. votes] : [.. votes, nextMenu]);
-    }
-
     public ApiJobBatch CreateVoteviewFollowOnBatch(ApiResource finished, string jobId, int congress, DateOnly currentDate)
     {
         var source = ReadVoteviewSource();
@@ -277,11 +254,6 @@ public sealed class ConfiguredCollectionSource
                     ? new ApiTarget(ApiResource.HouseVoteList, HouseVoteListUrl.FirstPage(source.Url, first),
                         CollectionJobPriority.Check)
                     : null;
-            case ApiParser.SenateVoteList:
-                return VoteSession.FirstOfSweep(source.BackfillFrom!.Value, today, source.MinimumCongress!.Value) is { } firstMenu
-                    ? new ApiTarget(ApiResource.SenateVoteMenu, SenateVoteUrl.Menu(source.Url, firstMenu),
-                        CollectionJobPriority.Check)
-                    : null;
             case ApiParser.VoteviewSenateVoteList:
                 return VoteSession.FirstOfSweep(source.BackfillFrom!.Value, today, source.MinimumCongress!.Value) is { } firstSession
                     ? new ApiTarget(ApiResource.VoteviewRollCalls,
@@ -292,6 +264,7 @@ public sealed class ConfiguredCollectionSource
             case ApiParser.CongressLegislatorsExecutive:
                 return new ApiTarget(ApiResource.ExecutiveRoster, source.Url, CollectionJobPriority.Check);
             case ApiParser.MemberPhotos:
+            case ApiParser.SenateVoteList:
                 return null;
             default:
                 throw new ArgumentOutOfRangeException(nameof(source));
@@ -304,11 +277,6 @@ public sealed class ConfiguredCollectionSource
         ReadSource() is { ApiParser: ApiParser.CongressHouseVoteList } source
             ? source
             : throw new ArgumentException("House vote admission requires a configured Congress House vote source.");
-
-    private WatchedSourceConfiguration ReadSenateVoteSource() =>
-        ReadSource() is { ApiParser: ApiParser.SenateVoteList } source
-            ? source
-            : throw new ArgumentException("Senate vote admission requires a configured Senate vote source.");
 
     private WatchedSourceConfiguration ReadVoteviewSource() =>
         ReadSource() is { ApiParser: ApiParser.VoteviewSenateVoteList } source

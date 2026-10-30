@@ -16,7 +16,6 @@ internal sealed class RosterMemberRowConfiguration : IEntityTypeConfiguration<Ro
         builder.HasKey(row => new { row.AttemptId, row.BioguideId });
         builder.Property(row => row.AttemptId).HasColumnName("attempt_id").IsRequired();
         builder.Property(row => row.BioguideId).HasColumnName("bioguide_id").HasMaxLength(7);
-        builder.Property(row => row.LisId).HasColumnName("lis_id").HasMaxLength(RosterLimits.LisId);
         builder.Property(row => row.FullName).HasColumnName("full_name").HasMaxLength(RosterLimits.FullName).IsRequired();
         builder.Property(row => row.Office).HasColumnName("office").HasMaxLength(RosterLimits.Office);
         builder.Property(row => row.Phone).HasColumnName("phone").HasMaxLength(RosterLimits.Phone);

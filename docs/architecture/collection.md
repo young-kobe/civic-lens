@@ -109,7 +109,7 @@ A 429 returns `deferred`, with Retry-After when the server supplies it. Host can
 
 **Scheme upgrade.** The collector can fetch a discovered `http` link over `https`. This happens when the allowed origin is `https` and the link has the same host and the default port. `CollectionRequest.ResolveCandidate` owns this rule.
 
-**API mode.** The collector fetches one JSON or XML resource with HTTP GET and sends `Accept: application/json`. It returns a capture with no discovery result. It knows nothing about any specific API. An Application parser reads the capture later. The Senate vote files are XML and need no credential. The senate.gov server returns `text/xml` for the JSON Accept value. The collector does not check the content type. API mode makes no robots request, so `robotsRequestCount` is 0 and no crawl delay is declared.
+**API mode.** The collector fetches one JSON or XML resource with HTTP GET and sends `Accept: application/json`. It returns a capture with no discovery result. It knows nothing about any specific API. An Application parser reads the capture later. The collector does not check the content type. API mode makes no robots request, so `robotsRequestCount` is 0 and no crawl delay is declared.
 
 **User-Agent.** Every request, also a robots request, sends `User-Agent: CivicLens/0.1 (civic-lens.info)`. The collector sets no `From` header and puts no email address in any request. `HttpCollector` owns the value. Test: `CollectorTests.EveryRequestNamesTheProjectSiteAndNoEmailSoOperatorsCanFindUsWithoutPrivateContact`.
 
@@ -209,7 +209,7 @@ Discovery results carry a required `outOfScopeCount`: the number of distinct res
 
 A 304 has no new discovery result. Retained candidates stay bound to the earlier captured attempt. Failed and deferred outcomes create no candidate list.
 
-**Feed item text.** A feed source can set `statementTextInFeed`. `JobPreparation` then parses the stored feed capture a second time in Application, after it admits the article jobs. Collector and contracts do not change. `BoundedXml` reads the XML for this and for the Senate vote files. It prohibits a DTD, sets no resolver, and caps the document size. The text, the candidate rules, and the limits are in [statements](statements.md#feed-items). The text of an item is a [document extraction](documents.md#extraction) with the index of the item as its part.
+**Feed item text.** A feed source can set `statementTextInFeed`. `JobPreparation` then parses the stored feed capture a second time in Application, after it admits the article jobs. Collector and contracts do not change. `BoundedXml` reads the XML for this. It prohibits a DTD, sets no resolver, and caps the document size. The text, the candidate rules, and the limits are in [statements](statements.md#feed-items). The text of an item is a [document extraction](documents.md#extraction) with the index of the item as its part.
 
 **Evidence.** Application snapshots discovery evidence immutably, with the original request scope. Infrastructure stores it in `collection_discoveries` in the same transaction as the attempt and capture identity. A conflicting replay of candidate URLs, status, or request snapshot is rejected. Receipt replay rebuilds this evidence without another fetch. Discovery creates no document version or editorial claim.
 

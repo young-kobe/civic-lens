@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.VoteviewVotes;
 using CivicLens.Infrastructure.Collection;
@@ -120,6 +122,31 @@ public sealed class PostgresVoteviewVoteTests(PostgresCollection postgres) : IAs
             "SELECT detail_job_id || '|' || members_job_id || '|' || roster_job_id || '|' || detail_extraction_id || '|' || members_extraction_id " +
             "FROM vote_candidates WHERE roll_call_number = 1"));
         Assert.Equal(FirstCapture.UtcTicks, await ScalarAsync("SELECT update_date_utc_ticks FROM vote_versions WHERE roll_call_number = 1"));
+    }
+
+    [Fact]
+    public async Task SenateCandidateIdsAreTheHashOfTheirFramedTextSoTheyNeverChange()
+    {
+        var chain = await ChainAsync("hash");
+
+        await AdmitAsync(chain, FirstCapture);
+
+        var id = VoteviewVoteFixtures.SourceId;
+        var text = $"senate-vote:{id.Length}:{id}119:1:1:{FirstCapture.UtcTicks}";
+        Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text))),
+            await ScalarAsync("SELECT candidate_id FROM vote_candidates WHERE roll_call_number = 1"));
+    }
+
+    [Fact]
+    public async Task TheSameRollNumberCanHaveADraftInBothChambersButNotTwoInOne()
+    {
+        await ScalarAsync(VoteDraft('a', "House"));
+        await ScalarAsync(VoteDraft('b', "Senate"));
+
+        var duplicate = await Assert.ThrowsAsync<PostgresException>(() => ScalarAsync(VoteDraft('c', "Senate")));
+        Assert.Equal(PostgresErrorCodes.UniqueViolation, duplicate.SqlState);
+        var unknown = await Assert.ThrowsAsync<PostgresException>(() => ScalarAsync(VoteDraft('d', "Congress")));
+        Assert.Equal(PostgresErrorCodes.CheckViolation, unknown.SqlState);
     }
 
     [Fact]
@@ -256,6 +283,12 @@ public sealed class PostgresVoteviewVoteTests(PostgresCollection postgres) : IAs
             new DocumentExtraction(captured, VoteviewParser.ExtractionVersion,
                 VoteviewRenderer.Render(roll) + (edits?.GetValueOrDefault(roll.RollCall.Part) ?? ""), part: roll.RollCall.Part)))];
     }
+
+    private static string VoteDraft(char id, string chamber) => $"""
+        INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number,
+            review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
+        VALUES ('{new string(id, 64)}', 'source', '{chamber}', 119, 1, 100, 1, 0, 'AwaitingReview', 1, 1)
+        """;
 
     private async Task<object?> ScalarAsync(string sql)
     {
