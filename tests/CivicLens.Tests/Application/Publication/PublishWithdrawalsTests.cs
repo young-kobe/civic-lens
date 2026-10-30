@@ -202,6 +202,19 @@ public sealed class PublishWithdrawalsTests
     }
 
     [Fact]
+    public async Task TheOwnerCannotBringAWithdrawnRecordBackWithACodeApprovedRevisionEither()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong."));
+        scenario.ReviseAction(action, 2, ReviewAuthor.CodeSubject);
+
+        await Assert.ThrowsAsync<WithdrawnRecordException>(() =>
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", Reference(action))));
+
+        Assert.Single(ReadManifest(scenario, scenario.Publications.Committed[^1].DirectoryName).Withdrawals);
+    }
+
+    [Fact]
     public async Task TheWorkerReturnsAWithdrawnRecordWhenAPersonApprovedAHigherRevisionWithANoteAndKeepsTheHistory()
     {
         var (scenario, action) = await PublishedActionAsync();

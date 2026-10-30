@@ -90,12 +90,12 @@ internal abstract class PublishedRecordLoader<TCandidate, TAddition>(PublishedRe
             RequireMayReturn(recordId, revisionNumber, decisions, withdrawal.WithdrawnRevisionNumber, build.ByCode);
     }
 
-    // The worker returns a withdrawn record only when a person approved a higher revision. Then the person note rule applies.
+    // A withdrawn record returns only when a person approved a higher revision. A code approval never returns it, on any path.
     private void RequireMayReturn(string recordId, int revisionNumber, ImmutableArray<ReviewDecision> decisions,
         int withdrawnRevisionNumber, bool byCode)
     {
         var canReturn = PublishedRecordRules.CanReturn(revisionNumber, withdrawnRevisionNumber);
-        if (byCode && (!canReturn || PublishedRecordRules.IsApprovedByCode(revisionNumber, decisions)))
+        if (PublishedRecordRules.IsApprovedByCode(revisionNumber, decisions) || (byCode && !canReturn))
             throw new WithdrawnRecordException(new(Kind, recordId));
         if (!canReturn)
             throw new ArgumentException(

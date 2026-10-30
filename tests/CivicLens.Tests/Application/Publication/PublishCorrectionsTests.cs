@@ -121,6 +121,27 @@ public sealed class PublishCorrectionsTests
     }
 
     [Fact]
+    public async Task AnApprovalWithdrawnAndGivenAgainWithANotePublishesWithThatNote()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        scenario.ReviseAction(action, 2, correctionNote: null);
+        var publishable = scenario.Actions.Publishable[action];
+        scenario.Actions.Publishable[action] = publishable with
+        {
+            Review = publishable.Review with
+            {
+                Decisions = publishable.Review.Decisions
+                    .Add(PublicationScenario.Decision(action, 3, ReviewDecisionKind.WithdrawApproval, 2))
+                    .Add(PublicationScenario.Decision(action, 4, ReviewDecisionKind.Approve, 2) with { CorrectionNote = "Fixed on second approval." })
+            }
+        };
+
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", action));
+
+        Assert.Equal("Fixed on second approval.", Assert.Single(ReadAction(scenario, second.DirectoryName, action).Corrections).Note);
+    }
+
+    [Fact]
     public async Task ANoteOnAnOlderRevisionIsNotUsedForANewerRevisionBecauseTheNoteBelongsToItsApproval()
     {
         var (scenario, action) = await PublishedActionAsync();

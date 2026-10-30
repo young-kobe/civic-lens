@@ -43,8 +43,7 @@ public sealed partial class PostgresBillStreamTests
     public async Task ACommittedActionLeavesTheReadyListBecauseTheReleaseRowCarriesTheActionKind()
     {
         await DraftAsync(UpdatedAt, DraftableOutput);
-        var ready = Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, [], default));
-        Assert.NotNull(ready);
+        Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, [], default));
 
         await PostgresPublicationStore.FromConnectionString(connectionString).CommitAsync(PublicationScenario.Owner.Subject,
             ActionCommit(reviewStateVersion: 1), "key", ReleaseHash(1), default);

@@ -514,7 +514,7 @@ A record allows at most 64 open concerns. An approval resolves them and starts a
 
 An AI draft is revision 1 by the AI drafter. Check every sentence and citation against the evidence. If the editor flags an unverified change date, check it, tick Date checked, and save a revision before you approve. Approved accounts publish within the hour, when the stage `publishing` runs.
 
-Code approves a worker revision of an action or a vote after it checks the citations. The decision history shows the actor "Code check". A record shows as Needs action only if code did not approve it. A concern is open, a person wrote the text, or an approval check failed. A person can edit or withdraw any record. The owner still publishes each release.
+Code approves a worker revision of an action or a vote after it checks the citations. The decision history shows the actor "Code check". A record shows as Needs action only if code did not approve it. A concern is open, a person wrote the text, or an approval check failed. A person can edit or withdraw any record.
 
 Auth0 tenant login and logout and the production reverse proxy still need live verification.
 
@@ -796,7 +796,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 
 ### Return a record
 
-To bring a withdrawn record back, first revise it in review. A person approves the new revision with a correction note in the approve step. The revision number must be higher than the withdrawn revision. The stage `publishing` then returns the record. You can also run `releases publish <idempotency-key> <kind>:<id>`. The note shows on the record page as a correction. A withdrawn record whose newest approval has no note, or was made by code, stays off the site, and the worker logs and skips it. The command exits with code 2 if the approval has no note or the revision is not higher.
+To bring a withdrawn record back, first revise it in review. A person approves the new revision with a correction note in the approve step. The revision number must be higher than the withdrawn revision. The stage `publishing` then returns the record. You can also run `releases publish <idempotency-key> <kind>:<id>` for a person approval. The note shows on the record page as a correction. A withdrawn record whose newest approval has no note, or was made by code, stays off the site, and the worker logs and skips it. A code approval never returns a record, also with the command. To free such a record, withdraw the code approval and approve the revision again with a note. The command exits with code 2 if the approval has no note or the revision is not higher.
 
 A relationship or a brief that cited the record stays withdrawn. Publish it again, in the same request or later.
 

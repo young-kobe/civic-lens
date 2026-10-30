@@ -32,7 +32,7 @@
             </Field>
             @if (Status != ReviewStatus.Approved)
             {
-                <Field Label="Correction note" For="Decision_CorrectionNote" Hint="Needed if this record replaces a public one. Without it, the old version stays public.">
+                <Field Label="Correction note" For="Decision_CorrectionNote" Hint="Needed if this record replaces or returns a public one. Without it, the public page does not change.">
                     <textarea id="Decision_CorrectionNote" class="plain" name="Decision.CorrectionNote" maxlength="@PublishedCorrection.MaximumNoteLength" aria-describedby="Decision_CorrectionNote-hint" value="@CorrectionNote"></textarea>
                 </Field>
             }
