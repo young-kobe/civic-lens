@@ -986,6 +986,7 @@ public sealed class PublishedOfficialPageTests
         {
             var rows = document.QuerySelectorAll("[data-records] tbody tr").Where(row => row.GetAttribute("data-filter-keys")!.Split(' ').Contains(count.GetAttribute("data-count-filter"))).ToArray();
             Assert.Equal(int.Parse(count.TextContent.Split(' ')[0]), rows.Length);
+            Assert.StartsWith(count.TextContent + ":", count.GetAttribute("data-filter-label"), StringComparison.Ordinal);
             Assert.EndsWith($": {rows.Length} {(rows.Length == 1 ? "record" : "records")}", count.GetAttribute("data-filter-shows"), StringComparison.Ordinal);
         }
     }
@@ -1040,7 +1041,7 @@ public sealed class PublishedOfficialPageTests
             "Showing their statements on housing in the 119th Congress: 3 records",
             "Showing bills they sponsored on housing in the 119th Congress: 1 record",
             "Showing their substantive votes on housing in the 119th Congress: 1 record"], counts.Select(count => count.GetAttribute("data-filter-shows")));
-        Assert.Equal("1: show bills they sponsored on housing", counts[2].GetAttribute("data-filter-label"));
+        Assert.Equal("1 bill: show bills they sponsored on housing", counts[2].GetAttribute("data-filter-label"));
         Assert.Equal("", document.QuerySelector("[data-records] [data-filter-status][role='status']")!.TextContent);
         Assert.False(document.QuerySelector("[data-filter-status]")!.HasAttribute("hidden"));
     }

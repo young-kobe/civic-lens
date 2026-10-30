@@ -177,10 +177,13 @@
 
     private int TalkAndActionCongress => Page.Congress!.Value;
 
-    private RenderFragment IssueCount(int count, string countKind, string issueId, string subject, string issueName) =>
-        @<CountFilter Count="count" Text="@PublishedOfficialView.Counted(count, countKind)" Key="@TalkAndActionProfile.CountKey(countKind, issueId)"
-            Label="@PublishedOfficialView.CountFilterLabel(count, subject, issueName)"
+    private RenderFragment IssueCount(int count, string countKind, string issueId, string subject, string issueName)
+    {
+        var counted = PublishedOfficialView.Counted(count, countKind);
+        return @<CountFilter Filterable="count > 0" Text="@counted" Key="@TalkAndActionProfile.CountKey(countKind, issueId)"
+            Label="@PublishedOfficialView.CountFilterLabel(counted, subject, issueName)"
             Notice="@PublishedOfficialView.CountFilterNotice(subject, issueName, TalkAndActionCongress, count)" />;
+    }
 
     private string NoOfficeText => Page.IsTracked
         ? "The rosters and the configuration list no dated office for this official."

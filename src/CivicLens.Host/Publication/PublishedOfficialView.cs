@@ -138,7 +138,7 @@ internal static class PublishedOfficialView
 
     public const string VotesSubject = "their substantive votes";
 
-    public static string CountFilterLabel(int count, string subject, string issueName) => $"{count}: show {subject} on {issueName}";
+    public static string CountFilterLabel(string counted, string subject, string issueName) => $"{counted}: show {subject} on {issueName}";
 
     public static string CountFilterNotice(string subject, string issueName, int congress, int count) =>
         $"Showing {subject} on {issueName} in the {CongressCalendar.Ordinal(congress)} Congress: {count} {Noun(count, "record")}";
