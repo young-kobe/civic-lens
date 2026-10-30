@@ -66,6 +66,7 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal(1, read!.Review.CurrentRevision.RevisionNumber);
         Assert.Equal((2, ReviewTextOrigin.Person), (edited.RevisionNumber, edited.TextOrigin));
         Assert.Equal(["rent"], edited.TrackedIssueIds.ToArray());
+        Assert.True(edited.IssueCandidateIds.IsDefault);
     }
 
     [Fact]
