@@ -103,7 +103,7 @@ internal static class ReviewValidation
 
     public static ReviewDecision CreateDecision(ReviewActor actor, string recordId, int expectedRevisionNumber,
         int expectedReviewStateVersion, ReviewDecisionKind kind, string? note, ImmutableArray<string> resolvedDecisionIds,
-        string? correctionNote = null)
+        string? correctionNote)
     {
         if (expectedRevisionNumber < 1) throw new ArgumentOutOfRangeException(nameof(expectedRevisionNumber));
         if (expectedReviewStateVersion < 0) throw new ArgumentOutOfRangeException(nameof(expectedReviewStateVersion));

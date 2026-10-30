@@ -171,7 +171,7 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
         var candidates = await ReadCandidatesAsync(db, [.. records.Select(record => record.Draft.CandidateId)], cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return [.. records.Select(record => new UnpublishedApprovedStatement(
-            ToListItem(record.Draft, candidates[record.Draft.CandidateId], record.History), record.PublishedRevisionNumber))];
+            ToListItem(record.Draft, candidates[record.Draft.CandidateId], record.History)))];
     }
 
     public async Task<IReadOnlyDictionary<string, PublishableStatement>> GetForPublicationAsync(ImmutableArray<string> candidateIds,

@@ -180,8 +180,7 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         var records = await Records.ReadUnpublishedApprovedAsync(db, ReviewQueries.UnpublishedApprovedDrafts, limit, excludedRecordIds, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return [.. records.Select(record => new UnpublishedApprovedDraft(ToListItem(record.Draft, record.History),
-            record.PublishedRevisionNumber))];
+        return [.. records.Select(record => new UnpublishedApprovedDraft(ToListItem(record.Draft, record.History)))];
     }
 
     public async Task<ReviewOverview> GetOverviewAsync(CancellationToken cancellationToken)

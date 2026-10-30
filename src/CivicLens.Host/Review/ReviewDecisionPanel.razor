@@ -32,7 +32,7 @@
             </Field>
             @if (Status != ReviewStatus.Approved)
             {
-                <Field Label="Correction note" For="Decision_CorrectionNote" Hint="Write this only if the record replaces one that is already public. Readers see it on the public record page.">
+                <Field Label="Correction note" For="Decision_CorrectionNote" Hint="Needed if this record replaces a public one. Without it, the old version stays public.">
                     <textarea id="Decision_CorrectionNote" class="plain" name="Decision.CorrectionNote" maxlength="@PublishedCorrection.MaximumNoteLength" aria-describedby="Decision_CorrectionNote-hint" value="@CorrectionNote"></textarea>
                 </Field>
             }
@@ -46,7 +46,10 @@
                 {
                     <Button Variant="ButtonVariant.Danger" Type="submit" name="kind" value="WithdrawApproval">Withdraw approval</Button>
                 }
-                <span class="actions-hint">Publishes soon.</span>
+                @if (Status != ReviewStatus.Approved)
+                {
+                    <span class="actions-hint">Publishes soon.</span>
+                }
             </div>
         </FieldSet>
     </form>

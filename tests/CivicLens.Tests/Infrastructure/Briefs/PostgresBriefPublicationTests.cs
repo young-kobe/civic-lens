@@ -71,7 +71,7 @@ public sealed class PostgresBriefPublicationTests(PostgresCollection postgres) :
         await ApproveAsync();
 
         var ready = Assert.Single(await reviews.ListUnpublishedApprovedAsync(10, [], default));
-        Assert.Equal((RecordId, null, false), (ready.Brief.RecordId, ready.PublishedRevisionNumber, ready.CitedRecordsChanged));
+        Assert.Equal((RecordId, false), (ready.Brief.RecordId, ready.CitedRecordsChanged));
 
         await seeder.DecisionAsync(PublishedRecordKind.Statement, CitedStatement, 1, 2, ReviewDecisionKind.WithdrawApproval);
 

@@ -102,6 +102,35 @@ public sealed class PublishCorrectionsTests
     }
 
     [Fact]
+    public async Task AnApprovalThatWasWithdrawnAndGivenAgainWithoutANoteNeedsANoteAgainBecauseTheNewestApprovalDecides()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        scenario.ReviseAction(action, 2, correctionNote: "Fix.");
+        var publishable = scenario.Actions.Publishable[action];
+        scenario.Actions.Publishable[action] = publishable with
+        {
+            Review = publishable.Review with
+            {
+                Decisions = publishable.Review.Decisions
+                    .Add(PublicationScenario.Decision(action, 3, ReviewDecisionKind.WithdrawApproval, 2))
+                    .Add(PublicationScenario.Decision(action, 4, ReviewDecisionKind.Approve, 2))
+            }
+        };
+
+        await Assert.ThrowsAsync<MissingCorrectionNoteException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", action)));
+    }
+
+    [Fact]
+    public async Task ANoteOnAnOlderRevisionIsNotUsedForANewerRevisionBecauseTheNoteBelongsToItsApproval()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        scenario.ReviseAction(action, 2, correctionNote: "Note for revision 2.");
+        scenario.ReviseAction(action, 3, correctionNote: null);
+
+        await Assert.ThrowsAsync<MissingCorrectionNoteException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", action)));
+    }
+
+    [Fact]
     public async Task ACarriedRecordFileWithoutACorrectionListFailsLoudInsteadOfBindingToNull()
     {
         var (scenario, action) = await PublishedActionAsync();

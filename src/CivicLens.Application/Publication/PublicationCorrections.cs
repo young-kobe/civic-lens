@@ -34,7 +34,7 @@ internal sealed class PublicationCorrections
     }
 
     // A code approval needs no note. A person approval that replaces a published record needs the note that its approval holds.
-    // A note on a record that is not in the release is not used.
+    // A note on a first publication is dropped.
     public PublishedCorrection[] For(PublishedRecordKind kind, string recordId, int revisionNumber, ImmutableArray<ReviewDecision> decisions)
     {
         var reference = new PublishedRecordReference(kind, recordId);

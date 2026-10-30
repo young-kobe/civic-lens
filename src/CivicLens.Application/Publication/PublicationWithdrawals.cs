@@ -12,13 +12,6 @@ internal static class PublicationWithdrawals
         return withdrawals.ToDictionary(withdrawal => withdrawal.Reference, withdrawal => withdrawal.ValidText(nameof(withdrawals)));
     }
 
-    public static void RequireNoReturnByCode(PreviousRelease previous, ImmutableArray<PublishedRecordReference> records, bool byCode)
-    {
-        if (!byCode) return;
-        foreach (var record in records.Where(record => previous.IsWithdrawn(record.RecordId)))
-            throw new WithdrawnRecordException(record);
-    }
-
     public static List<PublishedWithdrawal> Create(PreviousRelease previous, PublicationCorrections corrections, DateTimeOffset now,
         IReadOnlyDictionary<PublishedRecordReference, string> notes)
     {

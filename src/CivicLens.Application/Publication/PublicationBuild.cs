@@ -4,7 +4,7 @@ using CivicLens.Application.Roster;
 namespace CivicLens.Application.Publication;
 
 internal sealed record PublicationBuild(PreviousRelease Previous, DateTimeOffset Now, PublishedRecordRules Rules,
-    IReleaseRenderer Renderer, PublicationCatalog Catalog, PublicationCorrections Corrections, IReadOnlyList<RosterMember> Roster)
+    IReleaseRenderer Renderer, PublicationCatalog Catalog, PublicationCorrections Corrections, IReadOnlyList<RosterMember> Roster, bool ByCode)
 {
     public ImmutableArray<PublishedRevisionBinding> ReleaseRecords { get; private init; } =
         [.. Previous.Entries.Select(PublishedRevisionBinding.Of)];

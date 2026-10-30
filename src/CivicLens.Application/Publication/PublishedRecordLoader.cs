@@ -71,22 +71,34 @@ internal abstract class PublishedRecordLoader<TCandidate, TAddition>(PublishedRe
 
     protected abstract PendingRecord Build(string recordId, TAddition addition, PublicationBuild build);
 
-    protected ReadyToPublishRecord? Ready(ReviewStatus status, int unresolvedConcernCount, string recordId, string headline,
-        int revisionNumber, int? publishedRevisionNumber) =>
+    protected ReadyToPublishRecord? Ready(ReviewStatus status, int unresolvedConcernCount, string recordId,
+        int revisionNumber) =>
         PublishedRecordRules.IsPublishable(status, unresolvedConcernCount)
-            ? new(Kind, recordId, headline, revisionNumber, publishedRevisionNumber)
+            ? new(Kind, recordId, revisionNumber)
             : null;
 
     protected void RequirePublishable(string recordId, int revisionNumber, ImmutableArray<ReviewDecision> decisions,
-        ImmutableArray<ReviewDecision> unresolvedConcerns, PreviousRelease previous)
+        ImmutableArray<ReviewDecision> unresolvedConcerns, PublicationBuild build)
     {
+        var previous = build.Previous;
         var status = ReviewPolicy.GetCurrentStatus(revisionNumber, decisions, unresolvedConcerns);
         if (!PublishedRecordRules.IsPublishable(status, unresolvedConcerns.Length))
             throw new ArgumentException($"{noun} {recordId} is not approved or has unresolved concerns.");
         if (previous.Find(Kind, recordId)?.RevisionNumber == revisionNumber)
             throw new ArgumentException($"{noun} {recordId} is already published at its current revision.");
-        if (previous.FindWithdrawal(recordId) is { } withdrawal && !PublishedRecordRules.CanReturn(revisionNumber, withdrawal.WithdrawnRevisionNumber))
+        if (previous.FindWithdrawal(recordId) is { } withdrawal)
+            RequireMayReturn(recordId, revisionNumber, decisions, withdrawal.WithdrawnRevisionNumber, build.ByCode);
+    }
+
+    // The worker returns a withdrawn record only when a person approved a higher revision. Then the person note rule applies.
+    private void RequireMayReturn(string recordId, int revisionNumber, ImmutableArray<ReviewDecision> decisions,
+        int withdrawnRevisionNumber, bool byCode)
+    {
+        var canReturn = PublishedRecordRules.CanReturn(revisionNumber, withdrawnRevisionNumber);
+        if (byCode && (!canReturn || PublishedRecordRules.IsApprovedByCode(revisionNumber, decisions)))
+            throw new WithdrawnRecordException(new(Kind, recordId));
+        if (!canReturn)
             throw new ArgumentException(
-                $"{noun} {recordId} is at revision {revisionNumber}, but it was withdrawn at revision {withdrawal.WithdrawnRevisionNumber}. Revise it before it returns.");
+                $"{noun} {recordId} is at revision {revisionNumber}, but it was withdrawn at revision {withdrawnRevisionNumber}. Revise it before it returns.");
     }
 }

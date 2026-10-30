@@ -21,7 +21,7 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
 
     protected override ReadyToPublishRecord? ToReady(UnpublishedApprovedVote candidate) =>
         Ready(candidate.Vote.CurrentStatus, candidate.Vote.UnresolvedConcerns.Length, candidate.Vote.RecordId,
-            candidate.Vote.CurrentRevision.Headline, candidate.Vote.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber);
+            candidate.Vote.CurrentRevision.RevisionNumber);
 
     protected override async Task<IReadOnlyDictionary<string, VoteAddition>> GetForPublicationAsync(
         ImmutableArray<string> recordIds, PublicationBuild build, CancellationToken cancellationToken)
@@ -34,7 +34,7 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
     protected override PendingRecord Build(string recordId, VoteAddition addition, PublicationBuild build)
     {
         var review = addition.Vote.Review;
-        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
+        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build);
         var record = new PublishedVoteBuilder(build.Rules).Build(review.CurrentRevision, review.Decisions, addition.Vote.Extractions,
             build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId, review.CurrentRevision.RevisionNumber, review.Decisions), build.Now, addition.Parties);
         var billActionRecordId = BillActionRecordIn(addition.Vote.BillActionRecordIds, build);

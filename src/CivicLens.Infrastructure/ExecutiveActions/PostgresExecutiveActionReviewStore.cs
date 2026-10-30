@@ -70,7 +70,7 @@ public sealed class PostgresExecutiveActionReviewStore(IDbContextFactory<Collect
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         var records = await Records.ReadUnpublishedApprovedAsync(db, ExecutiveActionReviewQueries.UnpublishedApproved, limit, excludedRecordIds, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return [.. records.Select(record => new UnpublishedApprovedExecutiveAction(ToReview(record.Draft, record.History), record.PublishedRevisionNumber))];
+        return [.. records.Select(record => new UnpublishedApprovedExecutiveAction(ToReview(record.Draft, record.History)))];
     }
 
     public async Task<IReadOnlyDictionary<string, PublishableExecutiveAction>> GetForPublicationAsync(ImmutableArray<string> recordIds,

@@ -352,7 +352,7 @@ internal sealed class PublicationScenario
             ReviewPolicy.GetCurrentStatus(1, all, concerns), all, concerns);
         ExecutiveActions.Publishable[recordId] = new(review, ImmutableDictionary.CreateRange(StringComparer.Ordinal,
             extractions.Select(item => KeyValuePair.Create(item.ExtractionId, item))));
-        if (unpublished) ExecutiveActions.Unpublished.Add(new(review, null));
+        if (unpublished) ExecutiveActions.Unpublished.Add(new(review));
         return recordId;
     }
 

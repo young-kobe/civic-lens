@@ -587,7 +587,6 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         var ready = await statementReviews.ListUnpublishedApprovedAsync(10, [], default);
 
         Assert.Equal([neverPublished], ready.Select(item => item.Statement.CandidateId));
-        Assert.Null(ready[0].PublishedRevisionNumber);
     }
 
     [Fact]
@@ -600,7 +599,6 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
 
         var item = Assert.Single(ready);
         Assert.Equal(draft.DraftId, item.Draft.DraftId);
-        Assert.Null(item.PublishedRevisionNumber);
     }
 
     [Fact]
@@ -658,12 +656,8 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
 
         var ready = await reviews.ListUnpublishedApprovedDraftsAsync(10, [], default);
 
-        Assert.Equivalent(new Dictionary<string, int?>
-        {
-            [neverPublished.DraftId] = null,
-            [replaced.DraftId] = replaced.RevisionNumber,
-            [onlyInOldRelease.DraftId] = null
-        }, ready.ToDictionary(item => item.Draft.DraftId, item => item.PublishedRevisionNumber));
+        Assert.Equivalent(new[] { neverPublished.DraftId, replaced.DraftId, onlyInOldRelease.DraftId },
+            ready.Select(item => item.Draft.DraftId));
         Assert.Equal(revised.RevisionNumber, ready.Single(item => item.Draft.DraftId == replaced.DraftId).Draft.CurrentRevision.RevisionNumber);
         Assert.DoesNotContain(ready, item => item.Draft.DraftId == current.DraftId || item.Draft.DraftId == notApproved.DraftId ||
             item.Draft.DraftId == withdrawn.DraftId);

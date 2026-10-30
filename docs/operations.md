@@ -504,7 +504,7 @@ Open `/Review` through the configured HTTPS origin. Keep the separate `worker` r
 
 A record allows at most 64 open concerns. An approval resolves them and starts a new cycle. When a limit rejects a write, do not discard history to continue. Browsing comparisons may return an empty batch with a continuation when the batch holds only unchanged, incompatible, or limited results. Use the continuation; the empty batch does not prove that no changes exist.
 
-An AI draft is revision 1 by the AI drafter. Check every sentence and citation against the evidence. If the editor flags an unverified change date, check it, tick Date checked, and save a revision before you approve. Approved accounts stay private until the owner publishes them.
+An AI draft is revision 1 by the AI drafter. Check every sentence and citation against the evidence. If the editor flags an unverified change date, check it, tick Date checked, and save a revision before you approve. Approved accounts publish within the hour, when the stage `publishing` runs.
 
 Code approves a worker revision of an action or a vote after it checks the citations. The decision history shows the actor "Code check". A record shows as Needs action only if code did not approve it. A concern is open, a person wrote the text, or an approval check failed. A person can edit or withdraw any record. The owner still publishes each release.
 
@@ -729,7 +729,7 @@ The flag does not remove files from old releases. A kept release directory keeps
 
 ## Automatic publication
 
-The `worker` command can publish every approved record: actions, votes, executive actions, statements, relationships, briefs, and document changes. A person approval needs no owner step. [Publication](architecture/publication.md#automatic-publication) holds the rules. A person approval that replaces a published record needs a correction note, so the stage leaves it out and logs it. The record waits until a person approves a new revision with a correction note on the editor page. The stage is off by default. It runs when the variable below is `1`. Any other value stops the worker with exit code 2. Code approves an action or a vote only after a model drafts its headline and summary. So the stage publishes nothing until you also set `CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS` and `CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS`.
+The `worker` command can publish every approved record: actions, votes, executive actions, statements, relationships, briefs, and document changes. A person approval needs no owner step. [Publication](architecture/publication.md#automatic-publication) holds the rules. A person approval that replaces a published record needs a correction note, so the stage leaves it out and logs it. The record waits. To free it, withdraw the approval and approve the same revision again with a correction note. A record with 20 corrections that have a note cannot take another person revision. Only a code-approved revision publishes. The stage is off by default. It runs when the variable below is `1`. Any other value stops the worker with exit code 2. Code approves an action or a vote only after a model drafts its headline and summary. So the stage publishes nothing until you also set `CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS` and `CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS`.
 
 | Variable | Meaning |
 |---|---|
@@ -788,7 +788,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 
 ### Return a record
 
-To bring a withdrawn record back, first revise it in review and approve the new revision. The revision number must be higher than the withdrawn revision. Write the correction note in the approve step. The stage `publishing` then returns the record, or you can run `releases publish <idempotency-key> <kind>:<id>`. The note shows on the record page as a correction. The publish exits with code 2 if the approval has no note or the revision is not higher. The code subject cannot return a record. The worker only logs the withdrawn record and skips it.
+To bring a withdrawn record back, first revise it in review. A person approves the new revision with a correction note in the approve step. The revision number must be higher than the withdrawn revision. The stage `publishing` then returns the record. You can also run `releases publish <idempotency-key> <kind>:<id>`. The note shows on the record page as a correction. A withdrawn record whose newest approval has no note, or was made by code, stays off the site, and the worker logs and skips it. The command exits with code 2 if the approval has no note or the revision is not higher.
 
 A relationship or a brief that cited the record stays withdrawn. Publish it again, in the same request or later.
 

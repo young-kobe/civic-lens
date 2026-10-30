@@ -322,12 +322,17 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.Equal("500", firstEditor.QuerySelector("textarea[name='Decision.CorrectionNote']")!.GetAttribute("maxlength"));
         Assert.Contains("Publishes soon.", firstEditor.QuerySelector("#decision-controls .actions-hint")!.TextContent, StringComparison.Ordinal);
         await ApproveAsync(draftUrl);
+        var approvedEditor = await host.GetDocumentAsync(draftUrl);
+        Assert.Null(approvedEditor.QuerySelector("#decision-controls .actions-hint"));
+        Assert.Null(approvedEditor.QuerySelector("textarea[name='Decision.CorrectionNote']"));
         await PublishWithCliAsync("k1", reference);
 
         await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars, effective now");
         using var approved = await DecideAsync(draftUrl, "Approve", "Checked again.", correctionNote: "Clarified the effective date.");
         Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
         await PublishWithCliAsync("k2", reference);
+        var history = (await host.GetDocumentAsync(draftUrl)).QuerySelector("[aria-labelledby='history']")!.TextContent;
+        Assert.Contains("Correction note: Clarified the effective date.", history, StringComparison.Ordinal);
 
         var record = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(host.ReleaseDirectory, "current", PublicationProtocol.RecordDataPath(draftId))));
         var correction = Assert.Single(record.RootElement.GetProperty("corrections").EnumerateArray());

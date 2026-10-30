@@ -189,16 +189,52 @@ public sealed class PublishWithdrawalsTests
     }
 
     [Fact]
-    public async Task TheCodeSubjectCannotBringAWithdrawnRecordBackBecauseOnlyAPersonJudgesThatItMayReturn()
+    public async Task TheCodeSubjectCannotBringAWithdrawnRecordBackWithACodeApprovedRevisionBecauseOnlyAPersonJudgesThatItMayReturn()
     {
         var (scenario, action) = await PublishedActionAsync();
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong."));
-        scenario.ReviseAction(action, 2);
+        scenario.ReviseAction(action, 2, ReviewAuthor.CodeSubject);
 
         var error = await Assert.ThrowsAsync<WithdrawnRecordException>(() =>
             scenario.Publisher().ExecuteAsync(Code, PublicationScenario.Request("k3", Reference(action))));
 
         Assert.Contains($"action:{action}", error.Message);
+    }
+
+    [Fact]
+    public async Task TheWorkerReturnsAWithdrawnRecordWhenAPersonApprovedAHigherRevisionWithANoteAndKeepsTheHistory()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        var firstPublishedAt = scenario.Clock.Now;
+        scenario.Clock.Now = firstPublishedAt.AddDays(1);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong bill."));
+        scenario.ReviseAction(action, 2, correctionNote: "Bill fixed.");
+        scenario.Clock.Now = firstPublishedAt.AddDays(2);
+
+        var returned = await scenario.Publisher().ExecuteAsync(Code, PublicationScenario.Request("k3", Reference(action)));
+
+        var manifest = ReadManifest(scenario, returned.DirectoryName);
+        var entry = Assert.Single(manifest.Records);
+        Assert.Equal((action, 2, firstPublishedAt), (entry.RecordId, entry.RevisionNumber, entry.FirstPublishedAtUtc));
+        Assert.Empty(manifest.Withdrawals);
+        var corrections = ReadAction(scenario.Releases.Directories[returned.DirectoryName], action).Corrections;
+        var correction = Assert.Single(corrections);
+        Assert.Equal((1, "Bill fixed."), (correction.ReplacedRevisionNumber, correction.Note));
+    }
+
+    [Fact]
+    public async Task TheWorkerKeepsAWithdrawnRecordOffTheSiteWhenThePersonApprovalHasNoNote()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong bill."));
+        scenario.ReviseAction(action, 2, correctionNote: null);
+
+        await Assert.ThrowsAsync<MissingCorrectionNoteException>(() =>
+            scenario.Publisher().ExecuteAsync(Code, PublicationScenario.Request("k3", Reference(action))));
+
+        var manifest = ReadManifest(scenario, scenario.Publications.Committed[^1].DirectoryName);
+        Assert.Empty(manifest.Records);
+        Assert.Single(manifest.Withdrawals);
     }
 
     [Fact]
