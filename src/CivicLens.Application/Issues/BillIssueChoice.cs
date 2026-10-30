@@ -29,7 +29,6 @@ public sealed class BillIssueChoice
     public JsonObject? AnswerSchema() => candidates.IsEmpty ? null : new()
     {
         ["type"] = "array",
-        ["uniqueItems"] = true,
         ["items"] = AnalysisSchema.IdString(CandidateIds)
     };
 

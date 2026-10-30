@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text.Json.Serialization;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
@@ -11,7 +12,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     bool CandidateIncludesSummaries,
     string Fingerprint, string? SummaryVersion, SourceSpan? SummaryCitation, string? PolicyArea, SourceSpan? PolicyAreaCitation,
     string? PolicyAreaId, ImmutableArray<string> TrackedIssueIds,
-    ImmutableArray<string> IssueCandidateIds, string IssueRevisionId, ImmutableArray<ActionSponsorship> Sponsorships, string BillTitle)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ImmutableArray<string> IssueCandidateIds, string IssueRevisionId, ImmutableArray<ActionSponsorship> Sponsorships, string BillTitle)
     : IHeadlineSummaryRevision
 {
     public const int MaximumHeadlineLength = 256;
@@ -43,7 +44,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         if (TrackedIssueIds.IsDefault || TrackedIssueIds.Length > StatementDraftRevision.MaximumSelections || Sponsorships.IsDefaultOrEmpty ||
             Sponsorships.Length > MaximumSponsorships)
             throw new ArgumentException("An action revision needs 1 to 600 sponsorships and at most 64 tracked issues.");
-        if (IssueCandidateIds.IsDefault || !TrackedIssueIds.All(IssueCandidateIds.Contains))
+        if (!IssueCandidateIds.IsDefault && !TrackedIssueIds.All(IssueCandidateIds.Contains))
             throw new ArgumentException("The tracked issues of an action revision must come from its issue candidates.");
         if (Sponsorships.Any(item => item.Citations.IsDefaultOrEmpty || item.Citations.Length > MaximumCitationsPerSponsorship ||
                 !item.Citations.All(IsBounded)))
@@ -107,7 +108,8 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     private bool HasSameBillFactsAs(ActionDraftRevision other) =>
         SummaryVersion == other.SummaryVersion && PolicyArea == other.PolicyArea && PolicyAreaId == other.PolicyAreaId && IssueRevisionId == other.IssueRevisionId &&
         BillTitle == other.BillTitle && TrackedIssueIds.SequenceEqual(other.TrackedIssueIds) &&
-        IssueCandidateIds.SequenceEqual(other.IssueCandidateIds);
+        IssueCandidateIds.IsDefault == other.IssueCandidateIds.IsDefault &&
+        (IssueCandidateIds.IsDefault || IssueCandidateIds.SequenceEqual(other.IssueCandidateIds));
 
     private static bool IsBounded(SourceSpan span) => span is { Start: >= 0, Length: > 0 } && LowercaseHex.Is(span.ExtractionId, 64);
 }

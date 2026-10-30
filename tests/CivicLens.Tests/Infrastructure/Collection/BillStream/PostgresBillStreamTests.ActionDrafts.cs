@@ -415,7 +415,7 @@ public sealed partial class PostgresBillStreamTests
         await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, $"{insert} VALUES ('NOT-A-HASH', '{SourceId}', 119, 'hr', 8, 1, 0, 'AwaitingReview', 0)"));
     }
 
-    private static readonly string DraftableOutput = HeadlineSummaryOutputs.Output(headline: "A sponsored a housing measure", summary: "A filed this measure.");
+    private static readonly string DraftableOutput = HeadlineSummaryOutputs.Output(headline: "A sponsored a housing measure", summary: "A filed this measure.", issueIds: ["rent"]);
 
     private static string RecordId => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"{SourceId.Length}:{SourceId}119:hr:7")));
 

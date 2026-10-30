@@ -648,12 +648,13 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task AChoiceOutsideTheCandidatesOrRepeatedIsRejectedWithItsReasonAndRetriedOnce()
     {
-        var model = new FakeHeadlineSummaryModel().Draft(Output(issueIds: ["firearms"])).Draft(Output(issueIds: ["rent", "rent"]));
+        var model = new FakeHeadlineSummaryModel().Draft(Output(issueIds: ["rent", "rent", "firearms"])).Draft(Output(issueIds: ["rent", "rent"]));
 
         var (store, _) = await RunAsync(Create(), model);
 
         Assert.Empty(store.Revisions);
         Assert.Contains("\"firearms\", which is not a candidate issue", model.Requests[1].UserPrompt, StringComparison.Ordinal);
+        Assert.Contains("\"rent\" more than once", model.Requests[1].UserPrompt, StringComparison.Ordinal);
     }
 
     [Fact]

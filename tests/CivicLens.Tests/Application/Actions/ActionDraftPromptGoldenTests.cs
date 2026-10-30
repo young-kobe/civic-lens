@@ -11,8 +11,8 @@ namespace CivicLens.Tests.Application.Actions;
 public sealed class ActionDraftPromptGoldenTests
 {
     private const string SystemSha256 = "c60a70a558a5b17d3c31029a5a95a271cf6833850327f49241efb1b9f89de11b";
-    private const string SchemaSha256 = "896716532eca27856ef77f7f58f2f2a11f21b3bdb050ac8cbd5d483cfb13b1f9";
-    private const string InputHash = "c3ac2a26b0b1316eeee811465a3a55c64edae0aea37a0c92193de5941f8d1923";
+    private const string SchemaSha256 = "6d6adb018d7ee24f5df2e21a1f678cc87ed0fb7c144cf0a5c99cd84153a3acf0";
+    private const string InputHash = "4fc66c31f6bcbf09d08ca9c54d19549039560df0e2a30769b763964a0f509222";
 
     [Fact]
     public async Task ThePromptAndSchemaMatchTheirPinnedVersions()
@@ -64,7 +64,6 @@ public sealed class ActionDraftPromptGoldenTests
         var none = ActionDraftPrompt.Build(snapshot, NoChoice(), 100_000)!;
 
         Assert.Contains("\"issueIds\"", asked.SchemaJson, StringComparison.Ordinal);
-        Assert.Contains("\"uniqueItems\":true", asked.SchemaJson, StringComparison.Ordinal);
         Assert.Contains("\"definition\": \"Rent costs.\"", asked.UserPrompt, StringComparison.Ordinal);
         Assert.Equal(AnalysisSchema.HeadlineAndSummary(), none.SchemaJson);
         Assert.DoesNotContain("issueIds", none.SystemPrompt, StringComparison.Ordinal);

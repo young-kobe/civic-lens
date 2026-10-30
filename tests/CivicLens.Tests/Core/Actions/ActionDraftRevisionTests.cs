@@ -63,7 +63,10 @@ public sealed class ActionDraftRevisionTests
         (Model() with { TrackedIssueIds = [], IssueCandidateIds = ["rent"] }).ValidateShape();
 
         Assert.Throws<ArgumentException>(() => (Model() with { TrackedIssueIds = ["firearms"], IssueCandidateIds = ["rent"] }).ValidateShape());
-        Assert.Throws<ArgumentException>(() => (Model() with { IssueCandidateIds = default }).ValidateShape());
+
+        var legacy = Model() with { TrackedIssueIds = ["rent"], IssueCandidateIds = default };
+        legacy.ValidateShape();
+        PersonEditOf(legacy, "Edited headline", "Edited summary.").ValidatePersonEditOf(legacy);
     }
 
     [Fact]
