@@ -17,13 +17,17 @@ public sealed class ActionDraftLifecycleTests
         Assert.True(ActionDraftLifecycle.CanTransition(record, requeue));
     }
 
-    [Fact]
-    public void ASucceededActionDraftStaysFinalBecauseNoCodeRequeuesIt()
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(ActionDraftErrorCodes.Unchanged, true)]
+    [InlineData(ActionDraftErrorCodes.SupersededByNewerCandidate, false)]
+    [InlineData(ActionDraftErrorCodes.NoTrackedOfficial, false)]
+    public void OnlyASucceededActionDraftWithADraftToReplaceMayReturnToPendingForARedraft(string? errorCode, bool allowed)
     {
-        var record = new AnalysisRecord(CandidateId, ActionDraftTask.Task, State.Succeeded, null, 1, 1, null, null);
+        var record = new AnalysisRecord(CandidateId, ActionDraftTask.Task, State.Succeeded, null, 1, 1, null, errorCode);
         var requeue = new AnalysisCheckpoint(CandidateId, ActionDraftTask.Task, State.Succeeded, null, 1, State.Pending);
 
-        Assert.False(ActionDraftLifecycle.CanTransition(record, requeue));
+        Assert.Equal(allowed, ActionDraftLifecycle.CanTransition(record, requeue));
     }
 
     [Fact]
