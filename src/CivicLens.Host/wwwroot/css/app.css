@@ -123,7 +123,6 @@ a.cell-title:hover { text-decoration: underline; }
 
 .quote { margin: var(--s1) 0 0; padding-left: var(--s3); border-left: 2px solid var(--line-strong); font-family: var(--read); font-size: var(--t-base); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-.member-group + .member-group { margin-top: var(--s4); }
 .member-group h3 { margin-bottom: var(--s2); font-size: var(--t-sm); font-weight: 650; }
 .member-list { margin: 0; padding: 0; list-style: none; columns: 16rem; font-size: var(--t-sm); }
 .member-list li { break-inside: avoid; padding: 2px 0; }

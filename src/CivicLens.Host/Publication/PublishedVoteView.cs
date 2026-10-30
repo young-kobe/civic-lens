@@ -65,14 +65,40 @@ internal static class PublishedVoteView
     public static IEnumerable<PublishedVoteFact> ResultFacts(PublishedVote vote) =>
         vote.Facts.Where(fact => fact.Citation != vote.VotedOnCitation && fact.Citation != vote.KindCitation);
 
-    private static readonly string[] CastOrder = ["Yea", "Aye", "Nay", "No", "Present", PublishedOfficialVote.NotVoting];
+    private const string Present = "Present";
 
     public static IEnumerable<(string Heading, PublishedMemberVote[] Members)> CastGroups(PublishedVote vote) =>
         vote.Members.GroupBy(member => member.Cast)
-            .OrderBy(group => Array.IndexOf(CastOrder, group.Key) is var index and >= 0 ? index : CastOrder.Length)
-            .Select(group => ($"{CastPhrase(group.Key)} ({group.Count()} {PublishedOfficialView.Noun(group.Count(), "member")})", group.ToArray()));
+            .OrderBy(group => CastRank(group.Key))
+            .ThenByDescending(group => CastRank(group.Key) == CandidateRank ? group.Count() : 0)
+            .ThenBy(group => group.Key, StringComparer.Ordinal)
+            .Select(group => (Heading(group.Key, group.Count()),
+                Members: group.OrderBy(member => member.Official.Name, StringComparer.Ordinal).ThenBy(member => member.Official.Id, StringComparer.Ordinal).ToArray()));
 
-    private static string CastPhrase(string cast) => cast == PublishedOfficialVote.NotVoting ? "Did not vote" : $"Voted {cast}";
+    private const int CandidateRank = 2;
+
+    private static int CastRank(string cast) => cast switch
+    {
+        PublishedOfficialVote.NotVoting => 4,
+        Present => 3,
+        _ => PublishedOfficialVote.SideOf(cast) switch
+        {
+            PublishedPartyMajority.Yea => 0,
+            PublishedPartyMajority.Nay => 1,
+            _ => CandidateRank
+        }
+    };
+
+    private static string Heading(string cast, int count)
+    {
+        var phrase = cast switch
+        {
+            PublishedOfficialVote.NotVoting => "Did not vote",
+            Present => "Voted Present",
+            _ => CastRank(cast) == CandidateRank ? $"Voted for {cast}" : $"Voted {cast}"
+        };
+        return $"{phrase} ({count} {PublishedOfficialView.Noun(count, "member")})";
+    }
 
     public static string Anchor(PublishedVote vote, PublishedCitation citation) =>
         PublishedRecordView.CitationAnchor(vote.Citations().TakeWhile(item => item != citation).Count());

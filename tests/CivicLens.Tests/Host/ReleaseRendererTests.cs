@@ -738,36 +738,40 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task EveryVoteQuoteLinksToTheMarkOfTheSameTextInTheSource()
     {
-        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None);
+        var vote = Vote();
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         var links = document.QuerySelectorAll("a[href^='#cite-']").ToArray();
         Assert.Equal(4, links.Length);
         foreach (var link in links)
         {
-            var quote = link.Closest(".choice, li")!.QuerySelector("blockquote")?.TextContent ?? "Member: A000055, Jane Doe, R, AL, Yea";
+            var quote = link.Closest(".choice, li")!.QuerySelector("blockquote")?.TextContent ?? vote.Members.Single().Citation.Quote!;
             Assert.Equal(quote, document.QuerySelector(link.GetAttribute("href")!)!.TextContent);
         }
     }
 
     // A House vote lists about 435 members. A quote for each member once made the page grow past 200 KB.
-    // This page measured 130 KB with 435 members (string length of the rendered page); the budget leaves room for longer names.
+    // This page measured 130 KB with 435 members (UTF-8 bytes of the rendered page); the budget leaves room for longer names.
     [Fact]
     public async Task AHouseVotePageWithEveryMemberStaysWithinItsSizeBudget()
     {
-        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(VoteWithMembers(435), null, [], PublicationCatalogs.None, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(VoteWithCasts([.. Enumerable.Range(0, 435).Select(index => ($"Member {index}", new[] { "Yea", "Nay", "Not Voting" }[index % 3]))]), null, [], PublicationCatalogs.None, CancellationToken.None);
 
-        Assert.True(html.Length <= 150_000, $"The page is {html.Length} bytes.");
+        var bytes = System.Text.Encoding.UTF8.GetByteCount(html);
+        Assert.True(bytes <= 150_000, $"The page is {bytes} bytes.");
     }
 
     [Fact]
     public async Task TheVotePageGroupsMembersByCastWithTheCountSoAReaderSeesWhoVotedEachWay()
     {
-        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(VoteWithMembers(5), null, [], PublicationCatalogs.None, CancellationToken.None);
+        var vote = VoteWithCasts([("Zed", "Not Voting"), ("Pat", "Present"), ("Carl", "Yea"), ("Dee", "Emmer"), ("Eve", "Jeffries"), ("Bo", "Nay"), ("Amy", "Yea"), ("Fay", "Jeffries")]);
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
 
         var members = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='members-title']")!;
-        Assert.Equal(["Voted Yea (2 members)", "Voted Nay (2 members)", "Did not vote (1 member)"], members.QuerySelectorAll("h3").Select(heading => heading.TextContent));
-        Assert.Equal(["Member 0", "Member 3"], members.QuerySelectorAll(".member-group:nth-of-type(1) li a:first-child").Select(link => link.TextContent));
+        Assert.Equal(["Voted Yea (2 members)", "Voted Nay (1 member)", "Voted for Jeffries (2 members)", "Voted for Emmer (1 member)", "Voted Present (1 member)", "Did not vote (1 member)"],
+            members.QuerySelectorAll("h3").Select(heading => heading.TextContent));
+        Assert.Equal(["Amy", "Carl"], members.QuerySelectorAll(".member-group:first-of-type li a:first-child").Select(link => link.TextContent));
     }
 
     [Fact]
@@ -2171,21 +2175,20 @@ public sealed class ReleaseRendererTests
         };
     }
 
-    private static PublishedVote VoteWithMembers(int count)
+    private static PublishedVote VoteWithCasts(IReadOnlyList<(string Name, string Cast)> voters)
     {
         var template = Vote();
         var source = template.Sources[1];
-        var casts = new[] { "Yea", "Nay", "Not Voting" };
-        var lines = Enumerable.Range(0, count).Select(index => $"Member: B{index:D6}, Member {index}, R, AL, {casts[index % 3]}").ToArray();
+        var lines = voters.Select((voter, index) => $"Member: B{index:D6}, {voter.Name}, R, AL, {voter.Cast}").ToArray();
         var text = string.Concat(lines.Select(line => line + "\n"));
         return template with
         {
             Sources = [template.Sources[0], source with { Text = text }],
             Members = [.. lines.Select((line, index) => new PublishedMemberVote
             {
-                Official = new PublishedOfficial { Id = $"o{index}", Name = $"Member {index}" },
+                Official = new PublishedOfficial { Id = $"o{index}", Name = voters[index].Name },
                 Party = "Republican",
-                Cast = casts[index % 3],
+                Cast = voters[index].Cast,
                 Citation = new PublishedCitation { ExtractionId = source.ExtractionId, Start = text.IndexOf(line, StringComparison.Ordinal), Length = line.Length, Quote = line }
             })]
         };
