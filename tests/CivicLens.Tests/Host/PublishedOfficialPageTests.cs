@@ -1025,6 +1025,62 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
+    public async Task EveryWholeTableOnTheOfficialPageSortsInTheBrowserByTheValueBehindACellNeverByItsDisplayedText()
+    {
+        var page = Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)) with { IssueIds = ["housing"] }], [Split('a', new DateOnly(2026, 4, 1), "Nay") with { IssueIds = ["housing"] }]);
+        page = page with
+        {
+            Profile = WithOffice(),
+            TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes),
+            Pairs = [Pair('1', 'b', PublishedRelationshipType.StatesPositionOn, PublishedRecordKind.Action, new DateOnly(2026, 3, 1), null),
+                Pair('2', 'b', PublishedRelationshipType.StatesPositionOn, PublishedRecordKind.Action, null, null)]
+        };
+        var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None));
+
+        string[] Kinds(string panel) => [.. document.QuerySelectorAll($"[aria-labelledby='{panel}'] thead th").Select(header => header.GetAttribute("data-sort") ?? "none")];
+        string[] Values(string panel, string label) => [.. document.QuerySelectorAll($"[aria-labelledby='{panel}'] tbody td[data-label='{label}']").Select(cell => cell.GetAttribute("data-sort-value") ?? "none")];
+        Assert.Equal(["text", "number", "number", "number"], Kinds("panel-issues-they-work-on"));
+        Assert.Equal(["1"], Values("panel-issues-they-work-on", "Their statements"));
+        Assert.Equal(["0"], Values("panel-issues-they-work-on", "Bills they sponsored"));
+        Assert.Equal(["1"], Values("panel-issues-they-work-on", "Votes they cast"));
+        Assert.Equal(["date", "text", "text", "text", "text"], Kinds("panel-what-they-said-and-what-they-did"));
+        Assert.Equal(["2026-03-01", ""], Values("panel-what-they-said-and-what-they-did", "Statement date"));
+        Assert.Equal(["date", "text", "text", "text", "text"], Kinds("panel-votes-with-their-party"));
+        Assert.Equal(["2026-04-01"], Values("panel-votes-with-their-party", "Date"));
+        Assert.Equal(["date", "text", "text"], Kinds("panel-records"));
+        Assert.Equal(["2026-04-01", "2026-03-01"], Values("panel-records", "Date"));
+        Assert.Equal(["text", "text", "date", "none"], Kinds("panel-offices"));
+        Assert.Equal(["1997-01-07"], Values("panel-offices", "From"));
+    }
+
+    [Fact]
+    public async Task TheCastCellsOfTheBreaksTableSortByTheCastWordNeverByThePopoverText()
+    {
+        var document = await RenderedAsync([Split('a', new DateOnly(2026, 4, 1), "Nay")]);
+
+        var cells = document.QuerySelectorAll("[aria-labelledby='panel-votes-with-their-party'] tbody td[data-label='Their vote'], [aria-labelledby='panel-votes-with-their-party'] tbody td[data-label^='Most']");
+        Assert.Equal(["Nay", "Yea"], cells.Select(cell => cell.GetAttribute("data-sort-value")));
+    }
+
+    [Fact]
+    public async Task EachSortableTableNamesItsDefaultOrderInItsCaptionSoTheOrderWithoutScriptsIsStated()
+    {
+        var page = Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)) with { IssueIds = ["housing"] }], [Split('a', new DateOnly(2026, 4, 1), "Nay")]);
+        page = page with
+        {
+            Profile = WithOffice(),
+            TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes),
+            Pairs = [Pair('1', 'b', PublishedRelationshipType.StatesPositionOn, PublishedRecordKind.Action, new DateOnly(2026, 3, 1), null)]
+        };
+        var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None));
+
+        Assert.Equal(["Default order", "Newest first", "Newest first", "Newest first", "Default order"],
+            document.QuerySelectorAll("table").Select(table => table.GetAttribute("data-default-order")));
+        Assert.All(document.QuerySelectorAll("table"), table =>
+            Assert.EndsWith($". {table.GetAttribute("data-default-order")}.", table.QuerySelector("caption")!.TextContent, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task AVoteLinkWithNoCastRowOfTheOfficialSaysSoInsteadOfLeavingTheCellEmpty()
     {
         var page = Current([], []);
@@ -1078,6 +1134,9 @@ public sealed class PublishedOfficialPageTests
 
         Assert.DoesNotContain("What they said and what they did", html, StringComparison.Ordinal);
     }
+
+    private static PublishedOfficialProfile WithOffice() =>
+        Profile("mayor", "Mayor Example", new PublishedOfficeTerm { Office = "rep", Kind = PublishedOfficeKind.Representative, State = "WA", District = 9, Party = "Democrat", Start = new(1997, 1, 7) });
 
     private static LinkedPair Pair(char statement, char target, PublishedRelationshipType type, PublishedRecordKind kind, DateOnly? day, string? cast) =>
         new(day, new string(statement, 64), $"Statement {statement}", type, kind, new string(target, 64), $"Official title {target}", cast);

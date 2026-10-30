@@ -1,21 +1,22 @@
+@using System.Text.Json
 @using CivicLens.Application.Publication
 @using CivicLens.Publication.Contracts
 
-<DataTable Roles="true" Items="Records" Caption="@Caption">
+<DataTable Roles="true" Items="Records" Caption="@Caption" DefaultOrder="@(Sort is null ? null : PublishedRecordLabels.NewestFirst)" data-sort-source="@SortSource">
     <Head>
-        <TableCell Header>Record</TableCell>
+        <TableCell Header Sort="@Sortable(SortKind.Text)" SortKey="@Key("headline")">Record</TableCell>
         @switch (Columns)
         {
             case RecordTableColumns.Facet:
                 <TableCell Header>@PublicColumn.Officials</TableCell>
-                <TableCell Header Class="fit num">@PublicColumn.Date</TableCell>
+                <TableCell Header Class="fit num" Sort="@Sortable(SortKind.Date)" SortKey="@Key("date")">@PublicColumn.Date</TableCell>
                 break;
             case RecordTableColumns.Week:
                 <TableCell Header Class="fit num">@PublicColumn.WeekOf</TableCell>
                 <TableCell Header Class="fit num">@PublicColumn.FirstPublished</TableCell>
                 break;
             case RecordTableColumns.FirstPublished:
-                <TableCell Header Class="fit num">@PublicColumn.FirstPublished</TableCell>
+                <TableCell Header Class="fit num" Sort="@Sortable(SortKind.Date)" SortKey="@Key("published")">@PublicColumn.FirstPublished</TableCell>
                 break;
         }
     </Head>
@@ -44,4 +45,20 @@
     [Parameter, EditorRequired] public string Caption { get; set; } = string.Empty;
     [Parameter] public string RootPath { get; set; } = string.Empty;
     [Parameter] public RecordTableColumns Columns { get; set; }
+    [Parameter] public RecordSort? Sort { get; set; }
+
+    private SortKind Sortable(SortKind kind) => Sort is null ? SortKind.None : kind;
+
+    private string? Key(string key) => Sort is null ? null : key;
+
+    private string? SortSource => Sort is null ? null : JsonSerializer.Serialize(new
+    {
+        api = Sort.ApiUrl,
+        total = Sort.Total,
+        filter = Sort.Filter,
+        root = RootPath,
+        pageSize = PublicationProtocol.PageSize,
+        columns = Columns.ForSort(),
+        kinds = PublishedRecordLabels.KindLabels
+    }, PublicationProtocol.JsonOptions);
 }
