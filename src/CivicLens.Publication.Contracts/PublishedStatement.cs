@@ -17,6 +17,7 @@ public sealed record PublishedStatement
     public required PublishedQuotation[] Quotations { get; init; }
     public required string[] BillNumbers { get; init; }
     public required PublishedDocumentVersion Source { get; init; }
+    public string? ArticleUrl { get; init; }
     public required DateTimeOffset ApprovedAtUtc { get; init; }
     public required DateTimeOffset FirstPublishedAtUtc { get; init; }
     public required PublishedCorrection[] Corrections { get; init; }
@@ -42,6 +43,7 @@ public sealed record PublishedStatement
             string.IsNullOrWhiteSpace(Headline) || string.IsNullOrWhiteSpace(Summary))
             throw new InvalidDataException("Published record identity or wording is invalid.");
         PublishedEvidenceRules.RequireVersion(Source);
+        if (ArticleUrl is not null) PublishedEvidenceRules.RequireWebUrl(ArticleUrl);
         if (Quotations is null || Quotations.Length is 0 or > MaximumQuotations)
             throw new InvalidDataException($"Published statement requires 1 to {MaximumQuotations} quotations.");
         foreach (var quotation in Quotations) ValidateQuotation(quotation);

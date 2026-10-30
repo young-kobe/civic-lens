@@ -49,6 +49,8 @@ A person has a stable `id` and a current display `name`. Optional dated `names` 
 - Britt and Kim have no press source, because their press listings refuse our requests.
 - The House Drupal `rss.xml` feeds stay unused. A sample showed site-wide content, at most 10 items, and no overlap with the press-release listings.
 
+A feed source can set `statementTextInFeed` to `true`. It is off by default. A person sets it only after the person checks that the feed holds the full text of each item. Then each item of the feed can become a statement candidate. See [statements](statements.md#feed-items). The flag is valid only in feed mode. It is left out of the canonical snapshot while it is `false`, so existing revision IDs do not change. Enforced by `CollectionConfiguration`. Tests: `ConfigurationTests.StatementTextInFeedIsRefusedOnASourceThatIsNotAFeedBecauseOnlyAFeedHoldsItemText` and `ConfigurationTests.StatementTextInFeedIsOffByDefaultAndAnOffSourceSavesNoNewField`. No source in `config/federal-coverage.json` sets it yet.
+
 Four source types have no coverage list: the Congress.gov bill list, the Congress.gov House vote list, the member roster file, and the executive roster file. See [bills](bills.md#source-configuration), [votes](votes.md#source-configuration), and [roster](roster.md#source-configuration).
 
 ### Dates and intervals

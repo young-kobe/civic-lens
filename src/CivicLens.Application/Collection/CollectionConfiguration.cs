@@ -85,6 +85,7 @@ public sealed record CollectionConfiguration
                 throw new ArgumentException("Every source must have an ID.");
             ValidateApiParser(source);
             ValidateCoverageShape(source);
+            ValidateStatementTextInFeed(source);
             if (!sourceIds.Add(source.Id))
                 throw new ArgumentException($"Duplicate source ID '{source.Id}'.");
             if (source.DocumentProfileId is not null && !profilesById.ContainsKey(source.DocumentProfileId))
@@ -260,6 +261,12 @@ public sealed record CollectionConfiguration
         var policy = source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy();
         if (!policy.CanReserve(CollectionJobDefinition.FromSource(source), jobs))
             throw new ArgumentException($"Source '{source.Id}' admission policy must hold every job of one admission.");
+    }
+
+    private static void ValidateStatementTextInFeed(WatchedSourceConfiguration source)
+    {
+        if (source.StatementTextInFeed && source.Mode != CollectionMode.Feed)
+            throw new ArgumentException($"Source '{source.Id}' can read statement text from a feed only in feed mode.");
     }
 
     private static void ValidateCoverageShape(WatchedSourceConfiguration source)

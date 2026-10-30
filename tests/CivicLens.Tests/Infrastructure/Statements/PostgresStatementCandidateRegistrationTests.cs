@@ -1,3 +1,5 @@
+using CivicLens.Application.Documents;
+using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents;
@@ -14,6 +16,7 @@ namespace CivicLens.Tests.Infrastructure.Statements;
 public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private const string ArticleUrl = "https://example.test/pages/article";
+    private const string FeedUrl = "https://example.test/pages/feed";
     private static readonly DateTimeOffset In119th = new(2026, 3, 1, 0, 0, 0, TimeSpan.Zero);
     private readonly string root = Path.Combine(Path.GetTempPath(), "civic-statements-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
@@ -190,6 +193,128 @@ public sealed class PostgresStatementCandidateRegistrationTests(PostgresCollecti
         Assert.Equal(3L, await ScalarAsync($"SELECT priority::bigint FROM vote_analysis WHERE candidate_id = '{new string('1', 64)}'"));
         Assert.Equal(1L, await ScalarAsync($"SELECT priority::bigint FROM vote_analysis WHERE candidate_id = '{new string('2', 64)}'"));
     }
+
+    [Fact]
+    public async Task FeedItemsRegisterNewestFirstUpToTheLimitSoOneBusyFeedCannotFloodTheGate()
+    {
+        var feed = await seeder.ImportAsync("feed", FeedUrl, CandidateJobKind.None);
+        var items = Items(feed, "a", "b", "c");
+
+        await extractions.SaveFeedItemsAsync(items, 2, CancellationToken.None);
+
+        Assert.Equal([(feed.SourceId, ItemUrl("a"), items[0].Extraction.ExtractionId, feed.AttemptId),
+                (feed.SourceId, ItemUrl("b"), items[1].Extraction.ExtractionId, feed.AttemptId)],
+            (await CandidatesAsync()).OrderBy(row => row.Url, StringComparer.Ordinal));
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM statement_analysis WHERE task = 'gate' AND status = 'Pending'"));
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM document_extractions"));
+    }
+
+    [Fact]
+    public async Task AReplayOfTheSameFeedAttemptNeverAddsCandidatesBeyondTheLimit()
+    {
+        var feed = await seeder.ImportAsync("feed", FeedUrl, CandidateJobKind.None);
+        var items = Items(feed, "a", "b", "c");
+        await extractions.SaveFeedItemsAsync(items, 2, CancellationToken.None);
+
+        await extractions.SaveFeedItemsAsync(items, 2, CancellationToken.None);
+
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM statement_candidates"));
+    }
+
+    [Fact]
+    public async Task AFeedItemForALinkThatAPageJobAlreadyHoldsAddsNeitherACandidateNorAnExtraction()
+    {
+        var page = await seeder.ImportAsync("Page text.", ItemUrl("a"), CandidateJobKind.DiscoveryAdmitted);
+        await extractions.SaveAsync(new DocumentExtraction(page, "p", "Page text."), CancellationToken.None);
+        var feed = await seeder.ImportAsync("feed", FeedUrl, CandidateJobKind.None);
+
+        await extractions.SaveFeedItemsAsync(Items(feed, "a"), 5, CancellationToken.None);
+
+        Assert.Equal([page.AttemptId], (await CandidatesAsync()).Select(row => row.Attempt));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM document_extractions"));
+    }
+
+    [Fact]
+    public async Task APageJobForALinkThatAFeedItemAlreadyHoldsKeepsTheFeedItemTextAsTheFirstText()
+    {
+        var feed = await seeder.ImportAsync("feed", FeedUrl, CandidateJobKind.None);
+        var items = Items(feed, "a");
+        await extractions.SaveFeedItemsAsync(items, 5, CancellationToken.None);
+        var page = await seeder.ImportAsync("Page text.", ItemUrl("a"), CandidateJobKind.DiscoveryAdmitted);
+
+        await extractions.SaveAsync(new DocumentExtraction(page, "p", "Page text."), CancellationToken.None);
+
+        Assert.Equal([(feed.SourceId, ItemUrl("a"), items[0].Extraction.ExtractionId, feed.AttemptId)], await CandidatesAsync());
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM statement_analysis"));
+    }
+
+    [Fact]
+    public async Task LinksThatAlreadyHaveACandidateDoNotUseTheBoundSoNewerItemsStillRegister()
+    {
+        var page = await seeder.ImportAsync("Page text.", ItemUrl("a"), CandidateJobKind.DiscoveryAdmitted);
+        await extractions.SaveAsync(new DocumentExtraction(page, "p", "Page text."), CancellationToken.None);
+        var feed = await seeder.ImportAsync("feed", FeedUrl, CandidateJobKind.None);
+
+        await extractions.SaveFeedItemsAsync(Items(feed, "a", "b"), 1, CancellationToken.None);
+
+        Assert.Equal([ItemUrl("a"), ItemUrl("b")], (await CandidatesAsync()).Select(row => row.Url).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task FeedItemsThatNameDifferentBillsRaiseTheirVoteRowsAndLeaveOtherBillsAlone()
+    {
+        await SeedVoteRowAsync(new string('1', 64), roll: 1, congress: 119, billNumber: 14);
+        await SeedVoteRowAsync(new string('2', 64), roll: 2, congress: 119, billNumber: 15);
+        await SeedVoteRowAsync(new string('3', 64), roll: 3, congress: 119, billNumber: 16);
+        var feed = await seeder.ImportAsync("feed", FeedUrl, CandidateJobKind.None, observedAt: In119th);
+        FeedItemExtraction Item(string name, string text, int part) =>
+            new(ItemUrl(name), new DocumentExtraction(feed, "feed-v1", text, part: part));
+
+        await extractions.SaveFeedItemsAsync([Item("a", "I back H.Con.Res. 14.", 0), Item("b", "I back H.Con.Res. 15.", 1)], 5,
+            CancellationToken.None);
+
+        Assert.Equal([1L, 1L, 3L], await PrioritiesOfVoteRowsAsync());
+    }
+
+    [Fact]
+    public async Task ASaveOfAFeedAttemptWaitsForAnotherWriterOfTheSameAttemptSoTheBoundIsReadAfterThatWriterCommits()
+    {
+        var feed = await seeder.ImportAsync("feed", FeedUrl, CandidateJobKind.None);
+        await using var holder = new NpgsqlConnection(connectionString);
+        await holder.OpenAsync();
+        await using var transaction = await holder.BeginTransactionAsync();
+        await using (var lockCommand = new NpgsqlCommand(
+            "SELECT 1 FROM collection_attempts WHERE attempt_id = @id FOR NO KEY UPDATE", holder, transaction))
+        {
+            lockCommand.Parameters.AddWithValue("id", feed.AttemptId);
+            await lockCommand.ExecuteScalarAsync();
+        }
+
+        var save = extractions.SaveFeedItemsAsync(Items(feed, "a", "b", "c"), 2, CancellationToken.None);
+        var finishedWhileLocked = await Task.WhenAny(save, Task.Delay(TimeSpan.FromSeconds(1))) == save;
+        await transaction.CommitAsync();
+        await save.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.False(finishedWhileLocked, "The save must wait for the writer that holds the attempt row.");
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM statement_candidates"));
+    }
+
+    private async Task<List<long>> PrioritiesOfVoteRowsAsync()
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("SELECT priority::bigint FROM vote_analysis ORDER BY candidate_id", connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        var rows = new List<long>();
+        while (await reader.ReadAsync()) rows.Add(reader.GetInt64(0));
+        return rows;
+    }
+
+    private static string ItemUrl(string name) => "https://example.test/pages/" + name;
+
+    private static FeedItemExtraction[] Items(CapturedAttemptResult feed, params string[] names) =>
+        [.. names.Select((name, part) => new FeedItemExtraction(ItemUrl(name),
+            new DocumentExtraction(feed, "feed-v1", "Link: " + ItemUrl(name) + "\n\nText of " + name, part: part)))];
 
     private Task SeedVoteRowAsync(string candidateId, int roll, int congress, int billNumber) => ExecuteAsync(connectionString, $"""
         SET session_replication_role = replica;

@@ -11,7 +11,7 @@ public static class SenateVoteParser
 
     public static SenateVoteDetail Parse(ReadOnlySpan<byte> xml, SenateVoteRoll expected)
     {
-        var root = SenateXml.Load(xml, Name, "roll_call_vote");
+        var root = BoundedXml.LoadRoot(xml, Name, "roll_call_vote");
         var session = SenateXml.ReadSession(root, Name);
         if (SenateXml.ReadRoll(session, SenateXml.Required(root, "vote_number", Name), Name) != expected)
             throw new InvalidDataException("Senate vote is for another roll call than requested.");

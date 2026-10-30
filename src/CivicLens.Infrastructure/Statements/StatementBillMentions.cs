@@ -30,12 +30,12 @@ internal static class StatementBillMentions
         bool hasTrackedIssue, CancellationToken cancellationToken) =>
         ReviewPriority.Of(billType is not null && await IsNamedAsync(db, congress, billType, billNumber!.Value, cancellationToken), hasTrackedIssue);
 
-    public static async Task RaiseRowsNamedByAsync(CollectionAttemptDbContext db, DateOnly capturedOn, string articleText,
-        CancellationToken cancellationToken)
+    public static async Task RaiseRowsNamedByAsync(CollectionAttemptDbContext db, DateOnly capturedOn,
+        IReadOnlyCollection<string> articleTexts, CancellationToken cancellationToken)
     {
         if (CongressCalendar.CongressOn(capturedOn) is not { } congress) return;
-        var cited = RelationshipPairRule.CitedBills(articleText);
-        if (cited.IsEmpty) return;
+        var cited = articleTexts.SelectMany(text => RelationshipPairRule.CitedBills(text)).Distinct().ToArray();
+        if (cited.Length == 0) return;
         var numbers = cited.Select(bill => bill.Number).Distinct().ToArray();
         bool Names(string? billType, int? number) => cited.Any(bill =>
             RelationshipPairRule.IsSameBill(congress, bill.BillType, bill.Number, congress, billType, number));

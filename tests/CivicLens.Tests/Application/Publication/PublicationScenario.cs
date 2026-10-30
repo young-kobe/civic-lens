@@ -210,10 +210,10 @@ internal sealed class PublicationScenario
     }
 
     public string AddStatement(char id, ImmutableArray<ReviewDecision>? decisions = null, string[]? speakerIds = null,
-        int revisionNumber = 1, DateOnly? statementDate = null)
+        int revisionNumber = 1, DateOnly? statementDate = null, string? feedUrl = null)
     {
         var candidateId = new string(id, 64);
-        var extraction = Extraction($"Mayor said: housing matters.\nOther text {id}.\n", $"statement-{id}");
+        var extraction = Extraction($"Mayor said: housing matters.\nOther text {id}.\n", $"statement-{id}", feedUrl ?? StatementArticleUrl);
         var revision = new StatementDraftRevision(candidateId, revisionNumber, "author", ApprovedAt, $"Statement {id}", "Summary", statementDate,
             statementDate is null ? null : new SourceSpan(extraction.ExtractionId, 0, 5),
             [.. speakerIds ?? ["mayor"]], ["Council Member"], ["housing"], ["land-use"],
@@ -222,9 +222,11 @@ internal sealed class PublicationScenario
         var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
         var review = new StatementReview(candidateId, revision, all.Length, ReviewPolicy.GetCurrentStatus(revisionNumber, all, concerns),
             [revision], all, concerns);
-        Statements.Publishable[candidateId] = new(review, "https://example.test/article", extraction);
+        Statements.Publishable[candidateId] = new(review, StatementArticleUrl, extraction);
         return candidateId;
     }
+
+    public const string StatementArticleUrl = "https://example.test/article";
 
     public const string ActionDetail = "Bill: 119 hr 7\nIntroduced: 2026-01-03\nPolicy area: Housing and Community Development\nSponsor: M000001\n";
     public const string ActionCosponsors = "Bill: 119 hr 7\nCosponsor: C000001, original, 2026-01-05, withdrawn 2026-01-20\n";

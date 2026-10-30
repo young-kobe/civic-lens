@@ -209,6 +209,8 @@ Discovery results carry a required `outOfScopeCount`: the number of distinct res
 
 A 304 has no new discovery result. Retained candidates stay bound to the earlier captured attempt. Failed and deferred outcomes create no candidate list.
 
+**Feed item text.** A feed source can set `statementTextInFeed`. `JobPreparation` then parses the stored feed capture a second time in Application, after it admits the article jobs. Collector and contracts do not change. `BoundedXml` reads the XML for this and for the Senate vote files. It prohibits a DTD, sets no resolver, and caps the document size. The text, the candidate rules, and the limits are in [statements](statements.md#feed-items). The text of an item is a [document extraction](documents.md#extraction) with the index of the item as its part.
+
 **Evidence.** Application snapshots discovery evidence immutably, with the original request scope. Infrastructure stores it in `collection_discoveries` in the same transaction as the attempt and capture identity. A conflicting replay of candidate URLs, status, or request snapshot is rejected. Receipt replay rebuilds this evidence without another fetch. Discovery creates no document version or editorial claim.
 
 **Admission.** `discovery admit` turns one persisted parsed feed or HTML discovery into page jobs. The current enabled source configuration supplies the article job settings and the admission policy. Its source ID, discovery mode, and scope must match the retained discovery.
@@ -497,6 +499,7 @@ Provider exception details are not printed, because they can hold connection val
 | Collector | `src/CivicLens.Collector/Program.cs`, `src/CivicLens.Collector/Http/HttpCollector.cs`, `src/CivicLens.Collector/Http/CaptureDecoder.cs` |
 | Robots | `src/CivicLens.Collector/Http/RobotsRules.cs`, `src/CivicLens.Collector/Http/RobotsCache.cs` |
 | Feed and HTML discovery | `src/CivicLens.Collector/Http/FeedParser.cs`, `src/CivicLens.Collector/Http/HtmlParser.cs`, `src/CivicLens.Collector/Http/DiscoveryCandidates.cs` |
+| Feed item text and bounded XML | `src/CivicLens.Application/Collection/FeedStatements/`, `src/CivicLens.Application/Collection/BoundedXml.cs` |
 | Domain results and import policy | `src/CivicLens.Core/Collection/CollectionAttemptResult.cs`, `src/CivicLens.Core/Collection/CollectionImportPolicy.cs`, `src/CivicLens.Core/Collection/CollectionImportDecision.cs`, `src/CivicLens.Core/Collection/CollectionResponse.cs` |
 | Import handler and ports | `src/CivicLens.Application/Collection/CollectionAttemptImporter.cs`, `src/CivicLens.Application/Collection/ICollectorProcess.cs`, `src/CivicLens.Application/Collection/ICollectionAttemptStore.cs`, `src/CivicLens.Application/Collection/StoredCollectionAttempt.cs` |
 | Handoff and replay | `src/CivicLens.Application/Collection/PendingCollectionHandoff.cs`, `src/CivicLens.Application/Collection/RecoverCollectionAttempts.cs`, `src/CivicLens.Infrastructure/Collection/FileCollectionReceiptHandoffStore.cs` |

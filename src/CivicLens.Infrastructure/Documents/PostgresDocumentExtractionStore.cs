@@ -36,12 +36,63 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
     {
         ArgumentNullException.ThrowIfNull(extraction);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var captured = await RequireImportedAsync(db, extraction, cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        if (await InsertOrReadReplayAsync(db, captured, extraction, cancellationToken) is { } winner) return winner;
+        await PostgresStatementCandidateRegistration.RegisterAsync(db, captured, extraction.ExtractionId, extraction.Text, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return extraction;
+    }
+
+    public async Task SaveFeedItemsAsync(IReadOnlyList<FeedItemExtraction> newestFirst, int maximumNew,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(newestFirst);
+        if (newestFirst.Count == 0) return;
+        var feed = newestFirst[0].Extraction;
+        if (newestFirst.Any(item => !item.Extraction.SourceAttempt.Equals(feed.SourceAttempt)))
+            throw new ArgumentException("Feed items must share one captured attempt.", nameof(newestFirst));
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var captured = await RequireImportedAsync(db, feed, cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        await LockFeedAttemptAsync(db, captured, cancellationToken);
+        var known = await PostgresStatementCandidateRegistration.ReadKnownAsync(db, captured, newestFirst.Select(item => item.Link),
+            cancellationToken);
+        var remaining = maximumNew - known.RegisteredForAttempt;
+        var registeredTexts = new List<string>();
+        foreach (var item in newestFirst)
+        {
+            if (registeredTexts.Count >= remaining) break;
+            if (known.Links.Contains(item.Link)) continue;
+            if (await InsertOrReadReplayAsync(db, captured, item.Extraction, cancellationToken) is not null) continue;
+            if (await PostgresStatementCandidateRegistration.RegisterFeedItemAsync(db, captured, item.Link,
+                    item.Extraction.ExtractionId, cancellationToken))
+                registeredTexts.Add(item.Extraction.Text);
+        }
+        await PostgresStatementCandidateRegistration.RaiseAnalysisPrioritiesAsync(db, captured, registeredTexts, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    // Two saves of one attempt run one after the other, so the count of the bound is read after the first save commits.
+    // NO KEY UPDATE still lets job and extraction rows reference the attempt, and no other writer locks this row.
+    private static Task<int> LockFeedAttemptAsync(CollectionAttemptDbContext db, CapturedAttemptResult feed,
+        CancellationToken cancellationToken) =>
+        db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM collection_attempts WHERE attempt_id = {feed.AttemptId} FOR NO KEY UPDATE", cancellationToken);
+
+    private static async Task<CapturedAttemptResult> RequireImportedAsync(CollectionAttemptDbContext db,
+        DocumentExtraction extraction, CancellationToken cancellationToken)
+    {
         var imported = await PostgresCollectionAttemptStore.GetAsync(db, extraction.SourceAttempt.AttemptId, cancellationToken,
             includeDiscovery: false);
         if (imported?.AttemptResult is not CapturedAttemptResult captured || !captured.Equals(extraction.SourceAttempt))
             throw new InvalidOperationException("Extraction provenance does not match an imported captured attempt.");
+        return captured;
+    }
 
-        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+    private static async Task<DocumentExtraction?> InsertOrReadReplayAsync(CollectionAttemptDbContext db, CapturedAttemptResult captured,
+        DocumentExtraction extraction, CancellationToken cancellationToken)
+    {
         var profileJson = SerializeProfile(extraction.Profile);
         var inserted = await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO document_extractions (extraction_id, attempt_id, extraction_version, text,
@@ -50,17 +101,12 @@ public sealed class PostgresDocumentExtractionStore(IDbContextFactory<Collection
                 {extraction.Text}, {extraction.TextSha256}, {profileJson}, {extraction.Part})
             ON CONFLICT (extraction_id) DO NOTHING
             """, cancellationToken);
-        if (inserted == 0)
-        {
-            var winner = await ReadAsync(db, extraction.ExtractionId, cancellationToken)
-                ?? throw new InvalidOperationException("A conflicting extraction row vanished.");
-            if (!SameEvidence(winner, extraction))
-                throw new InvalidOperationException("An extraction identity was reused with different evidence or text.");
-            return winner;
-        }
-        await PostgresStatementCandidateRegistration.RegisterAsync(db, captured, extraction.ExtractionId, extraction.Text, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return extraction;
+        if (inserted > 0) return null;
+        var winner = await ReadAsync(db, extraction.ExtractionId, cancellationToken)
+            ?? throw new InvalidOperationException("A conflicting extraction row vanished.");
+        return SameEvidence(winner, extraction)
+            ? winner
+            : throw new InvalidOperationException("An extraction identity was reused with different evidence or text.");
     }
 
     internal static async Task<DocumentExtraction?> ReadAsync(CollectionAttemptDbContext db, string extractionId,

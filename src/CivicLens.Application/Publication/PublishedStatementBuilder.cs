@@ -25,10 +25,11 @@ internal sealed class PublishedStatementBuilder(PublishedRecordRules rules)
             PolicyAreaIds = [.. revision.PolicyAreaIds],
             Quotations = [.. revision.Quotations.Select(quotation => Quote(quotation, extraction))],
             BillNumbers = [.. revision.BillNumbers],
+            ArticleUrl = url == extraction.SourceAttempt.RequestedUrl ? null : url,
             Source = new()
             {
                 ExtractionId = extraction.ExtractionId,
-                Url = url,
+                Url = extraction.SourceAttempt.RequestedUrl,
                 ObservedAtUtc = extraction.SourceAttempt.ObservedAt,
                 Text = extraction.Text
             },

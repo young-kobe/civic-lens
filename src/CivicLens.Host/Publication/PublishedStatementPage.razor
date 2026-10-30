@@ -35,6 +35,10 @@
     </Panel>
 
     <Panel Title="Source text" Id="source-title" Padded="true">
+        @if (Record.ArticleUrl is { } article)
+        {
+            <p class="muted small">Article: <a href="@article" rel="noopener noreferrer nofollow">@article</a>. The source below is the feed that lists the article. It holds a copy of the article text.</p>
+        }
         <VersionSource Version="Record.Source" />
         <DocumentText Label="Source text" Runs="CitedText.Split(Record.Source.Text, PublishedStatementView.Ranges(Record))" />
     </Panel>

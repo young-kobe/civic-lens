@@ -107,6 +107,10 @@ public sealed class ConfiguredCollectionSource
         return new BillStreamAdmission(SourceId, policy, template, window, page.StartsPass, [.. bills], nextPage);
     }
 
+    public bool StatementTextInFeed => ReadSource().StatementTextInFeed;
+
+    public int MaximumNewFeedStatements => (ReadSource().AdmissionPolicy ?? new DiscoveryAdmissionPolicy()).MaxJobs;
+
     public IReadOnlySet<string> CoveredBioguideIdsOn(DateOnly day) =>
         Revision.Configuration.CoveredBioguideIdsOf(ReadSource(), day);
 

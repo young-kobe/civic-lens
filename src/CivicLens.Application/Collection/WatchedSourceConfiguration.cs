@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
+using System.Text.Json.Serialization;
 using System.Text;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Discovery;
@@ -36,6 +37,8 @@ public sealed record WatchedSourceConfiguration
     public DateOnly? BackfillFrom { get; init; }
     public int MaxCandidates { get; init; } = 100;
     public DiscoveryAdmissionPolicy? AdmissionPolicy { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool StatementTextInFeed { get; init; }
     public bool Enabled { get; init; } = true;
     public int MaxRequests { get; init; } = 5;
     public long MaxBytes { get; init; } = 2_000_000;
