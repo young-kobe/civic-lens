@@ -12,8 +12,8 @@ internal abstract class PublishedRecordLoader(PublishedRecordKind kind)
 
     public abstract void ValidateId(string recordId);
 
-    public abstract Task<(IReadOnlyList<ReadyToPublishRecord> Ready, bool HasMore)> ListReadyAsync(int limit,
-        CancellationToken cancellationToken);
+    public abstract Task<(IReadOnlyList<ReadyToPublishRecord> Ready, IReadOnlyList<string> NotReadyIds, bool HasMore)> ListReadyAsync(int limit,
+        IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken);
 
     public abstract Task<List<PendingRecord>> LoadAsync(ImmutableArray<string> recordIds, PublicationBuild build,
         CancellationToken cancellationToken);
@@ -27,11 +27,13 @@ internal abstract class PublishedRecordLoader<TCandidate, TAddition>(PublishedRe
     : PublishedRecordLoader(kind)
     where TAddition : class
 {
-    public sealed override async Task<(IReadOnlyList<ReadyToPublishRecord> Ready, bool HasMore)> ListReadyAsync(int limit,
-        CancellationToken cancellationToken)
+    public sealed override async Task<(IReadOnlyList<ReadyToPublishRecord> Ready, IReadOnlyList<string> NotReadyIds, bool HasMore)> ListReadyAsync(int limit,
+        IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken)
     {
-        var candidates = await ListCandidatesAsync(limit + 1, cancellationToken);
-        return (ReadyOf(candidates), candidates.Count > limit);
+        var candidates = await ListCandidatesAsync(limit + 1, excludedRecordIds, cancellationToken);
+        var checkedCandidates = candidates.Select(candidate => (candidate, ready: ToReady(candidate))).ToArray();
+        return ([.. checkedCandidates.Select(item => item.ready).OfType<ReadyToPublishRecord>()],
+            [.. checkedCandidates.Where(item => item.ready is null).Select(item => RecordIdOf(item.candidate))], candidates.Count > limit);
     }
 
     public sealed override async Task<List<PendingRecord>> LoadAsync(ImmutableArray<string> recordIds, PublicationBuild build,
@@ -57,10 +59,10 @@ internal abstract class PublishedRecordLoader<TCandidate, TAddition>(PublishedRe
         return pending;
     }
 
-    protected IReadOnlyList<ReadyToPublishRecord> ReadyOf(IEnumerable<TCandidate> candidates) =>
-        [.. candidates.Select(ToReady).OfType<ReadyToPublishRecord>()];
+    protected abstract Task<IReadOnlyList<TCandidate>> ListCandidatesAsync(int limit,
+        IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken);
 
-    protected abstract Task<IReadOnlyList<TCandidate>> ListCandidatesAsync(int limit, CancellationToken cancellationToken);
+    protected abstract string RecordIdOf(TCandidate candidate);
 
     protected abstract ReadyToPublishRecord? ToReady(TCandidate candidate);
 

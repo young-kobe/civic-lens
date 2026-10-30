@@ -11,7 +11,10 @@ internal sealed class RelationshipRecordLoader(IRelationshipReviewStore relation
     public override void ValidateId(string recordId) => ReviewValidation.ValidateHash(recordId, nameof(recordId));
 
     protected override Task<IReadOnlyList<UnpublishedApprovedRelationship>> ListCandidatesAsync(int limit,
-        CancellationToken cancellationToken) => relationships.ListUnpublishedApprovedAsync(limit, cancellationToken);
+        IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken) =>
+        relationships.ListUnpublishedApprovedAsync(limit, excludedRecordIds, cancellationToken);
+
+    protected override string RecordIdOf(UnpublishedApprovedRelationship candidate) => candidate.Relationship.RecordId;
 
     protected override ReadyToPublishRecord? ToReady(UnpublishedApprovedRelationship candidate) =>
         candidate.CitedRecordsChanged
@@ -36,7 +39,7 @@ internal sealed class RelationshipRecordLoader(IRelationshipReviewStore relation
         if (addition.CitedRecordsChanged)
             throw new ArgumentException(
                 $"Relationship {recordId} cites a record that the new release does not hold at the cited revision, or that is not approved.");
-        var record = new PublishedRelationshipBuilder(build.Rules).Build(addition, build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId), build.Now);
+        var record = new PublishedRelationshipBuilder(build.Rules).Build(addition, build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId, review.CurrentRevision.RevisionNumber, review.Decisions), build.Now);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
             (_, cancellationToken) => build.Renderer.RenderRelationshipAsync(record, build.Catalog, cancellationToken));
     }

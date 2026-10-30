@@ -12,9 +12,7 @@ public interface IExecutiveActionReviewStore
 
     Task<ExecutiveActionsNeedingAction> ListNeedingActionAsync(int limit, CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<UnpublishedApprovedExecutiveAction>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken);
-
-    Task<IReadOnlyList<UnpublishedApprovedExecutiveAction>> ListCodeApprovedUnpublishedAsync(int limit,
+    Task<IReadOnlyList<UnpublishedApprovedExecutiveAction>> ListUnpublishedApprovedAsync(int limit,
         IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken);
 
     Task<IReadOnlyDictionary<string, PublishableExecutiveAction>> GetForPublicationAsync(ImmutableArray<string> recordIds,

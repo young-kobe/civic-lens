@@ -177,7 +177,7 @@ Use the fixtures of the legacy crawler and its lessons about normalization, robo
 
 `WorkerLoop`, at the Application project root, owns four shared mechanics:
 
-- It waits for a wakeup and reconnects after a 2-second failure backoff. `CollectionJobWorker`, `AnalysisWorker`, and `StageWorker` use this. `StageWorker` runs the `factPublishing` stage and the report pull.
+- It waits for a wakeup and reconnects after a 2-second failure backoff. `CollectionJobWorker`, `AnalysisWorker`, and `StageWorker` use this. `StageWorker` runs the `publishing` stage and the report pull.
 - It renews a lease while work runs. Only `EvidenceProcessingWorker` and `AnalysisWorker` use this, because collection jobs keep `CollectionJobLeaseGuard`.
 - It passes the loop heartbeat to the wait. `WorkerBeat` writes the beat, and every worker loop uses it. See [collection](architecture/collection.md#autonomous-collection-engine).
 - It owns the recoverable-exception rule and the type-name error code.
@@ -222,7 +222,7 @@ These rules cross features. Each line gives the rule, what enforces it, and the 
 
 - A capture never changes after import. Enforced by the primary key of `collection_captures` and the insert-only `PostgresCollectionAttemptStore`. Test: `PostgresCollectionAttemptStoreTests.SerializesConcurrentSameAndDistinctAttemptsAndRejectsHashLengthConflict`.
 - A model prediction is never a human approval. Enforced by `ReviewPolicy`, which refuses decisions by the analysis author. Test: `ReviewPolicyTests.TheAiDrafterCannotRecordAnyDecisionEvenOnItsOwnDraft`.
-- Only the worker path approves by code, and only for actions, House votes, Senate votes, and executive actions. The reserved subject `civic-lens:code` is the actor. A person cannot act as it. It publishes only those four kinds, through the `factPublishing` worker stage. Enforced by `ReviewAuthor.IsReserved`, `ReviewAuthorization`, `ReviewWriteRules`, `ReviewRecords.AppendCodeApprovedAsync`, and `PublishRelease`. Tests: `PostgresBillStreamTests.APersonCannotActAsTheCodeSubject`, `PostgresStatementDraftStoreTests.AStatementAiRevisionIsNeverApprovedByCodeBecauseOnlyAPersonApprovesJudgment`, and `PublishCodeApprovedFactsTests.TheCodeSubjectCannotPublishAJudgmentRecordBecauseOnlyAPersonApprovesJudgment`.
+- Only the worker path approves by code, and only for actions, House votes, Senate votes, and executive actions. The reserved subject `civic-lens:code` is the actor. A person cannot act as it. It publishes any record kind through the `publishing` worker stage. Enforced by `ReviewAuthor.IsReserved`, `ReviewAuthorization`, `ReviewWriteRules`, `ReviewRecords.AppendCodeApprovedAsync`, and `PublishRelease`. Tests: `PostgresBillStreamTests.APersonCannotActAsTheCodeSubject`, `PostgresStatementDraftStoreTests.AStatementAiRevisionIsNeverApprovedByCodeBecauseOnlyAPersonApprovesJudgment`, and `PublishApprovedRecordsTests.TheCodeSubjectCanPublishAnyKindBecauseTheWorkerPublishesEveryApprovedRecord`.
 - A release holds the exact approved revision. Enforced by `PublishedRecordRules` and `PostgresPublicationStore`, which recheck the review state at commit. Test: `PostgresPublicationStoreTests.ASaveAfterTheBuildBlocksTheCommitBecauseTheServedRevisionWouldBeStale`.
 - The collector depends on Collection.Contracts only. Enforced by the dependency map in `ArchitectureTests`. Test: `ArchitectureTests.ProductionProjectsHaveOnlyApprovedDependencies`.
 - Only the current lease holder moves queue work. Each claim issues a new token and a higher fence, and a stale write fails. Enforced by `PostgresCollectionJobStore`, `EvidenceProcessingLifecycle`, and `AnalysisLifecycle`. Test: `PostgresDocumentChangeAnalysisStoreTests.AnExpiredLeaseIsRecoveredAsAnInterruptedRunAndTheStaleOwnerIsFenced`.
@@ -240,7 +240,7 @@ One document change moves from a source check to a published release. Each step 
 7. Comparison stores the diff and queues AI drafting: `document_comparisons` and `document_change_analysis` ([documents](architecture/documents.md#history)).
 8. The analysis worker records a run and a draft revision: `document_change_analysis_runs`, `document_change_drafts`, and `document_change_revisions` ([analysis](architecture/analysis.md#behavior)).
 9. A reviewer records a decision: `document_change_review_decisions` ([review](architecture/review.md#review-decisions)).
-10. The owner publishes a release, or the `factPublishing` stage publishes code-approved actions and votes: `publication_releases` and the release files ([publication](architecture/publication.md#publish)).
+10. The owner publishes a release, or the `publishing` stage publishes every approved record: `publication_releases` and the release files ([publication](architecture/publication.md#publish)).
 
 Statements branch at step 6: an admitted article becomes a candidate in `statement_candidates` ([statements](architecture/statements.md)). Bills branch at step 4: a passed bill becomes a candidate in `action_candidates` ([bills](architecture/bills.md)).
 

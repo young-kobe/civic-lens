@@ -59,16 +59,16 @@ public sealed class PostgresRelationshipPublicationTests(PostgresCollection post
     [Fact]
     public async Task TheReadyListHoldsAnApprovedRelationshipUntilACitedRecordLosesItsApprovalBecausePublishWouldRefuseIt()
     {
-        Assert.Empty(await reviews.ListUnpublishedApprovedAsync(10, default));
+        Assert.Empty(await reviews.ListUnpublishedApprovedAsync(10, [], default));
         await ApproveAsync();
 
-        var ready = Assert.Single(await reviews.ListUnpublishedApprovedAsync(10, default));
+        var ready = Assert.Single(await reviews.ListUnpublishedApprovedAsync(10, [], default));
         Assert.Equal((recordId, null, false), (ready.Relationship.RecordId, ready.PublishedRevisionNumber, ready.CitedRecordsChanged));
         Assert.Equal(("Warren on rent", ActionRevisionFixtures.Model().Headline), (ready.StatementHeadline, ready.TargetHeadline));
 
         await releases.DecisionAsync(PublishedRecordKind.Statement, StatementId, 1, 2, ReviewDecisionKind.WithdrawApproval);
 
-        Assert.True(Assert.Single(await reviews.ListUnpublishedApprovedAsync(10, default)).CitedRecordsChanged);
+        Assert.True(Assert.Single(await reviews.ListUnpublishedApprovedAsync(10, [], default)).CitedRecordsChanged);
     }
 
     [Fact]
@@ -78,7 +78,7 @@ public sealed class PostgresRelationshipPublicationTests(PostgresCollection post
         await releases.ReplaceActiveReleaseAsync(2, ReleasedAt.AddHours(1), StatementBinding, ActionBinding,
             BriefWorldSeeder.Binding(PublishedRecordKind.Relationship, recordId, 1));
 
-        Assert.Empty(await reviews.ListUnpublishedApprovedAsync(10, default));
+        Assert.Empty(await reviews.ListUnpublishedApprovedAsync(10, [], default));
     }
 
     [Fact]

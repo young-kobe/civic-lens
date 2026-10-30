@@ -102,23 +102,23 @@ public sealed class PublishExecutiveActionTests
     }
 
     [Fact]
-    public async Task TheWorkerPublishesARecordThatCodeApprovedAndLeavesOneThatAPersonApproved()
+    public async Task TheWorkerPublishesAnExecutiveActionWhoeverApprovedIt()
     {
         var scenario = new PublicationScenario();
         var byCode = scenario.AddExecutiveAction('a', [PublicationScenario.Decision(new string('a', 64), 1, ReviewDecisionKind.Approve) with { ActorSubject = ReviewAuthor.CodeSubject }], unpublished: true);
         var byPerson = scenario.AddExecutiveAction('b', unpublished: true);
-        var facts = new PublishCodeApprovedFacts(scenario.Publisher(), scenario.Publications, scenario.Loaders(),
-            new CapturingLogger<PublishCodeApprovedFacts>(), TestBeat.Create());
+        var worker = new PublishApprovedRecords(scenario.Publisher(), scenario.Publications, scenario.Loaders(),
+            new CapturingLogger<PublishApprovedRecords>(), TestBeat.Create());
         scenario.Publications.BeforeServe = () =>
         {
             var published = scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId).ToHashSet();
             scenario.ExecutiveActions.Unpublished.RemoveAll(item => published.Contains(item.Action.RecordId));
         };
 
-        await facts.ExecuteAsync(default);
+        await worker.ExecuteAsync(default);
 
-        Assert.Equal([byCode], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId));
-        Assert.Equal([byPerson], scenario.ExecutiveActions.Unpublished.Select(item => item.Action.RecordId));
+        Assert.Equal([byCode, byPerson], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId).Order());
+        Assert.Empty(scenario.ExecutiveActions.Unpublished);
     }
 
     private static PublishReleaseRequest Request(string key, string recordId) =>

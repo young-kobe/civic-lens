@@ -70,22 +70,22 @@ public sealed class PostgresBriefPublicationTests(PostgresCollection postgres) :
     {
         await ApproveAsync();
 
-        var ready = Assert.Single(await reviews.ListUnpublishedApprovedAsync(10, default));
+        var ready = Assert.Single(await reviews.ListUnpublishedApprovedAsync(10, [], default));
         Assert.Equal((RecordId, null, false), (ready.Brief.RecordId, ready.PublishedRevisionNumber, ready.CitedRecordsChanged));
 
         await seeder.DecisionAsync(PublishedRecordKind.Statement, CitedStatement, 1, 2, ReviewDecisionKind.WithdrawApproval);
 
-        Assert.True(Assert.Single(await reviews.ListUnpublishedApprovedAsync(10, default)).CitedRecordsChanged);
+        Assert.True(Assert.Single(await reviews.ListUnpublishedApprovedAsync(10, [], default)).CitedRecordsChanged);
     }
 
     [Fact]
     public async Task TheReadyListLeavesOutABriefThatIsNotApprovedAndABriefThatTheActiveReleaseHoldsAtItsCurrentRevision()
     {
-        Assert.Empty(await reviews.ListUnpublishedApprovedAsync(10, default));
+        Assert.Empty(await reviews.ListUnpublishedApprovedAsync(10, [], default));
         await ApproveAsync();
         await seeder.ReplaceActiveReleaseAsync(2, InWeek.AddHours(1), Statement, Action, DocumentChange, BriefBinding);
 
-        Assert.Empty(await reviews.ListUnpublishedApprovedAsync(10, default));
+        Assert.Empty(await reviews.ListUnpublishedApprovedAsync(10, [], default));
     }
 
     [Fact]

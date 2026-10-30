@@ -56,18 +56,18 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
     }
 
     [Fact]
-    public async Task ACodeApprovedRecordIsListedForCodeToPublishAndLoadsWithItsSavedEvidence()
+    public async Task ACodeApprovedRecordIsListedToPublishAndLoadsWithItsSavedEvidence()
     {
         var recordId = await AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
 
-        var listed = Assert.Single(await store.ListCodeApprovedUnpublishedAsync(10, [], default));
+        var listed = Assert.Single(await store.ListUnpublishedApprovedAsync(10, [], default));
         var publishable = (await store.GetForPublicationAsync([recordId], default))[recordId];
 
         Assert.Equal(recordId, listed.Action.RecordId);
         Assert.Null(listed.PublishedRevisionNumber);
         Assert.Equal(ReviewStatus.Approved, publishable.Review.CurrentStatus);
         Assert.Single(publishable.Extractions);
-        Assert.Empty(await store.ListCodeApprovedUnpublishedAsync(10, [recordId], default));
+        Assert.Empty(await store.ListUnpublishedApprovedAsync(10, [recordId], default));
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
 
         await store.DecideAsync("auth0|owner", decision, 1, 1, "key-1", new string('a', 64), default);
 
-        Assert.Empty(await store.ListCodeApprovedUnpublishedAsync(10, [], default));
+        Assert.Empty(await store.ListUnpublishedApprovedAsync(10, [], default));
         var needing = await store.ListNeedingActionAsync(10, default);
         Assert.Equal(1, needing.Total);
         Assert.Equal(ReviewStatus.ApprovalWithdrawn, Assert.Single(needing.Items).CurrentStatus);
@@ -96,7 +96,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
 
         await AdmitAsync(FederalRegisterFixtures.BidenProclamationCorrection, "joe-biden");
 
-        Assert.Empty(await store.ListCodeApprovedUnpublishedAsync(10, [], default));
+        Assert.Empty(await store.ListUnpublishedApprovedAsync(10, [], default));
         var needing = Assert.Single((await store.ListNeedingActionAsync(10, default)).Items);
         Assert.Equal(2, needing.CurrentRevision.RevisionNumber);
         Assert.Single(needing.UnresolvedConcerns);
@@ -125,7 +125,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         Assert.Contains("Ending the Weaponization of the Federal Government", page);
         Assert.Contains("title from the Federal Register", page);
         Assert.Contains("https://www.federalregister.gov/documents/2025/01/28/2025-01900/", page);
-        Assert.Empty(await store.ListCodeApprovedUnpublishedAsync(10, [], default));
+        Assert.Empty(await store.ListUnpublishedApprovedAsync(10, [], default));
 
         var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 2, ReviewDecisionKind.WithdrawApproval, "auth0|owner",
             "The title is wrong.", [], DateTimeOffset.UtcNow);

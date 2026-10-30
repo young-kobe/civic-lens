@@ -7,7 +7,7 @@ The review feature is the private editorial workspace. People draft, revise, and
 ## Decisions
 
 - One authorized operator may both draft and approve a record. A separate approver is not required, and self-approval is allowed.
-- The owner can draft, review, publish, and manage editorial access. The code subject publishes actions and votes only, through the worker stage; see [publication](publication.md#automatic-publication-of-facts). The additional reviewer can draft and review, but cannot publish or manage access.
+- The owner can draft, review, publish, and manage editorial access. The code subject publishes through the worker stage; see [publication](publication.md#automatic-publication). The additional reviewer can draft and review, but cannot publish or manage access.
 - Each person signs in with a separate Auth0 identity, and each decision names its actor. Sign-in alone grants no editorial access.
 - Authorization is enforced at mutation boundaries, not only by hiding UI controls.
 - Server configuration maps exact subject IDs to roles. Client role claims confer no permissions.

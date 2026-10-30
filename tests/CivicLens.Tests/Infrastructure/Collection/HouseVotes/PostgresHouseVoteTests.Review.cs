@@ -68,7 +68,7 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal((ReviewDecisionKind.Approve, ReviewAuthor.CodeSubject, 1, 1), (decision.Kind, decision.ActorSubject, decision.RevisionNumber,
             decision.ReviewStateVersion));
         Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM vote_drafts WHERE record_id = '{recordId}'"));
-        Assert.Equal(recordId, Assert.Single(await VoteReviews().ListUnpublishedApprovedAsync(10, default)).Vote.RecordId);
+        Assert.Equal(recordId, Assert.Single(await VoteReviews().ListUnpublishedApprovedAsync(10, [], default)).Vote.RecordId);
     }
 
     [Fact]

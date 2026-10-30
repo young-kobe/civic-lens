@@ -739,11 +739,12 @@ internal sealed class FakeReviewStore : IDocumentChangeReviewStore
     public int UnpublishedReadCount { get; private set; }
 
     public Task<IReadOnlyList<UnpublishedApprovedDraft>> ListUnpublishedApprovedDraftsAsync(int limit,
-        CancellationToken cancellationToken)
+        IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken)
     {
         UnpublishedReadCount++;
         UnpublishedLimit = limit;
-        return Task.FromResult<IReadOnlyList<UnpublishedApprovedDraft>>([.. Unpublished.Take(limit)]);
+        return Task.FromResult<IReadOnlyList<UnpublishedApprovedDraft>>([.. Unpublished
+            .Where(item => !excludedRecordIds.Contains(item.Draft.DraftId)).Take(limit)]);
     }
 
     public List<ReviewActivityEvent> Activity { get; } = [];

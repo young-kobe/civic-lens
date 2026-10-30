@@ -23,14 +23,10 @@ internal sealed class FakeExecutiveActionReviewStore : IExecutiveActionReviewSto
     public Task<ExecutiveActionsNeedingAction> ListNeedingActionAsync(int limit, CancellationToken cancellationToken) =>
         Task.FromResult(new ExecutiveActionsNeedingAction([], 0));
 
-    public Task<IReadOnlyList<UnpublishedApprovedExecutiveAction>> ListUnpublishedApprovedAsync(int limit, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<UnpublishedApprovedExecutiveAction>>(Unpublished);
-
-    public Task<IReadOnlyList<UnpublishedApprovedExecutiveAction>> ListCodeApprovedUnpublishedAsync(int limit,
+    public Task<IReadOnlyList<UnpublishedApprovedExecutiveAction>> ListUnpublishedApprovedAsync(int limit,
         IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<UnpublishedApprovedExecutiveAction>>(
-            [.. Unpublished.Where(item => !excludedRecordIds.Contains(item.Action.RecordId))
-                .Where(item => item.Action.Decisions.MaxBy(decision => decision.ReviewStateVersion) is { ActorSubject: ReviewAuthor.CodeSubject })]);
+            [.. Unpublished.Where(item => !excludedRecordIds.Contains(item.Action.RecordId)).Take(limit)]);
 
     public Task<IReadOnlyDictionary<string, PublishableExecutiveAction>> GetForPublicationAsync(ImmutableArray<string> recordIds,
         CancellationToken cancellationToken) =>

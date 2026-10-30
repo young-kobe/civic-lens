@@ -27,28 +27,13 @@ public sealed partial class PostgresHouseVoteTests
     public async Task ACommittedVoteLeavesTheReadyListBecauseTheReleaseRowCarriesTheVoteKind()
     {
         var recordId = await ApprovedVoteAsync();
-        var ready = Assert.Single(await VoteReviews().ListUnpublishedApprovedAsync(10, default));
+        var ready = Assert.Single(await VoteReviews().ListUnpublishedApprovedAsync(10, [], default));
         Assert.Null(ready.PublishedRevisionNumber);
 
         await PostgresPublicationStore.FromConnectionString(connectionString).CommitAsync(PublicationScenario.Owner.Subject,
             VoteCommit(recordId, reviewStateVersion: 1), "key", Hash(1), default);
 
-        Assert.Empty(await VoteReviews().ListUnpublishedApprovedAsync(10, default));
-    }
-
-    [Fact]
-    public async Task TheCodeApprovedListFiltersInSqlSoAPersonApprovalNeverFillsItsLimit()
-    {
-        var candidate = await PendingCandidateAsync();
-        await SettleAsync(candidate, await RevisionAsync(candidate, 1));
-        var recordId = await RecordIdAsync(candidate);
-        Assert.Equal(recordId, Assert.Single(await VoteReviews().ListCodeApprovedUnpublishedAsync(1, [], default)).Vote.RecordId);
-
-        await ReopenAsync(recordId);
-        await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Approve);
-
-        Assert.Single(await VoteReviews().ListUnpublishedApprovedAsync(1, default));
-        Assert.Empty(await VoteReviews().ListCodeApprovedUnpublishedAsync(1, [], default));
+        Assert.Empty(await VoteReviews().ListUnpublishedApprovedAsync(10, [], default));
     }
 
     [Fact]
@@ -61,7 +46,7 @@ public sealed partial class PostgresHouseVoteTests
         var second = await PendingCandidateAsync(Updated.AddDays(1));
         await SettleForReviewAsync(second, await RevisionAsync(second, 2));
 
-        Assert.Empty(await VoteReviews().ListUnpublishedApprovedAsync(10, default));
+        Assert.Empty(await VoteReviews().ListUnpublishedApprovedAsync(10, [], default));
     }
 
     [Fact]

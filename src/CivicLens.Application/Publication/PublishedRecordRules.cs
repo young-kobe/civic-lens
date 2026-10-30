@@ -21,6 +21,9 @@ public sealed class PublishedRecordRules(PublicationCatalog catalog)
     public static PublishedApprover ApproverOf(int revisionNumber, ImmutableArray<ReviewDecision> decisions) =>
         ReviewAuthor.IsCode(LatestApproval(revisionNumber, decisions).ActorSubject) ? PublishedApprover.Code : PublishedApprover.Person;
 
+    public static bool IsApprovedByCode(int revisionNumber, ImmutableArray<ReviewDecision> decisions) =>
+        ApproverOf(revisionNumber, decisions) == PublishedApprover.Code;
+
     private static ReviewDecision LatestApproval(int revisionNumber, ImmutableArray<ReviewDecision> decisions) =>
         decisions
             .Where(item => item.RevisionNumber == revisionNumber && item.Kind == ReviewDecisionKind.Approve)

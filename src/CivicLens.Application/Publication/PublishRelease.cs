@@ -48,9 +48,10 @@ public sealed class PublishRelease
     public async Task<PublicationReleaseSummary> ExecuteAsync(ReviewActor actor, PublishReleaseRequest request,
         CancellationToken cancellationToken = default)
     {
-        ReviewAuthorization.RequireOwner(actor, allowCode: IsOnlyFactRecords(request));
+        ReviewAuthorization.RequireOwner(actor, allowCode: true);
         var byCode = ReviewAuthor.IsCode(actor.Subject);
         var references = ValidateRequest(request);
+        if (byCode && references.IsEmpty) throw new ArgumentException("The code subject publishes at least one record.", nameof(request));
         var notes = PublicationCorrections.ValidateNotes(request.Notes, references, byCode);
         var withdrawalNotes = PublicationWithdrawals.ValidateNotes(request.Withdrawals, byCode);
         var payloadHash = ReviewValidation.HashPayload(request);
@@ -68,7 +69,7 @@ public sealed class PublishRelease
             throw new ArgumentException("A publish with no record needs an active release.");
         PublicationWithdrawals.RequireNoReturnByCode(previous, references, byCode);
         var withdrawn = ImmutableArray.CreateRange(withdrawalNotes.Keys);
-        var corrections = await PublicationCorrections.LoadAsync(releases, previous, now, byCode, notes, [.. references, .. withdrawn],
+        var corrections = await PublicationCorrections.LoadAsync(releases, previous, now, notes, [.. references, .. withdrawn],
             cancellationToken);
         var newWithdrawals = PublicationWithdrawals.Create(previous, corrections, now, withdrawalNotes);
         var returned = ImmutableArray.CreateRange(references.Where(reference => previous.IsWithdrawn(reference.RecordId)));
@@ -106,11 +107,6 @@ public sealed class PublishRelease
         _ = await publications.ServeActiveAsync(releases.ActivateAsync, cancellationToken)
             ?? throw new InvalidDataException("A release was committed but none is active.");
     }
-
-    // Judgment records need a person, so the code subject may publish only fact records.
-    private static bool IsOnlyFactRecords(PublishReleaseRequest request) =>
-        request is { Records.IsDefaultOrEmpty: false } &&
-        request.Records.All(record => record.Kind is PublishedRecordKind.Action or PublishedRecordKind.Vote or PublishedRecordKind.ExecutiveAction);
 
     private ImmutableArray<PublishedRecordReference> ValidateRequest(PublishReleaseRequest request)
     {
