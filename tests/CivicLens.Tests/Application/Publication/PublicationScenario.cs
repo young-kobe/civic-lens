@@ -205,11 +205,11 @@ internal sealed class PublicationScenario
     }
 
     public string AddStatement(char id, ImmutableArray<ReviewDecision>? decisions = null, string[]? speakerIds = null,
-        int revisionNumber = 1, DateOnly? statementDate = null, string? feedUrl = null)
+        int revisionNumber = 1, DateOnly? statementDate = null, string? feedUrl = null, string author = "author")
     {
         var candidateId = new string(id, 64);
         var extraction = Extraction($"Mayor said: housing matters.\nOther text {id}.\n", $"statement-{id}", feedUrl ?? StatementArticleUrl);
-        var revision = new StatementDraftRevision(candidateId, revisionNumber, "author", ApprovedAt, $"Statement {id}", "Summary", statementDate,
+        var revision = new StatementDraftRevision(candidateId, revisionNumber, author, ApprovedAt, $"Statement {id}", "Summary", statementDate,
             statementDate is null ? null : new SourceSpan(extraction.ExtractionId, 0, 5),
             [.. speakerIds ?? ["mayor"]], ["Council Member"], ["housing"], ["land-use"],
             [new(new(extraction.ExtractionId, 12, 15), StatementQuotationKind.DirectQuotation)], ["HB 12"]);
@@ -236,7 +236,7 @@ internal sealed class PublicationScenario
         SourceSpan DetailLine(string line) => new(detail.ExtractionId, ActionDetail.IndexOf(line, StringComparison.Ordinal), line.Length);
         var revision = new ActionDraftRevision(recordId, 1, personText ? "auth0|editor" : "civic-lens:analysis", ApprovedAt, $"Action {id}",
             "The mayor sponsored a housing bill.", personText ? ReviewTextOrigin.Person : ReviewTextOrigin.Model, null, "congress-bills", 119, "hr", 7, new string('b', 64), ApprovedAt, false, new string('d', 64), null, null,
-            "Housing and Community Development", DetailLine("Policy area: Housing and Community Development"), policyAreaId, ["housing"], new string('e', 64),
+            "Housing and Community Development", DetailLine("Policy area: Housing and Community Development"), policyAreaId, ["housing"], ["housing"], new string('e', 64),
             [
                 new(sponsorId, "M000001", ActionSponsorshipRole.Sponsor, false, new DateOnly(2026, 1, 3), null,
                     [DetailLine("Sponsor: M000001"), DetailLine("Introduced: 2026-01-03")]),
@@ -256,7 +256,7 @@ internal sealed class PublicationScenario
     {
         var publishable = Actions.Publishable[recordId];
         var review = publishable.Review;
-        var revised = review.CurrentRevision with { RevisionNumber = revisionNumber, TrackedIssueIds = [$"issue-{revisionNumber}"] };
+        var revised = review.CurrentRevision with { RevisionNumber = revisionNumber, TrackedIssueIds = [$"issue-{revisionNumber}"], IssueCandidateIds = [$"issue-{revisionNumber}"] };
         Actions.Publishable[recordId] = publishable with
         {
             Review = review with

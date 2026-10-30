@@ -29,6 +29,17 @@ public sealed class RecordReaderTests
     }
 
     [Fact]
+    public void ACodeApprovedAiStatementIsIndexedBecauseTheSearchServiceMustAcceptTheNewFieldsInTheSameDeploy()
+    {
+        var sample = PublishedSamples.Statement('a', "Rent cap");
+        var code = (PublishedStatement)sample.Body with { ApprovedBy = PublishedApprover.Code, TextOrigin = PublishedTextOrigin.Model };
+
+        var read = Read(sample with { Body = code });
+
+        Assert.Equal("A short account.\nXq", read.Summary);
+    }
+
+    [Fact]
     public void AnActionIndexesItsSummaryAndBillTitleAsSummaryAndItsSourcesAsSource()
     {
         var read = Read(PublishedSamples.Action("Doe sponsors a bill", "Doe sponsored it.", "A housing bill", "Sponsor: D000001"));

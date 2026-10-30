@@ -18,9 +18,10 @@ internal static class PublishedStatementView
         };
         if (statement.StatementDate is { } date) facts.Add(new("Statement date", Moment.Iso(date)));
         facts.Add(PublishedRecordView.Issues("Issues", statement.IssueIds, catalog));
-        facts.Add(PublishedRecordView.PolicyAreas("Policy areas", statement.PolicyAreaIds, catalog));
+        facts.Add(PublishedRecordView.PolicyAreas(PublishedRecordLabels.StatementPolicyAreas(statement.ApprovedBy), statement.PolicyAreaIds, catalog));
         facts.Add(Fact.List("Bill numbers", statement.BillNumbers));
-        facts.Add(new("Published", $"Approved {Moment.Full(statement.ApprovedAtUtc)}; first published {Moment.Full(statement.FirstPublishedAtUtc)}"));
+        facts.Add(new("Published", $"{PublishedRecordLabels.ApprovalOn(statement.ApprovedBy, Moment.Full(statement.ApprovedAtUtc))}; first published {Moment.Full(statement.FirstPublishedAtUtc)}"));
+        facts.AddRange(PublishedRecordLabels.StatementWording(statement));
         facts.Add(new("Revision", statement.RevisionNumber.ToString(System.Globalization.CultureInfo.InvariantCulture)));
         return facts;
     }
