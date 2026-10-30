@@ -12,11 +12,11 @@ internal static class RosterFixtures
     public const string SourceUrl = "https://unitedstates.github.io/congress-legislators/legislators-current.json";
 
     // Trimmed excerpt of legislators-current.json from github.com/unitedstates/congress-legislators (CC0), fetched 2026-10-19.
-    // Cantwell moved from the House to the Senate and has a Senate lis ID. Norton is a delegate with district 0.
+    // Cantwell moved from the House to the Senate. Norton is a delegate with district 0.
     // Wahab has no official_full name.
     public const string Json = """
         [
-         {"id":{"bioguide":"C000127","lis":"S275"},
+         {"id":{"bioguide":"C000127"},
           "name":{"first":"Maria","last":"Cantwell","official_full":"Maria Cantwell"},
           "terms":[
            {"type":"rep","start":"1993-01-05","end":"1995-01-03","state":"WA","district":1,"party":"Democrat"},

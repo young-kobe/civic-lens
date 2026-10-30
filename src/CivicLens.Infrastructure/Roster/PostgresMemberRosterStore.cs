@@ -1,12 +1,8 @@
 using CivicLens.Application.Collection;
 using CivicLens.Application.Roster;
-using CivicLens.Application.Votes;
-using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Roster.Persistence;
-using CivicLens.Infrastructure.Votes;
-using CivicLens.Infrastructure.Votes.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
@@ -15,8 +11,6 @@ namespace CivicLens.Infrastructure.Roster;
 /// <summary>Retains one append-only snapshot of the member roster for each capture body not yet seen.</summary>
 public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) : IMemberRosterStore
 {
-    private readonly PostgresAnalysisQueue<VoteAnalysisRow, VoteAnalysisBudgetRow, VoteDraftRun> voteQueue = VoteDraftStaleness.NewQueue(contextFactory);
-
     public static PostgresMemberRosterStore FromConnectionString(string connectionString)
     {
         _ = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
@@ -47,7 +41,6 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
             db.Add(ToRow(attemptId, member));
             db.AddRange(member.Terms.Select(term => ToRow(attemptId, member.BioguideId, term)));
         }
-        _ = await VoteDraftStaleness.RequeueSenateUnmatchedAsync(voteQueue, db, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
@@ -108,18 +101,6 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
         return [.. members.Select(member => ToMember(member, terms[member.BioguideId]))];
     }
 
-    public async Task<IReadOnlyList<SenatorLisId>> ReadSenatorLisIdsAsync(string sourceId, CancellationToken cancellationToken)
-    {
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var snapshotIds = RosterSnapshotRules.SnapshotAttempts(db, sourceId).Select(attempt => attempt.AttemptId);
-        var rows = await db.Set<RosterMemberRow>().AsNoTracking()
-            .Where(member => snapshotIds.Contains(member.AttemptId) && db.Set<RosterTermRow>().Any(term =>
-                term.AttemptId == member.AttemptId && term.BioguideId == member.BioguideId && term.Chamber == MemberRosterParser.Senate))
-            .Select(member => new { member.BioguideId, member.LisId }).Distinct()
-            .OrderBy(member => member.BioguideId).ThenBy(member => member.LisId).ToListAsync(cancellationToken);
-        return [.. rows.Select(row => new SenatorLisId(row.BioguideId, row.LisId))];
-    }
-
     private static async Task AddPhotoJobsAsync(CollectionAttemptDbContext db, ConfiguredCollectionSource photos,
         CancellationToken cancellationToken)
     {
@@ -134,7 +115,6 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
     {
         AttemptId = attemptId,
         BioguideId = member.BioguideId,
-        LisId = member.LisId,
         FullName = member.FullName,
         Office = member.Office,
         Phone = member.Phone,
@@ -157,7 +137,7 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
     };
 
     private static RosterMember ToMember(RosterMemberRow member, IEnumerable<RosterTermRow> terms) =>
-        new(member.BioguideId, member.LisId, member.FullName, member.Office, member.Phone, member.Url,
+        new(member.BioguideId, member.FullName, member.Office, member.Phone, member.Url,
             [.. terms.Select(term => new RosterTerm(term.TermIndex, term.Chamber, term.StartsOn, term.EndsOn, term.State,
                 term.District, term.SenateClass, term.Party, term.Caucus))]);
 }

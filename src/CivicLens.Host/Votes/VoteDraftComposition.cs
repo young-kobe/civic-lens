@@ -24,7 +24,7 @@ internal static class VoteDraftComposition
         if (configuration is null) return AnalysisComposition<VoteDraftRun>.Disabled(status);
         if (issues is null) throw new ArgumentException("Vote drafting needs CIVIC_LENS_ISSUES_CONFIG.");
         var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresVoteDraftStore.Table, VoteDraftTask.Task);
-        var step = new VoteDraftStep(new PostgresVoteDraftStore(contexts), new VoteReader(jobs, new PostgresMemberRosterStore(contexts), responses, artifactRoot),
+        var step = new VoteDraftStep(new PostgresVoteDraftStore(contexts), new VoteReader(jobs, responses, artifactRoot),
             new AnthropicVoteDraftModel(configuration.ApiKey), configuration.Settings, issues);
         return new(status, configuration.Settings.DailyTokenLimit, new AnalysisWorker<VoteDraftRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<VoteDraftRun>>(), beat, wakeup), wakeup);
     }

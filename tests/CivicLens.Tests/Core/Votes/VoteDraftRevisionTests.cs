@@ -17,6 +17,16 @@ public sealed class VoteDraftRevisionTests
         Assert.Throws<ArgumentException>(() => (Revision() with { Chamber = (Chamber)9 }).ValidateShape());
     }
 
+    [Theory]
+    [InlineData(Chamber.House, VoteSource.Voteview)]
+    [InlineData(Chamber.Senate, VoteSource.CongressGov)]
+    [InlineData(Chamber.Senate, (VoteSource)9)]
+    public void AVoteSourceThatCannotHaveCarriedTheChamberIsRefusedSoAHouseVoteNeverNamesVoteview(Chamber chamber, VoteSource source)
+    {
+        Assert.Throws<ArgumentException>(() => (Revision() with { Chamber = chamber, Source = source }).ValidateShape());
+        (Revision() with { Chamber = Chamber.Senate, Source = VoteSource.Voteview }).ValidateShape();
+    }
+
     [Fact]
     public void AnAnalysisRevisionFollowsTheCurrentOneAndAFirstRevisionIsNumberOne()
     {
@@ -212,7 +222,7 @@ public sealed class VoteDraftRevisionTests
 
     private static VoteDraftRevision Revision(int number = 1, string author = "civic-lens:analysis") => new(
         VoteWorld.RecordId, number, author, VoteWorld.UpdatedAt.AddMinutes(number), "The House voted", "The House decided a question.", ReviewTextOrigin.Model, null,
-        "congress-house-votes", Chamber.House, 119, 1, 100, "hconres", 14, VoteWorld.CandidateId, VoteWorld.UpdatedAt,
+        "congress-house-votes", VoteSource.CongressGov, Chamber.House, 119, 1, 100, "hconres", 14, VoteWorld.CandidateId, VoteWorld.UpdatedAt,
         [new("Result: Passed", new SourceSpan(ExtractionId, 0, 14))], new DateOnly(2025, 4, 10), new SourceSpan(ExtractionId, 30, 28),
         VoteKind.Passage, new SourceSpan(ExtractionId, 15, 20), [Member()], ["rent"], new string('e', 64));
 }

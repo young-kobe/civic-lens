@@ -460,6 +460,11 @@ catch (OperationCanceledException)
         : "Command cancelled or timed out.");
     return 1;
 }
+catch (RetiredSourceException exception) when (!executing)
+{
+    Console.Error.WriteLine(exception.Message);
+    return 2;
+}
 catch (Exception exception) when (!executing && exception is ArgumentException or UnauthorizedAccessException or IOException or JsonException or InvalidOperationException)
 {
     // Configuration and provider exceptions may contain credentials or other input values.

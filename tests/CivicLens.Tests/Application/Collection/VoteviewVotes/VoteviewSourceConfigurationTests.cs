@@ -13,21 +13,22 @@ public sealed class VoteviewSourceConfigurationTests
     private static readonly DateTimeOffset Now = new(2026, 10, 29, 3, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void ATwoSenateVoteSourcesCannotBeEnabledTogetherBecauseBothWouldKeyRecordsOnTheSameRollCalls()
+    public void TwoVoteviewSourcesCannotBeEnabledTogetherBecauseBothWouldKeyRecordsOnTheSameRollCalls()
     {
         var configuration = VoteviewVoteFixtures.Configuration();
-        var senate = SenateVoteFixtures.Configuration().Sources.Single() with { Enabled = true };
+        var second = VoteviewVoteFixtures.Source("voteview-second", enabled: true, url: VoteviewVoteFixtures.SourceUrl + "/second");
 
-        Assert.Throws<ArgumentException>((configuration with { Sources = [.. configuration.Sources, senate] }).Validate);
+        var error = Assert.Throws<ArgumentException>((configuration with { Sources = [.. configuration.Sources, second] }).Validate);
+        Assert.Contains("only one Senate vote source", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void ADisabledSenateVoteSourceMayStayConfiguredBesideTheEnabledOneForASwitchBack()
+    public void AStoredRevisionWithTheRetiredSenateGovSourceStillValidatesWhetherItIsEnabledOrNot()
     {
         var configuration = VoteviewVoteFixtures.Configuration();
-        var senate = SenateVoteFixtures.Configuration().Sources.Single() with { Enabled = false };
 
-        (configuration with { Sources = [.. configuration.Sources, senate] }).Validate();
+        (configuration with { Sources = [.. configuration.Sources, VoteviewVoteFixtures.RetiredSenateGovSource(enabled: false)] }).Validate();
+        (configuration with { Sources = [.. configuration.Sources, VoteviewVoteFixtures.RetiredSenateGovSource(enabled: true)] }).Validate();
     }
 
     [Fact]
@@ -62,21 +63,13 @@ public sealed class VoteviewSourceConfigurationTests
     }
 
     [Fact]
-    public void TheShippedVoteviewSourceIsOffByDefaultAndCannotBeEnabledWhileTheSenateGovSourceIsOn()
+    public void TheShippedVoteviewSourceIsOffByDefaultAndTheShippedFileHasNoSenateGovSource()
     {
         var shipped = JsonSerializer.Deserialize<CollectionConfiguration>(
             File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "config", "federal-coverage.json")), ConfigurationJson.Options)!;
         shipped.Validate();
         var voteview = shipped.Sources.Single(candidate => candidate.Id == VoteviewVoteFixtures.SourceId);
         Assert.False(voteview.Enabled);
-
-        var both = shipped with
-        {
-            Sources = [.. shipped.Sources.Select(source => source.ApiParser is ApiParser.SenateVoteList or ApiParser.VoteviewSenateVoteList
-                ? source with { Enabled = true }
-                : source)]
-        };
-
-        Assert.Throws<ArgumentException>(both.Validate);
+        Assert.DoesNotContain(shipped.Sources, source => source.ApiParser == ApiParser.SenateVoteList);
     }
 }

@@ -41,6 +41,7 @@ internal sealed class PublishedVoteBuilder(PublishedRecordRules rules)
             Congress = revision.Congress,
             Session = revision.SessionNumber,
             RollCallNumber = revision.RollCallNumber,
+            Source = PublishedVoteSources.Of(revision.Source),
             Kind = PublishedVoteKinds.Of(revision.Kind),
             KindCitation = revision.KindCitation is { } kind ? Cite(kind) : null,
             VotedOn = revision.VotedOn,
