@@ -26,6 +26,7 @@ public interface IReleaseRenderer
     Task<string> RenderReportAsync(CancellationToken cancellationToken);
     Task<string> RenderMethodAsync(CancellationToken cancellationToken);
     Task<string> RenderAboutAsync(CancellationToken cancellationToken);
+    Task<string> RenderGlossaryAsync(CancellationToken cancellationToken);
     Task<string> RenderSearchAsync(PublicationRelease release, ReleaseFacets facets, CancellationToken cancellationToken);
 
     Task<string> RenderNotFoundAsync(CancellationToken cancellationToken);

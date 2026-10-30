@@ -93,8 +93,8 @@
                         <Row Context="vote">
                             <TableCell Class="fit num" Label="@PublicColumn.Date" SortValue="@Moment.Iso(vote.VotedOn)">@Moment.Iso(vote.VotedOn)</TableCell>
                             <TableCell Main><PublishedRecordTitle RecordId="@vote.RecordId" RootPath="@Page.RootPath">@vote.Headline</PublishedRecordTitle></TableCell>
-                            <TableCell Label="@PublicColumn.TheirVote">@vote.Cast</TableCell>
-                            <TableCell Label="@($"Most {PublishedOfficialView.PartyOf(withParty)}")">@vote.PartyMajority</TableCell>
+                            <TableCell Label="@PublicColumn.TheirVote"><CastWord Cast="@vote.Cast" /></TableCell>
+                            <TableCell Label="@($"Most {PublishedOfficialView.PartyOf(withParty)}")"><CastWord Cast="@(vote.PartyMajority ?? string.Empty)" /></TableCell>
                             <TableCell Label="@PublicColumn.Result">@vote.Result</TableCell>
                         </Row>
                     </DataTable>

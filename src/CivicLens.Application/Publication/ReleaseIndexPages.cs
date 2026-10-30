@@ -3,7 +3,7 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
-/// <summary>Writes the pages built from the manifest: home, all records, weekly briefs, search, report, method, about, and the issue and policy area pages.</summary>
+/// <summary>Writes the pages built from the manifest: home, all records, weekly briefs, search, report, method, about, glossary, and the issue and policy area pages.</summary>
 internal sealed class ReleaseIndexPages(IReleaseDirectory releases, IReleaseRenderer renderer)
 {
     public async Task WriteAsync(IReleaseStaging staging, PublicationRelease manifest, ReleaseFacets facets,
@@ -25,6 +25,7 @@ internal sealed class ReleaseIndexPages(IReleaseDirectory releases, IReleaseRend
         await WriteAsync(staging, PublicationProtocol.ReportPagePath, await renderer.RenderReportAsync(cancellationToken), cancellationToken);
         await WriteAsync(staging, PublicationProtocol.MethodPagePath, await renderer.RenderMethodAsync(cancellationToken), cancellationToken);
         await WriteAsync(staging, PublicationProtocol.AboutPagePath, await renderer.RenderAboutAsync(cancellationToken), cancellationToken);
+        await WriteAsync(staging, PublicationProtocol.GlossaryPagePath, await renderer.RenderGlossaryAsync(cancellationToken), cancellationToken);
         var brief = await LoadLatestBriefAsync(briefs.FirstOrDefault(), additions, previous, cancellationToken);
         await WriteAsync(staging, PublicationProtocol.HomePath,
             await renderer.RenderHomeAsync(manifest, brief, facets, cancellationToken), cancellationToken);
