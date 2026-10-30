@@ -95,7 +95,7 @@ internal static class PublishedOfficialView
 
     public static string TheCongress(int congress) => $"the {CongressCalendar.Ordinal(congress)} Congress";
 
-    private static string Counted(int count, string singular) => $"{count} {Noun(count, singular)}";
+    public static string Counted(int count, string singular) => $"{count} {Noun(count, singular)}";
 
     private static string JoinAnd(List<string> parts) => parts.Count == 1 ? parts[0] : $"{string.Join(", ", parts[..^1])} and {parts[^1]}";
 
