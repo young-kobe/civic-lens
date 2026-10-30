@@ -519,7 +519,7 @@ internal sealed class FakePublicationStore : IPublicationStore
         return active;
     }
 
-    public async Task PruneAsync(int keep, Func<int, string?, CancellationToken, Task> retireOlder, CancellationToken cancellationToken)
+    public async Task PruneAsync(int keep, TimeSpan minimumAge, Func<int, string?, CancellationToken, Task> retireOlder, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (FailOnPrune is not null) throw FailOnPrune;
