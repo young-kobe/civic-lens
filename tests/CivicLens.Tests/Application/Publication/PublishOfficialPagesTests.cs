@@ -185,6 +185,71 @@ public sealed class PublishOfficialPagesTests
     }
 
     [Fact]
+    public async Task ARewriteOfAllOfficialsWritesTheCurrentAndPastPagesOfEveryOfficialAndLinksNone()
+    {
+        var scenario = await TwoOfficialsWithPastCongressAsync();
+        var mayorPast = PublicationProtocol.OfficialCongressPagePath("mayor", 118);
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteOfficials = true });
+
+        Assert.Contains(MayorPage, scenario.Releases.WriteOrder);
+        Assert.Contains(ChairPage, scenario.Releases.WriteOrder);
+        Assert.Contains(mayorPast, scenario.Releases.WriteOrder);
+        Assert.DoesNotContain(scenario.Releases.Links, link => link.Item2.StartsWith("officials/", StringComparison.Ordinal) && link.Item2.EndsWith(".html", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task WithoutTheRewriteOptionAnUntouchedOfficialKeepsItsCurrentAndPastPagesByLink()
+    {
+        var scenario = await TwoOfficialsWithPastCongressAsync();
+
+        var second = await PublishAsync(scenario, "k2", PublishedRecordKind.Statement, scenario.AddStatement('d', speakerIds: ["chair"]));
+
+        Assert.DoesNotContain(MayorPage, scenario.Releases.WriteOrder);
+        Assert.DoesNotContain(PublicationProtocol.OfficialCongressPagePath("mayor", 118), scenario.Releases.WriteOrder);
+        Assert.Contains(scenario.Releases.Links, link => link.Item2 == MayorPage);
+        Assert.Contains(scenario.Releases.Links, link => link.Item2 == PublicationProtocol.OfficialCongressPagePath("mayor", 118));
+        Assert.Equal(2, second.ReleaseNumber);
+    }
+
+    [Fact]
+    public async Task ARewriteOfAllOfficialsKeepsEveryRecordFirstPublicationDateAndEveryWithdrawal()
+    {
+        var scenario = new PublicationScenario();
+        var wrong = scenario.AddStatement('e');
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('a')),
+            new PublishedRecordReference(PublishedRecordKind.Statement, wrong)));
+        scenario.Publications.ReviewStatuses[new(PublishedRecordKind.Statement, wrong)] = ReviewStatus.ApprovalWithdrawn;
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            new PublishReleaseRequest([], "k2") { Withdrawals = [new(PublishedRecordKind.Statement, wrong, "Wrong.")] });
+
+        var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k3") { RewriteOfficials = true });
+
+        var before = Manifest(scenario.Releases.Directories[second.DirectoryName]);
+        var after = Manifest(scenario.Releases.Directories[third.DirectoryName]);
+        Assert.Equal(3, after.ReleaseNumber);
+        Assert.Equal(before.Records.Select(record => (record.RecordId, record.FirstPublishedAtUtc)), after.Records.Select(record => (record.RecordId, record.FirstPublishedAtUtc)));
+        Assert.Equal(wrong, Assert.Single(after.Withdrawals).RecordId);
+        Assert.Contains(scenario.Releases.Links, link => link.Item2 == PublicationProtocol.RecordPagePath(before.Records[0].RecordId));
+    }
+
+    private static async Task<PublicationScenario> TwoOfficialsWithPastCongressAsync()
+    {
+        var scenario = new PublicationScenario();
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('a', congress: 118)),
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('b')),
+            new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('c', speakerIds: ["chair"]))));
+        scenario.Releases.WriteOrder.Clear();
+        scenario.Releases.Links.Clear();
+        return scenario;
+    }
+
+    private static PublicationRelease Manifest(Dictionary<string, byte[]> files) =>
+        JsonSerializer.Deserialize<PublicationRelease>(files[PublicationProtocol.ManifestPath], PublicationProtocol.JsonOptions)!;
+
+    [Fact]
     public async Task APublishThatNamesNoOfficialRewritesNoOfficialFile()
     {
         var scenario = new PublicationScenario();

@@ -758,7 +758,7 @@ The owner can publish from the Review home page. Select records in the Publish s
 The Review page cannot withdraw a record. The CLI is a local owner command. Set `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER` (the owner subject recorded on the release), and `CIVIC_LENS_RELEASE_DIRECTORY` (an absolute path, for example `$PWD/.runtime/releases`). Publishing also needs `CIVIC_LENS_COLLECTION_CONFIG`, an absolute configuration path that supplies the officials' display names, and `CIVIC_LENS_ISSUES_CONFIG`, an absolute path that supplies the issue and policy area names. `CIVIC_LENS_ARTIFACT_DIRECTORY` is required. Set it to the capture directory (the worker `<artifact-directory>`, for example `$PWD/.runtime/captures`). `releases publish` stops with exit code 2 before it runs when the variable is unset, and prints its generic invalid-configuration line. The review workspace stops at startup with exit code 2 when it has `CIVIC_LENS_RELEASE_DIRECTORY` and no artifact directory. Its configuration line names the artifact directory. A photo that the previous release holds is linked and its capture is not read. A new photo that cannot be read does not fail the publish. The release keeps the earlier photo or shows none, and the log holds an error with the person and the attempt. The worker stage uses the directory of its own command line, and the review workspace reads the same variable. A new photo or another change to an official profile appears at the next publish. To publish it now, run `releases publish <idempotency-key>` with no record. The command refuses to publish when no record and no official changed. It needs an active release. The command trusts the local operator, who already holds database credentials.
 
 ```sh
-dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases publish <idempotency-key> [<kind>:<id>...] [--note <kind>:<id> <text>]... [--withdraw <kind>:<id> <text>]...
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases publish <idempotency-key> [<kind>:<id>...] [--note <kind>:<id> <text>]... [--withdraw <kind>:<id> <text>]... [--rewrite-officials]
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases list [limit]
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases blocked
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases activate <release-number>
@@ -776,7 +776,13 @@ To take a record out of the release, give `--withdraw <kind>:<id> <text>`. A req
 
 To list the published records that review blocked, run `releases blocked`. It prints the kind, the ID, the headline, the published revision, and the review status of each record. The list is empty when no release is active. Use it to choose the records to withdraw.
 
-After the deploy that ships the Congress tabs, publish once from an empty release directory. Until then an untouched official keeps the old footer panel. See the [publication limits](architecture/publication.md#limits-and-planned-work).
+To write the pages of all officials again, add `--rewrite-officials`. The publish then treats every official as touched. It keeps the release history, the withdrawals, and the first publication date of each record. It needs an active release. Use it once after a deploy that changes the layout of the official pages. Until then an untouched official keeps its old page. See the [publication limits](architecture/publication.md#limits-and-planned-work).
+
+After the deploy that ships the Congress tabs, run this once:
+
+```
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases publish <idempotency-key> --rewrite-officials
+```
 
 ### Return a record
 
