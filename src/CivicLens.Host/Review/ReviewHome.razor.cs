@@ -26,6 +26,7 @@ namespace CivicLens.Host.Review;
 public sealed partial class ReviewHome
 {
     private const int PageSize = 10;
+    private const int ReleaseHistoryLimit = 5;
 
     private static readonly IReadOnlyList<Crumb> Crumbs = [new("Review")];
 
@@ -38,6 +39,8 @@ public sealed partial class ReviewHome
     private AnalysisStatus? analysisStatus;
     private DocumentChangeReviewPage? drafts;
     private SourceHealthReport? health;
+    private PublicationReleaseList? releases;
+    private IReadOnlyList<BlockedPublishedRecord>? blocked;
     private StatementReviewCounts? statementCounts;
     private BriefReviewCounts? briefCounts;
     private RelationshipReviewCounts? relationshipCounts;
@@ -86,23 +89,12 @@ public sealed partial class ReviewHome
     {
         "invalid" => "Choose a new change to start a draft.",
         "unavailable" => "The draft could not be started. Refresh the page and try again.",
-        "published" => ReleaseNumber is { } number ? $"Release {number} is published." : "The release is published.",
-        "publish-invalid" => "The selection could not be published. Choose drafts again.",
-        "publish-note-required" => "Each replacement and each returned record needs a correction note. Choose the records again and write a note for each one.",
-        "publish-correction-limit" => "A record in the selection has reached the most corrections with a note. Remove it from the selection.",
-        "publish-conflict" => "Drafts or releases changed while you reviewed them. Check the list and try again.",
-        "publish-forbidden" => "Only the owner can publish.",
-        "publish-unavailable" => "The release could not be published. Refresh the page and try again.",
         _ => null
     };
-
-    private Tone StatusTone => Status == "published" ? Tone.Ok : Tone.Bad;
 
     protected override async Task OnInitializedAsync()
     {
         actor = Actors.GetActor((await AuthenticationState).User);
-        canPublish = actor.Role == ReviewRole.Owner && Services.GetService<PublishRelease>() is not null;
-        publishingOff = actor.Role == ReviewRole.Owner && !canPublish;
         if (HttpMethods.IsPost(HttpContext.Request.Method)) return;
         var cancellationToken = HttpContext.RequestAborted;
         if (Find is not null) lookupMessage = await FindDraftAsync(cancellationToken);
@@ -125,7 +117,7 @@ public sealed partial class ReviewHome
                 configuration = collection.GetConfiguration(actor);
                 health = await collection.GetSourceHealthAsync(actor, cancellationToken);
             }
-            if (canPublish) await LoadPublicationAsync(cancellationToken);
+            if (actor.Role == ReviewRole.Owner) await LoadPublicationAsync(cancellationToken);
             activity = (await GetActivity.ExecuteAsync(actor, cancellationToken: cancellationToken)).Select(Describe).ToArray();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
@@ -262,4 +254,11 @@ public sealed partial class ReviewHome
 
     private static string Count(int value, string singular, string plural) =>
         $"{value} {(value == 1 ? singular : plural)}";
+
+    private async Task LoadPublicationAsync(CancellationToken cancellationToken)
+    {
+        if (Services.GetService<ListBlockedPublished>() is not { } listBlocked) return;
+        blocked = await listBlocked.ExecuteAsync(actor!, cancellationToken);
+        releases = await Services.GetRequiredService<ListPublicationReleases>().ExecuteAsync(actor!, ReleaseHistoryLimit, cancellationToken);
+    }
 }

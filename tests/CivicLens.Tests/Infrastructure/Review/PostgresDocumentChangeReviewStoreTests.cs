@@ -106,6 +106,29 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
     }
 
     [Fact]
+    public async Task AnApprovalStoresItsCorrectionNoteAndTheSameKeyWithAnotherNoteIsAPayloadMismatch()
+    {
+        var comparison = await SaveComparisonAsync();
+        var actor = new ReviewActor("auth0|reviewer", ReviewRole.Reviewer);
+        var catalog = new ReviewCatalog([], []);
+        var revision = await new CreateDocumentChangeDraft(reviews).ExecuteAsync(actor, new(comparison.ComparisonId, "create-key"));
+        revision = await new SaveDocumentChangeDraft(reviews, catalog).ExecuteAsync(actor,
+            new(revision.DraftId, 1, "Policy update", "The policy changed.", null, null, "Example Office",
+                null, null, [], [], revision.Citations, "save-key"));
+        var decide = new DecideDocumentChangeReview(reviews, catalog);
+        var request = new DecideDocumentChangeReviewRequest(revision.DraftId, 2, 0, ReviewDecisionKind.Approve, null, [], "approve-key",
+            "Clarified the date.");
+
+        var first = await decide.ExecuteAsync(actor, request);
+
+        Assert.Equal("Clarified the date.", first.CorrectionNote);
+        Assert.Equal(first.DecisionId, (await decide.ExecuteAsync(actor, request)).DecisionId);
+        await Assert.ThrowsAsync<ArgumentException>(() => decide.ExecuteAsync(actor, request with { CorrectionNote = "Another note." }));
+        var stored = (await reviews.GetAsync(revision.DraftId, CancellationToken.None))!.Decisions;
+        Assert.Equal("Clarified the date.", Assert.Single(stored).CorrectionNote);
+    }
+
+    [Fact]
     public async Task ComparisonPagesTraverseIneligibleRowsWithoutOmissionsOrDuplicates()
     {
         var expected = new HashSet<string>(StringComparer.Ordinal);

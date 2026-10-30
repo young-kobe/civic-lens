@@ -220,7 +220,7 @@ else
         </div>
 
         <ReviewDecisionPanel RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="status"
-                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" OnDecide="DecideAsync">
+                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" CorrectionNote="@Decision?.CorrectionNote" OnDecide="DecideAsync">
             <Checklist>
                 <ul class="checklist">
                     <li>Is this a substantive edit, not navigation churn or a processing difference?</li>

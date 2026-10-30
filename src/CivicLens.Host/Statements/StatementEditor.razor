@@ -187,7 +187,7 @@ else
         @if (Revision is not null)
         {
             <ReviewDecisionPanel RevisionNumber="Revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="status"
-                                 Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" OnDecide="DecideAsync">
+                                 Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" CorrectionNote="@Decision?.CorrectionNote" OnDecide="DecideAsync">
                 <Checklist>
                     <ul class="checklist">
                         <li>Does each quotation appear in the article as written?</li>

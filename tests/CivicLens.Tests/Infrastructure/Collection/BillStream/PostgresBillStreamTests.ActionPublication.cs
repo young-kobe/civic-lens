@@ -43,8 +43,7 @@ public sealed partial class PostgresBillStreamTests
     public async Task ACommittedActionLeavesTheReadyListBecauseTheReleaseRowCarriesTheActionKind()
     {
         await DraftAsync(UpdatedAt, DraftableOutput);
-        var ready = Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, [], default));
-        Assert.Null(ready.PublishedRevisionNumber);
+        Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, [], default));
 
         await PostgresPublicationStore.FromConnectionString(connectionString).CommitAsync(PublicationScenario.Owner.Subject,
             ActionCommit(reviewStateVersion: 1), "key", ReleaseHash(1), default);
@@ -54,7 +53,7 @@ public sealed partial class PostgresBillStreamTests
 
         await AddSponsorAsync(UpdatedAt.AddDays(1));
 
-        Assert.Equal(1, Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, [], default)).PublishedRevisionNumber);
+        Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, [], default));
     }
 
     // The statistics describe one draft, as they do after a bulk load. Postgres then counts one release entry

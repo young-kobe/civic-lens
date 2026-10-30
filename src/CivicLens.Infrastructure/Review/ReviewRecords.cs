@@ -162,7 +162,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         db.Set<TDraftRow>().AsNoTracking().Where(row => recordIds.Contains(EF.Property<string>(row, recordIdProperty)))
             .ToArrayAsync(cancellationToken);
 
-    public async Task<IReadOnlyList<(TDraftRow Draft, ReviewHistory<TRevision> History, int? PublishedRevisionNumber)>>
+    public async Task<IReadOnlyList<(TDraftRow Draft, ReviewHistory<TRevision> History)>>
         ReadUnpublishedApprovedAsync(CollectionAttemptDbContext db, string unpublishedApprovedSql, int limit,
             IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken)
     {
@@ -175,7 +175,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         var drafts = (await ReadDraftsAsync(db, [.. keys.Select(key => key.RecordId)], cancellationToken))
             .ToDictionary(row => row.RecordId, StringComparer.Ordinal);
         var histories = await ReadHistoriesAsync(db, drafts.Values, cancellationToken);
-        return [.. keys.Select(key => (drafts[key.RecordId], histories[key.RecordId], key.PublishedRevisionNumber))];
+        return [.. keys.Select(key => (drafts[key.RecordId], histories[key.RecordId]))];
     }
 
     public async Task<Dictionary<string, ReviewHistory<TRevision>>> ReadHistoriesAsync(CollectionAttemptDbContext db,

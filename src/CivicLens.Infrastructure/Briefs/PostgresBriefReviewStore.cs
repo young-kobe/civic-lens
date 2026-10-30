@@ -100,7 +100,7 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
         var changed = await BriefRecordReader.FindChangedInActiveReleaseAsync(db,
             records.SelectMany(record => record.History.CurrentRevision!.Citations), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return [.. records.Select(record => new UnpublishedApprovedBrief(ToReview(record.Draft, record.History), record.PublishedRevisionNumber,
+        return [.. records.Select(record => new UnpublishedApprovedBrief(ToReview(record.Draft, record.History),
             record.History.CurrentRevision!.Citations.Any(citation => changed.Contains(BriefRecordReader.BindingOf(citation)))))];
     }
 

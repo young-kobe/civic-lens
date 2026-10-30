@@ -127,5 +127,8 @@ public abstract class ReviewRecordPage : ComponentBase
         return kind;
     }
 
+    protected string? CorrectionNoteOfApproval() =>
+        ParseDecisionKind(Kind) == ReviewDecisionKind.Approve ? EmptyToNull(Decision?.CorrectionNote) : null;
+
     protected static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 }

@@ -31,7 +31,7 @@ public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationS
             {
                 return published;
             }
-            catch (Exception exception) when (exception is WithdrawnRecordException or MissingCorrectionNoteException)
+            catch (Exception exception) when (exception is WithdrawnRecordException or MissingCorrectionNoteException or CorrectionLimitException)
             {
                 var record = UnpublishableRecord.Of(exception)!;
                 skipped.Add(record.RecordId);
@@ -75,7 +75,7 @@ public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationS
     }
 
     // Each kind gets an equal share of the limit. A kind with fewer ready records gives its unused share to the others.
-    internal static ImmutableArray<ReadyToPublishRecord> ShareLimitBetweenKinds(IReadOnlyList<ReadyToPublishRecord>[] kinds, int limit)
+    private static ImmutableArray<ReadyToPublishRecord> ShareLimitBetweenKinds(IReadOnlyList<ReadyToPublishRecord>[] kinds, int limit)
     {
         var counts = new int[kinds.Length];
         var remaining = limit;

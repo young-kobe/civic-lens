@@ -20,9 +20,7 @@ internal sealed class RelationshipRecordLoader(IRelationshipReviewStore relation
         candidate.CitedRecordsChanged
             ? null
             : Ready(candidate.Relationship.CurrentStatus, candidate.Relationship.UnresolvedConcerns.Length, candidate.Relationship.RecordId,
-                PublishedRelationshipBuilder.HeadlineOf(candidate.StatementHeadline, candidate.TargetHeadline),
-                candidate.Relationship.CurrentRevision.RevisionNumber, candidate.PublishedRevisionNumber)
-                is { } ready ? ready with { NoLongerMatches = candidate.Relationship.NoLongerMatches } : null;
+                candidate.Relationship.CurrentRevision.RevisionNumber);
 
     protected override Task<IReadOnlyDictionary<string, PublishableRelationship>> GetForPublicationAsync(
         ImmutableArray<string> recordIds, PublicationBuild build, CancellationToken cancellationToken) =>
@@ -35,7 +33,7 @@ internal sealed class RelationshipRecordLoader(IRelationshipReviewStore relation
     protected override PendingRecord Build(string recordId, PublishableRelationship addition, PublicationBuild build)
     {
         var review = addition.Review;
-        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build.Previous);
+        RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build);
         if (addition.CitedRecordsChanged)
             throw new ArgumentException(
                 $"Relationship {recordId} cites a record that the new release does not hold at the cited revision, or that is not approved.");

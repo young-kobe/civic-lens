@@ -4,7 +4,7 @@ This page holds pending work. A checked step is merged to main, and a merged ste
 
 ## MVP definition
 
-The MVP delivers the full product: officials' statements, authoritative actions, substantive document changes, and evidence-backed weekly briefs. A release with document changes only is a milestone, not the MVP. Coverage may start small, but all four record kinds must work end to end. Each one collects evidence, keeps exact inspectable provenance, gets human review, and publishes in a static release. AI drafts every record kind. Code approves action and vote records after it checks their citations (D-15, accepted on 2026-10-19). People edit and approve the other kinds, and the owner publishes. Review must handle a large volume of statements, relationships, briefs, and document changes. The dev box reaches the features, correctness, and citizen and reviewer UI of the first deploy before the first cloud deployment. Public MCP, the shared language insight, and the document-change criterion are checked after that deployment.
+The MVP delivers the full product: officials' statements, authoritative actions, substantive document changes, and evidence-backed weekly briefs. A release with document changes only is a milestone, not the MVP. Coverage may start small, but all four record kinds must work end to end. Each one collects evidence, keeps exact inspectable provenance, gets human review, and publishes in a static release. AI drafts every record kind. Code approves action and vote records after it checks their citations (D-15, accepted on 2026-10-19). People edit and approve the other kinds, and the worker publishes. Review must handle a large volume of statements, relationships, briefs, and document changes. The dev box reaches the features, correctness, and citizen and reviewer UI of the first deploy before the first cloud deployment. Public MCP, the shared language insight, and the document-change criterion are checked after that deployment.
 
 Exit criteria for the first deploy:
 
@@ -67,9 +67,7 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 
 **Review and approval**
 
-- R-50: Finish publishing every approval. Move the correction note to the approve step, then delete the owner publish code. Depends on: none. [Publication](architecture/publication.md#limits-and-planned-work)
-  - [ ] Correction note at approve, and delete owner publish code (in build)
-- R-51: Cut the review pages. Make one "Needs a person" queue that says why each record needs a person. Delete the triage files, the relationship and brief list pages, and the home panels that the queue replaces. Add an owner "Take off site" action in the editor, using the existing withdrawal code. Send a reader report correction straight to the editor with its note filled in. Delete the gate label pages after D-13. Depends on: R-50. [Review](architecture/review.md#limits-and-planned-work)
+- R-51: Cut the review pages. Make one "Needs a person" queue that says why each record needs a person. Delete the triage files, the relationship and brief list pages, and the home panels that the queue replaces. Add an owner "Take off site" action in the editor, using the existing withdrawal code. Send a reader report correction straight to the editor with its note filled in. Delete the gate label pages after D-13. Depends on: none. [Review](architecture/review.md#limits-and-planned-work)
   - [ ] "Needs a person" queue, and delete triage, list pages and home panels
   - [ ] "Take off site" action and report to editor
   - [ ] Delete gate label pages, after D-13

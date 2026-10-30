@@ -16,10 +16,6 @@ public sealed class ReleaseCommandTests
     [InlineData("releases", "publish", "key", "draft:abc")]
     [InlineData("releases", "publish", "key", "statement:")]
     [InlineData("releases", "publish", "key", "Statement:abc")]
-    [InlineData("releases", "publish", "key", "--note")]
-    [InlineData("releases", "publish", "key", "--note", "statement:abc")]
-    [InlineData("releases", "publish", "key", "statement:abc", "--note", "draft:abc", "text")]
-    [InlineData("releases", "publish", "key", "statement:abc", "--note", "statement:abc")]
     [InlineData("releases", "publish", "key", "--withdraw")]
     [InlineData("releases", "publish", "key", "--withdraw", "statement:abc")]
     [InlineData("releases", "publish", "key", "--withdraw", "draft:abc", "text")]
@@ -161,18 +157,19 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
-    public async Task NoteOptionsAttachTheirTextToTheNamedRecordSoTheReplacementEntryHoldsIt()
+    public async Task AReplacementPublishesWithTheNoteOfItsApprovalAndWithoutOneExitsWithTwo()
     {
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('a');
         var reference = $"action:{action}";
         await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", reference], scenario.Publisher(), null!, null!, null!,
             PublicationScenario.Owner, CancellationToken.None);
-        scenario.ReviseAction(action, 2);
+        scenario.ReviseAction(action, 2, correctionNote: null);
 
         var missing = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", reference], scenario.Publisher(), null!, null!, null!,
             PublicationScenario.Owner, CancellationToken.None);
-        var noted = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", reference, "--note", reference, "Fixed the issue."],
+        scenario.ReviseAction(action, 3, correctionNote: "Fixed the issue.");
+        var noted = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k3", reference],
             scenario.Publisher(), null!, null!, null!, PublicationScenario.Owner, CancellationToken.None);
 
         Assert.Equal((2, 0), (missing, noted));
@@ -221,23 +218,6 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
-    public async Task ANoteWithNoRecordExitsWithTwoAndMakesNoReleaseBecauseTheNoteHasNoRecordToDescribe()
-    {
-        var scenario = new PublicationScenario();
-        scenario.Captures.Add("attempt-1", [.. MemberPhotoFixtures.Jpeg(), 1]);
-        scenario.Photos = [new("mayor", MemberPhotoFixtures.PhotoUrl(), MemberPhoto.MemberGuideCredit, "attempt-1", new string('a', 64))];
-        await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", $"vote:{scenario.AddVote('a')}"], scenario.Publisher(), null!, null!, null!,
-            PublicationScenario.Owner, CancellationToken.None);
-        scenario.WithheldPhotos.Add("mayor");
-
-        var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "key", "--note", "statement:abc", "text"],
-            scenario.Publisher(), null!, null!, null!, PublicationScenario.Owner, CancellationToken.None);
-
-        Assert.Equal(2, exit);
-        Assert.Single(scenario.Publications.Committed);
-    }
-
-    [Fact]
     public async Task WithdrawOptionWithdrawsTheNamedRecordWithoutAnyRecordToPublishAndAnUnpublishedRecordExitsWithTwo()
     {
         var scenario = new PublicationScenario();
@@ -260,7 +240,7 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
-    public async Task NoteOptionOnAWithdrawnRecordBringsItBackAndNoNoteExitsWithTwo()
+    public async Task AWithdrawnRecordReturnsWithTheNoteOfItsNewApprovalAndWithoutOneExitsWithTwo()
     {
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('a');
@@ -269,11 +249,12 @@ public sealed class ReleaseCommandTests
             PublicationScenario.Owner, CancellationToken.None);
         await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", "--withdraw", reference, "Wrong bill."], scenario.Publisher(), null!, null!, null!,
             PublicationScenario.Owner, CancellationToken.None);
-        scenario.ReviseAction(action, 2);
+        scenario.ReviseAction(action, 2, correctionNote: null);
 
         var missing = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k3", reference], scenario.Publisher(), null!, null!, null!,
             PublicationScenario.Owner, CancellationToken.None);
-        var returned = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k3", reference, "--note", reference, "Bill fixed."],
+        scenario.ReviseAction(action, 3, correctionNote: "Bill fixed.");
+        var returned = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k4", reference],
             scenario.Publisher(), null!, null!, null!, PublicationScenario.Owner, CancellationToken.None);
 
         Assert.Equal((2, 0), (missing, returned));
