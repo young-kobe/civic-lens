@@ -52,23 +52,20 @@ public sealed partial class PostgresCollectionJobStore
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         var started = await db.Set<JobRow>().AsNoTracking().OrderByDescending(row => row.CreatedAt).ThenBy(row => row.JobId)
-            .Take(limit).Select(row => new JobTime(row.JobId, row.DefinitionJson, row.ConfigurationRevisionId, row.CreatedAt)).ToListAsync(cancellationToken);
+            .Take(limit).Select(row => new JobTime(row.JobId, row.SourceId, row.CreatedAt)).ToListAsync(cancellationToken);
         var failed = await (from row in db.Set<JobRow>().AsNoTracking()
                             where row.State == CollectionJobState.Failed
                             let failedAt = db.Set<JobAttemptRow>().Where(attempt => attempt.JobId == row.JobId)
                                 .Max(attempt => attempt.CompletedAt) ?? row.CreatedAt
                             orderby failedAt descending, row.JobId
-                            select new JobTime(row.JobId, row.DefinitionJson, row.ConfigurationRevisionId, failedAt)).Take(limit).ToListAsync(cancellationToken);
-        var revisions = await StoredJobDefinition.LoadRevisionsAsync(db,
-            started.Concat(failed).Select(job => job.ConfigurationRevisionId), cancellationToken);
+                            select new JobTime(row.JobId, row.SourceId, failedAt)).Take(limit).ToListAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new(started.Select(job => ToEvent(job, revisions)).ToArray(), failed.Select(job => ToEvent(job, revisions)).ToArray());
+        return new(started.Select(ToEvent).ToArray(), failed.Select(ToEvent).ToArray());
     }
 
-    private sealed record JobTime(string JobId, string DefinitionJson, string? ConfigurationRevisionId, long Ticks);
+    private sealed record JobTime(string JobId, string SourceId, long Ticks);
 
-    private static CollectionJobEvent ToEvent(JobTime job, IReadOnlyDictionary<string, CollectionConfigurationRevision> revisions) =>
-        new(job.JobId, StoredJobDefinition.Read(job.DefinitionJson, job.ConfigurationRevisionId, revisions).SourceId, FromTicks(job.Ticks)!.Value);
+    private static CollectionJobEvent ToEvent(JobTime job) => new(job.JobId, job.SourceId, FromTicks(job.Ticks)!.Value);
 
     private static IQueryable<JobRow> KeysetJobs(IQueryable<JobRow> rows, PageCursor? cursor)
     {

@@ -77,6 +77,23 @@ public sealed class PostgresRelationshipDraftStoreTests(PostgresCollection postg
     }
 
     [Fact]
+    public async Task ASavedSpeakerChangeMovesTheMatchBecauseTheListedOfficialsOfTheDraftSelectTheActions()
+    {
+        var pair = await SeedApprovedPairAsync();
+        await store.RefreshPairsAsync(default);
+        await seeder.SettledRowAsync(pair, "Succeeded", null, RelationshipFingerprint.Compute(pair));
+        const string flag = "SELECT no_longer_matches FROM relationship_drafts";
+
+        await seeder.StatementAsync(Statement(officials: ["markey"], revision: 2));
+        await store.RefreshPairsAsync(default);
+        Assert.Equal([["True"]], await seeder.ReadAsync(flag));
+
+        await seeder.StatementAsync(Statement(revision: 3));
+        await store.RefreshPairsAsync(default);
+        Assert.Equal([["False"]], await seeder.ReadAsync(flag));
+    }
+
+    [Fact]
     public async Task AVoteOnAMentionedBillQueuesAVotePairAndAVoteOnAnotherBillDoesNot()
     {
         await seeder.StatementAsync(Statement());

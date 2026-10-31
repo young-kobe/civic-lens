@@ -19,15 +19,15 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
         VALUES (@extraction, 'attempt', 'extraction', @text, @hash) ON CONFLICT DO NOTHING;
         INSERT INTO statement_candidates (candidate_id, source_id, url, extraction_id, attempt_id, created_at_utc_ticks)
         VALUES (@id, 'source', 'https://example.test/' || @id, @extraction, 'attempt', 1) ON CONFLICT DO NOTHING;
-        INSERT INTO statement_drafts (candidate_id, current_revision_number, review_state_version, review_status, created_at_utc_ticks)
-        VALUES (@id, @number, 0, @status, 1)
-        ON CONFLICT (candidate_id) DO UPDATE SET current_revision_number = @number, review_status = @status;
+        INSERT INTO statement_drafts (candidate_id, current_revision_number, review_state_version, review_status, created_at_utc_ticks, official_ids)
+        VALUES (@id, @number, 0, @status, 1, @officials)
+        ON CONFLICT (candidate_id) DO UPDATE SET current_revision_number = @number, review_status = @status, official_ids = @officials;
         INSERT INTO statement_revisions (candidate_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
         VALUES (@id, @number, 'auth0|editor', 'Person', NULL, @json, 1)
         ON CONFLICT (candidate_id, revision_number) DO UPDATE SET revision_json = EXCLUDED.revision_json
         """, ("id", statement.RecordId), ("number", statement.Revision.RevisionNumber), ("status", reviewStatus),
         ("extraction", RelationshipFixtures.ExtractionId), ("text", statement.ArticleText), ("hash", new string('f', 64)),
-        ("json", JsonSerializer.Serialize(statement.Revision, Web)));
+        ("json", JsonSerializer.Serialize(statement.Revision, Web)), ("officials", statement.Revision.SpeakerOfficialIds.ToArray()));
 
     public Task ActionAsync(ActionDraftRevision action, string reviewStatus = "Approved", long revisedAtTicks = 1) => ExecuteAsync("""
         SET session_replication_role = replica;
