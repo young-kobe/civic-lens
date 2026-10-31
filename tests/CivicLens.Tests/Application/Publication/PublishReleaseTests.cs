@@ -85,9 +85,10 @@ public sealed class PublishReleaseTests
         Assert.Equal(PublicationProtocol.ManifestPath, order[^1]);
         Assert.Equal(PublicationProtocol.HomePath, order[^2]);
         Assert.Equal(PublicationProtocol.OfficialsPagePath, order[^3]);
-        Assert.Equal(PublicationProtocol.OfficialSummariesPath, order[^4]);
-        Assert.Equal(PublicationProtocol.CatalogPath, order[^5]);
-        Assert.Equal(PublicationProtocol.OfficialsPath, order[^6]);
+        Assert.Equal(OfficialBoard.All.Select(board => board.PagePath), order.Skip(order.Count - 7).Take(4));
+        Assert.Equal(PublicationProtocol.OfficialSummariesPath, order[^8]);
+        Assert.Equal(PublicationProtocol.CatalogPath, order[^9]);
+        Assert.Equal(PublicationProtocol.OfficialsPath, order[^10]);
         Assert.True(order.IndexOf(PublicationProtocol.RecordDataPath(draft)) < order.IndexOf("assets/site.css"));
     }
 
@@ -137,9 +138,11 @@ public sealed class PublishReleaseTests
             [PublicationProtocol.AllRecordsPagePath(1), "all-2.html", "all-3.html", PublicationProtocol.BriefsPagePath(1),
                 PublicationProtocol.IssuePagePath("housing", 1), PublicationProtocol.FacetsPath, PublicationProtocol.SearchPagePath,
                 PublicationProtocol.ReportPagePath, PublicationProtocol.MethodPagePath, PublicationProtocol.AboutPagePath, PublicationProtocol.GlossaryPagePath,
-                PublicationProtocol.OfficialsPath, PublicationProtocol.CatalogPath, PublicationProtocol.OfficialSummariesPath, PublicationProtocol.OfficialsPagePath,
-                PublicationProtocol.HomePath, PublicationProtocol.ManifestPath],
-            order.TakeLast(17));
+                PublicationProtocol.OfficialsPath, PublicationProtocol.CatalogPath, PublicationProtocol.OfficialSummariesPath,
+                PublicationProtocol.BoardPagePath(PublishedChamber.House, PublishedPartyMajority.Democrat), PublicationProtocol.BoardPagePath(PublishedChamber.House, PublishedPartyMajority.Republican),
+                PublicationProtocol.BoardPagePath(PublishedChamber.Senate, PublishedPartyMajority.Democrat), PublicationProtocol.BoardPagePath(PublishedChamber.Senate, PublishedPartyMajority.Republican),
+                PublicationProtocol.OfficialsPagePath, PublicationProtocol.HomePath, PublicationProtocol.ManifestPath],
+            order.TakeLast(21));
         Assert.Equal("all.html", PublicationProtocol.AllRecordsPagePath(1));
         Assert.DoesNotContain("all-4.html", order);
         Assert.Contains("<html>index 3 120</html>", System.Text.Encoding.UTF8.GetString(

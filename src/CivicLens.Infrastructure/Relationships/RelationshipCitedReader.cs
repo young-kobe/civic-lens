@@ -34,18 +34,6 @@ internal static class RelationshipCitedReader
         return changed;
     }
 
-    public static async Task<Dictionary<RelationshipCitation, string>> ReadHeadlinesAsync(CollectionAttemptDbContext db,
-        IReadOnlyCollection<RelationshipCitation> citations, CancellationToken cancellationToken)
-    {
-        var statements = await ReadAsync<StatementDraftRevision>(db, RelationshipRecordKind.Statement, citations, cancellationToken);
-        var actions = await ReadAsync<ActionDraftRevision>(db, RelationshipRecordKind.Action, citations, cancellationToken);
-        var votes = await ReadAsync<VoteDraftRevision>(db, RelationshipRecordKind.Vote, citations, cancellationToken);
-        return statements.Select(item => (new RelationshipCitation(RelationshipRecordKind.Statement, item.CandidateId, item.RevisionNumber), item.Headline))
-            .Concat(actions.Select(item => (new RelationshipCitation(RelationshipRecordKind.Action, item.RecordId, item.RevisionNumber), item.Headline)))
-            .Concat(votes.Select(item => (new RelationshipCitation(RelationshipRecordKind.Vote, item.RecordId, item.RevisionNumber), item.Headline)))
-            .ToDictionary(item => item.Item1, item => item.Headline);
-    }
-
     /// <summary>Reads the headline of each cited statement revision for the review queue. A revision that is not stored, or whose
     /// stored data cannot be parsed, gets its cause instead of failing the whole read. A failed query still fails the read.</summary>
     public static async Task<(Dictionary<RelationshipCitation, string> Headlines, Dictionary<RelationshipCitation, Exception> Unreadable)>

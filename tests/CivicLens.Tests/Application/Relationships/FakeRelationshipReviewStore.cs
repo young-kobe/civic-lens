@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Relationships;
 using CivicLens.Application.Review;
@@ -55,8 +54,4 @@ internal sealed class FakeRelationshipReviewStore : IRelationshipReviewStore
 
     public Task<RelationshipReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-    public Task<RelationshipReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter, CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
-
-    public Task<RelationshipReviewCounts> CountAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
 }

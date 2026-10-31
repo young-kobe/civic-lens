@@ -230,7 +230,6 @@ public sealed class PostgresBriefReviewStoreTests(PostgresCollection postgres) :
         var read = (await reviews.GetAsync(RecordId, default))!;
         Assert.True(read.CitedRecordsChanged);
         Assert.Equal([("R1", true), ("R2", false), ("R3", false)], read.Cited.OrderBy(pair => pair.Key).Select(pair => (pair.Key, pair.Value.Changed)));
-        Assert.True(Assert.Single((await reviews.ListAsync(null, 10, DraftStatusFilter.All, default)).Items).CitedRecordsChanged);
     }
 
     [Fact]
@@ -252,28 +251,10 @@ public sealed class PostgresBriefReviewStoreTests(PostgresCollection postgres) :
 
         await ChangeCitedStatementAsync("withdrawn");
 
-        var item = Assert.Single((await reviews.ListAsync(null, 10, DraftStatusFilter.Approved, default)).Items);
-        Assert.Equal((ReviewStatus.Approved, true), (item.Review.CurrentStatus, item.CitedRecordsChanged));
+        var read = (await reviews.GetAsync(RecordId, default))!;
+        Assert.Equal((ReviewStatus.Approved, true), (read.Review.CurrentStatus, read.CitedRecordsChanged));
         _ = await DecideAsync(1, 1, ReviewDecisionKind.WithdrawApproval, "A cited record changed.");
         Assert.Equal("ApprovalWithdrawn", await ScalarAsync($"SELECT review_status FROM brief_drafts WHERE record_id = '{RecordId}'"));
-    }
-
-    [Fact]
-    public async Task TheListShowsDraftedBriefsOnlyAndCountsEachFilterWithTheSameStatusRule()
-    {
-        await seeder.QueueWeekAsync(new DateOnly(2026, 10, 19));
-        await seeder.ReviewableBriefAsync(ReviewableRevision(OtherWeek));
-        _ = await DecideAsync(1, 0, ReviewDecisionKind.Approve);
-
-        var counts = await reviews.CountAsync(default);
-        var all = await reviews.ListAsync(null, 10, DraftStatusFilter.All, default);
-        var approved = await reviews.ListAsync(null, 10, DraftStatusFilter.Approved, default);
-        var needsAction = await reviews.ListAsync(null, 10, DraftStatusFilter.NeedsAction, default);
-
-        Assert.Equal(new BriefReviewCounts(1, 1), counts);
-        Assert.Equal(2, all.Items.Length);
-        Assert.Equal([RecordId], approved.Items.Select(item => item.Review.RecordId));
-        Assert.Equal([BriefWeek.RecordIdOf(OtherWeek)], needsAction.Items.Select(item => item.Review.RecordId));
     }
 
     [Fact]
@@ -297,8 +278,6 @@ public sealed class PostgresBriefReviewStoreTests(PostgresCollection postgres) :
         var paragraphs = ReviewableRevision().Paragraphs;
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new GetBriefReview(null!).ExecuteAsync(outsider, RecordId));
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new ListBriefReviews(null!).ExecuteAsync(outsider, null));
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new GetBriefReviewCounts(null!).ExecuteAsync(outsider));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             new SaveBriefDraft(null!).ExecuteAsync(outsider, new(RecordId, 1, "Headline", paragraphs, SuggestionChoice.Keep, "save-1")));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>

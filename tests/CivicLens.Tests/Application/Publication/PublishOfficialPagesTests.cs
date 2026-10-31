@@ -27,6 +27,21 @@ public sealed class PublishOfficialPagesTests
     }
 
     [Fact]
+    public async Task ACarriedSummaryRowReachesTheBoardOfItsChamberAndPartyBecauseAnUntouchedOfficialStaysOnItsBoard()
+    {
+        var scenario = new PublicationScenario();
+        var board = PublicationProtocol.BoardPagePath(PublishedChamber.House, PublishedPartyMajority.Democrat);
+        var first = await PublishAsync(scenario, "k1", PublishedRecordKind.Vote, scenario.AddVote('a'));
+        Assert.Contains("[mayor]", Page(scenario.Releases.Directories[first.DirectoryName], board));
+
+        var second = await PublishAsync(scenario, "k2", PublishedRecordKind.Statement, scenario.AddStatement('b', speakerIds: ["chair"]));
+
+        var files = scenario.Releases.Directories[second.DirectoryName];
+        Assert.Contains("[mayor]", Page(files, board));
+        Assert.Contains("<html>board", Page(files, PublicationProtocol.BoardPagePath(PublishedChamber.Senate, PublishedPartyMajority.Republican)));
+    }
+
+    [Fact]
     public async Task ACurrentPageHoldsTheRecordsAndTheVotesOfThatOfficialOnly()
     {
         var scenario = new PublicationScenario();

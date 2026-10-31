@@ -1,6 +1,5 @@
 using CivicLens.Application.Actions;
 using CivicLens.Application.Paging;
-using CivicLens.Application.Relationships;
 using CivicLens.Application.Review;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Actions;
@@ -10,12 +9,9 @@ using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Collection;
-using CivicLens.Infrastructure.Relationships;
 using CivicLens.Infrastructure.Votes;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace CivicLens.Tests.Infrastructure.Review;
 
@@ -54,12 +50,29 @@ public sealed class PostgresReviewListTests(PostgresCollection postgres) : IAsyn
     }
 
     [Fact]
-    public async Task AListWithoutTiersRefusesARankedCursorSoACursorFromAnotherListCannotMovePastItsRows()
+    public async Task TheQueueRefusesARankedCursorSoACursorFromAnotherListCannotMovePastItsRows()
     {
-        var relationships = new ListRelationshipReviews(new PostgresRelationshipReviewStore(
-            new PooledDbContextFactory<CollectionAttemptDbContext>(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options)));
+        var ranked = PageCursor.Parse("o.1.5." + Id('1'));
 
-        await Assert.ThrowsAsync<ArgumentException>(() => relationships.ExecuteAsync(Reviewer, "o.1.5." + Id('1'), 1));
+        await Assert.ThrowsAsync<ArgumentException>(() => queue.ListAsync(ranked, 1, default));
+    }
+
+    [Fact]
+    public async Task AnUnmatchedApprovedLinkThatIsAlsoStuckIsLeftOutOfTheRowsAndTheTotalSoItShowsOnce()
+    {
+        await seeder.StatementAsync(RelationshipFixtures.Statement());
+        var link = RelationshipFixtures.Revision();
+        var other = link with { RecordId = Id('2') };
+        await seeder.RevisionAsync(link);
+        await seeder.RevisionAsync(other);
+        await seeder.ExecuteAsync("UPDATE relationship_drafts SET review_status = 'Approved', no_longer_matches = true");
+
+        var both = await queue.ListUnmatchedApprovedLinksAsync(10, [], default);
+        var withoutStuck = await queue.ListUnmatchedApprovedLinksAsync(10, [link.RecordId], default);
+
+        Assert.Equal(2, both.Total);
+        Assert.Equal(1, withoutStuck.Total);
+        Assert.Equal([other.RecordId], withoutStuck.Items.Select(item => item.RecordId));
     }
 
     private static string Id(char digit) => new(digit, 64);

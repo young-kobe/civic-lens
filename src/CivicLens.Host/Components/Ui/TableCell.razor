@@ -1,6 +1,6 @@
 @if (Header)
 {
-    <th scope="col" role="@(Roles ? "columnheader" : null)" class="@Class" data-sort="@SortName" data-sort-key="@SortKey">@ChildContent</th>
+    <th scope="col" role="@(Roles ? "columnheader" : null)" class="@Class" data-sort="@SortName" data-sort-key="@SortKey" data-sort-label="@SortLabel" data-sort-default="@(DefaultSort ? "" : null)">@ChildContent</th>
 }
 else
 {
@@ -18,6 +18,8 @@ else
     [Parameter] public string? Label { get; set; }
     [Parameter] public SortKind Sort { get; set; }
     [Parameter] public string? SortKey { get; set; }
+    [Parameter] public string? SortLabel { get; set; }
+    [Parameter] public bool DefaultSort { get; set; }
     [Parameter] public string? SortValue { get; set; }
 
     private string? SortName => Sort == SortKind.None ? null : Sort.ToString().ToLowerInvariant();

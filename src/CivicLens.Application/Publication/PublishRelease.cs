@@ -186,8 +186,8 @@ public sealed class PublishRelease
         var officials = await dataFiles.WriteAsync(staging, manifest, facets, additions, previous, roster, photos, cancellationToken);
         if (additions.Count == 0 && removed.Count == 0 && !rewriteOfficials && !rewriteEntries && !ReleaseOfficialPages.ChangesProfiles(previous, officials))
             throw new ArgumentException("Nothing to publish: no record and no official changed.");
-        var (listings, summaries) = await officialPages.WriteAsync(staging, manifest, officials, additions, removed, previous, rewriteOfficials, cancellationToken);
-        await indexPages.WriteHomeAsync(staging, manifest, facets, HomeHighlights.From(manifest, listings, summaries), additions, previous, cancellationToken);
+        var boards = await officialPages.WriteAsync(staging, manifest, officials, additions, removed, previous, rewriteOfficials, cancellationToken);
+        await indexPages.WriteHomeAsync(staging, manifest, facets, HomeHighlights.From(manifest, boards), additions, previous, cancellationToken);
         await staging.WriteSiteFilesAsync(manifest, cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestPath, manifestJson, cancellationToken);
         return (await staging.CompleteAsync(number, cancellationToken), entries);

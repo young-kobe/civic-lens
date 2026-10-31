@@ -6,14 +6,14 @@ using CivicLens.Publication.Contracts;
 namespace CivicLens.Application.Publication;
 
 /// <summary>
-/// Writes the vote files and pages of the officials, and the page that lists the officials. A publish rebuilds the files of an
+/// Writes the vote files and pages of the officials, the board pages, and the page that lists the officials. A publish rebuilds the files of an
 /// official only when the official is touched or the operator asks for a rewrite of all officials, and links every other file from the previous release. It also writes the summary row of each official: new for a touched official, carried for the others. An official who left the configuration is always touched. The current Congress of an
 /// official is the newest Congress with a vote file of that official. A change to a bill or a vote also touches the matched official of each link that cites it.
 /// </summary>
 internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, PublicationOfficials officials, IReleaseRenderer renderer,
     PublicationCatalog catalog)
 {
-    public async Task<(IReadOnlyList<OfficialListing> Listings, IReadOnlyList<PublishedOfficialSummary> Summaries)> WriteAsync(IReleaseStaging staging, PublicationRelease manifest, PublishedOfficials published,
+    public async Task<ImmutableArray<OfficialBoardPage>> WriteAsync(IReleaseStaging staging, PublicationRelease manifest, PublishedOfficials published,
         IReadOnlyList<PendingRecord> additions, IReadOnlyList<PublishedRecordEntry> removed, PreviousRelease previous,
         bool rewriteAll, CancellationToken cancellationToken)
     {
@@ -44,9 +44,12 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
             summaries.Add(summary with { CosponsoredBills = cosponsored?.GetValueOrDefault(profile.Id) });
         }
         await ReleaseOfficialSummaries.WriteAsync(staging, summaries, cancellationToken);
+        var boards = OfficialBoardPage.All(listings, summaries);
+        foreach (var board in boards)
+            await WriteAsync(staging, board.Board.PagePath, await renderer.RenderBoardAsync(board, cancellationToken), cancellationToken);
         await WriteAsync(staging, PublicationProtocol.OfficialsPagePath, await renderer.RenderOfficialsAsync(listings, manifest.PublishedAtUtc, cancellationToken),
             cancellationToken);
-        return (listings, summaries);
+        return boards;
     }
 
     public static bool ChangesProfiles(PreviousRelease previous, PublishedOfficials published) =>

@@ -50,7 +50,7 @@ Implemented:
 - the authenticated review workspace
 - static release publication of document changes, statements, actions, votes, weekly briefs, and relationships
 - related records on the statement, action, and vote pages
-- the public pages of each release: officials, official profiles, issues, weekly briefs, all records, about, method, reader reports, and photos
+- the public pages of each release: officials, official profiles, party voting boards, issues, weekly briefs, all records, about, method, reader reports, and photos
 - presidential documents from the Federal Register, recorded as code-approved executive actions with their official titles
 - record withdrawals, the member roster, and member photos
 - the public search service with its own Postgres database, fed from published releases, and the search page of each release
