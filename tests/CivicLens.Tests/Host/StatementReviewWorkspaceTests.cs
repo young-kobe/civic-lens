@@ -201,6 +201,10 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
 
         using var blocked = await DecideAsync(url, "Approve");
         Assert.Equal(HttpStatusCode.BadRequest, blocked.StatusCode);
+        var blockedPage = await host.GetDocumentAsync(url);
+        var cause = blockedPage.QuerySelector("#approval-blocked")!.TextContent;
+        Assert.Contains("Approval will fail until this is fixed.", cause, StringComparison.Ordinal);
+        Assert.Contains("confirm the AI-proposed", cause, StringComparison.Ordinal);
 
         var fields = await SaveFieldsAsync(url);
         fields.Add(new("Input.StatementDateChecked", "true"));
@@ -210,10 +214,38 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
 
         Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
         Assert.Equal(url + "?status=decided", PathOf(approved));
+        Assert.Null((await host.GetDocumentAsync(url)).QuerySelector("#approval-blocked"));
         Assert.Equal(ReviewStatus.Approved, (await reviews.GetAsync(candidate, default))!.Review.CurrentStatus);
         var page = await host.GetDocumentAsync(url);
         Assert.Equal("Approved, private", page.QuerySelector(".page-header .badge")!.TextContent);
         Assert.NotNull(page.QuerySelector("#decision-form button[value='WithdrawApproval']"));
+    }
+
+    [Fact]
+    public async Task ADecisionFormFromBeforeANewerRevisionIsAConflictAndApprovesNothingAsync()
+    {
+        var candidate = await AiDraftedAsync();
+        SignIn(Owner);
+        var url = $"/Review/Statements/{candidate}";
+        var first = await SaveFieldsAsync(url);
+        first.Add(new("Input.StatementDateChecked", "true"));
+        using var savedFirst = await host.Client.PostAsync(url, new FormUrlEncodedContent(first));
+        var staleDecision = Fields((await host.GetDocumentAsync(url)).QuerySelector("#decision-form")!);
+        Set(staleDecision, "kind", "Approve");
+        var second = await SaveFieldsAsync(url);
+        Set(second, "Input.Headline", "A later headline");
+        second.Add(new("Input.StatementDateChecked", "true"));
+        using var savedSecond = await host.Client.PostAsync(url, new FormUrlEncodedContent(second));
+        var withoutKey = staleDecision.Where(field => field.Key != "idempotencyKey");
+
+        using var stale = await host.Client.PostAsync(url, new FormUrlEncodedContent(staleDecision));
+        using var refused = await host.Client.PostAsync(url, new FormUrlEncodedContent(withoutKey));
+
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        var review = (await reviews.GetAsync(candidate, default))!.Review;
+        Assert.Equal(3, review.CurrentRevision!.RevisionNumber);
+        Assert.NotEqual(ReviewStatus.Approved, review.CurrentStatus);
     }
 
     [Fact]
@@ -230,73 +262,8 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
         Assert.Equal(HttpStatusCode.Redirect, withNote.StatusCode);
         var page = await host.GetDocumentAsync(url);
         Assert.Contains("Name the housing bill.", page.QuerySelector("[aria-labelledby='history'] tbody")!.TextContent, StringComparison.Ordinal);
-        Assert.Contains("Approval is blocked", page.Body!.TextContent, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task TheTriagePageShowsTheQuoteAndAFailedCheckWithNoApproveAndRequestChangesNeedsANoteAsync()
-    {
-        var candidate = await AiDraftedAsync();
-        SignIn(Reviewer);
-
-        var page = await host.GetDocumentAsync("/Review/Statements/Triage");
-
-        var row = Assert.Single(page.QuerySelectorAll("[aria-labelledby='drafts'] tbody tr"));
-        Assert.Equal($"/Review/Statements/{candidate}", row.QuerySelector("a.cell-title")!.GetAttribute("href"));
-        Assert.Contains(Quote, row.TextContent, StringComparison.Ordinal);
-        Assert.Contains("Approval check failed", row.TextContent, StringComparison.Ordinal);
-        Assert.Null(row.QuerySelector("button[name='approve']"));
-        using var withoutNote = await host.Client.PostAsync("/Review/Statements/Triage", TriageDecision(page, "requestChanges"));
-        using var withNote = await host.Client.PostAsync("/Review/Statements/Triage", TriageDecision(page, "requestChanges", "Name the housing bill."));
-        Assert.Equal(HttpStatusCode.BadRequest, withoutNote.StatusCode);
-        Assert.Equal(HttpStatusCode.Redirect, withNote.StatusCode);
-        var after = await host.GetDocumentAsync("/Review/Statements/Triage");
-        Assert.Empty(Assert.Single(after.QuerySelectorAll("[aria-labelledby='drafts'] tbody tr")).QuerySelectorAll("button, textarea"));
-        Assert.Equal(ReviewStatus.ChangesRequested, (await reviews.GetAsync(candidate, default))!.Review.CurrentStatus);
-    }
-
-    [Fact]
-    public async Task AnInlineApproveBindsTheRowRevisionRedirectsAndNeedsAnIdempotencyKeyAsync()
-    {
-        var candidate = await AiDraftedAsync();
-        SignIn(Owner);
-        var fields = await SaveFieldsAsync($"/Review/Statements/{candidate}");
-        fields.Add(new("Input.StatementDateChecked", "true"));
-        using var saved = await host.Client.PostAsync($"/Review/Statements/{candidate}", new FormUrlEncodedContent(fields));
-        var page = await host.GetDocumentAsync("/Review/Statements/Triage");
-        var target = page.QuerySelector("button[form='decide'][name='approve']")!.GetAttribute("value")!;
-        var withoutKey = Fields(page.QuerySelector("#decide")!).Where(field => field.Key != "idempotencyKey").Append(new("approve", target));
-
-        using var refused = await host.Client.PostAsync("/Review/Statements/Triage", new FormUrlEncodedContent(withoutKey));
-        using var approved = await host.Client.PostAsync("/Review/Statements/Triage", TriageDecision(page, "approve"));
-
-        Assert.StartsWith($"{candidate}:2:", target, StringComparison.Ordinal);
-        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
-        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
-        Assert.EndsWith("/Review/Statements/Triage?decided=approved#drafts", approved.Headers.Location!.OriginalString, StringComparison.Ordinal);
-        Assert.Equal(ReviewStatus.Approved, (await reviews.GetAsync(candidate, default))!.Review.CurrentStatus);
-    }
-
-    [Fact]
-    public async Task AnInlineApproveOfARevisionThatAPersonReplacedAfterThePageLoadedIsAConflictAsync()
-    {
-        var candidate = await AiDraftedAsync();
-        SignIn(Owner);
-        var url = $"/Review/Statements/{candidate}";
-        var first = await SaveFieldsAsync(url);
-        first.Add(new("Input.StatementDateChecked", "true"));
-        using var savedFirst = await host.Client.PostAsync(url, new FormUrlEncodedContent(first));
-        var page = await host.GetDocumentAsync("/Review/Statements/Triage");
-        var second = await SaveFieldsAsync(url);
-        Set(second, "Input.Headline", "A later headline");
-        second.Add(new("Input.StatementDateChecked", "true"));
-        using var savedSecond = await host.Client.PostAsync(url, new FormUrlEncodedContent(second));
-
-        using var stale = await host.Client.PostAsync("/Review/Statements/Triage", TriageDecision(page, "approve"));
-
-        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
-        Assert.Equal(3, (await reviews.GetAsync(candidate, default))!.Review.CurrentRevision!.RevisionNumber);
-        Assert.NotEqual(ReviewStatus.Approved, (await reviews.GetAsync(candidate, default))!.Review.CurrentStatus);
+        Assert.Contains("Resolve the open concern below first.", page.Body!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("confirm the AI-proposed", page.QuerySelector("#approval-blocked")!.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

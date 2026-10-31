@@ -1,13 +1,10 @@
 @page "/Review/Statements"
 @using CivicLens.Host.Review
-@inherits DraftListPage
 
 <TopBarTitle Crumbs="Crumbs" />
 
 <div class="content">
-    <PageHeader Title="Statements" Lede="Statements that the AI drafter wrote or that need a person to start them.">
-        <Actions><Button Href="@StatementRoutes.Triage">Triage</Button></Actions>
-    </PageHeader>
+    <PageHeader Title="Statements" Lede="Statements that the AI drafter wrote or that need a person to start them." />
     @if (StatusMessage is not null)
     {
         <Notice Tone="Tone.Bad" Dismissible="true">@StatusMessage</Notice>

@@ -284,7 +284,6 @@ internal static class ReviewWorkspace
         services.AddScoped<CreateStatementDraft>();
         services.AddScoped<SaveStatementDraft>();
         services.AddScoped<DecideStatementReview>();
-        services.AddScoped<ListStatementTriage>();
         services.AddScoped<GetStatementReview>();
         services.AddScoped<ListStatementReviews>();
         services.AddScoped<GetStatementReviewCounts>();
