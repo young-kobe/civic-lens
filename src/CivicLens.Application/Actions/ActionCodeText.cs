@@ -18,7 +18,9 @@ public static class ActionCodeText
         ["sres"] = "S.Res."
     };
 
-    private const string EndMarks = ".?!\"'\u201D\u2019)";
+    public const string NoSummarySentence = "Congress.gov has no summary of this bill yet.";
+
+    private const string EndMarks = ".?!";
 
     public static ReviewText Of(ActionBillSnapshot snapshot)
     {
@@ -30,7 +32,8 @@ public static class ActionCodeText
         var headline = names.Length == 0 ? $"{label}: introduced in Congress" : $"{label}: introduced by {sponsors}";
         var sponsorSentence = names.Length == 0 ? "" : $" {(names.Length == 1 ? "Sponsor" : "Sponsors")}: {sponsors}.";
         var introduced = bill.IntroducedDate.ToString("MMMM d, yyyy", CultureInfo.InvariantCulture);
-        var summary = $"{label}, {EndedSentence(bill.Title)}{sponsorSentence} Introduced {introduced}. Congress.gov has no summary of this bill yet.";
+        var noSummary = bill.SummaryCount == 0 ? " " + NoSummarySentence : "";
+        var summary = $"{label}, {EndedSentence(bill.Title)}{sponsorSentence} Introduced {introduced}.{noSummary}";
         return new(headline, summary, ReviewTextOrigin.Code, null);
     }
 

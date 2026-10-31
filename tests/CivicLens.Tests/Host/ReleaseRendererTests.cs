@@ -610,7 +610,7 @@ public sealed class ReleaseRendererTests
             PublicationCatalogs.None, CancellationToken.None);
 
         Assert.Contains("Wording", html, StringComparison.Ordinal);
-        Assert.Contains("Written by code from Congress.gov data", html, StringComparison.Ordinal);
+        Assert.Contains("Written automatically from Congress.gov data, with no AI", html, StringComparison.Ordinal);
         Assert.DoesNotContain("AI summary", html, StringComparison.Ordinal);
     }
 

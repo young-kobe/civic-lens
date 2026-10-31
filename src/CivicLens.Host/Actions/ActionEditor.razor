@@ -52,7 +52,7 @@ else
         }
         @if (revision.AuthorKind == ReviewAuthorKind.Code)
         {
-            <Notice Tone="Tone.Ok">Code wrote this revision from Congress.gov data, because the bill has no summary and no candidate issue. No model was used.</Notice>
+            <Notice Tone="Tone.Ok">Code wrote the wording of this revision from the Congress.gov bill data, because no summary text could reach the model. A model may have chosen the issues. Check them.</Notice>
         }
         @if (concerns.Length > 0)
         {

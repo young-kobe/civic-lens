@@ -67,7 +67,7 @@ public static class PublishedRecordLabels
 
     public const string ModelWording = "An AI summary of the official record";
 
-    public const string CodeWording = "Written by code from Congress.gov data";
+    public const string CodeWording = "Written automatically from Congress.gov data, with no AI";
 
     public static IEnumerable<Fact> Wording(PublishedTextOrigin origin, string modelWording = ModelWording) => origin switch
     {

@@ -10,9 +10,10 @@ namespace CivicLens.Tests.Application.Actions;
 
 public sealed class ActionDraftPromptGoldenTests
 {
-    private const string SystemSha256 = "9ad12992599558a0ae4b66d374a9934f3f44a778523d0de8b7dc7a273ff8cf28";
+    private const string SystemSha256 = "4c95a4e40f9b9169423ba73a7cb3eee0935ec578221d5340ccd225eafd755ca5";
+    private const string NoCandidateSystemSha256 = "4949cc48048c5226cd20a614dcc00f75d86fef7088502194ea6208f960046e29";
     private const string SchemaSha256 = "6d6adb018d7ee24f5df2e21a1f678cc87ed0fb7c144cf0a5c99cd84153a3acf0";
-    private const string InputHash = "7b8b2516b8d1da979c4a6d789404ade508df068ac8adccae86868e5cc549f556";
+    private const string InputHash = "47ec30926aa4fea1b163230236529021cb4b5c06491c41377d1af4a855514bea";
 
     [Fact]
     public async Task ThePromptAndSchemaMatchTheirPinnedVersions()
@@ -25,7 +26,7 @@ public sealed class ActionDraftPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(ActionDraftTask.PromptVersion)} ({ActionDraftTask.PromptVersion}) or " +
             $"{nameof(ActionDraftTask.SchemaVersion)} ({ActionDraftTask.SchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("action-draft", "action-draft-v1", "action-draft-prompt-v4", "action-draft-schema-v2", "claude-haiku-5-5"),
+        Assert.Equal(("action-draft", "action-draft-v1", "action-draft-prompt-v5", "action-draft-schema-v2", "claude-haiku-5-5"),
             (ActionDraftTask.Task, ActionDraftTask.TaskVersion, ActionDraftTask.PromptVersion, ActionDraftTask.SchemaVersion, ActionDraftTask.Model));
         Assert.NotEqual(StatementDraftTaskName, ActionDraftTask.Task);
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
@@ -34,7 +35,7 @@ public sealed class ActionDraftPromptGoldenTests
     }
 
     [Fact]
-    public async Task ThePublicTextRulesAndTheNoSummarySentenceAreInTheCachedSystemPrompt()
+    public async Task ThePublicTextRulesAreInTheCachedSystemPromptAndNoCodeSentenceIsAskedOfTheModel()
     {
         var world = Create();
         var snapshot = (await world.Reader().ReadAsync(world.Evidence(), default)).Snapshot!;
@@ -42,10 +43,27 @@ public sealed class ActionDraftPromptGoldenTests
         var request = ActionDraftPrompt.Build(snapshot, NoChoice(), ActionDraftTask.MaximumPromptBytes)!;
 
         Assert.True(request.CacheSystemPrompt);
+        Assert.Equal(NoCandidateSystemSha256, Sha256(request.SystemPrompt));
         Assert.Contains("Never use the words tracked, entry, or candidate", request.SystemPrompt, StringComparison.Ordinal);
         Assert.Contains("Use those words only when the bill itself is about the thing they name.", request.SystemPrompt, StringComparison.Ordinal);
-        Assert.Contains("\"Congress.gov has no summary of this bill yet.\"", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("Never write that it passed, was enacted, became law, or is law", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Congress.gov has no summary of this bill yet.", request.SystemPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("Rent aid", request.SystemPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheSummaryReachesTheModelAsTextAloneWithNoActionDescriptionNoActionDateAndNoVersionCode()
+    {
+        var world = Create(summaries: [new("00", "2025-01-03", "2025-01-05T10:00:00Z", "<p>It funds rent aid.</p>")]);
+        var snapshot = (await world.Reader().ReadAsync(world.Evidence(), default)).Snapshot!;
+
+        var user = ActionDraftPrompt.Build(snapshot, NoChoice(), ActionDraftTask.MaximumPromptBytes)!.UserPrompt;
+
+        using var facts = System.Text.Json.JsonDocument.Parse(user["Facts:\n".Length..]);
+        var summary = facts.RootElement.GetProperty("summary");
+        Assert.Equal(["text"], summary.EnumerateObject().Select(property => property.Name));
+        Assert.Contains("It funds rent aid.", summary.GetProperty("text").GetString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("actionDate", ActionDraftPrompt.SerializeContext(snapshot, NoChoice(), "issues"), StringComparison.Ordinal);
     }
 
     [Fact]

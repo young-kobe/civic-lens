@@ -116,7 +116,7 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
                                                         sibling.BillType == candidate.BillType && sibling.BillNumber == candidate.BillNumber
                                                     orderby run.StartedAtUtcTicks descending
                                                     select run.PromptVersion).FirstOrDefault()
-                           where newestDraftPrompt != null && newestDraftPrompt != ActionDraftTask.PromptVersion
+                           where newestDraftPrompt != null && !ActionDraftTask.CurrentPromptVersions.Contains(newestDraftPrompt)
                            select candidate.CandidateId).ToArrayAsync(cancellationToken);
         return stale.ToHashSet(StringComparer.Ordinal);
     }

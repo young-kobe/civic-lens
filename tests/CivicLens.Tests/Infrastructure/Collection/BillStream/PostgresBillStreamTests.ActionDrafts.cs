@@ -553,6 +553,31 @@ public sealed partial class PostgresBillStreamTests
         Assert.True((await ActionStore().ReadEvidenceAsync(candidate, default))!.HasOlderPromptDraft);
     }
 
+    [Theory]
+    [InlineData("action-draft-prompt-v3", 1)]
+    [InlineData("action-draft-prompt-v4", 1)]
+    [InlineData("action-draft-prompt-v5", 0)]
+    [InlineData("action-issue-prompt-v3", 0)]
+    public async Task RedraftTreatsOnlyAnOldFullDraftAsStaleBecauseBothCurrentPromptsNameAFinishedDraft(string newestDraftPrompt, int requeued)
+    {
+        var (older, newer) = await TwoSettledCandidatesAsync(ActionDraftErrorCodes.SupersededByNewerCandidate, null);
+        await InsertRunAsync(older, "action-draft-prompt-v1", 1);
+        await InsertRunAsync(newer, newestDraftPrompt, 2);
+
+        Assert.Equal(requeued, await ActionStore().RequeueOlderPromptAsync(default));
+    }
+
+    [Fact]
+    public async Task ACodeWrittenCurrentRevisionWithAnIssueRunIsNeverStaleBecauseItWouldQueueForever()
+    {
+        var (older, newer) = await TwoSettledCandidatesAsync(ActionDraftErrorCodes.SupersededByNewerCandidate, null);
+        await InsertRunAsync(older, "action-draft-prompt-v3", 1);
+        var issueRun = await InsertRunAsync(newer, "action-issue-prompt-v3", 2);
+        await InsertDraftAndRevisionAsync("Code", "civic-lens:code", issueRun);
+
+        Assert.Equal(0, await ActionStore().RequeueOlderPromptAsync(default));
+    }
+
     [Fact]
     public async Task ACodeWrittenCurrentRevisionIsNeverStaleBecauseItHasNoPromptAndRedraftWouldQueueItForever()
     {
@@ -826,14 +851,20 @@ public sealed partial class PostgresBillStreamTests
     }
 
     private async Task<string> ReadableCandidateAsync(string sponsor, DateTimeOffset? updatedAt = null, string? cosponsor = null,
-        string? title = null, string? policyArea = BillGateFixtures.TrackedPolicyArea)
+        string? title = null, string? policyArea = BillGateFixtures.TrackedPolicyArea, bool withSummary = true)
     {
-        var bill = await StartReadableBillAsync([sponsor], summaries: 0, updatedAt, title, cosponsors: cosponsor is null ? 0 : 1, policyArea);
+        var bill = await StartReadableBillAsync([sponsor], summaries: withSummary ? 1 : 0, updatedAt, title, cosponsors: cosponsor is null ? 0 : 1, policyArea);
         if (cosponsor is not null)
         {
             var body = ActionBillWorld.CosponsorBody([new(cosponsor, Backfill.ToString("yyyy-MM-dd"))], null);
             _ = await store.AdmitCosponsorPageAsync(Source(), bill.Cosponsors!, Cosponsors([cosponsor], next: null),
                 await ReadableExtractionAsync(bill.Cosponsors!, ApiResource.BillCosponsors, body), default);
+        }
+        if (withSummary)
+        {
+            var summary = ActionBillWorld.SummaryBody(new SummarySpec("00", "2025-01-03", "2025-01-05T10:00:00Z", "<p>It funds rent aid.</p>"), null);
+            _ = await store.AdmitSummariesPageAsync(Source(), bill.Summaries!, new CongressBillSummariesPage([], null),
+                await ReadableExtractionAsync(bill.Summaries!, ApiResource.BillSummaries, summary), default);
         }
         await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
         return (await CandidatesAsync()).Single(candidate => candidate.DetailJobId == bill.Detail).CandidateId;
