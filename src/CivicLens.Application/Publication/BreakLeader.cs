@@ -14,7 +14,7 @@ public sealed record BreakLeader(PublishedChamber Chamber, string Party, int Con
     public static ImmutableArray<BreakLeader> All(IReadOnlyList<OfficialListing> officials, IReadOnlyList<PublishedOfficialSummary> summaries)
     {
         var listings = officials.ToDictionary(official => official.Profile.Id, StringComparer.Ordinal);
-        var withVotes = summaries.Where(summary => summary.Congress is not null && listings.ContainsKey(summary.Id)).ToList();
+        var withVotes = summaries.Where(summary => summary.Congress is not null).ToList();
         return [.. Enum.GetValues<PublishedChamber>().SelectMany(chamber => InChamber(chamber, withVotes, listings))];
     }
 

@@ -88,7 +88,9 @@ internal sealed class PublicationScenario
 
     public PublicBaseUrl? BaseUrl { get; set; }
 
-    public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events, OfficialPages = OfficialPages, PublicBaseUrl = BaseUrl }, Loaders(),
+    public HomeHighlights? Highlights { get; private set; }
+
+    public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events, OfficialPages = OfficialPages, PublicBaseUrl = BaseUrl, HomeSeen = seen => Highlights = seen }, Loaders(),
         new PublicationCatalog(OfficialNames, Issues), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, Photos, () => PhotoReads++), new FixedExecutiveRoster(ExecutiveOfficials)),
         Captures.Photos("artifacts"), Clock, new PruneReleases(Publications, Releases, NullLogger<PruneReleases>.Instance));
 
@@ -440,9 +442,13 @@ internal sealed class FakeRenderer : IReleaseRenderer
         Task.FromResult($"<html>brief {record.RecordId}</html>");
     public Task<string> RenderWithdrawalAsync(PublishedWithdrawal withdrawal, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>withdrawn {withdrawal.RecordId} {withdrawal.Note}{PublicBaseUrl?.Join(string.Empty)}</html>");
+    public Action<HomeHighlights>? HomeSeen { get; init; }
     public Task<string> RenderHomeAsync(PublicationRelease release, PublishedBrief? brief, ReleaseFacets facets, HomeHighlights highlights,
-        CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>home {release.Records.Length} brief {brief?.RecordId}</html>");
+        CancellationToken cancellationToken)
+    {
+        HomeSeen?.Invoke(highlights);
+        return Task.FromResult($"<html>home {release.Records.Length} brief {brief?.RecordId}</html>");
+    }
     public Task<string> RenderAllRecordsAsync(PublicationRelease release, int page, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>index {page} {release.Records.Length}</html>");
     public Task<string> RenderBriefsAsync(PublicationRelease release, PublishedRecordEntry[] briefs, int page,

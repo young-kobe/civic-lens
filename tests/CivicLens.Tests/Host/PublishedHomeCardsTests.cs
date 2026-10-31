@@ -12,28 +12,28 @@ public sealed class PublishedHomeCardsTests
     [Fact]
     public async Task TheClosestVoteCardNamesTheDatesTheCountsAndTheSizeOfThePoolAndLinksTheVote()
     {
-        var release = ReleaseOf(Vote('a', 216, 214, PublishedVoteAlignment.Split), Vote('b', 300, 100, null));
+        var release = ReleaseOf(Vote('a', 216, 214, PublishedVoteAlignment.Split), Vote('b', 300, 100, PublishedVoteAlignment.PartiesAgree));
 
         var main = await HomeAsync(release, []);
 
         Assert.Contains("Closest vote, 5 May 2026 to 11 May 2026", main.QuerySelectorAll("h3").Select(heading => heading.TextContent));
         Assert.Contains("The Yea and Nay counts differ by 2 votes.", main.TextContent, StringComparison.Ordinal);
-        Assert.Contains("closest of 2 roll call votes with counts", main.TextContent, StringComparison.Ordinal);
+        Assert.Contains("closest of 2 substantive roll call votes with counts", main.TextContent, StringComparison.Ordinal);
         Assert.NotNull(main.QuerySelector($"a[href='records/{Id('a')}.html']"));
     }
 
     [Fact]
     public async Task WithNoVoteInTheWindowTheCardSaysSoAndNamesTheDatesInsteadOfShowingAnOlderVote()
     {
-        var main = await HomeAsync(ReleaseOf(Vote('a', 216, 214, null) with { EventDate = new DateOnly(2026, 1, 1) }), []);
+        var main = await HomeAsync(ReleaseOf(Vote('a', 216, 214, PublishedVoteAlignment.Split) with { EventDate = new DateOnly(2026, 1, 1) }), []);
 
-        Assert.Contains("No roll call vote with Yea and Nay counts is dated 5 May 2026 to 11 May 2026 on this site.", main.TextContent, StringComparison.Ordinal);
+        Assert.Contains("No substantive roll call vote with Yea and Nay counts is dated 5 May 2026 to 11 May 2026 on this site.", main.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task ATiedVoteSaysTheCountsAreEqualInsteadOfADifferenceOfZero()
     {
-        var main = await HomeAsync(ReleaseOf(Vote('a', 50, 50, null)), []);
+        var main = await HomeAsync(ReleaseOf(Vote('a', 50, 50, PublishedVoteAlignment.Mixed)), []);
 
         Assert.Contains("The Yea and Nay counts are equal.", main.TextContent, StringComparison.Ordinal);
     }
@@ -47,9 +47,9 @@ public sealed class PublishedHomeCardsTests
         var main = await HomeAsync(ReleaseOf(), leaders);
 
         var item = main.QuerySelector("li")!;
-        Assert.Equal("Jane Doe voted against most House Democrats on 12 of 40 split votes in the 119th Congress.", item.TextContent);
+        Assert.Equal("Jane Doe voted against most House Democrats on 12 of the 40 split votes they cast with Yea or Nay in the 119th Congress.", item.TextContent);
         Assert.Equal("officials/doe.html", item.QuerySelector("a")!.GetAttribute("href"));
-        Assert.Contains("A chamber and party with no line has no member who meets these rules.", main.TextContent, StringComparison.Ordinal);
+        Assert.Contains("A chamber and party with no line has no member with vote figures on this site who meets these rules.", main.TextContent, StringComparison.Ordinal);
         Assert.Contains("at least 25 split votes", main.TextContent, StringComparison.Ordinal);
     }
 
@@ -59,7 +59,7 @@ public sealed class PublishedHomeCardsTests
         var main = await HomeAsync(ReleaseOf(), []);
 
         Assert.Null(main.QuerySelector("li"));
-        Assert.Contains("this card names no one", main.TextContent, StringComparison.Ordinal);
+        Assert.Contains("with vote figures on this site has 25 split votes cast", main.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -71,12 +71,23 @@ public sealed class PublishedHomeCardsTests
 
         var table = main.QuerySelector("table")!;
         Assert.Equal([Id('d'), Id('c'), Id('b')], table.QuerySelectorAll("a.cell-title").Select(link => link.GetAttribute("href")!.Split('/')[1][..32]));
-        Assert.Contains("The 3 newest of 4 executive actions on this site.", main.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Picked by code: the 3 newest of 4 executive actions on this site.", main.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheExecutiveActionAsideSaysTheOnlyActionForOneAndShowsNoAsideForNoneInsteadOfZeroNewestOfZero()
+    {
+        var one = await HomeAsync(ReleaseOf(Executive('a', 1)), []);
+        var none = await HomeAsync(ReleaseOf(), []);
+
+        Assert.Contains("Picked by code: the only executive action on this site.", one.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("newest of 0", none.TextContent, StringComparison.Ordinal);
+        Assert.Contains("No executive action is on this site yet.", none.TextContent, StringComparison.Ordinal);
     }
 
     [Theory]
-    [InlineData(PublishedVoteAlignment.Split, "Split vote", "Most Democrats and most Republicans who cast Yea or Nay voted on opposite sides.")]
-    [InlineData(PublishedVoteAlignment.PartiesAgree, "Both parties agreed", "Most Democrats and most Republicans who cast Yea or Nay voted the same way.")]
+    [InlineData(PublishedVoteAlignment.Split, "Split vote", "On this substantive vote, most Democrats and most Republicans who cast Yea or Nay voted on opposite sides.")]
+    [InlineData(PublishedVoteAlignment.PartiesAgree, "Both parties agreed", "On this substantive vote, most Democrats and most Republicans who cast Yea or Nay voted the same way.")]
     public async Task AVoteInAListShowsItsPartyBadgeWithItsMeaningAndItsCounts(PublishedVoteAlignment alignment, string badge, string meaning)
     {
         var main = await HomeAsync(ReleaseOf(Vote('a', 216, 214, alignment)), []);
@@ -84,7 +95,7 @@ public sealed class PublishedHomeCardsTests
         var cell = main.QuerySelector("tbody td")!;
         Assert.Equal(["Vote", badge], cell.QuerySelectorAll(".badge").Select(item => item.TextContent));
         Assert.Contains(meaning, cell.TextContent, StringComparison.Ordinal);
-        Assert.Contains("Casts of all members: Yea 216, Nay 214.", cell.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Casts of all members of the chamber who voted Yea or Nay: Yea 216, Nay 214.", cell.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -97,7 +108,7 @@ public sealed class PublishedHomeCardsTests
 
         var cells = main.QuerySelectorAll("tbody tr").Select(row => row.QuerySelector("td")!).ToList();
         Assert.All(cells, cell => Assert.Single(cell.QuerySelectorAll(".badge")));
-        Assert.DoesNotContain("Casts of all members", cells.Single(cell => cell.QuerySelector($"a[href='records/{Id('a')}.html']") is not null).TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("Casts of all members of the chamber", cells.Single(cell => cell.QuerySelector($"a[href='records/{Id('a')}.html']") is not null).TextContent, StringComparison.Ordinal);
     }
 
     private static async Task<AngleSharp.Dom.IElement> HomeAsync(PublicationRelease release, BreakLeader[] leaders)

@@ -14,6 +14,7 @@
     {
         <p>@PublishedHomeCardView.NoVote(Highlights)</p>
     }
+    <p class="muted small">@PublishedHomeCardView.ClosestRule</p>
     <h3>@PublishedHomeCardView.BreaksTitle</h3>
     @if (Highlights.BreakLeaders.IsEmpty)
     {
@@ -34,7 +35,7 @@
     }
     <p class="muted small">@PublishedHomeCardView.BreaksRule</p>
 </Panel>
-<Panel Title="@PublishedHomeCardView.ExecutiveActionsTitle" Aside="@ExecutiveActionsCount">
+<Panel Title="@PublishedHomeCardView.ExecutiveActionsTitle" Aside="@(Highlights.ExecutiveActions.IsEmpty ? null : ExecutiveActionsCount)">
     @if (Highlights.ExecutiveActions.IsEmpty)
     {
         <EmptyState Title="No executive actions" Text="@PublishedHomeCardView.NoExecutiveActions" />

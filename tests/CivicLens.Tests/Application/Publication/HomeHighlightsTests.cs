@@ -33,9 +33,20 @@ public sealed class HomeHighlightsTests
     }
 
     [Fact]
-    public void AVoteWithoutCountsIsNeverTheClosestVoteBecauseASpeakerElectionHasNoYeaOrNayTotals()
+    public void AVoteDatedOnTheReleaseDayCountsAndOneDatedTheDayAfterDoesNot()
     {
-        var release = ReleaseOf(Vote('a', 0, 0), Vote('b', 0, 0) with { YeaCount = null, NayCount = null }, Vote('c', 220, 200));
+        var release = ReleaseOf(Vote('a', 216, 215) with { EventDate = new DateOnly(2026, 5, 11) }, Vote('b', 100, 100) with { EventDate = new DateOnly(2026, 5, 12) });
+
+        var highlights = HomeHighlights.From(release, [], []);
+
+        Assert.Equal(Id('a'), highlights.ClosestVote!.RecordId);
+        Assert.Equal(1, highlights.VotesInWindow);
+    }
+
+    [Fact]
+    public void AVoteWithNoAlignmentIsNeverTheClosestVoteBecauseProceduralVotesAndSpeakerElectionsAreOut()
+    {
+        var release = ReleaseOf(Vote('a', 100, 100) with { Alignment = null }, Vote('b', 0, 0) with { YeaCount = null, NayCount = null, Alignment = null }, Vote('c', 220, 200));
 
         var highlights = HomeHighlights.From(release, [], []);
 
@@ -81,6 +92,30 @@ public sealed class HomeHighlightsTests
     }
 
     [Fact]
+    public void AMemberWithExactlyTheMinimumOfSplitVotesCanLead()
+    {
+        var officials = new[] { Listing("exact") };
+        var summaries = new[] { Summary("exact", 119, PublishedChamber.Senate, PublishedPartyMajority.Republican, BreakLeader.MinimumSplitVotes, 1) };
+
+        var leader = Assert.Single(BreakLeader.All(officials, summaries));
+
+        Assert.Equal(("exact", BreakLeader.MinimumSplitVotes), (leader.Official.Profile.Id, leader.Cast));
+    }
+
+    [Fact]
+    public void ATieOnShareAndOnBreaksGoesToTheLowerOfficialId()
+    {
+        var officials = new[] { Listing("b"), Listing("a") };
+        var summaries = new[]
+        {
+            Summary("b", 119, PublishedChamber.House, PublishedPartyMajority.Democrat, 40, 10),
+            Summary("a", 119, PublishedChamber.House, PublishedPartyMajority.Democrat, 40, 10)
+        };
+
+        Assert.Equal("a", Assert.Single(BreakLeader.All(officials, summaries)).Official.Profile.Id);
+    }
+
+    [Fact]
     public void BreakLeadersComeFromTheNewestCongressOfTheChamberAndAnOfficialWithNoBreakIsNeverNamed()
     {
         var officials = new[] { Listing("older"), Listing("newer"), Listing("loyal"), Listing("senator") };
@@ -99,11 +134,9 @@ public sealed class HomeHighlightsTests
     }
 
     [Fact]
-    public void AnOfficialWithNoVoteFiguresOrNoListingNamesNoLeader()
+    public void AnOfficialWithNoVoteFiguresNamesNoLeader()
     {
-        var summaries = new[] { PublishedOfficialSummary.Empty("none"), Summary("unlisted", 119, PublishedChamber.House, PublishedPartyMajority.Democrat, 50, 10) };
-
-        Assert.Empty(BreakLeader.All([Listing("none")], summaries));
+        Assert.Empty(BreakLeader.All([Listing("none")], [PublishedOfficialSummary.Empty("none")]));
     }
 
     private static string Id(char letter) => new(letter, 32);
@@ -121,6 +154,7 @@ public sealed class HomeHighlightsTests
     {
         YeaCount = yea,
         NayCount = nay,
+        Alignment = PublishedVoteAlignment.Split,
         EventDate = new DateOnly(2026, 5, 7)
     };
 

@@ -84,15 +84,19 @@ internal static class PublishedVoteView
 
     public const string PartiesAgreedText = "Both parties agreed";
 
+    private static readonly string Democrats = PublishedPartyMajority.Democrat + "s";
+
+    private static readonly string Republicans = PublishedPartyMajority.Republican + "s";
+
     public static (string Text, string Meaning)? ListBadge(PublishedRecordEntry entry) => entry.Alignment switch
     {
-        PublishedVoteAlignment.Split => (SplitVoteText, "Most Democrats and most Republicans who cast Yea or Nay voted on opposite sides."),
-        PublishedVoteAlignment.PartiesAgree => (PartiesAgreedText, "Most Democrats and most Republicans who cast Yea or Nay voted the same way."),
+        PublishedVoteAlignment.Split => (SplitVoteText, $"On this substantive vote, most {Democrats} and most {Republicans} who cast Yea or Nay voted on opposite sides."),
+        PublishedVoteAlignment.PartiesAgree => (PartiesAgreedText, $"On this substantive vote, most {Democrats} and most {Republicans} who cast Yea or Nay voted the same way."),
         _ => null
     };
 
     public static string? ListCounts(PublishedRecordEntry entry) =>
-        entry.YeaCount is { } yea && entry.NayCount is { } nay ? $"Casts of all members: Yea {yea}, Nay {nay}." : null;
+        entry.YeaCount is { } yea && entry.NayCount is { } nay ? $"Casts of all members of the chamber who voted Yea or Nay: Yea {yea}, Nay {nay}." : null;
 
     public static VoteBadge? Badge(PublishedVote vote)
     {
