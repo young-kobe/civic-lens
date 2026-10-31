@@ -4,7 +4,7 @@ using CivicLens.Publication.Contracts;
 namespace CivicLens.Application.Publication;
 
 /// <summary>
-/// The lists of one board page, built from the summary rows of the newest Congress that any official has. Members hold the officials
+/// The lists of one board page, built from the summary rows of the newest Congress that any official has in the chamber of the board. Members hold the officials
 /// with a vote row for the chamber and party of the board, by name. The other counts are the officials that no board can show.
 /// A list ranks only members with at least MinimumSplitVotes split votes cast.
 /// </summary>
@@ -34,16 +34,24 @@ public sealed record OfficialBoardPage(OfficialBoard Board, int? Congress, Immut
     public static ImmutableArray<OfficialBoardPage> All(IReadOnlyList<OfficialListing> officials, IReadOnlyList<PublishedOfficialSummary> summaries)
     {
         var byId = summaries.ToDictionary(summary => summary.Id, StringComparer.Ordinal);
-        var congress = summaries.Max(summary => summary.Congress);
-        var inCongress = officials.Select(official => (Official: official, Summary: byId[official.Profile.Id])).Where(pair => pair.Summary.Congress == congress && congress is not null).ToList();
         var withoutVotes = summaries.Count(summary => summary.Congress is null);
-        var earlier = summaries.Count(summary => summary.Congress is not null && summary.Congress != congress);
-        var withoutMajorParty = inCongress.Count(pair => pair.Summary.PartyVotes.Length == 0);
-        return [.. OfficialBoard.All.Select(board => new OfficialBoardPage(board, congress, MembersOf(board, inCongress), withoutVotes, earlier, withoutMajorParty))];
+        return [.. OfficialBoard.All.Select(board => PageOf(board, officials.Select(official => (Official: official, Summary: byId[official.Profile.Id]))
+            .Where(pair => pair.Summary.Congress is not null && HoldsChamber(pair.Summary, board.Chamber)).ToList(), withoutVotes))];
     }
 
-    private static ImmutableArray<BoardMember> MembersOf(OfficialBoard board, List<(OfficialListing Official, PublishedOfficialSummary Summary)> inCongress) =>
-    [.. inCongress
+    private static OfficialBoardPage PageOf(OfficialBoard board, List<(OfficialListing Official, PublishedOfficialSummary Summary)> inChamber, int withoutVotes)
+    {
+        var congress = inChamber.Max(pair => pair.Summary.Congress);
+        var current = inChamber.Where(pair => pair.Summary.Congress == congress).ToList();
+        return new(board, congress, MembersOf(board, current), withoutVotes, inChamber.Count - current.Count,
+            current.Count(pair => pair.Summary.PartyVotes.All(row => row.Chamber != board.Chamber)));
+    }
+
+    private static bool HoldsChamber(PublishedOfficialSummary summary, PublishedChamber chamber) =>
+        summary.PartyVotes.Any(row => row.Chamber == chamber) || summary.Attendance.Any(row => row.Chamber == chamber);
+
+    private static ImmutableArray<BoardMember> MembersOf(OfficialBoard board, List<(OfficialListing Official, PublishedOfficialSummary Summary)> current) =>
+    [.. current
         .Select(pair => (pair.Official, Party: pair.Summary.PartyVotes.SingleOrDefault(row => row.Chamber == board.Chamber && row.Party == board.Party),
             Attendance: pair.Summary.Attendance.SingleOrDefault(row => row.Chamber == board.Chamber)))
         .Where(pair => pair.Party is not null)

@@ -460,7 +460,7 @@ internal sealed class FakeRenderer : IReleaseRenderer
     public Task<string> RenderOfficialsAsync(IReadOnlyList<OfficialListing> officials, DateTimeOffset publishedAtUtc, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>officials {string.Join(',', officials.Select(official => $"{official.Profile.Id}:{official.RecordCount}"))}</html>");
     public Task<string> RenderBoardAsync(OfficialBoardPage page, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>board {page.Board.PagePath} {page.Members.Length}</html>");
+        Task.FromResult($"<html>board {page.Board.PagePath} [{string.Join(',', page.Members.Select(member => member.Official.Profile.Id))}]</html>");
     public Task<string> RenderReportAsync(CancellationToken cancellationToken) =>
         Task.FromResult("<html>report</html>");
     public Task<string> RenderMethodAsync(CancellationToken cancellationToken) =>

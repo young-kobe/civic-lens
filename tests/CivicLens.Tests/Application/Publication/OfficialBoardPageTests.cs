@@ -38,7 +38,7 @@ public sealed class OfficialBoardPageTests
             Row("current", 119, 30, 3),
             Row("earlier", 118, 30, 3),
             (Listing("none"), PublishedOfficialSummary.Empty("none")),
-            (Listing("no-party"), new PublishedOfficialSummary { Id = "no-party", Congress = 119, CosponsoredBills = null, PartyVotes = [], Attendance = [] }));
+            (Listing("no-party"), new PublishedOfficialSummary { Id = "no-party", Congress = 119, CosponsoredBills = null, PartyVotes = [], Attendance = [new PublishedAttendanceSummary { Chamber = PublishedChamber.House, Held = 10, Missed = 0, First = new DateOnly(2025, 1, 3), Last = new DateOnly(2026, 10, 27) }] }));
 
         Assert.Equal(119, page.Congress);
         Assert.Equal(["current"], page.Members.Select(member => member.Official.Profile.Id));
@@ -57,7 +57,40 @@ public sealed class OfficialBoardPageTests
     }
 
     [Fact]
-    public void ARowWithNoSummaryRowsAtAllGivesFourEmptyBoardsAndNoCongress()
+    public void EachChamberUsesItsOwnNewestCongressSoAHouseAtOneCongressNeverHidesASenateAtAnother()
+    {
+        var rows = new[]
+        {
+            Row("house-new", 120, 30, 3), Row("house-old", 119, 30, 3),
+            Row("senate", 119, 30, 3, PublishedChamber.Senate), Row("senate-old", 118, 30, 3, PublishedChamber.Senate)
+        };
+        var pages = OfficialBoardPage.All([.. rows.Select(row => row.Item1)], [.. rows.Select(row => row.Item2)]);
+
+        var house = pages.Single(page => page.Board == HouseDemocrats);
+        var senate = pages.Single(page => page.Board == new OfficialBoard(PublishedChamber.Senate, PublishedPartyMajority.Democrat));
+        Assert.Equal((120, 1, 1), (house.Congress, house.InEarlierCongress, house.Members.Length));
+        Assert.Equal((119, 1, 1), (senate.Congress, senate.InEarlierCongress, senate.Members.Length));
+    }
+
+    [Fact]
+    public void RankedMembersWithTheSameShareOrderByCountThenNameSoTheOrderNeverDependsOnInputOrder()
+    {
+        var page = PageOf(Row("b", 119, 50, 5), Row("a", 119, 50, 5), Row("c", 119, 100, 10), Row("d", 119, 25, 2));
+
+        Assert.Equal(["c", "a", "b", "d"], page.Breakers.Select(member => member.Official.Profile.Id));
+        Assert.Equal(["d", "c", "a", "b"], page.Loyalists.Select(member => member.Official.Profile.Id));
+    }
+
+    [Fact]
+    public void MissedVotesWithTheSameCountOrderByName()
+    {
+        var page = PageOf(Row("b", 119, 30, 3, missed: 4), Row("a", 119, 30, 3, missed: 4), Row("c", 119, 30, 3, missed: 7));
+
+        Assert.Equal(["c", "a", "b"], page.MostMissed.Select(member => member.Official.Profile.Id));
+    }
+
+    [Fact]
+    public void AReleaseWithNoOfficialsStillGivesFourEmptyBoardsWithNoCongressAndNoDate()
     {
         var pages = OfficialBoardPage.All([], []);
 

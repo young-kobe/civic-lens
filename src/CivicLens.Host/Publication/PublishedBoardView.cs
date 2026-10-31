@@ -9,11 +9,11 @@ internal static class PublishedBoardView
 {
     public const string TabsLabel = "Show the voting boards of a chamber and party";
 
-    public const string BreakersOrder = "Highest share of votes against the party first";
+    public const string BreakersOrder = "Highest share first";
 
-    public const string LoyalistsOrder = "Highest share of votes with the party first";
+    public const string LoyalistsOrder = "Highest share first";
 
-    public const string MostMissedOrder = "Most missed votes first";
+    public const string MostMissedOrder = "Most missed first";
 
     public const string TooFewTitle = "Too few split votes yet";
 
@@ -33,7 +33,7 @@ internal static class PublishedBoardView
 
     public static string Lede(OfficialBoardPage page) => page.Congress is { } congress
         ? $"Three lists of the {PartyOf(page.Board)} in the {CongressCalendar.Ordinal(congress)} Congress. {Intro}"
-        : $"No roll call votes are on this site yet. {Intro}";
+        : $"No vote figures are in this release yet. {Intro}";
 
     public static string Description(OfficialBoardPage page) =>
         $"{PartyOf(page.Board)} ranked by votes against their party and by missed votes, with the counts behind each rank.";
@@ -45,6 +45,10 @@ internal static class PublishedBoardView
 
     public static string LoyalistsTitle(OfficialBoard board) => $"Voted with most {PartyOf(board)}";
 
+    public static string AgainstShareHeader(OfficialBoard board) => $"Share of split votes against most {PartyOf(board)}";
+
+    public static string WithShareHeader(OfficialBoard board) => $"Share of split votes with most {PartyOf(board)}";
+
     public static string MissedTitle(OfficialBoard board) => $"Missed votes of the {PartyOf(board)}";
 
     public static string RankingRule(OfficialBoard board) =>
@@ -55,7 +59,7 @@ internal static class PublishedBoardView
 
     public static string NoMissedList(OfficialBoard board) => $"No member of the {PartyOf(board)} has a roll call on this site.";
 
-    public static string NewestRollCall(DateOnly day) => $"The newest roll call on this site in this chamber is on {Moment.Day(day)}. Every count stops on that day.";
+    public static string NewestRollCall(DateOnly day) => $"The newest roll call on this site in this chamber is on {Moment.Day(day)}. No count includes a later day.";
 
     public static string TooFew(int count) =>
         $"{count} {PublishedOfficialView.Noun(count, "member")} cast Yea or Nay on fewer than {OfficialBoardPage.MinimumSplitVotes} split votes. The lists do not rank {(count == 1 ? "this member" : "these members")}.";
@@ -65,12 +69,12 @@ internal static class PublishedBoardView
     public static IEnumerable<string> LeftOut(OfficialBoardPage page)
     {
         if (page.WithoutVotes > 0)
-            yield return $"{page.WithoutVotes} {PublishedOfficialView.Noun(page.WithoutVotes, "official")} with no roll call votes on this site, such as officials who are not members of Congress.";
+            yield return $"{page.WithoutVotes} {PublishedOfficialView.Noun(page.WithoutVotes, "official")} with no vote figures in this release.";
         if (page.InEarlierCongress > 0)
-            yield return $"{page.InEarlierCongress} {PublishedOfficialView.Noun(page.InEarlierCongress, "official")} whose newest votes are in an earlier Congress.";
+            yield return $"{page.InEarlierCongress} {PublishedOfficialView.Noun(page.InEarlierCongress, "official")} whose newest vote figures are in an earlier Congress.";
         if (page.WithoutMajorParty > 0)
-            yield return $"{page.WithoutMajorParty} {PublishedOfficialView.Noun(page.WithoutMajorParty, "official")} with votes in this Congress but no {PublishedPartyMajority.Democrat} or {PublishedPartyMajority.Republican} party on those votes, so no party majority applies.";
-        yield return "Members of the other parties and of the other chamber. They are on the other pages.";
+            yield return $"{page.WithoutMajorParty} {PublishedOfficialView.Noun(page.WithoutMajorParty, "official")} with vote figures in this Congress but no {PublishedPartyMajority.Democrat} or {PublishedPartyMajority.Republican} party on their votes, so no party majority applies.";
+        yield return "Members of the other party. They are on the other page.";
         yield return "Roll calls that are not on this site, and casts of Present or Not Voting. The split vote counts hold only Yea and Nay casts.";
     }
 }
