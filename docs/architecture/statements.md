@@ -447,7 +447,7 @@ Relationship review uses the shared decision rules and review cycles in [review]
 
 **Decide.** `DecideRelationshipReview` builds the decision as the other review kinds do. On approval, the store refuses the decision when `FindChangedAsync` names the statement or the target. The refusal is an invalid-input error, and the page shows it as a bad request. A decision runs no after-decision hook, because no other record kind cites a relationship. A withdrawal or a request for changes has no flag check.
 
-**Pages.** `/Review/Relationships/{record-id}` has these parts. The Needs a person queue lists a relationship that needs a person. An approved relationship has no headline, so the approved-record search does not reach it. Open it with Find a draft by record ID, or from a reader report. No relationship list page exists.
+**Pages.** `/Review/Relationships/{record-id}` has these parts. The Needs a person queue lists a relationship that needs a person. An approved relationship has no headline, so the approved-record search does not reach it. Open it with Find a draft by record ID, or from a reader report. The owner chose to keep approved relationships out of the search for now. Revisit this choice with R-52. No relationship list page exists.
 
 - the statement panel with its headline, summary, and saved quote. It also shows the cited revision, the date, the match basis, and the matched words, with a link to the statement
 - the target panel with its cited revision and its numbered facts, and a link to the action or vote review page
