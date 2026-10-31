@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Runs one listed production command as root, so a login user needs no general sudo, docker, or env file access.
+# Runs one listed production command as root, so the agent key needs no general sudo, docker, or env file access.
 # A deploy takes only a newer commit on origin/main, because the checkout's scripts then run as root and a migration has no undo.
 set -euo pipefail
 export HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
+lock_file=/run/civic-lens-ops.lock
 repository=/opt/civic-lens
 compose=$repository/deploy/scripts/compose.sh
 git_root=(git -c "safe.directory=$repository" -C "$repository")
@@ -18,7 +19,7 @@ number() { [[ ${1:-} =~ ^[1-9][0-9]{0,3}$ ]] || refuse; }
 
 deploy() {
   [[ ${1:-} =~ ^[0-9a-f]{40}$ ]] || refuse
-  "${git_root[@]}" fetch --quiet origin main
+  "${git_root[@]}" fetch --quiet origin main 9>&-
   if ! "${git_root[@]}" merge-base --is-ancestor "$1" origin/main; then
     echo "$1 is not on origin/main." >&2
     exit 1
@@ -44,7 +45,8 @@ publish() {
 }
 
 if [[ $* != status && $* != "worker health" && $* != "release sizes" ]]; then
-  exec 9>/run/lock/civic-lens-ops
+  [[ -e $lock_file ]] || install -m 600 /dev/null "$lock_file"
+  exec 9>"$lock_file"
   if ! flock --nonblock 9; then
     echo "Another listed command is running. Wait for it to finish." >&2
     exit 1
@@ -55,7 +57,7 @@ case "$*" in
   # usage: status
   status) "$compose" ps --all ;;
   # usage: release sizes
-  "release sizes") cd /srv/civic-lens/releases; ls -d [0-9]* | sort -V | xargs du -sB1 ;;
+  "release sizes") cd /srv/civic-lens/releases/releases; du -sB1 [0-9]* ;;
   # usage: deploy <full commit SHA on origin/main>
   "deploy "*) [[ $# -eq 2 ]] || refuse; deploy "$2" ;;
   # usage: db migrate
