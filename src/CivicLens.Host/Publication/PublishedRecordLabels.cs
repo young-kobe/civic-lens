@@ -67,8 +67,14 @@ public static class PublishedRecordLabels
 
     public const string ModelWording = "An AI summary of the official record";
 
-    public static IEnumerable<Fact> Wording(PublishedTextOrigin origin, string modelWording = ModelWording) =>
-        origin == PublishedTextOrigin.Model ? [new("Wording", modelWording)] : [];
+    public const string CodeWording = "Written by code from Congress.gov data";
+
+    public static IEnumerable<Fact> Wording(PublishedTextOrigin origin, string modelWording = ModelWording) => origin switch
+    {
+        PublishedTextOrigin.Model => [new("Wording", modelWording)],
+        PublishedTextOrigin.Code => [new("Wording", CodeWording)],
+        _ => []
+    };
 
     public const string StatementModelWording = "An AI summary of this release.";
 

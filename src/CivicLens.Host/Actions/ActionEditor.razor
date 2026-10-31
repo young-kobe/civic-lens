@@ -50,6 +50,10 @@ else
         {
             <Notice Tone="Tone.Warn">The AI drafter wrote this revision. It is not a human decision. Code built the sponsorships and their citations. Check the headline and the summary against them before you approve.</Notice>
         }
+        @if (revision.AuthorKind == ReviewAuthorKind.Code)
+        {
+            <Notice Tone="Tone.Ok">Code wrote this revision from Congress.gov data, because the bill has no summary and no candidate issue. No model was used.</Notice>
+        }
         @if (concerns.Length > 0)
         {
             <Notice Tone="Tone.Warn">Approval is blocked. @(concerns.Length == 1 ? "Resolve the open concern below first." : $"Resolve the {concerns.Length} open concerns below first.")</Notice>

@@ -5,6 +5,7 @@ using CivicLens.Application.Collection.Bills;
 using CivicLens.Infrastructure.Actions.Persistence;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Relationships;
+using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.BillStream;
@@ -55,7 +56,8 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
             new DateTimeOffset(row.UpdateDateUtcTicks, TimeSpan.Zero), row.IncludesSummaries, row.IncludesSubjects);
         return new(candidate, StoredJobDefinition.Find(revisions, row.ConfigurationRevisionId), await ReadPagesAsync(db, row.DetailJobId, row.IncludesSummaries, row.IncludesSubjects, cancellationToken),
             await ActionDraftRows.ReadCurrentAsync(db, recordId, cancellationToken),
-            await ActionDraftRows.HasNewerCandidateAsync(db, candidate, cancellationToken));
+            await ActionDraftRows.HasNewerCandidateAsync(db, candidate, cancellationToken),
+            (await StaleCandidateIdsAsync(db, [candidateId], cancellationToken)).Contains(candidateId));
     }
 
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) =>
@@ -97,7 +99,14 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
         CancellationToken cancellationToken)
     {
         var stale = await (from candidate in db.Set<ActionCandidateRow>().AsNoTracking()
-                           where candidateIds.Contains(candidate.CandidateId)
+                           where candidateIds.Contains(candidate.CandidateId) && !(
+                               from draft in db.Set<ActionDraftRow>().AsNoTracking()
+                               join revision in db.Set<ActionRevisionRow>().AsNoTracking()
+                                   on new { draft.RecordId, Number = draft.CurrentRevisionNumber } equals new { revision.RecordId, Number = revision.RevisionNumber }
+                               where draft.SourceId == candidate.SourceId && draft.Congress == candidate.Congress &&
+                                   draft.BillType == candidate.BillType && draft.BillNumber == candidate.BillNumber &&
+                                   revision.AuthorKind == ReviewAuthorKind.Code
+                               select draft.RecordId).Any()
                            let newestDraftPrompt = (from run in db.Set<ActionAnalysisRunRow>()
                                                     join sibling in db.Set<ActionCandidateRow>() on run.CandidateId equals sibling.CandidateId
                                                     where run.Task == ActionDraftTask.Task && run.Outcome == AnalysisRunOutcome.Drafted &&

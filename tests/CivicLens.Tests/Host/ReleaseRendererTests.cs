@@ -604,6 +604,17 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task AnActionPageLabelsCodeWrittenWordingWithItsSourceAndNeverCallsItAnAiSummary()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action() with { TextOrigin = PublishedTextOrigin.Code }, [],
+            PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.Contains("Wording", html, StringComparison.Ordinal);
+        Assert.Contains("Written by code from Congress.gov data", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("AI summary", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task EveryActionQuoteLinksToTheMarkOfTheSameTextInTheSourceAndEachSourceIsLabelledByPosition()
     {
         var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action(), [], PublicationCatalogs.None, CancellationToken.None);
@@ -1566,6 +1577,7 @@ public sealed class ReleaseRendererTests
         Assert.NotNull(document.QuerySelector("main a[href='method.html']"));
         Assert.NotNull(document.QuerySelector("main a[href='report.html']"));
         Assert.Contains(PublishedRecordLabels.ModelWording, html, StringComparison.Ordinal);
+        Assert.Contains(PublishedRecordLabels.CodeWording, html, StringComparison.Ordinal);
         Assert.DoesNotContain("unreviewed", html, StringComparison.OrdinalIgnoreCase);
     }
 

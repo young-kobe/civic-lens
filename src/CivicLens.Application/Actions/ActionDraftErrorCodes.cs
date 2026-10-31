@@ -12,6 +12,7 @@ public static class ActionDraftErrorCodes
     public const string SummaryOmitted = "summaryOmitted";
     public const string Unchanged = "unchanged";
     public const string SponsorshipsChanged = "sponsorshipsChanged";
+    public const string CodeWritten = "codeWritten";
     public const string SupersededByNewerCandidate = "supersededByNewerCandidate";
     public const string RevisionConflict = "revisionConflict";
 }

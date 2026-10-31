@@ -63,12 +63,13 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
             throw new ArgumentException("A policy area ID needs a policy area and text.");
     }
 
-    public void ValidateAsAnalysisRevision(ActionDraftRevision? previous)
+    public void ValidateAsWorkerRevision(ActionDraftRevision? previous)
     {
         ValidateShape();
-        if (AuthorKind != ReviewAuthorKind.Analysis || RevisionNumber != (previous?.RevisionNumber ?? 0) + 1)
-            throw new ArgumentException("An analysis revision follows the current revision and has the analysis author.");
-        ReviewTextRules.RequireAnalysisText(this, previous);
+        if (AuthorKind == ReviewAuthorKind.Person || RevisionNumber != (previous?.RevisionNumber ?? 0) + 1)
+            throw new ArgumentException("A worker revision follows the current revision and has the analysis or the code author.");
+        if (AuthorKind == ReviewAuthorKind.Code) ReviewTextRules.RequireCodeText(this, previous);
+        else ReviewTextRules.RequireAnalysisText(this, previous);
     }
 
     public void ValidatePersonEditOf(ActionDraftRevision previous)

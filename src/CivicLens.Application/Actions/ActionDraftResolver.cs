@@ -35,19 +35,23 @@ public static class ActionDraftResolver
         return Assemble(context, createdAtUtc, ReviewText.CopyOf(current), current.TrackedIssueIds, subjectsHash);
     }
 
+    public static ActionDraftRevision WriteByCode(ActionDraftContext context, DateTimeOffset createdAtUtc) =>
+        Assemble(context, createdAtUtc, ActionCodeText.Of(context.Snapshot), [], context.Issues.SubjectsHash);
+
     private static ActionDraftRevision Assemble(ActionDraftContext context, DateTimeOffset createdAtUtc, ReviewText text,
         ImmutableArray<string> trackedIssueIds, string? subjectsHash)
     {
         var (evidence, snapshot, issues, policyAreaId, issueRevisionId) = context;
         var current = evidence.Current;
         var candidate = evidence.Candidate;
-        var revision = new ActionDraftRevision(candidate.RecordId, (current?.RevisionNumber ?? 0) + 1, ReviewAuthor.AnalysisSubject,
+        var author = text.Origin == ReviewTextOrigin.Code ? ReviewAuthor.CodeSubject : ReviewAuthor.AnalysisSubject;
+        var revision = new ActionDraftRevision(candidate.RecordId, (current?.RevisionNumber ?? 0) + 1, author,
             createdAtUtc, text.Headline, text.Summary, text.Origin, text.Suggestion,
             candidate.SourceId, candidate.Congress, candidate.BillType, candidate.BillNumber, candidate.CandidateId, candidate.UpdateDate,
             candidate.IncludesSummaries, candidate.IncludesSubjects,
             snapshot.Fingerprint, snapshot.SummaryVersion, snapshot.SummaryCitation, snapshot.Bill.PolicyArea, snapshot.PolicyAreaCitation,
             policyAreaId, trackedIssueIds, issues.CandidateIds, issueRevisionId, snapshot.Sponsorships, snapshot.Bill.Title, subjectsHash);
-        revision.ValidateAsAnalysisRevision(current);
+        revision.ValidateAsWorkerRevision(current);
         return revision;
     }
 

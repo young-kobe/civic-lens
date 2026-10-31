@@ -8,7 +8,7 @@ public static class ReviewAuthor
 
     public const int MaximumSubjectLength = 256;
 
-    public static ReviewAuthorKind KindOf(string? subject) => IsAnalysis(subject) ? ReviewAuthorKind.Analysis : ReviewAuthorKind.Person;
+    public static ReviewAuthorKind KindOf(string? subject) => IsAnalysis(subject) ? ReviewAuthorKind.Analysis : IsCode(subject) ? ReviewAuthorKind.Code : ReviewAuthorKind.Person;
 
     public static bool IsAnalysis(string? subject) => string.Equals(subject, AnalysisSubject, StringComparison.Ordinal);
 
@@ -23,4 +23,4 @@ public static class ReviewAuthor
         revisionNumber >= 1 && IsValidSubject(authorSubject) && createdAtUtc.Offset == TimeSpan.Zero;
 }
 
-public enum ReviewAuthorKind { Person, Analysis }
+public enum ReviewAuthorKind { Person, Analysis, Code }

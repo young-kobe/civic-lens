@@ -48,17 +48,20 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
         {
             ActionChange.None =>
                 await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken),
-            ActionChange.SponsorshipsOnly => await CopyTextAsync(attempt, context, cancellationToken),
+            ActionChange.SponsorshipsOnly => await SettleRevisionWithoutCallAsync(attempt, context, ActionDraftErrorCodes.SponsorshipsChanged,
+                ActionDraftResolver.CopyText, cancellationToken),
+            _ when context.CanBeWrittenByCode => await SettleRevisionWithoutCallAsync(attempt, context, ActionDraftErrorCodes.CodeWritten,
+                ActionDraftResolver.WriteByCode, cancellationToken),
             _ => await DraftAsync(attempt, context, summariesOmitted, cancellationToken)
         };
     }
 
-    private Task<bool> CopyTextAsync(IAnalysisAttempt<ActionDraftRun> attempt, ActionDraftContext context,
-        CancellationToken cancellationToken)
+    private static Task<bool> SettleRevisionWithoutCallAsync(IAnalysisAttempt<ActionDraftRun> attempt, ActionDraftContext context,
+        string reason, Func<ActionDraftContext, DateTimeOffset, ActionDraftRevision> write, CancellationToken cancellationToken)
     {
         var run = attempt.BypassRun(ActionDraftTask.Model, context.Snapshot.Fingerprint, null);
-        var revision = ActionDraftResolver.CopyText(context, run.FinishedAtUtc);
-        return attempt.SettleAsync(new ActionDraftRun(run, ActionDraftErrorCodes.SponsorshipsChanged),
+        var revision = write(context, run.FinishedAtUtc);
+        return attempt.SettleAsync(new ActionDraftRun(run, reason),
             ActionDraftCheckpoint.From(attempt.Claim, revision), cancellationToken);
     }
 

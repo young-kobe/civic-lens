@@ -258,6 +258,104 @@ public sealed class ActionDraftStepTests
     }
 
     [Fact]
+    public async Task ABillWithNoSummaryAndNoCandidateIssueGetsCodeTextWithNoModelCallAndNoChargeBecauseTheModelAddsNothing()
+    {
+        var world = Create(policyArea: BillGateFixtures.UntrackedPolicyArea);
+        var (store, model) = await RunAsync(world, new FakeHeadlineSummaryModel());
+
+        Assert.Empty(model.Requests);
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal(("civic-lens:code", ReviewTextOrigin.Code, null), (revision.AuthorSubject, revision.TextOrigin, revision.Suggestion));
+        Assert.Equal("H.R. 1: introduced by Elizabeth Warren", revision.Headline);
+        Assert.Equal("H.R. 1, A housing bill. Sponsor: Elizabeth Warren. Introduced January 3, 2025. Congress.gov has no summary of this bill yet.",
+            revision.Summary);
+        Assert.Empty(revision.TrackedIssueIds);
+        var run = Assert.Single(store.Runs);
+        Assert.Equal((AnalysisRunOutcome.Bypassed, 0L, ActionDraftErrorCodes.CodeWritten), (run.Run.Outcome, run.Run.ChargedTokens, run.Reason));
+        var entry = Assert.Single(store.Entries);
+        Assert.Equal((State.Succeeded, null), (entry.Status, entry.ErrorCode));
+    }
+
+    [Fact]
+    public async Task ABillWithCandidateIssuesButNoSummaryStillCallsTheModelBecauseTheModelChoosesTheIssues()
+    {
+        var (store, model) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
+
+        Assert.Single(model.Requests);
+        Assert.Equal(ReviewTextOrigin.Model, Assert.Single(store.Revisions).TextOrigin);
+    }
+
+    [Fact]
+    public async Task ASummaryThatArrivesOnACodeWrittenRecordCallsTheModelAndTheModelTextReplacesTheCodeText()
+    {
+        var untracked = BillGateFixtures.UntrackedPolicyArea;
+        var (first, _) = await RunAsync(Create(policyArea: untracked), new FakeHeadlineSummaryModel());
+        var codeWritten = Assert.Single(first.Revisions);
+
+        var (second, model) = await RunAsync(Create(policyArea: untracked, summaries: [Summary]),
+            new FakeHeadlineSummaryModel().Draft(Output(issueIds: [])), codeWritten);
+
+        Assert.Single(model.Requests);
+        var revision = Assert.Single(second.Revisions);
+        Assert.Equal(("civic-lens:analysis", ReviewTextOrigin.Model, 2), (revision.AuthorSubject, revision.TextOrigin, revision.RevisionNumber));
+    }
+
+    [Fact]
+    public async Task ACodeWrittenRecordIsUnchangedOnTheNextRunAndKeepsItsCodeTextWhenOnlyACosponsorJoins()
+    {
+        var untracked = BillGateFixtures.UntrackedPolicyArea;
+        var (first, _) = await RunAsync(Create(policyArea: untracked), new FakeHeadlineSummaryModel());
+        var codeWritten = Assert.Single(first.Revisions);
+
+        var (again, _) = await RunAsync(Create(policyArea: untracked), new FakeHeadlineSummaryModel(), codeWritten);
+        var (joined, model) = await RunAsync(Create(policyArea: untracked, cosponsorPages: [[MarkeyOriginal]]), new FakeHeadlineSummaryModel(), codeWritten);
+
+        Assert.Empty(again.Revisions);
+        Assert.Empty(model.Requests);
+        var copy = Assert.Single(joined.Revisions);
+        Assert.Equal(("civic-lens:code", ReviewTextOrigin.Code, codeWritten.Summary), (copy.AuthorSubject, copy.TextOrigin, copy.Summary));
+        Assert.Equal(2, copy.Sponsorships.Length);
+    }
+
+    [Fact]
+    public async Task CodeNeverReplacesTextThatAPersonWroteSoABillWithNoSummaryAndNoCandidateIssueStillCallsTheModelForASuggestion()
+    {
+        var untracked = BillGateFixtures.UntrackedPolicyArea;
+        var (first, _) = await RunAsync(Create(policyArea: untracked), new FakeHeadlineSummaryModel());
+        var edited = Assert.Single(first.Revisions) with
+        {
+            RevisionNumber = 2,
+            AuthorSubject = "auth0|editor",
+            TextOrigin = ReviewTextOrigin.Person,
+            Headline = "Edited"
+        };
+
+        var (second, model) = await RunAsync(Create(policyArea: untracked, title: "A renamed bill"), new FakeHeadlineSummaryModel().Draft(Output(issueIds: [])), edited);
+
+        Assert.Single(model.Requests);
+        var revision = Assert.Single(second.Revisions);
+        Assert.Equal((ReviewTextOrigin.Person, "Edited"), (revision.TextOrigin, revision.Headline));
+        Assert.NotNull(revision.Suggestion);
+    }
+
+    [Fact]
+    public async Task ARevisionFromAnOlderPromptDraftsAgainEvenWhenNothingElseChangedBecauseARedraftMustReachOldText()
+    {
+        var world = Create(cosponsorPages: [[MarkeyOriginal]]);
+        var (first, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output()));
+        var current = Assert.Single(first.Revisions);
+
+        var (unchanged, unchangedModel) = await RunAsync(world, new FakeHeadlineSummaryModel(), current);
+        var (redrafted, model) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output(headline: "Warren filed a housing bill")), current,
+            hasOlderPromptDraft: true);
+
+        Assert.Empty(unchanged.Revisions);
+        Assert.Empty(unchangedModel.Requests);
+        Assert.Single(model.Requests);
+        Assert.Equal("Warren filed a housing bill", Assert.Single(redrafted.Revisions).Headline);
+    }
+
+    [Fact]
     public async Task ACandidateWithSubjectsDraftsAgainFromARevisionThatNeverSawThemAndALaterRunOfTheSameCandidateIsUnchanged()
     {
         var withoutSubjects = Create(summaries: [Summary]);
@@ -726,7 +824,8 @@ public sealed class ActionDraftStepTests
     [Fact]
     public async Task APolicyAreaWithNoIssueSendsTheSchemaWithoutIssueIds()
     {
-        var (_, model) = await RunAsync(Create(policyArea: BillGateFixtures.UntrackedPolicyArea), new FakeHeadlineSummaryModel().Draft(Output(issueIds: [])));
+        var (_, model) = await RunAsync(Create(policyArea: BillGateFixtures.UntrackedPolicyArea, summaries: [Summary]),
+            new FakeHeadlineSummaryModel().Draft(Output(issueIds: [])));
 
         Assert.DoesNotContain("issueIds", Assert.Single(model.Requests).SchemaJson, StringComparison.Ordinal);
     }
@@ -1008,9 +1107,9 @@ public sealed class ActionDraftStepTests
 
     private static async Task<(FakeActionDraftStore Store, FakeHeadlineSummaryModel Model)> RunAsync(ActionBillWorld world,
         FakeHeadlineSummaryModel model, ActionDraftRevision? current = null, DateTimeOffset? updatedAt = null, ActionDraftSettings? settings = null,
-        IssueConfigurationRevision? issues = null, bool hasNewerCandidate = false)
+        IssueConfigurationRevision? issues = null, bool hasNewerCandidate = false, bool hasOlderPromptDraft = false)
     {
-        var store = new FakeActionDraftStore(world.Evidence(current, updatedAt, hasNewerCandidate));
+        var store = new FakeActionDraftStore(world.Evidence(current, updatedAt, hasNewerCandidate, hasOlderPromptDraft));
         await AnalysisWorkers.ActionDrafting(store, new FakeAnalysisStatusStore(), world.Reader(), model,
             settings ?? new ActionDraftSettings(10_000_000, concurrency: 1), issues ?? BillGateFixtures.Revision(), TimeProvider.System).ExecuteAsync(once: true);
         return (store, model);

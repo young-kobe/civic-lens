@@ -1,14 +1,18 @@
 using CivicLens.Application.Issues;
+using CivicLens.Core.Review;
 
 namespace CivicLens.Application.Actions;
 
 public sealed record ActionDraftContext(ActionDraftEvidence Evidence, ActionBillSnapshot Snapshot, BillIssueChoice Issues,
     string? PolicyAreaId, string IssueRevisionId)
 {
+    public bool CanBeWrittenByCode => Snapshot.Bill.SummaryCount == 0 && Issues.CandidateIds.IsEmpty &&
+        Evidence.Current is not { TextOrigin: ReviewTextOrigin.Person };
+
     public ActionChange ChangeSinceCurrent()
     {
         var previous = Evidence.Current;
-        if (previous is null || previous.SummaryVersion != Snapshot.SummaryVersion || previous.PolicyArea != Snapshot.Bill.PolicyArea || previous.PolicyAreaId != PolicyAreaId ||
+        if (previous is null || Evidence.HasOlderPromptDraft || previous.SummaryVersion != Snapshot.SummaryVersion || previous.PolicyArea != Snapshot.Bill.PolicyArea || previous.PolicyAreaId != PolicyAreaId ||
             previous.BillTitle != Snapshot.Bill.Title || previous.IssueCandidateIds.IsDefault || !previous.IssueCandidateIds.SequenceEqual(Issues.CandidateIds) ||
             previous.IssueRevisionId != IssueRevisionId ||
             Evidence.Candidate.IncludesSubjects && previous.SubjectsHash != Issues.SubjectsHash)

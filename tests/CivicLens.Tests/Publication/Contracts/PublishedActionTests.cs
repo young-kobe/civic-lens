@@ -12,6 +12,15 @@ public sealed class PublishedActionTests
     private const string CosponsorsText = "Cosponsor: C000001, 2026-01-05\n";
 
     [Fact]
+    public void CodeTextOriginWritesAsCodeAndReadsBackBecauseTheOriginIsPartOfTheContract()
+    {
+        var json = JsonSerializer.Serialize(Action() with { TextOrigin = PublishedTextOrigin.Code }, PublicationProtocol.JsonOptions);
+
+        Assert.Contains("\"textOrigin\":\"code\"", json, StringComparison.Ordinal);
+        Assert.Equal(PublishedTextOrigin.Code, JsonSerializer.Deserialize<PublishedAction>(json, PublicationProtocol.JsonOptions)!.TextOrigin);
+    }
+
+    [Fact]
     public void PublishedActionJsonMatchesPinnedSchemaVersion()
     {
         var json = JsonSerializer.Serialize(Action(), PublicationProtocol.JsonOptions);

@@ -12,12 +12,37 @@ public sealed class ActionDraftRevisionTests
     [Fact]
     public void AnAnalysisRevisionFollowsTheCurrentOneAndAFirstRevisionIsNumberOne()
     {
-        Model().ValidateAsAnalysisRevision(null);
-        Model(2).ValidateAsAnalysisRevision(Model());
+        Model().ValidateAsWorkerRevision(null);
+        Model(2).ValidateAsWorkerRevision(Model());
 
-        Assert.Throws<ArgumentException>(() => Model(2).ValidateAsAnalysisRevision(null));
-        Assert.Throws<ArgumentException>(() => Model(3).ValidateAsAnalysisRevision(Model()));
-        Assert.Throws<ArgumentException>(() => Model(author: "auth0|person").ValidateAsAnalysisRevision(null));
+        Assert.Throws<ArgumentException>(() => Model(2).ValidateAsWorkerRevision(null));
+        Assert.Throws<ArgumentException>(() => Model(3).ValidateAsWorkerRevision(Model()));
+        Assert.Throws<ArgumentException>(() => Model(author: "auth0|person").ValidateAsWorkerRevision(null));
+    }
+
+    [Fact]
+    public void ACodeRevisionHoldsCodeTextAndTheCodeAuthorTogetherBecauseTheLabelOnThePageNamesWhoWroteTheWords()
+    {
+        var code = Model() with { AuthorSubject = ReviewAuthor.CodeSubject, TextOrigin = ReviewTextOrigin.Code };
+
+        code.ValidateAsWorkerRevision(null);
+        (code with { RevisionNumber = 2 }).ValidateAsWorkerRevision(code);
+
+        Assert.Equal(ReviewAuthorKind.Code, code.AuthorKind);
+        Assert.Throws<ArgumentException>(() => (code with { TextOrigin = ReviewTextOrigin.Model }).ValidateAsWorkerRevision(null));
+        Assert.Throws<ArgumentException>(() => (Model() with { TextOrigin = ReviewTextOrigin.Code }).ValidateAsWorkerRevision(null));
+        Assert.Throws<ArgumentException>(() => (code with { AuthorSubject = "auth0|person" }).ValidateAsWorkerRevision(null));
+    }
+
+    [Fact]
+    public void ACodeRevisionNeverReplacesTextThatAPersonWroteAndNeverCarriesASuggestion()
+    {
+        var person = PersonEditOf(Model(), "Edited headline", "Edited summary.");
+        var code = Model(3) with { AuthorSubject = ReviewAuthor.CodeSubject, TextOrigin = ReviewTextOrigin.Code };
+        var suggestion = new ReviewTextSuggestion("New", "New summary.", new string('1', 32), Fingerprint);
+
+        Assert.Throws<ArgumentException>(() => code.ValidateAsWorkerRevision(person with { RevisionNumber = 2 }));
+        Assert.Throws<ArgumentException>(() => (code with { Suggestion = suggestion }).ValidateAsWorkerRevision(Model(2)));
     }
 
     [Fact]
@@ -28,11 +53,11 @@ public sealed class ActionDraftRevisionTests
         var suggestion = new ReviewTextSuggestion("New", "New summary.", new string('1', 32), Fingerprint);
         var kept = Model(3) with { Headline = person.Headline, Summary = person.Summary, TextOrigin = ReviewTextOrigin.Person, Suggestion = suggestion };
 
-        kept.ValidateAsAnalysisRevision(person);
+        kept.ValidateAsWorkerRevision(person);
 
-        Assert.Throws<ArgumentException>(() => (kept with { Headline = "Overwritten" }).ValidateAsAnalysisRevision(person));
-        Assert.Throws<ArgumentException>(() => (kept with { Suggestion = null }).ValidateAsAnalysisRevision(person));
-        Assert.Throws<ArgumentException>(() => Model(3).ValidateAsAnalysisRevision(person));
+        Assert.Throws<ArgumentException>(() => (kept with { Headline = "Overwritten" }).ValidateAsWorkerRevision(person));
+        Assert.Throws<ArgumentException>(() => (kept with { Suggestion = null }).ValidateAsWorkerRevision(person));
+        Assert.Throws<ArgumentException>(() => Model(3).ValidateAsWorkerRevision(person));
     }
 
     [Fact]
@@ -42,10 +67,10 @@ public sealed class ActionDraftRevisionTests
         var person = PersonEditOf(Model(), "Edited headline", "Edited summary.");
         var withSuggestion = person with { Suggestion = suggestion };
 
-        (Model(3) with { Headline = person.Headline, Summary = person.Summary, TextOrigin = ReviewTextOrigin.Person }).ValidateAsAnalysisRevision(person);
+        (Model(3) with { Headline = person.Headline, Summary = person.Summary, TextOrigin = ReviewTextOrigin.Person }).ValidateAsWorkerRevision(person);
         (Model(3) with { Headline = person.Headline, Summary = person.Summary, TextOrigin = ReviewTextOrigin.Person, Suggestion = suggestion })
-            .ValidateAsAnalysisRevision(withSuggestion);
-        Model(2).ValidateAsAnalysisRevision(Model());
+            .ValidateAsWorkerRevision(withSuggestion);
+        Model(2).ValidateAsWorkerRevision(Model());
     }
 
     [Fact]
@@ -53,7 +78,7 @@ public sealed class ActionDraftRevisionTests
     {
         var suggestion = new ReviewTextSuggestion("New", "New summary.", new string('1', 32), Fingerprint);
 
-        Assert.Throws<ArgumentException>(() => (Model(2) with { Suggestion = suggestion }).ValidateAsAnalysisRevision(Model()));
+        Assert.Throws<ArgumentException>(() => (Model(2) with { Suggestion = suggestion }).ValidateAsWorkerRevision(Model()));
     }
 
     [Fact]
