@@ -1,7 +1,5 @@
 using System.Collections.Immutable;
 using System.Runtime.ExceptionServices;
-using System.Linq.Expressions;
-using CivicLens.Application.Paging;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
@@ -173,19 +171,6 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
     public async Task<(int NeedsAction, int Approved)> CountAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken) =>
         (await Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken),
             await Drafts(db, DraftStatusFilter.Approved).CountAsync(cancellationToken));
-
-    public Task<KeysetSlice<TDraftRow>> PageAsync(CollectionAttemptDbContext db, PageCursor? cursor, int limit,
-        DraftStatusFilter filter, CancellationToken cancellationToken) =>
-        PageAsync(db, cursor, limit, filter, row => row.CreatedAtUtcTicks, cancellationToken);
-
-    public async Task<KeysetSlice<TDraftRow>> PageAsync(CollectionAttemptDbContext db, PageCursor? cursor, int limit,
-        DraftStatusFilter filter, Expression<Func<TDraftRow, long>> ticksOf, CancellationToken cancellationToken)
-    {
-        var fetched = await ReviewKeyset.Page(Drafts(db, filter), cursor, ticksOf,
-            row => EF.Property<string>(row, recordIdProperty)).Take(limit + 1).ToArrayAsync(cancellationToken);
-        var ticks = ticksOf.Compile();
-        return KeysetSlice<TDraftRow>.Create(fetched, limit, cursor, row => (ticks(row), row.RecordId));
-    }
 
     public Task<TDraftRow[]> ReadDraftsAsync(CollectionAttemptDbContext db, string[] recordIds, CancellationToken cancellationToken) =>
         db.Set<TDraftRow>().AsNoTracking().Where(row => recordIds.Contains(EF.Property<string>(row, recordIdProperty)))
