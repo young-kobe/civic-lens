@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Relationships;
 using CivicLens.Application.Review;

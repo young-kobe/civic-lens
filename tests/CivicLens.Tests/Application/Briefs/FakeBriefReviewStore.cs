@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Briefs;
-using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;

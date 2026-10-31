@@ -45,15 +45,13 @@ public sealed class BriefReviewWorkspaceTests(PostgresCollection postgres) : IAs
         await seeder.ReleaseCitedRecordsAsync();
         await seeder.ReviewableBriefAsync(ReviewableRevision());
 
-        foreach (var url in new[] { $"/Review/Briefs/{RecordId}" })
-        {
-            using var anonymous = await host.Client.GetAsync(url);
-            Assert.NotEqual(HttpStatusCode.OK, anonymous.StatusCode);
-            using var stranger = new HttpRequestMessage(HttpMethod.Get, url);
-            stranger.Headers.Add("Cookie", host.CreateCookie("auth0|stranger"));
-            using var refused = await host.Client.SendAsync(stranger);
-            Assert.NotEqual(HttpStatusCode.OK, refused.StatusCode);
-        }
+        var url = $"/Review/Briefs/{RecordId}";
+        using var anonymous = await host.Client.GetAsync(url);
+        Assert.NotEqual(HttpStatusCode.OK, anonymous.StatusCode);
+        using var stranger = new HttpRequestMessage(HttpMethod.Get, url);
+        stranger.Headers.Add("Cookie", host.CreateCookie("auth0|stranger"));
+        using var refused = await host.Client.SendAsync(stranger);
+        Assert.NotEqual(HttpStatusCode.OK, refused.StatusCode);
     }
 
     [Fact]
@@ -66,6 +64,7 @@ public sealed class BriefReviewWorkspaceTests(PostgresCollection postgres) : IAs
         var page = await host.GetDocumentAsync($"/Review/Briefs/{RecordId}");
 
         Assert.Equal("Record ID " + RecordId, page.QuerySelector(".page-header-record-id")!.TextContent);
+        Assert.Equal("/Review", Assert.Single(page.QuerySelectorAll(".rail .nav-link"), link => link.GetAttribute("aria-current") == "page").GetAttribute("href"));
         var evidence = page.QuerySelector("[aria-labelledby='evidence']")!;
         Assert.Contains("Rent cap", evidence.TextContent, StringComparison.Ordinal);
         Assert.Contains("Summary of Rent cap", evidence.TextContent, StringComparison.Ordinal);
@@ -76,7 +75,7 @@ public sealed class BriefReviewWorkspaceTests(PostgresCollection postgres) : IAs
     }
 
     [Fact]
-    public async Task AChangedCitedRecordShowsTheFlagOnTheListAndInTheEditorWhileTheBriefStaysApproved()
+    public async Task AChangedCitedRecordShowsTheFlagInTheEditorWhileTheBriefStaysApproved()
     {
         await seeder.ReleaseCitedRecordsAsync();
         await seeder.ReviewableBriefAsync(ReviewableRevision());

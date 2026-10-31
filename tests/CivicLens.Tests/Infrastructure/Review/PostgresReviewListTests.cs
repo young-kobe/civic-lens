@@ -1,6 +1,5 @@
 using CivicLens.Application.Actions;
 using CivicLens.Application.Paging;
-using CivicLens.Application.Relationships;
 using CivicLens.Application.Review;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Actions;
@@ -10,12 +9,9 @@ using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Collection;
-using CivicLens.Infrastructure.Relationships;
 using CivicLens.Infrastructure.Votes;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace CivicLens.Tests.Infrastructure.Review;
 
@@ -56,7 +52,9 @@ public sealed class PostgresReviewListTests(PostgresCollection postgres) : IAsyn
     [Fact]
     public async Task TheQueueRefusesARankedCursorSoACursorFromAnotherListCannotMovePastItsRows()
     {
-        await Assert.ThrowsAsync<ArgumentException>(() => queue.ListAsync(PageCursor.Parse("o.1.5." + Id('1')), 1, default));
+        var ranked = PageCursor.Parse("o.1.5." + Id('1'));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => queue.ListAsync(ranked, 1, default));
     }
 
     private static string Id(char digit) => new(digit, 64);

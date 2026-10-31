@@ -37,6 +37,7 @@ public sealed class RelationshipReviewWorkspaceTests(PostgresCollection postgres
         Assert.Equal(HttpStatusCode.Redirect, found.StatusCode);
         Assert.Equal(url, found.Headers.Location!.AbsolutePath);
         Assert.Equal("Record ID " + ActionPair().PairId, editor.QuerySelector(".page-header-record-id")!.TextContent);
+        Assert.Equal("/Review", Assert.Single(editor.QuerySelectorAll(".rail .nav-link"), link => link.GetAttribute("aria-current") == "page").GetAttribute("href"));
     }
 
     [Fact]
@@ -51,15 +52,12 @@ public sealed class RelationshipReviewWorkspaceTests(PostgresCollection postgres
         }
         host.Client.DefaultRequestHeaders.Remove("Cookie");
 
-        foreach (var page in new[] { url })
-        {
-            using var anonymous = await host.Client.GetAsync(page);
-            Assert.NotEqual(HttpStatusCode.OK, anonymous.StatusCode);
-            using var stranger = new HttpRequestMessage(HttpMethod.Get, page);
-            stranger.Headers.Add("Cookie", host.CreateCookie("auth0|stranger"));
-            using var refused = await host.Client.SendAsync(stranger);
-            Assert.NotEqual(HttpStatusCode.OK, refused.StatusCode);
-        }
+        using var anonymous = await host.Client.GetAsync(url);
+        Assert.NotEqual(HttpStatusCode.OK, anonymous.StatusCode);
+        using var stranger = new HttpRequestMessage(HttpMethod.Get, url);
+        stranger.Headers.Add("Cookie", host.CreateCookie("auth0|stranger"));
+        using var refused = await host.Client.SendAsync(stranger);
+        Assert.NotEqual(HttpStatusCode.OK, refused.StatusCode);
     }
 
     [Fact]
