@@ -274,7 +274,7 @@ At settlement, `StatementDraftRows` appends the first revision through `ReviewRe
 
 Statement review mirrors document-change review and uses the shared decision rules in [review](review.md#review-decisions). The Host has statement pages on top of the shared handlers.
 
-**Ownership.** Core/Statements holds `StatementReview`, the aggregate of one candidate, and the rules on `StatementDraftRevision`. Application/Statements holds the commands `CreateStatementDraft`, `SaveStatementDraft`, and `DecideStatementReview`. It also holds the reads `GetStatementReview`, `ListStatementReviews`, `ListStatementTriage` with `StatementTriagePage` and `StatementTriageRow`, and `ListStatementsNotInReview`, and the store boundary `IStatementReviewStore`.
+**Ownership.** Core/Statements holds `StatementReview`, the aggregate of one candidate, and the rules on `StatementDraftRevision`. Application/Statements holds the commands `CreateStatementDraft`, `SaveStatementDraft`, and `DecideStatementReview`. It also holds the reads `GetStatementReview`, `ListStatementReviews`, and `ListStatementsNotInReview`, and the store boundary `IStatementReviewStore`.
 
 Infrastructure/Statements holds `PostgresStatementReviewStore` and `StatementReviewQueries`. The store runs on the shared `ReviewRecords` core; see [review](review.md#storage-and-contracts). The handlers use `ReviewAuthorization`, `ReviewValidation`, `PageCursor`, `KeysetSlice`, and `PageLimit`. Every command needs a reviewer. The AI author can never decide or author a person revision.
 
@@ -297,7 +297,7 @@ Infrastructure/Statements holds `PostgresStatementReviewStore` and `StatementRev
 
 **Decide.** `DecideStatementReview` checks the expected revision number and review state version, then applies `ReviewPolicy`. `ReviewValidation.CreateDecision` builds the decision for both record types. An approval runs `StatementAllowedSelections.RequireApprovable`, which calls `StatementDraftRevision.ValidateForApproval`. A person approval also runs `RequireConfirmedDate`. The approval needs a headline, a summary, at least one speaker, at least one quotation, and a date with evidence or no date. It also checks the allowed selections again and checks the spans against the extraction.
 
-**Reads.** `GetStatementReview` returns the aggregate, the status, the source ID, the URL, and the extraction for quote display. It also returns the run ID when revision 1 is an AI draft. A candidate with no draft row reads as `NotDrafted`.
+**Reads.** `GetStatementReview` returns the aggregate, the status, the source ID, the URL, and the extraction for quote display. It also returns the run ID when revision 1 is an AI draft. It runs the approval check on the saved revision of a statement that is not approved. The check uses the rules for a person. The result is `Approval`. A candidate with no draft row reads as `NotDrafted`.
 
 `ListStatementReviews` takes the filter `All`, `NeedsAction`, or `Approved`. Every filter orders by newest event date, then candidate ID; the statement list has no tier. See [review](review.md#lists-and-paging). The list also takes an issue, an official, and an event date range. `NotDrafted` counts as needs action. `GetStatementReviewCounts` counts each filter with the same status rule, and the Review home page shows the needs action count.
 
@@ -308,9 +308,8 @@ Infrastructure/Statements holds `PostgresStatementReviewStore` and `StatementRev
 - The drafts table has the filter tabs All, Needs action, and Approved, with their counts. It has a filter form for issue, official, and dates, and a pager on `ListStatementReviews`. It shows the headline (or "Not drafted"), the source, the status, and the open concern count.
 - The query values are `drafts` (filter), `draftsCursor`, `issue`, `official`, `from`, `to`, `notInReview` (cursor), and `status`.
 - The "Not in review" table has a pager on `ListStatementsNotInReview`. It shows the source, the URL, and the reason code. Each row has a Start draft post form.
-- The page header links `/Review/Statements/Triage`. That page lists the drafts that need action, 10 for each page, with the same filters. `ListStatementTriage` returns each row with the quotes of its revision and the result of the approval check. The check uses the allowed selections of the admitting configuration revision. A row without an open concern has Approve, Request changes, and a note field. See [review](review.md#triage).
 
-`/Review/Statements/{CandidateId}` mirrors the document-change editor. It shows the AI authorship notice with the analysis run, the open-concern notice, and the compare panel after a stale save.
+`/Review/Statements/{CandidateId}` mirrors the document-change editor. It shows the AI authorship notice with the analysis run, the open-concern notice, and the compare panel after a stale save. It also shows the failure text of `Approval` in a notice at the top, so a person sees why Approve fails.
 
 - The Statement panel has the tabs "Saved revision N" (`StatementRecord`) and "Edit wording".
 - The Evidence panel shows the article text with the cited spans marked through `DocumentText` and `CitedText`.
@@ -530,7 +529,7 @@ With `--since`, `regate` moves only candidates first captured on or after that U
 | Review aggregate | `src/CivicLens.Core/Statements/StatementReview.cs`, `src/CivicLens.Core/Review/AiProposedDate.cs` |
 | Review commands and reads | `src/CivicLens.Application/Statements/CreateStatementDraft.cs`, `src/CivicLens.Application/Statements/SaveStatementDraft.cs`, `src/CivicLens.Application/Statements/DecideStatementReview.cs`, `src/CivicLens.Application/Statements/GetStatementReview.cs`, `src/CivicLens.Application/Statements/ListStatementReviews.cs`, `src/CivicLens.Application/Statements/GetStatementReviewCounts.cs`, `src/CivicLens.Application/Statements/ListStatementsNotInReview.cs`, `src/CivicLens.Application/Statements/StatementSelectionResolver.cs`, `src/CivicLens.Application/Statements/StatementSelectableSpans.cs` |
 | Review store | `src/CivicLens.Infrastructure/Statements/PostgresStatementReviewStore.cs`, `src/CivicLens.Infrastructure/Statements/StatementReviewQueries.cs` |
-| Review pages | `src/CivicLens.Host/Statements/StatementList.razor`, `src/CivicLens.Host/Statements/StatementTriage.razor`, `src/CivicLens.Host/Review/DraftListPage.cs`, `src/CivicLens.Host/Statements/StatementEditor.razor`, `src/CivicLens.Host/Review/ReviewRecordPage.cs` |
+| Review pages | `src/CivicLens.Host/Statements/StatementList.razor`, `src/CivicLens.Host/Statements/StatementEditor.razor`, `src/CivicLens.Host/Review/ReviewRecordPage.cs` |
 | Gate labels: label, split, store | `src/CivicLens.Core/Statements/GateLabel.cs`, `src/CivicLens.Core/Statements/GateLabelEntry.cs`, `src/CivicLens.Core/Statements/GateLabelSplit.cs`, `src/CivicLens.Application/Statements/IGateLabelStore.cs`, `src/CivicLens.Infrastructure/Statements/PostgresGateLabelStore.cs` |
 | Gate label use cases | `src/CivicLens.Application/Statements/SaveGateLabel.cs`, `src/CivicLens.Application/Statements/ListGateLabelQueue.cs`, `src/CivicLens.Application/Statements/GetGateLabelTask.cs`, `src/CivicLens.Application/Statements/ExportGateLabels.cs` |
 | Gate label pages and export | `src/CivicLens.Host/Statements/GateLabelList.razor`, `src/CivicLens.Host/Statements/GateLabelEditor.razor`, `src/CivicLens.Host/Statements/GateLabelExport.cs` |

@@ -67,7 +67,7 @@
         </Panel>
     }
 
-    <form id="start-draft" method="post" @formname="start-draft" @onsubmit="StartDraftAsync">
+    <form id="start-draft" hidden method="post" @formname="start-draft" @onsubmit="StartDraftAsync">
         <AntiforgeryToken />
         <input type="hidden" name="idempotencyKey" value="@renderKey" />
     </form>

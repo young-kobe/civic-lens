@@ -41,7 +41,7 @@ Implemented:
 - the statement gate and statement drafting
 - AI drafting of bill action records
 - AI drafting of House and Senate vote records, one for each roll call, from the vote candidates
-- action review, with person edits and withdrawals on records that code approved, and a triage page for statements
+- action review, with person edits and withdrawals on records that code approved
 - vote review: person edits, version-bound decisions, and the tracked member votes beside their citations
 - brief review: person edits, version-bound decisions, and a derived flag for changed cited records
 - AI drafting of relationships between approved statements and approved actions or votes
@@ -412,7 +412,7 @@ This is the only navigation index.
 | Review decisions, roles, concurrency | [Review](architecture/review.md#review-decisions) | `src/CivicLens.Core/Review/ReviewPolicy.cs` |
 | Review cycles, history caps, the shared append step | [Review](architecture/review.md#review-cycles) | `src/CivicLens.Infrastructure/Review/ReviewRecords.cs` |
 | Review queue, search, lists, paging | [Review](architecture/review.md#lists-and-paging) | `src/CivicLens.Application/Review/ListReviewQueue.cs` |
-| Statement triage page and inline decisions | [Review](architecture/review.md#triage) | `src/CivicLens.Host/Statements/StatementTriage.razor.cs` |
+| Approval check | [Review](architecture/review.md#approval-check) | `src/CivicLens.Application/Review/ApprovalCheck.cs` |
 | Releases, activation, rollback | [Publication](architecture/publication.md#publish) | `src/CivicLens.Application/Publication/PublishRelease.cs` |
 | Release record content and schema | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Publication.Contracts/PublicationRelease.cs` |
 | Published vote record, builder, and page | [Publication](architecture/publication.md#vote-record) | `src/CivicLens.Publication.Contracts/PublishedVote.cs` |
