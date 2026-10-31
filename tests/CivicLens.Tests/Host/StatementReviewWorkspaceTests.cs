@@ -202,7 +202,9 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
         using var blocked = await DecideAsync(url, "Approve");
         Assert.Equal(HttpStatusCode.BadRequest, blocked.StatusCode);
         var blockedPage = await host.GetDocumentAsync(url);
-        Assert.Contains("Approval is blocked.", blockedPage.QuerySelector("#approval-blocked")!.TextContent, StringComparison.Ordinal);
+        var cause = blockedPage.QuerySelector("#approval-blocked")!.TextContent;
+        Assert.Contains("Approval will fail until this is fixed.", cause, StringComparison.Ordinal);
+        Assert.Contains("confirm the AI-proposed", cause, StringComparison.Ordinal);
 
         var fields = await SaveFieldsAsync(url);
         fields.Add(new("Input.StatementDateChecked", "true"));
@@ -260,7 +262,8 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
         Assert.Equal(HttpStatusCode.Redirect, withNote.StatusCode);
         var page = await host.GetDocumentAsync(url);
         Assert.Contains("Name the housing bill.", page.QuerySelector("[aria-labelledby='history'] tbody")!.TextContent, StringComparison.Ordinal);
-        Assert.Contains("Approval is blocked", page.Body!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Resolve the open concern below first.", page.Body!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("confirm the AI-proposed", page.QuerySelector("#approval-blocked")!.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

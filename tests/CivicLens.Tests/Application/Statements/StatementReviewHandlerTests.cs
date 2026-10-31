@@ -223,4 +223,28 @@ public sealed class StatementReviewHandlerTests
         Assert.True(configured.Approval!.Passed);
         Assert.Contains("no longer configured", retired.Approval!.Failure, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task GetShowsNoApprovalFailureForAnApprovedAiRevisionWithADateBecauseCodeReadTheDate()
+    {
+        var saved = await new SaveStatementDraft(store, Reader()).ExecuteAsync(Reviewer, Request());
+        var aiRevision = saved with
+        {
+            AuthorSubject = ReviewAuthor.AnalysisSubject,
+            StatementDate = new DateOnly(2026, 5, 5),
+            StatementDateEvidence = Span(ReleaseSentence)
+        };
+        var awaiting = await ReadAsync(ReviewStatus.AwaitingReview);
+        var approved = await ReadAsync(ReviewStatus.Approved);
+
+        Assert.Contains("AI-proposed", awaiting.Approval!.Failure, StringComparison.Ordinal);
+        Assert.Null(approved.Approval);
+
+        async Task<StatementReviewDetail> ReadAsync(ReviewStatus status)
+        {
+            store.Read = new StatementReviewRead(new(CandidateId, aiRevision, 0, status, [aiRevision], [], []), "source",
+                "https://example.test/a", Evidence.Article.Extraction, null, StatementDraftFixtures.SpeakerRevision());
+            return (await new GetStatementReview(store, Resolver).ExecuteAsync(Reviewer, CandidateId))!;
+        }
+    }
 }

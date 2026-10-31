@@ -297,7 +297,7 @@ Infrastructure/Statements holds `PostgresStatementReviewStore` and `StatementRev
 
 **Decide.** `DecideStatementReview` checks the expected revision number and review state version, then applies `ReviewPolicy`. `ReviewValidation.CreateDecision` builds the decision for both record types. An approval runs `StatementAllowedSelections.RequireApprovable`, which calls `StatementDraftRevision.ValidateForApproval`. A person approval also runs `RequireConfirmedDate`. The approval needs a headline, a summary, at least one speaker, at least one quotation, and a date with evidence or no date. It also checks the allowed selections again and checks the spans against the extraction.
 
-**Reads.** `GetStatementReview` returns the aggregate, the status, the source ID, the URL, and the extraction for quote display. It also returns the run ID when revision 1 is an AI draft. A candidate with no draft row reads as `NotDrafted`.
+**Reads.** `GetStatementReview` returns the aggregate, the status, the source ID, the URL, and the extraction for quote display. It also returns the run ID when revision 1 is an AI draft. It runs the approval check on the saved revision of a statement that is not approved. The check uses the rules for a person. The result is `Approval`. A candidate with no draft row reads as `NotDrafted`.
 
 `ListStatementReviews` takes the filter `All`, `NeedsAction`, or `Approved`. Every filter orders by newest event date, then candidate ID; the statement list has no tier. See [review](review.md#lists-and-paging). The list also takes an issue, an official, and an event date range. `NotDrafted` counts as needs action. `GetStatementReviewCounts` counts each filter with the same status rule, and the Review home page shows the needs action count.
 
@@ -309,7 +309,7 @@ Infrastructure/Statements holds `PostgresStatementReviewStore` and `StatementRev
 - The query values are `drafts` (filter), `draftsCursor`, `issue`, `official`, `from`, `to`, `notInReview` (cursor), and `status`, as on the Review home page.
 - The "Not in review" table has a pager on `ListStatementsNotInReview`. It shows the source, the URL, and the reason code. Each row has a Start draft post form.
 
-`/Review/Statements/{CandidateId}` mirrors the document-change editor. It shows the AI authorship notice with the analysis run, the open-concern notice, and the compare panel after a stale save.
+`/Review/Statements/{CandidateId}` mirrors the document-change editor. It shows the AI authorship notice with the analysis run, the open-concern notice, and the compare panel after a stale save. It also shows the failure text of `Approval` in a notice at the top, so a person sees why Approve fails.
 
 - The Statement panel has the tabs "Saved revision N" (`StatementRecord`) and "Edit wording".
 - The Evidence panel shows the article text with the cited spans marked through `DocumentText` and `CitedText`.

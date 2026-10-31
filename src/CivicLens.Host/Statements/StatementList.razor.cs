@@ -17,6 +17,7 @@ public sealed partial class StatementList
 {
     private const int PageSize = 10;
     private const string StartForm = "start-statement";
+    private const string DateFormat = "yyyy-MM-dd";
 
     private static readonly IReadOnlyList<Crumb> Crumbs = [new("Review", "/Review"), new("Statements")];
 
@@ -24,13 +25,28 @@ public sealed partial class StatementList
     private StatementReviewPage? drafts;
     private StatementNotInReviewPage? notInReview;
     private StatementReviewCounts? counts;
+    private ReviewActor actor = default!;
+    private string? error;
 
     [Inject] private ListStatementReviews ListDrafts { get; set; } = default!;
     [Inject] private GetStatementReviewCounts GetCounts { get; set; } = default!;
     [Inject] private ListStatementsNotInReview ListNotInReview { get; set; } = default!;
     [Inject] private CreateStatementDraft CreateDraft { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
+    [Inject] private ReviewActorAccessor Actors { get; set; } = default!;
+    [Inject] private IssueConfiguration Issues { get; set; } = default!;
+    [Inject] private ILogger<StatementList> Logger { get; set; } = default!;
+    [Inject] private ReviewOfficials Officials { get; set; } = default!;
 
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = default!;
+
+    [SupplyParameterFromQuery(Name = "drafts")] private string? DraftsFilterName { get; set; }
+    [SupplyParameterFromQuery(Name = "draftsCursor")] private string? DraftsCursor { get; set; }
+    [SupplyParameterFromQuery(Name = "issue")] private string? IssueId { get; set; }
+    [SupplyParameterFromQuery(Name = "official")] private string? OfficialId { get; set; }
+    [SupplyParameterFromQuery(Name = "from")] private string? From { get; set; }
+    [SupplyParameterFromQuery(Name = "to")] private string? To { get; set; }
     [SupplyParameterFromQuery(Name = "notInReview")] private string? NotInReviewCursor { get; set; }
     [SupplyParameterFromQuery(Name = "status")] private string? Status { get; set; }
 
@@ -94,26 +110,6 @@ public sealed partial class StatementList
         DraftStatusFilter.Approved => ("No approved statements", "Approved statements show here. Approval keeps them private."),
         _ => ("No statement drafts yet", "The AI drafter writes a draft for each article that passes the gate. You can also start one below.")
     };
-
-    private const string DateFormat = "yyyy-MM-dd";
-
-    private ReviewActor actor = default!;
-    private string? error;
-
-    [Inject] private ReviewActorAccessor Actors { get; set; } = default!;
-    [Inject] private IssueConfiguration Issues { get; set; } = default!;
-    [Inject] private ILogger<StatementList> Logger { get; set; } = default!;
-    [Inject] private ReviewOfficials Officials { get; set; } = default!;
-
-    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
-    [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = default!;
-
-    [SupplyParameterFromQuery(Name = "drafts")] private string? DraftsFilterName { get; set; }
-    [SupplyParameterFromQuery(Name = "draftsCursor")] private string? DraftsCursor { get; set; }
-    [SupplyParameterFromQuery(Name = "issue")] private string? IssueId { get; set; }
-    [SupplyParameterFromQuery(Name = "official")] private string? OfficialId { get; set; }
-    [SupplyParameterFromQuery(Name = "from")] private string? From { get; set; }
-    [SupplyParameterFromQuery(Name = "to")] private string? To { get; set; }
 
     private ImmutableArray<KeyValuePair<string, string>> OfficialChoices => Officials.People;
 

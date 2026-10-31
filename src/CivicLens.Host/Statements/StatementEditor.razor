@@ -52,9 +52,9 @@ else
         {
             <Notice Tone="Tone.Warn">The AI drafter wrote this revision@(detail.AnalysisRunId is null ? "" : $" in analysis run {detail.AnalysisRunId}"). It is not a human decision. Check every sentence, date, speaker, and quotation against the article before you approve it.</Notice>
         }
-        @if (concerns.Length == 0 && detail.Approval is { Passed: false } approval)
+        @if (detail.Approval is { Passed: false } approval)
         {
-            <Notice Tone="Tone.Warn" id="approval-blocked">Approval is blocked. @approval.Failure</Notice>
+            <Notice Tone="Tone.Warn" id="approval-blocked">Approval will fail until this is fixed. @approval.Failure</Notice>
         }
         @if (concerns.Length > 0)
         {

@@ -211,7 +211,7 @@ The Review home page has a search box, "Find a draft". It sends a GET request wi
 
 ### Approval check
 
-`ApprovalCheck` holds the result of the checks that Approve runs, as data. It keeps the failure message. A statement check also uses the allowed selections of the admitting configuration revision. Code approval uses it, and the queue shows its failure message as the held reason. `GetStatementReview` runs the statement check on the saved revision. The statement editor shows the failure text next to the decision form when no concern is open.
+`ApprovalCheck` holds the result of the checks that Approve runs, as data. It keeps the failure message. A statement check also uses the allowed selections of the admitting configuration revision. Code approval uses it, and the queue shows its failure message as the held reason. `GetStatementReview` runs the statement check on the saved revision. The statement editor shows the failure text in a notice at the top of the page, also when a concern is open. It shows no notice for an approved statement, because code approval reads the date by code and this check does not.
 
 ### Workspace forms
 
