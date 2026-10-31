@@ -10,9 +10,9 @@ namespace CivicLens.Tests.Application.Actions;
 
 public sealed class ActionDraftPromptGoldenTests
 {
-    private const string SystemSha256 = "c60a70a558a5b17d3c31029a5a95a271cf6833850327f49241efb1b9f89de11b";
+    private const string SystemSha256 = "9ad12992599558a0ae4b66d374a9934f3f44a778523d0de8b7dc7a273ff8cf28";
     private const string SchemaSha256 = "6d6adb018d7ee24f5df2e21a1f678cc87ed0fb7c144cf0a5c99cd84153a3acf0";
-    private const string InputHash = "4fc66c31f6bcbf09d08ca9c54d19549039560df0e2a30769b763964a0f509222";
+    private const string InputHash = "7b8b2516b8d1da979c4a6d789404ade508df068ac8adccae86868e5cc549f556";
 
     [Fact]
     public async Task ThePromptAndSchemaMatchTheirPinnedVersions()
@@ -25,12 +25,27 @@ public sealed class ActionDraftPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(ActionDraftTask.PromptVersion)} ({ActionDraftTask.PromptVersion}) or " +
             $"{nameof(ActionDraftTask.SchemaVersion)} ({ActionDraftTask.SchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("action-draft", "action-draft-v1", "action-draft-prompt-v3", "action-draft-schema-v2", "claude-haiku-5-5"),
+        Assert.Equal(("action-draft", "action-draft-v1", "action-draft-prompt-v4", "action-draft-schema-v2", "claude-haiku-5-5"),
             (ActionDraftTask.Task, ActionDraftTask.TaskVersion, ActionDraftTask.PromptVersion, ActionDraftTask.SchemaVersion, ActionDraftTask.Model));
         Assert.NotEqual(StatementDraftTaskName, ActionDraftTask.Task);
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
         Assert.True(Sha256(request.SchemaJson) == SchemaSha256, $"{bump} Schema: {Sha256(request.SchemaJson)}");
         Assert.True(request.InputHash == InputHash, $"{bump} Input hash: {request.InputHash}");
+    }
+
+    [Fact]
+    public async Task ThePublicTextRulesAndTheNoSummarySentenceAreInTheCachedSystemPrompt()
+    {
+        var world = Create();
+        var snapshot = (await world.Reader().ReadAsync(world.Evidence(), default)).Snapshot!;
+
+        var request = ActionDraftPrompt.Build(snapshot, NoChoice(), ActionDraftTask.MaximumPromptBytes)!;
+
+        Assert.True(request.CacheSystemPrompt);
+        Assert.Contains("Never use the words tracked, entry, or candidate", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("Use those words only when the bill itself is about the thing they name.", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("\"Congress.gov has no summary of this bill yet.\"", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Rent aid", request.SystemPrompt, StringComparison.Ordinal);
     }
 
     [Fact]
