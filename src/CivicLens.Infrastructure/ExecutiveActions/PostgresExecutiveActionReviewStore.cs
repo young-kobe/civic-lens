@@ -51,17 +51,6 @@ public sealed class PostgresExecutiveActionReviewStore(IDbContextFactory<Collect
         return new(ToReview(draft, history), extractions.ToImmutableDictionary(StringComparer.Ordinal));
     }
 
-    public async Task<ExecutiveActionsNeedingAction> ListNeedingActionAsync(int limit, CancellationToken cancellationToken)
-    {
-        PageLimit.Validate(limit);
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var (drafts, total) = await Records.ReadNeedingActionAsync(db, limit, cancellationToken);
-        var histories = await Records.ReadHistoriesAsync(db, drafts, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return new([.. drafts.Select(row => ToReview(row, histories[row.RecordId]))], total);
-    }
-
     public async Task<IReadOnlyList<UnpublishedApprovedExecutiveAction>> ListUnpublishedApprovedAsync(int limit,
         IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken)
     {

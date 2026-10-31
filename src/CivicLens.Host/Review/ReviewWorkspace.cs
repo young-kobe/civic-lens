@@ -236,9 +236,7 @@ internal static class ReviewWorkspace
         services.AddScoped<SaveDocumentChangeDraft>();
         services.AddScoped<DecideDocumentChangeReview>();
         services.AddScoped<GetDocumentChangeReview>();
-        services.AddScoped<ListDocumentChangeReviews>();
         services.AddScoped<ListEligibleDocumentComparisons>();
-        services.AddScoped<GetReviewOverview>();
         var contexts = AnalysisDbContextFactory.Create(connectionString);
         ConfigureStatementReview(services, contexts, issues);
         ConfigureActionReview(services, contexts);
@@ -250,6 +248,7 @@ internal static class ReviewWorkspace
         services.AddSingleton<IRecordKindStore>(new PostgresRecordKindStore(contexts));
         services.AddSingleton<IReviewQueueStore>(new PostgresReviewQueueStore(contexts));
         services.AddScoped<ListReviewQueue>();
+        services.AddScoped<SearchApprovedRecords>();
         services.AddScoped(provider => new LookupDraft(provider.GetRequiredService<IActionReviewStore>(),
             provider.GetRequiredService<IVoteReviewStore>(), provider.GetRequiredService<IRecordKindStore>(), TimeProvider.System));
         var collection = ConfigurationFile.ReadCollectionFromEnvironment();
@@ -300,7 +299,6 @@ internal static class ReviewWorkspace
         services.AddScoped<SaveActionDraft>();
         services.AddScoped<DecideActionReview>();
         services.AddScoped<GetActionReview>();
-        services.AddScoped<ListActionsNeedingAction>();
     }
 
     private static void ConfigureVoteReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)
@@ -309,7 +307,6 @@ internal static class ReviewWorkspace
         services.AddScoped<SaveVoteDraft>();
         services.AddScoped<DecideVoteReview>();
         services.AddScoped<GetVoteReview>();
-        services.AddScoped<ListVotesNeedingAction>();
     }
 
     private static void ConfigureExecutiveActionReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)
@@ -317,7 +314,6 @@ internal static class ReviewWorkspace
         services.AddSingleton<IExecutiveActionReviewStore>(new PostgresExecutiveActionReviewStore(contexts));
         services.AddScoped<DecideExecutiveActionReview>();
         services.AddScoped<GetExecutiveActionReview>();
-        services.AddScoped<ListExecutiveActionsNeedingAction>();
     }
 
     private static void ConfigureRelationshipReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)

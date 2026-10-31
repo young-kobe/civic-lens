@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Runtime.ExceptionServices;
 using System.Linq.Expressions;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Review;
@@ -173,13 +174,6 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         (await Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken),
             await Drafts(db, DraftStatusFilter.Approved).CountAsync(cancellationToken));
 
-    public async Task<(TDraftRow[] Drafts, int Total)> ReadNeedingActionAsync(CollectionAttemptDbContext db, int limit,
-        CancellationToken cancellationToken)
-    {
-        var slice = await PageAsync(db, null, limit, DraftStatusFilter.NeedsAction, row => row.LastRevisedAtUtcTicks, cancellationToken);
-        return ([.. slice.Items], await Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken));
-    }
-
     public Task<KeysetSlice<TDraftRow>> PageAsync(CollectionAttemptDbContext db, PageCursor? cursor, int limit,
         DraftStatusFilter filter, CancellationToken cancellationToken) =>
         PageAsync(db, cursor, limit, filter, row => row.CreatedAtUtcTicks, cancellationToken);
@@ -197,23 +191,31 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         db.Set<TDraftRow>().AsNoTracking().Where(row => recordIds.Contains(EF.Property<string>(row, recordIdProperty)))
             .ToArrayAsync(cancellationToken);
 
-    public async Task<Dictionary<string, QueueRead<TRevision>>> ReadQueueAsync(CollectionAttemptDbContext db, string[] recordIds,
-        CancellationToken cancellationToken)
+    /// <summary>Reads each draft for the queue. A draft whose stored data cannot be read keeps its parse error, so one bad record does
+    /// not hide the others.</summary>
+    public async Task<(Dictionary<string, QueueRead<TRevision>> Readable, Dictionary<string, Exception> Unreadable)> ReadQueueAsync(
+        CollectionAttemptDbContext db, string[] recordIds, CancellationToken cancellationToken)
     {
         var drafts = await ReadDraftsAsync(db, recordIds, cancellationToken);
-        var histories = await ReadHistoriesAsync(db, drafts, cancellationToken);
-        return drafts.ToDictionary(draft => draft.RecordId, draft =>
+        var (histories, errors) = await ReadHistoriesOrUnreadableAsync(db, drafts, cancellationToken);
+        var readable = drafts.Where(draft => histories.ContainsKey(draft.RecordId)).ToDictionary(draft => draft.RecordId, draft =>
         {
             var history = histories[draft.RecordId];
             return new QueueRead<TRevision>(history.CurrentRevision!, history.CurrentStatus, history.UnresolvedConcerns.Length,
                 (draft as IHeldDraftRow)?.HeldReason);
         }, StringComparer.Ordinal);
+        return (readable, errors);
     }
 
     public async Task<Dictionary<string, QueueDraft>> ReadQueueDraftsAsync(CollectionAttemptDbContext db, string[] recordIds,
-        Func<TRevision, string> headlineOf, CancellationToken cancellationToken) =>
-        (await ReadQueueAsync(db, recordIds, cancellationToken))
-        .ToDictionary(read => read.Key, read => read.Value.ToDraft(headlineOf(read.Value.Revision)), StringComparer.Ordinal);
+        Func<TRevision, string> headlineOf, CancellationToken cancellationToken)
+    {
+        var (readable, unreadable) = await ReadQueueAsync(db, recordIds, cancellationToken);
+        var drafts = readable.ToDictionary(read => read.Key, read => read.Value.ToDraft(headlineOf(read.Value.Revision)),
+            StringComparer.Ordinal);
+        foreach (var (recordId, cause) in unreadable) drafts[recordId] = QueueDraft.Unreadable(recordId, cause);
+        return drafts;
+    }
 
     public async Task<IReadOnlyList<(TDraftRow Draft, ReviewHistory<TRevision> History)>>
         ReadUnpublishedApprovedAsync(CollectionAttemptDbContext db, string unpublishedApprovedSql, int limit,
@@ -234,16 +236,38 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
     public async Task<Dictionary<string, ReviewHistory<TRevision>>> ReadHistoriesAsync(CollectionAttemptDbContext db,
         IReadOnlyCollection<TDraftRow> drafts, CancellationToken cancellationToken)
     {
-        if (drafts.Count == 0) return [];
+        var (histories, unreadable) = await ReadHistoriesOrUnreadableAsync(db, drafts, cancellationToken);
+        if (unreadable.Count > 0) ExceptionDispatchInfo.Throw(unreadable.Values.First());
+        return histories;
+    }
+
+    /// <summary>Reads the rows of every draft in a fixed number of queries, then parses each draft alone. Only an error from the parse or from the build
+    /// of the history marks a draft unreadable (see <see cref="ReviewJson.IsUnreadableStoredData"/>). That covers a missing revision and
+    /// failed shape or history checks. A failed query is not caught, so a database error fails the whole read.</summary>
+    public async Task<(Dictionary<string, ReviewHistory<TRevision>> Histories, Dictionary<string, Exception> Unreadable)>
+        ReadHistoriesOrUnreadableAsync(CollectionAttemptDbContext db, IReadOnlyCollection<TDraftRow> drafts, CancellationToken cancellationToken)
+    {
+        Dictionary<string, ReviewHistory<TRevision>> histories = [];
+        Dictionary<string, Exception> unreadable = [];
+        if (drafts.Count == 0) return (histories, unreadable);
         var decisionRows = await ReadCycleRowsAsync(db, [.. drafts.Where(draft => draft.ReviewStateVersion > 0).Select(draft => draft.RecordId)],
             cancellationToken);
-        var cycles = drafts.ToDictionary(draft => draft.RecordId,
-            draft => ReviewDecisionHistory.Parse(draft.ReviewStateVersion, decisionRows[draft.RecordId]), StringComparer.Ordinal);
-        var revisions = await ReadCycleRevisionsAsync(db, [.. drafts.Where(draft => draft.CurrentRevisionNumber > 0).Select(draft => draft.RecordId)],
+        Dictionary<string, ImmutableArray<ReviewDecision>> cycles = new(StringComparer.Ordinal);
+        foreach (var draft in drafts)
+        {
+            try { cycles[draft.RecordId] = ReviewDecisionHistory.Parse(draft.ReviewStateVersion, decisionRows[draft.RecordId]); }
+            catch (Exception exception) when (ReviewJson.IsUnreadableStoredData(exception)) { unreadable[draft.RecordId] = exception; }
+        }
+        var readable = drafts.Where(draft => cycles.ContainsKey(draft.RecordId)).ToArray();
+        var revisionRows = await ReadCycleRevisionRowsAsync(db, [.. readable.Where(draft => draft.CurrentRevisionNumber > 0).Select(draft => draft.RecordId)],
             [.. cycles.Values.Where(cycle => ReviewDecisionHistory.ApprovalVersionOf(cycle) > 0).Select(cycle => cycle[0].DecisionId)],
             cancellationToken);
-        return drafts.ToDictionary(draft => draft.RecordId, draft => BuildHistory(draft, cycles[draft.RecordId], revisions),
-            StringComparer.Ordinal);
+        foreach (var draft in readable)
+        {
+            try { histories[draft.RecordId] = BuildHistory(draft, cycles[draft.RecordId], revisionRows); }
+            catch (Exception exception) when (ReviewJson.IsUnreadableStoredData(exception)) { unreadable[draft.RecordId] = exception; }
+        }
+        return (histories, unreadable);
     }
 
     public async Task<ImmutableArray<ReviewDecision>> ReadCycleAsync(CollectionAttemptDbContext db, TDraftRow draft,
@@ -269,7 +293,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         return rows.ToLookup(row => row.RecordId, StringComparer.Ordinal);
     }
 
-    private async Task<Dictionary<(string RecordId, int RevisionNumber), TRevision>> ReadCycleRevisionsAsync(
+    private async Task<Dictionary<(string RecordId, int RevisionNumber), TRevisionRow>> ReadCycleRevisionRowsAsync(
         CollectionAttemptDbContext db, string[] recordIds, string[] approvalIds, CancellationToken cancellationToken)
     {
         if (recordIds.Length == 0) return [];
@@ -281,20 +305,22 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
                         EF.Property<string>(approval, recordIdProperty) == EF.Property<string>(row, recordIdProperty) &&
                         approval.RevisionNumber == row.RevisionNumber)))
             .Take(recordIds.Length * 2).ToArrayAsync(cancellationToken);
-        return rows.ToDictionary(row => (row.RecordId, row.RevisionNumber), ParseRevision);
+        return rows.ToDictionary(row => (row.RecordId, row.RevisionNumber));
     }
 
     private ReviewHistory<TRevision> BuildHistory(TDraftRow draft, ImmutableArray<ReviewDecision> cycle,
-        Dictionary<(string RecordId, int RevisionNumber), TRevision> revisions)
+        Dictionary<(string RecordId, int RevisionNumber), TRevisionRow> revisionRows)
     {
         if (draft.CurrentRevisionNumber == 0)
             return cycle.IsEmpty ? new(null, null, [], [], ReviewStatus.NotDrafted)
                 : throw new InvalidOperationException("A draft without a revision has review decisions.");
-        var current = revisions.GetValueOrDefault((draft.RecordId, draft.CurrentRevisionNumber))
-            ?? throw new InvalidOperationException("Current draft revision is missing.");
+        var current = ParseRevision(revisionRows.GetValueOrDefault((draft.RecordId, draft.CurrentRevisionNumber))
+            ?? throw new InvalidOperationException("Current draft revision is missing."));
         var approvedNumber = ReviewDecisionHistory.ApprovedRevisionOf(cycle);
-        var approved = approvedNumber == 0 ? null : revisions.GetValueOrDefault((draft.RecordId, approvedNumber))
-            ?? throw new InvalidOperationException("Approved draft revision is missing.");
+        var approved = approvedNumber == 0 ? null
+            : approvedNumber == draft.CurrentRevisionNumber ? current
+            : ParseRevision(revisionRows.GetValueOrDefault((draft.RecordId, approvedNumber))
+                ?? throw new InvalidOperationException("Approved draft revision is missing."));
         ReviewDecisionHistory.Validate(draft.RecordId, current, approved, cycle);
         var concerns = ReviewPolicy.GetUnresolvedConcerns(cycle);
         return new(current, approved, cycle, concerns, ReviewPolicy.GetCurrentStatus(draft.CurrentRevisionNumber, cycle, concerns));

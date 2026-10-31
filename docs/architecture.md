@@ -411,7 +411,7 @@ This is the only navigation index.
 | Statement review pages and commands | [Statements](architecture/statements.md#statement-review) | `src/CivicLens.Host/Statements/StatementEditor.razor` |
 | Review decisions, roles, concurrency | [Review](architecture/review.md#review-decisions) | `src/CivicLens.Core/Review/ReviewPolicy.cs` |
 | Review cycles, history caps, the shared append step | [Review](architecture/review.md#review-cycles) | `src/CivicLens.Infrastructure/Review/ReviewRecords.cs` |
-| Review lists, paging, overview counts | [Review](architecture/review.md#lists-and-paging) | `src/CivicLens.Application/Review/ListDocumentChangeReviews.cs` |
+| Review queue, search, lists, paging | [Review](architecture/review.md#lists-and-paging) | `src/CivicLens.Application/Review/ListReviewQueue.cs` |
 | Approval check | [Review](architecture/review.md#approval-check) | `src/CivicLens.Application/Review/ApprovalCheck.cs` |
 | Releases, activation, rollback | [Publication](architecture/publication.md#publish) | `src/CivicLens.Application/Publication/PublishRelease.cs` |
 | Release record content and schema | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Publication.Contracts/PublicationRelease.cs` |

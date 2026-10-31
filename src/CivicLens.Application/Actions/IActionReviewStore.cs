@@ -18,7 +18,6 @@ public interface IActionReviewStore
 
     Task<ActionReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken);
 
-    Task<ActionsNeedingAction> ListNeedingActionAsync(int limit, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<UnpublishedApprovedAction>> ListUnpublishedApprovedAsync(int limit, IReadOnlyCollection<string> excludedRecordIds,
         CancellationToken cancellationToken);

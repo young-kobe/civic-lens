@@ -8,18 +8,6 @@ public sealed class ReviewReadHandlerTests
     private static readonly ReviewActor Reviewer = new("auth0|reviewer", ReviewRole.Reviewer);
     private static readonly ReviewCatalog Catalog = new([], []);
 
-    // The store is null: a tampered cursor must be refused at the trust boundary before any read.
-    [Theory]
-    [InlineData("garbage")]
-    [InlineData("o.1.a b")]
-    [InlineData("")]
-    public async Task DraftListRejectsTamperedCursorBeforeReading(string cursor)
-    {
-        var handler = new ListDocumentChangeReviews(null!, Catalog);
-
-        await Assert.ThrowsAsync<ArgumentException>(() => handler.ExecuteAsync(Reviewer, cursor, 10));
-    }
-
     [Fact]
     public async Task EligibleListRejectsTamperedCursorBeforeReading()
     {
@@ -29,21 +17,24 @@ public sealed class ReviewReadHandlerTests
     }
 
     [Fact]
-    public async Task DraftListRejectsUnknownFilterAndBadLimit()
-    {
-        var handler = new ListDocumentChangeReviews(null!, Catalog);
-
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => handler.ExecuteAsync(Reviewer, null, 10, (DraftStatusFilter)99));
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => handler.ExecuteAsync(Reviewer, null, 0));
-    }
-
-    [Fact]
-    public async Task ListsAndOverviewRequireAReviewer()
+    public async Task ListRequiresAReviewer()
     {
         var outsider = new ReviewActor("auth0|nobody", (ReviewRole)99);
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new ListDocumentChangeReviews(null!, Catalog).ExecuteAsync(outsider, null, 10));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new ListEligibleDocumentComparisons(null!, Catalog).ExecuteAsync(outsider, null, 10));
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new GetReviewOverview(null!).ExecuteAsync(outsider));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task SearchRejectsBlankTextAndTooLongTextBeforeReading(string query)
+    {
+        var handler = new SearchApprovedRecords(null!);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => handler.ExecuteAsync(Reviewer, query, null));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            handler.ExecuteAsync(Reviewer, new string('a', SearchApprovedRecords.MaximumQueryLength + 1), null));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            handler.ExecuteAsync(new ReviewActor("auth0|nobody", (ReviewRole)99), "rent", null));
     }
 }

@@ -118,18 +118,6 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
         return result;
     }
 
-    public async Task<DocumentChangeReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter,
-        CancellationToken cancellationToken)
-    {
-        PageLimit.Validate(limit);
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var slice = await Records.PageAsync(db, cursor, limit, filter, cancellationToken);
-        var histories = await Records.ReadHistoriesAsync(db, slice.Items, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return new([.. slice.Items.Select(row => ToListItem(row, histories[row.DraftId]))], slice.NewerCursor, slice.OlderCursor);
-    }
-
     public async Task<NewDocumentChangePage> ListEligibleComparisonsAsync(PageCursor? cursor, int limit,
         CancellationToken cancellationToken)
     {
@@ -181,14 +169,6 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
         var records = await Records.ReadUnpublishedApprovedAsync(db, ReviewQueries.UnpublishedApprovedDrafts, limit, excludedRecordIds, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return [.. records.Select(record => new UnpublishedApprovedDraft(ToListItem(record.Draft, record.History)))];
-    }
-
-    public async Task<ReviewOverview> GetOverviewAsync(CancellationToken cancellationToken)
-    {
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var newChanges = await ReviewQueries.EligibleComparisons(db).CountAsync(cancellationToken);
-        var (needingAction, approved) = await Records.CountAsync(db, cancellationToken);
-        return new(newChanges, needingAction, approved);
     }
 
     public async Task<IReadOnlyList<ReviewActivityEvent>> ListRecentActivityAsync(int limit, CancellationToken cancellationToken)

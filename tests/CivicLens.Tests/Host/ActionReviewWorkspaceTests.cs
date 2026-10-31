@@ -53,9 +53,7 @@ public sealed class ActionReviewWorkspaceTests(PostgresCollection postgres) : IA
 
         var home = await host.GetDocumentAsync("/Review");
 
-        var stat = home.QuerySelector("a.stat[href='#fact-exceptions']")!;
-        Assert.Equal(["3", "Actions and votes need action"], stat.Children.Select(child => child.TextContent));
-        var links = home.QuerySelectorAll("[aria-labelledby='fact-exceptions'] tbody a.cell-title").Select(link => link.GetAttribute("href"));
+        var links = home.QuerySelectorAll("[aria-labelledby='needs-a-person'] tbody a.cell-title").Select(link => link.GetAttribute("href"));
         Assert.Equivalent(new[] { $"/Review/Actions/{refused.RecordId}", $"/Review/Actions/{changesRequested.RecordId}", $"/Review/Votes/{refusedVote.RecordId}" }, links);
         Assert.Null(home.QuerySelector($"a[href='/Review/Actions/{approved.RecordId}']"));
         Assert.Null(home.QuerySelector($"a[href='/Review/Votes/{approvedVote.RecordId}']"));
@@ -64,7 +62,7 @@ public sealed class ActionReviewWorkspaceTests(PostgresCollection postgres) : IA
     }
 
     [Fact]
-    public async Task TheReviewHomeShowsNoUnapprovedFactWhenCodeApprovedEveryActionAndVoteAsync()
+    public async Task TheReviewHomeQueueLeavesOutActionsAndVotesThatCodeApprovedAsync()
     {
         var seeder = new RelationshipWorldSeeder(host.ConnectionString);
         await seeder.ActionAsync(RelationshipFixtures.Action(1), "Approved");
@@ -73,49 +71,49 @@ public sealed class ActionReviewWorkspaceTests(PostgresCollection postgres) : IA
 
         var home = await host.GetDocumentAsync("/Review");
 
-        Assert.Equal("0", home.QuerySelector("a.stat[href='#fact-exceptions']")!.Children[0].TextContent);
-        Assert.Equal("No action or vote needs action", home.QuerySelector("[aria-labelledby='fact-exceptions'] .empty h3")!.TextContent);
+        Assert.Equal("No record needs a person", home.QuerySelector("[aria-labelledby='needs-a-person'] .empty h3")!.TextContent);
     }
 
     [Fact]
-    public async Task TheReviewHomeShowsOnlyOnePageOfEachKindButCountsEveryRecordAsync()
+    public async Task OneUnreadableRevisionShowsARowErrorThatLinksToTheRecordAndTheOtherQueueRowsStayVisibleAsync()
     {
         var seeder = new RelationshipWorldSeeder(host.ConnectionString);
-        for (var index = 0; index < 11; index++)
-        {
-            var id = new string(index.ToString("x")[0], 64);
-            await seeder.ActionAsync(RelationshipFixtures.Action(index + 1) with { RecordId = id, CandidateId = id }, "AwaitingReview", index);
-        }
+        var good = RelationshipFixtures.Action(1);
+        var broken = RelationshipFixtures.Vote();
+        await seeder.ActionAsync(good, "AwaitingReview", 100);
+        await seeder.VoteAsync(broken, "AwaitingReview", 200);
+        await seeder.ExecuteAsync("UPDATE vote_revisions SET revision_json = '{broken' WHERE record_id = @id", ("id", broken.RecordId));
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
 
         var home = await host.GetDocumentAsync("/Review");
 
-        var panel = home.QuerySelector("[aria-labelledby='fact-exceptions']")!;
-        Assert.Equal(10, panel.QuerySelectorAll("tbody tr").Length);
-        Assert.Contains("11 records", panel.TextContent, StringComparison.Ordinal);
-        Assert.Null(panel.QuerySelector($"a[href='/Review/Actions/{new string('0', 64)}']"));
+        Assert.Null(home.QuerySelector(".notice-bad"));
+        var rows = home.QuerySelectorAll("[aria-labelledby='needs-a-person'] tbody tr").ToArray();
+        Assert.Equal(2, rows.Length);
+        Assert.Contains("Cannot read", rows[0].TextContent, StringComparison.Ordinal);
+        Assert.Contains("cannot be read", rows[0].TextContent, StringComparison.Ordinal);
+        Assert.NotNull(rows[0].QuerySelector($"a[href='/Review/Votes/{broken.RecordId}']"));
+        Assert.NotNull(rows[1].QuerySelector($"a[href='/Review/Actions/{good.RecordId}']"));
     }
 
     [Fact]
-    public async Task TheReviewHomeMergesActionsAndVotesByLastRevisionNewestFirstAsync()
+    public async Task TheReviewHomeSearchesApprovedRecordsByHeadlineAndLinksEachResultToItsEditorWithItsKindInPlainWordsAsync()
     {
         var seeder = new RelationshipWorldSeeder(host.ConnectionString);
-        var oldAction = RelationshipFixtures.Action(1) with { CreatedAtUtc = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero) };
-        var middleAction = RelationshipFixtures.Action(2) with
-        {
-            RecordId = new string('3', 64),
-            CandidateId = new string('3', 64),
-            CreatedAtUtc = new DateTimeOffset(2025, 3, 1, 0, 0, 0, TimeSpan.Zero)
-        };
-        var newVote = RelationshipFixtures.Vote() with { CreatedAtUtc = new DateTimeOffset(2025, 6, 1, 0, 0, 0, TimeSpan.Zero) };
-        await seeder.ActionAsync(oldAction, "AwaitingReview", oldAction.CreatedAtUtc.UtcTicks);
-        await seeder.ActionAsync(middleAction, "AwaitingReview", middleAction.CreatedAtUtc.UtcTicks);
-        await seeder.VoteAsync(newVote, "AwaitingReview", newVote.CreatedAtUtc.UtcTicks);
+        var action = RelationshipFixtures.Action(1);
+        await seeder.ActionAsync(action, "Approved");
+        var word = action.Headline.Split(' ').First(part => part.Length > 4 && part.All(char.IsLetter));
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
 
-        var home = await host.GetDocumentAsync("/Review");
+        var found = await host.GetDocumentAsync($"/Review?q={word}");
+        var missing = await host.GetDocumentAsync("/Review?q=zzzunmatched");
+        var blank = await host.GetDocumentAsync("/Review?q=%20");
 
-        Assert.Equal([$"/Review/Votes/{newVote.RecordId}", $"/Review/Actions/{middleAction.RecordId}", $"/Review/Actions/{oldAction.RecordId}"],
-            home.QuerySelectorAll("[aria-labelledby='fact-exceptions'] tbody a.cell-title").Select(link => link.GetAttribute("href")));
+        var row = Assert.Single(found.QuerySelectorAll("[aria-labelledby='search-results'] tbody tr"));
+        Assert.NotNull(row.QuerySelector($"a[href='/Review/Actions/{action.RecordId}']"));
+        Assert.Contains("Action", row.TextContent, StringComparison.Ordinal);
+        Assert.Equal("No approved record matches", missing.QuerySelector("[aria-labelledby='search-results'] .empty h3")!.TextContent);
+        Assert.Contains("Type 1 to 300 characters", blank.QuerySelector(".notice-warn")!.TextContent, StringComparison.Ordinal);
+        Assert.NotNull(found.QuerySelector("form[action='/Review'] input[name='find']"));
     }
 }

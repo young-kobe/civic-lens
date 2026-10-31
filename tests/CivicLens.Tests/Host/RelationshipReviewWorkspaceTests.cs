@@ -182,20 +182,21 @@ public sealed class RelationshipReviewWorkspaceTests(PostgresCollection postgres
     }
 
     [Fact]
-    public async Task TheReviewHomeCountsTheBriefsAndTheRelationshipsThatNeedActionAndLinksEachList()
+    public async Task TheReviewHomeQueueListsTheBriefAndTheRelationshipThatNeedActionAndLinksEachEditor()
     {
         await SeedAsync();
         var briefSeeder = new BriefWorldSeeder(host.ConnectionString);
-        await briefSeeder.ReviewableBriefAsync(BriefFixtures.ReviewableRevision(new DateOnly(2026, 10, 5)));
+        var waiting = BriefFixtures.ReviewableRevision(new DateOnly(2026, 10, 5));
+        await briefSeeder.ReviewableBriefAsync(waiting);
         await briefSeeder.ReviewableBriefAsync(BriefFixtures.ReviewableRevision(new DateOnly(2026, 10, 12)), "Approved");
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
 
         var home = await host.GetDocumentAsync("/Review");
 
-        var relationships = home.QuerySelector("a.stat[href='/Review/Relationships?drafts=needs-action']")!;
-        Assert.Equal(["1", "Relationships need action"], relationships.Children.Select(child => child.TextContent));
-        var briefs = home.QuerySelector("a.stat[href='/Review/Briefs?drafts=needs-action']")!;
-        Assert.Equal(["1", "Briefs need action"], briefs.Children.Select(child => child.TextContent));
+        var links = home.QuerySelectorAll("[aria-labelledby='needs-a-person'] tbody a.cell-title").Select(link => link.GetAttribute("href")).ToArray();
+        Assert.Equal(2, links.Length);
+        Assert.Contains(url, links);
+        Assert.Contains($"/Review/Briefs/{waiting.RecordId}", links);
     }
 
     [Fact]

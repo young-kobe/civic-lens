@@ -306,7 +306,7 @@ Infrastructure/Statements holds `PostgresStatementReviewStore` and `StatementRev
 **Pages.** `/Review/Statements` lists the drafts and the statements that are not in review.
 
 - The drafts table has the filter tabs All, Needs action, and Approved, with their counts. It has a filter form for issue, official, and dates, and a pager on `ListStatementReviews`. It shows the headline (or "Not drafted"), the source, the status, and the open concern count.
-- The query values are `drafts` (filter), `draftsCursor`, `issue`, `official`, `from`, `to`, `notInReview` (cursor), and `status`, as on the Review home page.
+- The query values are `drafts` (filter), `draftsCursor`, `issue`, `official`, `from`, `to`, `notInReview` (cursor), and `status`.
 - The "Not in review" table has a pager on `ListStatementsNotInReview`. It shows the source, the URL, and the reason code. Each row has a Start draft post form.
 
 `/Review/Statements/{CandidateId}` mirrors the document-change editor. It shows the AI authorship notice with the analysis run, the open-concern notice, and the compare panel after a stale save. It also shows the failure text of `Approval` in a notice at the top, so a person sees why Approve fails.
@@ -456,7 +456,7 @@ Relationship review uses the shared decision rules and review cycles in [review]
 - notices for a changed cited record, a pair that no longer matches, and a revision from the AI drafter. A changed record also adds a header badge
 - the shared `ReviewDecisionPanel` and `ReviewHistoryPanel`
 
-The rail has a Relationships link. The review home has stat cards for the briefs and the relationships that need action. Each card links to its list.
+The rail has a Relationships link.
 
 **Changed record.** The flag blocks approval only. A relationship that is approved stays approved when a cited record changes, and the notice tells the reviewer to withdraw the approval. No event requeues it. The queue returns a pair to Pending only when its relationship is not approved. After a person withdraws a link with stale citations, the owner runs `relationships draft refresh`. The refresh requeues the pair, because the link is no longer approved. A model call that finishes after an approval does not append a revision: the settlement keeps the approved revision.
 
