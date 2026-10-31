@@ -178,6 +178,56 @@
         apply();
     };
 
+    const initRecordFilters = panel => {
+        const rows = Array.from(panel.querySelectorAll("tbody tr"));
+        if (rows.length === 0) return;
+        const tabs = panel.querySelector("[data-record-filters]");
+        const kindButtons = tabs ? Array.from(tabs.querySelectorAll("[data-filter-value]")) : [];
+        const counts = Array.from(document.querySelectorAll("[data-count-filter]"));
+        const status = panel.querySelector("[data-filter-status]");
+        const notice = panel.querySelector("[data-filter-notice]");
+        const clearButton = notice?.querySelector("[data-filter-clear]");
+        let kind = "", issue = null;
+        const hides = row => (kind !== "" && !row.classList.contains(kind))
+            || (issue !== null && !(row.dataset.filterKeys ?? "").split(" ").includes(issue.dataset.countFilter));
+        const apply = () => {
+            let shown = 0;
+            for (const row of rows) {
+                row.hidden = hides(row);
+                if (!row.hidden) shown++;
+            }
+            for (const button of kindButtons) button.setAttribute("aria-pressed", String(button.dataset.filterValue === kind));
+            for (const count of counts) count.querySelector("button").setAttribute("aria-pressed", String(count === issue));
+            if (notice) {
+                notice.querySelector("[data-filter-text]").textContent = issue?.dataset.filterShows ?? "";
+                notice.hidden = issue === null;
+            }
+            const total = rows.length;
+            const filtered = kind !== "" || issue !== null;
+            status.textContent = !filtered ? "" : `Showing ${shown.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} ${total === 1 ? "record" : "records"}`
+                + (shown === 0 ? `. No record matches both filters. Use ${clearButton.textContent} to see every record.` : "");
+        };
+        for (const count of counts) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "count-filter";
+            button.textContent = count.textContent;
+            button.setAttribute("aria-label", count.dataset.filterLabel);
+            count.replaceChildren(button);
+            button.addEventListener("click", () => { issue = issue === count ? null : count; apply(); });
+        }
+        for (const button of kindButtons) button.addEventListener("click", () => { kind = button.dataset.filterValue; apply(); });
+        clearButton?.addEventListener("click", () => {
+            const pressed = issue?.querySelector("button");
+            kind = "";
+            issue = null;
+            apply();
+            pressed?.focus();
+        });
+        if (tabs) tabs.hidden = false;
+        apply();
+    };
+
     const codeUnitOrder = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
     const sortKinds = {
         text: { first: "asc", words: { asc: "A to Z", desc: "Z to A" }, compare: (a, b) => codeUnitOrder(a.toLowerCase(), b.toLowerCase()) },
@@ -350,6 +400,7 @@
         commit(null);
     };
 
+    document.querySelectorAll("[data-records]").forEach(initRecordFilters);
     document.querySelectorAll("[data-officials-filters]").forEach(initOfficialsFilter);
     document.querySelectorAll("[data-search-api]").forEach(initSearchService);
     document.querySelectorAll("[data-report-api]").forEach(initReportForm);

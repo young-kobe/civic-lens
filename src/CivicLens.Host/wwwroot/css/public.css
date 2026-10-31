@@ -69,9 +69,12 @@
     .public-main .table td:empty::before { content: none; }
 }
 
-.sort-bar { display: grid; gap: var(--s2); padding: var(--s3) var(--s4) 0; }
-.sort-bar p { margin: 0; }
+.sort-bar, .records-lead { display: grid; gap: var(--s2); padding: var(--s3) var(--s4) 0; }
+.sort-bar p, .records-lead p { margin: 0; }
 .panel-padded .sort-bar { padding-inline: 0; }
+.count-filter { padding: 0 4px; border: 0; border-radius: 3px; background: none; color: inherit; font: inherit; font-weight: 650; text-decoration: underline; text-underline-offset: .2em; cursor: pointer; }
+.count-filter:hover { text-decoration-thickness: 2px; }
+.count-filter[aria-pressed="true"] { background: var(--info-bg); text-decoration-thickness: 3px; }
 .sort-field { max-width: 320px; }
 .sort-button { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
 .sort-button:hover { color: var(--ink); text-decoration: underline; }

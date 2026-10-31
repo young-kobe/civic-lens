@@ -12,6 +12,8 @@ public sealed record PublishedCorrection
 
     public static int NotedCount(IEnumerable<PublishedCorrection> corrections) => corrections.Count(item => item.Note is not null);
 
+    public static bool IsAtNoteLimit(IEnumerable<PublishedCorrection> corrections) => NotedCount(corrections) >= MaximumNotedEntries;
+
     /// <summary>A code update replaces a newest code update, so a run of code updates stays one entry.</summary>
     public static PublishedCorrection[] Prepend(PublishedCorrection[] kept, PublishedCorrection entry) =>
         entry.Note is null && kept is [{ Note: null }, ..] ? [entry, .. kept[1..]] : [entry, .. kept];
