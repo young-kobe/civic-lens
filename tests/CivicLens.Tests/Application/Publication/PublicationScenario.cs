@@ -738,14 +738,8 @@ internal sealed class FakeReviewStore : IDocumentChangeReviewStore
         ImmutableHashSet<string> allowedOfficialIds, ImmutableHashSet<string> allowedIssueIds,
         CancellationToken cancellationToken) => throw new NotSupportedException();
 
-    public Task<DocumentChangeReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter,
-        CancellationToken cancellationToken) => throw new NotSupportedException();
-
     public Task<NewDocumentChangePage> ListEligibleComparisonsAsync(PageCursor? cursor, int limit,
         CancellationToken cancellationToken) => throw new NotSupportedException();
-
-    public Task<ReviewOverview> GetOverviewAsync(CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
 
     public List<UnpublishedApprovedDraft> Unpublished { get; } = [];
     public int UnpublishedLimit { get; private set; }

@@ -20,12 +20,9 @@ public interface IDocumentChangeReviewStore
     Task<DocumentChangeReview?> GetAsync(string draftId, CancellationToken cancellationToken);
     Task<IReadOnlyDictionary<string, PublishableDocumentChange>> GetForPublicationAsync(
         IReadOnlyCollection<string> draftIds, CancellationToken cancellationToken);
-    Task<DocumentChangeReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter,
-        CancellationToken cancellationToken);
     Task<NewDocumentChangePage> ListEligibleComparisonsAsync(PageCursor? cursor, int limit,
         CancellationToken cancellationToken);
     Task<IReadOnlyList<UnpublishedApprovedDraft>> ListUnpublishedApprovedDraftsAsync(int limit,
         IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken);
-    Task<ReviewOverview> GetOverviewAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<ReviewActivityEvent>> ListRecentActivityAsync(int limit, CancellationToken cancellationToken);
 }

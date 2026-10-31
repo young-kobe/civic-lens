@@ -62,8 +62,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
     {
         var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump", shiftedStoredTextPrefix: "Shifted. ");
 
-        var held = Assert.Single((await store.ListNeedingActionAsync(10, default)).Items);
-        Assert.Equal(ReviewStatus.AwaitingReview, held.CurrentStatus);
+        Assert.Equal("AwaitingReview", await ScalarAsync("SELECT review_status FROM executive_action_drafts"));
         Assert.Equal("An executive action fact must equal the text of its citation.", await HeldReasonAsync());
         var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 1, ReviewDecisionKind.RequestChanges, "auth0|owner",
             "The quotes do not match.", [], DateTimeOffset.UtcNow);
@@ -82,9 +81,6 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         await store.DecideAsync("auth0|owner", decision, 1, 1, "key-1", new string('a', 64), default);
 
         Assert.Empty(await store.ListUnpublishedApprovedAsync(10, [], default));
-        var needing = await store.ListNeedingActionAsync(10, default);
-        Assert.Equal(1, needing.Total);
-        Assert.Equal(ReviewStatus.ApprovalWithdrawn, Assert.Single(needing.Items).CurrentStatus);
         Assert.Equal(ReviewStatus.ApprovalWithdrawn, (await store.GetAsync(recordId, default))!.Review.CurrentStatus);
     }
 
@@ -99,9 +95,9 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamationCorrection, "joe-biden");
 
         Assert.Empty(await store.ListUnpublishedApprovedAsync(10, [], default));
-        var needing = Assert.Single((await store.ListNeedingActionAsync(10, default)).Items);
-        Assert.Equal(2, needing.CurrentRevision.RevisionNumber);
-        Assert.Single(needing.UnresolvedConcerns);
+        var review = (await store.GetAsync(recordId, default))!.Review;
+        Assert.Equal(2, review.CurrentRevision.RevisionNumber);
+        Assert.Single(review.UnresolvedConcerns);
     }
 
     [Fact]
@@ -139,11 +135,13 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
             PublicationProtocol.ManifestPath, PublicationProtocol.MaximumManifestBytes, default), PublicationProtocol.JsonOptions)!.Records);
     }
 
-    private async Task<string?> HeldReasonAsync()
+    private Task<string?> HeldReasonAsync() => ScalarAsync("SELECT held_reason FROM executive_action_drafts");
+
+    private async Task<string?> ScalarAsync(string sql)
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
-        await using var command = new NpgsqlCommand("SELECT held_reason FROM executive_action_drafts", connection);
+        await using var command = new NpgsqlCommand(sql, connection);
         return await command.ExecuteScalarAsync() as string;
     }
 }

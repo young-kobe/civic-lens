@@ -86,7 +86,6 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal("Approved", await ScalarAsync("SELECT review_status FROM vote_drafts"));
         Assert.Equal(await ScalarAsync("SELECT max(created_at_utc_ticks) FROM vote_revisions"),
             await ScalarAsync("SELECT last_revised_at_utc_ticks FROM vote_drafts"));
-        Assert.Equal(0, (await new ListVotesNeedingAction(VoteReviews()).ExecuteAsync(Reviewer)).Total);
     }
 
     [Fact]
@@ -120,8 +119,7 @@ public sealed partial class PostgresHouseVoteTests
         await SettleAsync(candidate, revision with { Facts = [new("Result: Passed", new(new string('f', 64), 0, 5))] });
 
         Assert.Empty(await VoteDecisionsAsync());
-        var listed = Assert.Single((await new ListVotesNeedingAction(VoteReviews()).ExecuteAsync(Reviewer)).Items);
-        Assert.Equal(ReviewStatus.AwaitingReview, listed.CurrentStatus);
+        Assert.Equal("AwaitingReview", await ScalarAsync("SELECT review_status FROM vote_drafts"));
         Assert.Equal("A vote citation names a missing extraction.", await ScalarAsync("SELECT held_reason FROM vote_drafts"));
     }
 

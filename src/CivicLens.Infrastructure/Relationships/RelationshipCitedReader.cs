@@ -9,6 +9,7 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Documents.Persistence;
 using CivicLens.Infrastructure.Statements.Persistence;
+using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Relationships;
@@ -43,6 +44,38 @@ internal static class RelationshipCitedReader
             .Concat(actions.Select(item => (new RelationshipCitation(RelationshipRecordKind.Action, item.RecordId, item.RevisionNumber), item.Headline)))
             .Concat(votes.Select(item => (new RelationshipCitation(RelationshipRecordKind.Vote, item.RecordId, item.RevisionNumber), item.Headline)))
             .ToDictionary(item => item.Item1, item => item.Headline);
+    }
+
+    /// <summary>Reads the headline of each cited statement revision for the review queue. A revision that is not stored, or whose
+    /// stored data cannot be parsed, gets its cause instead of failing the whole read. A failed query still fails the read.</summary>
+    public static async Task<(Dictionary<RelationshipCitation, string> Headlines, Dictionary<RelationshipCitation, Exception> Unreadable)>
+        ReadStatementHeadlinesAsync(CollectionAttemptDbContext db, IReadOnlyCollection<RelationshipCitation> citations,
+            CancellationToken cancellationToken)
+    {
+        var named = citations.Where(citation => citation.Kind == RelationshipRecordKind.Statement).Distinct().ToArray();
+        var stored = await CitedRevisions.ReadStoredRevisionsAsync(db, PublishedRecordKind.Statement,
+            [.. named.Select(citation => new PublishedRevisionBinding(PublishedRecordKind.Statement, citation.RecordId, citation.RevisionNumber))],
+            cancellationToken);
+        Dictionary<RelationshipCitation, string> headlines = [];
+        Dictionary<RelationshipCitation, Exception> unreadable = [];
+        foreach (var citation in named)
+        {
+            try
+            {
+                var row = stored.FirstOrDefault(row => row.RecordId == citation.RecordId && row.RevisionNumber == citation.RevisionNumber)
+                    ?? throw new InvalidDataException("A cited statement revision is not stored.");
+                var revision = ReviewJson.Deserialize<StatementDraftRevision>(row.RevisionJson, "revision");
+                if (revision.CandidateId != citation.RecordId || revision.RevisionNumber != citation.RevisionNumber || revision.Headline is null)
+                    throw new InvalidDataException("The stored revision does not match its citation.");
+                headlines[citation] = revision.Headline;
+            }
+            catch (Exception exception) when (ReviewJson.IsUnreadableStoredData(exception))
+            {
+                unreadable[citation] = new InvalidDataException(
+                    $"Cited statement {citation.RecordId} revision {citation.RevisionNumber} cannot be read.", exception);
+            }
+        }
+        return (headlines, unreadable);
     }
 
     public static async Task<(ApprovedStatement Statement, RelationshipTarget Target)> ReadCitedAsync(CollectionAttemptDbContext db,

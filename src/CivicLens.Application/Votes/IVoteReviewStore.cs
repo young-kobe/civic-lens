@@ -17,7 +17,6 @@ public interface IVoteReviewStore
 
     Task<VoteReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken);
 
-    Task<VotesNeedingAction> ListNeedingActionAsync(int limit, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<UnpublishedApprovedVote>> ListUnpublishedApprovedAsync(int limit, IReadOnlyCollection<string> excludedRecordIds,
         CancellationToken cancellationToken);

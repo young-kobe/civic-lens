@@ -231,7 +231,6 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         Assert.Equal(1, await command.ExecuteNonQueryAsync());
 
         await Assert.ThrowsAsync<ArgumentException>(() => reviews.GetAsync(revision.DraftId, default));
-        await Assert.ThrowsAsync<ArgumentException>(() => reviews.ListAsync(null, 10, DraftStatusFilter.All, default));
     }
 
     [Fact]
@@ -275,12 +274,10 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         var withdrawal = await decide.ExecuteAsync(actor, new(reapproved, 2, 1, ReviewDecisionKind.WithdrawApproval, "Check.", [], "withdraw-3"));
         await decide.ExecuteAsync(actor, new(reapproved, 2, 2, ReviewDecisionKind.Approve, "Checked.", [withdrawal.DecisionId], "reapprove-3"));
 
-        var items = (await reviews.ListAsync(null, 10, DraftStatusFilter.All, default)).Items.ToDictionary(item => item.DraftId);
-
-        Assert.Equal((ReviewStatus.AwaitingReview, 0), (items[drafts[0].DraftId].CurrentStatus, items[drafts[0].DraftId].UnresolvedConcernCount));
-        Assert.Equal((ReviewStatus.ChangesRequested, 1), (items[requested].CurrentStatus, items[requested].UnresolvedConcernCount));
-        Assert.Equal((ReviewStatus.ApprovalWithdrawn, 1), (items[withdrawn].CurrentStatus, items[withdrawn].UnresolvedConcernCount));
-        Assert.Equal((ReviewStatus.Approved, 0), (items[reapproved].CurrentStatus, items[reapproved].UnresolvedConcernCount));
+        Assert.Equal((ReviewStatus.AwaitingReview, 0), await StatusAsync(drafts[0].DraftId));
+        Assert.Equal((ReviewStatus.ChangesRequested, 1), await StatusAsync(requested));
+        Assert.Equal((ReviewStatus.ApprovalWithdrawn, 1), await StatusAsync(withdrawn));
+        Assert.Equal((ReviewStatus.Approved, 0), await StatusAsync(reapproved));
     }
 
     private async Task<(ReviewActor Actor, ReviewCatalog Catalog, DocumentChangeDraftRevision Revision)> SavedDraftAsync()
@@ -337,22 +334,6 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
     }
 
     [Fact]
-    public async Task ReviewListUsesTheSameQueryCountForOneDraftAndAFullPageSoTheQueueStaysCheap()
-    {
-        await CreateDraftsAsync(20);
-        var counter = new ReadCommandCounter();
-        var counted = CountedStore(counter);
-
-        await counted.ListAsync(null, 1, DraftStatusFilter.All, default);
-        var singleDraftReads = counter.ReadCount;
-        counter.ReadCount = 0;
-        var page = await counted.ListAsync(null, 20, DraftStatusFilter.All, default);
-
-        Assert.Equal(20, page.Items.Length);
-        Assert.Equal(singleDraftReads, counter.ReadCount);
-    }
-
-    [Fact]
     public async Task PublicationReadRejectsTamperedComparisonLikeTheSingleDraftReadSoAlteredEvidenceIsNeverPublished()
     {
         var drafts = await CreateDraftsAsync(2);
@@ -388,23 +369,10 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         Assert.Equal(0L, await count.ExecuteScalarAsync());
     }
 
-    [Fact]
-    public async Task DraftPagesWalkOlderThenNewerOverTheSameRowsEvenWhenTimestampsTie()
+    private async Task<(ReviewStatus Status, int Concerns)> StatusAsync(string draftId)
     {
-        var drafts = await CreateDraftsAsync(7);
-        // Three drafts share each timestamp, so only the id tie-breaker separates them.
-        var keyed = drafts.Select((draft, index) => (draft.DraftId, Ticks: 5_000L + index / 3)).ToArray();
-        await SetDraftTicksAsync(keyed);
-        var expected = keyed.OrderByDescending(key => key.Ticks).ThenByDescending(key => key.DraftId, StringComparer.Ordinal)
-            .Select(key => key.DraftId).ToArray();
-
-        var walk = await PageWalk.RunAsync(async cursor =>
-        {
-            var page = await reviews.ListAsync(cursor, 2, DraftStatusFilter.All, default);
-            return (page.Items.Select(item => item.DraftId).ToArray(), page.NewerCursor, page.OlderCursor);
-        });
-
-        walk.AssertExact(expected);
+        var review = (await reviews.GetAsync(draftId, default))!;
+        return (ReviewPolicy.GetCurrentStatus(review.CurrentRevision.RevisionNumber, review.Decisions), review.UnresolvedConcerns.Length);
     }
 
     [Fact]
@@ -436,7 +404,6 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         var page = await reviews.ListEligibleComparisonsAsync(null, 10, default);
 
         Assert.Equal(open.ComparisonId, Assert.Single(page.Items).ComparisonId);
-        Assert.Equal(1, (await reviews.GetOverviewAsync(default)).NewChanges);
     }
 
     [Fact]
@@ -459,57 +426,6 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
             .ExecuteAsync(new("auth0|owner", ReviewRole.Owner), new(comparison.ComparisonId, "key")));
     }
 
-    // The newest drafts are approved. If the filter ran after the limit, the first needs-action page would come back short.
-    [Fact]
-    public async Task StatusFilterAppliesBeforeTheLimitAndNeedsActionIsEveryStatusButApproved()
-    {
-        var seeded = await SeedEveryStatusAsync();
-
-        var needsAction = await reviews.ListAsync(null, 2, DraftStatusFilter.NeedsAction, default);
-        var approved = await reviews.ListAsync(null, 1, DraftStatusFilter.Approved, default);
-
-        Assert.Equal([seeded.ChangesRequested, seeded.Withdrawn], needsAction.Items.Select(item => item.DraftId));
-        Assert.Equal(ReviewStatus.ChangesRequested, needsAction.Items[0].CurrentStatus);
-        Assert.Equal(ReviewStatus.ApprovalWithdrawn, needsAction.Items[1].CurrentStatus);
-        Assert.NotNull(needsAction.OlderCursor);
-        var rest = await reviews.ListAsync(PageCursor.Parse(needsAction.OlderCursor), 10, DraftStatusFilter.NeedsAction, default);
-        Assert.Equal([ReviewStatus.AwaitingReviewWithConcerns, ReviewStatus.AwaitingReview],
-            rest.Items.Select(item => item.CurrentStatus));
-        Assert.Null(rest.OlderCursor);
-        Assert.Equal(seeded.ApprovedNewest, Assert.Single(approved.Items).DraftId);
-        Assert.NotNull(approved.OlderCursor);
-        var all = await reviews.ListAsync(null, 10, DraftStatusFilter.All, default);
-        Assert.Equal(6, all.Items.Length);
-    }
-
-    [Fact]
-    public async Task OverviewCountsEqualTheTotalsOfTheirLists()
-    {
-        await SeedEveryStatusAsync();
-        await SaveComparisonAsync();
-        await SaveComparisonAsync();
-
-        var overview = await reviews.GetOverviewAsync(default);
-
-        var newChanges = await CountAsync(async cursor =>
-        {
-            var page = await reviews.ListEligibleComparisonsAsync(cursor, 1, default);
-            return (page.Items.Length, page.OlderCursor);
-        });
-        var needsAction = await CountAsync(async cursor =>
-        {
-            var page = await reviews.ListAsync(cursor, 3, DraftStatusFilter.NeedsAction, default);
-            return (page.Items.Length, page.OlderCursor);
-        });
-        var approved = await CountAsync(async cursor =>
-        {
-            var page = await reviews.ListAsync(cursor, 1, DraftStatusFilter.Approved, default);
-            return (page.Items.Length, page.OlderCursor);
-        });
-        Assert.Equal(new ReviewOverview(2, 4, 2), overview);
-        Assert.Equal((overview.NewChanges, overview.DraftsNeedingAction, overview.ApprovedDrafts), (newChanges, needsAction, approved));
-    }
-
     [Fact]
     public async Task RecentActivityTakesTheNewestOfEachKindWithActorAndHeadline()
     {
@@ -526,21 +442,6 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         Assert.All(events.Where(item => item.Kind != ReviewActivityKind.DraftCreated), item => Assert.Equal("Headline", item.Headline));
         Assert.All(events.Where(item => item.Kind == ReviewActivityKind.DecisionRecorded), item => Assert.NotNull(item.DecisionKind));
         Assert.All(events.Where(item => item.Kind != ReviewActivityKind.DecisionRecorded), item => Assert.Null(item.DecisionKind));
-    }
-
-    [Fact]
-    public async Task ListReadCountDoesNotGrowWithPageSizeOrFilter()
-    {
-        await SeedEveryStatusAsync();
-        var counter = new ReadCommandCounter();
-        var counted = CountedStore(counter);
-
-        await counted.ListAsync(null, 1, DraftStatusFilter.NeedsAction, default);
-        var single = counter.ReadCount;
-        counter.ReadCount = 0;
-        await counted.ListAsync(null, 20, DraftStatusFilter.All, default);
-
-        Assert.Equal(single, counter.ReadCount);
     }
 
     [Fact]
@@ -703,20 +604,6 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
             await decide.ExecuteAsync(actor, new(approved.DraftId, 2, 0, ReviewDecisionKind.Approve, null, [], "approve-" + index));
         }
         return new(drafts[5].DraftId, drafts[4].DraftId, drafts[3].DraftId, drafts[2].DraftId, drafts[1].DraftId, drafts[0].DraftId);
-    }
-
-    private static async Task<int> CountAsync(Func<PageCursor?, Task<(int Count, string? Older)>> read)
-    {
-        var total = 0;
-        PageCursor? cursor = null;
-        for (var guard = 0; guard < 50; guard++)
-        {
-            var (count, older) = await read(cursor);
-            total += count;
-            if (older is null) return total;
-            cursor = PageCursor.Parse(older);
-        }
-        throw new InvalidOperationException("Paging did not end.");
     }
 
     private async Task SetDraftTicksAsync((string DraftId, long Ticks)[] keys)
