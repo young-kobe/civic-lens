@@ -697,6 +697,33 @@ public sealed class VoteDraftStepTests
     }
 
     [Fact]
+    public async Task AVoteDraftedUnderAnOlderPromptDraftsAgainOnceAndTheNextRunSpendsNothing()
+    {
+        var world = Create();
+        var current = await FirstRevisionAsync(world);
+        var model = new FakeHeadlineSummaryModel().Draft(Drafted);
+
+        var (redrafted, _) = await RunAsync(world, model, evidence: world.Evidence(current) with { DraftedUnderOlderPrompt = true });
+        var (rerun, _) = await RunAsync(world, model, redrafted.Revisions[0]);
+
+        Assert.Single(model.Requests);
+        Assert.Equal("unchanged", rerun.Entries[0].ErrorCode);
+    }
+
+    [Fact]
+    public async Task AVoteDraftedUnderTheCurrentPromptSettlesUnchangedWithNoModelCall()
+    {
+        var world = Create();
+        var current = await FirstRevisionAsync(world);
+        var model = new FakeHeadlineSummaryModel();
+
+        var (store, _) = await RunAsync(world, model, current);
+
+        Assert.Empty(model.Requests);
+        Assert.Equal("unchanged", store.Entries[0].ErrorCode);
+    }
+
+    [Fact]
     public async Task AVoteOnABillWithoutASavedBillDetailBlocksBecauseTheDraftNeedsTheTitle()
     {
         var world = Create();

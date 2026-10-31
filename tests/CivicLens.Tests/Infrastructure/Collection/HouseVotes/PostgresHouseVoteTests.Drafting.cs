@@ -317,6 +317,17 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal((status, 2), Assert.Single((await StatusAndAttemptsAsync()).Values));
     }
 
+    [Theory]
+    [InlineData("vote-draft-prompt-v1", true)]
+    [InlineData(VoteDraftTask.PromptVersion, false)]
+    public async Task TheEvidenceNamesAnOlderPromptOnlyWhenTheNewestDraftRunUsedOneSoARerunSpendsNothingAfterTheRedraft(string prompt, bool older)
+    {
+        var candidate = await PendingCandidateAsync();
+        await InsertRunAsync(candidate, prompt, 1);
+
+        Assert.Equal(older, (await VoteStore().ReadEvidenceAsync(candidate, default))!.DraftedUnderOlderPrompt);
+    }
+
     [Fact]
     public async Task RedraftLeavesARollCallWithoutAModelDraftedRunBecauseThereIsNoOldPromptToReplace()
     {
