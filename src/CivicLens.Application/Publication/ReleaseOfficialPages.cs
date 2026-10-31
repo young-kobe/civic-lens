@@ -13,7 +13,7 @@ namespace CivicLens.Application.Publication;
 internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, PublicationOfficials officials, IReleaseRenderer renderer,
     PublicationCatalog catalog)
 {
-    public async Task WriteAsync(IReleaseStaging staging, PublicationRelease manifest, PublishedOfficials published,
+    public async Task<(IReadOnlyList<OfficialListing> Listings, IReadOnlyList<PublishedOfficialSummary> Summaries)> WriteAsync(IReleaseStaging staging, PublicationRelease manifest, PublishedOfficials published,
         IReadOnlyList<PendingRecord> additions, IReadOnlyList<PublishedRecordEntry> removed, PreviousRelease previous,
         bool rewriteAll, CancellationToken cancellationToken)
     {
@@ -46,6 +46,7 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
         await ReleaseOfficialSummaries.WriteAsync(staging, summaries, cancellationToken);
         await WriteAsync(staging, PublicationProtocol.OfficialsPagePath, await renderer.RenderOfficialsAsync(listings, manifest.PublishedAtUtc, cancellationToken),
             cancellationToken);
+        return (listings, summaries);
     }
 
     public static bool ChangesProfiles(PreviousRelease previous, PublishedOfficials published) =>
