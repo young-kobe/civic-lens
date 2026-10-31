@@ -205,7 +205,7 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
     }
 
     [Fact]
-    public async Task ReadsReplayEveryDecisionSinceTheLatestApprovalSoATamperedDecisionInTheCycleFailsTheRead()
+    public async Task ReadsReplayEveryDecisionSinceTheLatestApprovalSoATamperedDecisionColumnInTheCycleFailsTheRead()
     {
         var comparison = await SaveComparisonAsync();
         var actor = new ReviewActor("auth0|owner", ReviewRole.Owner);
@@ -224,13 +224,52 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""
             UPDATE document_change_review_decisions
-            SET decision_json = jsonb_set(decision_json::jsonb, '{note}', 'null'::jsonb)::text
+            SET note = NULL
             WHERE decision_id = @id
             """, connection);
         command.Parameters.AddWithValue("id", withdrawal.DecisionId);
         Assert.Equal(1, await command.ExecuteNonQueryAsync());
 
         await Assert.ThrowsAsync<ArgumentException>(() => reviews.GetAsync(revision.DraftId, default));
+    }
+
+    [Fact]
+    public async Task ReadsTakeTheDecisionFromItsColumnsAndResolutionRowsSoAStaleJsonCopyChangesNothing()
+    {
+        var (actor, catalog, saved) = await SavedDraftAsync();
+        var decide = new DecideDocumentChangeReview(reviews, catalog);
+        var concern = await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 0, ReviewDecisionKind.RequestChanges, "Context missing.", [], "concern"));
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("""
+            UPDATE document_change_review_decisions SET actor_subject = 'auth0|column', note = 'Column note.' WHERE decision_id = @id
+            """, connection);
+        command.Parameters.AddWithValue("id", concern.DecisionId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+
+        var review = (await reviews.GetAsync(saved.DraftId, default))!;
+        var activity = await reviews.ListRecentActivityAsync(5, default);
+
+        var read = Assert.Single(review.UnresolvedConcerns);
+        Assert.Equal(("auth0|column", "Column note."), (read.ActorSubject, read.Note));
+        Assert.Equal("auth0|column", Assert.Single(activity, item => item.Kind == ReviewActivityKind.DecisionRecorded).ActorSubject);
+    }
+
+    [Fact]
+    public async Task ReadsTakeTheResolvedConcernsFromTheResolutionRowsSoAnApprovalWithoutRowsNamesNoResolvedConcern()
+    {
+        var (actor, catalog, saved) = await SavedDraftAsync();
+        var decide = new DecideDocumentChangeReview(reviews, catalog);
+        var concern = await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 0, ReviewDecisionKind.RequestChanges, "Context missing.", [], "concern"));
+        await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 1, ReviewDecisionKind.Approve, "Resolved.", [concern.DecisionId], "approve"));
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("DELETE FROM document_change_review_decision_resolutions", connection);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+
+        var review = (await reviews.GetAsync(saved.DraftId, default))!;
+
+        Assert.Empty(Assert.Single(review.Decisions).ResolvedDecisionIds);
     }
 
     [Fact]

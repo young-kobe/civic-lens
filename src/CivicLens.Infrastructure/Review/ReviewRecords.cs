@@ -255,7 +255,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         Dictionary<string, ImmutableArray<ReviewDecision>> cycles = new(StringComparer.Ordinal);
         foreach (var draft in drafts)
         {
-            try { cycles[draft.RecordId] = ReviewDecisionHistory.Parse(draft.ReviewStateVersion, decisionRows[draft.RecordId]); }
+            try { cycles[draft.RecordId] = ReviewDecisionHistory.RequireContiguousCycle(draft.ReviewStateVersion, [.. decisionRows[draft.RecordId]]); }
             catch (Exception exception) when (ReviewJson.IsUnreadableStoredData(exception)) { unreadable[draft.RecordId] = exception; }
         }
         var readable = drafts.Where(draft => cycles.ContainsKey(draft.RecordId)).ToArray();
@@ -275,13 +275,13 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
     {
         if (draft.ReviewStateVersion == 0) return [];
         var rows = await ReadCycleRowsAsync(db, [draft.RecordId], cancellationToken);
-        return ReviewDecisionHistory.Parse(draft.ReviewStateVersion, rows[draft.RecordId]);
+        return ReviewDecisionHistory.RequireContiguousCycle(draft.ReviewStateVersion, [.. rows[draft.RecordId]]);
     }
 
-    private async Task<ILookup<string, TDecisionRow>> ReadCycleRowsAsync(CollectionAttemptDbContext db, string[] recordIds,
+    private async Task<ILookup<string, ReviewDecision>> ReadCycleRowsAsync(CollectionAttemptDbContext db, string[] recordIds,
         CancellationToken cancellationToken)
     {
-        if (recordIds.Length == 0) return Array.Empty<TDecisionRow>().ToLookup(row => row.RecordId, StringComparer.Ordinal);
+        if (recordIds.Length == 0) return Array.Empty<ReviewDecision>().ToLookup(decision => decision.DraftId, StringComparer.Ordinal);
         var rows = await db.Set<TDecisionRow>().AsNoTracking()
             .Where(row => recordIds.Contains(EF.Property<string>(row, recordIdProperty)) &&
                 row.ReviewStateVersion >= (db.Set<TDecisionRow>()
@@ -290,7 +290,13 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
                     .Max(approval => (int?)approval.ReviewStateVersion) ?? 0))
             .OrderBy(row => EF.Property<string>(row, recordIdProperty)).ThenBy(row => row.ReviewStateVersion)
             .Take(recordIds.Length * ReviewPolicy.MaximumDecisionsPerCycle).ToArrayAsync(cancellationToken);
-        return rows.ToLookup(row => row.RecordId, StringComparer.Ordinal);
+        var decisionIds = rows.Select(row => row.DecisionId).ToArray();
+        var resolved = (await db.Set<ReviewDecisionResolutionRow<TDecisionRow>>().AsNoTracking()
+                .Where(resolution => decisionIds.Contains(resolution.DecisionId))
+                .OrderBy(resolution => resolution.ResolvedDecisionId).ToArrayAsync(cancellationToken))
+            .ToLookup(resolution => resolution.DecisionId, resolution => resolution.ResolvedDecisionId, StringComparer.Ordinal);
+        return rows.ToLookup(row => row.RecordId,
+            row => ReviewDecisionHistory.ToDecision(row, [.. resolved[row.DecisionId]]), StringComparer.Ordinal);
     }
 
     private async Task<Dictionary<(string RecordId, int RevisionNumber), TRevisionRow>> ReadCycleRevisionRowsAsync(
