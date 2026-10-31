@@ -35,8 +35,8 @@ public sealed record OfficialBoardPage(OfficialBoard Board, int? Congress, Immut
     {
         var byId = summaries.ToDictionary(summary => summary.Id, StringComparer.Ordinal);
         var withoutVotes = summaries.Count(summary => summary.Congress is null);
-        return [.. OfficialBoard.All.Select(board => PageOf(board, officials.Select(official => (Official: official, Summary: byId[official.Profile.Id]))
-            .Where(pair => pair.Summary.Congress is not null && HoldsChamber(pair.Summary, board.Chamber)).ToList(), withoutVotes))];
+        var withVotes = officials.Select(official => (Official: official, Summary: byId[official.Profile.Id])).Where(pair => pair.Summary.Congress is not null).ToList();
+        return [.. OfficialBoard.All.Select(board => PageOf(board, withVotes.Where(pair => HoldsChamber(pair.Summary, board.Chamber)).ToList(), withoutVotes))];
     }
 
     private static OfficialBoardPage PageOf(OfficialBoard board, List<(OfficialListing Official, PublishedOfficialSummary Summary)> inChamber, int withoutVotes)

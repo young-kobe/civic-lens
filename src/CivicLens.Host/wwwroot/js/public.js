@@ -231,7 +231,7 @@
     const codeUnitOrder = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
     const sortKinds = {
         text: { first: "asc", words: { asc: "A to Z", desc: "Z to A" }, compare: (a, b) => codeUnitOrder(a.toLowerCase(), b.toLowerCase()) },
-        number: { first: "desc", words: { desc: "most first", asc: "fewest first" }, compare: (a, b) => Number(a) - Number(b) },
+        number: { first: "desc", words: { desc: "most first", asc: "fewest first" }, ranked: { desc: "highest first", asc: "lowest first" }, compare: (a, b) => Number(a) - Number(b) },
         date: { first: "desc", words: { desc: "newest first", asc: "oldest first" }, compare: codeUnitOrder }
     };
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -289,7 +289,12 @@
         const staticRows = Array.from(body.rows);
         const pager = source && table.closest("section").querySelector(".pager");
         if (!source && staticRows.length < 2) return;
-        const label = (header, direction) => `${names.get(header)}, ${sortKinds[header.dataset.sort].words[direction]}`;
+        const isDefault = (header, direction) => header.dataset.sortDefault !== undefined && direction === sortKinds[header.dataset.sort].first;
+        const label = (header, direction) => {
+            if (isDefault(header, direction)) return table.dataset.defaultOrder;
+            const kind = sortKinds[header.dataset.sort];
+            return header.dataset.sortLabel === undefined ? `${names.get(header)}, ${kind.words[direction]}` : `${header.dataset.sortLabel}, ${kind.ranked[direction]}`;
+        };
         const bar = document.createElement("div");
         bar.className = "sort-bar";
         const field = document.createElement("div");
@@ -303,7 +308,7 @@
         select.add(new Option(table.dataset.defaultOrder, ""));
         for (const header of sortable)
             for (const direction of [sortKinds[header.dataset.sort].first, opposite(sortKinds[header.dataset.sort].first)])
-                select.add(new Option(label(header, direction), `${headers.indexOf(header)}:${direction}`));
+                if (!isDefault(header, direction)) select.add(new Option(label(header, direction), `${headers.indexOf(header)}:${direction}`));
         field.append(selectLabel, select);
         const status = document.createElement("p");
         status.className = "muted small";
@@ -321,7 +326,7 @@
         const commit = state => {
             current = state;
             for (const header of sortable) header.setAttribute("aria-sort", state?.header === header ? { asc: "ascending", desc: "descending" }[state.direction] : "none");
-            select.value = state ? `${headers.indexOf(state.header)}:${state.direction}` : "";
+            select.value = state && !isDefault(state.header, state.direction) ? `${headers.indexOf(state.header)}:${state.direction}` : "";
         };
         const restore = () => {
             running++;

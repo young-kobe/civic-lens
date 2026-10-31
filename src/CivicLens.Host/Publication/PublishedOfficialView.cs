@@ -194,7 +194,7 @@ internal static class PublishedOfficialView
 
     public static string MissedVotes(MissedVotes missed, int congress)
     {
-        var share = missed.Share is { } value ? $" ({Percent(value, missed.Missed, missed.Held)})" : "";
+        var share = missed.Share is not null ? $" ({Percent(missed.Missed, missed.Held)})" : "";
         var days = missed.First == missed.Last ? $"on {Moment.Day(missed.First)}" : $"{Moment.Day(missed.First)} to {Moment.Day(missed.Last)}";
         return $"Missed {missed.Missed} of the {missed.Held} roll call {Noun(missed.Held, "vote")} of {ChamberName(missed.Chamber)} on this site{share}, {days} ({CongressCalendar.Ordinal(congress)} Congress).";
     }
@@ -213,7 +213,7 @@ internal static class PublishedOfficialView
 
     public static string SplitVoteCount(int count, int cast)
     {
-        var share = TalkAndActionProfile.ShareOf(count, cast) is { } value ? $" ({Percent(value, count, cast)})" : "";
+        var share = TalkAndActionProfile.ShareOf(count, cast) is not null ? $" ({Percent(count, cast)})" : "";
         return $"{count} of {cast} split {Noun(cast, "vote")}{share}";
     }
 
@@ -229,9 +229,9 @@ internal static class PublishedOfficialView
 
     public static string Noun(int count, string singular) => count == 1 ? singular : singular + "s";
 
-    private static string Percent(double share, int count, int of)
+    private static string Percent(int count, int of)
     {
-        var percent = share * 100;
+        var percent = 100.0 * count / of;
         if (count > 0 && percent < 0.5) return "under 1%";
         if (count < of && percent >= 99.5) return "over 99%";
         return string.Create(CultureInfo.InvariantCulture, $"{percent:0}%");

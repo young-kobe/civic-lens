@@ -9,9 +9,9 @@ internal static class PublishedBoardView
 {
     public const string TabsLabel = "Show the voting boards of a chamber and party";
 
-    public const string BreakersOrder = "Highest share first";
+    public const string ShareOrder = "Highest share first";
 
-    public const string LoyalistsOrder = "Highest share first";
+    public const string ShareSortName = "Share";
 
     public const string MostMissedOrder = "Most missed first";
 
@@ -74,7 +74,7 @@ internal static class PublishedBoardView
             yield return $"{page.InEarlierCongress} {PublishedOfficialView.Noun(page.InEarlierCongress, "official")} whose newest vote figures are in an earlier Congress.";
         if (page.WithoutMajorParty > 0)
             yield return $"{page.WithoutMajorParty} {PublishedOfficialView.Noun(page.WithoutMajorParty, "official")} with vote figures in this Congress but no {PublishedPartyMajority.Democrat} or {PublishedPartyMajority.Republican} party on their votes, so no party majority applies.";
-        yield return "Members of the other party. They are on the other page.";
+        yield return "Members of the other party. They are on the other page for this chamber.";
         yield return "Roll calls that are not on this site, and casts of Present or Not Voting. The split vote counts hold only Yea and Nay casts.";
     }
 }

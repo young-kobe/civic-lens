@@ -90,6 +90,30 @@ public sealed class OfficialBoardPageTests
     }
 
     [Fact]
+    public void AMemberWhoChangedPartyShowsTheSameMissedCountOnBothBoardsBecauseAttendanceHasNoParty()
+    {
+        var switcher = new PublishedOfficialSummary
+        {
+            Id = "switcher",
+            Congress = 119,
+            CosponsoredBills = null,
+            PartyVotes =
+            [
+                new PublishedPartyVoteSummary { Chamber = PublishedChamber.House, Party = PublishedPartyMajority.Democrat, SplitVotesCast = 20, Breaks = 1 },
+                new PublishedPartyVoteSummary { Chamber = PublishedChamber.House, Party = PublishedPartyMajority.Republican, SplitVotesCast = 30, Breaks = 2 }
+            ],
+            Attendance = [new PublishedAttendanceSummary { Chamber = PublishedChamber.House, Held = 100, Missed = 7, First = new DateOnly(2025, 1, 3), Last = new DateOnly(2026, 10, 27) }]
+        };
+
+        var pages = OfficialBoardPage.All([Listing("switcher")], [switcher]);
+
+        var missed = pages.Where(page => page.Board.Chamber == PublishedChamber.House).Select(page => Assert.Single(page.MostMissed).Missed).ToList();
+        Assert.Equal(2, missed.Count);
+        Assert.Equal(missed[0], missed[1]);
+        Assert.Equal(7, missed[0]!.Missed);
+    }
+
+    [Fact]
     public void AReleaseWithNoOfficialsStillGivesFourEmptyBoardsWithNoCongressAndNoDate()
     {
         var pages = OfficialBoardPage.All([], []);

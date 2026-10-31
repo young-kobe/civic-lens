@@ -85,11 +85,35 @@ public sealed class PublishedBoardPageTests
     [InlineData(399, 400, "399 of 400 split votes (over 99%)")]
     [InlineData(400, 400, "400 of 400 split votes (100%)")]
     [InlineData(14, 120, "14 of 120 split votes (12%)")]
+    [InlineData(1, 150, "1 of 150 split votes (1%)")]
+    [InlineData(149, 150, "149 of 150 split votes (99%)")]
+    [InlineData(199, 200, "199 of 200 split votes (over 99%)")]
     public async Task ASplitVoteCountNeverRoundsANonzeroCountToZeroOrANonTotalToAHundredPercent(int breaks, int cast, string expected)
     {
         var document = await RenderAsync(Page(Member("Ada Rep", cast, breaks, missed: 1, held: 100)));
 
         var cell = document.QuerySelector("[aria-labelledby='panel-voted-against-most-house-democrats'] tbody td:last-child")!;
         Assert.Equal(expected, cell.TextContent.Trim());
+    }
+
+    [Fact]
+    public async Task AMissedShareBelowOneHalfPercentReadsUnderOnePercentSoANonzeroCountNeverReadsZero()
+    {
+        var document = await RenderAsync(Page(Member("Ada Rep", 30, 3, missed: 1, held: 400)));
+
+        Assert.Contains("(under 1%)", document.QuerySelector("[aria-labelledby='panel-missed-votes-of-the-house-democrats']")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheShareAndMissedColumnsNameTheirShortSortLabelAndMarkTheDefaultOrderSoOneOrderHasOneName()
+    {
+        var document = await RenderAsync(Page(Member("Ada Rep", 30, 3, missed: 1, held: 400)));
+
+        var shareHeader = document.QuerySelector("[aria-labelledby='panel-voted-against-most-house-democrats'] thead th[data-sort=number]")!;
+        Assert.Equal(("Share", ""), (shareHeader.GetAttribute("data-sort-label"), shareHeader.GetAttribute("data-sort-default")));
+        Assert.Equal("Share of split votes against most House Democrats", shareHeader.TextContent);
+        var officialHeader = document.QuerySelector("[aria-labelledby='panel-voted-against-most-house-democrats'] thead th[data-sort=text]")!;
+        Assert.Null(officialHeader.GetAttribute("data-sort-default"));
+        Assert.Equal("", document.QuerySelector("[aria-labelledby='panel-missed-votes-of-the-house-democrats'] thead th[data-sort=number]")!.GetAttribute("data-sort-default"));
     }
 }
