@@ -198,6 +198,12 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
         });
     }
 
+    public Task<string> RenderBoardAsync(OfficialBoardPage page, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        return RenderAsync<PublishedBoardPage>(new Dictionary<string, object?> { [nameof(PublishedBoardPage.Page)] = page });
+    }
+
     public static ReleaseRenderer FromEnvironment() => new(
         Environment.GetEnvironmentVariable(PublicApiUrlVariable)?.TrimEnd('/') is { Length: > 0 } url ? url : null,
         Environment.GetEnvironmentVariable(TurnstileSiteKeyVariable)?.Trim() is { Length: > 0 } siteKey ? siteKey : null,

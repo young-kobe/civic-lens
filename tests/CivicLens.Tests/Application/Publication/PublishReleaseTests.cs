@@ -137,9 +137,12 @@ public sealed class PublishReleaseTests
             [PublicationProtocol.AllRecordsPagePath(1), "all-2.html", "all-3.html", PublicationProtocol.BriefsPagePath(1),
                 PublicationProtocol.IssuePagePath("housing", 1), PublicationProtocol.FacetsPath, PublicationProtocol.SearchPagePath,
                 PublicationProtocol.ReportPagePath, PublicationProtocol.MethodPagePath, PublicationProtocol.AboutPagePath, PublicationProtocol.GlossaryPagePath, PublicationProtocol.HomePath,
-                PublicationProtocol.OfficialsPath, PublicationProtocol.CatalogPath, PublicationProtocol.OfficialSummariesPath, PublicationProtocol.OfficialsPagePath,
+                PublicationProtocol.OfficialsPath, PublicationProtocol.CatalogPath, PublicationProtocol.OfficialSummariesPath,
+                PublicationProtocol.BoardPagePath(PublishedChamber.House, PublishedPartyMajority.Democrat), PublicationProtocol.BoardPagePath(PublishedChamber.House, PublishedPartyMajority.Republican),
+                PublicationProtocol.BoardPagePath(PublishedChamber.Senate, PublishedPartyMajority.Democrat), PublicationProtocol.BoardPagePath(PublishedChamber.Senate, PublishedPartyMajority.Republican),
+                PublicationProtocol.OfficialsPagePath,
                 PublicationProtocol.ManifestPath],
-            order.TakeLast(17));
+            order.TakeLast(21));
         Assert.Equal("all.html", PublicationProtocol.AllRecordsPagePath(1));
         Assert.DoesNotContain("all-4.html", order);
         Assert.Contains("<html>index 3 120</html>", System.Text.Encoding.UTF8.GetString(

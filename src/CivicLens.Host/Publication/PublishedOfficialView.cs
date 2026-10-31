@@ -203,13 +203,18 @@ internal static class PublishedOfficialView
 
     public static string WithParty(VotesWithParty votes, int congress)
     {
-        var share = votes.Share is { } value ? $" ({Percent(value)})" : "";
         var inCongress = $"in the {CongressCalendar.Ordinal(congress)} Congress";
         var sentence = votes.Cast == 0
             ? $"No Yea or Nay cast yet on a split vote in {ChamberName(votes.Chamber)} as a {votes.Party} {inCongress}."
-            : $"Voted with most {PartyOf(votes)} on {votes.Matched} of {votes.Cast} split {Noun(votes.Cast, "vote")}{share} {inCongress}.";
+            : $"Voted with most {PartyOf(votes)} on {SplitVoteCount(votes.Matched, votes.Cast)} {inCongress}.";
         var other = votes.Cast == 0 ? "" : "other ";
         return votes.NotCast == 0 ? sentence : $"{sentence} They did not cast Yea or Nay on {votes.NotCast} {other}split {Noun(votes.NotCast, "vote")}.";
+    }
+
+    public static string SplitVoteCount(int count, int cast)
+    {
+        var share = TalkAndActionProfile.ShareOf(count, cast) is { } value ? $" ({Percent(value)})" : "";
+        return $"{count} of {cast} split {Noun(cast, "vote")}{share}";
     }
 
     public static string PartyOf(VotesWithParty votes) => PartyOf(votes.Chamber, votes.Party);
