@@ -209,7 +209,7 @@ public sealed partial class DraftEditor
         return LoadAsync();
     }
 
-    public override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.DocumentChange, DraftId);
+    protected override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.DocumentChange, DraftId);
 
     private async Task TakeOffSiteAsync() =>
         NavigateWhenSet(review is null ? null : await RunTakeOffSiteAsync(CurrentStatus, WithdrawAsync, ReloadAfterDecideConflictAsync));

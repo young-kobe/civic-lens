@@ -399,7 +399,9 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.Contains("off the public site", editor.QuerySelector(".notice")!.TextContent, StringComparison.Ordinal);
         Assert.Null(editor.QuerySelector("#take-off-site"));
         Assert.Equal("This record is off the public site. It returns only when a person approves a newer revision with a correction note.",
-            editor.QuerySelector("#take-off-site-off")!.TextContent);
+            editor.QuerySelector("[aria-labelledby='decision'] #take-off-site-off")!.TextContent);
+        Assert.Equal("Approving this revision does not bring the record back. Only a newer revision can.",
+            editor.QuerySelector("#decision-controls .actions-hint")!.TextContent);
         Assert.Equal([ReviewDecisionKind.Approve, ReviewDecisionKind.WithdrawApproval], await DecisionKindsAsync(draftId));
 
         using var repeated = await host.Client.PostAsync(draftUrl, new FormUrlEncodedContent(fields));
@@ -446,7 +448,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
-    public async Task AFailedWithdrawalStepKeepsTheSavedDecisionAndTheRetryWithTheSameKeyRecordsNoSecondOneAsync()
+    public async Task AFailedServeKeepsTheSavedDecisionAndAPostFromAFreshPageServesItWithoutASecondOneAsync()
     {
         SignIn(Owner);
         var (draftUrl, draftId) = await ApprovedDraftAsync();
@@ -469,8 +471,8 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         }
         Assert.Equal([ReviewDecisionKind.Approve, ReviewDecisionKind.WithdrawApproval], await DecisionKindsAsync(draftId));
         Assert.Empty(ManifestWithdrawals());
-        var retryFields = Fields(failedPage.QuerySelector("#take-off-site-form")!);
-        Assert.Equal(fields.Single(field => field.Key == "idempotencyKey").Value, retryFields.Single(field => field.Key == "idempotencyKey").Value);
+        var retryFields = Fields((await host.GetDocumentAsync(draftUrl)).QuerySelector("#take-off-site-form")!);
+        Assert.NotEqual(fields.Single(field => field.Key == "idempotencyKey").Value, retryFields.Single(field => field.Key == "idempotencyKey").Value);
         Set(retryFields, "note", "The source was wrong.");
 
         using var retried = await host.Client.PostAsync(draftUrl, new FormUrlEncodedContent(retryFields));

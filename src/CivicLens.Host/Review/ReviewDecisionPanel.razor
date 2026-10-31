@@ -1,8 +1,13 @@
 @using System.Collections.Immutable
+@using CivicLens.Application.Publication
 @using CivicLens.Core.Review
 @using CivicLens.Publication.Contracts
 
 <Panel Title="@($"Decide on revision {RevisionNumber}")" Id="decision" Padded="true">
+    @if (WithdrawnRevisionNumber is not null)
+    {
+        <p id="take-off-site-off" class="small">This record is off the public site. It returns only when a person approves a newer revision with a correction note.</p>
+    }
     @Checklist
     @if (Concerns.Length > 0)
     {
@@ -48,7 +53,7 @@
                 }
                 @if (Status != ReviewStatus.Approved)
                 {
-                    <span class="actions-hint">Publishes soon.</span>
+                    <span class="actions-hint">@(CannotReturn ? "Approving this revision does not bring the record back. Only a newer revision can." : "Publishes soon.")</span>
                 }
             </div>
         </FieldSet>
@@ -56,12 +61,15 @@
 </Panel>
 
 @code {
+    private bool CannotReturn => WithdrawnRevisionNumber is { } withdrawn && !PublishedRecordRules.CanReturn(RevisionNumber, withdrawn);
+
     [Parameter, EditorRequired] public int RevisionNumber { get; set; }
     [Parameter, EditorRequired] public int ReviewStateVersion { get; set; }
     [Parameter, EditorRequired] public ReviewStatus Status { get; set; }
     [Parameter, EditorRequired] public ImmutableArray<ReviewDecision> Concerns { get; set; }
     [Parameter, EditorRequired] public bool CanDecide { get; set; }
     [Parameter, EditorRequired] public string IdempotencyKey { get; set; } = string.Empty;
+    [Parameter] public int? WithdrawnRevisionNumber { get; set; }
     [Parameter] public string? Note { get; set; }
     [Parameter] public string? CorrectionNote { get; set; }
     [Parameter, EditorRequired] public EventCallback OnDecide { get; set; }

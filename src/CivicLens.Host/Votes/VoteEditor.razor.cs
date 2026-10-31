@@ -105,7 +105,7 @@ public sealed partial class VoteEditor
         return LoadAsync();
     }
 
-    public override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.Vote, RecordId);
+    protected override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.Vote, RecordId);
 
     private async Task TakeOffSiteAsync() =>
         NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(detail.Review.CurrentStatus, WithdrawAsync, ReloadAfterDecideConflictAsync));

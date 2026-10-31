@@ -106,7 +106,7 @@ public sealed partial class ActionEditor
         return LoadAsync();
     }
 
-    public override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.Action, RecordId);
+    protected override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.Action, RecordId);
 
     private async Task TakeOffSiteAsync() =>
         NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(detail.Review.CurrentStatus, WithdrawAsync, ReloadAfterDecideConflictAsync));

@@ -113,7 +113,7 @@ public sealed partial class RelationshipEditor
         return LoadAsync();
     }
 
-    public override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.Relationship, RecordId);
+    protected override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.Relationship, RecordId);
 
     private async Task TakeOffSiteAsync() =>
         NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(detail.Review.CurrentStatus, WithdrawAsync, ReloadAfterDecideConflictAsync));

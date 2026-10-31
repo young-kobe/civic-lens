@@ -31,7 +31,7 @@ public sealed class TakeOffSiteTests
     }
 
     [Fact]
-    public async Task ARetryAfterTheServeFailedServesTheCommittedReleaseAgainInsteadOfSayingTheRecordIsNotOnTheSite()
+    public async Task APostFromAFreshPageServesTheCommittedWithdrawalWithoutASecondDecisionOrReleaseBecauseTheManifestAlreadyWithdrawsTheRecord()
     {
         var (scenario, action) = await PublishedActionAsync();
         var decisions = new List<(ReviewDecisionKind Kind, string Key)>();
@@ -40,20 +40,66 @@ public sealed class TakeOffSiteTests
 
         var failed = await takeOff.ExecuteAsync(PublicationScenario.Owner, Request(action, ReviewStatus.Approved), Record(decisions));
 
-        Assert.Equal("The public site could not be updated. Your decision on the record is saved. Press Take off site again. If this repeats, ask the operator to check the release directory.", failed);
-
+        Assert.Equal("The public site could not be updated. Your decision on the record is saved. Press Take off site again. If this repeats, check the release directory on the server.", failed);
         var pending = await takeOff.GetStatusAsync(PublicationScenario.Owner, Reference(action));
         Assert.Equal((false, true, true, true), (pending.OnSite, pending.TakenOff, pending.ReadersSeeOldSite, pending.CanTakeOff));
         scenario.Releases.FailOnActivate = null;
+        var releases = scenario.Publications.Committed.Count;
 
-        var retried = await takeOff.ExecuteAsync(PublicationScenario.Owner, Request(action, ReviewStatus.ApprovalWithdrawn), Record(decisions));
+        var retried = await takeOff.ExecuteAsync(PublicationScenario.Owner,
+            Request(action, ReviewStatus.ApprovalWithdrawn) with { IdempotencyKey = "fresh-page-key" }, Record(decisions));
 
         Assert.Null(retried);
         Assert.Equal(scenario.Publications.Committed.Last().DirectoryName, scenario.Releases.Active);
         Assert.Single(decisions);
+        Assert.Equal(releases, scenario.Publications.Committed.Count);
         var served = await takeOff.GetStatusAsync(PublicationScenario.Owner, Reference(action));
-        Assert.False(served.CanTakeOff);
-        Assert.True(served.TakenOff);
+        Assert.Equal((false, true), (served.CanTakeOff, served.TakenOff));
+    }
+
+    [Fact]
+    public async Task AReplayedKeyNeverSaysTheRecordIsOffWhenAnActivateHasPutItBackBecauseSuccessNeedsTheActiveManifestToDropIt()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        var takeOff = TakeOff(scenario);
+        await takeOff.ExecuteAsync(PublicationScenario.Owner, Request(action, ReviewStatus.Approved), Record([]));
+        scenario.Publications.ActiveReleaseNumber = 1;
+
+        var refusal = await takeOff.ExecuteAsync(PublicationScenario.Owner, Request(action, ReviewStatus.Approved), Record([]));
+
+        Assert.Equal("The public site still shows this record. Reload the page and press Take off site again.", refusal);
+    }
+
+    [Fact]
+    public async Task AnUnrelatedUnservedReleaseGivesNoWarningOnARecordWithdrawnEarlierBecauseReadersAlreadySeeItOff()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        var takeOff = TakeOff(scenario);
+        await takeOff.ExecuteAsync(PublicationScenario.Owner, Request(action, ReviewStatus.Approved), Record([]));
+        scenario.Releases.FailOnActivate = new IOException("The link could not move.");
+
+        await Assert.ThrowsAsync<IOException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k3", new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('b')))));
+
+        var status = await takeOff.GetStatusAsync(PublicationScenario.Owner, Reference(action));
+        Assert.Equal((true, false), (status.TakenOff, status.ReadersSeeOldSite));
+    }
+
+    [Fact]
+    public async Task ACancelledRequestAfterTheDecisionStillCommitsTheWithdrawalBecauseAClosedTabMustNotLeaveTheRecordHalfDone()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        using var cancellation = new CancellationTokenSource();
+
+        var refusal = await TakeOff(scenario).ExecuteAsync(PublicationScenario.Owner, Request(action, ReviewStatus.Approved),
+            (_, _) =>
+            {
+                cancellation.Cancel();
+                return Task.CompletedTask;
+            }, cancellation.Token);
+
+        Assert.Null(refusal);
+        Assert.Equal(action, Assert.Single(Manifest(scenario).Withdrawals).RecordId);
     }
 
     [Fact]
@@ -167,21 +213,6 @@ public sealed class TakeOffSiteTests
 
         Assert.Equal("The decision could not be recorded, so the public site is unchanged. Reload the page, check the review state, and try again.", refusal);
         Assert.Empty(Manifest(scenario).Withdrawals);
-    }
-
-    [Fact]
-    public async Task ARetryWithAnotherReasonAfterTheCommitGetsATrueSentenceBecauseTheKeyAlreadyWentOutWithTheFirstReason()
-    {
-        var (scenario, action) = await PublishedActionAsync();
-        var takeOff = TakeOff(scenario);
-        scenario.Releases.FailOnActivate = new IOException("The link could not move.");
-        await takeOff.ExecuteAsync(PublicationScenario.Owner, Request(action, ReviewStatus.Approved), Record([]));
-        scenario.Releases.FailOnActivate = null;
-
-        var refusal = await takeOff.ExecuteAsync(PublicationScenario.Owner,
-            Request(action, ReviewStatus.ApprovalWithdrawn) with { Note = "Another reason." }, Record([]));
-
-        Assert.Equal("This request already went out with a different reason. Type the first reason again, or reload the page.", refusal);
     }
 
     [Fact]

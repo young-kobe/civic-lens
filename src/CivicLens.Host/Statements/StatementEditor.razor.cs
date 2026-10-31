@@ -172,7 +172,7 @@ public sealed partial class StatementEditor
         return LoadAsync();
     }
 
-    public override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.Statement, CandidateId);
+    protected override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.Statement, CandidateId);
 
     private async Task TakeOffSiteAsync() =>
         NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(review!.CurrentStatus, WithdrawAsync, ReloadAfterDecideConflictAsync));

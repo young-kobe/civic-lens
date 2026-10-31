@@ -50,7 +50,7 @@ public sealed partial class ExecutiveActionEditor
         return ExecutiveActionRoutes.Editor(RecordId, "decided");
     }
 
-    public override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.ExecutiveAction, RecordId);
+    protected override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.ExecutiveAction, RecordId);
 
     private async Task TakeOffSiteAsync() =>
         NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(detail.Review.CurrentStatus, WithdrawAsync, LoadAsync));

@@ -158,7 +158,7 @@ else
         </Panel>
 
         <ReviewDecisionPanel RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="review.CurrentStatus"
-                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" CorrectionNote="@Decision?.CorrectionNote" OnDecide="DecideAsync">
+                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" CorrectionNote="@Decision?.CorrectionNote" WithdrawnRevisionNumber="TakeOffView.Status.WithdrawnRevisionNumber" OnDecide="DecideAsync">
             <Checklist>
                 <ul class="checklist">
                     <li>Does the headline match the result and the vote kind?</li>
@@ -168,7 +168,7 @@ else
             </Checklist>
         </ReviewDecisionPanel>
 
-        <TakeOffSitePanel Actor="actor" Record="TakeOffRecord" RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion"
+        <TakeOffSitePanel View="TakeOffView" RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion"
                           IdempotencyKey="@TakeOffFormKey" Note="@TakeOffNote" Refusal="@takeOffRefusal" OnSubmit="TakeOffSiteAsync" />
 
         <ReviewHistoryPanel Entries="History" ViewerSubject="@actor.Subject" />

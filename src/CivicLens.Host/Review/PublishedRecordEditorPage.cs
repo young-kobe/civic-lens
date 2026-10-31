@@ -2,6 +2,7 @@ using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Host.Review;
 
@@ -23,9 +24,17 @@ public abstract class PublishedRecordEditorPage : ReviewRecordPage
     [SupplyParameterFromForm(FormName = TakeOffSitePanel.FormName, Name = "idempotencyKey")] protected string? TakeOffKey { get; set; }
     [SupplyParameterFromForm(FormName = TakeOffSitePanel.FormName, Name = "note")] protected string? TakeOffNote { get; set; }
 
-    public abstract PublishedRecordReference TakeOffRecord { get; }
+    protected abstract PublishedRecordReference TakeOffRecord { get; }
+
+    protected TakeOffSiteView TakeOffView { get; private set; } = TakeOffSiteView.Hidden;
 
     protected string TakeOffFormKey => TakeOffKey ?? newTakeOffKey;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        await LoadTakeOffViewAsync();
+    }
 
     protected override string? StatusText() => Status == TakeOffSitePanel.DoneStatus
         ? "The record is off the public site. Its page now shows a notice."
@@ -41,10 +50,34 @@ public abstract class PublishedRecordEditorPage : ReviewRecordPage
             refusal = await Services.GetRequiredService<TakeOffSite>().ExecuteAsync(actor, request, recordDecision, RequestAborted);
             return RecordRoutes.Editor(TakeOffRecord.Kind, TakeOffRecord.RecordId, TakeOffSitePanel.DoneStatus);
         }, TakeOffFailures, reload);
-        if (refusal is null) return target;
-        takeOffRefusal = refusal;
-        HttpContext.Response.StatusCode = StatusCodes.Status409Conflict;
-        await reload();
+        if (target is not null && refusal is null) return target;
+        if (refusal is not null)
+        {
+            takeOffRefusal = refusal;
+            HttpContext.Response.StatusCode = StatusCodes.Status409Conflict;
+            await reload();
+        }
+        await LoadTakeOffViewAsync();
         return null;
+    }
+
+    private async Task LoadTakeOffViewAsync()
+    {
+        if (actor.Role != ReviewRole.Owner) return;
+        if (Services.GetService<TakeOffSite>() is not { } takeOff)
+        {
+            TakeOffView = new(true, false, false, TakeOffSiteStatus.NotPublished);
+            return;
+        }
+        try
+        {
+            TakeOffView = new(true, true, false, await takeOff.GetStatusAsync(actor, TakeOffRecord, RequestAborted));
+        }
+        catch (OperationCanceledException) when (RequestAborted.IsCancellationRequested) { throw; }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "The take off site check failed.");
+            TakeOffView = new(true, true, true, TakeOffSiteStatus.NotPublished);
+        }
     }
 }

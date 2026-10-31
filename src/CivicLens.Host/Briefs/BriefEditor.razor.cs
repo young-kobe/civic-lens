@@ -117,7 +117,7 @@ public sealed partial class BriefEditor
         return LoadAsync();
     }
 
-    public override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.Brief, RecordId);
+    protected override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.Brief, RecordId);
 
     private async Task TakeOffSiteAsync() =>
         NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(detail.Review.CurrentStatus, WithdrawAsync, ReloadAfterDecideConflictAsync));
