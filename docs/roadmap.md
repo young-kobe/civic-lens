@@ -96,7 +96,7 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 
 **Data and schemas**
 
-- R-63: Move our own data out of JSON. Our data and our schemas are a first class feature, so the database must enforce their rules. Decisions, revisions, and other data we define move to columns and child tables. Stored JSON stays only for text that must stay verbatim: the hashed configuration revision, the byte-compared document comparison, and raw model and collector input and output. Before a kind drops its JSON, a check rebuilds each revision from the new rows and compares it to the stored JSON. Public release files stay JSON, because they are the published product and not our storage. The revision steps start after R-51 PR 3 and PR 4. Depends on: none. [Architecture](architecture.md)
+- R-63: Move our own data out of JSON. Our data and our schemas are a first class feature, so the database must enforce their rules. Decisions, revisions, and other data we define move to columns and child tables. Stored JSON stays only for text that must stay verbatim: the hashed configuration revision, the byte-compared document comparison, and raw model and collector input and output. Before a kind drops its JSON, a check rebuilds each revision from the new rows and compares it to the stored JSON. Public release files stay JSON, because they are the published product and not our storage. Each link between records becomes a real row with a foreign key, so that later insights can follow it. The revision steps start after R-51 PR 3 and PR 4. Depends on: none. [Architecture](architecture.md)
   - [x] Survey every JSON column
   - [x] Agree the direction
   - [ ] Stop parsing JSON where a column already holds the value
@@ -147,7 +147,7 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 
 The audience is regular citizens who want transparency in U.S. national politics. State and local coverage are possible future extensions. Readers start with reviewed accounts and can inspect the evidence behind them. The editorial flow and the restrained monochrome identity are agreed.
 
-Data is the product. The product is only as good as its data, so data and database schemas are a first class feature. Design them as deliberately as any public page.
+Data is the product. The product is only as good as its data, so data and database schemas are a first class feature. Design them as deliberately as any public page. The goal is rich links between people, records, bills, votes, and issues, so that we can derive insights no single source shows. This may become a graph.
 
 Design for scale. Each record carries rich detail, and coverage of officials, sources, and issues is broad. Automate every step that does not need human judgment.
 
