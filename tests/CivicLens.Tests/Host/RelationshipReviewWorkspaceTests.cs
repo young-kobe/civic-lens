@@ -48,6 +48,20 @@ public sealed class RelationshipReviewWorkspaceTests(PostgresCollection postgres
     }
 
     [Fact]
+    public async Task TheLookupBoxOpensTheEditorOfARelationshipIdAndTheEditorShowsTheIdToCopy()
+    {
+        await SeedAsync();
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+
+        using var found = await host.Client.GetAsync($"/Review?find=%20{ActionPair().PairId}%20");
+        var editor = await host.GetDocumentAsync(url);
+
+        Assert.Equal(HttpStatusCode.Redirect, found.StatusCode);
+        Assert.Equal(url, found.Headers.Location!.AbsolutePath);
+        Assert.Equal("Record ID " + ActionPair().PairId, editor.QuerySelector(".page-header-record-id")!.TextContent);
+    }
+
+    [Fact]
     public async Task AnUnknownOrMalformedRelationshipIsNotFoundAndOnlyAConfiguredSubjectMayOpenThePages()
     {
         await SeedAsync();

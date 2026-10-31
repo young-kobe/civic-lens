@@ -86,6 +86,7 @@ public sealed class BriefReviewWorkspaceTests(PostgresCollection postgres) : IAs
 
         var page = await host.GetDocumentAsync($"/Review/Briefs/{RecordId}");
 
+        Assert.Equal("Record ID " + RecordId, page.QuerySelector(".page-header-record-id")!.TextContent);
         var evidence = page.QuerySelector("[aria-labelledby='evidence']")!;
         Assert.Contains("Rent cap", evidence.TextContent, StringComparison.Ordinal);
         Assert.Contains("Summary of Rent cap", evidence.TextContent, StringComparison.Ordinal);

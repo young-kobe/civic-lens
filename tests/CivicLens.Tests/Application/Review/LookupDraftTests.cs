@@ -1,3 +1,4 @@
+using System.Globalization;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
@@ -17,7 +18,9 @@ public sealed class LookupDraftTests
     private readonly FakeVoteReviewStore votes = new();
     private readonly FakeClock clock = new(new DateTimeOffset(2026, 10, 19, 0, 0, 0, TimeSpan.Zero));
 
-    private LookupDraft Lookup() => new(actions, votes, clock);
+    private readonly FakeRecordKindStore kinds = new();
+
+    private LookupDraft Lookup() => new(actions, votes, kinds, clock);
 
     [Theory]
     [InlineData("HR 1234")]
@@ -65,6 +68,74 @@ public sealed class LookupDraftTests
         Assert.Equal(new DraftLookupHit(PublishedRecordKind.Vote, "senate-vote"), await Lookup().ExecuteAsync(Reviewer, query));
     }
 
+    [Theory]
+    [InlineData(PublishedRecordKind.Statement)]
+    [InlineData(PublishedRecordKind.Action)]
+    [InlineData(PublishedRecordKind.Vote)]
+    [InlineData(PublishedRecordKind.Brief)]
+    [InlineData(PublishedRecordKind.Relationship)]
+    [InlineData(PublishedRecordKind.ExecutiveAction)]
+    public async Task ARecordIdOpensTheEditorOfTheKindThatOwnsIt(PublishedRecordKind kind)
+    {
+        var recordId = new string('a', 64);
+        kinds.Records[recordId] = kind;
+
+        Assert.Equal(new DraftLookupHit(kind, recordId), await Lookup().ExecuteAsync(Reviewer, $"  {recordId} "));
+    }
+
+    [Fact]
+    public async Task ADocumentChangeDraftIdIsAValidRecordIdBecauseItIsShorterThanOtherRecordIds()
+    {
+        var draftId = new string('b', 32);
+        kinds.Records[draftId] = PublishedRecordKind.DocumentChange;
+
+        Assert.Equal(new DraftLookupHit(PublishedRecordKind.DocumentChange, draftId), await Lookup().ExecuteAsync(Reviewer, draftId));
+        Assert.Null(await Lookup().ExecuteAsync(Reviewer, new string('c', 32)));
+    }
+
+    [Theory]
+    [InlineData("https://review.example.test/Review/Actions/{0}")]
+    [InlineData("https://review.example.test/Review/Actions/{0}?status=saved")]
+    [InlineData("  https://review.example.test/Review/Actions/{0}/  ")]
+    [InlineData("https://review.example.test/Review/Actions/{0}#history")]
+    [InlineData("https://civic-lens.info/records/{0}.html")]
+    public async Task AnEditorLinkOrAPublicRecordLinkGivesItsRecordIdSoACopiedAddressWorks(string link)
+    {
+        var recordId = new string('d', 64);
+        kinds.Records[recordId] = PublishedRecordKind.Action;
+
+        Assert.Equal(new DraftLookupHit(PublishedRecordKind.Action, recordId),
+            await Lookup().ExecuteAsync(Reviewer, string.Format(CultureInfo.InvariantCulture, link, recordId)));
+    }
+
+    [Fact]
+    public async Task ADocumentChangeEditorLinkGivesItsShortRecordId()
+    {
+        var draftId = new string('e', 32);
+        kinds.Records[draftId] = PublishedRecordKind.DocumentChange;
+
+        Assert.Equal(new DraftLookupHit(PublishedRecordKind.DocumentChange, draftId),
+            await Lookup().ExecuteAsync(Reviewer, "https://review.example.test/Review/" + draftId));
+    }
+
+    [Theory]
+    [InlineData("https://example.test/")]
+    [InlineData("https://example.test/news/story.html")]
+    [InlineData("https://example.test/Review/Actions/abc")]
+    [InlineData("ftp://example.test/records/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.html")]
+    public async Task ALinkWithoutARecordIdIsAUserErrorBeforeAnyRead(string link)
+    {
+        await Assert.ThrowsAsync<DraftLookupFormatException>(() => Lookup().ExecuteAsync(Reviewer, link));
+
+        Assert.Equal(0, kinds.Lookups);
+    }
+
+    [Fact]
+    public async Task ARecordIdWithNoRecordIsNotAnError()
+    {
+        Assert.Null(await Lookup().ExecuteAsync(Reviewer, new string('c', 64)));
+    }
+
     [Fact]
     public async Task ABillWithNoDraftIsNotAnError()
     {
@@ -85,11 +156,13 @@ public sealed class LookupDraftTests
     [InlineData("Senate Roll 0")]
     [InlineData("House roll 5")]
     [InlineData("HR 12; DROP TABLE")]
-    public async Task AnInputThatNamesNoBillOrRollCallIsAUserErrorBeforeAnyRead(string? query)
+    [InlineData("ABCDEF0123456789ABCDEF0123456789")]
+    [InlineData("0123456789abcdef0123456789abcdef01234567")]
+    public async Task AnInputThatNamesNoBillRollCallOrRecordIdIsAUserErrorBeforeAnyRead(string? query)
     {
         await Assert.ThrowsAsync<DraftLookupFormatException>(() => Lookup().ExecuteAsync(Reviewer, query));
 
-        Assert.Equal((0, 0), (actions.BillLookups, votes.RollLookups));
+        Assert.Equal((0, 0, 0), (actions.BillLookups, votes.RollLookups, kinds.Lookups));
     }
 
     [Fact]
@@ -105,5 +178,17 @@ public sealed class LookupDraftTests
     {
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             Lookup().ExecuteAsync(new ReviewActor("auth0|nobody", (ReviewRole)99), "HR 1"));
+    }
+
+    private sealed class FakeRecordKindStore : IRecordKindStore
+    {
+        public Dictionary<string, PublishedRecordKind> Records { get; } = [];
+        public int Lookups { get; private set; }
+
+        public Task<PublishedRecordKind?> FindKindAsync(string recordId, CancellationToken cancellationToken)
+        {
+            Lookups++;
+            return Task.FromResult(Records.TryGetValue(recordId, out var kind) ? kind : (PublishedRecordKind?)null);
+        }
     }
 }

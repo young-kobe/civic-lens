@@ -30,7 +30,7 @@ else
     var concerns = review.UnresolvedConcerns;
     <TopBarTitle Crumbs="Crumbs" />
     <div class="content">
-        <PageHeader Title="@revision.Title" Meta="HeaderMeta(review.CurrentStatus, concerns.Length)" />
+        <PageHeader Title="@revision.Title" RecordId="@RecordId" Meta="HeaderMeta(review.CurrentStatus, concerns.Length)" />
 
         @if (error is not null)
         {
