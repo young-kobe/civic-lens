@@ -43,6 +43,7 @@ public static class PublicationProtocol
     public static int PageCount(int recordCount) => Math.Max(1, (recordCount + PageSize - 1) / PageSize);
     public static bool IsPathSegment(string id) =>
         id.Length is > 0 and <= MaximumFacetIdLength && id.All(c => c is (>= '0' and <= '9') or (>= 'a' and <= 'z') or '-');
+    public static string BoardPagePath(PublishedChamber chamber, string party) => $"board-{chamber}-{party}.html".ToLowerInvariant();
     public static string OfficialPagePath(string officialId) => $"officials/{officialId}.html";
     public static string OfficialCongressPagePath(string officialId, int congress) => $"officials/{officialId}/{congress}.html";
     public static string OfficialVotesPath(string officialId, int congress) => $"officials/{officialId}/votes-{congress}.json";

@@ -12,7 +12,7 @@ public sealed class HomeHighlightsTests
     {
         var release = ReleaseOf(Vote('b', 216, 214), Vote('a', 215, 217), Vote('c', 300, 120));
 
-        var highlights = HomeHighlights.From(release, [], []);
+        var highlights = HomeHighlights.From(release, []);
 
         Assert.Equal(Id('a'), highlights.ClosestVote!.RecordId);
         Assert.Equal(3, highlights.VotesInWindow);
@@ -24,7 +24,7 @@ public sealed class HomeHighlightsTests
         var release = ReleaseOf(Vote('a', 216, 215) with { EventDate = new DateOnly(2026, 5, 4) }, Vote('b', 300, 100) with { EventDate = new DateOnly(2026, 5, 5) },
             Vote('c', 216, 215) with { EventDate = new DateOnly(2026, 5, 12) });
 
-        var highlights = HomeHighlights.From(release, [], []);
+        var highlights = HomeHighlights.From(release, []);
 
         Assert.Equal(new DateOnly(2026, 5, 5), highlights.WindowStart);
         Assert.Equal(new DateOnly(2026, 5, 11), highlights.WindowEnd);
@@ -37,7 +37,7 @@ public sealed class HomeHighlightsTests
     {
         var release = ReleaseOf(Vote('a', 216, 215) with { EventDate = new DateOnly(2026, 5, 11) }, Vote('b', 100, 100) with { EventDate = new DateOnly(2026, 5, 12) });
 
-        var highlights = HomeHighlights.From(release, [], []);
+        var highlights = HomeHighlights.From(release, []);
 
         Assert.Equal(Id('a'), highlights.ClosestVote!.RecordId);
         Assert.Equal(1, highlights.VotesInWindow);
@@ -48,7 +48,7 @@ public sealed class HomeHighlightsTests
     {
         var release = ReleaseOf(Vote('a', 100, 100) with { Alignment = null }, Vote('b', 0, 0) with { YeaCount = null, NayCount = null, Alignment = null }, Vote('c', 220, 200));
 
-        var highlights = HomeHighlights.From(release, [], []);
+        var highlights = HomeHighlights.From(release, []);
 
         Assert.Equal(Id('c'), highlights.ClosestVote!.RecordId);
         Assert.Equal(1, highlights.VotesInWindow);
@@ -57,7 +57,7 @@ public sealed class HomeHighlightsTests
     [Fact]
     public void WithNoVoteInTheWindowThereIsNoClosestVote()
     {
-        var highlights = HomeHighlights.From(ReleaseOf(Vote('a', 216, 215) with { EventDate = new DateOnly(2026, 1, 1) }), [], []);
+        var highlights = HomeHighlights.From(ReleaseOf(Vote('a', 216, 215) with { EventDate = new DateOnly(2026, 1, 1) }), []);
 
         Assert.Null(highlights.ClosestVote);
         Assert.Equal(0, highlights.VotesInWindow);
@@ -68,7 +68,7 @@ public sealed class HomeHighlightsTests
     {
         var release = ReleaseOf(Executive('a', 1), Executive('b', 4), Executive('c', 2), Executive('d', 3), Vote('e', 1, 2));
 
-        var highlights = HomeHighlights.From(release, [], []);
+        var highlights = HomeHighlights.From(release, []);
 
         Assert.Equal([Id('b'), Id('d'), Id('c')], highlights.ExecutiveActions.Select(entry => entry.RecordId));
         Assert.Equal(4, highlights.ExecutiveActionTotal);
@@ -82,10 +82,10 @@ public sealed class HomeHighlightsTests
         {
             Summary("long", 119, PublishedChamber.House, PublishedPartyMajority.Democrat, 100, 20),
             Summary("share", 119, PublishedChamber.House, PublishedPartyMajority.Democrat, 40, 10),
-            Summary("short", 119, PublishedChamber.House, PublishedPartyMajority.Democrat, BreakLeader.MinimumSplitVotes - 1, BreakLeader.MinimumSplitVotes - 1)
+            Summary("short", 119, PublishedChamber.House, PublishedPartyMajority.Democrat, OfficialBoardPage.MinimumSplitVotes - 1, OfficialBoardPage.MinimumSplitVotes - 1)
         };
 
-        var leader = Assert.Single(BreakLeader.All(officials, summaries));
+        var leader = Assert.Single(BreakLeader.All(OfficialBoardPage.All(officials, summaries)));
 
         Assert.Equal(("share", PublishedChamber.House, PublishedPartyMajority.Democrat, 119, 40, 10),
             (leader.Official.Profile.Id, leader.Chamber, leader.Party, leader.Congress, leader.Cast, leader.Breaks));
@@ -95,24 +95,28 @@ public sealed class HomeHighlightsTests
     public void AMemberWithExactlyTheMinimumOfSplitVotesCanLead()
     {
         var officials = new[] { Listing("exact") };
-        var summaries = new[] { Summary("exact", 119, PublishedChamber.Senate, PublishedPartyMajority.Republican, BreakLeader.MinimumSplitVotes, 1) };
+        var summaries = new[] { Summary("exact", 119, PublishedChamber.Senate, PublishedPartyMajority.Republican, OfficialBoardPage.MinimumSplitVotes, 1) };
 
-        var leader = Assert.Single(BreakLeader.All(officials, summaries));
+        var leader = Assert.Single(BreakLeader.All(OfficialBoardPage.All(officials, summaries)));
 
-        Assert.Equal(("exact", BreakLeader.MinimumSplitVotes), (leader.Official.Profile.Id, leader.Cast));
+        Assert.Equal(("exact", OfficialBoardPage.MinimumSplitVotes), (leader.Official.Profile.Id, leader.Cast));
     }
 
     [Fact]
-    public void ATieOnShareAndOnBreaksGoesToTheLowerOfficialId()
+    public void ATieOnShareAndOnBreaksGoesToTheFirstOfficialNameLikeTheBoardListNotTheLowerId()
     {
-        var officials = new[] { Listing("b"), Listing("a") };
+        var officials = new[] { Listing("a", "Zed"), Listing("b", "Adams") };
         var summaries = new[]
         {
-            Summary("b", 119, PublishedChamber.House, PublishedPartyMajority.Democrat, 40, 10),
-            Summary("a", 119, PublishedChamber.House, PublishedPartyMajority.Democrat, 40, 10)
+            Summary("a", 119, PublishedChamber.House, PublishedPartyMajority.Democrat, 40, 10),
+            Summary("b", 119, PublishedChamber.House, PublishedPartyMajority.Democrat, 40, 10)
         };
+        var boards = OfficialBoardPage.All(officials, summaries);
 
-        Assert.Equal("a", Assert.Single(BreakLeader.All(officials, summaries)).Official.Profile.Id);
+        var leader = Assert.Single(BreakLeader.All(boards));
+
+        Assert.Equal("b", leader.Official.Profile.Id);
+        Assert.Equal(boards.Single(page => page.Board.Chamber == PublishedChamber.House && page.Board.Party == PublishedPartyMajority.Democrat).Breakers[0].Official, leader.Official);
     }
 
     [Fact]
@@ -127,7 +131,7 @@ public sealed class HomeHighlightsTests
             Summary("senator", 118, PublishedChamber.Senate, PublishedPartyMajority.Republican, 50, 5)
         };
 
-        var leaders = BreakLeader.All(officials, summaries);
+        var leaders = BreakLeader.All(OfficialBoardPage.All(officials, summaries));
 
         Assert.Equal([("newer", PublishedChamber.House, 119), ("senator", PublishedChamber.Senate, 118)],
             leaders.Select(leader => (leader.Official.Profile.Id, leader.Chamber, leader.Congress)));
@@ -136,7 +140,7 @@ public sealed class HomeHighlightsTests
     [Fact]
     public void AnOfficialWithNoVoteFiguresNamesNoLeader()
     {
-        Assert.Empty(BreakLeader.All([Listing("none")], [PublishedOfficialSummary.Empty("none")]));
+        Assert.Empty(BreakLeader.All(OfficialBoardPage.All([Listing("none")], [PublishedOfficialSummary.Empty("none")])));
     }
 
     private static string Id(char letter) => new(letter, 32);
@@ -176,7 +180,7 @@ public sealed class HomeHighlightsTests
         PolicyAreaIds = []
     };
 
-    private static OfficialListing Listing(string id) => new(new PublishedOfficialProfile { Id = id, Name = id, Terms = [] }, 0);
+    private static OfficialListing Listing(string id, string? name = null) => new(new PublishedOfficialProfile { Id = id, Name = name ?? id, Terms = [] }, 0);
 
     private static PublishedOfficialSummary Summary(string id, int congress, PublishedChamber chamber, string party, int cast, int breaks) => new()
     {
