@@ -76,7 +76,7 @@ public sealed class PublishRelease
         var build = new PublicationBuild(previous, now, rules, renderer, catalog, corrections, roster, byCode).WithRemoved(withdrawn).WithReturned(returned);
         var additions = await LoadAdditionsAsync(references, build, cancellationToken);
         var released = build.WithAdded(additions);
-        await WithdrawalCascade.RequireNoCitersAsync(releases, loaders, released, additions, cancellationToken);
+        await WithdrawalCascade.RequireNoCitersAsync(releases, loaders, previous, withdrawn, additions, cancellationToken);
         var pages = await releasePages.RenderAsync(released, additions, cancellationToken);
         var replaced = references.Concat(withdrawn).ToHashSet();
         var carried = previous.Entries.Where(entry => !replaced.Contains(new(entry.Kind, entry.RecordId))).ToList();

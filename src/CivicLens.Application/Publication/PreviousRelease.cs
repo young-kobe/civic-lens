@@ -38,12 +38,19 @@ internal sealed class PreviousRelease
     public static async Task<PublicationRelease> LoadManifestAsync(IReleaseDirectory releases, PublicationReleaseSummary active,
         CancellationToken cancellationToken)
     {
-        var bytes = await releases.ReadFileAsync(active.DirectoryName, PublicationProtocol.ManifestPath,
+        var manifest = await LoadManifestAsync(releases, active.DirectoryName, cancellationToken);
+        if (manifest.ReleaseNumber != active.ReleaseNumber)
+            throw new InvalidDataException("Release manifest does not match the active release.");
+        return manifest;
+    }
+
+    public static async Task<PublicationRelease> LoadManifestAsync(IReleaseDirectory releases, string directoryName,
+        CancellationToken cancellationToken)
+    {
+        var bytes = await releases.ReadFileAsync(directoryName, PublicationProtocol.ManifestPath,
             PublicationProtocol.MaximumManifestBytes, cancellationToken);
         var manifest = ReadManifest(bytes);
         manifest.Validate();
-        if (manifest.ReleaseNumber != active.ReleaseNumber)
-            throw new InvalidDataException("Release manifest does not match the active release.");
         return manifest;
     }
 
