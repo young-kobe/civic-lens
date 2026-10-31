@@ -133,6 +133,16 @@ public sealed class PublishApprovedRecordsTests
         Assert.Equal(2, summary.ReleaseNumber);
     }
 
+    [Fact]
+    public void TheStatusOnlyFlagStaysOutOfTheRequestHashWhenItIsOffSoTheKeyOfAnEarlierRequestStillReplays()
+    {
+        var request = new PublishReleaseRequest([new(PublishedRecordKind.Action, new string('a', 64))], "k");
+
+        var earlier = JsonSerializer.Serialize(new { request.Records, request.IdempotencyKey, request.Withdrawals, request.RewriteOfficials, request.RewriteEntries });
+        Assert.Equal(earlier, JsonSerializer.Serialize(request));
+        Assert.NotEqual(earlier, JsonSerializer.Serialize(request with { StatusOnly = true }));
+    }
+
     private static PublishedBillStatus Status(string recordId, string text) =>
         new() { RecordId = recordId, Text = text, Date = new DateOnly(2026, 1, 28), ObservedAtUtc = new DateTimeOffset(2026, 1, 30, 9, 0, 0, TimeSpan.Zero) };
 
