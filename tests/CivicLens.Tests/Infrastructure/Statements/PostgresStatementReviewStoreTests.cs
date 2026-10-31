@@ -626,63 +626,6 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     }
 
     [Fact]
-    public async Task TriageListsDraftedStatementsThatNeedActionWithTheirExtractionAndTheApprovalCheckResult()
-    {
-        var ready = await ApprovableAsync();
-        var blank = await StartedAsync();
-        var approved = await ApprovableAsync();
-        var undrafted = await CandidateAsync();
-        await InsertRevisionLessDraftAsync(undrafted);
-        await Decide.ExecuteAsync(Owner, new(approved, 2, 0, ReviewDecisionKind.Approve, null, [], "approve"));
-        var triage = new ListStatementTriage(reviews, new StatementSelectionResolver(StatementGateFixtures.Configuration()));
-
-        var page = await triage.ExecuteAsync(Owner, null, new(DraftStatusFilter.Approved));
-
-        var rows = page.Rows.ToDictionary(row => row.Review.CandidateId);
-        Assert.Equal(new[] { blank, ready }.Order(StringComparer.Ordinal), rows.Keys.Order(StringComparer.Ordinal));
-        Assert.True(rows[ready].Check.Passed);
-        Assert.False(rows[blank].Check.Passed);
-        Assert.Contains(Quote, rows[ready].Quotes[0]);
-        Assert.Empty(rows[blank].Quotes);
-        var rent = await triage.ExecuteAsync(Owner, null, new(DraftStatusFilter.All, IssueId: RentIssue));
-        Assert.Equal([ready], rent.Rows.Select(row => row.Review.CandidateId));
-    }
-
-    [Fact]
-    public async Task TriageFailsTheApprovalCheckOfAStatementWhoseSelectionIsNoLongerConfigured()
-    {
-        await ApprovableAsync();
-        var triage = new ListStatementTriage(reviews, new StatementSelectionResolver(StatementGateFixtures.Configuration()));
-
-        var row = Assert.Single((await triage.ExecuteAsync(Owner, null)).Rows);
-
-        Assert.True(row.Check.Passed);
-        var narrower = new ListStatementTriage(reviews, new StatementSelectionResolver(StatementGateFixtures.Configuration() with { Issues = [] }));
-        var failed = Assert.Single((await narrower.ExecuteAsync(Owner, null)).Rows);
-        Assert.Contains("no longer configured", failed.Check.Failure);
-    }
-
-    [Fact]
-    public async Task TriageReadsADraftedPageWithAFixedNumberOfQueriesWhateverItsSize()
-    {
-        await ApprovableAsync();
-        var counter = new ReadCommandCounter();
-        var counted = new PostgresStatementReviewStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
-            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).AddInterceptors(counter).Options));
-        await counted.ListTriageAsync(null, default, default);
-        counter.ReadCount = 0;
-        await counted.ListTriageAsync(null, default, default);
-        var oneRow = counter.ReadCount;
-        for (var index = 0; index < 4; index++) await ApprovableAsync();
-        counter.ReadCount = 0;
-
-        var read = await counted.ListTriageAsync(null, default, default);
-
-        Assert.Equal(5, read.Items.Length);
-        Assert.Equal(oneRow, counter.ReadCount);
-    }
-
-    [Fact]
     public async Task CountsUseTheSameStatusRuleAsTheListFiltersSoADraftWithoutARevisionNeedsAction()
     {
         var overCap = await CandidateAsync();

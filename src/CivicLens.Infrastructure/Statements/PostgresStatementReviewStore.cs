@@ -107,37 +107,14 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var (page, _) = await ReadPageAsync(db, Records.Drafts(db, filter.Status), cursor, limit, filter, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return page;
-    }
-
-    public async Task<StatementTriageRead> ListTriageAsync(PageCursor? cursor, DraftListFilter filter, CancellationToken cancellationToken)
-    {
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var drafted = Records.Drafts(db, DraftStatusFilter.NeedsAction).Where(draft => draft.CurrentRevisionNumber > 0);
-        var (page, candidates) = await ReadPageAsync(db, drafted, cursor, ListStatementTriage.PageSize, filter, cancellationToken);
-        var candidateIds = page.Items.Select(item => item.CandidateId).ToArray();
-        var extractions = await PostgresDocumentExtractionStore.ReadManyAsync(db,
-            [.. candidates.Values.Select(candidate => candidate.ExtractionId).Distinct(StringComparer.Ordinal)], cancellationToken);
-        var configurationRevisions = await admittingRevisions.ReadManyAsync(db, candidateIds, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        var items = page.Items.Select(item => new StatementTriageEvidence(item, extractions[candidates[item.CandidateId].ExtractionId],
-            configurationRevisions.GetValueOrDefault(item.CandidateId)));
-        return new([.. items], page.NewerCursor, page.OlderCursor);
-    }
-
-    private async Task<(StatementReviewPage Page, Dictionary<string, StatementCandidateRow> Candidates)> ReadPageAsync(CollectionAttemptDbContext db, IQueryable<StatementDraftRow> drafts,
-        PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken)
-    {
-        var slice = await ListedDrafts.PageWithoutTierAsync(drafts, nameof(StatementDraftRow.CandidateId), cursor, limit, filter,
-            cancellationToken);
+        var slice = await ListedDrafts.PageWithoutTierAsync(Records.Drafts(db, filter.Status), nameof(StatementDraftRow.CandidateId), cursor,
+            limit, filter, cancellationToken);
         var rows = slice.Items.Select(item => item.Draft).ToArray();
         var candidates = await ReadCandidatesAsync(db, [.. rows.Select(row => row.CandidateId)], cancellationToken);
         var histories = await Records.ReadHistoriesAsync(db, rows, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         var items = rows.Select(row => ToListItem(row, candidates[row.CandidateId], histories[row.CandidateId]));
-        return (new([.. items], slice.NewerCursor, slice.OlderCursor), candidates);
+        return new([.. items], slice.NewerCursor, slice.OlderCursor);
     }
 
     public async Task<StatementReviewCounts> CountAsync(CancellationToken cancellationToken)

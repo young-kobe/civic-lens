@@ -1,6 +1,6 @@
 namespace CivicLens.Application.Review;
 
-/// <summary>The result of the checks that Approve runs, kept as data so a list can show it before anyone decides.</summary>
+/// <summary>The result of the checks that Approve runs, kept as data so a page can show the cause before anyone decides.</summary>
 public sealed record ApprovalCheck(string? Failure)
 {
     public bool Passed => Failure is null;

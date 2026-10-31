@@ -137,7 +137,6 @@ public sealed class StatementReviewHandlerTests
             await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new GetStatementReview(store, Resolver).ExecuteAsync(actor, CandidateId));
             await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new ListStatementReviews(store).ExecuteAsync(actor, null));
             await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new ListStatementsNotInReview(store).ExecuteAsync(actor, null));
-            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new ListStatementTriage(store, Resolver).ExecuteAsync(actor, null));
         }
         Assert.False(store.DecideCalled);
         Assert.Null(store.Created);
@@ -151,7 +150,6 @@ public sealed class StatementReviewHandlerTests
     {
         await Assert.ThrowsAsync<ArgumentException>(() => new ListStatementReviews(null!).ExecuteAsync(Reviewer, cursor, 10));
         await Assert.ThrowsAsync<ArgumentException>(() => new ListStatementsNotInReview(null!).ExecuteAsync(Reviewer, cursor, 10));
-        await Assert.ThrowsAsync<ArgumentException>(() => new ListStatementTriage(null!, null!).ExecuteAsync(Reviewer, cursor));
     }
 
     [Fact]
@@ -209,5 +207,44 @@ public sealed class StatementReviewHandlerTests
 
         Assert.Empty(detail.Allowed.OfficialIds);
         Assert.Empty(detail.Officials);
+    }
+
+    [Fact]
+    public async Task GetShowsWhyApprovalWillFailWhenAnIssueOfTheSavedRevisionIsNoLongerConfigured()
+    {
+        var revision = await new SaveStatementDraft(store, Reader()).ExecuteAsync(Reviewer, Request());
+        store.Read = new StatementReviewRead(new(CandidateId, revision, 0, ReviewStatus.AwaitingReview, [revision], [], []), "source",
+            "https://example.test/a", Evidence.Article.Extraction, null, StatementDraftFixtures.SpeakerRevision());
+        var narrower = new StatementSelectionResolver(StatementGateFixtures.Configuration() with { Issues = [] });
+
+        var configured = (await new GetStatementReview(store, Resolver).ExecuteAsync(Reviewer, CandidateId))!;
+        var retired = (await new GetStatementReview(store, narrower).ExecuteAsync(Reviewer, CandidateId))!;
+
+        Assert.True(configured.Approval!.Passed);
+        Assert.Contains("no longer configured", retired.Approval!.Failure, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetShowsNoApprovalFailureForAnApprovedAiRevisionWithADateBecauseCodeReadTheDate()
+    {
+        var saved = await new SaveStatementDraft(store, Reader()).ExecuteAsync(Reviewer, Request());
+        var aiRevision = saved with
+        {
+            AuthorSubject = ReviewAuthor.AnalysisSubject,
+            StatementDate = new DateOnly(2026, 5, 5),
+            StatementDateEvidence = Span(ReleaseSentence)
+        };
+        var awaiting = await ReadAsync(ReviewStatus.AwaitingReview);
+        var approved = await ReadAsync(ReviewStatus.Approved);
+
+        Assert.Contains("AI-proposed", awaiting.Approval!.Failure, StringComparison.Ordinal);
+        Assert.Null(approved.Approval);
+
+        async Task<StatementReviewDetail> ReadAsync(ReviewStatus status)
+        {
+            store.Read = new StatementReviewRead(new(CandidateId, aiRevision, 0, status, [aiRevision], [], []), "source",
+                "https://example.test/a", Evidence.Article.Extraction, null, StatementDraftFixtures.SpeakerRevision());
+            return (await new GetStatementReview(store, Resolver).ExecuteAsync(Reviewer, CandidateId))!;
+        }
     }
 }

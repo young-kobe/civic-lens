@@ -22,8 +22,6 @@ public interface IStatementReviewStore
 
     Task<StatementReviewPage> ListAsync(PageCursor? cursor, int limit, DraftListFilter filter, CancellationToken cancellationToken);
 
-    Task<StatementTriageRead> ListTriageAsync(PageCursor? cursor, DraftListFilter filter, CancellationToken cancellationToken);
-
     Task<StatementReviewCounts> CountAsync(CancellationToken cancellationToken);
 
     Task<StatementNotInReviewPage> ListNotInReviewAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken);
