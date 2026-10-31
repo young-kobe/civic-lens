@@ -1,5 +1,6 @@
 using System.Text;
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Tests.Application.Collection.Bills;
 
@@ -36,6 +37,38 @@ public sealed class CongressBillParserTests
 
         Assert.Null(bill.PolicyArea);
         Assert.Empty(bill.SponsorBioguideIds);
+    }
+
+    [Fact]
+    public void TheLatestActionKeepsItsDateAndTrimmedTextSoThePublishedStatusLineStatesWhatCongressGovListed()
+    {
+        var bill = Parse(Valid.Replace("\"summaries\"", "\"latestAction\":{\"actionDate\":\"2025-07-04\",\"text\":\" Became Public Law No: 119-21. \"},\"summaries\""));
+
+        Assert.Equal(new CongressBillLatestAction(new DateOnly(2025, 7, 4), "Became Public Law No: 119-21."), bill.LatestAction);
+    }
+
+    [Fact]
+    public void ADetailWithNoLatestActionHasNoStatusSoNoReaderSeesAFalseNoActionLine()
+    {
+        Assert.Null(Parse(Valid).LatestAction);
+    }
+
+    [Theory]
+    [InlineData("{\"text\":\"Introduced in House\"}")]
+    [InlineData("{\"actionDate\":\"2025-07-04\"}")]
+    [InlineData("{\"actionDate\":\"2025-07-04\",\"text\":\"  \"}")]
+    [InlineData("{\"actionDate\":\"not a date\",\"text\":\"Introduced in House\"}")]
+    public void ALatestActionWithoutADateOrTextIsInvalidBecauseAHalfStatusCannotBeShown(string latestAction)
+    {
+        Assert.Throws<InvalidDataException>(() => Parse(Valid.Replace("\"summaries\"", "\"latestAction\":" + latestAction + ",\"summaries\"")));
+    }
+
+    [Fact]
+    public void ALatestActionTextOverTheCapIsInvalidBecauseThePublishedFileBoundsItsSize()
+    {
+        var text = new string('a', PublishedBillStatus.MaximumTextLength + 1);
+
+        Assert.Throws<InvalidDataException>(() => Parse(Valid.Replace("\"summaries\"", "\"latestAction\":{\"actionDate\":\"2025-07-04\",\"text\":\"" + text + "\"},\"summaries\"")));
     }
 
     [Fact]

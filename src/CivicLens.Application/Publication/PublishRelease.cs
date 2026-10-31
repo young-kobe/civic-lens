@@ -73,7 +73,9 @@ public sealed class PublishRelease
         var returned = ImmutableArray.CreateRange(references.Where(reference => previous.IsWithdrawn(reference.RecordId)));
         var roster = await officials.ReadRosterAsync(cancellationToken);
         var photos = await officials.ReadPhotosAsync(cancellationToken);
-        var build = new PublicationBuild(previous, now, rules, renderer, catalog, corrections, roster, byCode).WithRemoved(withdrawn).WithReturned(returned);
+        var statuses = await ReleaseBillStatuses.LoadAsync(loaders.Actions, previous, references, withdrawn, cancellationToken);
+        var build = new PublicationBuild(previous, now, rules, renderer, catalog, corrections, roster, byCode)
+            .WithRemoved(withdrawn).WithReturned(returned).WithBillStatuses(statuses);
         var additions = await LoadAdditionsAsync(references, build, cancellationToken);
         var released = build.WithAdded(additions);
         await WithdrawalCascade.RequireNoCitersAsync(releases, loaders, released, additions, cancellationToken);
@@ -87,7 +89,7 @@ public sealed class PublishRelease
             throw new ArgumentException("The release would exceed the maximum record count.", nameof(request));
 
         var number = state.LatestReleaseNumber + 1;
-        var (directory, entries) = await StageAsync(number, now, previous, carried, additions, removed, withdrawals, pages, roster, photos, request.RewriteOfficials, request.RewriteEntries, cancellationToken);
+        var (directory, entries) = await StageAsync(number, now, previous, carried, additions, removed, withdrawals, pages, statuses, roster, photos, request.RewriteOfficials, request.RewriteEntries, cancellationToken);
         var commit = new PublicationCommit(number, state.Active?.ReleaseNumber, directory,
             [.. entries.Select(PublishedRevisionBinding.Of)],
             [.. additions.Select(addition => addition.Expectation)])
@@ -139,7 +141,7 @@ public sealed class PublishRelease
 
     private async Task<(string Directory, List<PublishedRecordEntry> Entries)> StageAsync(int number, DateTimeOffset now,
         PreviousRelease previous, List<PublishedRecordEntry> carried, List<PendingRecord> additions,
-        List<PublishedRecordEntry> removed, List<PublishedWithdrawal> withdrawals, IReadOnlyDictionary<string, string> pages, IReadOnlyList<RosterMember> roster,
+        List<PublishedRecordEntry> removed, List<PublishedWithdrawal> withdrawals, IReadOnlyDictionary<string, string> pages, IReadOnlyDictionary<string, PublishedBillStatus> statuses, IReadOnlyList<RosterMember> roster,
         IReadOnlyList<OfficialPhoto> photos, bool rewriteOfficials, bool rewriteEntries, CancellationToken cancellationToken)
     {
         List<PublishedRecordEntry> entries = [.. carried, .. additions.Select(addition => addition.Entry)];
@@ -183,9 +185,11 @@ public sealed class PublishRelease
             Compress(manifestJson, stream => new BrotliStream(stream, CompressionLevel.Optimal)), cancellationToken);
         var facets = ReleaseFacets.From(manifest, catalog);
         await indexPages.WriteAsync(staging, manifest, facets, cancellationToken);
+        await ReleaseBillStatuses.WriteAsync(staging, ReleaseBillStatuses.ActionIdsOf(manifest.Records), statuses, cancellationToken);
         var officials = await dataFiles.WriteAsync(staging, manifest, facets, additions, previous, roster, photos, cancellationToken);
-        if (additions.Count == 0 && removed.Count == 0 && !rewriteOfficials && !rewriteEntries && !ReleaseOfficialPages.ChangesProfiles(previous, officials))
-            throw new ArgumentException("Nothing to publish: no record and no official changed.");
+        if (additions.Count == 0 && removed.Count == 0 && !rewriteOfficials && !rewriteEntries && !ReleaseOfficialPages.ChangesProfiles(previous, officials) &&
+            !ReleaseBillStatuses.ChangedActionIds(ReleaseBillStatuses.ActionIdsOf(manifest.Records), previous, statuses).Any())
+            throw new ArgumentException("Nothing to publish: no record, official, or bill status changed.");
         var (listings, summaries) = await officialPages.WriteAsync(staging, manifest, officials, additions, removed, previous, rewriteOfficials, cancellationToken);
         await indexPages.WriteHomeAsync(staging, manifest, facets, HomeHighlights.From(manifest, listings, summaries), additions, previous, cancellationToken);
         await staging.WriteSiteFilesAsync(manifest, cancellationToken);

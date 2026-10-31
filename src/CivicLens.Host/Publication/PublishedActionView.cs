@@ -1,6 +1,7 @@
 using System.Globalization;
 using CivicLens.Application.Publication;
 using CivicLens.Host.Actions;
+using CivicLens.Host.Collection;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Publication.Contracts;
@@ -9,16 +10,28 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublishedActionView
 {
-    public static IReadOnlyList<Fact> Facts(PublishedAction action, PublicationCatalog catalog) =>
+    public static IReadOnlyList<Fact> Facts(PublishedAction action, PublishedBillStatus? billStatus, PublicationCatalog catalog) =>
     [
         new("Bill", ActionLabels.Bill(action.Congress, action.BillType, action.BillNumber)),
         new("Title", action.BillTitle),
+        .. LatestAction(action, billStatus),
         .. PolicyArea(action, catalog),
         .. PublishedRecordView.Issues("Tracked issues", action.TrackedIssueIds, catalog),
         new("Published", $"From the official record, checked {Moment.Full(action.ApprovedAtUtc)}; first published {Moment.Full(action.FirstPublishedAtUtc)}"),
         .. PublishedRecordLabels.Wording(action.TextOrigin),
         new("Revision", action.RevisionNumber.ToString(CultureInfo.InvariantCulture))
     ];
+
+    private static IEnumerable<Fact> LatestAction(PublishedAction action, PublishedBillStatus? billStatus)
+    {
+        if (billStatus is null) return [];
+        return
+        [
+            new("Latest action on Congress.gov", $"{Moment.Iso(billStatus.Date)}: {billStatus.Text}"),
+            new("Status last checked", $"{Moment.Full(billStatus.ObservedAtUtc)}. The bill can move after this time."),
+            Fact.LinkList("Official bill page", [new FactLink("Bill on Congress.gov", SourcePages.Bill(action.Congress, action.BillType, action.BillNumber))])
+        ];
+    }
 
     private static IEnumerable<Fact> PolicyArea(PublishedAction action, PublicationCatalog catalog) =>
         PublishedRecordView.Links("Policy area", action.PolicyArea is null ? [] : [PublishedRecordView.PolicyAreaLink(action.PolicyAreaId, action.PolicyArea, catalog)]);

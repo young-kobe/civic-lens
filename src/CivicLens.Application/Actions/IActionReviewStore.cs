@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Review;
+using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Actions;
 
@@ -24,4 +25,6 @@ public interface IActionReviewStore
 
     Task<IReadOnlyDictionary<string, PublishableAction>> GetForPublicationAsync(ImmutableArray<string> recordIds,
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<PublishedBillStatus>> ReadBillStatusesAsync(ImmutableArray<string> recordIds, CancellationToken cancellationToken);
 }

@@ -3,6 +3,7 @@ using CivicLens.Application.Actions;
 using CivicLens.Application.Paging;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Review;
+using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Tests.Application.Actions;
 
@@ -51,4 +52,8 @@ internal sealed class FakeActionReviewStore : IActionReviewStore
 
     public Task<ActionReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken) => throw new NotSupportedException();
 
+    public Dictionary<string, PublishedBillStatus> BillStatuses { get; } = [];
+
+    public Task<IReadOnlyList<PublishedBillStatus>> ReadBillStatusesAsync(ImmutableArray<string> recordIds, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<PublishedBillStatus>>([.. recordIds.Where(BillStatuses.ContainsKey).Select(id => BillStatuses[id])]);
 }

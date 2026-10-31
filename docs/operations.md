@@ -167,6 +167,14 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- bi
 
 The limit is 100 when you give none. The command prints `examined`, `admitted`, and `failed`. A bill whose saved detail capture is missing or unreadable counts as failed, and the run goes on with the next bill. Run it again until `examined` equals `failed`. A failed bill keeps a null count and is listed again each run, ahead of the later bills. If `failed` reaches the limit, raise the limit. Look at each failed bill: its saved detail capture is missing or unreadable. Collect the bill again, or leave it. A bill with a new update date gets a new gate row with its own count. It is safe to repeat. The worker fetches the subjects pages. When a chain closes for a bill that already has an action candidate, the worker queues one more action draft for that bill. Each such draft spends model budget. Start with a small limit and watch the daily limit of [action drafting](#action-drafting). Run `votes draft redraft` after the subjects arrive. It selects only votes whose newest draft used an older prompt. A vote drafted under the current prompt before its subjects arrived is not selected. Use `votes draft requeue` for such a vote. [Bills](architecture/bills.md#subjects-backfill) holds the rules. A rollback past the subjects migration is refused when an action revision came from a candidate that includes subjects. After the backfill drafted a bill, such a rollback needs a backup, or a manual delete of that revision first.
 
+After the status migration, bills that the gate saw earlier have no stored latest action. The owner command below reads it from the saved detail capture of the newest version of each bill. It makes no Congress.gov request. It needs the same three variables as the subjects command.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- bills status backfill 100
+```
+
+The limit is 100 when you give none. The command prints `examined`, `recorded`, and `failed`. A bill whose saved detail capture is missing or unreadable counts as failed and stays unread, so it is listed again each run. Run it until `examined` is 0 or equals `failed`. A capture that has no `latestAction` is recorded with no status. After the backfill, run `releases publish <idempotency-key>` with no record. The publish writes `bill-status.json` and every action page that now has a status. The [bill status line](architecture/publication.md#bill-status-line) holds the rules.
+
 ### Federal Register stream
 
 The source `federal-register-documents` in `config/federal-coverage.json` follows the presidential documents of the Federal Register. It ships with `enabled: false`. It needs no key and no roster. [Executive actions](architecture/executive-actions.md) holds the design. To enable it:

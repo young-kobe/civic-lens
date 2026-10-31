@@ -23,6 +23,7 @@ public static class PublicationProtocol
     public const string MethodPagePath = "method.html";
     public const string OfficialsPath = "officials.json";
     public const string OfficialSummariesPath = "officials-summary.json";
+    public const string BillStatusPath = "bill-status.json";
     public const string CatalogPath = "catalog.json";
     public const string OfficialsPagePath = "officials.html";
     public const string AboutPagePath = "about.html";

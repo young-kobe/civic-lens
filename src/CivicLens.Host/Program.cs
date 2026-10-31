@@ -158,7 +158,7 @@ if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _]
     or ["discovery", "get", _] or ["discovery", "admit", _, _, _, _]
     or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args) &&
     !CollectionWorkerCommand.Matches(args) && !WorkerHealthCommand.Matches(args) && !DocumentCommand.Matches(args) && !ReleaseCommand.Matches(args) &&
-    !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args) && !ActionCommand.Matches(args) && !VoteCommand.Matches(args) && !RelationshipCommand.Matches(args) && !BillSubjectsCommand.Matches(args) && !BriefCommand.Matches(args) && !RosterCommand.Matches(args))
+    !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args) && !ActionCommand.Matches(args) && !VoteCommand.Matches(args) && !RelationshipCommand.Matches(args) && !BillBackfillCommand.Matches(args) && !BriefCommand.Matches(args) && !RosterCommand.Matches(args))
 {
     Console.Error.WriteLine("Unknown command. Use --help.");
     return 2;
@@ -322,14 +322,15 @@ try
         return await relationships.ExecuteAsync(args, cancellation.Token);
     }
 
-    if (BillSubjectsCommand.Matches(args))
+    if (BillBackfillCommand.Matches(args))
     {
         var (_, owner) = OwnerCommand.ReadEnvironment();
         var jobs = CreateJobs();
-        var backfill = new BackfillBillSubjects(jobs, jobs, new ApiResponseReader(CreateDatabase(), new CaptureBodyReader()),
-            PublicationComposition.RequireArtifactRoot());
+        var responses = new ApiResponseReader(CreateDatabase(), new CaptureBodyReader());
+        var artifactRoot = PublicationComposition.RequireArtifactRoot();
         executing = true;
-        return await new BillSubjectsCommand(backfill, owner).ExecuteAsync(args, cancellation.Token);
+        return await new BillBackfillCommand(new BackfillBillSubjects(jobs, jobs, responses, artifactRoot),
+            new BackfillBillStatus(jobs, jobs, responses, artifactRoot), owner).ExecuteAsync(args, cancellation.Token);
     }
 
     if (BriefCommand.Matches(args))

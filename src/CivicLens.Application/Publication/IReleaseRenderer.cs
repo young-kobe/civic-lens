@@ -8,8 +8,8 @@ public interface IReleaseRenderer
     Task<string> RenderRecordAsync(PublishedDocumentChange record, PublicationCatalog catalog, CancellationToken cancellationToken);
     Task<string> RenderStatementAsync(PublishedStatement record, ImmutableArray<PublishedRelationship> related, PublicationCatalog catalog,
         CancellationToken cancellationToken);
-    Task<string> RenderActionAsync(PublishedAction record, ImmutableArray<PublishedRelationship> related, PublicationCatalog catalog,
-        CancellationToken cancellationToken);
+    Task<string> RenderActionAsync(PublishedAction record, PublishedBillStatus? billStatus, ImmutableArray<PublishedRelationship> related,
+        PublicationCatalog catalog, CancellationToken cancellationToken);
     Task<string> RenderVoteAsync(PublishedVote record, string? billActionRecordId, ImmutableArray<PublishedRelationship> related,
         PublicationCatalog catalog, CancellationToken cancellationToken);
     Task<string> RenderExecutiveActionAsync(PublishedExecutiveAction record, CancellationToken cancellationToken);

@@ -7,6 +7,7 @@ using CivicLens.Infrastructure.Votes;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
+using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
 using CivicLens.Host.Publication;
@@ -114,6 +115,23 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal(ReviewStatus.Approved, read.Value.Review.CurrentStatus);
         Assert.Equal(read.Value.Review.CurrentRevision.Citations.Select(span => span.ExtractionId).Distinct().Order(),
             read.Value.Extractions.Keys.Order());
+    }
+
+    [Fact]
+    public async Task TheStatusOfAnActionIsTheLatestActionOfTheNewestVersionOfItsBillSoAnOlderStatusNeverShowsOnceTheBillMoved()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await ExecuteAsync(connectionString, "UPDATE bill_gates SET latest_action_date = '2025-03-02', latest_action_text = 'Passed House.'");
+
+        var statuses = await ActionReviews().ReadBillStatusesAsync([RecordId, new string('f', 64)], default);
+
+        var status = Assert.Single(statuses);
+        Assert.Equal((RecordId, "Passed House.", new DateOnly(2025, 3, 2)), (status.RecordId, status.Text, status.Date));
+        Assert.Equal((long)(await ScalarAsync("SELECT created_at_utc_ticks FROM bill_gates"))!, status.ObservedAtUtc.UtcTicks);
+        var newer = await EnqueueDetailAsync("newer");
+        await AdmitDetailAsync(newer, DetailBill(UpdatedAt.AddDays(1), cosponsors: 0), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+        Assert.Empty(await ActionReviews().ReadBillStatusesAsync([RecordId], default));
+        Assert.Empty(await ActionReviews().ReadBillStatusesAsync([], default));
     }
 
     // The saved Congress.gov pages pass the contract check, so a drafted citation never blocks a publish.

@@ -31,7 +31,9 @@ internal sealed class ReleasePages(IReleaseDirectory releases, PublishedRecordLo
         var votesOnChangedBills = await loaders.Votes.FindOnBillsOfActionsAsync(
             build.Removed.Where(record => record.Kind == PublishedRecordKind.Action).Select(record => record.RecordId).Concat(returnedActions),
             cancellationToken);
+        var changedStatuses = ReleaseBillStatuses.ChangedActionIds(build.ReleaseRecords.Where(record => record.Kind == PublishedRecordKind.Action).Select(record => record.RecordId), build.Previous, build.BillStatuses);
         return links.ChangedCitations.Select(cited => new PublishedRecordReference(cited.Kind, cited.RecordId))
+            .Concat(changedStatuses.Select(id => new PublishedRecordReference(PublishedRecordKind.Action, id)))
             .Concat(build.ReleaseRecords.Where(record => record.Kind == PublishedRecordKind.Vote && votesOnChangedBills.Contains(record.RecordId))
                 .Select(record => new PublishedRecordReference(record.Kind, record.RecordId)))
             .Where(record => !skipped.Contains((record.Kind, record.RecordId))).Distinct();

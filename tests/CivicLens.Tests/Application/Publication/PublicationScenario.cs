@@ -428,9 +428,10 @@ internal sealed class FakeRenderer : IReleaseRenderer
     public Task<string> RenderStatementAsync(PublishedStatement record, ImmutableArray<PublishedRelationship> related, PublicationCatalog catalog,
         CancellationToken cancellationToken) =>
         Logged($"render {record.RecordId[..1]}", $"<html>statement {record.RecordId}{Related(related)}</html>");
-    public Task<string> RenderActionAsync(PublishedAction record, ImmutableArray<PublishedRelationship> related, PublicationCatalog catalog,
-        CancellationToken cancellationToken) =>
-        Logged($"render {record.RecordId[..1]}", $"<html>action {record.RecordId}{Related(related)}{Corrections(record.Corrections)}</html>");
+    public Task<string> RenderActionAsync(PublishedAction record, PublishedBillStatus? billStatus, ImmutableArray<PublishedRelationship> related,
+        PublicationCatalog catalog, CancellationToken cancellationToken) =>
+        Logged($"render {record.RecordId[..1]}", $"<html>action {record.RecordId}{Related(related)}{Corrections(record.Corrections)}{StatusText(billStatus)}</html>");
+    private static string StatusText(PublishedBillStatus? status) => status is null ? "" : $" status {status.Text} {status.Date:yyyy-MM-dd}";
     public Task<string> RenderVoteAsync(PublishedVote record, string? billActionRecordId, ImmutableArray<PublishedRelationship> related,
         PublicationCatalog catalog, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>vote {record.RecordId} bill {billActionRecordId}{Related(related)}</html>");

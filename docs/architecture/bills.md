@@ -26,6 +26,7 @@ The bills feature follows the Congress.gov bill list each day. It fetches the de
 - The subjects chain never blocks a candidate, because Congress.gov gives subjects to only some bills.
 - `subjects.count` of the detail includes the policy area. A bill has legislative subjects when the count is above 1 with a policy area, or above 0 with none (`CongressBill.HasLegislativeSubjects`). A bill with only a policy area gets no subjects chain and no candidate with subjects.
 - A subjects chain is admitted at the detail for every bill that has legislative subjects, also when the gate is `notRelevant`. A [vote](votes.md) can name a bill that never passed the gate.
+- The gate row of each bill version stores the `latestAction` of the detail: its date and its text. The row is the status of the bill as of the fetch. The newest version of a bill holds its current status. Status is never part of an action candidate or an action revision, because a bill moves after approval. [Publication](publication.md#bill-status-line) reads it.
 - A candidate is an immutable input. Late summaries or subjects add a new candidate and never change an older one.
 
 ## Invariants
@@ -36,6 +37,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - The reason fits the decision, and only a decided gate has a decision time. Enforced by `ck_bill_gates_reason` and `ck_bill_gates_decided`. Test: `PostgresBillStreamTests.TheDatabaseRefusesAReasonThatDoesNotBelongToItsDecision`.
 - A decided gate never changes. Enforced by `PostgresCollectionJobStore`, which settles only a Pending gate. Test: `PostgresBillStreamTests.ALaterCosponsorPageNeverChangesAGateThatAnEarlierStepDecided`.
 - A bill with only a policy area admits no subjects chain, and the backfill is bounded and idempotent. Enforced by `BillGateRow.HasSubjectsChain` and `PostgresCollectionJobStore.AdmitSubjectsChainAsync`. Tests: `PostgresBillStreamTests.TheSubjectsCountIncludesThePolicyAreaSoAPolicyOnlyBillAdmitsNoSubjectsChain`, `PostgresBillStreamTests.TheBackfillAdmitsTheChainOfTheNewestVersionOnceStoresTheCountAndNeverListsAnExaminedBillAgain`, and `PostgresBillStreamTests.TheBackfillOfAPolicyOnlyBillAdmitsNothingButRecordsTheCountSoItIsNotListedAgain`.
+- A stored latest action has both a date and a trimmed text of 1 to 1,000 characters, and only a row marked read holds one. The parser refuses a `latestAction` that lacks either field or whose text is over the cap, and a detail with no `latestAction` stores no status. The status backfill lists only the newest unread version of a bill, once. Enforced by `ck_bill_gates_latest_action`, `CongressBillParser`, and `PostgresCollectionJobStore.RecordStatusAsync`. Tests: `PostgresBillStreamTests.TheDatabaseRefusesALatestActionWithOnlyADateOrWithBlankOrPaddedTextSoNoHalfStatusIsStored`, `CongressBillParserTests.ALatestActionWithoutADateOrTextIsInvalidBecauseAHalfStatusCannotBeShown`, `CongressBillParserTests.ADetailWithNoLatestActionHasNoStatusSoNoReaderSeesAFalseNoActionLine`, `PostgresBillStreamTests.TheGateStoresTheLatestActionOfTheDetailAndMarksItReadAlsoWhenTheDetailHasNoneSoNoBackfillListsItAgain`, and `PostgresBillStreamTests.TheStatusBackfillListsOnlyTheNewestUnreadVersionRecordsItOnceAndNeverListsItAgain`.
 - A bill version has at most three action candidates, one for each growing set of closed chains. Enforced by `ux_action_candidates_detail_job` and `ActionCandidateInputs`. Test: `PostgresBillStreamTests.SubjectsAndSummariesThatCloseLaterGiveAtMostThreeCandidatesWhicheverComesFirstAndReplayAddsNoMore`.
 - A candidate ID of an older input set never changes. Enforced by `PostgresCollectionJobStore.HashActionCandidate`. Test: `PostgresBillStreamTests.TheCandidateIdsOfTheOldInputCombinationsStayTheSameAndTheSubjectsSuffixComesLast`.
 - A candidate needs a Passed gate and closed chains. Enforced by `PostgresCollectionJobStore.RecordActionCandidateAsync`. Test: `PostgresBillStreamTests.NoCandidateIsWrittenForABillTheGateMarksNotRelevant`.
@@ -102,7 +104,7 @@ Each succeeded page job goes through [preparation](collection.md#preparation). T
 | Parser | Version | Reads |
 |---|---|---|
 | `CongressBillListParser` | none, because a list has no extraction | One list page of at most 250 items |
-| `CongressBillParser` | `congress-bill-detail-v1` | One detail, including `summaries.count` and `subjects.count` (a missing object means 0) |
+| `CongressBillParser` | `congress-bill-detail-v1` | One detail, including `summaries.count`, `subjects.count` (a missing object means 0), and the optional `latestAction` |
 | `CongressBillCosponsorsParser` | `congress-bill-cosponsors-v1` | One cosponsors page of at most 250 items |
 | `CongressBillActionsParser` | `congress-bill-actions-v1` | One actions page of at most 250 items |
 | `CongressBillSummariesParser` | `congress-bill-summaries-v1+html-text-v1` | One summaries page of at most 1 item |
@@ -113,6 +115,8 @@ The list parser checks the type against `hr`, `s`, `hjres`, `sjres`, `hconres`, 
 A follow-on `next` link must be inside the source scope and must be the next page URL form of the same bill and kind. Its offset must be larger than the offset of the current page.
 
 A summary has `versionCode`, `actionDate`, `actionDesc`, `updateDate` (an exact time), and `text` (HTML).
+
+The `latestAction` object of the detail has `actionDate` and `text`. It has no action code; the Congress.gov documentation lists `actionCode` only for items of the actions list. A missing object means no status. An object without a date, or with a blank or over-long text, is invalid data.
 
 A subjects page has `subjects.legislativeSubjects`, a list of items with a `name`. The parser keeps the trimmed names and ignores the `policyArea` object of the page, because the detail already holds the policy area. A blank name is invalid data. A live check on 119th bills showed that `legislativeSubjects` is present and empty for a bill that has only a policy area. It also showed that a page can hold fewer names than the limit and still have `next`.
 
@@ -224,6 +228,12 @@ Bills that the gate saw before the subjects column existed have a null `subject_
 
 A replay is safe, because the stored count takes the bill out of the list and the job key is fixed. A bill with only a policy area, or with no subjects at all, gets its count and no chain. A bill whose capture failed keeps a null count. It stays in the list and counts as failed on each run, and it stays ahead of the later bills in the order. A subjects chain that closes adds a new candidate to a passed bill, so the action worker drafts that bill again. Start with a small limit, because each such candidate spends model budget.
 
+### Status backfill
+
+Gate rows written before the status columns existed have `latest_action_read` false. The owner command `bills status backfill [limit]` fills them. The limit is 100 when you give none. It has the shape of the subjects backfill.
+
+`BackfillBillStatus` asks for the newest bill versions that are unread, at most the limit, in detail job ID order. For each, it reads the saved detail capture with `CongressBillDetailJob` and calls `IBillStatusBackfillStore.RecordStatusAsync`. The store marks the row read and stores the date and text, or stores none when the capture has no `latestAction`. The command prints `examined`, `recorded`, and `failed`. A missing or unreadable capture counts as failed, and the run continues. The command makes no Congress.gov request, because the capture holds the detail. The status is then as of the original fetch, and the next update of the bill replaces it. Older versions of a bill stay unread, because only the newest version is ever shown.
+
 ### Action candidate
 
 `RecordActionCandidateAsync` owns the completeness rule. It runs under the global job lock, in the transaction that admits a closing page of any chain. The evidence is complete when all of these hold:
@@ -253,6 +263,7 @@ The write that creates a candidate also adds its `action_analysis` queue row in 
 - `issue_revision_id` names the issue configuration revision that the gate used. It has no foreign key, because issue revisions are not stored in a table.
 - `summary_count` is 0 or more. Rows written before the column existed have 0, so those bills fetch no summaries until their update date changes.
 - `subject_count` is null or 0 or more. Null means that nobody has read the count. A gate write stores `subjects.count` of the detail, which includes the policy area. Rows written before the column existed stay null, and the backfill reads them. The [subjects backfill](#subjects-backfill) fills the null rows. `BillGateRow.HasSubjectsChain` is false for a null count. A bill with legislative subjects admits the chain whatever the gate decision is.
+- `latest_action_read` is false for rows written before the status columns existed and true for every row that a detail admission writes. `latest_action_date` and `latest_action_text` are both null or both set, and set only on a row marked read. A null pair on a read row means that the detail had no `latestAction`. The time that Civic Lens read the status is `created_at_utc_ticks` of the row. The [status backfill](#status-backfill) fills the unread rows.
 - `cosponsor_count` stores the detail cosponsor count, because the completeness check must know whether a cosponsor chain exists. Gates written before this column existed have 0 and no detail page row, so they never get a candidate.
 - The decision and reason are stored as PascalCase strings, like other enums.
 - A second detail job for a gated version records nothing, admits nothing, and counts as a duplicate.
@@ -274,7 +285,8 @@ The write that creates a candidate also adds its `action_analysis` queue row in 
 | Gate and renderer | `src/CivicLens.Application/Collection/Bills/BillGate.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillRenderer.cs` |
 | Resource kinds and parser list | `src/CivicLens.Application/Collection/ApiResource.cs`, `src/CivicLens.Application/Collection/ApiParser.cs` |
 | Coverage exception | `src/CivicLens.Application/Collection/CollectionConfiguration.cs` |
-| Subjects backfill | `src/CivicLens.Application/Collection/Bills/BackfillBillSubjects.cs`, `src/CivicLens.Application/Collection/Bills/IBillSubjectsBackfillStore.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.SubjectsBackfill.cs`, `src/CivicLens.Host/Collection/BillSubjectsCommand.cs` |
+| Subjects backfill | `src/CivicLens.Application/Collection/Bills/BackfillBillSubjects.cs`, `src/CivicLens.Application/Collection/Bills/IBillSubjectsBackfillStore.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.SubjectsBackfill.cs`, `src/CivicLens.Host/Collection/BillBackfillCommand.cs` |
+| Status backfill | `src/CivicLens.Application/Collection/Bills/BackfillBillStatus.cs`, `src/CivicLens.Application/Collection/Bills/IBillStatusBackfillStore.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillLatestAction.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.StatusBackfill.cs` |
 | Preparation | `src/CivicLens.Application/Collection/Processing/JobPreparation.cs`, `src/CivicLens.Application/Collection/Processing/ApiResponseReader.cs` |
 | Admission port | `src/CivicLens.Application/Collection/Bills/IBillStreamAdmissionStore.cs`, `src/CivicLens.Application/Collection/Bills/BillStreamAdmission.cs` |
 | Postgres admission, follow-ons, candidates | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.BillStream.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ApiJobs.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.BillFollowOns.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ActionCandidates.cs` |

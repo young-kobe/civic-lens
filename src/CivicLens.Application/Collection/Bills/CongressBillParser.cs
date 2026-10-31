@@ -1,4 +1,5 @@
 using System.Globalization;
+using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Collection.Bills;
 
@@ -24,7 +25,7 @@ public static class CongressBillParser
         return new CongressBill(bill.Congress.Value, type, bill.Number.Value, bill.Title, bill.IntroducedDate.Value,
             ReadUpdateDate(bill.UpdateDate), ReadPolicyArea(bill.PolicyArea), ReadSponsors(bill.Sponsors),
             ReadCosponsorCount(bill.Cosponsors), ReadCount(bill.Actions, "action"), ReadCount(bill.Summaries, "summary"),
-            ReadCount(bill.Subjects, "subject"));
+            ReadCount(bill.Subjects, "subject"), ReadLatestAction(bill.LatestAction));
     }
 
     internal static DateTimeOffset ReadUpdateDate(string updateDate) =>
@@ -46,6 +47,15 @@ public static class CongressBillParser
         _ => throw new InvalidDataException($"Bill detail {name} count is invalid.")
     };
 
+    private static CongressBillLatestAction? ReadLatestAction(WireLatestAction? latestAction)
+    {
+        if (latestAction is null) return null;
+        var text = latestAction.Text?.Trim();
+        if (latestAction.ActionDate is not { } date || string.IsNullOrEmpty(text) || text.Length > PublishedBillStatus.MaximumTextLength)
+            throw new InvalidDataException("Bill detail latest action is invalid.");
+        return new CongressBillLatestAction(date, text);
+    }
+
     private static string? ReadPolicyArea(WirePolicyArea? policyArea) =>
         string.IsNullOrWhiteSpace(policyArea?.Name) ? null : policyArea.Name.Trim();
 
@@ -57,7 +67,8 @@ public static class CongressBillParser
     private sealed record WireDetail(WireBill? Bill);
     private sealed record WireBill(int? Congress, string? Type, int? Number, string? Title, DateOnly? IntroducedDate,
         string? UpdateDate, WirePolicyArea? PolicyArea, WireSponsor?[]? Sponsors, WireCosponsors? Cosponsors,
-        WireCount? Actions, WireCount? Summaries, WireCount? Subjects);
+        WireCount? Actions, WireCount? Summaries, WireCount? Subjects, WireLatestAction? LatestAction);
+    private sealed record WireLatestAction(DateOnly? ActionDate, string? Text);
     private sealed record WirePolicyArea(string? Name);
     private sealed record WireSponsor(string? BioguideId);
     private sealed record WireCount(int? Count);
