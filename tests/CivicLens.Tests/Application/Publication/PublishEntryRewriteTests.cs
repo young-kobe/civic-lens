@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CivicLens.Application.Publication;
+using CivicLens.Application.Roster;
 using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
 
@@ -22,7 +23,7 @@ public sealed class PublishEntryRewriteTests
         Assert.Equal(before.Length, carried.Length);
         foreach (var old in before)
             Assert.Equal(Json(old), Json(carried.Single(entry => entry.RecordId == old.RecordId)));
-        Assert.All(carried, entry => Assert.Equal((null, null, null, null), (entry.YeaCount, entry.NayCount, entry.Alignment, entry.CosponsorOfficials)));
+        Assert.All(carried, entry => Assert.Equal((null, null, null, null), (entry.YeaCount, entry.NayCount, entry.Alignment, entry.CosponsorIds)));
     }
 
     [Fact]
@@ -45,10 +46,10 @@ public sealed class PublishEntryRewriteTests
         var voteRecord = ReadRecord<PublishedVote>(scenario, second, vote.RecordId);
         Assert.Equal((voteRecord.Totals!.Yea, voteRecord.Totals.Nay), (vote.YeaCount, vote.NayCount));
         Assert.Equal(voteRecord.ToEntry().Alignment, vote.Alignment);
-        Assert.NotNull(vote.Alignment);
+        Assert.Equal(PublishedVoteAlignment.Split, vote.Alignment);
         var action = after.Single(entry => entry.Kind == PublishedRecordKind.Action);
-        Assert.Equal(["chair"], action.CosponsorOfficials!.Select(official => official.Id));
-        Assert.All(after.Where(entry => entry.Kind == PublishedRecordKind.Statement), entry => Assert.Null(entry.CosponsorOfficials));
+        Assert.Equal(["chair"], action.CosponsorIds!);
+        Assert.All(after.Where(entry => entry.Kind == PublishedRecordKind.Statement), entry => Assert.Null(entry.CosponsorIds));
         foreach (var entry in after)
         {
             Assert.DoesNotContain(PublicationProtocol.RecordDataPath(entry.RecordId), scenario.Releases.WriteOrder);
@@ -108,7 +109,7 @@ public sealed class PublishEntryRewriteTests
         scenario.OfficialPages.Clear();
 
         var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
-            new PublishedRecordReference(PublishedRecordKind.Action, scenario.AddAction('b'))));
+            new PublishedRecordReference(PublishedRecordKind.Action, scenario.AddAction('b', cosponsorWithdrawn: false))));
 
         var summaries = Summaries(scenario, second);
         Assert.Equal(1, summaries["chair"].CosponsoredBills);
@@ -157,11 +158,83 @@ public sealed class PublishEntryRewriteTests
         Assert.Equal(119, Summaries(scenario, third)["mayor"].Congress);
     }
 
-    private static async Task<PublicationReleaseSummary> PublishFirstAsync(PublicationScenario scenario) =>
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
-            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('a')),
-            new PublishedRecordReference(PublishedRecordKind.Action, scenario.AddAction('b')),
+    [Fact]
+    public async Task TheCosponsorCountIsNullWhileAnActionEntryHasNoCosponsorDataAndARealCountIncludingZeroAfterTheRewrite()
+    {
+        var scenario = new PublicationScenario();
+        var first = await PublishFirstAsync(scenario);
+        AsReleaseFromBeforeTheNewFields(scenario, first);
+
+        var partial = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k2", new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('d', speakerIds: ["chair"]))));
+        var rewritten = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k3") { RewriteEntries = true });
+
+        Assert.All(Summaries(scenario, partial).Values, row => Assert.Null(row.CosponsoredBills));
+        var complete = Summaries(scenario, rewritten);
+        Assert.Equal(1, complete["chair"].CosponsoredBills);
+        Assert.Equal(0, complete["mayor"].CosponsoredBills);
+    }
+
+    [Fact]
+    public async Task AReleaseWithNoActionCountsZeroCosponsoredBillsBecauseNoActionEntryLacksData()
+    {
+        var scenario = new PublicationScenario();
+        var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('a', speakerIds: ["chair"]))));
+
+        Assert.Equal(0, Summaries(scenario, first)["chair"].CosponsoredBills);
+    }
+
+    [Fact]
+    public async Task TheRewriteStopsOnACarriedEntryThatDiffersFromItsRecordFileOutsideTheNewFieldsSoItNeverHidesACorruptRelease()
+    {
+        var scenario = new PublicationScenario();
+        var first = await PublishFirstAsync(scenario);
+        var manifest = Manifest(scenario, first);
+        var action = manifest.Records.Single(entry => entry.Kind == PublishedRecordKind.Action);
+        scenario.Releases.Directories[first.DirectoryName][PublicationProtocol.ManifestPath] = JsonSerializer.SerializeToUtf8Bytes(
+            manifest with { Records = [.. manifest.Records.Select(entry => entry == action ? entry with { EventDate = new DateOnly(2020, 1, 1) } : entry)] },
+            PublicationProtocol.JsonOptions);
+
+        var failure = await Assert.ThrowsAsync<InvalidDataException>(() =>
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteEntries = true }));
+
+        Assert.Contains(action.RecordId, failure.Message, StringComparison.Ordinal);
+        Assert.Contains("Action", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheRewriteOfACorrectedRecordKeepsTheRevisionOfTheEntryBecauseTheRecordFileIsTheCorrectedOne()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('a', cosponsorWithdrawn: false);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Action, action)));
+        scenario.ReviseAction(action, 2, correctionNote: "Fixed the issue.");
+        var corrected = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k2", new PublishedRecordReference(PublishedRecordKind.Action, action)));
+        AsReleaseFromBeforeTheNewFields(scenario, corrected);
+
+        var rewritten = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k3") { RewriteEntries = true });
+
+        var entry = Assert.Single(Manifest(scenario, rewritten).Records);
+        Assert.Equal(2, entry.RevisionNumber);
+        Assert.Equal(["chair"], entry.CosponsorIds!);
+    }
+
+    private static async Task<PublicationReleaseSummary> PublishFirstAsync(PublicationScenario scenario)
+    {
+        scenario.RosterMembers = [Member("M000001", "Democrat"), Member("R1", "Republican")];
+        return await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Vote,
+                scenario.AddVote('a', totalLines: [PublicationScenario.DefaultPartyTotal, "Party total R: Yea 0, Nay 1, Present 0, Not voting 0"],
+                    otherMemberLines: ["Member: R1, A, R, AL, No"])),
+            new PublishedRecordReference(PublishedRecordKind.Action, scenario.AddAction('b', cosponsorWithdrawn: false)),
             new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('c'))));
+    }
+
+    private static RosterMember Member(string id, string party) =>
+        new(id, id, null, null, null, [new(0, "rep", new(2025, 1, 3), new(2027, 1, 3), "MA", 1, null, party, null)]);
 
     private static void AsReleaseFromBeforeTheNewFields(PublicationScenario scenario, PublicationReleaseSummary release)
     {
@@ -173,7 +246,7 @@ public sealed class PublishEntryRewriteTests
     }
 
     private static PublishedRecordEntry WithoutNewFields(PublishedRecordEntry entry) =>
-        entry with { YeaCount = null, NayCount = null, Alignment = null, CosponsorOfficials = null };
+        entry with { YeaCount = null, NayCount = null, Alignment = null, CosponsorIds = null };
 
     private static PublicationRelease Manifest(PublicationScenario scenario, PublicationReleaseSummary release) =>
         JsonSerializer.Deserialize<PublicationRelease>(scenario.Releases.Directories[release.DirectoryName][PublicationProtocol.ManifestPath],

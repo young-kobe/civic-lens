@@ -220,6 +220,33 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
+    public async Task TheRewriteEntriesAndRewriteOfficialsOptionsRunTogetherAsInTheRunbookAndFillEntriesAndSummaries()
+    {
+        var scenario = new PublicationScenario();
+        await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", $"vote:{scenario.AddVote('a')}", $"action:{scenario.AddAction('b', cosponsorWithdrawn: false)}",
+            $"statement:{scenario.AddStatement('c', speakerIds: ["chair"])}"],
+            scenario.Publisher(), null!, null!, null!, PublicationScenario.Owner, CancellationToken.None);
+        var first = scenario.Publications.Committed[^1].DirectoryName;
+        var manifest = JsonSerializer.Deserialize<PublicationRelease>(scenario.Releases.Directories[first][PublicationProtocol.ManifestPath], PublicationProtocol.JsonOptions)!;
+        scenario.Releases.Directories[first][PublicationProtocol.ManifestPath] = JsonSerializer.SerializeToUtf8Bytes(
+            manifest with { Records = [.. manifest.Records.Select(entry => entry with { YeaCount = null, NayCount = null, Alignment = null, CosponsorIds = null })] },
+            PublicationProtocol.JsonOptions);
+        scenario.Releases.WriteOrder.Clear();
+
+        var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", "--rewrite-entries", "--rewrite-officials"], scenario.Publisher(), null!, null!, null!,
+            PublicationScenario.Owner, CancellationToken.None);
+
+        Assert.Equal(0, exit);
+        var directory = scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName];
+        var rewritten = JsonSerializer.Deserialize<PublicationRelease>(directory[PublicationProtocol.ManifestPath], PublicationProtocol.JsonOptions)!;
+        Assert.NotNull(rewritten.Records.Single(entry => entry.Kind == PublishedRecordKind.Vote).YeaCount);
+        Assert.Equal(["chair"], rewritten.Records.Single(entry => entry.Kind == PublishedRecordKind.Action).CosponsorIds!);
+        Assert.Contains(PublicationProtocol.OfficialPagePath("mayor"), scenario.Releases.WriteOrder);
+        var summaries = JsonSerializer.Deserialize<PublishedOfficialSummaries>(directory[PublicationProtocol.OfficialSummariesPath], PublicationProtocol.JsonOptions)!;
+        Assert.Equal(1, summaries.Officials.Single(row => row.Id == "chair").CosponsoredBills);
+    }
+
+    [Fact]
     public async Task PublishWithOnlyAKeyAfterAWithholdFlagMakesAReleaseWithNoPhotoSoATakedownNeedsNoNewRecord()
     {
         var scenario = new PublicationScenario();

@@ -41,7 +41,7 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
                 await LinkAsync(staging, profile.Id, previous, cancellationToken);
                 summary = previous.Summaries.GetValueOrDefault(profile.Id) ?? PublishedOfficialSummary.Empty(profile.Id);
             }
-            summaries.Add(summary with { CosponsoredBills = cosponsored.GetValueOrDefault(profile.Id) });
+            summaries.Add(summary with { CosponsoredBills = cosponsored?.GetValueOrDefault(profile.Id) });
         }
         await ReleaseOfficialSummaries.WriteAsync(staging, summaries, cancellationToken);
         await WriteAsync(staging, PublicationProtocol.OfficialsPagePath, await renderer.RenderOfficialsAsync(listings, manifest.PublishedAtUtc, cancellationToken),

@@ -18,6 +18,7 @@ public sealed class PublishedOfficialSummariesTests
         Assert.Equal((12, 3), (read.Officials[0].PartyVotes[0].SplitVotesCast, read.Officials[0].PartyVotes[0].Breaks));
         Assert.Equal(new DateOnly(2025, 1, 3), read.Officials[0].Attendance[0].First);
         Assert.Null(read.Officials[1].Congress);
+        Assert.Equal((4, null), (read.Officials[0].CosponsoredBills, read.Officials[1].CosponsoredBills));
     }
 
     public static TheoryData<PublishedOfficialSummary> InvalidRows() => new()

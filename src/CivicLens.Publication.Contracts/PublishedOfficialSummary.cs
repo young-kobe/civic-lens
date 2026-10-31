@@ -2,7 +2,7 @@ namespace CivicLens.Publication.Contracts;
 
 /// <summary>
 /// The numbers of one official that a ranking needs. The vote rows come from the newest Congress with a vote file of the official.
-/// A row with no Congress holds no vote data. CosponsoredBills counts the action records that name the official as a cosponsor.
+/// A row with no Congress holds no vote data. CosponsoredBills counts the action records that list the official as a current cosponsor. It is null while any action entry of the release has no cosponsor data, because a partial count would read as a true count.
 /// </summary>
 public sealed record PublishedOfficialSummary
 {
@@ -10,12 +10,12 @@ public sealed record PublishedOfficialSummary
 
     public required string Id { get; init; }
     public int? Congress { get; init; }
-    public required int CosponsoredBills { get; init; }
+    public required int? CosponsoredBills { get; init; }
     public required PublishedPartyVoteSummary[] PartyVotes { get; init; }
     public required PublishedAttendanceSummary[] Attendance { get; init; }
 
     public static PublishedOfficialSummary Empty(string id) =>
-        new() { Id = id, CosponsoredBills = 0, PartyVotes = [], Attendance = [] };
+        new() { Id = id, CosponsoredBills = null, PartyVotes = [], Attendance = [] };
 
     public void Validate()
     {

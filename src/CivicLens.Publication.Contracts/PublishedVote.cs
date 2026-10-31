@@ -81,8 +81,14 @@ public sealed record PublishedVote
         Alignment = AlignmentOfParties()
     };
 
-    private PublishedVoteAlignment? AlignmentOfParties() =>
-        !Kind.IsSubstantive() || Totals is null ? null : IsSplit() ? PublishedVoteAlignment.PartyLine : PartiesAgree() ? PublishedVoteAlignment.Bipartisan : PublishedVoteAlignment.Mixed;
+    private PublishedVoteAlignment? AlignmentOfParties()
+    {
+        if (!Kind.IsSubstantive() || Totals is null || !HasBothMajorParties) return null;
+        return IsSplit() ? PublishedVoteAlignment.Split : PartiesAgree() ? PublishedVoteAlignment.PartiesAgree : PublishedVoteAlignment.Mixed;
+    }
+
+    private bool HasBothMajorParties =>
+        PartyMajorities.Any(party => party.Party == PublishedPartyMajority.Democrat) && PartyMajorities.Any(party => party.Party == PublishedPartyMajority.Republican);
 
     public IEnumerable<PublishedCitation> Citations() => new[] { VotedOnCitation }.Concat(KindCitation is { } kind ? [kind] : [])
         .Concat(Facts.Select(fact => fact.Citation)).Concat(Members.Select(member => member.Citation));

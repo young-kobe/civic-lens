@@ -42,8 +42,8 @@ public sealed class PublishedVoteTests
     }
 
     [Theory]
-    [InlineData(1, 0, 1, 0, PublishedVoteAlignment.Bipartisan)]
-    [InlineData(0, 1, 1, 0, PublishedVoteAlignment.PartyLine)]
+    [InlineData(1, 0, 1, 0, PublishedVoteAlignment.PartiesAgree)]
+    [InlineData(0, 1, 1, 0, PublishedVoteAlignment.Split)]
     [InlineData(1, 1, 1, 0, PublishedVoteAlignment.Mixed)]
     public void TheEntryNamesHowTheTwoPartiesVotedFromTheirMajorities(int democratYea, int democratNay, int republicanYea, int republicanNay, PublishedVoteAlignment expected)
     {
@@ -54,6 +54,20 @@ public sealed class PublishedVoteTests
         };
 
         Assert.Equal(expected, vote.ToEntry().Alignment);
+    }
+
+    [Fact]
+    public void AVoteWithNoMajorPartyRowHasNoAlignmentBecauseNoReaderCanCompareTwoPartiesWhenOneIsAbsent()
+    {
+        var vote = Vote() with
+        {
+            PartyMajorities = [PublishedPartyMajority.Of("Democrat", 1, 0)]
+        };
+
+        var entry = vote.ToEntry();
+
+        Assert.Equal((1, 1), (entry.YeaCount, entry.NayCount));
+        Assert.Null(entry.Alignment);
     }
 
     [Fact]

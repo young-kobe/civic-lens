@@ -65,11 +65,11 @@ public sealed class PublishedActionTests
     }
 
     [Fact]
-    public void TheEntryListsTheCosponsorsApartFromTheSponsorsSoACosponsorNeverCountsAsASponsoredBill()
+    public void TheEntryListsTheCosponsorIdsApartFromTheSponsorsSoACosponsorNeverCountsAsASponsoredBill()
     {
-        var entry = Action().ToEntry();
+        var entry = WithChairCosponsoring().ToEntry();
 
-        Assert.Equal(["chair"], entry.CosponsorOfficials!.Select(official => official.Id));
+        Assert.Equal(["chair"], entry.CosponsorIds!);
         Assert.DoesNotContain(entry.Officials, official => official.Id == "chair");
         entry.Validate();
     }
@@ -79,7 +79,44 @@ public sealed class PublishedActionTests
     {
         var action = Action() with { Sponsorships = [.. Action().Sponsorships.Where(item => item.Role == PublishedSponsorshipRole.Sponsor)] };
 
-        Assert.Empty(action.ToEntry().CosponsorOfficials!);
+        Assert.Empty(action.ToEntry().CosponsorIds!);
+    }
+
+    [Fact]
+    public void AWithdrawnCosponsorshipIsNotListedBecauseTheOfficialNoLongerBacksTheBill()
+    {
+        var entry = Action().ToEntry();
+
+        Assert.NotNull(Action().Sponsorships.Single(item => item.Role == PublishedSponsorshipRole.Cosponsor).WithdrawnOn);
+        Assert.Empty(entry.CosponsorIds!);
+    }
+
+    [Fact]
+    public void ASponsorWhoAlsoCosponsorsIsListedAsASponsorOnlySoTheBillNeverCountsTwiceForOneOfficial()
+    {
+        var action = WithChairCosponsoring() with
+        {
+            Sponsorships = [.. WithChairCosponsoring().Sponsorships, Cosponsorship("mayor", "Mayor Example")]
+        };
+
+        var entry = action.ToEntry();
+
+        Assert.Equal(["chair"], entry.CosponsorIds!);
+        Assert.Equal(["mayor"], entry.Officials.Select(official => official.Id));
+    }
+
+    [Fact]
+    public void TwoCosponsorRowsOfOneOfficialGiveOneIdSoTheEntryStaysValidAndThePublishGoesOn()
+    {
+        var action = WithChairCosponsoring() with
+        {
+            Sponsorships = [.. WithChairCosponsoring().Sponsorships, Cosponsorship("chair", "Chair Example")]
+        };
+
+        var entry = action.ToEntry();
+
+        Assert.Equal(["chair"], entry.CosponsorIds!);
+        entry.Validate();
     }
 
     [Fact]
@@ -103,7 +140,7 @@ public sealed class PublishedActionTests
 
         Assert.Throws<InvalidDataException>((entry with { BillTitle = null }).Validate);
         Assert.Throws<InvalidDataException>((entry with { Kind = PublishedRecordKind.Statement, RecordId = new string('1', 64) }).Validate);
-        (entry with { Kind = PublishedRecordKind.Statement, RecordId = new string('1', 64), BillTitle = null, CosponsorOfficials = null }).Validate();
+        (entry with { Kind = PublishedRecordKind.Statement, RecordId = new string('1', 64), BillTitle = null, CosponsorIds = null }).Validate();
     }
 
     // The quote is exact text of the other source, so only a check against the named source finds the wrong name.
@@ -214,6 +251,20 @@ public sealed class PublishedActionTests
     {
         Assert.Throws<InvalidDataException>((Action() with { RecordId = "0123456789abcdef0123456789abcdef" }).Validate);
     }
+
+    private static PublishedAction WithChairCosponsoring() => Action() with
+    {
+        Sponsorships = [.. Action().Sponsorships.Select(item => item.Role == PublishedSponsorshipRole.Cosponsor ? item with { WithdrawnOn = null } : item)]
+    };
+
+    private static PublishedSponsorship Cosponsorship(string id, string name) => new()
+    {
+        Official = new() { Id = id, Name = name },
+        Role = PublishedSponsorshipRole.Cosponsor,
+        IsOriginal = false,
+        SponsoredOn = new DateOnly(2026, 1, 6),
+        Citations = [Cite(CosponsorsId, CosponsorsText, "Cosponsor: C000001, 2026-01-05")]
+    };
 
     private static PublishedAction Action() => new()
     {

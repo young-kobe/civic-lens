@@ -231,7 +231,7 @@ internal sealed class PublicationScenario
 
     // The sponsor cites the detail page and the cosponsor cites a second API page, so the record has two sources.
     public string AddAction(char id, ImmutableArray<ReviewDecision>? decisions = null, string sponsorId = "mayor",
-        string? policyAreaId = "housing-development", bool personText = false)
+        string? policyAreaId = "housing-development", bool personText = false, bool cosponsorWithdrawn = true)
     {
         var recordId = new string(id, 64);
         var detail = Extraction(ActionDetail, $"action-detail-{id}", "https://api.congress.gov/v3/bill/119/hr/7");
@@ -243,7 +243,7 @@ internal sealed class PublicationScenario
             [
                 new(sponsorId, "M000001", ActionSponsorshipRole.Sponsor, false, new DateOnly(2026, 1, 3), null,
                     [DetailLine("Sponsor: M000001"), DetailLine("Introduced: 2026-01-03")]),
-                new("chair", "C000001", ActionSponsorshipRole.Cosponsor, true, new DateOnly(2026, 1, 5), new DateOnly(2026, 1, 20),
+                new("chair", "C000001", ActionSponsorshipRole.Cosponsor, true, new DateOnly(2026, 1, 5), cosponsorWithdrawn ? new DateOnly(2026, 1, 20) : null,
                     [new(cosponsors.ExtractionId, ActionCosponsors.IndexOf("Cosponsor", StringComparison.Ordinal),
                         ActionCosponsors.Length - ActionCosponsors.IndexOf("Cosponsor", StringComparison.Ordinal) - 1)])
             ], "A housing bill");

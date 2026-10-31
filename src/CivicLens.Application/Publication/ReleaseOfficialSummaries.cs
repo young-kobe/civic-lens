@@ -5,7 +5,7 @@ namespace CivicLens.Application.Publication;
 
 /// <summary>
 /// Builds the summary rows of the officials from the figures that the official pages already compute. The vote figures of an untouched
-/// official come from the previous release. The cosponsor count comes from the manifest entries of every publish, so it never goes stale.
+/// official come from the previous release. The cosponsor count comes from the manifest entries of every publish, so it never goes stale. It is null while any action entry has no cosponsor data.
 /// </summary>
 internal static class ReleaseOfficialSummaries
 {
@@ -16,7 +16,7 @@ internal static class ReleaseOfficialSummaries
             {
                 Id = officialId,
                 Congress = congress,
-                CosponsoredBills = 0,
+                CosponsoredBills = null,
                 PartyVotes = [.. profile.WithPartyByChamber.Select(party => new PublishedPartyVoteSummary
                 {
                     Chamber = party.Chamber,
@@ -34,9 +34,13 @@ internal static class ReleaseOfficialSummaries
                 })]
             };
 
-    public static Dictionary<string, int> CosponsoredCounts(IEnumerable<PublishedRecordEntry> entries) =>
-        entries.SelectMany(entry => entry.CosponsorOfficials ?? []).GroupBy(official => official.Id, StringComparer.Ordinal)
+    public static Dictionary<string, int>? CosponsoredCounts(IEnumerable<PublishedRecordEntry> entries)
+    {
+        var actions = entries.Where(entry => entry.Kind == PublishedRecordKind.Action).ToList();
+        if (actions.Any(action => action.CosponsorIds is null)) return null;
+        return actions.SelectMany(action => action.CosponsorIds!).GroupBy(id => id, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+    }
 
     public static Task WriteAsync(IReleaseStaging staging, IReadOnlyList<PublishedOfficialSummary> rows, CancellationToken cancellationToken)
     {

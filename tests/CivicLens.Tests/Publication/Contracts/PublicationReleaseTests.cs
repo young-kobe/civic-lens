@@ -129,7 +129,7 @@ public sealed class PublicationReleaseTests
     {
         var oldJson = JsonSerializer.Serialize(Entry(PublishedRecordKind.Vote, StatementId), PublicationProtocol.JsonOptions);
         var node = JsonNode.Parse(oldJson)!.AsObject();
-        foreach (var field in new[] { "yeaCount", "nayCount", "alignment", "cosponsorOfficials" }) node.Remove(field);
+        foreach (var field in new[] { "yeaCount", "nayCount", "alignment", "cosponsorIds" }) node.Remove(field);
 
         var read = JsonSerializer.Deserialize<PublishedRecordEntry>(node.ToJsonString(), PublicationProtocol.JsonOptions)!;
         read.Validate();
@@ -137,20 +137,20 @@ public sealed class PublicationReleaseTests
         Assert.Null(read.YeaCount);
         Assert.Null(read.NayCount);
         Assert.Null(read.Alignment);
-        Assert.Null(read.CosponsorOfficials);
+        Assert.Null(read.CosponsorIds);
     }
 
     [Fact]
     public void VoteFactsRoundTripAndTheAlignmentIsAWordSoNoReaderSeesANumber()
     {
-        var entry = Entry(PublishedRecordKind.Vote, StatementId) with { YeaCount = 216, NayCount = 214, Alignment = PublishedVoteAlignment.PartyLine };
+        var entry = Entry(PublishedRecordKind.Vote, StatementId) with { YeaCount = 216, NayCount = 214, Alignment = PublishedVoteAlignment.Split };
         var json = JsonSerializer.Serialize(entry, PublicationProtocol.JsonOptions);
 
         var read = JsonSerializer.Deserialize<PublishedRecordEntry>(json, PublicationProtocol.JsonOptions)!;
         read.Validate();
 
-        Assert.Contains("\"alignment\":\"partyLine\"", json, StringComparison.Ordinal);
-        Assert.Equal((216, 214, PublishedVoteAlignment.PartyLine), (read.YeaCount, read.NayCount, read.Alignment));
+        Assert.Contains("\"alignment\":\"split\"", json, StringComparison.Ordinal);
+        Assert.Equal((216, 214, PublishedVoteAlignment.Split), (read.YeaCount, read.NayCount, read.Alignment));
     }
 
     public static TheoryData<PublishedRecordEntry> InvalidVoteFacts()
@@ -188,12 +188,12 @@ public sealed class PublicationReleaseTests
         var tooLong = new string('x', PublishedRecordEntry.MaximumFilterValueLength + 1);
         return new()
         {
-            Entry(PublishedRecordKind.Statement, StatementId) with { CosponsorOfficials = [] },
-            action with { CosponsorOfficials = [.. Enumerable.Range(0, PublishedAction.MaximumSponsorships + 1).Select(index => new PublishedOfficial { Id = $"person-{index}", Name = "Name" })] },
-            action with { CosponsorOfficials = [new() { Id = "chair", Name = "A" }, new() { Id = "chair", Name = "B" }] },
-            action with { CosponsorOfficials = [new() { Id = "chair", Name = tooLong }] },
-            action with { CosponsorOfficials = [new() { Id = tooLong, Name = "Chair" }] },
-            action with { CosponsorOfficials = [null!] }
+            Entry(PublishedRecordKind.Statement, StatementId) with { CosponsorIds = [] },
+            action with { CosponsorIds = [.. Enumerable.Range(0, PublishedAction.MaximumSponsorships + 1).Select(index => $"person-{index}")] },
+            action with { CosponsorIds = ["chair", "chair"] },
+            action with { CosponsorIds = [tooLong] },
+            action with { CosponsorIds = [" "] },
+            action with { CosponsorIds = [null!] }
         };
     }
 
@@ -209,8 +209,37 @@ public sealed class PublicationReleaseTests
     {
         (Entry(PublishedRecordKind.Action, new string('7', 64)) with
         {
-            CosponsorOfficials = [.. Enumerable.Range(0, PublishedAction.MaximumSponsorships).Select(index => new PublishedOfficial { Id = $"person-{index}", Name = "Name" })]
+            CosponsorIds = [.. Enumerable.Range(0, PublishedAction.MaximumSponsorships).Select(index => $"person-{index}")]
         }).Validate();
+    }
+
+    [Fact]
+    public void AManifestOfTheMaximumNumberOfRealisticActionEntriesWithCosponsorsStaysUnderTheManifestByteCap()
+    {
+        var entries = Enumerable.Range(0, PublicationProtocol.MaximumRecordsPerRelease).Select(index => Entry(PublishedRecordKind.Action, index.ToString("x").PadLeft(64, '0')) with
+        {
+            Headline = "Representative Example introduced a bill to fund local housing and transit projects in the district",
+            Officials = [new() { Id = "representative-example", Name = "Representative Example" }],
+            IssueIds = ["housing-affordability", "public-transit", "local-budgets"],
+            PolicyAreaIds = ["housing-and-community-development"],
+            SourceHost = "api.congress.gov",
+            BillTitle = "A bill to provide grants to States and local governments for housing and transit projects, and for other purposes",
+            EventDate = new DateOnly(2026, 1, 20),
+            CosponsorIds = [.. Enumerable.Range(0, 15).Select(cosponsor => $"cosponsor-{cosponsor:D2}-of-a-long-name")]
+        }).ToArray();
+        var release = new PublicationRelease
+        {
+            SchemaVersion = PublicationProtocol.SchemaVersion,
+            ReleaseNumber = 1,
+            PublishedAtUtc = DateTimeOffset.UnixEpoch,
+            Records = entries,
+            Withdrawals = []
+        };
+
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(release, PublicationProtocol.JsonOptions).Length;
+
+        release.Validate();
+        Assert.True(bytes < PublicationProtocol.MaximumManifestBytes, $"The manifest holds {bytes} bytes.");
     }
 
     [Theory]

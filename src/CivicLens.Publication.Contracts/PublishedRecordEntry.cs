@@ -25,7 +25,7 @@ public sealed record PublishedRecordEntry
     public int? YeaCount { get; init; }
     public int? NayCount { get; init; }
     public PublishedVoteAlignment? Alignment { get; init; }
-    public PublishedOfficial[]? CosponsorOfficials { get; init; }
+    public string[]? CosponsorIds { get; init; }
 
     public void Validate()
     {
@@ -55,10 +55,9 @@ public sealed record PublishedRecordEntry
         (long)YeaCount.Value + NayCount.Value <= PublishedVote.MaximumMembers && (Alignment is null || Enum.IsDefined(Alignment.Value));
 
     private bool HasValidCosponsors =>
-        CosponsorOfficials is null ||
-        Kind == PublishedRecordKind.Action && CosponsorOfficials.Length <= PublishedAction.MaximumSponsorships &&
-        CosponsorOfficials.All(official => official is not null && IsFilterValue(official.Id) && IsFilterValue(official.Name)) &&
-        PublishedEvidenceRules.AreDistinctAndNotBlank(CosponsorOfficials.Select(official => official.Id));
+        CosponsorIds is null ||
+        Kind == PublishedRecordKind.Action && CosponsorIds.Length <= PublishedAction.MaximumSponsorships &&
+        CosponsorIds.All(IsFilterValue) && PublishedEvidenceRules.AreDistinctAndNotBlank(CosponsorIds);
 
     private bool HasValidBillTitle => !string.IsNullOrWhiteSpace(BillTitle) && BillTitle.Length <= PublishedAction.MaximumBillTitleLength;
 
