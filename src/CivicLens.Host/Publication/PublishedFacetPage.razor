@@ -6,20 +6,35 @@
     <PageHeader Title="@Facet.Name" Lede="@($"{KindLabel}. {Facet.Records.Length} published records, newest event date first. A record with no event date uses its first publication day.")" />
     @if (Page == 1)
     {
-        <Panel Title="@PublishedFacetSummaryView.Title(KindName)" Padded="true">
-            <p class="muted small">@PublishedFacetSummaryView.Lede(KindName)</p>
+        <Panel Title="@PublishedFacetSummaryView.Title(Facet.Kind)" Padded="true">
+            <p class="muted small">@PublishedFacetSummaryView.Lede(Facet.Kind)</p>
+            @if (IsIssue)
+            {
+                <p class="muted small"><a href="@MethodLink(PublishedFacetSummaryView.IssueTagsAnchor)">@PublishedFacetSummaryView.IssueTagsLinkText</a></p>
+            }
             <ul>
-                <li>@PublishedFacetSummaryView.Votes(Summary, KindName)</li>
-                @if (Summary.SplitVotes > 0)
+                @if (IsIssue)
                 {
-                    <li>@PublishedFacetSummaryView.SplitVotes(Summary)</li>
-                }
-                @if (Summary.PartiesAgreedVotes > 0)
-                {
-                    <li>@PublishedFacetSummaryView.PartiesAgreedVotes(Summary)</li>
+                    <li>@PublishedFacetSummaryView.Votes(Summary)</li>
+                    @if (Summary.SplitVotes > 0)
+                    {
+                        <li>@PublishedFacetSummaryView.SplitVotes(Summary)</li>
+                    }
+                    @if (Summary.PartiesAgreedVotes > 0)
+                    {
+                        <li>@PublishedFacetSummaryView.PartiesAgreedVotes(Summary)</li>
+                    }
+                    @if (Summary.OtherVotes > 0)
+                    {
+                        <li>@PublishedFacetSummaryView.OtherVotes(Summary) <a href="@MethodLink(PublishedFacetSummaryView.OtherVotesAnchor)">@PublishedFacetSummaryView.OtherVotesLinkText</a></li>
+                    }
                 }
                 <li>@PublishedFacetSummaryView.Bills(Summary, KindName)</li>
             </ul>
+            @if (Summary.SplitVotes + Summary.PartiesAgreedVotes > 0)
+            {
+                <p class="muted small">@PublishedFacetSummaryView.PartiesNote</p>
+            }
         </Panel>
     }
     <Panel Label="Records">
@@ -38,11 +53,17 @@
     [Parameter] public string? PublicApiUrl { get; set; }
 
     private RecordSort? Sort => PublicApiUrl is null ? null
-        : new(PublicApiUrl, Facet.Records.Length, $"{(Facet.Kind == FacetKind.Issue ? "issue" : "policyArea")}={Facet.Id}");
+        : new(PublicApiUrl, Facet.Records.Length, $"{(IsIssue ? "issue" : "policyArea")}={Facet.Id}");
 
-    private FacetSummary Summary => FacetSummary.From(Facet.Records);
+    private FacetSummary? summary;
+
+    private FacetSummary Summary => summary ??= FacetSummary.From(Facet.Records);
+
+    private bool IsIssue => Facet.Kind == FacetKind.Issue;
+
+    private static string MethodLink(string anchor) => "../" + PublicationProtocol.MethodPagePath + anchor;
 
     private string KindName => KindLabel.ToLowerInvariant();
 
-    private string KindLabel => Facet.Kind == FacetKind.Issue ? "Issue" : "Policy area";
+    private string KindLabel => IsIssue ? "Issue" : "Policy area";
 }

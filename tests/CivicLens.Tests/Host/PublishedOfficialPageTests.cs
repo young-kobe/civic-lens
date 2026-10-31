@@ -507,7 +507,7 @@ public sealed class PublishedOfficialPageTests
         var panel = document.QuerySelector("[aria-labelledby='panel-votes-with-their-party']")!;
         Assert.Equal(["Voted with most House Republicans on 1 of 3 split votes in the 119th Congress. They did not cast Yea or Nay on 1 other split vote.",
             "Voted with most Senate Democrats on 1 of 1 split vote in the 119th Congress.",
-            "A split vote is a substantive roll call vote where most Democrats and most Republicans voted on opposite sides."],
+            "A split vote is a substantive roll call vote where most Democrats and most Republicans who cast Yea or Nay voted on opposite sides."],
             panel.QuerySelectorAll("p").Select(paragraph => paragraph.TextContent.Trim()));
         var table = panel.QuerySelector("table")!;
         Assert.Equal(["Date", "Vote", "Their vote", "Most House Republicans", "Result"], table.QuerySelectorAll("th").Select(cell => cell.TextContent.Trim()));

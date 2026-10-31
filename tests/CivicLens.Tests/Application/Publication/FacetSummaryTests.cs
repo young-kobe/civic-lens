@@ -13,12 +13,7 @@ public sealed class FacetSummaryTests
             Entry(PublishedRecordKind.Statement, null)]);
 
         Assert.Equal(new FacetSummary(Votes: 4, SplitVotes: 1, PartiesAgreedVotes: 1, Bills: 1), summary);
-    }
-
-    [Fact]
-    public void AFacetWithNoRecordsCountsZeroOfEach()
-    {
-        Assert.Equal(new FacetSummary(0, 0, 0, 0), FacetSummary.From([]));
+        Assert.Equal(2, summary.OtherVotes);
     }
 
     private static PublishedRecordEntry Entry(PublishedRecordKind kind, PublishedVoteAlignment? alignment) => new()

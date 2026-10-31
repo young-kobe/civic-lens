@@ -5,6 +5,8 @@ namespace CivicLens.Application.Publication;
 /// <summary>Counts of the votes and bills among the manifest entries of one issue or policy area. The counts cover every page of the facet.</summary>
 public sealed record FacetSummary(int Votes, int SplitVotes, int PartiesAgreedVotes, int Bills)
 {
+    public int OtherVotes => Votes - SplitVotes - PartiesAgreedVotes;
+
     public static FacetSummary From(IEnumerable<PublishedRecordEntry> records)
     {
         var entries = records.ToList();
