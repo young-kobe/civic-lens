@@ -149,6 +149,37 @@ public sealed class ReaderReportWorkspaceTests(PostgresCollection postgres) : IA
         Assert.Equal("/Review/Reports", stat.GetAttribute("href"));
     }
 
+    [Fact]
+    public async Task TheRailLinksToTheReportQueueAndMarksOnlyThatLinkCurrentOnTheQueueAndReportPages()
+    {
+        var report = await SaveReportAsync(Report());
+
+        foreach (var page in new[] { "/Review/Reports", $"/Review/Reports/{report.ReportId:D}" })
+        {
+            var shown = await host.GetDocumentAsync(page);
+
+            var links = shown.QuerySelectorAll(".rail .nav-link").Where(link => link.GetAttribute("aria-current") == "page").ToArray();
+            var current = Assert.Single(links);
+            Assert.Equal("/Review/Reports", current.GetAttribute("href"));
+            Assert.Contains("Reader reports", current.TextContent, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task AnExecutiveActionPageShowsTheBannerOfACorrectionReportOfThatKind()
+    {
+        var recordId = await new ExecutiveActionSeeder(host.ConnectionString, host.ArtifactDirectory)
+            .AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
+        var report = await SaveReportAsync(Report() with { RecordId = recordId, Kind = PublishedRecordKind.ExecutiveAction });
+        await store.ResolveAsync("auth0|friend", report.ReportId, 0, CivicLens.Application.Reports.ReaderReportStatus.CorrectionNeeded, "Use the full title.", default);
+
+        var shown = await host.GetDocumentAsync($"/Review/ExecutiveActions/{recordId}");
+
+        var banner = shown.QuerySelector($"#reader-report-{report.ReportId:D}")!;
+        Assert.Contains("Use the full title.", banner.TextContent, StringComparison.Ordinal);
+        Assert.Equal($"/Review/Reports/{report.ReportId:D}", banner.QuerySelector("a")!.GetAttribute("href"));
+    }
+
     private async Task<PulledReport> SaveReportAsync(PulledReport report)
     {
         await store.SavePulledAsync(Batch(report), default);

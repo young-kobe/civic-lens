@@ -89,7 +89,7 @@ An original creates the draft row and revision 1, with the notices that waited. 
 
 ### Review
 
-The review page at `/Review/ExecutiveActions/{id}` shows the facts, their quotes, the history, and the decision panel. It has no editor. A reviewer or the owner can withdraw approval or request changes. A record that needs action appears in the review overview with the other fact records.
+The review page at `/Review/ExecutiveActions/{id}` shows the facts, their quotes, the history, the banner of an unanswered reader correction, and the decision panel. It has no editor. A reviewer or the owner can withdraw approval or request changes. A record that needs action appears in the review overview with the other fact records.
 
 ### Publication
 
