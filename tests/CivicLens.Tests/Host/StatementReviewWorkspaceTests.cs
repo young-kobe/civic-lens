@@ -201,6 +201,8 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
 
         using var blocked = await DecideAsync(url, "Approve");
         Assert.Equal(HttpStatusCode.BadRequest, blocked.StatusCode);
+        var blockedPage = await host.GetDocumentAsync(url);
+        Assert.Contains("Approval is blocked.", blockedPage.QuerySelector("#approval-blocked")!.TextContent, StringComparison.Ordinal);
 
         var fields = await SaveFieldsAsync(url);
         fields.Add(new("Input.StatementDateChecked", "true"));
@@ -210,10 +212,38 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
 
         Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
         Assert.Equal(url + "?status=decided", PathOf(approved));
+        Assert.Null((await host.GetDocumentAsync(url)).QuerySelector("#approval-blocked"));
         Assert.Equal(ReviewStatus.Approved, (await reviews.GetAsync(candidate, default))!.Review.CurrentStatus);
         var page = await host.GetDocumentAsync(url);
         Assert.Equal("Approved, private", page.QuerySelector(".page-header .badge")!.TextContent);
         Assert.NotNull(page.QuerySelector("#decision-form button[value='WithdrawApproval']"));
+    }
+
+    [Fact]
+    public async Task ADecisionFormFromBeforeANewerRevisionIsAConflictAndApprovesNothingAsync()
+    {
+        var candidate = await AiDraftedAsync();
+        SignIn(Owner);
+        var url = $"/Review/Statements/{candidate}";
+        var first = await SaveFieldsAsync(url);
+        first.Add(new("Input.StatementDateChecked", "true"));
+        using var savedFirst = await host.Client.PostAsync(url, new FormUrlEncodedContent(first));
+        var staleDecision = Fields((await host.GetDocumentAsync(url)).QuerySelector("#decision-form")!);
+        Set(staleDecision, "kind", "Approve");
+        var second = await SaveFieldsAsync(url);
+        Set(second, "Input.Headline", "A later headline");
+        second.Add(new("Input.StatementDateChecked", "true"));
+        using var savedSecond = await host.Client.PostAsync(url, new FormUrlEncodedContent(second));
+        var withoutKey = staleDecision.Where(field => field.Key != "idempotencyKey");
+
+        using var stale = await host.Client.PostAsync(url, new FormUrlEncodedContent(staleDecision));
+        using var refused = await host.Client.PostAsync(url, new FormUrlEncodedContent(withoutKey));
+
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        var review = (await reviews.GetAsync(candidate, default))!.Review;
+        Assert.Equal(3, review.CurrentRevision!.RevisionNumber);
+        Assert.NotEqual(ReviewStatus.Approved, review.CurrentStatus);
     }
 
     [Fact]

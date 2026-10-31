@@ -208,4 +208,19 @@ public sealed class StatementReviewHandlerTests
         Assert.Empty(detail.Allowed.OfficialIds);
         Assert.Empty(detail.Officials);
     }
+
+    [Fact]
+    public async Task GetShowsWhyApprovalWillFailWhenAnIssueOfTheSavedRevisionIsNoLongerConfigured()
+    {
+        var revision = await new SaveStatementDraft(store, Reader()).ExecuteAsync(Reviewer, Request());
+        store.Read = new StatementReviewRead(new(CandidateId, revision, 0, ReviewStatus.AwaitingReview, [revision], [], []), "source",
+            "https://example.test/a", Evidence.Article.Extraction, null, StatementDraftFixtures.SpeakerRevision());
+        var narrower = new StatementSelectionResolver(StatementGateFixtures.Configuration() with { Issues = [] });
+
+        var configured = (await new GetStatementReview(store, Resolver).ExecuteAsync(Reviewer, CandidateId))!;
+        var retired = (await new GetStatementReview(store, narrower).ExecuteAsync(Reviewer, CandidateId))!;
+
+        Assert.True(configured.Approval!.Passed);
+        Assert.Contains("no longer configured", retired.Approval!.Failure, StringComparison.Ordinal);
+    }
 }

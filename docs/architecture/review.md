@@ -211,13 +211,15 @@ The Review home page has a search box, "Find a draft". It sends a GET request wi
 
 ### Approval check
 
-`ApprovalCheck` holds the result of the checks that Approve runs, as data. It keeps the failure message. A statement check also uses the allowed selections of the admitting configuration revision. Code approval uses it, and the queue shows its failure message as the held reason.
-
-`SourceSpan.QuoteIn` reads the quote of a citation. The editors share it.
+`ApprovalCheck` holds the result of the checks that Approve runs, as data. It keeps the failure message. A statement check also uses the allowed selections of the admitting configuration revision. Code approval uses it, and the queue shows its failure message as the held reason. `GetStatementReview` runs the statement check on the saved revision. The statement editor shows the failure text next to the decision form when no concern is open.
 
 ### Workspace forms
 
 The editor shows the saved account and its exact selected passages as the approval target. It keeps them apart from editable or recovered unsaved wording. Reviewers judge substantive change, wording, attribution, dates, interpretation, and evidence limits. Automatic citation and revision checks establish integrity, not semantic correctness.
+
+`SourceSpan.QuoteIn` reads the quote of a citation. The editors share it.
+
+`ReviewCommand` maps a conflict, a bad request, and an operational failure to a status code and a message. An unauthorized actor goes to the access-denied page.
 
 The workspace keeps conflicting edits. It disables decisions for unsaved, failed, or conflicting forms. Every mutation uses an antiforgery token. The reader preview updates on the server render after an explicit save.
 
@@ -276,12 +278,12 @@ The Host uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.14 for th
 | Reads | `src/CivicLens.Application/Review/GetDocumentChangeReview.cs`, `src/CivicLens.Application/Review/ListDocumentChangeReviews.cs`, `src/CivicLens.Application/Review/ListEligibleDocumentComparisons.cs`, `src/CivicLens.Application/Review/GetReviewOverview.cs`, `src/CivicLens.Application/Activity/GetRecentActivity.cs` |
 | Validation and authorization | `src/CivicLens.Application/Review/ReviewValidation.cs` |
 | Paging | `src/CivicLens.Application/Paging/PageCursor.cs`, `src/CivicLens.Application/Paging/KeysetSlice.cs`, `src/CivicLens.Application/Paging/PageLimit.cs` |
-| Draft lists | `src/CivicLens.Application/Review/DraftListFilter.cs`, `src/CivicLens.Infrastructure/Review/ListedDrafts.cs`, `src/CivicLens.Infrastructure/Review/RankedDraft.cs`, `src/CivicLens.Infrastructure/Review/ListedDraftRows.cs`, `src/CivicLens.Infrastructure/Review/ReviewKeyset.cs`, `src/CivicLens.Infrastructure/Review/Persistence/IListedDraftRow.cs`, `src/CivicLens.Infrastructure/Review/Persistence/ListedDraftTableConfiguration.cs`, `src/CivicLens.Host/Review/DraftListPage.cs`, `src/CivicLens.Host/Review/ReviewOfficials.cs`, `src/CivicLens.Host/Review/DraftFilterForm.razor` |
+| Draft lists | `src/CivicLens.Application/Review/DraftListFilter.cs`, `src/CivicLens.Infrastructure/Review/ListedDrafts.cs`, `src/CivicLens.Infrastructure/Review/RankedDraft.cs`, `src/CivicLens.Infrastructure/Review/ListedDraftRows.cs`, `src/CivicLens.Infrastructure/Review/ReviewKeyset.cs`, `src/CivicLens.Infrastructure/Review/Persistence/IListedDraftRow.cs`, `src/CivicLens.Infrastructure/Review/Persistence/ListedDraftTableConfiguration.cs`, `src/CivicLens.Host/Review/ReviewOfficials.cs`, `src/CivicLens.Host/Review/DraftFilterForm.razor` |
 | Shared store core | `src/CivicLens.Infrastructure/Review/ReviewRecords.cs`, `src/CivicLens.Infrastructure/Review/ReviewHistory.cs`, `src/CivicLens.Core/Review/IReviewRevision.cs`, `src/CivicLens.Infrastructure/Review/Persistence/IReviewDraftRow.cs`, `src/CivicLens.Infrastructure/Review/Persistence/IHeldDraftRow.cs`, `src/CivicLens.Infrastructure/Review/Persistence/ReviewDraftTableConfiguration.cs`, `src/CivicLens.Infrastructure/Review/Persistence/IReviewRevisionRow.cs`, `src/CivicLens.Infrastructure/Review/Persistence/IReviewDecisionRow.cs` |
 | Postgres store and helpers | `src/CivicLens.Infrastructure/Review/PostgresDocumentChangeReviewStore.cs`, `src/CivicLens.Infrastructure/Review/ReviewIdempotency.cs`, `src/CivicLens.Infrastructure/Review/ReviewDecisionHistory.cs`, `src/CivicLens.Infrastructure/Review/ReviewKeyset.cs`, `src/CivicLens.Infrastructure/Review/ReviewJson.cs`, `src/CivicLens.Infrastructure/Review/ReviewQueries.cs`, `src/CivicLens.Infrastructure/Review/CitedRevisions.cs`, `src/CivicLens.Infrastructure/Review/PostgresRecordKindStore.cs` |
 | Needs a person queue | `src/CivicLens.Application/Review/ListReviewQueue.cs`, `src/CivicLens.Application/Review/IReviewQueueStore.cs`, `src/CivicLens.Application/Review/ReviewQueueItem.cs`, `src/CivicLens.Application/Review/ReviewQueuePage.cs`, `src/CivicLens.Application/Review/CodeApproval.cs`, `src/CivicLens.Infrastructure/Review/PostgresReviewQueueStore.cs`, `src/CivicLens.Infrastructure/Review/QueueDraft.cs`, `src/CivicLens.Host/Review/QueueRow.cs` |
-| Pages | `src/CivicLens.Host/Review/ReviewHome.razor`, `src/CivicLens.Host/Review/UnapprovedFact.cs`, `src/CivicLens.Host/Documents/DraftEditor.razor`, `src/CivicLens.Host/Review/ReviewDecisionPanel.razor`, `src/CivicLens.Host/Review/ReviewHistoryPanel.razor`, `src/CivicLens.Host/Review/ReviewRecordPage.cs`, `src/CivicLens.Host/Documents/DocumentRoutes.cs`, `src/CivicLens.Host/Review/RecordRoutes.cs` |
-| Approval check | `src/CivicLens.Application/Review/ApprovalCheck.cs`, `src/CivicLens.Host/Review/ReviewCommand.cs` |
+| Pages | `src/CivicLens.Host/Review/ReviewHome.razor`, `src/CivicLens.Host/Review/ReviewCommand.cs`, `src/CivicLens.Host/Review/UnapprovedFact.cs`, `src/CivicLens.Host/Documents/DraftEditor.razor`, `src/CivicLens.Host/Review/ReviewDecisionPanel.razor`, `src/CivicLens.Host/Review/ReviewHistoryPanel.razor`, `src/CivicLens.Host/Review/ReviewRecordPage.cs`, `src/CivicLens.Host/Documents/DocumentRoutes.cs`, `src/CivicLens.Host/Review/RecordRoutes.cs` |
+| Approval check | `src/CivicLens.Application/Review/ApprovalCheck.cs` |
 | Draft lookup | `src/CivicLens.Application/Review/LookupDraft.cs`, `src/CivicLens.Application/Review/IRecordKindStore.cs`, `src/CivicLens.Application/Review/DraftLookupHit.cs`, `src/CivicLens.Application/Review/DraftLookupFormatException.cs`, `src/CivicLens.Host/Review/ReviewHome.razor` |
 | Brief review | `src/CivicLens.Host/Briefs/BriefList.razor`, `src/CivicLens.Host/Briefs/BriefEditor.razor`, `src/CivicLens.Infrastructure/Briefs/PostgresBriefReviewStore.cs`; see [briefs](briefs.md#code-map) |
 | Relationship review | `src/CivicLens.Host/Relationships/RelationshipList.razor`, `src/CivicLens.Host/Relationships/RelationshipEditor.razor`, `src/CivicLens.Infrastructure/Relationships/PostgresRelationshipReviewStore.cs`; see [statements](statements.md#relationship-review) |
