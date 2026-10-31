@@ -17,8 +17,7 @@ namespace CivicLens.Infrastructure.Briefs;
 public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) : IBriefReviewStore
 {
     internal static readonly ReviewRecords<BriefDraftRow, BriefRevisionRow, BriefReviewDecisionRow, BriefRevision> Records =
-        new(PostgresAdvisoryLock.BriefReview, "Brief", nameof(BriefDraftRow.RecordId),
-            (draft, revision) => draft.LastRevisedAtUtcTicks = revision.CreatedAtUtc.UtcTicks);
+        new(PostgresAdvisoryLock.BriefReview, "Brief", nameof(BriefDraftRow.RecordId));
 
     private const string SaveOperation = "brief-save";
     private const string DecideOperation = "brief-decide";

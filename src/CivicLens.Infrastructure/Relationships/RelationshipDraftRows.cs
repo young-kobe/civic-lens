@@ -11,8 +11,7 @@ namespace CivicLens.Infrastructure.Relationships;
 internal static class RelationshipDraftRows
 {
     internal static readonly ReviewRecords<RelationshipDraftRow, RelationshipRevisionRow, RelationshipReviewDecisionRow, RelationshipRevision> Records =
-        new(PostgresAdvisoryLock.RelationshipReview, "Relationship", nameof(RelationshipDraftRow.RecordId),
-            (draft, revision) => draft.LastRevisedAtUtcTicks = revision.CreatedAtUtc.UtcTicks);
+        new(PostgresAdvisoryLock.RelationshipReview, "Relationship", nameof(RelationshipDraftRow.RecordId));
 
     public static async Task<string?> AppendAnalysisRevisionAsync(CollectionAttemptDbContext db, RelationshipRevision revision, string runId,
         CancellationToken cancellationToken)

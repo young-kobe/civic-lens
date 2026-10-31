@@ -122,6 +122,7 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Empty(await VoteDecisionsAsync());
         var listed = Assert.Single((await new ListVotesNeedingAction(VoteReviews()).ExecuteAsync(Reviewer)).Items);
         Assert.Equal(ReviewStatus.AwaitingReview, listed.CurrentStatus);
+        Assert.Equal("A vote citation names a missing extraction.", await ScalarAsync("SELECT held_reason FROM vote_drafts"));
     }
 
     [Fact]

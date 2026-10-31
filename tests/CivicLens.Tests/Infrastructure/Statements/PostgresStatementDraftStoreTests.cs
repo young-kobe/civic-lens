@@ -83,6 +83,26 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM relationship_analysis"));
         Assert.Equal(0L, await ScalarAsync($"SELECT count(*) FROM statement_review_decisions WHERE candidate_id = '{candidate}'"));
         Assert.Equal("AwaitingReview", await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+        Assert.Equal(StatementCodeApproval.SpeakerIsNotOfficeOwner, await TextAsync($"SELECT held_reason FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+    }
+
+    [Fact]
+    public async Task AStatementThatCodeDeclinesKeepsTheReasonUntilAPersonSavesARevision()
+    {
+        var candidate = await PassedCandidateAsync();
+        await DraftingWorker(new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"]))).ExecuteAsync(once: true);
+        Assert.Equal(StatementCodeApproval.SpeakerIsNotOfficeOwner, await TextAsync($"SELECT held_reason FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+        var evidence = (await drafts.ReadEvidenceAsync(candidate, default))!.Article.Extraction;
+        var span = new SourceSpan(evidence.ExtractionId, evidence.Text.IndexOf("a rent cap for tenants", StringComparison.Ordinal), 22);
+        var save = new SaveStatementDraft(new PostgresStatementReviewStore(factory),
+            new StatementReviewContextReader(drafts, new StatementSelectionResolver(StatementGateFixtures.Configuration())));
+
+        await save.ExecuteAsync(Owner, new(candidate, 1, "Warren edit", "The senator announced a rent cap.", null, null, [Warren], [], [RentIssue],
+            [HousingArea], [span], "edit-after-decline"));
+
+        Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM statement_drafts WHERE candidate_id = '{candidate}' AND held_reason IS NULL"));
+        Assert.Equal(await ScalarAsync("SELECT max(created_at_utc_ticks) FROM statement_revisions"),
+            await ScalarAsync($"SELECT last_revised_at_utc_ticks FROM statement_drafts WHERE candidate_id = '{candidate}'"));
     }
 
     [Fact]
@@ -93,6 +113,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         await DraftingWorker(new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"]))).ExecuteAsync(once: true);
 
         Assert.Equal("Approved", await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+        Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM statement_drafts WHERE candidate_id = '{candidate}' AND held_reason IS NULL"));
         Assert.Equal(("civic-lens:code", "Approve", 1L), (
             await TextAsync($"SELECT decision_json::jsonb->>'actorSubject' FROM statement_review_decisions WHERE candidate_id = '{candidate}'"),
             await TextAsync($"SELECT kind FROM statement_review_decisions WHERE candidate_id = '{candidate}'"),

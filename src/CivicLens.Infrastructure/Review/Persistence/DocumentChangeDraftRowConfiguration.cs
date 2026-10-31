@@ -21,6 +21,7 @@ internal sealed class DocumentChangeDraftRowConfiguration : IEntityTypeConfigura
         builder.Property(row => row.ReviewStateVersion).HasColumnName("review_state_version").IsRequired();
         builder.Property(row => row.ReviewStatus).HasColumnName("review_status").HasConversion<string>().HasMaxLength(32).IsRequired();
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks").IsRequired();
+        ReviewDraftTableConfiguration.ConfigureLastRevised(builder, "document_change_drafts", nameof(DocumentChangeDraftRow.DraftId));
         builder.HasOne<Documents.Persistence.DocumentComparisonRow>().WithMany()
             .HasForeignKey(row => row.ComparisonId).OnDelete(DeleteBehavior.Restrict);
     }

@@ -30,7 +30,8 @@ internal sealed class VoteDraftRowConfiguration : IEntityTypeConfiguration<VoteD
         builder.Property(row => row.ReviewStateVersion).HasColumnName("review_state_version");
         builder.Property(row => row.ReviewStatus).HasColumnName("review_status").HasConversion<string>().HasMaxLength(32).IsRequired();
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
-        builder.Property(row => row.LastRevisedAtUtcTicks).HasColumnName("last_revised_at_utc_ticks");
+        ReviewDraftTableConfiguration.ConfigureLastRevised(builder, "vote_drafts", nameof(VoteDraftRow.RecordId));
+        builder.Property(row => row.HeldReason).HasColumnName("held_reason");
         ListedDraftTableConfiguration.ConfigureListing(builder, "vote_drafts");
         builder.HasIndex(row => new { row.SourceId, row.Chamber, row.Congress, row.SessionNumber, row.RollCallNumber }).IsUnique()
             .HasDatabaseName("ux_vote_drafts_roll");

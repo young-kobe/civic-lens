@@ -1,3 +1,4 @@
+using CivicLens.Infrastructure.Review.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -22,6 +23,6 @@ internal sealed class RelationshipDraftRowConfiguration : IEntityTypeConfigurati
         builder.Property(row => row.ReviewStatus).HasColumnName("review_status").HasConversion<string>().HasMaxLength(32).IsRequired();
         builder.Property(row => row.NoLongerMatches).HasColumnName("no_longer_matches");
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
-        builder.Property(row => row.LastRevisedAtUtcTicks).HasColumnName("last_revised_at_utc_ticks");
+        ReviewDraftTableConfiguration.ConfigureLastRevised(builder, "relationship_drafts", nameof(RelationshipDraftRow.RecordId));
     }
 }

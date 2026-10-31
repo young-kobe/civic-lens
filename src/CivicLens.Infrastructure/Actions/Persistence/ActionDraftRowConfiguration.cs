@@ -28,7 +28,8 @@ internal sealed class ActionDraftRowConfiguration : IEntityTypeConfiguration<Act
         builder.Property(row => row.ReviewStateVersion).HasColumnName("review_state_version");
         builder.Property(row => row.ReviewStatus).HasColumnName("review_status").HasConversion<string>().HasMaxLength(32).IsRequired();
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
-        builder.Property(row => row.LastRevisedAtUtcTicks).HasColumnName("last_revised_at_utc_ticks");
+        ReviewDraftTableConfiguration.ConfigureLastRevised(builder, "action_drafts", nameof(ActionDraftRow.RecordId));
+        builder.Property(row => row.HeldReason).HasColumnName("held_reason");
         ListedDraftTableConfiguration.ConfigureListing(builder, "action_drafts");
         builder.HasIndex(row => new { row.SourceId, row.Congress, row.BillType, row.BillNumber }).IsUnique()
             .HasDatabaseName("ux_action_drafts_bill");

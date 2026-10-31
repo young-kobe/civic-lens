@@ -27,13 +27,10 @@ internal static class VoteDraftRows
         if ((draft?.CurrentRevisionNumber ?? 0) != revision.RevisionNumber - 1) return VoteDraftErrorCodes.RevisionConflict;
         if (draft is null) db.Add(draft = NewDraft(revision));
         await Records.AppendCodeApprovedAsync(db, draft, revision, NewRevision(revision, runId), await Records.ReadCycleAsync(db, draft, cancellationToken),
-            () => PassesApprovalChecksAsync(db, revision, cancellationToken), PostgresVoteReviewStore.NewDecisionRow);
+            () => ApprovalCheck.OfAsync(() => PostgresVoteReviewStore.ValidateApprovalAsync(db, revision, cancellationToken)),
+            PostgresVoteReviewStore.NewDecisionRow);
         return null;
     }
-
-    private static async Task<bool> PassesApprovalChecksAsync(CollectionAttemptDbContext db, VoteDraftRevision revision,
-        CancellationToken cancellationToken) =>
-        (await ApprovalCheck.OfAsync(() => PostgresVoteReviewStore.ValidateApprovalAsync(db, revision, cancellationToken))).Passed;
 
     public static Task<bool> HasNewerCandidateAsync(CollectionAttemptDbContext db, string sourceId, Chamber chamber, int congress,
         int sessionNumber, int rollCallNumber, long updateDateUtcTicks, CancellationToken cancellationToken) =>
@@ -55,7 +52,6 @@ internal static class VoteDraftRows
     private static void Revised(VoteDraftRow draft, VoteDraftRevision revision)
     {
         draft.CandidateId = revision.CandidateId;
-        draft.LastRevisedAtUtcTicks = revision.CreatedAtUtc.UtcTicks;
         ListedDraftRows.Set(draft, revision.VotedOn, revision.TrackedIssueIds, revision.OfficialIds());
     }
 

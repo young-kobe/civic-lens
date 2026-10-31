@@ -10,6 +10,7 @@ internal sealed class DocumentChangeDraftRow : IReviewDraftRow
     public int ReviewStateVersion { get; set; }
     public ReviewStatus ReviewStatus { get; set; }
     public long CreatedAtUtcTicks { get; set; }
+    public long LastRevisedAtUtcTicks { get; set; }
 
     string IReviewDraftRow.RecordId => DraftId;
 }

@@ -1,3 +1,4 @@
+using CivicLens.Infrastructure.Review.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -23,7 +24,7 @@ internal sealed class BriefDraftRowConfiguration : IEntityTypeConfiguration<Brie
         builder.Property(row => row.ReviewStateVersion).HasColumnName("review_state_version");
         builder.Property(row => row.ReviewStatus).HasColumnName("review_status").HasConversion<string>().HasMaxLength(32).IsRequired();
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
-        builder.Property(row => row.LastRevisedAtUtcTicks).HasColumnName("last_revised_at_utc_ticks");
+        ReviewDraftTableConfiguration.ConfigureLastRevised(builder, "brief_drafts", nameof(BriefDraftRow.RecordId));
         builder.HasIndex(row => row.WeekStart).IsUnique().HasDatabaseName("ux_brief_drafts_week");
     }
 }

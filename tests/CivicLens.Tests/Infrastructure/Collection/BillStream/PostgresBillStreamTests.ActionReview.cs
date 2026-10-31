@@ -148,6 +148,34 @@ public sealed partial class PostgresBillStreamTests
         Assert.Empty(await ActionDecisionsAsync());
         var listed = Assert.Single((await new ListActionsNeedingAction(ActionReviews()).ExecuteAsync(Reviewer)).Items);
         Assert.Equal(ReviewStatus.AwaitingReview, listed.CurrentStatus);
+        Assert.Equal("An action citation names a missing extraction.", await HeldReasonAsync());
+    }
+
+    [Fact]
+    public async Task APersonDecisionOrEditRemovesTheHeldReasonOfAnActionBecauseItDescribesTheNewestRevisionOnly()
+    {
+        var candidate = await CandidateWithoutSummariesAsync();
+        await SettleAsync(candidate, Revision(candidate, 1));
+        Assert.NotNull(await HeldReasonAsync());
+
+        await DecideAsync(1, 0, ReviewDecisionKind.RequestChanges, "Add the summary.");
+        Assert.Null(await HeldReasonAsync());
+        await ExecuteAsync(connectionString, "UPDATE action_drafts SET held_reason = 'stale'");
+        await SaveAsync(1, SuggestionChoice.Keep, "save-2");
+
+        Assert.Null(await HeldReasonAsync());
+    }
+
+    [Fact]
+    public async Task ACodeApprovalClearsTheHeldReasonOfAnEarlierRevision()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+        await ExecuteAsync(connectionString, "UPDATE action_drafts SET held_reason = 'stale'");
+
+        await AddSponsorAsync(UpdatedAt.AddDays(1));
+
+        Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Null(await HeldReasonAsync());
     }
 
     [Fact]
@@ -389,6 +417,9 @@ public sealed partial class PostgresBillStreamTests
         UPDATE action_drafts SET review_state_version = review_state_version - 1, review_status = 'AwaitingReview'
          WHERE record_id = '{RecordId}' AND EXISTS (SELECT 1 FROM removed)
         """);
+
+    private async Task<string?> HeldReasonAsync() =>
+        await ScalarAsync("SELECT held_reason FROM action_drafts") is string reason ? reason : null;
 
     private Task<ReviewDecision> DecideAsync(int revision, int stateVersion, ReviewDecisionKind kind, string? note = null) =>
         new DecideActionReview(ActionReviews()).ExecuteAsync(Reviewer,

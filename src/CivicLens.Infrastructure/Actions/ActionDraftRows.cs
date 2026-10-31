@@ -25,13 +25,10 @@ internal static class ActionDraftRows
         if (draft is null) db.Add(draft = NewDraft(revision));
         var records = PostgresActionReviewStore.Records;
         await records.AppendCodeApprovedAsync(db, draft, revision, NewRevision(revision, runId), await records.ReadCycleAsync(db, draft, cancellationToken),
-            () => PassesApprovalChecksAsync(db, revision, cancellationToken), PostgresActionReviewStore.NewDecisionRow);
+            () => ApprovalCheck.OfAsync(() => PostgresActionReviewStore.ValidateApprovalAsync(db, revision, cancellationToken)),
+            PostgresActionReviewStore.NewDecisionRow);
         return null;
     }
-
-    private static async Task<bool> PassesApprovalChecksAsync(CollectionAttemptDbContext db, ActionDraftRevision revision,
-        CancellationToken cancellationToken) =>
-        (await ApprovalCheck.OfAsync(() => PostgresActionReviewStore.ValidateApprovalAsync(db, revision, cancellationToken))).Passed;
 
     public static Task<bool> HasNewerCandidateAsync(CollectionAttemptDbContext db, ActionDraftCandidate candidate, CancellationToken cancellationToken)
     {
@@ -55,7 +52,6 @@ internal static class ActionDraftRows
     public static void Revised(ActionDraftRow draft, ActionDraftRevision revision)
     {
         draft.CandidateId = revision.CandidateId;
-        draft.LastRevisedAtUtcTicks = revision.CreatedAtUtc.UtcTicks;
         ListedDraftRows.Set(draft, revision.EventOn(), revision.TrackedIssueIds, revision.OfficialIds());
     }
 

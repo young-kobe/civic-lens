@@ -9,4 +9,5 @@ internal interface IReviewDraftRow
     int ReviewStateVersion { get; set; }
     ReviewStatus ReviewStatus { get; set; }
     long CreatedAtUtcTicks { get; }
+    long LastRevisedAtUtcTicks { get; set; }
 }

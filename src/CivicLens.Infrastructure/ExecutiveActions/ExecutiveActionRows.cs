@@ -84,16 +84,12 @@ internal static class ExecutiveActionRows
     {
         revision.ValidateShape();
         await Records.AppendCodeApprovedAsync(db, draft, revision, NewRevision(revision), await Records.ReadCycleAsync(db, draft, cancellationToken),
-            () => PassesApprovalChecksAsync(db, revision, cancellationToken), NewDecisionRow);
+            () => ApprovalCheck.OfAsync(() => PostgresExecutiveActionReviewStore.ValidateApprovalAsync(db, revision, cancellationToken)),
+            NewDecisionRow);
     }
-
-    private static async Task<bool> PassesApprovalChecksAsync(CollectionAttemptDbContext db, ExecutiveActionRevision revision,
-        CancellationToken cancellationToken) =>
-        (await ApprovalCheck.OfAsync(() => PostgresExecutiveActionReviewStore.ValidateApprovalAsync(db, revision, cancellationToken))).Passed;
 
     private static void Revised(ExecutiveActionDraftRow draft, ExecutiveActionRevision revision)
     {
-        draft.LastRevisedAtUtcTicks = revision.CreatedAtUtc.UtcTicks;
         ListedDraftRows.Set(draft, revision.SignedOn, [], revision.OfficialIds());
     }
 

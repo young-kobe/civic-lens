@@ -70,6 +70,21 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
     }
 
     [Fact]
+    public async Task AFailedApprovalCheckKeepsItsMessageAsTheHeldReasonUntilAPersonDecides()
+    {
+        var recordId = await AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump", shiftedStoredTextPrefix: "Shifted. ");
+
+        var held = Assert.Single((await store.ListNeedingActionAsync(10, default)).Items);
+        Assert.Equal(ReviewStatus.AwaitingReview, held.CurrentStatus);
+        Assert.Equal("An executive action fact must equal the text of its citation.", await HeldReasonAsync());
+        var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 1, ReviewDecisionKind.RequestChanges, "auth0|owner",
+            "The quotes do not match.", [], DateTimeOffset.UtcNow);
+        await store.DecideAsync("auth0|owner", decision, 1, 0, "key-held", new string('b', 64), default);
+
+        Assert.Null(await HeldReasonAsync());
+    }
+
+    [Fact]
     public async Task TheOwnerCanWithdrawApprovalSoTheRecordLeavesTheReadyListAndNeedsAction()
     {
         var recordId = await AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
@@ -136,7 +151,15 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
             PublicationProtocol.ManifestPath, PublicationProtocol.MaximumManifestBytes, default), PublicationProtocol.JsonOptions)!.Records);
     }
 
-    private async Task<string> AdmitAsync(string json, string personId)
+    private async Task<string?> HeldReasonAsync()
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("SELECT held_reason FROM executive_action_drafts", connection);
+        return await command.ExecuteScalarAsync() as string;
+    }
+
+    private async Task<string> AdmitAsync(string json, string personId, string shiftedStoredTextPrefix = "")
     {
         var document = FederalRegisterFixtures.Document(json);
         var source = new ConfiguredCollectionSource(FederalRegisterFixtures.Configuration(), FederalRegisterFixtures.SourceId,
@@ -145,7 +168,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         var jobId = Assert.Single((await jobs.AdmitListPageAsync(source, page, default)).Jobs).JobId;
         await SucceededJobs.MarkSucceededAsync(connectionString, jobId);
         var text = FederalRegisterRenderer.Render(document);
-        var extractionId = await extractions.SaveAsync(jobId, json, text, FederalRegisterDocumentParser.ExtractionVersion);
+        var extractionId = await extractions.SaveAsync(jobId, json, shiftedStoredTextPrefix + text, FederalRegisterDocumentParser.ExtractionVersion);
         await jobs.AdmitDocumentAsync(source, jobId, new FederalRegisterEvidence(document, extractionId, text, personId), default);
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
