@@ -40,7 +40,7 @@
         <input type="hidden" name="idempotencyKey" value="@renderKey" />
     </form>
 
-    @if (overview is not null && changes is not null && drafts is not null)
+    @if (overview is not null && changes is not null && drafts is not null && queue is not null)
     {
         <StatStrip Label="Review summary">
             <Stat Value="overview.NewChanges" Label="New changes" Href="#new-changes" />
@@ -59,6 +59,47 @@
 
         <div class="dashboard">
             <div class="dashboard-main">
+                <Panel Title="Needs a person" Id="needs-a-person">
+                    <Aside>@Count(queue.Total + StuckRows.Count, "record", "records")</Aside>
+                    <ChildContent>
+                        <DataTable Items="QueueRows" Caption="Records that need a person">
+                            <Head>
+                                <th class="queue-record">Record</th>
+                                <th class="hide-narrow">Kind</th>
+                                <th>Why it needs a person</th>
+                                <th class="time hide-narrow">Last revised</th>
+                                <th class="act hide-narrow"><span class="visually-hidden">Action</span></th>
+                            </Head>
+                            <Row Context="row">
+                                <td class="queue-record"><CellTitle Href="@RecordRoutes.Editor(row.Kind, row.RecordId)">@DraftStatusDisplay.DraftName(row.Headline)</CellTitle></td>
+                                <td class="hide-narrow">@PublishedRecordLabels.Kind(row.Kind)</td>
+                                <td>
+                                    <StatusBadge Tone="row.Tone" Text="@row.StatusLabel" />
+                                    <span class="actions-hint">@row.Reason</span>
+                                </td>
+                                <td class="time hide-narrow">
+                                    @if (row.RevisedAtUtc is { } revised) { <Timestamp Value="revised" /> }
+                                    else { <span>Approved</span> }
+                                </td>
+                                <td class="act hide-narrow"><Button Small="true" Href="@RecordRoutes.Editor(row.Kind, row.RecordId)">Open</Button></td>
+                            </Row>
+                            <Empty>
+                                @if (QueueCursor is not null)
+                                {
+                                    <EmptyState Title="No more records on this page" Text="Go back to the first page.">
+                                        <Action><Button Href="/Review#needs-a-person">First page</Button></Action>
+                                    </EmptyState>
+                                }
+                                else
+                                {
+                                    <EmptyState Title="No record needs a person" Text="Code approves an action, a vote, a statement, or an executive action when its checks pass. A record shows here when a check refuses it or a person must decide. To open an approved record, use Find a draft." />
+                                }
+                            </Empty>
+                        </DataTable>
+                        <Pager Label="Needs a person pages" NewerHref="@QueueHref(queue.NewerCursor)" OlderHref="@QueueHref(queue.OlderCursor)" />
+                    </ChildContent>
+                </Panel>
+
                 <Panel Title="New changes" Id="new-changes">
                     <Aside>A text change alone does not show significance.</Aside>
                     <ChildContent>

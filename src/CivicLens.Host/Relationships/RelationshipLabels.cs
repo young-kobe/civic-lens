@@ -15,6 +15,8 @@ internal static class RelationshipLabels
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Relationship type has no label.")
     };
 
+    public static string Title(RelationshipType type, string statementHeadline) => $"{Type(type)}: {statementHeadline}";
+
     public static string Basis(RelationshipMatchBasis basis) => basis == RelationshipMatchBasis.BillNumber ? "Bill number" : "Bill title";
 
     public static string Summary(RelationshipRevision revision) => $"{Type(revision.Type)}: {revision.Reason}";

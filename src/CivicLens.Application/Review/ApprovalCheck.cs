@@ -14,7 +14,7 @@ public sealed record ApprovalCheck(string? Failure)
         }
         catch (ArgumentException exception)
         {
-            return new(exception.Message);
+            return new(MessageOf(exception));
         }
     }
 
@@ -27,7 +27,15 @@ public sealed record ApprovalCheck(string? Failure)
         }
         catch (ArgumentException exception)
         {
-            return new(exception.Message);
+            return new(MessageOf(exception));
         }
+    }
+
+    private static string MessageOf(ArgumentException exception)
+    {
+        var suffix = $"(Parameter '{exception.ParamName}')";
+        return exception.ParamName is not null && exception.Message.EndsWith(suffix, StringComparison.Ordinal)
+            ? exception.Message[..^suffix.Length].TrimEnd()
+            : exception.Message;
     }
 }
