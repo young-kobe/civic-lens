@@ -14,8 +14,8 @@ public interface IPublicationStore
 
     Task PruneAsync(int keep, TimeSpan minimumAge, Func<int, string?, CancellationToken, Task> retireOlder, CancellationToken cancellationToken);
 
-    Task<IReadOnlyDictionary<PublishedRecordReference, ReviewStatus>> ReadReviewStatusesAsync(
-        IReadOnlyCollection<PublishedRecordReference> records, CancellationToken cancellationToken);
+    Task<IReadOnlyDictionary<PublishedRecordReference, ReviewedRecord>> ReadReviewStatusesAsync(
+        IReadOnlyCollection<PublishedRevisionBinding> published, CancellationToken cancellationToken);
 
     Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken);

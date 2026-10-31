@@ -1,19 +1,12 @@
-using CivicLens.Tests.Infrastructure.Collection;
-using System.Collections.Immutable;
-using CivicLens.Application.Collection.FederalRegister;
-using CivicLens.Application.Collection;
-using CivicLens.Core.Review;
-using CivicLens.Infrastructure.Collection;
-using CivicLens.Infrastructure.Collection.Jobs;
-using CivicLens.Infrastructure.Documents;
-using CivicLens.Infrastructure.ExecutiveActions;
-using CivicLens.Tests.Fixtures;
+using System.Text.Json;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Publication;
+using CivicLens.Core.Review;
 using CivicLens.Host.Publication;
 using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Briefs;
+using CivicLens.Infrastructure.ExecutiveActions;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Infrastructure.Relationships;
 using CivicLens.Infrastructure.Review;
@@ -21,8 +14,9 @@ using CivicLens.Infrastructure.Statements;
 using CivicLens.Infrastructure.Votes;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Application.Publication;
+using CivicLens.Tests.Fixtures;
+using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.Extensions.Logging.Abstractions;
-using System.Text.Json;
 using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.ExecutiveActions;
@@ -33,20 +27,14 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
 {
     private readonly string captureRoot = Path.Combine(Path.GetTempPath(), "executive-action-review-" + Guid.NewGuid().ToString("N"));
     private string connectionString = null!;
-    private PostgresCollectionJobStore jobs = null!;
     private PostgresExecutiveActionReviewStore store = null!;
-    private JobExtractionSeeder extractions = null!;
+    private ExecutiveActionSeeder executiveActions = null!;
 
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
-        jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
         store = PostgresExecutiveActionReviewStore.FromConnectionString(connectionString);
-        var documents = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
-        Directory.CreateDirectory(captureRoot);
-        var seeder = new StatementCandidateSeeder(PostgresCollectionAttemptStore.FromConnectionString(connectionString), documents,
-            connectionString, captureRoot);
-        extractions = new JobExtractionSeeder(jobs, documents, seeder, connectionString, captureRoot);
+        executiveActions = new ExecutiveActionSeeder(connectionString, captureRoot);
     }
 
     public async Task DisposeAsync()
@@ -58,7 +46,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
     [Fact]
     public async Task ACodeApprovedRecordIsListedToPublishAndLoadsWithItsSavedEvidence()
     {
-        var recordId = await AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
+        var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
 
         var listed = Assert.Single(await store.ListUnpublishedApprovedAsync(10, [], default));
         var publishable = (await store.GetForPublicationAsync([recordId], default))[recordId];
@@ -72,7 +60,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
     [Fact]
     public async Task AFailedApprovalCheckKeepsItsMessageAsTheHeldReasonUntilAPersonDecides()
     {
-        var recordId = await AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump", shiftedStoredTextPrefix: "Shifted. ");
+        var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump", shiftedStoredTextPrefix: "Shifted. ");
 
         var held = Assert.Single((await store.ListNeedingActionAsync(10, default)).Items);
         Assert.Equal(ReviewStatus.AwaitingReview, held.CurrentStatus);
@@ -87,7 +75,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
     [Fact]
     public async Task TheOwnerCanWithdrawApprovalSoTheRecordLeavesTheReadyListAndNeedsAction()
     {
-        var recordId = await AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
+        var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
         var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 2, ReviewDecisionKind.WithdrawApproval, "auth0|owner",
             "The title is wrong.", [], DateTimeOffset.UtcNow);
 
@@ -103,12 +91,12 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
     [Fact]
     public async Task ACorrectionAfterAWithdrawalWaitsForAPersonBecauseTheOpenConcernBlocksCodeApproval()
     {
-        var recordId = await AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
+        var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
         var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 2, ReviewDecisionKind.WithdrawApproval, "auth0|owner",
             "Check the date.", [], DateTimeOffset.UtcNow);
         await store.DecideAsync("auth0|owner", decision, 1, 1, "key-1", new string('a', 64), default);
 
-        await AdmitAsync(FederalRegisterFixtures.BidenProclamationCorrection, "joe-biden");
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamationCorrection, "joe-biden");
 
         Assert.Empty(await store.ListUnpublishedApprovedAsync(10, [], default));
         var needing = Assert.Single((await store.ListNeedingActionAsync(10, default)).Items);
@@ -119,7 +107,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
     [Fact]
     public async Task ARecordPublishesWithItsRealPageThenLeavesTheReadyListAndWithdrawsFromTheSite()
     {
-        var recordId = await AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
+        var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
         var releases = new FileReleaseDirectory(Path.Combine(captureRoot, "releases"));
         var clock = new FakeClock(DateTimeOffset.UtcNow);
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
@@ -157,22 +145,5 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("SELECT held_reason FROM executive_action_drafts", connection);
         return await command.ExecuteScalarAsync() as string;
-    }
-
-    private async Task<string> AdmitAsync(string json, string personId, string shiftedStoredTextPrefix = "")
-    {
-        var document = FederalRegisterFixtures.Document(json);
-        var source = new ConfiguredCollectionSource(FederalRegisterFixtures.Configuration(), FederalRegisterFixtures.SourceId,
-            DateOnly.FromDateTime(DateTime.UtcNow));
-        var page = new FederalRegisterListPage([new FederalRegisterListItem(document.DocumentNumber, document.PublishedOn)]);
-        var jobId = Assert.Single((await jobs.AdmitListPageAsync(source, page, default)).Jobs).JobId;
-        await SucceededJobs.MarkSucceededAsync(connectionString, jobId);
-        var text = FederalRegisterRenderer.Render(document);
-        var extractionId = await extractions.SaveAsync(jobId, json, shiftedStoredTextPrefix + text, FederalRegisterDocumentParser.ExtractionVersion);
-        await jobs.AdmitDocumentAsync(source, jobId, new FederalRegisterEvidence(document, extractionId, text, personId), default);
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand("SELECT record_id FROM executive_action_drafts LIMIT 1", connection);
-        return (string)(await command.ExecuteScalarAsync())!;
     }
 }

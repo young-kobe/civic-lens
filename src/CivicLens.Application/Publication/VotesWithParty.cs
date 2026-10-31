@@ -20,9 +20,12 @@ public sealed record VotesWithParty(PublishedChamber Chamber, string Party, int 
         .Select(group => From(group.Key.Chamber, group.Key.Party, group.Where(vote => vote.SplitVote).ToArray()))];
 
     public static bool IsBreak(PublishedOfficialVote vote) =>
-        HasMajorParty(vote) && vote.SplitVote && PublishedOfficialVote.SideOf(vote.Cast) is { } side && side != vote.PartyMajority;
+        vote.SplitVote && vote.PartyMajority is { } majority && IsAgainstPartyMajority(vote.Party, vote.Cast, majority);
 
-    private static bool HasMajorParty(PublishedOfficialVote vote) => vote.Party is PublishedPartyMajority.Democrat or PublishedPartyMajority.Republican;
+    public static bool IsAgainstPartyMajority(string party, string cast, string partyMajority) =>
+        PublishedPartyMajority.IsMajorParty(party) && PublishedOfficialVote.SideOf(cast) is { } side && side != partyMajority;
+
+    private static bool HasMajorParty(PublishedOfficialVote vote) => PublishedPartyMajority.IsMajorParty(vote.Party);
 
     private static VotesWithParty From(PublishedChamber chamber, string party, PublishedOfficialVote[] splitVotes)
     {

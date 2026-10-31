@@ -182,12 +182,43 @@ public sealed class PostgresPublicationStore : IPublicationStore
         db.Set<PublicationReleaseRow>().Where(row => row.IsActive)
             .ExecuteUpdateAsync(update => update.SetProperty(row => row.IsActive, false), cancellationToken);
 
-    public async Task<IReadOnlyDictionary<PublishedRecordReference, ReviewStatus>> ReadReviewStatusesAsync(
-        IReadOnlyCollection<PublishedRecordReference> records, CancellationToken cancellationToken)
+    public async Task<IReadOnlyDictionary<PublishedRecordReference, ReviewedRecord>> ReadReviewStatusesAsync(
+        IReadOnlyCollection<PublishedRevisionBinding> published, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var current = await ReadCurrentReviewStatesAsync(db, [.. records.Select(record => (record.Kind, record.RecordId))], cancellationToken);
-        return current.ToDictionary(state => new PublishedRecordReference(state.Key.Kind, state.Key.RecordId), state => state.Value.ReviewStatus);
+        var current = await ReadCurrentReviewStatesAsync(db, [.. published.Select(record => (record.Kind, record.RecordId))], cancellationToken);
+        var unpublished = published.Where(record => current.TryGetValue((record.Kind, record.RecordId), out var state) &&
+            state.ReviewStatus == ReviewStatus.Approved && state.RevisionNumber != record.RevisionNumber);
+        var actors = await ReadApprovalActorsAsync(db, unpublished, cancellationToken);
+        return current.ToDictionary(state => new PublishedRecordReference(state.Key.Kind, state.Key.RecordId),
+            state => new ReviewedRecord(state.Value.ReviewStatus, actors.GetValueOrDefault(state.Key)));
+    }
+
+    // The newest approval of a record opens its review cycle, so one row for each record holds the actor.
+    private static async Task<Dictionary<(PublishedRecordKind, string), string>> ReadApprovalActorsAsync(CollectionAttemptDbContext db,
+        IEnumerable<PublishedRevisionBinding> records, CancellationToken cancellationToken)
+    {
+        var actors = new Dictionary<(PublishedRecordKind, string), string>();
+        foreach (var group in records.GroupBy(record => record.Kind))
+        {
+            var (_, table, idColumn) = ReviewTables.For(group.Key);
+            var sql = $$"""
+                SELECT DISTINCT ON (d.{{idColumn}}) d.{{idColumn}} AS "RecordId", d.decision_json AS "DecisionJson"
+                FROM {{table}} d WHERE d.{{idColumn}} = ANY({0}) AND d.kind = 'Approve'
+                ORDER BY d.{{idColumn}}, d.review_state_version DESC
+                """;
+            var rows = await db.Database.SqlQueryRaw<ApprovalRow>(sql, (object)group.Select(record => record.RecordId).ToArray())
+                .ToArrayAsync(cancellationToken);
+            foreach (var row in rows)
+                actors[(group.Key, row.RecordId)] = ReviewJson.Deserialize<ReviewDecision>(row.DecisionJson, "decision").ActorSubject;
+        }
+        return actors;
+    }
+
+    private sealed class ApprovalRow
+    {
+        public string RecordId { get; set; } = "";
+        public string DecisionJson { get; set; } = "";
     }
 
     private static async Task RequireUnchangedReleasesAsync(CollectionAttemptDbContext db, PublicationCommit commit,

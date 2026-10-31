@@ -54,9 +54,9 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [ ] `pg_notify` on approval
 - R-46: Sortable tables and vote insights. Add a filter row above the tables. Vote pages get badges and a panel of members who broke with their party. Issue pages get a summary of votes and bills. Depends on: R-44. [Search](architecture/search.md#limits-and-planned-work)
   - [x] Sortable tables and search sort keys (#247)
-  - [ ] Vote badges and the party break panel
+  - [x] Vote badges and the party break panel
   - [ ] Issue summary
-  - [ ] Filter row
+  - [x] Filter row
 - R-47: Insight boards. One contract PR adds vote fields to vote entries, a per-official summary roll-up, and a cosponsor field on action entries. Then build boards for party breakers, loyalists, and missed votes, as static pages for each chamber and party. Then add list badges and home cards for the closest vote, the most breaks, and the newest executive actions. Then add a bill status line, sponsored bills that moved, and bipartisan cosponsorship. Depends on: R-46. [Publication](architecture/publication.md#limits-and-planned-work)
   - [ ] Contract PR, with one dev reset
   - [ ] Boards

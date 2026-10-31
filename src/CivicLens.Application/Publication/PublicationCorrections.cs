@@ -44,14 +44,14 @@ internal sealed class PublicationCorrections
         if (note is null && !PublishedRecordRules.IsApprovedByCode(revisionNumber, decisions))
             throw new MissingCorrectionNoteException(reference);
         var kept = earlier[reference];
-        if (note is not null && PublishedCorrection.NotedCount(kept) >= PublishedCorrection.MaximumNotedEntries)
+        if (note is not null && PublishedCorrection.IsAtNoteLimit(kept))
             throw new CorrectionLimitException(reference);
         return PublishedCorrection.Prepend(kept, new() { ReplacedRevisionNumber = replaced, PublishedAtUtc = now, Note = note });
     }
 
     public PublishedCorrection[] Earlier(PublishedRecordReference record) => earlier[record];
 
-    private static async Task<PublishedCorrection[]> ReadAsync(IReleaseDirectory releases, string directoryName,
+    internal static async Task<PublishedCorrection[]> ReadAsync(IReleaseDirectory releases, string directoryName,
         PublishedRecordReference record, CancellationToken cancellationToken)
     {
         var json = await releases.ReadFileAsync(directoryName, PublicationProtocol.RecordDataPath(record.RecordId),

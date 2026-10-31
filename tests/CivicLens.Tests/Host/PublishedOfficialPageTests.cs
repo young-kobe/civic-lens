@@ -581,24 +581,53 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task TheRecordsSwitchShowsOnlyWhenTheOfficialHasAVoteAgainstTheirParty()
+    public async Task TheKindTabsCountEveryRowOfTheListSoATabNeverPromisesMoreThanItShows()
     {
-        var day = new DateOnly(2026, 4, 1);
+        var document = await RenderedWithCountsAsync();
 
-        var withBreak = await RenderedAsync([Split('a', day, "Nay")]);
-        var withoutBreak = await RenderedAsync([Split('a', day, "Yea")]);
-
-        var switchButtons = withBreak.QuerySelectorAll("[aria-labelledby='panel-records'] [data-layout-choice]");
-        Assert.Equal(["All records", "Votes against their party"], switchButtons.Select(button => button.TextContent));
-        Assert.Equal("all", withBreak.QuerySelector("[aria-labelledby='panel-records']")!.GetAttribute("data-layout"));
-        Assert.Null(withoutBreak.QuerySelector("[aria-labelledby='panel-records'] [data-layout-choice]"));
-        Assert.Null(withoutBreak.QuerySelector("[aria-labelledby='panel-records']")!.GetAttribute("data-layout"));
-        Assert.NotNull(withBreak.QuerySelector("[aria-labelledby='panel-records'] [data-layout-switch][hidden]"));
-        Assert.Equal(["true", "false"], switchButtons.Select(button => button.GetAttribute("aria-pressed")));
+        var tabs = document.QuerySelectorAll("[data-records] [data-record-filters] [data-filter-value]").ToArray();
+        Assert.Equal(["All records 9", "Statements 4", "Actions 2", "Votes 3"], tabs.Select(TabText));
+        foreach (var tab in tabs.Skip(1))
+        {
+            var rows = document.QuerySelectorAll($"[data-records] tbody tr.{tab.GetAttribute("data-filter-value")}");
+            Assert.Equal(int.Parse(tab.QuerySelector(".segmented-count")!.TextContent), rows.Length);
+        }
     }
 
     [Fact]
-    public async Task AnEarlierCongressPageHasNoRecordsSwitchEvenWithAVoteAgainstTheirParty()
+    public async Task TheKindTabsAreHiddenWithoutScriptAndNoRowIsHiddenSoTheListStaysWhole()
+    {
+        var document = await RenderedWithCountsAsync();
+
+        Assert.NotNull(document.QuerySelector("[data-records] [data-record-filters][hidden]"));
+        Assert.Empty(document.QuerySelectorAll("[data-records] tbody tr[hidden]"));
+        Assert.Equal("", document.QuerySelector("[data-records] [data-filter-status][role='status']")!.TextContent);
+    }
+
+    [Fact]
+    public async Task ARecordsListOfOneKindHasNoKindTabsBecauseTheyCouldNotNarrowIt()
+    {
+        var document = await RenderedAsync([Split('a', new DateOnly(2026, 4, 1), "Yea")]);
+
+        Assert.Null(document.QuerySelector("[data-record-filters]"));
+    }
+
+    [Fact]
+    public async Task TheAgainstPartyTabShowsOnlyWhenTheOfficialHasAVoteAgainstTheirPartyAndCountsThoseVotes()
+    {
+        var day = new DateOnly(2026, 4, 1);
+
+        var withBreak = await RenderedAsync([Split('a', day, "Nay"), Split('b', day, "Yea")]);
+        var withoutBreak = await RenderedAsync([Split('a', day, "Yea"), Split('b', day, "Yea")]);
+
+        Assert.Equal(["All records 2", "Votes against their party 1"],
+            withBreak.QuerySelectorAll("[aria-labelledby='panel-records'] [data-filter-value]").Select(TabText));
+        Assert.Null(withoutBreak.QuerySelector("[data-record-filters]"));
+        Assert.Equal(1, withBreak.QuerySelectorAll("tbody tr.against-party").Length);
+    }
+
+    [Fact]
+    public async Task AnEarlierCongressPageHasNoAgainstPartyTabEvenWithAVoteAgainstTheirParty()
     {
         var page = new ReleaseOfficialPage(Profile(), true, 118, false, [], [], [Split('a', new DateOnly(2024, 4, 1), "Nay") with { Congress = 118 }], ListPublishedAtUtc);
 
@@ -606,7 +635,7 @@ public sealed class PublishedOfficialPageTests
 
         var document = new HtmlParser().ParseDocument(html);
         Assert.NotNull(document.QuerySelector("tbody tr.against-party"));
-        Assert.Null(document.QuerySelector("[data-layout-choice]"));
+        Assert.Null(document.QuerySelector("[data-record-filters]"));
     }
 
     private static async Task<AngleSharp.Dom.IDocument> RenderedAsync(PublishedOfficialVote[] votes)
@@ -1153,7 +1182,6 @@ public sealed class PublishedOfficialPageTests
             var rows = document.QuerySelectorAll("[data-records] tbody tr").Where(row => row.GetAttribute("data-filter-keys")!.Split(' ').Contains(count.GetAttribute("data-count-filter"))).ToArray();
             Assert.Equal(int.Parse(count.TextContent.Split(' ')[0]), rows.Length);
             Assert.StartsWith(count.TextContent + ":", count.GetAttribute("data-filter-label"), StringComparison.Ordinal);
-            Assert.EndsWith($": {rows.Length} {(rows.Length == 1 ? "record" : "records")}", count.GetAttribute("data-filter-shows"), StringComparison.Ordinal);
         }
     }
 
@@ -1203,17 +1231,17 @@ public sealed class PublishedOfficialPageTests
         var notice = document.QuerySelector("[data-records] [data-filter-notice][hidden]")!;
         Assert.Equal("Show all records", notice.QuerySelector("button[data-filter-clear]")!.TextContent);
         var counts = document.QuerySelectorAll("[data-count-filter]").ToArray();
-        Assert.Equal(["Showing their statements on health in the 119th Congress: 1 record",
-            "Showing their statements on housing in the 119th Congress: 3 records",
-            "Showing bills they sponsored on housing in the 119th Congress: 1 record",
-            "Showing their substantive votes on housing in the 119th Congress: 1 record"], counts.Select(count => count.GetAttribute("data-filter-shows")));
+        Assert.Equal(["Filtered to their statements on health in the 119th Congress",
+            "Filtered to their statements on housing in the 119th Congress",
+            "Filtered to bills they sponsored on housing in the 119th Congress",
+            "Filtered to their substantive votes on housing in the 119th Congress"], counts.Select(count => count.GetAttribute("data-filter-shows")));
         Assert.Equal("1 bill: show bills they sponsored on housing", counts[2].GetAttribute("data-filter-label"));
         Assert.Equal("", document.QuerySelector("[data-records] [data-filter-status][role='status']")!.TextContent);
         Assert.False(document.QuerySelector("[data-filter-status]")!.HasAttribute("hidden"));
     }
 
     [Fact]
-    public async Task APageWithNoProfileHasNoRecordsFilterMarkup()
+    public async Task AnEmptyListWithNoProfileHasNoRecordsFilterMarkup()
     {
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([], []), PublicationCatalogs.None, CancellationToken.None);
 
@@ -1222,6 +1250,20 @@ public sealed class PublishedOfficialPageTests
         Assert.Null(document.QuerySelector("[data-filter-notice]"));
         Assert.Null(document.QuerySelector("tbody tr[data-filter-keys]"));
     }
+
+    [Fact]
+    public async Task APageWithNoProfileStillFiltersByKindButHasNoIssueNotice()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(
+            Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], [Vote('a', new DateOnly(2026, 4, 1))]), PublicationCatalogs.None, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.Equal(["All records 2", "Statements 1", "Votes 1"], document.QuerySelectorAll("[data-records] [data-record-filters] [data-filter-value]").Select(TabText));
+        Assert.NotNull(document.QuerySelector("[data-records] [data-filter-status][role='status']"));
+        Assert.Null(document.QuerySelector("[data-filter-notice]"));
+    }
+
+    private static string TabText(AngleSharp.Dom.IElement tab) => $"{tab.FirstChild!.TextContent.Trim()} {tab.QuerySelector(".segmented-count")!.TextContent}";
 
     private static async Task<AngleSharp.Dom.IDocument> RenderedWithCountsAsync()
     {

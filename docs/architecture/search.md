@@ -222,7 +222,7 @@ Run commands are in [operations](../operations.md#run-the-search-service).
 
 - One worker pulls. Two workers would pull the same pages. The unique report ID keeps the queue correct.
 - The pull address and token are set by hand in the worker environment. [R-24](../roadmap.md#later) sets them in the container configuration.
-- The queue has no rail link. The Review home page links it. The operational application sends no notice when a report arrives.
+- The rail and the Review home page link the queue. The operational application sends no notice when a report arrives.
 - The per-client report limit lives in memory and resets when the service restarts.
 - There is no reporter identity. Abuse handling relies on Turnstile and the caps. A flood can fill the daily cap and close reports for the day.
 - A duplicate sent at the daily cap gets 503 like any other report.

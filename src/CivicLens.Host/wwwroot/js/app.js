@@ -50,33 +50,8 @@
             button.setAttribute("aria-pressed", String(button.dataset.layoutChoice === choice)));
     };
 
-    const showRecords = (panel, source) => {
-        const key = source?.dataset.countFilter;
-        all("tbody tr", panel).forEach(row => {
-            row.hidden = key !== undefined && !(row.dataset.filterKeys ?? "").split(" ").includes(key);
-        });
-        all("[data-count-filter] button").forEach(button =>
-            button.setAttribute("aria-pressed", String(button.parentElement === source)));
-        const shows = source?.dataset.filterShows ?? "";
-        const notice = panel.querySelector("[data-filter-notice]");
-        notice.querySelector("[data-filter-text]").textContent = shows;
-        notice.hidden = !source;
-        panel.querySelector("[data-filter-status]").textContent = shows;
-    };
-
-    const makeCountButtons = () => all("[data-count-filter]").forEach(count => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "count-filter";
-        button.textContent = count.textContent;
-        button.setAttribute("aria-label", count.dataset.filterLabel);
-        button.setAttribute("aria-pressed", "false");
-        count.replaceChildren(button);
-    });
-
     const init = () => {
         all(".theme-toggle").forEach(toggle => { toggle.hidden = false; });
-        makeCountButtons();
         all("[data-layout-switch]").forEach(control => { control.hidden = false; });
         showTheme(root.dataset.theme || "");
         measureAll();
@@ -90,20 +65,7 @@
         if (layout) {
             const view = layout.closest("[data-layout]");
             setLayout(view, layout.dataset.layoutChoice);
-            if (view.matches("[data-records]")) showRecords(view, null);
             measureAll();
-            return;
-        }
-        const count = target?.closest("[data-count-filter]");
-        const panel = document.querySelector("[data-records]");
-        if (count && panel) {
-            const clear = count.querySelector("button").getAttribute("aria-pressed") === "true";
-            if ("layout" in panel.dataset) setLayout(panel, panel.querySelector("[data-layout-choice]").dataset.layoutChoice);
-            showRecords(panel, clear ? null : count);
-        } else if (target?.closest("[data-filter-clear]") && panel) {
-            const pressed = document.querySelector("[data-count-filter] button[aria-pressed='true']");
-            showRecords(panel, null);
-            pressed?.focus();
         }
     });
     for (const [type, linked] of [["mouseover", true], ["focusin", true], ["mouseout", false], ["focusout", false]]) {

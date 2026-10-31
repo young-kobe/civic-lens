@@ -145,7 +145,23 @@ internal static class PublishedOfficialView
             row => row.Date, row => row.PublishedAtUtc, row => row.RecordId)];
     }
 
-    public static readonly IReadOnlyList<(string Value, string Text)> RecordFilters = [("all", "All records"), ("against-party", "Votes against their party")];
+    private const string AgainstPartyClass = "against-party";
+
+    public static string RowClass(PublishedOfficialRow row) => row.AgainstParty ? $"{KindClass(row.Kind)} {AgainstPartyClass}" : KindClass(row.Kind);
+
+    private static string KindClass(PublishedRecordKind kind) => $"kind-{PublicationProtocol.KindText(kind)}";
+
+    public static IReadOnlyList<FilterTab> RecordTabs(IReadOnlyList<PublishedOfficialRow> rows, bool withBreaks)
+    {
+        var kinds = rows.GroupBy(row => row.Kind).OrderBy(group => group.Key).ToList();
+        var breaks = withBreaks ? rows.Count(row => row.AgainstParty) : 0;
+        var kindTabs = kinds.Count > 1 ? kinds : [];
+        if (kindTabs.Count + breaks == 0) return [];
+        var tabs = new List<FilterTab> { FilterTab.Button("All records", "", true, rows.Count) };
+        tabs.AddRange(kindTabs.Select(group => FilterTab.Button(PublishedRecordLabels.KindPlural(group.Key), KindClass(group.Key), false, group.Count())));
+        if (breaks > 0) tabs.Add(FilterTab.Button("Votes against their party", AgainstPartyClass, false, breaks));
+        return tabs;
+    }
 
     public const string ShowAllRecords = "Show all records";
 
@@ -157,8 +173,8 @@ internal static class PublishedOfficialView
 
     public static string CountFilterLabel(string counted, string subject, string issueName) => $"{counted}: show {subject} on {issueName}";
 
-    public static string CountFilterNotice(string subject, string issueName, int congress, int count) =>
-        $"Showing {subject} on {issueName} in the {CongressCalendar.Ordinal(congress)} Congress: {count} {Noun(count, "record")}";
+    public static string CountFilterNotice(string subject, string issueName, int congress) =>
+        $"Filtered to {subject} on {issueName} in the {CongressCalendar.Ordinal(congress)} Congress";
 
     public const string LinkMeaning = "A reviewer approved each link. A link does not mean the vote or bill matches the statement.";
 
@@ -196,7 +212,11 @@ internal static class PublishedOfficialView
         return votes.NotCast == 0 ? sentence : $"{sentence} They did not cast Yea or Nay on {votes.NotCast} {other}split {Noun(votes.NotCast, "vote")}.";
     }
 
-    public static string PartyOf(VotesWithParty votes) => $"{votes.Chamber} {Members(votes.Party)}";
+    public static string PartyOf(VotesWithParty votes) => PartyOf(votes.Chamber, votes.Party);
+
+    public static string PartyOf(PublishedChamber chamber, string party) => $"{chamber} {Members(party)}";
+
+    public static string PartyMemberOf(PublishedChamber chamber, string party) => $"{chamber} {party}";
 
     private static string Members(string party) => $"{party}s";
 

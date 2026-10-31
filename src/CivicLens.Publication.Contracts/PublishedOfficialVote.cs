@@ -50,7 +50,7 @@ public sealed record PublishedOfficialVote
         Totals = vote.Totals,
         SplitVote = vote.IsSplit(),
         Party = member.Party,
-        PartyMajority = vote.PartyMajorities.SingleOrDefault(majority => majority.Party == member.Party)?.Majority,
+        PartyMajority = vote.MajorityOf(member.Party),
         Headline = vote.Headline,
         Kind = vote.Kind,
         IssueIds = vote.TrackedIssueIds
