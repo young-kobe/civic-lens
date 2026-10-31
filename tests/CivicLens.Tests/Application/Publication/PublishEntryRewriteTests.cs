@@ -140,6 +140,32 @@ public sealed class PublishEntryRewriteTests
     }
 
     [Fact]
+    public async Task ThePublishHandsTheHomeCardsTheVoteCountsAndTheLeaderOfTheCarriedSummaryAndARewriteOfAllOfficialsRecomputesThem()
+    {
+        var scenario = new PublicationScenario();
+        scenario.Clock.Now = new(2025, 4, 12, 0, 0, 0, TimeSpan.Zero);
+        var first = await PublishFirstAsync(scenario);
+        var vote = Assert.IsType<PublishedRecordEntry>(scenario.Highlights!.ClosestVote);
+        Assert.Equal((1, 1, PublishedVoteAlignment.Split), (vote.YeaCount, vote.NayCount, vote.Alignment));
+        Assert.Empty(scenario.Highlights.BreakLeaders);
+        var carried = Summaries(scenario, first);
+        var withLeader = carried["mayor"] with
+        {
+            PartyVotes = [new() { Chamber = PublishedChamber.House, Party = PublishedPartyMajority.Democrat, SplitVotesCast = 40, Breaks = 12 }]
+        };
+        scenario.Releases.Directories[first.DirectoryName][PublicationProtocol.OfficialSummariesPath] = JsonSerializer.SerializeToUtf8Bytes(
+            new PublishedOfficialSummaries { Officials = [.. carried.Values.Select(row => row.Id == "mayor" ? withLeader : row)] }, PublicationProtocol.JsonOptions);
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
+            new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('d', speakerIds: ["chair"]))));
+
+        var leader = Assert.Single(scenario.Highlights!.BreakLeaders);
+        Assert.Equal(("mayor", 40, 12), (leader.Official.Profile.Id, leader.Cast, leader.Breaks));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k3") { RewriteOfficials = true });
+        Assert.Empty(scenario.Highlights.BreakLeaders);
+    }
+
+    [Fact]
     public async Task AReleaseWithNoSummaryFileGivesAnUntouchedOfficialNoVoteDataUntilARewriteOfAllOfficialsBecauseNoReaderGuessesADefault()
     {
         var scenario = new PublicationScenario();

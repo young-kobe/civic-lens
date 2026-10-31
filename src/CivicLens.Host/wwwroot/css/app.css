@@ -70,6 +70,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .cell-title { display: block; max-width: 60ch; color: var(--ink); font-weight: 600; text-decoration: none; }
 a.cell-title:hover { text-decoration: underline; }
 .cell-sub { display: block; max-width: 60ch; margin-top: 2px; overflow: hidden; color: var(--muted); font-size: var(--t-xs); text-overflow: ellipsis; white-space: nowrap; }
+.cell-note { display: block; max-width: 60ch; margin-top: 2px; color: var(--muted); font-size: var(--t-xs); }
 .cell-sub del { background: var(--del-bg); color: var(--del); }
 .cell-sub ins { background: var(--ins-bg); color: var(--ins); text-decoration: none; }
 

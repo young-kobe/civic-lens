@@ -13,7 +13,7 @@ namespace CivicLens.Application.Publication;
 internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, PublicationOfficials officials, IReleaseRenderer renderer,
     PublicationCatalog catalog)
 {
-    public async Task WriteAsync(IReleaseStaging staging, PublicationRelease manifest, PublishedOfficials published,
+    public async Task<ImmutableArray<OfficialBoardPage>> WriteAsync(IReleaseStaging staging, PublicationRelease manifest, PublishedOfficials published,
         IReadOnlyList<PendingRecord> additions, IReadOnlyList<PublishedRecordEntry> removed, PreviousRelease previous,
         bool rewriteAll, CancellationToken cancellationToken)
     {
@@ -44,10 +44,12 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
             summaries.Add(summary with { CosponsoredBills = cosponsored?.GetValueOrDefault(profile.Id) });
         }
         await ReleaseOfficialSummaries.WriteAsync(staging, summaries, cancellationToken);
-        foreach (var board in OfficialBoardPage.All(listings, summaries))
+        var boards = OfficialBoardPage.All(listings, summaries);
+        foreach (var board in boards)
             await WriteAsync(staging, board.Board.PagePath, await renderer.RenderBoardAsync(board, cancellationToken), cancellationToken);
         await WriteAsync(staging, PublicationProtocol.OfficialsPagePath, await renderer.RenderOfficialsAsync(listings, manifest.PublishedAtUtc, cancellationToken),
             cancellationToken);
+        return boards;
     }
 
     public static bool ChangesProfiles(PreviousRelease previous, PublishedOfficials published) =>

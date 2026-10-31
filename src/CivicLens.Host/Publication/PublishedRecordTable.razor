@@ -21,7 +21,7 @@
         }
     </Head>
     <Row Context="entry">
-        <TableCell Main><PublishedRecordTitle RecordId="@entry.RecordId" RootPath="@RootPath">@entry.Headline</PublishedRecordTitle>@if (Columns != RecordTableColumns.Week) {@(" ")<StatusBadge Text="@PublishedRecordLabels.Kind(entry.Kind)" />}</TableCell>
+        <TableCell Main><PublishedRecordTitle RecordId="@entry.RecordId" RootPath="@RootPath">@entry.Headline</PublishedRecordTitle>@if (Columns != RecordTableColumns.Week) {@(" ")<StatusBadge Text="@PublishedRecordLabels.Kind(entry.Kind)" />}@if (entry.Kind == PublishedRecordKind.Vote) {<PublishedVoteListFacts Entry="entry" />}</TableCell>
         @switch (Columns)
         {
             case RecordTableColumns.Facet:
