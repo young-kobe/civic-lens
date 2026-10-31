@@ -96,10 +96,15 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 
 **Data and schemas**
 
-- R-63: Audit how we store data. Our data and our schemas are a first class feature, so each column must earn its form. The schema has 16 distinct `*_json` column names, and many repeat across the draft tables. A field gets a real column if we filter, sort, join, or enforce a rule on it. A value stays JSON only if it is an immutable snapshot that we read whole, such as a model output as received. `records_json` already failed this rule and goes in R-45. Survey first, with no migration: list each column, its readers and fields used, and a recommendation. The owner then chooses, and each accepted move is its own PR. Public release files stay JSON, because they are the published product and not our storage. Depends on: none. [Architecture](architecture.md)
-  - [ ] Survey every JSON column, with a recommendation for each
-  - [ ] Agree the moves
-  - [ ] Build the agreed moves
+- R-63: Move our own data out of JSON. Our data and our schemas are a first class feature, so the database must enforce their rules. Decisions, revisions, and other data we define move to columns and child tables. Stored JSON stays only for text that must stay verbatim: the hashed configuration revision, the byte-compared document comparison, and raw model and collector input and output. Before a kind drops its JSON, a check rebuilds each revision from the new rows and compares it to the stored JSON. Public release files stay JSON, because they are the published product and not our storage. The revision steps start after R-51 PR 3 and PR 4. Depends on: none. [Architecture](architecture.md)
+  - [x] Survey every JSON column
+  - [x] Agree the direction
+  - [ ] Stop parsing JSON where a column already holds the value
+  - [ ] Move review decisions to columns
+  - [ ] Add tick bounds and missing foreign keys, after a read-only check of production rows
+  - [ ] Agree the table design from one pilot on vote revisions, with measured row counts
+  - [ ] Move vote revisions
+  - [ ] Move the other revision kinds, one PR for each
 
 **Operations**
 
