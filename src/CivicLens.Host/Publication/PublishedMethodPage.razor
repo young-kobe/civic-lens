@@ -35,6 +35,12 @@
     <Panel Title="Substantive votes" Padded="true">
         <p>A vote is substantive when its kind is one of these: @SubstantiveKinds. The count of votes they cast leaves out all other kinds, such as rules, <Term Key="cloture">cloture</Term>, and motions. These are procedural votes.</p>
     </Panel>
+    <Panel Title="The picks on the home page" Id="home-picks" Padded="true">
+        <p>Code picks the cards on the home page from the published records. No model is used. The same records always give the same picks.</p>
+        <p>The closest vote card looks at the roll call votes with Yea and Nay counts that are dated in the 7 days that end on the day of the release. It picks the vote with the smallest difference between the Yea count and the Nay count. When two votes tie, it picks the one with the lower record ID. The card counts the casts of all members who voted. It does not say what the vote decided. The card names the dates, and it says when no vote has counts in these dates.</p>
+        <p>The party card names, for each chamber and party, the member with the highest share of split votes cast against most of the party. It uses the figures of the official pages for the newest Congress with vote figures in that chamber. It counts only members with at least @BreakLeader.MinimumSplitVotes split votes cast with Yea or Nay and at least one vote against the party. A member with no such record is not named.</p>
+        <p>The executive action card lists the newest executive actions on this site by their date.</p>
+    </Panel>
     <Panel Title="Presidential documents" Padded="true">
         <p>The page of a President lists the <Term Key="executive-order">executive orders</Term>, <Term Key="proclamation">proclamations</Term>, <Term Key="presidential-notice">notices</Term>, and <Term Key="memorandum">memoranda</Term> that the <Term Key="federal-register">Federal Register</Term> published. The counts above do not include them.</p>
         <p>Each record shows the title and the facts from the Federal Register. Code checks the facts against the saved record. No person or model summarizes the document.</p>

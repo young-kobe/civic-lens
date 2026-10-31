@@ -1,0 +1,15 @@
+@using CivicLens.Publication.Contracts
+
+@if (PublishedVoteView.ListBadge(Entry) is { } badge)
+{
+    @(" ")<StatusBadge Text="@badge.Text" />
+    <span class="cell-note">@badge.Meaning</span>
+}
+@if (PublishedVoteView.ListCounts(Entry) is { } counts)
+{
+    <span class="cell-note">@counts</span>
+}
+
+@code {
+    [Parameter, EditorRequired] public PublishedRecordEntry Entry { get; set; } = default!;
+}

@@ -80,6 +80,20 @@ internal static class PublishedVoteView
     private static PublishedMemberVote[] ByName(IEnumerable<PublishedMemberVote> members) =>
         [.. members.OrderBy(member => member.Official.Name, StringComparer.OrdinalIgnoreCase).ThenBy(member => member.Official.Id, StringComparer.Ordinal)];
 
+    public const string SplitVoteText = "Split vote";
+
+    public const string PartiesAgreedText = "Both parties agreed";
+
+    public static (string Text, string Meaning)? ListBadge(PublishedRecordEntry entry) => entry.Alignment switch
+    {
+        PublishedVoteAlignment.Split => (SplitVoteText, "Most Democrats and most Republicans who cast Yea or Nay voted on opposite sides."),
+        PublishedVoteAlignment.PartiesAgree => (PartiesAgreedText, "Most Democrats and most Republicans who cast Yea or Nay voted the same way."),
+        _ => null
+    };
+
+    public static string? ListCounts(PublishedRecordEntry entry) =>
+        entry.YeaCount is { } yea && entry.NayCount is { } nay ? $"Casts of all members: Yea {yea}, Nay {nay}." : null;
+
     public static VoteBadge? Badge(PublishedVote vote)
     {
         var democrats = $"most {PartyOf(vote, PublishedPartyMajority.Democrat)}";
@@ -87,8 +101,8 @@ internal static class PublishedVoteView
         var democratSide = vote.MajorityOf(PublishedPartyMajority.Democrat);
         const string cast = "who cast Yea or Nay";
         if (vote.IsSplit())
-            return new("Split vote", $"Split vote: {democrats} {cast} voted {democratSide}, and {republicans} {cast} voted {vote.MajorityOf(PublishedPartyMajority.Republican)}.", PartyCounts(vote));
-        return vote.PartiesAgree() ? new("Both parties agreed", $"Both parties agreed: {democrats} and {republicans} {cast} voted {democratSide}.", PartyCounts(vote)) : null;
+            return new(SplitVoteText, $"{SplitVoteText}: {democrats} {cast} voted {democratSide}, and {republicans} {cast} voted {vote.MajorityOf(PublishedPartyMajority.Republican)}.", PartyCounts(vote));
+        return vote.PartiesAgree() ? new(PartiesAgreedText, $"{PartiesAgreedText}: {democrats} and {republicans} {cast} voted {democratSide}.", PartyCounts(vote)) : null;
     }
 
     private static string PartyCounts(PublishedVote vote) =>
