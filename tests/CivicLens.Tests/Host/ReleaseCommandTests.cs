@@ -332,6 +332,30 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
+    public async Task BlockedNamesTheReasonOfEachRowSoTheOwnerSeesAStuckRecordIsNotOneToWithdraw()
+    {
+        var scenario = new PublicationScenario();
+        var blocked = new PublishedRecordReference(PublishedRecordKind.Action, scenario.AddAction('a'));
+        var stuck = new PublishedRecordReference(PublishedRecordKind.Action, scenario.AddAction('b'));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", blocked, stuck));
+        for (var revision = 2; revision <= PublishedCorrection.MaximumNotedEntries + 1; revision++)
+        {
+            scenario.ReviseAction(stuck.RecordId, revision, correctionNote: "Fix.");
+            await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request($"k{revision}", stuck));
+        }
+        scenario.Publications.ReviewStatuses[blocked] = ReviewStatus.ChangesRequested;
+        scenario.Publications.ReviewStatuses[stuck] = ReviewStatus.Approved;
+        scenario.Publications.UnpublishedApprovalActors[stuck] = "auth0|editor";
+
+        var json = await RunAsync(["releases", "blocked"], scenario);
+
+        var reasons = json.RootElement.EnumerateArray()
+            .ToDictionary(item => item.GetProperty("recordId").GetString()!, item => item.GetProperty("reason").GetString());
+        Assert.Equal("reviewBlocksIt", reasons[blocked.RecordId]);
+        Assert.Equal("correctionLimit", reasons[stuck.RecordId]);
+    }
+
+    [Fact]
     public async Task ActivateNestsTheSummaryNextToTheRollbackWarningsSoOneObjectCarriesBoth()
     {
         var scenario = new PublicationScenario();

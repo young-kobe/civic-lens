@@ -369,7 +369,7 @@ try
         var (publish, _) = PublicationComposition.Create(connectionString, publications, releases, publishConfiguration, issueConfiguration,
             artifactRoot, loggers);
         executing = true;
-        var blocked = new BlockedPublishedRecords(publications);
+        var blocked = new BlockedPublishedRecords(publications, releases);
         return await ReleaseCommand.ExecuteAsync(args, publish, new ListPublicationReleases(publications, releases),
             new ListBlockedPublished(publications, releases, blocked),
             new ActivatePublicationRelease(publications, releases, blocked, loggers.CreateLogger<ActivatePublicationRelease>()), owner,
