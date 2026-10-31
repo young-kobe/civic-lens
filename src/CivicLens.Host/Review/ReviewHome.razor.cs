@@ -6,6 +6,7 @@ using CivicLens.Application.Analysis;
 using CivicLens.Application.Briefs;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Health;
+using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Relationships;
 using CivicLens.Application.Reports;
@@ -101,6 +102,11 @@ public sealed partial class ReviewHome
         if (HttpMethods.IsPost(HttpContext.Request.Method)) return;
         var cancellationToken = HttpContext.RequestAborted;
         if (Find is not null) lookupMessage = await FindDraftAsync(cancellationToken);
+        if (!new[] { ChangesCursor, DraftsCursor, QueueCursor }.All(IsValidCursor))
+        {
+            error = "This page link is no longer valid. Go back to the first page of the list.";
+            return;
+        }
         try
         {
             var collection = actor.Role == ReviewRole.Owner ? Services.GetService<CollectionWorkspace>() : null;
@@ -125,11 +131,6 @@ public sealed partial class ReviewHome
             activity = (await GetActivity.ExecuteAsync(actor, cancellationToken: cancellationToken)).Select(Describe).ToArray();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (ArgumentException)
-        {
-            overview = null;
-            error = "This page link is no longer valid. Go back to the first page of the list.";
-        }
         catch (Exception exception)
         {
             Logger.LogError(exception, "The review overview could not load.");
@@ -231,7 +232,17 @@ public sealed partial class ReviewHome
 
     private IReadOnlyList<QueueRow> StuckRows => [.. blocked?.Select(record => record.StuckText() is { } text ? QueueRow.Of(record, text) : null).OfType<QueueRow>() ?? []];
 
-    private IReadOnlyList<QueueRow> QueueRows => [.. QueueCursor is null ? StuckRows : [], .. queue!.Items.Select(QueueRow.Of)];
+    private IReadOnlyList<QueueRow> QueueRows => [.. queue!.NewerCursor is null ? StuckRows : [], .. queue!.Items.Select(QueueRow.Of)];
+
+    private static bool IsValidCursor(string? cursor)
+    {
+        try
+        {
+            _ = PageCursor.Parse(cursor);
+            return true;
+        }
+        catch (ArgumentException) { return false; }
+    }
 
     private string? QueueHref(string? cursor) => cursor is null ? null : "/Review?queue=" + Uri.EscapeDataString(cursor) + "#needs-a-person";
 

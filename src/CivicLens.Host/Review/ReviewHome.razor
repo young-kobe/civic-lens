@@ -65,23 +65,35 @@
                         <DataTable Items="QueueRows" Caption="Records that need a person">
                             <Head>
                                 <th>Record</th>
-                                <th>Kind</th>
+                                <th class="hide-narrow">Kind</th>
                                 <th>Why it needs a person</th>
-                                <th class="time">Last revised</th>
+                                <th class="time hide-narrow">Last revised</th>
                                 <th class="act"><span class="visually-hidden">Action</span></th>
                             </Head>
                             <Row Context="row">
-                                <td><a class="cell-title" href="@RecordRoutes.Editor(row.Kind, row.RecordId)">@DraftStatusDisplay.DraftName(row.Headline)</a></td>
-                                <td>@PublishedRecordLabels.Kind(row.Kind)</td>
+                                <td><CellTitle Href="@RecordRoutes.Editor(row.Kind, row.RecordId)">@DraftStatusDisplay.DraftName(row.Headline)</CellTitle></td>
+                                <td class="hide-narrow">@PublishedRecordLabels.Kind(row.Kind)</td>
                                 <td>
                                     <StatusBadge Tone="row.Tone" Text="@row.StatusLabel" />
                                     <span class="actions-hint">@row.Reason</span>
                                 </td>
-                                <td class="time">@if (row.RevisedAtUtc is { } revised) { <Timestamp Value="revised" /> }</td>
+                                <td class="time hide-narrow">
+                                    @if (row.RevisedAtUtc is { } revised) { <Timestamp Value="revised" /> }
+                                    else { <span>Approved</span> }
+                                </td>
                                 <td class="act"><Button Small="true" Href="@RecordRoutes.Editor(row.Kind, row.RecordId)">Open</Button></td>
                             </Row>
                             <Empty>
-                                <EmptyState Title="No record needs a person" Text="Code approves an action, a vote, a statement, or an executive action when its checks pass. A record shows here when a check refuses it or a person must decide. To open an approved record, use Find a draft." />
+                                @if (QueueCursor is not null)
+                                {
+                                    <EmptyState Title="No more records on this page" Text="Go back to the first page.">
+                                        <Action><Button Href="/Review#needs-a-person">First page</Button></Action>
+                                    </EmptyState>
+                                }
+                                else
+                                {
+                                    <EmptyState Title="No record needs a person" Text="Code approves an action, a vote, a statement, or an executive action when its checks pass. A record shows here when a check refuses it or a person must decide. To open an approved record, use Find a draft." />
+                                }
                             </Empty>
                         </DataTable>
                         <Pager Label="Needs a person pages" NewerHref="@QueueHref(queue.NewerCursor)" OlderHref="@QueueHref(queue.OlderCursor)" />

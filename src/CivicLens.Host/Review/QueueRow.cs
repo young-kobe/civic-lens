@@ -1,6 +1,7 @@
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Host.Components.Ui;
+using CivicLens.Host.Relationships;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Host.Review;
@@ -9,7 +10,7 @@ internal sealed record QueueRow(PublishedRecordKind Kind, string RecordId, strin
     DateTimeOffset? RevisedAtUtc)
 {
     public static QueueRow Of(ReviewQueueItem item) =>
-        new(item.Kind, item.RecordId, item.Headline, DraftStatusDisplay.Label(item.Status, item.OpenConcerns), DraftStatusDisplay.Tone(item.Status),
+        new(item.Kind, item.RecordId, item.LinkType is { } type ? RelationshipLabels.Title(type, item.Headline) : item.Headline, DraftStatusDisplay.Label(item.Status, item.OpenConcerns), DraftStatusDisplay.Tone(item.Status),
             item.Reason, item.LastRevisedAtUtc);
 
     public static QueueRow Of(BlockedPublishedRecord record, string stuckText) =>

@@ -1,3 +1,4 @@
+using System.Data;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Review;
 using CivicLens.Infrastructure.Actions;
@@ -17,19 +18,19 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
 {
     private static readonly QueueKind[] Kinds =
     [
-        new(PublishedRecordKind.DocumentChange, "dc", "document_change_drafts", "draft_id",
+        new(PublishedRecordKind.DocumentChange, "dc", "document_change_drafts",
             (db, ids, ct) => PostgresDocumentChangeReviewStore.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct)),
-        new(PublishedRecordKind.Statement, "st", "statement_drafts", "candidate_id",
+        new(PublishedRecordKind.Statement, "st", "statement_drafts",
             (db, ids, ct) => PostgresStatementReviewStore.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct)),
-        new(PublishedRecordKind.Action, "ac", "action_drafts", "record_id",
+        new(PublishedRecordKind.Action, "ac", "action_drafts",
             (db, ids, ct) => PostgresActionReviewStore.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct)),
-        new(PublishedRecordKind.Vote, "vo", "vote_drafts", "record_id",
+        new(PublishedRecordKind.Vote, "vo", "vote_drafts",
             (db, ids, ct) => VoteDraftRows.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct)),
-        new(PublishedRecordKind.Brief, "br", "brief_drafts", "record_id",
+        new(PublishedRecordKind.Brief, "br", "brief_drafts",
             (db, ids, ct) => PostgresBriefReviewStore.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct)),
-        new(PublishedRecordKind.Relationship, "re", "relationship_drafts", "record_id",
-            (db, ids, ct) => RelationshipDraftRows.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Reason, ct)),
-        new(PublishedRecordKind.ExecutiveAction, "ea", "executive_action_drafts", "record_id",
+        new(PublishedRecordKind.Relationship, "re", "relationship_drafts",
+            ReadRelationshipsAsync),
+        new(PublishedRecordKind.ExecutiveAction, "ea", "executive_action_drafts",
             (db, ids, ct) => ExecutiveActionRows.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Title, ct))
     ];
 
@@ -46,12 +47,14 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
     {
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         var queue = db.Database.SqlQueryRaw<QueueKey>(NeedsAPerson);
         var fetched = await ReviewKeyset.Page(queue, cursor, key => key.LastRevisedAtUtcTicks, key => key.QueueId)
             .Take(limit + 1).ToArrayAsync(cancellationToken);
         var slice = KeysetSlice<QueueKey>.Create(fetched, limit, cursor, key => (key.LastRevisedAtUtcTicks, key.QueueId));
         var drafts = await ReadDraftsAsync(db, slice.Items, cancellationToken);
         var total = await queue.CountAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return new([.. slice.Items.Select(key => ToItem(key, drafts[key.QueueId]))], total, slice.NewerCursor, slice.OlderCursor);
     }
 
@@ -68,12 +71,25 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
         return drafts;
     }
 
+    private static async Task<Dictionary<string, QueueDraft>> ReadRelationshipsAsync(CollectionAttemptDbContext db, string[] recordIds,
+        CancellationToken cancellationToken)
+    {
+        var reads = await RelationshipDraftRows.Records.ReadQueueAsync(db, recordIds, cancellationToken);
+        var headlines = await RelationshipCitedReader.ReadHeadlinesAsync(db, [.. reads.Values.Select(read => read.Revision.Statement)],
+            cancellationToken);
+        return reads.ToDictionary(read => read.Key,
+            read => read.Value.ToDraft(headlines[read.Value.Revision.Statement], read.Value.Revision.Type), StringComparer.Ordinal);
+    }
+
     private static ReviewQueueItem ToItem(QueueKey key, QueueDraft draft) =>
         new(KindsByCode[key.KindCode].Kind, key.RecordId, draft.Headline, draft.Status, draft.OpenConcerns, draft.HeldReason,
-            new DateTimeOffset(key.LastRevisedAtUtcTicks, TimeSpan.Zero));
+            new DateTimeOffset(key.LastRevisedAtUtcTicks, TimeSpan.Zero), draft.EditedByPerson, draft.LinkType);
 
-    private sealed record QueueKind(PublishedRecordKind Kind, string Code, string Table, string IdColumn,
-        Func<CollectionAttemptDbContext, string[], CancellationToken, Task<Dictionary<string, QueueDraft>>> Read);
+    private sealed record QueueKind(PublishedRecordKind Kind, string Code, string Table,
+        Func<CollectionAttemptDbContext, string[], CancellationToken, Task<Dictionary<string, QueueDraft>>> Read)
+    {
+        public string IdColumn => ReviewTables.For(Kind).IdColumn;
+    }
 
     private sealed class QueueKey
     {

@@ -67,7 +67,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .table .fit { width: 1%; white-space: nowrap; }
 .table td:has(> .cell-sub) { width: 100%; max-width: 0; }
 .table .time { color: var(--ink-2); white-space: nowrap; }
-.cell-title { display: block; max-width: 60ch; color: var(--ink); font-weight: 600; text-decoration: none; }
+.cell-title { display: block; max-width: 60ch; overflow-wrap: anywhere; color: var(--ink); font-weight: 600; text-decoration: none; }
 a.cell-title:hover { text-decoration: underline; }
 .cell-sub { display: block; max-width: 60ch; margin-top: 2px; overflow: hidden; color: var(--muted); font-size: var(--t-xs); text-overflow: ellipsis; white-space: nowrap; }
 .cell-sub del { background: var(--del-bg); color: var(--del); }

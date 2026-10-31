@@ -31,10 +31,17 @@ public sealed class ReviewQueueItemTests
     }
 
     [Fact]
-    public void NoKindAndStatusPairShowsAnEmptyReasonBecauseTheQueueMustAlwaysSayWhyAPersonIsNeeded()
+    public void ARecordThatAPersonEditedSaysNoCheckRanBecauseCodeApprovalSkipsPersonText()
     {
-        foreach (var kind in Enum.GetValues<PublishedRecordKind>())
-            foreach (var status in Enum.GetValues<ReviewStatus>())
-                Assert.False(string.IsNullOrWhiteSpace(Item(kind, status).Reason), $"{kind} {status}");
+        var edited = Item(PublishedRecordKind.Action, ReviewStatus.AwaitingReview) with { EditedByPerson = true };
+
+        Assert.Equal("A person edited this record. A person must approve it.", edited.Reason);
+        Assert.Equal("A person must review this draft.", (edited with { Kind = PublishedRecordKind.Brief }).Reason);
+    }
+
+    [Fact]
+    public void ARecordApprovedAfterTheListWasReadTellsTheReaderToRefresh()
+    {
+        Assert.Equal("This record is approved. Refresh the page.", Item(PublishedRecordKind.Statement, ReviewStatus.Approved).Reason);
     }
 }
