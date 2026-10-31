@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Runs SQL from stdin as civic_lens_readonly. A backslash is refused, because a psql command such as \! runs a shell.
 set -euo pipefail
+export HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 sql=$(cat)
 if [[ $sql == *\\* ]]; then

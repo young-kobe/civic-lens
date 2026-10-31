@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs one listed production command as root, so a login user needs no general sudo, docker, or env file access.
-# A deploy takes only a commit on origin/main, because the checkout's scripts then run as root.
+# A deploy takes only a newer commit on origin/main, because the checkout's scripts then run as root and a migration has no undo.
 set -euo pipefail
+export HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 repository=/opt/civic-lens
 compose=$repository/deploy/scripts/compose.sh
@@ -22,6 +23,10 @@ deploy() {
     echo "$1 is not on origin/main." >&2
     exit 1
   fi
+  if ! "${git_root[@]}" merge-base --is-ancestor HEAD "$1"; then
+    echo "$1 is older than the checkout. A rollback stays with the owner." >&2
+    exit 1
+  fi
   "${git_root[@]}" checkout --quiet --detach "$1"
   "$repository/deploy/scripts/update.sh" "$1"
   cd "$repository"
@@ -37,6 +42,14 @@ publish() {
   done
   "$compose" run --rm cli releases publish "$key" "$@"
 }
+
+if [[ $* != status && $* != "worker health" ]]; then
+  exec 9>/run/lock/civic-lens-ops
+  if ! flock --nonblock 9; then
+    echo "Another listed command is running. Wait for it to finish." >&2
+    exit 1
+  fi
+fi
 
 case "$*" in
   # usage: status

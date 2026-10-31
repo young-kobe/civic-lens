@@ -981,7 +981,7 @@ sudo deploy/scripts/compose.sh run --rm cli releases list
 
 This section is for the temporary production machine, a Jetson with Docker Compose v2. The long-term cloud move will use Terraform. Terraform state never goes to R2, because it holds credentials. The first launch uses no Terraform.
 
-**Vendor data rule.** Cloudflare may receive public content and the encrypted backups. Nothing else leaves the machine. The review workspace is never behind Cloudflare, because it holds review notes and reviewer identity.
+**Vendor data rule.** Cloudflare may receive public content and the encrypted backups. An agent that uses [operator access](#operator-access) sends each result that it reads to its model vendor, and that can include unpublished drafts and model output. Nothing else leaves the machine. The review workspace is never behind Cloudflare, because it holds review notes and reviewer identity.
 
 ### First install
 
@@ -1116,13 +1116,14 @@ sudo install -d -m 700 -o 70 -g 70 /srv/civic-lens/postgres/search
 ```
 
 6. Start the services with `update.sh`. The search service ingests the active release when it starts, and then every 30 seconds. Wait for one poll, then search on the site.
-7. Start the timer: `sudo systemctl start civic-lens-backup.timer`. When the site works, delete `/srv/restore` and the `.old` folders.
+7. Run `sudo deploy/scripts/install-operator-access.sh <login user>` again, because the restore leaves out the grants of the read-only role.
+8. Start the timer: `sudo systemctl start civic-lens-backup.timer`. When the site works, delete `/srv/restore` and the `.old` folders.
 
 The dump file stays in `/srv/civic-lens/backup`, mode 700, until the next run replaces it.
 
 ### Operator access
 
-A login user can run two root-owned commands without a password. The login user gets no other sudo, no docker, and no access to the env files.
+A login user can run two root-owned commands without a password. Any other sudo still needs the password of that user. The installer refuses a user in the docker group, and it refuses a checkout that anyone other than root can write.
 
 Install both once, and name the login user:
 
@@ -1130,15 +1131,15 @@ Install both once, and name the login user:
 sudo deploy/scripts/install-operator-access.sh <login user>
 ```
 
-Run the same install command again after a migration, because a new table or column stays unreadable until then. Run it again after a restore too, because the restore leaves out all grants. Run it again when one of the two scripts changes, because the installed copies do not follow the checkout. Both scripts expect the checkout at `/opt/civic-lens`.
+Run the same install command again after a migration, because a new table or column stays unreadable until then. Run it again after a restore too, because the restore leaves out all grants. Run it again when one of the two scripts or `readonly-grants.sql` changes, because the installed copies and the grants do not follow the checkout. Both scripts expect the checkout at `/opt/civic-lens` and the data root at `/srv/civic-lens`.
 
-**Read-only SQL.** `/usr/local/bin/civic-lens-sql` reads SQL from stdin and runs it as the Postgres role `civic_lens_readonly`. It writes nothing, and each statement stops after 30 seconds. The role cannot read review notes, reviewer identity, credentials, or raw collector requests. `deploy/scripts/readonly-grants.sql` owns that list of hidden columns. Revision JSON is hidden too. `readonly_access.revisions('vote_revisions')` returns each revision row and its JSON without the author. The command refuses a backslash, because a psql command can run a shell.
+**Read-only SQL.** `/usr/local/bin/civic-lens-sql` reads SQL from stdin and runs it as the Postgres role `civic_lens_readonly`. The role has no write privilege on any table and cannot create temp objects. A statement stops after 30 seconds by default, but a query can change that limit, and a long query can delay a migration. The role cannot read review notes, reviewer identity, credentials, or raw collector requests. `deploy/scripts/readonly-grants.sql` owns that list of hidden columns. Revision JSON is hidden too. `readonly_access.revisions('vote_revisions')` returns each revision row and its JSON without the author. The command refuses a backslash, because a psql command can run a shell.
 
 Every result that an agent reads goes to its model vendor, so add a column to the hidden list before it holds private text.
 
-**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `deploy`, `db migrate`, `worker health`, the two redraft commands, `bills subjects backfill`, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record.
+**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `deploy`, `db migrate`, `worker health`, the two redraft commands, `bills subjects backfill`, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record. Only one command runs at a time, apart from `status` and `worker health`.
 
-`deploy` takes a full commit SHA on `origin/main`, because the scripts of that commit then run as root. It checks out the commit, runs `update.sh`, and runs `check-live.sh`. Only the owner can merge to `main`, so an agent branch cannot reach root through this command.
+`deploy` takes a full commit SHA on `origin/main` that is the checkout or newer. The scripts of that commit run as root, and a migration has no undo, so a rollback stays with the owner. It checks out the commit, runs `update.sh`, and runs `check-live.sh`. Only the owner can merge to `main`, so an agent branch cannot reach root through this command.
 
 ### Failure alerts
 
