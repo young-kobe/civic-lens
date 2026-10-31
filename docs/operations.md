@@ -1095,7 +1095,7 @@ The first backup run by hand also proves the credentials. The timer runs at 03:3
 
 ```sh
 sudo deploy/scripts/compose.sh exec -T postgres sh -c 'psql --username="$POSTGRES_USER" --dbname=postgres --command="DROP DATABASE \"$POSTGRES_DB\" WITH (FORCE)" --command="CREATE DATABASE \"$POSTGRES_DB\" OWNER \"$POSTGRES_USER\""'
-sudo deploy/scripts/compose.sh exec -T postgres sh -c 'pg_restore --single-transaction --exit-on-error --username="$POSTGRES_USER" --dbname="$POSTGRES_DB"' < /srv/restore/srv/civic-lens/backup/operational.dump
+sudo deploy/scripts/compose.sh exec -T postgres sh -c 'pg_restore --single-transaction --exit-on-error --no-privileges --username="$POSTGRES_USER" --dbname="$POSTGRES_DB"' < /srv/restore/srv/civic-lens/backup/operational.dump
 ```
 
 4. Move the old folders aside, then copy the restored folders in. A copy into the old folders would keep releases newer than the snapshot, and the next publish would reuse their numbers. `cp -a` keeps the owners, the modes, and the hard links between releases.
@@ -1119,6 +1119,26 @@ sudo install -d -m 700 -o 70 -g 70 /srv/civic-lens/postgres/search
 7. Start the timer: `sudo systemctl start civic-lens-backup.timer`. When the site works, delete `/srv/restore` and the `.old` folders.
 
 The dump file stays in `/srv/civic-lens/backup`, mode 700, until the next run replaces it.
+
+### Operator access
+
+A login user can run two root-owned commands without a password. The login user gets no other sudo, no docker, and no access to the env files.
+
+Install both once, and name the login user:
+
+```sh
+sudo deploy/scripts/install-operator-access.sh <login user>
+```
+
+Run the same install command again after a migration, because a new table or column stays unreadable until then. Run it again after a restore too, because the restore leaves out all grants. Run it again when one of the two scripts changes, because the installed copies do not follow the checkout. Both scripts expect the checkout at `/opt/civic-lens`.
+
+**Read-only SQL.** `/usr/local/bin/civic-lens-sql` reads SQL from stdin and runs it as the Postgres role `civic_lens_readonly`. It writes nothing, and each statement stops after 30 seconds. The role cannot read review notes, reviewer identity, credentials, or raw collector requests. `deploy/scripts/readonly-grants.sql` owns that list of hidden columns. Revision JSON is hidden too. `readonly_access.revisions('vote_revisions')` returns each revision row and its JSON without the author. The command refuses a backslash, because a psql command can run a shell.
+
+Every result that an agent reads goes to its model vendor, so add a column to the hidden list before it holds private text.
+
+**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `deploy`, `db migrate`, `worker health`, the two redraft commands, `bills subjects backfill`, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record.
+
+`deploy` takes a full commit SHA on `origin/main`, because the scripts of that commit then run as root. It checks out the commit, runs `update.sh`, and runs `check-live.sh`. Only the owner can merge to `main`, so an agent branch cannot reach root through this command.
 
 ### Failure alerts
 
