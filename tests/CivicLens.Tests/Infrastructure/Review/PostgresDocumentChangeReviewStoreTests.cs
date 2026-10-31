@@ -17,6 +17,7 @@ using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
@@ -441,6 +442,59 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         Assert.All(events.Where(item => item.Kind != ReviewActivityKind.DraftCreated), item => Assert.Equal("Headline", item.Headline));
         Assert.All(events.Where(item => item.Kind == ReviewActivityKind.DecisionRecorded), item => Assert.NotNull(item.DecisionKind));
         Assert.All(events.Where(item => item.Kind != ReviewActivityKind.DecisionRecorded), item => Assert.Null(item.DecisionKind));
+    }
+
+    [Fact]
+    public async Task TheDecisionColumnsAndTheResolvedConcernsEqualTheJsonOfEveryDecisionBecauseOneStepWritesBoth()
+    {
+        var (actor, catalog, saved) = await SavedDraftAsync();
+        var decide = new DecideDocumentChangeReview(reviews, catalog);
+        var concern = await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 0, ReviewDecisionKind.RequestChanges, "Context missing.", [], "concern"));
+        await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 1, ReviewDecisionKind.Approve, "Resolved.", [concern.DecisionId], "approve", "Date corrected."));
+
+        var fromColumns = await ReadRowsAsync("""
+            SELECT d.kind || '|' || d.actor_subject || '|' || coalesce(d.note, '<null>') || '|' || coalesce(d.correction_note, '<null>') || '|'
+                || coalesce((SELECT string_agg(r.resolved_decision_id, ',') FROM document_change_review_decision_resolutions r
+                    WHERE r.decision_id = d.decision_id), '')
+            FROM document_change_review_decisions d ORDER BY d.review_state_version
+            """);
+        var fromJson = await ReadRowsAsync("""
+            SELECT CASE j ->> 'kind' WHEN '0' THEN 'Approve' WHEN '1' THEN 'RequestChanges' ELSE 'WithdrawApproval' END
+                || '|' || (j ->> 'actorSubject') || '|' || coalesce(j ->> 'note', '<null>') || '|' || coalesce(j ->> 'correctionNote', '<null>') || '|'
+                || coalesce((SELECT string_agg(x, ',') FROM jsonb_array_elements_text(j -> 'resolvedDecisionIds') x), '')
+            FROM (SELECT decision_json::jsonb AS j, review_state_version FROM document_change_review_decisions) d ORDER BY review_state_version
+            """);
+
+        Assert.Equal(fromJson, fromColumns);
+        Assert.Equal(["RequestChanges|auth0|owner|Context missing.|<null>|", $"Approve|auth0|owner|Resolved.|Date corrected.|{concern.DecisionId}"], fromColumns);
+    }
+
+    // The migration checks every old decision, so a row from the production writer must pass the check after a rollback.
+    [Fact]
+    public async Task DecisionsFromTheProductionWriterPassTheMigrationChecksWhenTheMigrationRunsAgain()
+    {
+        var (actor, catalog, saved) = await SavedDraftAsync();
+        var decide = new DecideDocumentChangeReview(reviews, catalog);
+        var concern = await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 0, ReviewDecisionKind.RequestChanges, "Context missing.", [], "concern"));
+        await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 1, ReviewDecisionKind.Approve, "Resolved.", [concern.DecisionId], "approve", "Date corrected."));
+        await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
+        var migrator = db.GetService<IMigrator>();
+
+        await migrator.MigrateAsync(db.Database.GetMigrations().TakeWhile(id => id != ReviewDecisionColumnsMigrationTests.Migration).Last());
+        await migrator.MigrateAsync(ReviewDecisionColumnsMigrationTests.Migration);
+
+        Assert.Equal(["2"], await ReadRowsAsync("SELECT count(*)::text FROM document_change_review_decisions"));
+    }
+
+    private async Task<List<string>> ReadRowsAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        var rows = new List<string>();
+        while (await reader.ReadAsync()) rows.Add(reader.GetString(0));
+        return rows;
     }
 
     [Fact]

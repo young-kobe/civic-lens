@@ -16,7 +16,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
     string recordIdProperty, Action<TDraftRow, TRevision>? revised = null)
     where TDraftRow : class, IReviewDraftRow
     where TRevisionRow : class, IReviewRevisionRow
-    where TDecisionRow : class, IReviewDecisionRow
+    where TDecisionRow : class, IReviewDecisionRow, new()
     where TRevision : class, IReviewRevision
 {
     public async Task<TRevision> CreateAsync(IDbContextFactory<CollectionAttemptDbContext> contextFactory, string actorSubject,
@@ -74,7 +74,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
     /// A failed approval check keeps its message as the held reason of the draft. The caller runs
     /// <see cref="AfterCodeApprovalAsync"/> once the rest of the transaction rows are tracked.</summary>
     public async Task AppendCodeApprovedAsync(CollectionAttemptDbContext db, TDraftRow draft, TRevision revision, TRevisionRow row,
-        ImmutableArray<ReviewDecision> cycle, Func<Task<ApprovalCheck>> approvalChecks, Func<ReviewDecision, TDecisionRow> toDecisionRow)
+        ImmutableArray<ReviewDecision> cycle, Func<Task<ApprovalCheck>> approvalChecks)
     {
         AppendRevision(db, draft, revision, row, cycle);
         if (!ReviewPolicy.GetUnresolvedConcerns(cycle).IsEmpty || revision is IHeadlineSummaryRevision { TextOrigin: ReviewTextOrigin.Person })
@@ -88,7 +88,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), draft.RecordId, revision.RevisionNumber, draft.ReviewStateVersion + 1,
             ReviewDecisionKind.Approve, ReviewAuthor.CodeSubject, null, [], new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero));
         ReviewPolicy.ValidateDecision(draft.RecordId, draft.CurrentRevisionNumber, draft.ReviewStateVersion, cycle, decision);
-        RecordDecision(db, draft, cycle, decision, toDecisionRow);
+        RecordDecision(db, draft, cycle, decision);
     }
 
     /// <summary>Runs the after-decision hooks for a code approval that this transaction tracked. The hooks save the context, so the
@@ -101,14 +101,34 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         if (approved) await afterDecision(db, recordId, revisionNumber, cancellationToken);
     }
 
-    private void RecordDecision(CollectionAttemptDbContext db, TDraftRow draft, ImmutableArray<ReviewDecision> cycle, ReviewDecision decision,
-        Func<ReviewDecision, TDecisionRow> toRow)
+    private void RecordDecision(CollectionAttemptDbContext db, TDraftRow draft, ImmutableArray<ReviewDecision> cycle, ReviewDecision decision)
     {
-        db.Add(toRow(decision));
+        db.Add(NewDecisionRow(decision));
+        db.AddRange(decision.ResolvedDecisionIds.Select(resolvedId => new ReviewDecisionResolutionRow<TDecisionRow>
+        {
+            DecisionId = decision.DecisionId,
+            RecordId = decision.DraftId,
+            ResolvedDecisionId = resolvedId
+        }));
         draft.ReviewStateVersion = decision.ReviewStateVersion;
         SetHeldReason(draft, null);
         draft.ReviewStatus = ReviewPolicy.GetCurrentStatus(draft.CurrentRevisionNumber, cycle.Add(decision));
     }
+
+    /// <summary>The one writer of decision columns. The columns and the JSON come from the same decision, so they cannot differ.</summary>
+    private static TDecisionRow NewDecisionRow(ReviewDecision decision) => new()
+    {
+        DecisionId = decision.DecisionId,
+        RecordId = decision.DraftId,
+        RevisionNumber = decision.RevisionNumber,
+        ReviewStateVersion = decision.ReviewStateVersion,
+        DecisionJson = ReviewJson.Serialize(decision),
+        Kind = decision.Kind,
+        ActorSubject = decision.ActorSubject,
+        Note = decision.Note,
+        CorrectionNote = decision.CorrectionNote,
+        CreatedAtUtcTicks = decision.CreatedAtUtc.UtcTicks
+    };
 
     private static void SetHeldReason(TDraftRow draft, string? reason)
     {
@@ -118,7 +138,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
     public async Task<ReviewDecision> DecideAsync(IDbContextFactory<CollectionAttemptDbContext> contextFactory, string actorSubject,
         ReviewDecision decision, int expectedRevisionNumber, int expectedReviewStateVersion, string operation, string idempotencyKey,
         string payloadHash, Func<CollectionAttemptDbContext, TDraftRow, ReviewHistory<TRevision>, Task> validateDecision,
-        Func<ReviewDecision, TDecisionRow> toRow, Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision,
+        Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision,
         CancellationToken cancellationToken)
     {
         ReviewIdempotency.ValidateRequest(actorSubject, idempotencyKey, payloadHash);
@@ -132,7 +152,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
                 expectedReviewStateVersion, decision);
             ReviewPolicy.ValidateDecision(draft.RecordId, draft.CurrentRevisionNumber, draft.ReviewStateVersion, history.Decisions, decision);
             await validateDecision(db, draft, history);
-            RecordDecision(db, draft, history.Decisions, decision, toRow);
+            RecordDecision(db, draft, history.Decisions, decision);
             await afterDecision(db, draft.RecordId, decision.RevisionNumber, cancellationToken);
             return decision;
         }, cancellationToken);

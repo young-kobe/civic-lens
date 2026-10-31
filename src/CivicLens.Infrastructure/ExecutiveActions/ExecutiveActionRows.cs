@@ -84,8 +84,7 @@ internal static class ExecutiveActionRows
     {
         revision.ValidateShape();
         await Records.AppendCodeApprovedAsync(db, draft, revision, NewRevision(revision), await Records.ReadCycleAsync(db, draft, cancellationToken),
-            () => ApprovalCheck.OfAsync(() => PostgresExecutiveActionReviewStore.ValidateApprovalAsync(db, revision, cancellationToken)),
-            NewDecisionRow);
+            () => ApprovalCheck.OfAsync(() => PostgresExecutiveActionReviewStore.ValidateApprovalAsync(db, revision, cancellationToken)));
     }
 
     private static void Revised(ExecutiveActionDraftRow draft, ExecutiveActionRevision revision)
@@ -105,16 +104,5 @@ internal static class ExecutiveActionRows
         RevisionNumber = revision.RevisionNumber,
         RevisionJson = ReviewJson.Serialize(revision),
         CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
-    };
-
-    public static ExecutiveActionReviewDecisionRow NewDecisionRow(CivicLens.Core.Review.ReviewDecision decision) => new()
-    {
-        DecisionId = decision.DecisionId,
-        RecordId = decision.DraftId,
-        RevisionNumber = decision.RevisionNumber,
-        ReviewStateVersion = decision.ReviewStateVersion,
-        DecisionJson = ReviewJson.Serialize(decision),
-        Kind = decision.Kind,
-        CreatedAtUtcTicks = decision.CreatedAtUtc.UtcTicks
     };
 }

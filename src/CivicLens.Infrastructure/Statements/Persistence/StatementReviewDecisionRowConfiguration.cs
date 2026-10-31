@@ -1,3 +1,4 @@
+using CivicLens.Infrastructure.Review.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -20,6 +21,7 @@ internal sealed class StatementReviewDecisionRowConfiguration : IEntityTypeConfi
         builder.Property(row => row.DecisionJson).HasColumnName("decision_json").IsRequired();
         builder.Property(row => row.Kind).HasColumnName("kind").HasConversion<string>().IsRequired();
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks").IsRequired();
+        ReviewDecisionTableConfiguration.ConfigureDecisionColumns(builder, "statement_review_decisions", nameof(StatementReviewDecisionRow.CandidateId));
         builder.HasOne<StatementRevisionRow>().WithMany()
             .HasForeignKey(row => new { row.CandidateId, row.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(row => new { row.CandidateId, row.ReviewStateVersion }).IsUnique();

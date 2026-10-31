@@ -1,4 +1,5 @@
 using CivicLens.Infrastructure.Collection.Persistence;
+using CivicLens.Infrastructure.Review.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Collection;
@@ -12,5 +13,6 @@ public sealed class CollectionAttemptDbContext(DbContextOptions<CollectionAttemp
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(CollectionAttemptDbContext).Assembly);
+        ReviewDecisionTableConfiguration.ConfigureAllResolutions(modelBuilder);
     }
 }

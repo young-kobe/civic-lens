@@ -36,7 +36,7 @@ public sealed class PostgresExecutiveActionReviewStore(IDbContextFactory<Collect
             {
                 if (decision.Kind != ReviewDecisionKind.Approve) return;
                 await ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken);
-            }, ExecutiveActionRows.NewDecisionRow, static (_, _, _, _) => Task.CompletedTask, cancellationToken);
+            }, static (_, _, _, _) => Task.CompletedTask, cancellationToken);
 
     public async Task<ExecutiveActionReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken)
     {
