@@ -137,9 +137,10 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
 
         Assert.True(opening < TimeSpan.FromSeconds(5), $"The first commit took {opening}.");
         Assert.True(revising < TimeSpan.FromSeconds(5), $"The revising commit took {revising}.");
-        Assert.Equal([ids.Length.ToString()], (await PublishedRecordStateReader.ReadAsync(connectionString, """
-            SELECT count(*) FROM publication_record_states WHERE first_release <= 2 AND (last_release IS NULL OR last_release >= 2)
-            """)).Select(row => row[0]));
+        Assert.Equal([ids.Length.ToString(), ids.Length.ToString()], (await PublishedRecordStateReader.ReadAsync(connectionString, """
+            SELECT count(*), count(*) FILTER (WHERE revision_number = 2) FROM publication_record_states
+            WHERE first_release <= 2 AND (last_release IS NULL OR last_release >= 2)
+            """)).Single());
     }
 
     private async Task AssertReleaseHoldsAsync(int release, params (string Id, int Revision)[] records) =>

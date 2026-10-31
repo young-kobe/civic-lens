@@ -10,6 +10,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql("LOCK TABLE publication_releases IN SHARE ROW EXCLUSIVE MODE");
+
             migrationBuilder.Sql("""
                 DO $$
                 BEGIN

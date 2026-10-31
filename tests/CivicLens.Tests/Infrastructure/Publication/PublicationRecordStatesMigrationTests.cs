@@ -33,16 +33,21 @@ public sealed class PublicationRecordStatesMigrationTests(PostgresCollection pos
         await InsertReleaseAsync(1, $$"""[{"draftId":"{{legacyDraft}}","revisionNumber":1},{"kind":"action","recordId":"x","revisionNumber":1},{"kind":"statement","recordId":"w","revisionNumber":1}]""");
         await InsertReleaseAsync(2, """[{"kind":"documentChange","recordId":"y","revisionNumber":1},{"kind":"action","recordId":"x","revisionNumber":1},{"kind":"statement","recordId":"w","revisionNumber":2}]""");
         await InsertReleaseAsync(4, """[{"kind":"documentChange","recordId":"y","revisionNumber":1},{"kind":"vote","recordId":"z","revisionNumber":1}]""");
-        await InsertReleaseAsync(5, """[{"kind":"documentChange","recordId":"y","revisionNumber":1},{"kind":"action","recordId":"x","revisionNumber":1},{"kind":"vote","recordId":"z","revisionNumber":1}]""", active: true);
+        await InsertReleaseAsync(5, """[{"kind":"documentChange","recordId":"y","revisionNumber":1},{"kind":"action","recordId":"x","revisionNumber":1},{"kind":"vote","recordId":"z","revisionNumber":1}]""");
+        await InsertReleaseAsync(6, "[]", active: true);
 
         await MigrateForwardAsync();
 
         await AssertEveryReleaseMatchesRecordsJsonAsync();
-        Assert.Equal(["1|2", "5|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, "x"));
-        Assert.Equal(["2|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, "y"));
+        Assert.Equal(["1|2", "5|5"], await PublishedRecordStateReader.RangesAsync(connectionString, "x"));
+        Assert.Equal(["2|5"], await PublishedRecordStateReader.RangesAsync(connectionString, "y"));
         Assert.Equal(["1|1", "2|2"], await PublishedRecordStateReader.RangesAsync(connectionString, "w"));
-        Assert.Equal(["4|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, "z"));
+        Assert.Equal(["4|5"], await PublishedRecordStateReader.RangesAsync(connectionString, "z"));
         Assert.Equal(["documentChange"], await KindsAsync(legacyDraft));
+
+        await MigrateForwardAsync(DropMigration);
+
+        Assert.False(await RecordsJsonExistsAsync());
     }
 
     [Fact]
@@ -84,6 +89,7 @@ public sealed class PublicationRecordStatesMigrationTests(PostgresCollection pos
         var failure = await Assert.ThrowsAsync<PostgresException>(() => MigrateForwardAsync(DropMigration));
 
         Assert.Equal(PostgresErrorCodes.RaiseException, failure.SqlState);
+        Assert.StartsWith("Cannot drop records_json", failure.MessageText, StringComparison.Ordinal);
         Assert.True(await RecordsJsonExistsAsync());
     }
 
