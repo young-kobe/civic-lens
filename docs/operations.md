@@ -786,22 +786,22 @@ To take a record out of the release, give `--withdraw <kind>:<id> <text>`. A req
 
 To list the published records that cannot move on, run `releases blocked`. It prints the kind, the ID, the headline, the published revision, the review status, and the reason of each record. The reason `reviewBlocksIt` means review blocked the record. Use these rows to choose the records to withdraw. The reasons `correctionLimit` and `withdrawnAtCorrectionLimit` mean the record holds 20 corrections with a note, and a person approved a revision that cannot publish. A withdrawal does not free these rows. The list is empty when no release is active.
 
-To write the pages of all officials again, add `--rewrite-officials`. The publish then treats every official as touched. The option itself adds no record. It keeps the release history, the withdrawals, and the first publication date of each record. A rewrite with no named record needs an active release. Use it once after a deploy that changes the layout of the official pages. Until then an untouched official keeps its old page. On a failure, run the same command again. A worker publish that commits while a long rewrite runs makes the commit conflict. Run the command again. If conflicts repeat, stop the worker first with `sudo deploy/scripts/compose.sh stop worker`, run the command, and start the worker again. See the [publication limits](architecture/publication.md#limits-and-planned-work).
+To write the pages of all officials again, add `--rewrite-officials`. The publish then treats every official as touched. The option itself adds no record. It keeps the release history, the withdrawals, and the first publication date of each record. A rewrite with no named record needs an active release. Use it once after a deploy that changes the layout of the official pages. Until then an untouched official keeps its old page. On a commit conflict, run the same command again. A stop that names a record kind and ID does not clear on a retry. Compare that record file with its manifest entry, and send the message to the developer. Do not publish around it. A worker publish that commits while a long rewrite runs makes the commit conflict. Run the command again. If conflicts repeat, stop the worker first with `sudo deploy/scripts/compose.sh stop worker`, run the command, and start the worker again. See the [publication limits](architecture/publication.md#limits-and-planned-work).
 
 After the deploy that ships the Congress tabs, run this once:
 
 ```sh
-dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases publish <idempotency-key> --rewrite-officials
+sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> --rewrite-officials
 ```
 
 To fill the new fields of carried vote and action entries, add `--rewrite-entries`. The publish reads the record file of each carried vote and action and builds its manifest entry again. It adds `yeaCount`, `nayCount`, `alignment`, and `cosponsorIds`. It checks each record file and stops with an error that names the record when the file is invalid or when its entry differs in any other field. It changes no other entry field. It keeps the record files linked and writes none of them again. A withdrawn record stays withdrawn. The option adds no record, and it needs an active release. It reads one file for each carried vote and action. On a failure, run the same command again.
 
 Every publish writes `officials-summary.json`, the roll-up of the figures that rankings need. A touched official gets new figures. An untouched official keeps the figures of the previous release. A release from before the roll-up has none, so its untouched officials have no vote figures until `--rewrite-officials` runs. The cosponsor counts come from the manifest entries of every publish. The count is null until `--rewrite-entries` gives every carried action its cosponsor data. A reader must not read null as 0.
 
-After the deploy that ships the vote fields, the cosponsor field, and the roll-up, run this once. After `releases activate` of a release older than this rewrite, run it again:
+After the deploy that ships the vote fields, the cosponsor field, and the roll-up, run this once. After `releases activate` of a release older than this rewrite, run it again. Use a new key each time, because the same key and payload replay the old result with no rewrite:
 
 ```sh
-dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases publish <idempotency-key> --rewrite-entries --rewrite-officials
+sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> --rewrite-entries --rewrite-officials
 ```
 
 An image from before this change cannot read a release that the new image made, because it refuses the new entry members. To go back to that image, first activate a release that it made. See the [publication limits](architecture/publication.md#limits-and-planned-work).

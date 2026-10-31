@@ -56,13 +56,12 @@ public sealed class PublishedVoteTests
         Assert.Equal(expected, vote.ToEntry().Alignment);
     }
 
-    [Fact]
-    public void AVoteWithNoMajorPartyRowHasNoAlignmentBecauseNoReaderCanCompareTwoPartiesWhenOneIsAbsent()
+    [Theory]
+    [InlineData("Democrat")]
+    [InlineData("Republican")]
+    public void AVoteWithNoMajorPartyRowHasNoAlignmentBecauseNoReaderCanCompareTwoPartiesWhenOneIsAbsent(string presentParty)
     {
-        var vote = Vote() with
-        {
-            PartyMajorities = [PublishedPartyMajority.Of("Democrat", 1, 0)]
-        };
+        var vote = Vote() with { PartyMajorities = [PublishedPartyMajority.Of(presentParty, 1, 0)] };
 
         var entry = vote.ToEntry();
 

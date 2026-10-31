@@ -247,6 +247,32 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
+    public async Task ARewriteThatFindsARecordFileOutOfStepWithItsEntryPrintsTheKindAndIdAndExitsWithOneSoTheOperatorKnowsWhichFileToCheck()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('b', cosponsorWithdrawn: false);
+        await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", $"action:{action}"], scenario.Publisher(), null!, null!, null!,
+            PublicationScenario.Owner, CancellationToken.None);
+        var first = scenario.Publications.Committed[^1].DirectoryName;
+        scenario.Releases.Directories[first][PublicationProtocol.RecordDataPath(action)] = "not json"u8.ToArray();
+        var error = new StringWriter();
+        var original = Console.Error;
+        Console.SetError(error);
+        try
+        {
+            var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", "--rewrite-entries"], scenario.Publisher(), null!, null!, null!,
+                PublicationScenario.Owner, CancellationToken.None);
+
+            Assert.Equal(1, exit);
+            Assert.Contains($"Action {action}", error.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Console.SetError(original);
+        }
+    }
+
+    [Fact]
     public async Task PublishWithOnlyAKeyAfterAWithholdFlagMakesAReleaseWithNoPhotoSoATakedownNeedsNoNewRecord()
     {
         var scenario = new PublicationScenario();

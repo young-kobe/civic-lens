@@ -196,11 +196,45 @@ public sealed class PublishEntryRewriteTests
             manifest with { Records = [.. manifest.Records.Select(entry => entry == action ? entry with { EventDate = new DateOnly(2020, 1, 1) } : entry)] },
             PublicationProtocol.JsonOptions);
 
-        var failure = await Assert.ThrowsAsync<InvalidDataException>(() =>
+        var failure = await Assert.ThrowsAsync<ReleaseRewriteException>(() =>
             scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteEntries = true }));
 
         Assert.Contains(action.RecordId, failure.Message, StringComparison.Ordinal);
         Assert.Contains("Action", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("not json")]
+    [InlineData("{}")]
+    public async Task TheRewriteNamesTheRecordWhenItsFileIsNotAValidRecordSoTheOperatorKnowsWhichFileToCheck(string content)
+    {
+        var scenario = new PublicationScenario();
+        var first = await PublishFirstAsync(scenario);
+        var action = Manifest(scenario, first).Records.Single(entry => entry.Kind == PublishedRecordKind.Action);
+        scenario.Releases.Directories[first.DirectoryName][PublicationProtocol.RecordDataPath(action.RecordId)] = System.Text.Encoding.UTF8.GetBytes(content);
+
+        var failure = await Assert.ThrowsAsync<ReleaseRewriteException>(() =>
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteEntries = true }));
+
+        Assert.Contains(action.RecordId, failure.Message, StringComparison.Ordinal);
+        Assert.Contains("Action", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnOldActionEntryAndANewActionEntryTogetherGiveNoCountToAnyOfficialBecauseOnePartialEntryMakesEveryCountPartial()
+    {
+        var scenario = new PublicationScenario();
+        var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Action, scenario.AddAction('a', cosponsorWithdrawn: false)),
+            new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('c', speakerIds: ["chair"]))));
+        AsReleaseFromBeforeTheNewFields(scenario, first);
+
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
+            new PublishedRecordReference(PublishedRecordKind.Action, scenario.AddAction('b', cosponsorWithdrawn: false))));
+
+        var entries = Manifest(scenario, second).Records.Where(entry => entry.Kind == PublishedRecordKind.Action).ToArray();
+        Assert.Equal([false, true], entries.Select(entry => entry.CosponsorIds is null).Order());
+        Assert.All(Summaries(scenario, second).Values, row => Assert.Null(row.CosponsoredBills));
     }
 
     [Fact]
