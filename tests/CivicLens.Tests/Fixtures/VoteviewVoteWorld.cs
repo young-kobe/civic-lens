@@ -64,7 +64,7 @@ internal sealed class VoteviewVoteWorld
     {
         var page = Page(VotesJob, savedText ?? Text, extractionVersion);
         return new(new VoteDraftCandidate(CandidateId, RecordId, VoteviewVoteFixtures.SourceId, Chamber.Senate, 119, 1, rollCall, null, null, UpdatedAt, rosterJobId),
-            Revision, page with { JobId = RollCallsJob }, page, null, [], null, false);
+            Revision, page with { JobId = RollCallsJob }, page, null, [], null, false, false);
     }
 
     public string Quote(SourceSpan span) => Text.Substring(span.Start, span.Length);

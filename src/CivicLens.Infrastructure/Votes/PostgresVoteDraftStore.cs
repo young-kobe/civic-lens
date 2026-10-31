@@ -66,7 +66,7 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
             await ReadBillDetailAsync(db, row, cancellationToken),
             hasNewerCandidate ? [] : await ReadBillSubjectsAsync(db, row, cancellationToken),
             await VoteDraftRows.ReadCurrentAsync(db, recordId, cancellationToken), hasNewerCandidate,
-            (await StaleCandidateIdsAsync(db, [candidateId], cancellationToken)).Contains(candidateId));
+            !hasNewerCandidate && (await StaleCandidateIdsAsync(db, [candidateId], cancellationToken)).Contains(candidateId));
     }
 
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) =>
@@ -136,8 +136,22 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
                                                     select run.PromptVersion).FirstOrDefault()
                            where newestDraftPrompt != null && newestDraftPrompt != VoteDraftTask.PromptVersion
                            select candidate.CandidateId).ToArrayAsync(cancellationToken);
-        return stale.ToHashSet(StringComparer.Ordinal);
+        var closed = await CandidatesThatCannotTakeNewTextAsync(db, stale, cancellationToken);
+        return stale.Except(closed, StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal);
     }
+
+    // New model text would go to a person or stay held, so a redraft would spend tokens for nothing.
+    private static async Task<string[]> CandidatesThatCannotTakeNewTextAsync(CollectionAttemptDbContext db, string[] candidateIds,
+        CancellationToken cancellationToken) =>
+        await db.Database.SqlQuery<string>($"""
+            SELECT c.candidate_id AS "Value"
+            FROM vote_candidates c
+            JOIN vote_drafts d ON d.source_id = c.source_id AND d.chamber = c.chamber AND d.congress = c.congress
+                AND d.session_number = c.session_number AND d.roll_call_number = c.roll_call_number
+            JOIN vote_revisions r ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
+            WHERE c.candidate_id = ANY({candidateIds})
+              AND (d.review_status IN ('AwaitingReviewWithConcerns', 'ApprovalWithdrawn') OR r.revision_json::jsonb ->> 'textOrigin' = 'Person')
+            """).ToArrayAsync(cancellationToken);
 
     private static async Task<VoteDraftPage?> ReadBillDetailAsync(CollectionAttemptDbContext db, VoteCandidateRow candidate,
         CancellationToken cancellationToken)

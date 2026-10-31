@@ -329,6 +329,42 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
+    public async Task AVoteThatAWorkerSettledUnderTheCurrentPromptHasNoOlderPromptSoTheRedraftSettlesItForGood()
+    {
+        var candidate = await PendingCandidateAsync();
+        await SettleAsync(candidate, await RevisionAsync(candidate, 1));
+
+        Assert.False((await VoteStore().ReadEvidenceAsync(candidate, default))!.DraftedUnderOlderPrompt);
+        Assert.Equal(0, await VoteStore().RequeueOlderPromptAsync(default));
+    }
+
+    [Theory]
+    [InlineData("", 1)]
+    [InlineData("UPDATE vote_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{textOrigin}', '\"Person\"')::text", 0)]
+    [InlineData("UPDATE vote_drafts SET review_status = 'AwaitingReviewWithConcerns'", 0)]
+    [InlineData("UPDATE vote_drafts SET review_status = 'ApprovalWithdrawn'", 0)]
+    public async Task ARedraftSkipsAVoteWhoseCurrentRevisionHoldsPersonTextAnOpenConcernOrAWithdrawnApproval(string change, int requeued)
+    {
+        var candidate = await PendingCandidateAsync();
+        await SettleAsync(candidate, await RevisionAsync(candidate, 1));
+        await ExecuteAsync("UPDATE vote_analysis_runs SET prompt_version = 'vote-draft-prompt-v1'");
+        if (change.Length > 0) await ExecuteAsync(change);
+
+        Assert.Equal(requeued == 1, (await VoteStore().ReadEvidenceAsync(candidate, default))!.DraftedUnderOlderPrompt);
+        Assert.Equal(requeued, await VoteStore().RequeueOlderPromptAsync(default));
+    }
+
+    [Fact]
+    public async Task TheEvidenceOfAVoteWithANewerCandidateNamesNoOlderPromptBecauseTheNewerCandidateWillDraftIt()
+    {
+        var older = await PendingCandidateAsync();
+        await InsertRunAsync(older, "vote-draft-prompt-v1", 1);
+        await PendingCandidateAsync(Updated.AddDays(1));
+
+        Assert.False((await VoteStore().ReadEvidenceAsync(older, default))!.DraftedUnderOlderPrompt);
+    }
+
+    [Fact]
     public async Task RedraftLeavesARollCallWithoutAModelDraftedRunBecauseThereIsNoOldPromptToReplace()
     {
         var candidate = await PendingCandidateAsync();
