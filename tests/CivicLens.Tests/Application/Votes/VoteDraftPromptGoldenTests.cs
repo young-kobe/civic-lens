@@ -9,10 +9,10 @@ namespace CivicLens.Tests.Application.Votes;
 
 public sealed class VoteDraftPromptGoldenTests
 {
-    private const string SystemSha256 = "f923da3e62e5216e23ede153e3d06a3026b0fbfb78343ad94f3d13a14f5ce7ee";
-    private const string SenateSystemSha256 = "9120ed0e9a6e89f3e3d7f7ab165209e75d6cb11364ed358b4b9a768f2120c231";
+    private const string SystemSha256 = "245b5d6f8ab50710082f64d673c9a6665f308595983b7151bedae03a271da2e4";
+    private const string SenateSystemSha256 = "2cc0614e3d80c6395ab0b403f591b76103e1758cbacf2fd9d6e9e2357ec98708";
     private const string SchemaSha256 = "6d6adb018d7ee24f5df2e21a1f678cc87ed0fb7c144cf0a5c99cd84153a3acf0";
-    private const string InputHash = "f46e352694c61d0ed863a51c19a1e714d15bb455e59dc1f1a2f30f1f03a44f56";
+    private const string InputHash = "c855c5605249f2b1cf46bd16f675a26df9ae9717b838867d5f7c6c5ee9c5f2b4";
 
     [Fact]
     public async Task ThePromptAndSchemaMatchTheirPinnedVersions()
@@ -48,19 +48,17 @@ public sealed class VoteDraftPromptGoldenTests
     }
 
     [Fact]
-    public async Task TheSystemPromptBansInternalWordsAndIsCachedWhileAFailedNameCheckLeaksNone()
+    public async Task TheSystemPromptBansInternalWordsAndIsCached()
     {
         var world = VoteWorld.Create();
         var snapshot = (await world.Reader().ReadAsync(world.Evidence(), default)).Snapshot!;
 
-        var request = VoteDraftPrompt.Build(snapshot, NoChoice(), VoteDraftTask.MaximumPromptBytes,
-            ["The headline names \"A\". The list beside the text names the members and their votes, so name no person."])!;
+        var request = VoteDraftPrompt.Build(snapshot, NoChoice(), VoteDraftTask.MaximumPromptBytes)!;
 
         Assert.True(request.CacheSystemPrompt);
         Assert.Contains("Never use the words tracked, entry, or candidate", request.SystemPrompt, StringComparison.Ordinal);
         Assert.Contains("Never describe how Civic Lens works", request.SystemPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("tracked member", request.SystemPrompt, StringComparison.Ordinal);
-        Assert.DoesNotContain("tracked member", request.UserPrompt, StringComparison.Ordinal);
     }
 
     [Fact]

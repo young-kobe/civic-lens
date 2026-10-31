@@ -331,6 +331,7 @@ public sealed class VoteDraftStepTests
         var (store, _) = await RunAsync(Create(), model);
 
         Assert.Contains("so name no person", model.Requests[1].UserPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("tracked", model.Requests[1].UserPrompt, StringComparison.OrdinalIgnoreCase);
         Assert.Equal([AnalysisRunOutcome.OutputRejected, AnalysisRunOutcome.Drafted], store.Runs.Select(run => run.Run.Outcome));
         Assert.Single(store.Revisions);
     }
