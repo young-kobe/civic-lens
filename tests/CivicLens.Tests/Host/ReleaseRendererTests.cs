@@ -2356,11 +2356,11 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public void TheSortStatusLineTellsAReaderThatSortedRowsLeaveOutTheBadgeAndTheCountsSoAMissingBadgeIsNeverASilentGap()
+    public void TheSortStatusLineTemplateEndsWithTheNoticeThatSortedRowsLeaveOutTheBadgeAndTheCounts()
     {
         var script = System.Text.Encoding.UTF8.GetString(new ReleaseRenderer(null, null).Assets.Single(asset => asset.RelativePath == "assets/js/public.js").Content);
 
-        Assert.Contains("Sorted rows leave out the party badge and the vote counts.", script, StringComparison.Ordinal);
+        Assert.Contains("sorted by ${label(current.header, current.direction)}. Sorted rows leave out the party badge and the vote counts.", script, StringComparison.Ordinal);
     }
 
     [Fact]

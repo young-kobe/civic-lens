@@ -75,10 +75,10 @@ public sealed class OfficialBoardPageTests
     [Fact]
     public void RankedMembersWithTheSameShareOrderByCountThenNameSoTheOrderNeverDependsOnInputOrder()
     {
-        var page = PageOf(Row("b", 119, 50, 5), Row("a", 119, 50, 5), Row("c", 119, 100, 10), Row("d", 119, 25, 2));
+        var page = PageOf(Row("b", 119, 50, 5, name: "Adams"), Row("a", 119, 50, 5, name: "Zed"), Row("c", 119, 100, 10), Row("d", 119, 25, 2));
 
-        Assert.Equal(["c", "a", "b", "d"], page.Breakers.Select(member => member.Official.Profile.Id));
-        Assert.Equal(["d", "c", "a", "b"], page.Loyalists.Select(member => member.Official.Profile.Id));
+        Assert.Equal(["c", "b", "a", "d"], page.Breakers.Select(member => member.Official.Profile.Id));
+        Assert.Equal(["d", "c", "b", "a"], page.Loyalists.Select(member => member.Official.Profile.Id));
     }
 
     [Fact]
@@ -114,6 +114,26 @@ public sealed class OfficialBoardPageTests
     }
 
     [Fact]
+    public void AnOfficialWithAttendanceInANewerCongressAndNoPartyVotesMovesTheChamberToThatCongressAndLeavesItsBoardsEmpty()
+    {
+        var attendanceOnly = new PublishedOfficialSummary
+        {
+            Id = "attendance",
+            Congress = 120,
+            CosponsoredBills = null,
+            PartyVotes = [],
+            Attendance = [new PublishedAttendanceSummary { Chamber = PublishedChamber.House, Held = 10, Missed = 1, First = new DateOnly(2027, 1, 3), Last = new DateOnly(2027, 1, 20) }]
+        };
+        var (voter, voterSummary) = Row("voter", 119, 30, 3);
+
+        var page = OfficialBoardPage.All([Listing("attendance"), voter], [attendanceOnly, voterSummary]).Single(page => page.Board == HouseDemocrats);
+
+        Assert.Equal(120, page.Congress);
+        Assert.Empty(page.Members);
+        Assert.Equal(1, page.InEarlierCongress);
+    }
+
+    [Fact]
     public void AReleaseWithNoOfficialsStillGivesFourEmptyBoardsWithNoCongressAndNoDate()
     {
         var pages = OfficialBoardPage.All([], []);
@@ -126,11 +146,11 @@ public sealed class OfficialBoardPageTests
     private static OfficialBoardPage PageOf(params (OfficialListing, PublishedOfficialSummary)[] rows) =>
         OfficialBoardPage.All([.. rows.Select(row => row.Item1)], [.. rows.Select(row => row.Item2)]).Single(page => page.Board == HouseDemocrats);
 
-    private static OfficialListing Listing(string id) => new(new PublishedOfficialProfile { Id = id, Name = id, Terms = [] }, 0);
+    private static OfficialListing Listing(string id, string? name = null) => new(new PublishedOfficialProfile { Id = id, Name = name ?? id, Terms = [] }, 0);
 
     private static (OfficialListing, PublishedOfficialSummary) Row(string id, int congress, int cast, int breaks,
-        PublishedChamber chamber = PublishedChamber.House, string party = PublishedPartyMajority.Democrat, int missed = 1, int held = 100) =>
-        (Listing(id), new PublishedOfficialSummary
+        PublishedChamber chamber = PublishedChamber.House, string party = PublishedPartyMajority.Democrat, int missed = 1, int held = 100, string? name = null) =>
+        (Listing(id, name), new PublishedOfficialSummary
         {
             Id = id,
             Congress = congress,

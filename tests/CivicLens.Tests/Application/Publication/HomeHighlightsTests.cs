@@ -103,16 +103,20 @@ public sealed class HomeHighlightsTests
     }
 
     [Fact]
-    public void ATieOnShareAndOnBreaksGoesToTheFirstOfficialNameLikeTheBoardList()
+    public void ATieOnShareAndOnBreaksGoesToTheFirstOfficialNameLikeTheBoardListNotTheLowerId()
     {
-        var officials = new[] { Listing("b"), Listing("a") };
+        var officials = new[] { Listing("a", "Zed"), Listing("b", "Adams") };
         var summaries = new[]
         {
-            Summary("b", 119, PublishedChamber.House, PublishedPartyMajority.Democrat, 40, 10),
-            Summary("a", 119, PublishedChamber.House, PublishedPartyMajority.Democrat, 40, 10)
+            Summary("a", 119, PublishedChamber.House, PublishedPartyMajority.Democrat, 40, 10),
+            Summary("b", 119, PublishedChamber.House, PublishedPartyMajority.Democrat, 40, 10)
         };
+        var boards = OfficialBoardPage.All(officials, summaries);
 
-        Assert.Equal("a", Assert.Single(BreakLeader.All(OfficialBoardPage.All(officials, summaries))).Official.Profile.Id);
+        var leader = Assert.Single(BreakLeader.All(boards));
+
+        Assert.Equal("b", leader.Official.Profile.Id);
+        Assert.Equal(boards.Single(page => page.Board.Chamber == PublishedChamber.House && page.Board.Party == PublishedPartyMajority.Democrat).Breakers[0].Official, leader.Official);
     }
 
     [Fact]
@@ -176,7 +180,7 @@ public sealed class HomeHighlightsTests
         PolicyAreaIds = []
     };
 
-    private static OfficialListing Listing(string id) => new(new PublishedOfficialProfile { Id = id, Name = id, Terms = [] }, 0);
+    private static OfficialListing Listing(string id, string? name = null) => new(new PublishedOfficialProfile { Id = id, Name = name ?? id, Terms = [] }, 0);
 
     private static PublishedOfficialSummary Summary(string id, int congress, PublishedChamber chamber, string party, int cast, int breaks) => new()
     {
