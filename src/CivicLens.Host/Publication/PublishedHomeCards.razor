@@ -1,0 +1,53 @@
+@using CivicLens.Application.Publication
+@using CivicLens.Publication.Contracts
+
+<Panel Title="@PublishedHomeCardView.PickedTitle" Padded="true">
+    <p class="muted small">@PublishedHomeCardView.PickedLede <a href="@PublicationProtocol.MethodPagePath#home-picks">@PublishedHomeCardView.MethodLinkText</a></p>
+    <h3>@PublishedHomeCardView.ClosestTitle(Highlights)</h3>
+    @if (Highlights.ClosestVote is { } vote)
+    {
+        <p><PublishedRecordTitle RecordId="@vote.RecordId">@vote.Headline</PublishedRecordTitle><PublishedVoteListFacts Entry="vote" /></p>
+        <p>@PublishedHomeCardView.VoteGap(vote)</p>
+        <p class="muted small">@PublishedHomeCardView.VotePool(Highlights)</p>
+    }
+    else
+    {
+        <p>@PublishedHomeCardView.NoVote(Highlights)</p>
+    }
+    <p class="muted small">@PublishedHomeCardView.ClosestRule</p>
+    <h3>@PublishedHomeCardView.BreaksTitle</h3>
+    @if (Highlights.BreakLeaders.IsEmpty)
+    {
+        <p>@PublishedHomeCardView.NoBreakLeaders</p>
+    }
+    else
+    {
+        <ul>
+            @foreach (var leader in Highlights.BreakLeaders)
+            {
+                <li><a href="@leader.Official.PagePath">@leader.Official.Profile.Name</a> @PublishedHomeCardView.Leader(leader)</li>
+            }
+        </ul>
+        @if (PublishedHomeCardView.LeavesOutGroups(Highlights))
+        {
+            <p class="muted small">@PublishedHomeCardView.BreaksLeftOut</p>
+        }
+    }
+    <p class="muted small">@PublishedHomeCardView.BreaksRule</p>
+</Panel>
+<Panel Title="@PublishedHomeCardView.ExecutiveActionsTitle" Aside="@(Highlights.ExecutiveActions.IsEmpty ? null : ExecutiveActionsCount)">
+    @if (Highlights.ExecutiveActions.IsEmpty)
+    {
+        <EmptyState Title="No executive actions" Text="@PublishedHomeCardView.NoExecutiveActions" />
+    }
+    else
+    {
+        <PublishedRecordTable Records="Highlights.ExecutiveActions" Caption="@PublishedHomeCardView.ExecutiveActionsTitle" Columns="RecordTableColumns.Facet" />
+    }
+</Panel>
+
+@code {
+    [Parameter, EditorRequired] public HomeHighlights Highlights { get; set; } = default!;
+
+    private RenderFragment ExecutiveActionsCount => @<text>@PublishedHomeCardView.ExecutiveActionsCount(Highlights)</text>;
+}

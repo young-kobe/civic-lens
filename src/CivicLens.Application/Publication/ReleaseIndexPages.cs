@@ -3,11 +3,10 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
-/// <summary>Writes the pages built from the manifest: home, all records, weekly briefs, search, report, method, about, glossary, and the issue and policy area pages.</summary>
+/// <summary>Writes the pages built from the manifest: all records, weekly briefs, search, report, method, about, glossary, and the issue and policy area pages. The home page is separate, because its cards need the official summaries.</summary>
 internal sealed class ReleaseIndexPages(IReleaseDirectory releases, IReleaseRenderer renderer)
 {
-    public async Task WriteAsync(IReleaseStaging staging, PublicationRelease manifest, ReleaseFacets facets,
-        IReadOnlyList<PendingRecord> additions, PreviousRelease previous, CancellationToken cancellationToken)
+    public async Task WriteAsync(IReleaseStaging staging, PublicationRelease manifest, ReleaseFacets facets, CancellationToken cancellationToken)
     {
         for (var page = 1; page <= PublicationProtocol.PageCount(manifest.Records.Length); page++)
             await WriteAsync(staging, PublicationProtocol.AllRecordsPagePath(page),
@@ -26,9 +25,15 @@ internal sealed class ReleaseIndexPages(IReleaseDirectory releases, IReleaseRend
         await WriteAsync(staging, PublicationProtocol.MethodPagePath, await renderer.RenderMethodAsync(cancellationToken), cancellationToken);
         await WriteAsync(staging, PublicationProtocol.AboutPagePath, await renderer.RenderAboutAsync(cancellationToken), cancellationToken);
         await WriteAsync(staging, PublicationProtocol.GlossaryPagePath, await renderer.RenderGlossaryAsync(cancellationToken), cancellationToken);
-        var brief = await LoadLatestBriefAsync(briefs.FirstOrDefault(), additions, previous, cancellationToken);
+    }
+
+    public async Task WriteHomeAsync(IReleaseStaging staging, PublicationRelease manifest, ReleaseFacets facets, HomeHighlights highlights,
+        IReadOnlyList<PendingRecord> additions, PreviousRelease previous, CancellationToken cancellationToken)
+    {
+        var latestBrief = BriefsNewestFirst(manifest).FirstOrDefault();
+        var brief = await LoadLatestBriefAsync(latestBrief, additions, previous, cancellationToken);
         await WriteAsync(staging, PublicationProtocol.HomePath,
-            await renderer.RenderHomeAsync(manifest, brief, facets, cancellationToken), cancellationToken);
+            await renderer.RenderHomeAsync(manifest, brief, facets, highlights, cancellationToken), cancellationToken);
     }
 
     private static PublishedRecordEntry[] BriefsNewestFirst(PublicationRelease manifest) =>

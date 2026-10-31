@@ -83,11 +83,11 @@ public sealed class PublishReleaseTests
 
         var order = scenario.Releases.WriteOrder;
         Assert.Equal(PublicationProtocol.ManifestPath, order[^1]);
-        Assert.Equal(PublicationProtocol.OfficialsPagePath, order[^2]);
-        Assert.Equal(PublicationProtocol.OfficialSummariesPath, order[^3]);
-        Assert.Equal(PublicationProtocol.CatalogPath, order[^4]);
-        Assert.Equal(PublicationProtocol.OfficialsPath, order[^5]);
-        Assert.Equal(PublicationProtocol.HomePath, order[^6]);
+        Assert.Equal(PublicationProtocol.HomePath, order[^2]);
+        Assert.Equal(PublicationProtocol.OfficialsPagePath, order[^3]);
+        Assert.Equal(PublicationProtocol.OfficialSummariesPath, order[^4]);
+        Assert.Equal(PublicationProtocol.CatalogPath, order[^5]);
+        Assert.Equal(PublicationProtocol.OfficialsPath, order[^6]);
         Assert.True(order.IndexOf(PublicationProtocol.RecordDataPath(draft)) < order.IndexOf("assets/site.css"));
     }
 
@@ -136,9 +136,9 @@ public sealed class PublishReleaseTests
         Assert.Equal(
             [PublicationProtocol.AllRecordsPagePath(1), "all-2.html", "all-3.html", PublicationProtocol.BriefsPagePath(1),
                 PublicationProtocol.IssuePagePath("housing", 1), PublicationProtocol.FacetsPath, PublicationProtocol.SearchPagePath,
-                PublicationProtocol.ReportPagePath, PublicationProtocol.MethodPagePath, PublicationProtocol.AboutPagePath, PublicationProtocol.GlossaryPagePath, PublicationProtocol.HomePath,
+                PublicationProtocol.ReportPagePath, PublicationProtocol.MethodPagePath, PublicationProtocol.AboutPagePath, PublicationProtocol.GlossaryPagePath,
                 PublicationProtocol.OfficialsPath, PublicationProtocol.CatalogPath, PublicationProtocol.OfficialSummariesPath, PublicationProtocol.OfficialsPagePath,
-                PublicationProtocol.ManifestPath],
+                PublicationProtocol.HomePath, PublicationProtocol.ManifestPath],
             order.TakeLast(17));
         Assert.Equal("all.html", PublicationProtocol.AllRecordsPagePath(1));
         Assert.DoesNotContain("all-4.html", order);
