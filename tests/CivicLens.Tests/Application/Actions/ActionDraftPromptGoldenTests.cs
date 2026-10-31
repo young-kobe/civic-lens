@@ -10,9 +10,9 @@ namespace CivicLens.Tests.Application.Actions;
 
 public sealed class ActionDraftPromptGoldenTests
 {
-    private const string SystemSha256 = "c2e126a7a900c4b83900505a952bd38440ba3c60545e9e19d934dcb8039e2c35";
+    private const string SystemSha256 = "9ad12992599558a0ae4b66d374a9934f3f44a778523d0de8b7dc7a273ff8cf28";
     private const string SchemaSha256 = "6d6adb018d7ee24f5df2e21a1f678cc87ed0fb7c144cf0a5c99cd84153a3acf0";
-    private const string InputHash = "6b0275a5ea89b37b46239e6b18d7d828cf2d2baab36b3963b7be10d8927bc476";
+    private const string InputHash = "7b8b2516b8d1da979c4a6d789404ade508df068ac8adccae86868e5cc549f556";
 
     [Fact]
     public async Task ThePromptAndSchemaMatchTheirPinnedVersions()
@@ -42,7 +42,8 @@ public sealed class ActionDraftPromptGoldenTests
         var request = ActionDraftPrompt.Build(snapshot, NoChoice(), ActionDraftTask.MaximumPromptBytes)!;
 
         Assert.True(request.CacheSystemPrompt);
-        Assert.Contains("Never use the words tracked, facts, data, entry, record, or candidate.", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("Never use the words tracked, entry, or candidate", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("Use those words only when the bill itself is about the thing they name.", request.SystemPrompt, StringComparison.Ordinal);
         Assert.Contains("\"Congress.gov has no summary of this bill yet.\"", request.SystemPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("Rent aid", request.SystemPrompt, StringComparison.Ordinal);
     }
