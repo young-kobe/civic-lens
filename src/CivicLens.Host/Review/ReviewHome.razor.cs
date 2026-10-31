@@ -40,6 +40,7 @@ public sealed partial class ReviewHome
     private DocumentChangeReviewPage? drafts;
     private SourceHealthReport? health;
     private PublicationReleaseList? releases;
+    private ReviewQueuePage? queue;
     private IReadOnlyList<BlockedPublishedRecord>? blocked;
     private StatementReviewCounts? statementCounts;
     private BriefReviewCounts? briefCounts;
@@ -58,6 +59,7 @@ public sealed partial class ReviewHome
     [Inject] private ListEligibleDocumentComparisons ListChanges { get; set; } = default!;
     [Inject] private ListDocumentChangeAnalyses ListAnalyses { get; set; } = default!;
     [Inject] private GetDocumentChangeAnalysisStatus GetAnalysisStatus { get; set; } = default!;
+    [Inject] private ListReviewQueue ListQueue { get; set; } = default!;
     [Inject] private ListDocumentChangeReviews ListDrafts { get; set; } = default!;
     [Inject] private GetStatementReviewCounts GetStatementCounts { get; set; } = default!;
     [Inject] private GetBriefReviewCounts GetBriefCounts { get; set; } = default!;
@@ -74,6 +76,7 @@ public sealed partial class ReviewHome
     [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
     [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = default!;
 
+    [SupplyParameterFromQuery(Name = "queue")] private string? QueueCursor { get; set; }
     [SupplyParameterFromQuery(Name = "changes")] private string? ChangesCursor { get; set; }
     [SupplyParameterFromQuery(Name = "drafts")] private string? DraftsFilterName { get; set; }
     [SupplyParameterFromQuery(Name = "draftsCursor")] private string? DraftsCursor { get; set; }
@@ -106,6 +109,7 @@ public sealed partial class ReviewHome
             analyses = await ListAnalyses.ExecuteAsync(actor,
                 [.. changes.Items.Select(item => item.ComparisonId)], cancellationToken);
             analysisStatus = await GetAnalysisStatus.ExecuteAsync(actor, cancellationToken);
+            queue = await ListQueue.ExecuteAsync(actor, QueueCursor, PageSize, cancellationToken);
             drafts = await ListDrafts.ExecuteAsync(actor, DraftsCursor, PageSize, Filter, cancellationToken);
             statementCounts = await GetStatementCounts.ExecuteAsync(actor, cancellationToken);
             briefCounts = await GetBriefCounts.ExecuteAsync(actor, cancellationToken);
@@ -224,6 +228,12 @@ public sealed partial class ReviewHome
         };
         return new(text, item.OccurredAt, DraftStatusDisplay.Tone(kind));
     }
+
+    private IReadOnlyList<QueueRow> StuckRows => [.. blocked?.Select(record => record.StuckText() is { } text ? QueueRow.Of(record, text) : null).OfType<QueueRow>() ?? []];
+
+    private IReadOnlyList<QueueRow> QueueRows => [.. QueueCursor is null ? StuckRows : [], .. queue!.Items.Select(QueueRow.Of)];
+
+    private string? QueueHref(string? cursor) => cursor is null ? null : "/Review?queue=" + Uri.EscapeDataString(cursor) + "#needs-a-person";
 
     private IReadOnlyList<FilterTab> DraftTabs => DraftFilterTabs.For(
         Filter, name => Href(ChangesCursor, name, null, "drafts"), overview!.DraftsNeedingAction, overview.ApprovedDrafts);

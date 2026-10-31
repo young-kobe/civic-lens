@@ -24,7 +24,7 @@ namespace CivicLens.Infrastructure.Review;
 /// <summary>Transactional persistence for immutable document-change revisions and review decisions.</summary>
 public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewStore
 {
-    private static readonly ReviewRecords<DocumentChangeDraftRow, DocumentChangeRevisionRow, ReviewDecisionRow, DocumentChangeDraftRevision>
+    internal static readonly ReviewRecords<DocumentChangeDraftRow, DocumentChangeRevisionRow, ReviewDecisionRow, DocumentChangeDraftRevision>
         Records = new(PostgresAdvisoryLock.DocumentChangeReview, "Document-change", nameof(DocumentChangeDraftRow.DraftId));
 
     private const string CreateOperation = "create";

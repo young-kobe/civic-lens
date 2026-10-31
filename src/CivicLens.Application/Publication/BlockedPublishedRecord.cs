@@ -1,3 +1,4 @@
+using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
 
@@ -13,13 +14,10 @@ public sealed record BlockedPublishedRecord(PublishedRecordKind Kind, string Rec
     /// <summary>Tells the owner why the record cannot move on. It is null when a withdrawal frees the record.</summary>
     public string? StuckText() => Reason switch
     {
-        BlockedReason.CorrectionLimit when CodeCanApprove(Kind) =>
+        BlockedReason.CorrectionLimit when CodeApproval.CanApprove(Kind) =>
             $"This record has {AtLimit} A person revision cannot publish. Only a code-approved revision can.",
         BlockedReason.CorrectionLimit => $"This record has {AtLimit} No new revision can publish.",
         BlockedReason.WithdrawnAtCorrectionLimit => $"This record is off the site and has {AtLimit} It cannot return to the site.",
         _ => null
     };
-
-    private static bool CodeCanApprove(PublishedRecordKind kind) =>
-        kind is PublishedRecordKind.Action or PublishedRecordKind.Vote or PublishedRecordKind.Statement or PublishedRecordKind.ExecutiveAction;
 }

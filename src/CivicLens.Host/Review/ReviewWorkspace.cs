@@ -248,6 +248,8 @@ internal static class ReviewWorkspace
         ConfigureBriefReview(services, contexts);
         ConfigureReportReview(services, contexts);
         services.AddSingleton<IRecordKindStore>(new PostgresRecordKindStore(contexts));
+        services.AddSingleton<IReviewQueueStore>(new PostgresReviewQueueStore(contexts));
+        services.AddScoped<ListReviewQueue>();
         services.AddScoped(provider => new LookupDraft(provider.GetRequiredService<IActionReviewStore>(),
             provider.GetRequiredService<IVoteReviewStore>(), provider.GetRequiredService<IRecordKindStore>(), TimeProvider.System));
         var collection = ConfigurationFile.ReadCollectionFromEnvironment();

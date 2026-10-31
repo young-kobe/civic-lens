@@ -378,6 +378,9 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.Contains("Approval withdrawn", panel.TextContent, StringComparison.Ordinal);
         Assert.Contains($"releases publish <key> --withdraw documentChange:{draftId} \"note\"", panel.TextContent, StringComparison.Ordinal);
         Assert.NotNull(panel.QuerySelector($"a[href='{draftUrl}']"));
+        var queue = (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='needs-a-person']")!;
+        Assert.Contains("Fee rose to 12 dollars", queue.TextContent, StringComparison.Ordinal);
+        Assert.Contains("A reviewer withdrew the approval. Review the draft again.", queue.TextContent, StringComparison.Ordinal);
 
         host.Client.DefaultRequestHeaders.Remove("Cookie");
         SignIn(Reviewer);
@@ -410,6 +413,9 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
             panel.TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain("--withdraw", panel.TextContent, StringComparison.Ordinal);
         Assert.NotNull(panel.QuerySelector($"a[href='{draftUrl}']"));
+        var queue = (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='needs-a-person']")!;
+        Assert.Contains("Cannot publish", queue.TextContent, StringComparison.Ordinal);
+        Assert.Contains("No new revision can publish.", queue.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

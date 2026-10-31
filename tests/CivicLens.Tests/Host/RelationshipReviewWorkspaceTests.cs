@@ -185,8 +185,9 @@ public sealed class RelationshipReviewWorkspaceTests(PostgresCollection postgres
     public async Task TheReviewHomeCountsTheBriefsAndTheRelationshipsThatNeedActionAndLinksEachList()
     {
         await SeedAsync();
-        await new BriefWorldSeeder(host.ConnectionString).BriefAsync(new DateOnly(2026, 10, 5));
-        await new BriefWorldSeeder(host.ConnectionString).BriefAsync(new DateOnly(2026, 10, 12), reviewStatus: "Approved");
+        var briefSeeder = new BriefWorldSeeder(host.ConnectionString);
+        await briefSeeder.ReviewableBriefAsync(BriefFixtures.ReviewableRevision(new DateOnly(2026, 10, 5)));
+        await briefSeeder.ReviewableBriefAsync(BriefFixtures.ReviewableRevision(new DateOnly(2026, 10, 12)), "Approved");
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
 
         var home = await host.GetDocumentAsync("/Review");
