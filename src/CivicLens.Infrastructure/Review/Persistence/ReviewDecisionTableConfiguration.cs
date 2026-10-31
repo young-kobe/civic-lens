@@ -55,5 +55,4 @@ internal static class ReviewDecisionTableConfiguration
                 .HasPrincipalKey(nameof(IReviewDecisionRow.DecisionId), recordIdProperty).OnDelete(DeleteBehavior.Restrict);
         });
     }
-
 }

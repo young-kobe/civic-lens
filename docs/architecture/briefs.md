@@ -279,9 +279,9 @@ This is an owner command. It prints the count of entries that it queued or moved
 ## Storage and contracts
 
 - The generated [briefs schema](schema/briefs.md) lists every table, column, key, check, index, and trigger.
-- Seven tables hold weekly briefs: `brief_analysis`, `brief_analysis_runs`, `brief_analysis_budget`, `brief_schedule`, `brief_drafts`, `brief_revisions`, and `brief_review_decisions`.
+- Eight tables hold weekly briefs: `brief_analysis`, `brief_analysis_runs`, `brief_analysis_budget`, `brief_schedule`, `brief_drafts`, `brief_revisions`, `brief_review_decisions`, and `brief_review_decision_resolutions`.
 - The commands use the replay receipt table with the operations `brief-save` and `brief-decide`.
-- The review of briefs adds no table, column, or lock. It uses `brief_drafts`, `brief_revisions`, and `brief_review_decisions`.
+- The review of briefs adds no lock. It uses `brief_drafts`, `brief_revisions`, `brief_review_decisions`, and `brief_review_decision_resolutions`.
 - The citations of a brief stay in `revision_json`. No table indexes them.
 - A Bypassed run records its reason in `brief_analysis_runs`. The reasons are `unchanged` and `noNewRecords`.
 - `brief_schedule` holds the first brief week for the task.

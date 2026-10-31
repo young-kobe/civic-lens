@@ -545,6 +545,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
             ("executive_action", "record_id"), ("relationship", "record_id"), ("brief", "record_id")
         ];
 
+        // Ticks count from 0001-01-01 and a microsecond is 10 ticks. timestamptz keeps microseconds, so the check allows 1 microsecond of rounding.
+        private const long DotNetEpochMicroseconds = 62_135_596_800_000_000;
+
         // JSON holds the kind as a number: 0 Approve, 1 RequestChanges, 2 WithdrawApproval.
         private static string BackfillSql(string prefix, string idColumn)
         {
@@ -572,6 +575,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         OR d.actor_subject IS DISTINCT FROM d.decision_json::jsonb ->> 'actorSubject'
                         OR d.note IS DISTINCT FROM d.decision_json::jsonb ->> 'note'
                         OR d.correction_note IS DISTINCT FROM d.decision_json::jsonb ->> 'correctionNote'
+                        OR coalesce(abs(d.created_at_utc_ticks / 10 - {{DotNetEpochMicroseconds}}
+                            - round(extract(epoch FROM (d.decision_json::jsonb ->> 'createdAtUtc')::timestamptz)::numeric * 1000000)) > 1, true)
+                        OR EXISTS (SELECT 1 FROM {{resolutions}} r
+                            JOIN {{decisions}} target ON target.decision_id = r.resolved_decision_id
+                            WHERE r.decision_id = d.decision_id AND (d.kind <> 'Approve' OR target.kind NOT IN ('RequestChanges', 'WithdrawApproval')))
                         OR (SELECT coalesce(array_agg(r.resolved_decision_id::text ORDER BY r.resolved_decision_id), '{}')
                             FROM {{resolutions}} r WHERE r.decision_id = d.decision_id)
                             IS DISTINCT FROM (SELECT coalesce(array_agg(j.value ORDER BY j.value), '{}')
