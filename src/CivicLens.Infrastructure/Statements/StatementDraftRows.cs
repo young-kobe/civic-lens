@@ -1,3 +1,4 @@
+using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Infrastructure.Collection;
@@ -10,7 +11,7 @@ namespace CivicLens.Infrastructure.Statements;
 internal static class StatementDraftRows
 {
     public static async Task<bool> TryAddAnalysisDraftAsync(CollectionAttemptDbContext db, StatementDraftRevision revision, string runId,
-        bool codeApproved, CancellationToken cancellationToken)
+        ApprovalCheck codeApproval, CancellationToken cancellationToken)
     {
         revision.ValidateAsFirstAnalysisRevision();
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.StatementReview, cancellationToken);
@@ -20,7 +21,7 @@ internal static class StatementDraftRows
         SetListing(draft, revision, capturedOn);
         db.Add(draft);
         await PostgresStatementReviewStore.Records.AppendCodeApprovedAsync(db, draft, revision, NewRevision(revision, runId), [],
-            () => Task.FromResult(codeApproved), PostgresStatementReviewStore.NewDecisionRow);
+            () => Task.FromResult(codeApproval), PostgresStatementReviewStore.NewDecisionRow);
         return true;
     }
 
@@ -43,7 +44,8 @@ internal static class StatementDraftRows
         CandidateId = candidateId,
         CurrentRevisionNumber = currentRevisionNumber,
         ReviewStatus = ReviewPolicy.GetInitialStatus(currentRevisionNumber),
-        CreatedAtUtcTicks = createdAtUtcTicks
+        CreatedAtUtcTicks = createdAtUtcTicks,
+        LastRevisedAtUtcTicks = createdAtUtcTicks
     };
 
     public static StatementRevisionRow NewRevision(StatementDraftRevision revision, string? runId) => new()

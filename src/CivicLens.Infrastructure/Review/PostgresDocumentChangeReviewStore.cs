@@ -308,7 +308,8 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
             CurrentRevisionNumber = 1,
             ReviewStateVersion = 0,
             ReviewStatus = ReviewPolicy.GetInitialStatus(1),
-            CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
+            CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks,
+            LastRevisedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
         });
         db.Add(NewRevisionRow(revision));
     }

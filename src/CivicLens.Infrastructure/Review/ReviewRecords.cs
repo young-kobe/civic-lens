@@ -55,26 +55,35 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         }, cancellationToken);
     }
 
-    /// <summary>The one step that appends a revision for a person or for analysis. It recomputes the stored status.</summary>
+    /// <summary>The one step that appends a revision for a person or for analysis. It recomputes the stored status. It clears the
+    /// held reason, because the reason described an older revision.</summary>
     public void AppendRevision(CollectionAttemptDbContext db, TDraftRow draft, TRevision revision, TRevisionRow row,
         ImmutableArray<ReviewDecision> cycle)
     {
         db.Add(row);
         draft.CurrentRevisionNumber = revision.RevisionNumber;
+        draft.LastRevisedAtUtcTicks = row.CreatedAtUtcTicks;
+        SetHeldReason(draft, null);
         revised?.Invoke(draft, revision);
         draft.ReviewStatus = ReviewPolicy.GetCurrentStatus(draft.CurrentRevisionNumber, cycle);
     }
 
     /// <summary>The analysis worker appends a revision of a fact record. Code approves it in the same transaction when no concern
-    /// is open, the revision holds no text that a person wrote, and the record's own approval checks pass. Otherwise it waits for a person. The caller runs
+    /// is open, the revision holds no text that a person wrote, and the record's own approval checks pass. Otherwise it waits for a person.
+    /// A failed approval check keeps its message as the held reason of the draft. The caller runs
     /// <see cref="AfterCodeApprovalAsync"/> once the rest of the transaction rows are tracked.</summary>
     public async Task AppendCodeApprovedAsync(CollectionAttemptDbContext db, TDraftRow draft, TRevision revision, TRevisionRow row,
-        ImmutableArray<ReviewDecision> cycle, Func<Task<bool>> passesApprovalChecks, Func<ReviewDecision, TDecisionRow> toDecisionRow)
+        ImmutableArray<ReviewDecision> cycle, Func<Task<ApprovalCheck>> approvalChecks, Func<ReviewDecision, TDecisionRow> toDecisionRow)
     {
         AppendRevision(db, draft, revision, row, cycle);
-        if (!ReviewPolicy.GetUnresolvedConcerns(cycle).IsEmpty || revision is IHeadlineSummaryRevision { TextOrigin: ReviewTextOrigin.Person } ||
-            !await passesApprovalChecks())
+        if (!ReviewPolicy.GetUnresolvedConcerns(cycle).IsEmpty || revision is IHeadlineSummaryRevision { TextOrigin: ReviewTextOrigin.Person })
             return;
+        var check = await approvalChecks();
+        if (!check.Passed)
+        {
+            SetHeldReason(draft, check.Failure);
+            return;
+        }
         var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), draft.RecordId, revision.RevisionNumber, draft.ReviewStateVersion + 1,
             ReviewDecisionKind.Approve, ReviewAuthor.CodeSubject, null, [], new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero));
         ReviewPolicy.ValidateDecision(draft.RecordId, draft.CurrentRevisionNumber, draft.ReviewStateVersion, cycle, decision);
@@ -96,7 +105,13 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
     {
         db.Add(toRow(decision));
         draft.ReviewStateVersion = decision.ReviewStateVersion;
+        SetHeldReason(draft, null);
         draft.ReviewStatus = ReviewPolicy.GetCurrentStatus(draft.CurrentRevisionNumber, cycle.Add(decision));
+    }
+
+    private static void SetHeldReason(TDraftRow draft, string? reason)
+    {
+        if (draft is IHeldDraftRow held) held.HeldReason = reason;
     }
 
     public async Task<ReviewDecision> DecideAsync(IDbContextFactory<CollectionAttemptDbContext> contextFactory, string actorSubject,
@@ -139,9 +154,9 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
             await Drafts(db, DraftStatusFilter.Approved).CountAsync(cancellationToken));
 
     public async Task<(TDraftRow[] Drafts, int Total)> ReadNeedingActionAsync(CollectionAttemptDbContext db, int limit,
-        Expression<Func<TDraftRow, long>> revisedOf, CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
-        var slice = await PageAsync(db, null, limit, DraftStatusFilter.NeedsAction, revisedOf, cancellationToken);
+        var slice = await PageAsync(db, null, limit, DraftStatusFilter.NeedsAction, row => row.LastRevisedAtUtcTicks, cancellationToken);
         return ([.. slice.Items], await Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken));
     }
 

@@ -55,7 +55,7 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
             var draft = await db.Set<StatementDraftRow>()
                 .SingleOrDefaultAsync(row => row.CandidateId == revision.CandidateId, cancellationToken);
             if (draft is null) db.Add(draft = StatementDraftRows.NewDraft(revision.CandidateId, 1, revision.CreatedAtUtc.UtcTicks));
-            else StartRevisionLessDraft(draft);
+            else StartRevisionLessDraft(draft, revision);
             StatementDraftRows.SetListing(draft, revision, capturedOn);
             db.Add(StatementDraftRows.NewRevision(revision, null));
             return revision;
@@ -202,10 +202,11 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
         public string ReasonCode { get; set; } = "";
     }
 
-    private static void StartRevisionLessDraft(StatementDraftRow draft)
+    private static void StartRevisionLessDraft(StatementDraftRow draft, StatementDraftRevision revision)
     {
         if (draft.CurrentRevisionNumber != 0) throw new StatementDraftExistsException(draft.CandidateId);
         draft.CurrentRevisionNumber = 1;
+        draft.LastRevisedAtUtcTicks = revision.CreatedAtUtc.UtcTicks;
         draft.ReviewStatus = ReviewPolicy.GetInitialStatus(1);
     }
 

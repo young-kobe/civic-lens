@@ -329,6 +329,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasDefaultValue(new DateOnly(1, 1, 1))
                         .HasColumnName("event_on");
 
+                    b.Property<string>("HeldReason")
+                        .HasColumnType("text")
+                        .HasColumnName("held_reason");
+
                     b.PrimitiveCollection<string[]>("IssueIds")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -374,6 +378,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasDatabaseName("ix_action_drafts_official_ids");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("OfficialIds"), "gin");
+
+                    b.HasIndex("LastRevisedAtUtcTicks", "RecordId")
+                        .IsDescending()
+                        .HasDatabaseName("ix_action_drafts_needs_action_revised")
+                        .HasFilter("review_status <> 'Approved'");
 
                     b.HasIndex("SourceId", "Congress", "BillType", "BillNumber")
                         .IsUnique()
@@ -1114,6 +1123,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasIndex("WeekStart")
                         .IsUnique()
                         .HasDatabaseName("ux_brief_drafts_week");
+
+                    b.HasIndex("LastRevisedAtUtcTicks", "RecordId")
+                        .IsDescending()
+                        .HasDatabaseName("ix_brief_drafts_needs_action_revised")
+                        .HasFilter("review_status <> 'Approved'");
 
                     b.ToTable("brief_drafts", null, t =>
                         {
@@ -2595,6 +2609,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasDefaultValue(new DateOnly(1, 1, 1))
                         .HasColumnName("event_on");
 
+                    b.Property<string>("HeldReason")
+                        .HasColumnType("text")
+                        .HasColumnName("held_reason");
+
                     b.PrimitiveCollection<string[]>("IssueIds")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -2634,6 +2652,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasDatabaseName("ix_executive_action_drafts_official_ids");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("OfficialIds"), "gin");
+
+                    b.HasIndex("LastRevisedAtUtcTicks", "RecordId")
+                        .IsDescending()
+                        .HasDatabaseName("ix_executive_action_drafts_needs_action_revised")
+                        .HasFilter("review_status <> 'Approved'");
 
                     b.ToTable("executive_action_drafts", null, t =>
                         {
@@ -3138,6 +3161,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("RecordId");
 
+                    b.HasIndex("LastRevisedAtUtcTicks", "RecordId")
+                        .IsDescending()
+                        .HasDatabaseName("ix_relationship_drafts_needs_action_revised")
+                        .HasFilter("review_status <> 'Approved'");
+
                     b.ToTable("relationship_drafts", null, t =>
                         {
                             t.HasCheckConstraint("ck_relationship_drafts_id", "record_id ~ '^[0-9a-f]{64}$'");
@@ -3380,6 +3408,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("current_revision_number");
 
+                    b.Property<long>("LastRevisedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_revised_at_utc_ticks");
+
                     b.Property<int>("ReviewStateVersion")
                         .HasColumnType("integer")
                         .HasColumnName("review_state_version");
@@ -3393,6 +3425,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasKey("DraftId");
 
                     b.HasIndex("ComparisonId");
+
+                    b.HasIndex("LastRevisedAtUtcTicks", "DraftId")
+                        .IsDescending()
+                        .HasDatabaseName("ix_document_change_drafts_needs_action_revised")
+                        .HasFilter("review_status <> 'Approved'");
 
                     b.ToTable("document_change_drafts", null, t =>
                         {
@@ -4078,12 +4115,20 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasDefaultValue(new DateOnly(1, 1, 1))
                         .HasColumnName("event_on");
 
+                    b.Property<string>("HeldReason")
+                        .HasColumnType("text")
+                        .HasColumnName("held_reason");
+
                     b.PrimitiveCollection<string[]>("IssueIds")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("text[]")
                         .HasColumnName("issue_ids")
                         .HasDefaultValueSql("'{}'");
+
+                    b.Property<long>("LastRevisedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_revised_at_utc_ticks");
 
                     b.PrimitiveCollection<string[]>("OfficialIds")
                         .IsRequired()
@@ -4117,6 +4162,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasIndex("EventOn", "CandidateId")
                         .IsDescending()
                         .HasDatabaseName("ix_statement_drafts_listing");
+
+                    b.HasIndex("LastRevisedAtUtcTicks", "CandidateId")
+                        .IsDescending()
+                        .HasDatabaseName("ix_statement_drafts_needs_action_revised")
+                        .HasFilter("review_status <> 'Approved'");
 
                     b.ToTable("statement_drafts", null, t =>
                         {
@@ -4597,6 +4647,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasDefaultValue(new DateOnly(1, 1, 1))
                         .HasColumnName("event_on");
 
+                    b.Property<string>("HeldReason")
+                        .HasColumnType("text")
+                        .HasColumnName("held_reason");
+
                     b.PrimitiveCollection<string[]>("IssueIds")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -4650,6 +4704,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasDatabaseName("ix_vote_drafts_official_ids");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("OfficialIds"), "gin");
+
+                    b.HasIndex("LastRevisedAtUtcTicks", "RecordId")
+                        .IsDescending()
+                        .HasDatabaseName("ix_vote_drafts_needs_action_revised")
+                        .HasFilter("review_status <> 'Approved'");
 
                     b.HasIndex("SourceId", "Chamber", "Congress", "SessionNumber", "RollCallNumber")
                         .IsUnique()

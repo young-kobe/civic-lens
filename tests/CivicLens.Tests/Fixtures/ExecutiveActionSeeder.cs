@@ -24,7 +24,7 @@ internal sealed class ExecutiveActionSeeder
         extractions = new JobExtractionSeeder(jobs, documents, candidates, connectionString, captureRoot);
     }
 
-    public async Task<string> AdmitAsync(string json, string personId)
+    public async Task<string> AdmitAsync(string json, string personId, string shiftedStoredTextPrefix = "")
     {
         var document = FederalRegisterFixtures.Document(json);
         var source = new ConfiguredCollectionSource(FederalRegisterFixtures.Configuration(), FederalRegisterFixtures.SourceId,
@@ -33,7 +33,7 @@ internal sealed class ExecutiveActionSeeder
         var jobId = Assert.Single((await jobs.AdmitListPageAsync(source, page, default)).Jobs).JobId;
         await SucceededJobs.MarkSucceededAsync(connectionString, jobId);
         var text = FederalRegisterRenderer.Render(document);
-        var extractionId = await extractions.SaveAsync(jobId, json, text, FederalRegisterDocumentParser.ExtractionVersion);
+        var extractionId = await extractions.SaveAsync(jobId, json, shiftedStoredTextPrefix + text, FederalRegisterDocumentParser.ExtractionVersion);
         await jobs.AdmitDocumentAsync(source, jobId, new FederalRegisterEvidence(document, extractionId, text, personId), default);
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();

@@ -51,7 +51,7 @@ internal sealed class FakeStatementDraftStore : FakeAnalysisQueue<StatementDraft
         if (checkpoint is StatementDraftCheckpoint { Revision: { } revision } settled)
         {
             Revisions.Add(revision);
-            if (settled.CodeApproved) CodeApproved.Add(revision.CandidateId);
+            if (settled.CodeApproval is { Passed: true }) CodeApproved.Add(revision.CandidateId);
         }
         if (checkpoint.Status == State.Succeeded && checkpoint.ErrorCode == StatementDraftErrorCodes.OverByteCap)
             DraftsWithoutRevision.Add(entry.SubjectId);

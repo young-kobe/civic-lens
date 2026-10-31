@@ -66,6 +66,7 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         var replay = await create.ExecuteAsync(actor, createRequest);
         Assert.Equal(first.DraftId, replay.DraftId);
         Assert.NotEmpty(replay.Citations);
+        Assert.Equal(await RevisionTicksAsync(first.DraftId), await LastRevisedTicksAsync(first.DraftId));
 
         var save = new SaveDocumentChangeDraft(reviews, catalog);
         var initialRequest = new SaveDocumentChangeDraftRequest(first.DraftId, 1, "Policy update", "The policy changed.",
@@ -80,6 +81,7 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         var review = await reviews.GetAsync(first.DraftId, CancellationToken.None);
         Assert.NotNull(review);
         Assert.Equal(2, review.CurrentRevision.RevisionNumber);
+        Assert.Equal(await RevisionTicksAsync(first.DraftId, 2), await LastRevisedTicksAsync(first.DraftId));
     }
 
     [Fact]
@@ -585,6 +587,22 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         command.Parameters.AddWithValue("id", comparison.ComparisonId);
         Assert.Equal(comparison.HasChanges(), (bool)(await command.ExecuteScalarAsync())!);
         Assert.True(comparison.HasChanges());
+    }
+
+    private Task<long> RevisionTicksAsync(string draftId, int revisionNumber = 1) => TicksAsync(
+        "SELECT created_at_utc_ticks FROM document_change_revisions WHERE draft_id = @id AND revision_number = @number", draftId, revisionNumber);
+
+    private Task<long> LastRevisedTicksAsync(string draftId) =>
+        TicksAsync("SELECT last_revised_at_utc_ticks FROM document_change_drafts WHERE draft_id = @id", draftId, 0);
+
+    private async Task<long> TicksAsync(string sql, string draftId, int revisionNumber)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("id", draftId);
+        command.Parameters.AddWithValue("number", revisionNumber);
+        return (long)(await command.ExecuteScalarAsync())!;
     }
 
     private async Task AssertStoredStatusMatchesPolicyAsync(string draftId, ReviewStatus expected)

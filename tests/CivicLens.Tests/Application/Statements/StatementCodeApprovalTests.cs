@@ -138,7 +138,25 @@ public sealed class StatementCodeApprovalTests
             IssueIds = [StatementGateFixtures.RentIssue]
         };
 
-        Assert.False(StatementCodeApproval.Approves(evidence, Allowed(), Warren, revision));
+        Assert.Equal(StatementCodeApproval.IssueNotInGate, StatementCodeApproval.Check(evidence, Allowed(), Warren, revision).Failure);
+    }
+
+    [Fact]
+    public void AGateThatDidNotPassGivesItsOwnReasonSoAPersonSeesWhyCodeHeldTheDraft()
+    {
+        var evidence = DraftEvidence(carryOver: StatementGateCarryOver.None, configuration: OwnOfficeOf(Warren));
+        var revision = StatementDraftResolver.Resolve(Output(), evidence, Officials(Warren), DateTimeOffset.UnixEpoch).Revision!;
+
+        Assert.Equal(StatementCodeApproval.GateNotPassed, StatementCodeApproval.Check(evidence, Allowed(), Warren, revision).Failure);
+    }
+
+    [Fact]
+    public void ASourceWithoutAnOfficeOwnerGivesTheSpeakerReasonSoAPersonSeesWhyCodeHeldTheDraft()
+    {
+        var evidence = DraftEvidence(configuration: OwnOfficeOf(Warren));
+        var revision = StatementDraftResolver.Resolve(Output(), evidence, Officials(Warren), DateTimeOffset.UnixEpoch).Revision!;
+
+        Assert.Equal(StatementCodeApproval.SpeakerIsNotOfficeOwner, StatementCodeApproval.Check(evidence, Allowed(), null, revision).Failure);
     }
 
     [Fact]
@@ -148,7 +166,7 @@ public sealed class StatementCodeApprovalTests
         var revision = StatementDraftResolver.Resolve(Output(), evidence, Officials(Warren), DateTimeOffset.UnixEpoch).Revision!;
         var narrower = new StatementAllowedSelections([], [StatementGateFixtures.RentIssue], [StatementGateFixtures.HousingArea]);
 
-        Assert.False(StatementCodeApproval.Approves(evidence, narrower, Warren, revision));
+        Assert.False(StatementCodeApproval.Check(evidence, narrower, Warren, revision).Passed);
     }
 
     private static StatementAllowedSelections Allowed() => new([Warren], [StatementGateFixtures.RentIssue], [StatementGateFixtures.HousingArea]);

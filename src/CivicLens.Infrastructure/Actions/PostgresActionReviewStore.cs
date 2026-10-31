@@ -97,7 +97,7 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var (drafts, total) = await Records.ReadNeedingActionAsync(db, limit, row => row.LastRevisedAtUtcTicks, cancellationToken);
+        var (drafts, total) = await Records.ReadNeedingActionAsync(db, limit, cancellationToken);
         var histories = await Records.ReadHistoriesAsync(db, drafts, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new([.. drafts.Select(row => ToReview(row, histories[row.RecordId]))], total);

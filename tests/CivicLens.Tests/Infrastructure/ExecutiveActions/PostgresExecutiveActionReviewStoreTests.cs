@@ -1,13 +1,12 @@
-using CivicLens.Tests.Infrastructure.Collection;
-using CivicLens.Core.Review;
-using CivicLens.Infrastructure.ExecutiveActions;
-using CivicLens.Tests.Fixtures;
+using System.Text.Json;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Publication;
+using CivicLens.Core.Review;
 using CivicLens.Host.Publication;
 using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Briefs;
+using CivicLens.Infrastructure.ExecutiveActions;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Infrastructure.Relationships;
 using CivicLens.Infrastructure.Review;
@@ -15,8 +14,10 @@ using CivicLens.Infrastructure.Statements;
 using CivicLens.Infrastructure.Votes;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Application.Publication;
+using CivicLens.Tests.Fixtures;
+using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.Extensions.Logging.Abstractions;
-using System.Text.Json;
+using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.ExecutiveActions;
 
@@ -54,6 +55,21 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         Assert.Equal(ReviewStatus.Approved, publishable.Review.CurrentStatus);
         Assert.Single(publishable.Extractions);
         Assert.Empty(await store.ListUnpublishedApprovedAsync(10, [recordId], default));
+    }
+
+    [Fact]
+    public async Task AFailedApprovalCheckKeepsItsMessageAsTheHeldReasonUntilAPersonDecides()
+    {
+        var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump", shiftedStoredTextPrefix: "Shifted. ");
+
+        var held = Assert.Single((await store.ListNeedingActionAsync(10, default)).Items);
+        Assert.Equal(ReviewStatus.AwaitingReview, held.CurrentStatus);
+        Assert.Equal("An executive action fact must equal the text of its citation.", await HeldReasonAsync());
+        var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 1, ReviewDecisionKind.RequestChanges, "auth0|owner",
+            "The quotes do not match.", [], DateTimeOffset.UtcNow);
+        await store.DecideAsync("auth0|owner", decision, 1, 0, "key-held", new string('b', 64), default);
+
+        Assert.Null(await HeldReasonAsync());
     }
 
     [Fact]
@@ -121,5 +137,13 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
             new PublishReleaseRequest([], "withdraw") { Withdrawals = [new(PublishedRecordKind.ExecutiveAction, recordId, "The title is wrong.")] });
         Assert.Empty(JsonSerializer.Deserialize<PublicationRelease>(await releases.ReadFileAsync(withdrawn.DirectoryName,
             PublicationProtocol.ManifestPath, PublicationProtocol.MaximumManifestBytes, default), PublicationProtocol.JsonOptions)!.Records);
+    }
+
+    private async Task<string?> HeldReasonAsync()
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("SELECT held_reason FROM executive_action_drafts", connection);
+        return await command.ExecuteScalarAsync() as string;
     }
 }

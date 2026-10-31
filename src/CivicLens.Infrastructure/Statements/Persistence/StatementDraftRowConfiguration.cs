@@ -22,6 +22,8 @@ internal sealed class StatementDraftRowConfiguration : IEntityTypeConfiguration<
         builder.Property(row => row.ReviewStateVersion).HasColumnName("review_state_version");
         builder.Property(row => row.ReviewStatus).HasColumnName("review_status").HasConversion<string>().HasMaxLength(32).IsRequired();
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
+        ReviewDraftTableConfiguration.ConfigureLastRevised(builder, "statement_drafts", nameof(StatementDraftRow.CandidateId));
+        builder.Property(row => row.HeldReason).HasColumnName("held_reason");
         ListedDraftTableConfiguration.ConfigureListing(builder, "statement_drafts");
         builder.HasIndex(nameof(StatementDraftRow.EventOn), nameof(StatementDraftRow.CandidateId)).IsDescending(true, true)
             .HasDatabaseName("ix_statement_drafts_listing");

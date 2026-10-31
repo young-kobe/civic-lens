@@ -102,6 +102,8 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         await Create.ExecuteAsync(Owner, new(candidate, "create-key"));
 
         Assert.Equal(("AwaitingReview", 1L, 0L, 1L), await DraftStateAsync(candidate));
+        Assert.Equal(await ScalarAsync($"SELECT created_at_utc_ticks FROM statement_revisions WHERE candidate_id = '{candidate}' AND revision_number = 1"),
+            await ScalarAsync($"SELECT last_revised_at_utc_ticks FROM statement_drafts WHERE candidate_id = '{candidate}'"));
         await Assert.ThrowsAsync<ArgumentException>(() => Create.ExecuteAsync(Owner, new(new string('a', 64), "unknown")));
     }
 

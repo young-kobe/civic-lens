@@ -255,9 +255,9 @@ A span is a `DirectQuotation` when it lies entirely inside one quoted passage. E
 
 ### Statement code approval
 
-`StatementDraftStep` reads the evidence once. It resolves the allowed selections and the covered officials with `StatementSelectionResolver`. After the draft passes the resolver, `StatementCodeApproval.Approves` decides. The result goes in `StatementDraftCheckpoint.CodeApproved`.
+`StatementDraftStep` reads the evidence once. It resolves the allowed selections and the covered officials with `StatementSelectionResolver`. After the draft passes the resolver, `StatementCodeApproval.Check` decides. `Check` returns an `ApprovalCheck`. The result goes in `StatementDraftCheckpoint.CodeApproval`.
 
-Code approves only when all these rules hold. Otherwise the draft waits for a person, as before.
+Code approves only when all these rules hold. Otherwise the draft waits for a person, as before. The check stops at the first failure. It tests the gate, the issues, the speaker, and then the approval rules of a person. The draft row keeps the failure message in `held_reason`; see [review](review.md#code-approval).
 
 - The source of the article sets `officeOf`, and the draft has that person as its one speaker. The draft names no other speaker.
 - The latest gate run is a pass. A failed-open or over-cap gate gives `StatementGateCarryOver.None`, so it never passes. Each issue of the draft has a verified gate quote.
@@ -265,6 +265,8 @@ Code approves only when all these rules hold. Otherwise the draft waits for a pe
 - The statement date is null. Or its quote states it, and it lies on the capture day or up to 7 days before it. `StatementDraftResolver` checks the quote with `AnalysisAnswerRules.StatesDate`. `StatementCodeApproval` owns this window and passes `dateReadByCode` to `RequireApprovable`. A person approval never passes it, so a person still needs a confirmed date. The public page then says "Date read from the release by code".
 - A gate pass about a bill or vote with no tracked issue can be code-approved. The draft then has an empty issue list.
 - The approval rules of a person pass: `StatementAllowedSelections.RequireApprovable`.
+
+The messages are the constants `GateNotPassed`, `IssueNotInGate`, and `SpeakerIsNotOfficeOwner` of `StatementCodeApproval`. The date rule and the approval rules of a person give the message of `RequireApprovable`.
 
 At settlement, `StatementDraftRows` appends the first revision through `ReviewRecords.AppendCodeApprovedAsync`. The Approve decision has the actor `civic-lens:code`. `StatementDraftQueueMapping` then runs `AfterCodeApprovalAsync`, so relationship pairs and brief staleness follow as for a person approval.
 
@@ -499,6 +501,7 @@ With `--since`, `regate` moves only candidates first captured on or after that U
 - `StatementDraftRevision` holds the headline, the summary, and the statement date with its evidence span. It also holds `speakerOfficialIds`, `otherSpeakers`, `issueIds`, `policyAreaIds`, the quotations (an extraction span and a kind), and `billNumbers`. Confidence is never in the revision; it stays in the run output.
 - The review record ID is the 64-character candidate ID. `ReviewValidation.ValidateCandidateId` accepts a lowercase SHA-256 value only.
 - `statement_drafts` also has `event_on`, `issue_ids`, and `official_ids`, with GIN indexes on the two arrays and the index `ix_statement_drafts_listing`. Create, save, and the AI draft each call `StatementDraftRows.SetListing` with the revision and the capture date. The over-cap draft row gets the capture date.
+- `statement_drafts` also has `last_revised_at_utc_ticks` and the nullable `held_reason`; see [review](review.md#storage-and-contracts).
 - `statement_drafts` also has `review_state_version` and `review_status`. The store computes both with `ReviewPolicy` under the lock.
 - A draft with no revision has the status `NotDrafted`.
 - `statement_review_decisions` holds the immutable decision JSON.
