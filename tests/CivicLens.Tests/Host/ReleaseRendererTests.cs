@@ -2044,7 +2044,8 @@ public sealed class ReleaseRendererTests
     [
         PublicationProtocol.HomePath, PublicationProtocol.OfficialsPagePath, PublicationProtocol.FacetsPath,
         PublicationProtocol.AllRecordsPagePath(1), PublicationProtocol.BriefsPagePath(1), PublicationProtocol.SearchPagePath,
-        PublicationProtocol.MethodPagePath, PublicationProtocol.AboutPagePath, PublicationProtocol.GlossaryPagePath, PublicationProtocol.ReportPagePath
+        PublicationProtocol.MethodPagePath, PublicationProtocol.AboutPagePath, PublicationProtocol.GlossaryPagePath, PublicationProtocol.ReportPagePath,
+        .. OfficialBoard.All.Select(board => board.PagePath)
     ];
 
     [Fact]
@@ -2151,6 +2152,7 @@ public sealed class ReleaseRendererTests
             ("official", official.PagePath, await renderer.RenderOfficialAsync(official, PublicationCatalogs.None, CancellationToken.None), "Officials"),
             ("past congress", pastOfficial.PagePath, await renderer.RenderOfficialAsync(pastOfficial, PublicationCatalogs.None, CancellationToken.None), "Officials"),
             ("officials", PublicationProtocol.OfficialsPagePath, await renderer.RenderOfficialsAsync([new OfficialListing(profile, 0)], DateTimeOffset.UnixEpoch, CancellationToken.None), "Officials"),
+            ("board", OfficialBoard.All[0].PagePath, await renderer.RenderBoardAsync(OfficialBoardPage.All([], []).First(), CancellationToken.None), "Officials"),
             ("search", PublicationProtocol.SearchPagePath, await renderer.RenderSearchAsync(release, facets, CancellationToken.None), "Search"),
             ("method", PublicationProtocol.MethodPagePath, await renderer.RenderMethodAsync(CancellationToken.None), null),
             ("about", PublicationProtocol.AboutPagePath, await renderer.RenderAboutAsync(CancellationToken.None), null),
@@ -2168,6 +2170,7 @@ public sealed class ReleaseRendererTests
         AssertTrail(pages["issues"], ["Home|index.html", "Issues and policy areas"]);
         AssertTrail(pages["search"], ["Home|index.html", "Search records"]);
         AssertTrail(pages["officials"], ["Home|index.html", "Officials"]);
+        AssertTrail(pages["board"], ["Home|index.html", "Officials|officials.html", "House Democrats"]);
         AssertTrail(pages["method"], ["Home|index.html", "How the official page counts work"]);
         AssertTrail(pages["report"], ["Home|index.html", "Report a problem"]);
         AssertTrail(pages["briefs"], ["Home|index.html", "Briefs"]);
@@ -2365,6 +2368,14 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public void TheSortStatusLineTemplateEndsWithTheNoticeThatSortedRowsLeaveOutTheBadgeAndTheCounts()
+    {
+        var script = System.Text.Encoding.UTF8.GetString(new ReleaseRenderer(null, null).Assets.Single(asset => asset.RelativePath == "assets/js/public.js").Content);
+
+        Assert.Contains("sorted by ${label(current.header, current.direction)}. Sorted rows leave out the party badge and the vote counts.", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task EveryPageTypePreloadsInstrumentSansAndOnlyPagesWithNewsreaderTextAboveTheFoldPreloadNewsreader()
     {
         string[] newsreaderPages = ["record", "statement", "action", "vote", "relationship", "brief", "withdrawal"];
@@ -2455,7 +2466,7 @@ public sealed class ReleaseRendererTests
     private static string ReleasePath(string pagePath, string href) => new Uri(new Uri("https://x/" + pagePath), href).AbsolutePath[1..];
 
     private static readonly ReleaseFacets NoFacets = new([], []);
-    private static HomeHighlights NoHighlights(PublicationRelease release) => HomeHighlights.From(release, [], []);
+    private static HomeHighlights NoHighlights(PublicationRelease release) => HomeHighlights.From(release, []);
 
     private static PublicationCatalog HousingCatalog { get; } = new(new Dictionary<string, string>(), IssuesNamed("housing", "Housing costs"));
 

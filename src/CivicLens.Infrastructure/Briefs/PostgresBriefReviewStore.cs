@@ -65,30 +65,6 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
         return new(ToReview(draft, history), CitedRecordsOf(current.Citations, records, changed), CitedRecordsOf(suggested, records, changed));
     }
 
-    public async Task<BriefReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter, CancellationToken cancellationToken)
-    {
-        PageLimit.Validate(limit);
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var slice = filter == DraftStatusFilter.NeedsAction
-            ? await Records.PageAsync(db, cursor, limit, filter, row => row.LastRevisedAtUtcTicks, cancellationToken)
-            : await Records.PageAsync(db, cursor, limit, filter, cancellationToken);
-        var histories = await Records.ReadHistoriesAsync(db, slice.Items, cancellationToken);
-        var changed = await BriefRecordReader.FindChangedInActiveReleaseAsync(db,
-            histories.Values.SelectMany(history => history.CurrentRevision!.Citations), cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return new([.. slice.Items.Select(row => new BriefReviewItem(ToReview(row, histories[row.RecordId]),
-            histories[row.RecordId].CurrentRevision!.Citations.Any(citation => changed.Contains(BriefRecordReader.BindingOf(citation)))))],
-            slice.NewerCursor, slice.OlderCursor);
-    }
-
-    public async Task<BriefReviewCounts> CountAsync(CancellationToken cancellationToken)
-    {
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var (needsAction, approved) = await Records.CountAsync(db, cancellationToken);
-        return new(needsAction, approved);
-    }
-
     public async Task<IReadOnlyList<UnpublishedApprovedBrief>> ListUnpublishedApprovedAsync(int limit,
         IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken)
     {

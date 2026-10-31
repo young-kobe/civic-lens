@@ -12,8 +12,6 @@ public sealed record VotesWithParty(PublishedChamber Chamber, string Party, int 
 {
     public int Cast => Matched + Breaks.Length;
 
-    public double? Share => TalkAndActionProfile.ShareOf(Matched, Cast);
-
     public static ImmutableArray<VotesWithParty> Of(IEnumerable<PublishedOfficialVote> votes) =>
     [.. votes.Where(HasMajorParty)
         .GroupBy(vote => (vote.Chamber, vote.Party)).OrderBy(group => group.Key.Chamber).ThenBy(group => group.Key.Party, StringComparer.Ordinal)

@@ -14,8 +14,7 @@ public sealed record HomeHighlights(DateOnly WindowStart, DateOnly WindowEnd, Pu
     public const int WindowDays = 7;
     public const int ExecutiveActionCount = 3;
 
-    public static HomeHighlights From(PublicationRelease release, IReadOnlyList<OfficialListing> officials,
-        IReadOnlyList<PublishedOfficialSummary> summaries)
+    public static HomeHighlights From(PublicationRelease release, ImmutableArray<OfficialBoardPage> boards)
     {
         var end = DateOnly.FromDateTime(release.PublishedAtUtc.UtcDateTime);
         var start = end.AddDays(1 - WindowDays);
@@ -24,7 +23,7 @@ public sealed record HomeHighlights(DateOnly WindowStart, DateOnly WindowEnd, Pu
         var executiveActions = ReleaseRecordOrder.NewestFirst(release.Records.Where(entry => entry.Kind == PublishedRecordKind.ExecutiveAction),
             ReleaseRecordOrder.Day, entry => entry.FirstPublishedAtUtc, entry => entry.RecordId).ToList();
         return new(start, end, votes.OrderBy(Gap).ThenBy(entry => entry.RecordId, StringComparer.Ordinal).FirstOrDefault(), votes.Count,
-            [.. executiveActions.Take(ExecutiveActionCount)], executiveActions.Count, BreakLeader.All(officials, summaries));
+            [.. executiveActions.Take(ExecutiveActionCount)], executiveActions.Count, BreakLeader.All(boards));
     }
 
     public static int Gap(PublishedRecordEntry vote) => Math.Abs(vote.YeaCount!.Value - vote.NayCount!.Value);

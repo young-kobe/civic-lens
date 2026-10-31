@@ -13,9 +13,9 @@ internal static class PublishedHomeCardView
 
     public const string BreaksTitle = "Voted against their party most often";
 
-    public static readonly string BreaksRule = $"{PublishedOfficialView.SplitVoteMeaning} The card names one member for each chamber and party: the member with the highest share of split votes cast against most of the party. It counts only members with at least {BreakLeader.MinimumSplitVotes} split votes cast with Yea or Nay and at least one vote against the party. A vote against the party is not a mistake. The card shows counts and nothing more.";
+    public static readonly string BreaksRule = $"{PublishedOfficialView.SplitVoteMeaning} The card names one member for each chamber and party: the member with the highest share of split votes cast against most of the party. It counts only members with at least {OfficialBoardPage.MinimumSplitVotes} split votes cast with Yea or Nay and at least one vote against the party. A vote against the party is not a mistake. The card shows counts and nothing more.";
 
-    public static readonly string NoBreakLeaders = $"No member with vote figures on this site has {BreakLeader.MinimumSplitVotes} split votes cast with Yea or Nay and a vote against the party yet, so this card names no one.";
+    public static readonly string NoBreakLeaders = $"No member with vote figures on this site has {OfficialBoardPage.MinimumSplitVotes} split votes cast with Yea or Nay and a vote against the party yet, so this card names no one.";
 
     public const string BreaksLeftOut = "A chamber and party with no line has no member with vote figures on this site who meets these rules.";
 

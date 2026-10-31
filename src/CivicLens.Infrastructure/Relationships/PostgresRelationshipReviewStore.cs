@@ -75,34 +75,6 @@ public sealed class PostgresRelationshipReviewStore(IDbContextFactory<Collection
             RelationshipEditOptions.For(current, statement, target));
     }
 
-    public async Task<RelationshipReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter, CancellationToken cancellationToken)
-    {
-        PageLimit.Validate(limit);
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var slice = filter == DraftStatusFilter.NeedsAction
-            ? await Records.PageAsync(db, cursor, limit, filter, row => row.LastRevisedAtUtcTicks, cancellationToken)
-            : await Records.PageAsync(db, cursor, limit, filter, cancellationToken);
-        var histories = await Records.ReadHistoriesAsync(db, slice.Items, cancellationToken);
-        var citations = histories.Values.SelectMany(history => CitationsOf(history.CurrentRevision!)).ToArray();
-        var headlines = await RelationshipCitedReader.ReadHeadlinesAsync(db, citations, cancellationToken);
-        var changed = await RelationshipCitedReader.FindChangedAsync(db, citations, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return new([.. slice.Items.Select(row =>
-        {
-            var current = histories[row.RecordId].CurrentRevision!;
-            return new RelationshipReviewItem(ToReview(row, histories[row.RecordId]), headlines[current.Statement], headlines[current.Target],
-                changed.Contains(current.Statement) || changed.Contains(current.Target));
-        })], slice.NewerCursor, slice.OlderCursor);
-    }
-
-    public async Task<RelationshipReviewCounts> CountAsync(CancellationToken cancellationToken)
-    {
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var (needsAction, approved) = await Records.CountAsync(db, cancellationToken);
-        return new(needsAction, approved);
-    }
-
     public async Task<IReadOnlyList<UnpublishedApprovedRelationship>> ListUnpublishedApprovedAsync(int limit,
         IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken)
     {

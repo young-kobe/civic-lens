@@ -28,27 +28,6 @@ public sealed class BriefReviewWorkspaceTests(PostgresCollection postgres) : IAs
     public Task DisposeAsync() => host.StopAsync();
 
     [Fact]
-    public async Task TheRailLinksTheBriefListWhichCountsEachFilterAndListsDraftedBriefsOnly()
-    {
-        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
-
-        var empty = await host.GetDocumentAsync("/Review/Briefs");
-
-        Assert.Equal("page", empty.QuerySelector(".nav a[href='/Review/Briefs']")!.GetAttribute("aria-current"));
-        Assert.Null(empty.QuerySelector(".nav a[href='/Review']")!.GetAttribute("aria-current"));
-        Assert.Equal(["0", "0", "0"], empty.QuerySelectorAll("[aria-labelledby='drafts'] .segmented-count").Select(count => count.TextContent));
-        Assert.Equal("No weekly briefs yet", empty.QuerySelector("[aria-labelledby='drafts'] .empty h3")!.TextContent);
-
-        await seeder.QueueWeekAsync(new DateOnly(2026, 10, 19));
-        await seeder.ReleaseCitedRecordsAsync();
-        await seeder.ReviewableBriefAsync(ReviewableRevision());
-        var listed = await host.GetDocumentAsync("/Review/Briefs");
-
-        Assert.Equal(["1", "1", "0"], listed.QuerySelectorAll("[aria-labelledby='drafts'] .segmented-count").Select(count => count.TextContent));
-        Assert.Equal("A week of housing news", Assert.Single(listed.QuerySelectorAll("[aria-labelledby='drafts'] tbody .cell-title")).TextContent);
-    }
-
-    [Fact]
     public async Task AnUnknownOrMalformedBriefIsNotFoundAsync()
     {
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|owner"));
@@ -66,15 +45,13 @@ public sealed class BriefReviewWorkspaceTests(PostgresCollection postgres) : IAs
         await seeder.ReleaseCitedRecordsAsync();
         await seeder.ReviewableBriefAsync(ReviewableRevision());
 
-        foreach (var url in new[] { "/Review/Briefs", $"/Review/Briefs/{RecordId}" })
-        {
-            using var anonymous = await host.Client.GetAsync(url);
-            Assert.NotEqual(HttpStatusCode.OK, anonymous.StatusCode);
-            using var stranger = new HttpRequestMessage(HttpMethod.Get, url);
-            stranger.Headers.Add("Cookie", host.CreateCookie("auth0|stranger"));
-            using var refused = await host.Client.SendAsync(stranger);
-            Assert.NotEqual(HttpStatusCode.OK, refused.StatusCode);
-        }
+        var url = $"/Review/Briefs/{RecordId}";
+        using var anonymous = await host.Client.GetAsync(url);
+        Assert.NotEqual(HttpStatusCode.OK, anonymous.StatusCode);
+        using var stranger = new HttpRequestMessage(HttpMethod.Get, url);
+        stranger.Headers.Add("Cookie", host.CreateCookie("auth0|stranger"));
+        using var refused = await host.Client.SendAsync(stranger);
+        Assert.NotEqual(HttpStatusCode.OK, refused.StatusCode);
     }
 
     [Fact]
@@ -87,6 +64,7 @@ public sealed class BriefReviewWorkspaceTests(PostgresCollection postgres) : IAs
         var page = await host.GetDocumentAsync($"/Review/Briefs/{RecordId}");
 
         Assert.Equal("Record ID " + RecordId, page.QuerySelector(".page-header-record-id")!.TextContent);
+        Assert.Equal("/Review", Assert.Single(page.QuerySelectorAll(".rail .nav-link"), link => link.GetAttribute("aria-current") == "page").GetAttribute("href"));
         var evidence = page.QuerySelector("[aria-labelledby='evidence']")!;
         Assert.Contains("Rent cap", evidence.TextContent, StringComparison.Ordinal);
         Assert.Contains("Summary of Rent cap", evidence.TextContent, StringComparison.Ordinal);
@@ -97,7 +75,7 @@ public sealed class BriefReviewWorkspaceTests(PostgresCollection postgres) : IAs
     }
 
     [Fact]
-    public async Task AChangedCitedRecordShowsTheFlagOnTheListAndInTheEditorWhileTheBriefStaysApproved()
+    public async Task AChangedCitedRecordShowsTheFlagInTheEditorWhileTheBriefStaysApproved()
     {
         await seeder.ReleaseCitedRecordsAsync();
         await seeder.ReviewableBriefAsync(ReviewableRevision());
@@ -108,10 +86,8 @@ public sealed class BriefReviewWorkspaceTests(PostgresCollection postgres) : IAs
         Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
         await seeder.DecisionAsync(PublishedRecordKind.Statement, CitedStatement, 1, 2, ReviewDecisionKind.WithdrawApproval);
 
-        var list = await host.GetDocumentAsync("/Review/Briefs");
         var page = await host.GetDocumentAsync($"/Review/Briefs/{RecordId}");
 
-        Assert.Contains("Cited records changed", list.QuerySelector("[aria-labelledby='drafts'] tbody")!.TextContent, StringComparison.Ordinal);
         Assert.Contains("Withdraw the approval", page.QuerySelector("#cited-changed")!.TextContent, StringComparison.Ordinal);
         Assert.Equal(1, page.QuerySelectorAll("[aria-labelledby='evidence'] .badge").Count(badge => badge.TextContent == "Changed"));
         Assert.Contains("Approved, private", page.QuerySelector(".page-header")!.TextContent, StringComparison.Ordinal);

@@ -26,7 +26,7 @@ public sealed partial class BriefEditor
     private BriefRevision Revision => detail!.Review.CurrentRevision;
 
     private IReadOnlyList<Crumb> Crumbs =>
-        [new("Review", "/Review"), new("Briefs", BriefRoutes.List), new(detail is not null ? Revision.Headline : notFound ? "Brief not found" : "Brief")];
+        [new("Review", "/Review"), new(detail is not null ? Revision.Headline : notFound ? "Brief not found" : "Brief")];
 
     private IReadOnlyList<TabDefinition> RecordTabs =>
         [new("saved", $"Saved revision {Revision.RevisionNumber}"), new("edit", "Edit wording")];
