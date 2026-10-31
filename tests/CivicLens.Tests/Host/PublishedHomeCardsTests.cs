@@ -121,7 +121,7 @@ public sealed class PublishedHomeCardsTests
 
     private static async Task<AngleSharp.Dom.IElement> HomeAsync(PublicationRelease release, BreakLeader[] leaders)
     {
-        var highlights = HomeHighlights.From(release, [], []) with { BreakLeaders = [.. leaders] };
+        var highlights = HomeHighlights.From(release, []) with { BreakLeaders = [.. leaders] };
         var html = await new ReleaseRenderer(null, null).RenderHomeAsync(release, null, new ReleaseFacets([], []), highlights, CancellationToken.None);
         return new HtmlParser().ParseDocument(html).QuerySelector("main")!;
     }
