@@ -59,6 +59,22 @@ public sealed class ReviewPolicyTests
     }
 
     [Theory]
+    [InlineData(ReviewDecisionKind.RequestChanges)]
+    [InlineData(ReviewDecisionKind.WithdrawApproval)]
+    public void OnlyAnApprovalResolvesAConcernBecauseAConcernThatResolvesAnotherWouldHideIt(ReviewDecisionKind kind)
+    {
+        var draftId = new string('f', 32);
+        var approval = Decision(draftId, 1, 1, ReviewDecisionKind.Approve, null);
+        var concern = Decision(draftId, 1, 2, ReviewDecisionKind.RequestChanges, "Add context.");
+        var review = Review(draftId, 1, 2, [approval, concern]);
+
+        var failure = Assert.Throws<ArgumentException>(() => Validate(review,
+            Decision(draftId, 1, 3, kind, "Not an approval.", [concern.DecisionId])));
+
+        Assert.Contains("Only approval may resolve concerns", failure.Message);
+    }
+
+    [Theory]
     [InlineData(ReviewDecisionKind.Approve, null)]
     [InlineData(ReviewDecisionKind.RequestChanges, "Needs context.")]
     public void TheAiDrafterCannotRecordAnyDecisionEvenOnItsOwnDraft(ReviewDecisionKind kind, string? note)

@@ -148,6 +148,46 @@ public sealed partial class ReviewDecisionColumnsMigrationTests(PostgresCollecti
     }
 
     [Fact]
+    public async Task AConcernThatResolvesAConcernFailsTheMigrationAndNamesTheDecisionBecauseOnlyAnApprovalResolves()
+    {
+        await InsertDecisionAsync("vote", "record_id", "r1", Concern, 1, ReviewDecisionKind.RequestChanges, "First.");
+        var secondConcern = new string('d', 32);
+        await InsertDecisionAsync("vote", "record_id", "r1", secondConcern, 2, ReviewDecisionKind.RequestChanges, "Second.", [Concern]);
+
+        var failure = await Assert.ThrowsAsync<PostgresException>(MigrateForwardAsync);
+
+        Assert.Contains("vote_review_decisions", failure.MessageText);
+        Assert.Contains(secondConcern, failure.MessageText);
+    }
+
+    [Fact]
+    public async Task AnApprovalThatResolvesAWithdrawalMigratesAndCopiesTheResolutionBecauseAWithdrawalIsAConcern()
+    {
+        await InsertDecisionAsync("vote", "record_id", "r1", Approval, 1, ReviewDecisionKind.Approve, null);
+        var withdrawal = new string('d', 32);
+        await InsertDecisionAsync("vote", "record_id", "r1", withdrawal, 2, ReviewDecisionKind.WithdrawApproval, "Source changed.");
+        var reapproval = new string('e', 32);
+        await InsertDecisionAsync("vote", "record_id", "r1", reapproval, 3, ReviewDecisionKind.Approve, "Checked again.", [withdrawal]);
+
+        await MigrateForwardAsync();
+
+        Assert.Equal([$"{reapproval}|{withdrawal}"],
+            await ReadAsync("SELECT decision_id || '|' || resolved_decision_id FROM vote_review_decision_resolutions"));
+    }
+
+    [Fact]
+    public async Task ADecisionJsonWithoutACreationTimeFailsTheMigrationAndNamesTheDecisionBecauseTheTimeCheckMustNotSkipANull()
+    {
+        await InsertDecisionAsync("vote", "record_id", "r1", Concern, 1, ReviewDecisionKind.RequestChanges, "x",
+            editJson: json => json.Remove("createdAtUtc"));
+
+        var failure = await Assert.ThrowsAsync<PostgresException>(MigrateForwardAsync);
+
+        Assert.Contains("vote_review_decisions", failure.MessageText);
+        Assert.Contains(Concern, failure.MessageText);
+    }
+
+    [Fact]
     public async Task OlderRowsWithoutACorrectionNoteKeyOrAResolvedKeyMigrateWithNoNoteAndNoResolutions()
     {
         await InsertDecisionAsync("vote", "record_id", "r1", Concern, 1, ReviewDecisionKind.RequestChanges, "x",
