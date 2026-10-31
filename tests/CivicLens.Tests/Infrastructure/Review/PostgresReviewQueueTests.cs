@@ -108,6 +108,18 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
 
     private static ReviewQueueItem Of(ReviewQueuePage page, PublishedRecordKind kind) => page.Items.Single(item => item.Kind == kind);
 
+    [Fact]
+    public async Task AnExecutiveActionWithNoHeldReasonIsNotCalledAPersonEditBecauseCodeWritesEveryRevisionOfThatKind()
+    {
+        var executiveId = await new ExecutiveActionSeeder(connectionString, captureRoot)
+            .AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump", shiftedStoredTextPrefix: "Shifted. ");
+        await seeder.ExecuteAsync("UPDATE executive_action_drafts SET held_reason = NULL WHERE record_id = @id", ("id", executiveId));
+
+        var page = await store.ListAsync(null, 10, default);
+
+        Assert.Equal("Code did not approve this record. A person must decide.", Assert.Single(page.Items).Reason);
+    }
+
     private async Task<Dictionary<PublishedRecordKind, string>> SeedEveryKindAsync()
     {
         var statement = RelationshipFixtures.Statement(dated: false);

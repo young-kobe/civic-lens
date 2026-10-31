@@ -10,5 +10,8 @@ internal sealed record QueueRead<TRevision>(TRevision Revision, ReviewStatus Sta
     where TRevision : IReviewRevision
 {
     public QueueDraft ToDraft(string headline, RelationshipType? linkType = null) =>
-        new(headline, Status, OpenConcerns, HeldReason, ReviewAuthor.KindOf(Revision.AuthorSubject) == ReviewAuthorKind.Person, linkType);
+        new(headline, Status, OpenConcerns, HeldReason, HoldsPersonText, linkType);
+
+    private bool HoldsPersonText =>
+        !ReviewAuthor.IsReserved(Revision.AuthorSubject) || Revision is IHeadlineSummaryRevision { TextOrigin: ReviewTextOrigin.Person };
 }

@@ -238,7 +238,7 @@ public sealed partial class ReviewHome
     {
         try
         {
-            _ = PageCursor.Parse(cursor);
+            PageCursor.RequireRank(PageCursor.Parse(cursor), ranked: false);
             return true;
         }
         catch (ArgumentException) { return false; }

@@ -64,14 +64,14 @@
                     <ChildContent>
                         <DataTable Items="QueueRows" Caption="Records that need a person">
                             <Head>
-                                <th>Record</th>
+                                <th class="queue-record">Record</th>
                                 <th class="hide-narrow">Kind</th>
                                 <th>Why it needs a person</th>
                                 <th class="time hide-narrow">Last revised</th>
-                                <th class="act"><span class="visually-hidden">Action</span></th>
+                                <th class="act hide-narrow"><span class="visually-hidden">Action</span></th>
                             </Head>
                             <Row Context="row">
-                                <td><CellTitle Href="@RecordRoutes.Editor(row.Kind, row.RecordId)">@DraftStatusDisplay.DraftName(row.Headline)</CellTitle></td>
+                                <td class="queue-record"><CellTitle Href="@RecordRoutes.Editor(row.Kind, row.RecordId)">@DraftStatusDisplay.DraftName(row.Headline)</CellTitle></td>
                                 <td class="hide-narrow">@PublishedRecordLabels.Kind(row.Kind)</td>
                                 <td>
                                     <StatusBadge Tone="row.Tone" Text="@row.StatusLabel" />
@@ -81,7 +81,7 @@
                                     @if (row.RevisedAtUtc is { } revised) { <Timestamp Value="revised" /> }
                                     else { <span>Approved</span> }
                                 </td>
-                                <td class="act"><Button Small="true" Href="@RecordRoutes.Editor(row.Kind, row.RecordId)">Open</Button></td>
+                                <td class="act hide-narrow"><Button Small="true" Href="@RecordRoutes.Editor(row.Kind, row.RecordId)">Open</Button></td>
                             </Row>
                             <Empty>
                                 @if (QueueCursor is not null)

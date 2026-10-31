@@ -443,10 +443,12 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         SignIn(Owner);
 
         var junk = await host.GetDocumentAsync("/Review?queue=junk");
+        var ranked = await host.GetDocumentAsync("/Review?queue=o.1.123.abc");
         var pastEnd = await host.GetDocumentAsync("/Review?queue=o.1.ffff");
 
         Assert.Contains("This page link is no longer valid.", junk.QuerySelector(".notice-bad")!.TextContent, StringComparison.Ordinal);
         Assert.Null(junk.QuerySelector("[aria-labelledby='needs-a-person']"));
+        Assert.Contains("This page link is no longer valid.", ranked.QuerySelector(".notice-bad")!.TextContent, StringComparison.Ordinal);
         Assert.Equal("No more records on this page", QueuePanel(pastEnd).QuerySelector(".empty h3")!.TextContent);
     }
 

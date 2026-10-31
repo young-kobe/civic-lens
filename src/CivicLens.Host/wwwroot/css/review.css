@@ -133,3 +133,6 @@ tr.is-new td { animation: row-in 1.6s var(--ease); }
     .field-row { grid-template-columns: minmax(0, 1fr); }
     .hide-narrow { display: none; }
 }
+
+.queue-record { min-width: 8rem; }
+.queue-record .cell-title { overflow-wrap: anywhere; }
