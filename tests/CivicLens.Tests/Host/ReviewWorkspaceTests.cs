@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using CivicLens.Publication.Contracts;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
@@ -384,6 +385,34 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
+    public async Task ARecordStuckAtTheCorrectionCapShowsCannotPublishAndTheReasonInsteadOfTheWithdrawHintAsync()
+    {
+        await SaveComparisonAsync("Fee: 10 dollars.\n", "Fee: 12 dollars.\n");
+        SignIn(Owner);
+        var draftUrl = await StartFirstDraftAsync();
+        var draftId = draftUrl[("/Review/".Length)..];
+        await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars");
+        await ApproveAsync(draftUrl);
+        await PublishWithCliAsync("k1", $"documentChange:{draftId}");
+        var emptyPanel = (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='blocked'] .empty")!;
+        Assert.Equal("A published record shows here when review withdraws its approval, asks for changes, or opens a concern. " +
+            "It also shows here when a person revision cannot publish because the record holds the most corrections with a note.",
+            emptyPanel.QuerySelector("p")!.TextContent);
+        await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars, effective now");
+        using var approved = await DecideAsync(draftUrl, "Approve", "Checked again.", correctionNote: "Clarified the date.");
+        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+        FillCorrectionsToTheCap(draftId);
+
+        var panel = (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='blocked']")!;
+
+        Assert.Contains("Cannot publish", panel.TextContent, StringComparison.Ordinal);
+        Assert.Contains("This record has 20 corrections with a note, the most it can hold. No new revision can publish.",
+            panel.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("--withdraw", panel.TextContent, StringComparison.Ordinal);
+        Assert.NotNull(panel.QuerySelector($"a[href='{draftUrl}']"));
+    }
+
+    [Fact]
     public async Task NewerAndOlderLinksVisitEveryRowOnceAndKeepTheOtherListInPlaceAsync()
     {
         var comparisons = new List<string>();
@@ -495,6 +524,15 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         var concerns = editor.QuerySelectorAll("input[name='Decision.ResolvedDecisionIds']").Select(box => box.GetAttribute("value")!);
         using var approved = await DecideAsync(editorUrl, "Approve", "Checked again.", concerns);
         Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+    }
+
+    private void FillCorrectionsToTheCap(string draftId)
+    {
+        var path = Path.Combine(host.ReleaseDirectory, "current", PublicationProtocol.RecordDataPath(draftId));
+        var record = JsonNode.Parse(File.ReadAllBytes(path))!;
+        record["corrections"] = new JsonArray([.. Enumerable.Range(1, PublishedCorrection.MaximumNotedEntries).Select(number =>
+            (JsonNode)new JsonObject { ["replacedRevisionNumber"] = number, ["publishedAtUtc"] = "2026-10-01T00:00:00+00:00", ["note"] = "Fix." })]);
+        File.WriteAllText(path, record.ToJsonString());
     }
 
     private Task PublishWithCliAsync(string key, string reference) => RunReleaseCommandAsync(["releases", "publish", key, reference]);

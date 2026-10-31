@@ -8,6 +8,7 @@ public enum IconName
     Relationships,
     Briefs,
     Labels,
+    Reports,
     Light,
     Dark,
     System,

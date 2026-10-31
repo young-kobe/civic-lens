@@ -1,0 +1,20 @@
+@using CivicLens.Publication.Contracts
+
+<li>
+    <PublishedOfficialName Official="Member.Official" />
+    @(" ")
+    @if (ShowCast)
+    {
+        <span class="small">voted <CastWord Cast="@Member.Cast" /></span>
+    }
+    else
+    {
+        <ContextLink Class="small" Text="Source line" Href="@("#" + PublishedVoteView.Anchor(Record, Member.Citation))" Target="@($"{Member.Official.Name}, member line")" />
+    }
+</li>
+
+@code {
+    [Parameter, EditorRequired] public PublishedVote Record { get; set; } = default!;
+    [Parameter, EditorRequired] public PublishedMemberVote Member { get; set; } = default!;
+    [Parameter] public bool ShowCast { get; set; }
+}

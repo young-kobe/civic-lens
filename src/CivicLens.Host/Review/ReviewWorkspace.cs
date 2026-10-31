@@ -357,7 +357,7 @@ internal static class ReviewWorkspace
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
         var releases = new FileReleaseDirectory(releaseRoot);
         services.AddScoped(_ => new ListPublicationReleases(publications, releases));
-        services.AddScoped(_ => new ListBlockedPublished(publications, releases, new BlockedPublishedRecords(publications)));
+        services.AddScoped(_ => new ListBlockedPublished(publications, releases, new BlockedPublishedRecords(publications, releases)));
     }
 
     private static void SetHeaders(HttpResponse response)

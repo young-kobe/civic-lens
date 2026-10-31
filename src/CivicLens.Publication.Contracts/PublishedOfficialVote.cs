@@ -50,7 +50,7 @@ public sealed record PublishedOfficialVote
         Totals = vote.Totals,
         SplitVote = vote.IsSplit(),
         Party = member.Party,
-        PartyMajority = vote.PartyMajorities.SingleOrDefault(majority => majority.Party == member.Party)?.Majority,
+        PartyMajority = vote.MajorityOf(member.Party),
         Headline = vote.Headline,
         Kind = vote.Kind,
         IssueIds = vote.TrackedIssueIds
@@ -61,7 +61,7 @@ public sealed record PublishedOfficialVote
         if (!PublicationProtocol.IsRecordId(PublishedRecordKind.Vote, RecordId) || !Enum.IsDefined(Chamber) || Congress < 1 || Session is not (1 or 2) ||
             RollCallNumber < 1 || !Enum.IsDefined(Kind) || !PublishedRecordEntry.AreFilterValues(IssueIds) || !IsText(Cast, PublishedVote.MaximumCastLength) || !IsText(Headline, PublishedVote.MaximumHeadlineLength) ||
             !IsText(Result, PublishedVote.MaximumHeadlineLength) || !IsText(Party, PublishedVote.MaximumHeadlineLength) || PartyMajority is not (null or PublishedPartyMajority.Yea or PublishedPartyMajority.Nay) ||
-            SplitVote && (!Kind.IsSubstantive() || PartyMajority is null || Totals is null) || (BillType is null) != (BillNumber is null) || BillType is not null && (!IsText(BillType, PublishedVote.MaximumBillTypeLength) || BillNumber < 1))
+            SplitVote && (!Kind.IsSubstantive() || Totals is null || PartyMajority is null && PublishedPartyMajority.IsMajorParty(Party)) || (BillType is null) != (BillNumber is null) || BillType is not null && (!IsText(BillType, PublishedVote.MaximumBillTypeLength) || BillNumber < 1))
             throw new InvalidDataException("Published official vote is invalid.");
         Totals?.Validate();
     }

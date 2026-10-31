@@ -1,6 +1,7 @@
 @page "/Review/ExecutiveActions/{RecordId}"
 @inherits ReviewRecordPage
 @using CivicLens.Core.Review
+@using CivicLens.Host.Reports
 @using CivicLens.Host.Review
 
 @if (detail is null)
@@ -39,6 +40,7 @@ else
         {
             <Notice Tone="@(isConflict ? Tone.Warn : Tone.Ok)" Dismissible="@(!isConflict)">@statusMessage</Notice>
         }
+        <ReaderReportBanner Actor="actor" Kind="PublishedRecordKind.ExecutiveAction" RecordId="@RecordId" />
         <Notice Tone="Tone.Neutral">Code wrote this record from the Federal Register and approved it. No person edits it. Withdraw approval here. Then publish the withdrawal with the command <code>releases publish --withdraw</code>, because the public site changes only when a release publishes.</Notice>
         @if (concerns.Length > 0)
         {
