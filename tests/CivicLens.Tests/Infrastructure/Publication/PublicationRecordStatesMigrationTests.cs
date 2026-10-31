@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +13,7 @@ namespace CivicLens.Tests.Infrastructure.Publication;
 public sealed class PublicationRecordStatesMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private const string Migration = "20261030182714_PublicationRecordStates";
+    private const string DropMigration = "20261031175813_DropPublicationRecordsJson";
     private string connectionString = null!;
 
     public async Task InitializeAsync()
@@ -28,19 +30,47 @@ public sealed class PublicationRecordStatesMigrationTests(PostgresCollection pos
     public async Task TheBackfillRebuildsEveryReleaseFromRecordsJsonWithLegacyEntriesGapsAndReturnedRecords()
     {
         var legacyDraft = new string('1', 32);
-        await InsertReleaseAsync(1, $$"""[{"draftId":"{{legacyDraft}}","revisionNumber":1},{"kind":"action","recordId":"x","revisionNumber":1},{"kind":"statement","recordId":"w","revisionNumber":1}]""");
-        await InsertReleaseAsync(2, """[{"kind":"documentChange","recordId":"y","revisionNumber":1},{"kind":"action","recordId":"x","revisionNumber":1},{"kind":"statement","recordId":"w","revisionNumber":2}]""");
-        await InsertReleaseAsync(4, """[{"kind":"documentChange","recordId":"y","revisionNumber":1},{"kind":"vote","recordId":"z","revisionNumber":1}]""");
-        await InsertReleaseAsync(5, """[{"kind":"documentChange","recordId":"y","revisionNumber":1},{"kind":"action","recordId":"x","revisionNumber":1},{"kind":"vote","recordId":"z","revisionNumber":1}]""", active: true);
+        await SeedHardReleasesAsync(legacyDraft);
 
         await MigrateForwardAsync();
 
-        await PublishedRecordStateReader.AssertEveryReleaseMatchesAsync(connectionString);
-        Assert.Equal(["1|2", "5|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, "x"));
-        Assert.Equal(["2|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, "y"));
+        await AssertEveryReleaseMatchesRecordsJsonAsync();
+        Assert.Equal(["1|2", "5|5"], await PublishedRecordStateReader.RangesAsync(connectionString, "x"));
+        Assert.Equal(["2|5"], await PublishedRecordStateReader.RangesAsync(connectionString, "y"));
         Assert.Equal(["1|1", "2|2"], await PublishedRecordStateReader.RangesAsync(connectionString, "w"));
-        Assert.Equal(["4|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, "z"));
+        Assert.Equal(["4|5"], await PublishedRecordStateReader.RangesAsync(connectionString, "z"));
         Assert.Equal(["documentChange"], await KindsAsync(legacyDraft));
+
+        await MigrateForwardAsync(DropMigration);
+
+        Assert.False(await RecordsJsonExistsAsync());
+    }
+
+    [Fact]
+    public async Task TheRollbackRebuildsRecordsJsonOfEveryReleaseFromTheStateTableAndTheDropRunsAgain()
+    {
+        await SeedHardReleasesAsync(new string('1', 32));
+        await MigrateForwardAsync();
+        var before = await RecordsJsonOfEveryReleaseAsync();
+
+        await MigrateForwardAsync(DropMigration);
+        await using (var db = NewContext())
+            await db.GetService<IMigrator>().MigrateAsync(db.Database.GetMigrations().TakeWhile(id => id != DropMigration).Last());
+
+        Assert.Equal(before, await RecordsJsonOfEveryReleaseAsync());
+        Assert.Equal(["[]"], (await PublishedRecordStateReader.ReadAsync(connectionString,
+            "SELECT records_json FROM publication_releases WHERE release_number = 6")).Select(row => row[0]));
+        await MigrateForwardAsync(DropMigration);
+        Assert.False(await RecordsJsonExistsAsync());
+    }
+
+    private async Task SeedHardReleasesAsync(string legacyDraft)
+    {
+        await InsertReleaseAsync(1, $$"""[{"draftId":"{{legacyDraft}}","revisionNumber":1},{"kind":"action","recordId":"x","revisionNumber":1},{"kind":"statement","recordId":"w","revisionNumber":1}]""");
+        await InsertReleaseAsync(2, """[{"kind":"documentChange","recordId":"y","revisionNumber":1},{"kind":"action","recordId":"x","revisionNumber":1},{"kind":"statement","recordId":"w","revisionNumber":2}]""");
+        await InsertReleaseAsync(4, """[{"kind":"documentChange","recordId":"y","revisionNumber":1},{"kind":"vote","recordId":"z","revisionNumber":1}]""");
+        await InsertReleaseAsync(5, """[{"kind":"documentChange","recordId":"y","revisionNumber":1},{"kind":"action","recordId":"x","revisionNumber":1},{"kind":"vote","recordId":"z","revisionNumber":1}]""");
+        await InsertReleaseAsync(6, "[]", active: true);
     }
 
     [Fact]
@@ -48,7 +78,7 @@ public sealed class PublicationRecordStatesMigrationTests(PostgresCollection pos
     {
         await InsertReleaseAsync(1, """[{"kind":"action","recordId":"x"}]""", active: true);
 
-        var failure = await Assert.ThrowsAsync<PostgresException>(MigrateForwardAsync);
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => MigrateForwardAsync());
 
         Assert.Equal(PostgresErrorCodes.NotNullViolation, failure.SqlState);
         Assert.Empty(await PublishedRecordStateReader.ReadAsync(connectionString,
@@ -57,13 +87,67 @@ public sealed class PublicationRecordStatesMigrationTests(PostgresCollection pos
         Assert.Contains(Migration, await db.Database.GetPendingMigrationsAsync());
     }
 
+    [Fact]
+    public async Task TheDropRemovesRecordsJsonAndKeepsEveryStateRowBecauseTheTableIsTheOnlySourceAfterIt()
+    {
+        await InsertReleaseAsync(1, """[{"kind":"action","recordId":"x","revisionNumber":1}]""");
+        await InsertReleaseAsync(2, """[{"kind":"action","recordId":"x","revisionNumber":2}]""", active: true);
+        await MigrateForwardAsync();
+        var before = await StateRowsAsync();
+
+        await MigrateForwardAsync(DropMigration);
+
+        Assert.False(await RecordsJsonExistsAsync());
+        Assert.Equal(before, await StateRowsAsync());
+        Assert.Equal(2, before.Count);
+    }
+
+    [Fact]
+    public async Task TheDropFailsAndKeepsRecordsJsonWhenAStateRowDiffersFromTheReleasesBecauseTheDataCannotComeBack()
+    {
+        await InsertReleaseAsync(1, """[{"kind":"action","recordId":"x","revisionNumber":1}]""");
+        await MigrateForwardAsync();
+        await InsertReleaseAsync(2, """[{"kind":"action","recordId":"x","revisionNumber":1},{"kind":"action","recordId":"y","revisionNumber":1}]""", active: true);
+
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => MigrateForwardAsync(DropMigration));
+
+        Assert.Equal(PostgresErrorCodes.RaiseException, failure.SqlState);
+        Assert.StartsWith("Cannot drop records_json", failure.MessageText, StringComparison.Ordinal);
+        Assert.True(await RecordsJsonExistsAsync());
+    }
+
+    private async Task<bool> RecordsJsonExistsAsync() =>
+        (await PublishedRecordStateReader.ReadAsync(connectionString,
+            "SELECT 1 FROM information_schema.columns WHERE table_name = 'publication_releases' AND column_name = 'records_json'")).Count > 0;
+
     private CollectionAttemptDbContext NewContext() =>
         new(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
 
-    private async Task MigrateForwardAsync()
+    private async Task MigrateForwardAsync(string target = Migration)
     {
         await using var db = NewContext();
-        await db.Database.MigrateAsync();
+        await db.GetService<IMigrator>().MigrateAsync(target);
+    }
+
+    private async Task AssertEveryReleaseMatchesRecordsJsonAsync()
+    {
+        foreach (var (release, listed) in await RecordsJsonOfEveryReleaseAsync())
+            Assert.Equal(listed, await PublishedRecordStateReader.StateAtAsync(connectionString, release));
+    }
+
+    private async Task<Dictionary<int, SortedSet<string>>> RecordsJsonOfEveryReleaseAsync()
+    {
+        var releases = new Dictionary<int, SortedSet<string>>();
+        foreach (var release in await PublishedRecordStateReader.ReadAsync(connectionString, "SELECT release_number, records_json FROM publication_releases"))
+        {
+            using var document = JsonDocument.Parse(release[1]);
+            releases[int.Parse(release[0])] = [.. document.RootElement.EnumerateArray().Select(entry => string.Join('|',
+                entry.TryGetProperty("kind", out var kind) ? kind.GetString() : "documentChange",
+                entry.TryGetProperty("recordId", out var recordId) ? recordId.GetString() : entry.GetProperty("draftId").GetString(),
+                entry.GetProperty("revisionNumber").GetInt32()))];
+        }
+
+        return releases;
     }
 
     private async Task InsertReleaseAsync(int number, string recordsJson, bool active = false)
@@ -80,6 +164,12 @@ public sealed class PublicationRecordStatesMigrationTests(PostgresCollection pos
         command.Parameters.AddWithValue("active", active);
         await command.ExecuteNonQueryAsync();
     }
+
+    private async Task<List<string>> StateRowsAsync() =>
+        [.. (await PublishedRecordStateReader.ReadAsync(connectionString, """
+            SELECT kind || '|' || record_id || '|' || revision_number || '|' || first_release || '|' || COALESCE(last_release::text, 'NULL')
+            FROM publication_record_states ORDER BY 1
+            """)).Select(row => row[0])];
 
     private async Task<List<string>> KindsAsync(string recordId) =>
         [.. (await PublishedRecordStateReader.ReadAsync(connectionString,

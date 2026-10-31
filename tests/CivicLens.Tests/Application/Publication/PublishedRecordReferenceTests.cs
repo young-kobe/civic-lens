@@ -39,7 +39,7 @@ public sealed class PublishedRecordReferenceTests
     }
 
     [Fact]
-    public void TheKindSpellingMatchesTheWireSpellingOfRecordsJson()
+    public void TheKindSpellingMatchesTheWireSpellingOfPublishedRecords()
     {
         foreach (var kind in Enum.GetValues<PublishedRecordKind>())
             Assert.Equal(JsonSerializer.Serialize(kind), $"\"{PublishedRecordReference.NameOf(kind)}\"");

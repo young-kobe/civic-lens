@@ -2862,11 +2862,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("record_count");
 
-                    b.Property<string>("RecordsJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("records_json");
-
                     b.HasKey("ReleaseNumber");
 
                     b.HasIndex("DirectoryName")
