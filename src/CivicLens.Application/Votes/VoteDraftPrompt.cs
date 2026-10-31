@@ -26,6 +26,8 @@ public static class VoteDraftPrompt
         - headline: one short line, at most {VoteDraftRevision.MaximumHeadlineLength} characters, that states what the {shortName} voted on.
         - summary: one to three short paragraphs, at most {VoteDraftRevision.MaximumSummaryLength} characters. Explain the question of the vote in plain words, and name the legislation when the facts give it.
         Each field has a text and a confidence. The confidence is your probability that a careful human reviewer would approve the text without changing its substance. It is a number from 0 to 1. Civic Lens records the values to calibrate them against human review. No rule acts on them. Use the full range honestly.
+
+        Never write a vote count, a total, or a party split in the headline or the summary. Code shows the exact counts beside your text. Say whether the question passed or failed, and what that means.
         """;
 
     public static long MinimumReservation =>
