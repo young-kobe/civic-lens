@@ -981,7 +981,7 @@ sudo deploy/scripts/compose.sh run --rm cli releases list
 
 This section is for the temporary production machine, a Jetson with Docker Compose v2. The long-term cloud move will use Terraform. Terraform state never goes to R2, because it holds credentials. The first launch uses no Terraform.
 
-**Vendor data rule.** Cloudflare may receive public content and the encrypted backups. Nothing else leaves the machine. The review workspace is never behind Cloudflare, because it holds review notes and reviewer identity.
+**Vendor data rule.** Cloudflare may receive public content and the encrypted backups. An agent that uses [operator access](#operator-access) sends each result that it reads to its model vendor, and that can include unpublished drafts and model output. Nothing else leaves the machine. The review workspace is never behind Cloudflare, because it holds review notes and reviewer identity.
 
 ### First install
 
@@ -1095,7 +1095,7 @@ The first backup run by hand also proves the credentials. The timer runs at 03:3
 
 ```sh
 sudo deploy/scripts/compose.sh exec -T postgres sh -c 'psql --username="$POSTGRES_USER" --dbname=postgres --command="DROP DATABASE \"$POSTGRES_DB\" WITH (FORCE)" --command="CREATE DATABASE \"$POSTGRES_DB\" OWNER \"$POSTGRES_USER\""'
-sudo deploy/scripts/compose.sh exec -T postgres sh -c 'pg_restore --single-transaction --exit-on-error --username="$POSTGRES_USER" --dbname="$POSTGRES_DB"' < /srv/restore/srv/civic-lens/backup/operational.dump
+sudo deploy/scripts/compose.sh exec -T postgres sh -c 'pg_restore --single-transaction --exit-on-error --no-privileges --username="$POSTGRES_USER" --dbname="$POSTGRES_DB"' < /srv/restore/srv/civic-lens/backup/operational.dump
 ```
 
 4. Move the old folders aside, then copy the restored folders in. A copy into the old folders would keep releases newer than the snapshot, and the next publish would reuse their numbers. `cp -a` keeps the owners, the modes, and the hard links between releases.
@@ -1116,9 +1116,32 @@ sudo install -d -m 700 -o 70 -g 70 /srv/civic-lens/postgres/search
 ```
 
 6. Start the services with `update.sh`. The search service ingests the active release when it starts, and then every 30 seconds. Wait for one poll, then search on the site.
-7. Start the timer: `sudo systemctl start civic-lens-backup.timer`. When the site works, delete `/srv/restore` and the `.old` folders.
+7. Run `sudo deploy/scripts/install-operator-access.sh "<agent public key>"` again, because the restore leaves out the grants of the read-only role.
+8. Start the timer: `sudo systemctl start civic-lens-backup.timer`. When the site works, delete `/srv/restore` and the `.old` folders.
 
 The dump file stays in `/srv/civic-lens/backup`, mode 700, until the next run replaces it.
+
+### Operator access
+
+One SSH key can run two root-owned commands. It belongs to the AI agent on the development machine. It is not a login: the key has no shell, forwarding, or terminal, and it runs only `/usr/local/bin/civic-lens-agent`. That program takes `sql`, or `ops` and a listed command. The key maps to the user `civic-lens-agent`, which has no password, no docker group, and no other sudo. No other user gets these commands.
+
+The agent makes the key, and the private key stays on the development machine. Install it once with the public key:
+
+```sh
+sudo deploy/scripts/install-operator-access.sh "ssh-ed25519 AAAA..."
+```
+
+To end the access, delete `/etc/sudoers.d/civic-lens-operator` and the `authorized_keys` file of that user.
+
+The installer refuses a checkout that anyone other than root can write, because the commands run scripts from it as root. Run the same install command again after a migration, because a new table or column stays unreadable until then. Run it again after a restore too, because the restore leaves out the grants of the read-only role. Run it again when one of the scripts or `readonly-grants.sql` changes, because the installed copies and the grants do not follow the checkout. The commands expect the checkout at `/opt/civic-lens` and the data root at `/srv/civic-lens`. The `origin` remote must use HTTPS, because root has no SSH key for `deploy`.
+
+**Read-only SQL.** `/usr/local/bin/civic-lens-sql` reads SQL from stdin and runs it as the Postgres role `civic_lens_readonly`. The role has no write privilege on any table and cannot create temp objects. A statement stops after 30 seconds by default, but a query can change that limit, and a long query can delay a migration. The role cannot read review notes, reviewer identity, credentials, or raw collector requests. `deploy/scripts/readonly-grants.sql` owns that list of hidden columns. Revision JSON is hidden too. `readonly_access.revisions('vote_revisions')` returns each revision row and its JSON without the author. The command refuses a backslash, because a psql command can run a shell.
+
+Every result that an agent reads goes to its model vendor, so add a column to the hidden list before it holds private text.
+
+**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, the two redraft commands, `bills subjects backfill`, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
+
+`deploy` takes a full commit SHA on `origin/main` that is the checkout or newer. The scripts of that commit run as root, and a migration has no undo, so a rollback stays with the owner. It checks out the commit, runs `update.sh`, and runs `check-live.sh`. A merge to `main` is therefore the real approval. GitHub does not stop the agent from merging, because it uses the owner's token. Only the agent rules and the Claude Code permissions stop it.
 
 ### Failure alerts
 
