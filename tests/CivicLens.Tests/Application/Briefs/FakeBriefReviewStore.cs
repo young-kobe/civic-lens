@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Briefs;
-using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
@@ -57,8 +56,4 @@ internal sealed class FakeBriefReviewStore : IBriefReviewStore
 
     public Task<BriefReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-    public Task<BriefReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter, CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
-
-    public Task<BriefReviewCounts> CountAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
 }

@@ -15,6 +15,7 @@
             <p><a href="@PublicationProtocol.BriefsPagePath(1)">All weekly briefs</a></p>
         </Panel>
     }
+    <PublishedHomeCards Highlights="Highlights" />
     <Panel Title="Newest records" Aside="@AllRecordsLink">
         <PublishedRecordTable Records="NewestRecords" Caption="Newest records" />
     </Panel>
@@ -28,6 +29,7 @@
     [Parameter, EditorRequired] public PublicationRelease Release { get; set; } = default!;
     [Parameter] public PublishedBrief? Brief { get; set; }
     [Parameter, EditorRequired] public ReleaseFacets Facets { get; set; } = default!;
+    [Parameter, EditorRequired] public HomeHighlights Highlights { get; set; } = default!;
 
     private string HomeDescription => Brief?.Headline
         ?? "Civic Lens collects what officials say and do, with the sources and the exact text that each record cites.";

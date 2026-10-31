@@ -50,8 +50,9 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [x] Add the per-record table (#242)
   - [x] Page cache of 60 seconds and search poll of 30 seconds (#246)
   - [x] Move readers to the per-record table (#251)
-  - [x] Drop `records_json` and the drift check
-  - [ ] `pg_notify` on approval
+  - [x] Drop `records_json` and the drift check (#276)
+  - [ ] Check the row count inside each publish, after `records_json` is dropped
+  - [ ] `pg_notify` on approval, after the action draft drain
 - R-46: Sortable tables and vote insights. Add a filter row above the tables. Vote pages get badges and a panel of members who broke with their party. Issue pages get a summary of votes and bills. Depends on: R-44. [Search](architecture/search.md#limits-and-planned-work)
   - [x] Sortable tables and search sort keys (#247)
   - [x] Vote badges and the party break panel (#252)
@@ -60,17 +61,23 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 - R-47: Insight boards. One contract PR adds vote fields to vote entries, a per-official summary roll-up, and a cosponsor field on action entries. Then build boards for party breakers, loyalists, and missed votes, as static pages for each chamber and party. Then add list badges and home cards for the closest vote, the most breaks, and the newest executive actions. Then add a bill status line, sponsored bills that moved, and bipartisan cosponsorship. Depends on: R-46. [Publication](architecture/publication.md#limits-and-planned-work)
   - [x] Contract PR (#258), with one operator rewrite of carried entries and no reset, not yet run
   - [ ] Boards
-  - [ ] List badges and home cards
+  - [x] List badges and home cards (#273)
   - [ ] Bill status line and the remaining items
+  - [ ] Show the prior Congress on the vote boards until a new Congress has votes
 - R-48: What an official said and how they voted. The profile lists pairs, not totals: the quote with its date, then the cast with its question, date, and result. It shows no Yea or Nay totals and no talk against action quadrant, because a bare total lacks context. Depends on: R-47. [Publication](architecture/publication.md#limits-and-planned-work)
   - [ ] Said and voted pairs on the profile
+- R-64: What officials did on an issue. Today a bill or vote links to an issue with no direction, so no official position can be derived. Add a row for what a bill does on an issue, with citations, and a row for what a Yea does on each vote, such as pass, amend, table, or proceed. Code then lists each official's casts with that evidence. The page shows no score and no "pro" or "anti" label. Effect on an issue starts with facts only: bill status, vote result, and whether the bill became law. Start with one tracked issue and measure accuracy and review load. The schema design goes to the owner first. Depends on: R-48, and the action redraft. [Publication](architecture/publication.md#limits-and-planned-work)
 
 **Review and approval**
 
 - R-51: Cut the review pages. Make one "Needs a person" queue that says why each record needs a person. Delete the relationship and brief list pages, and the home panels that the queue replaces. Add an owner "Take off site" action in the editor, using the existing withdrawal code. Send a reader report correction straight to the editor with its note filled in. Delete the gate label pages after D-13. Depends on: none. [Review](architecture/review.md#limits-and-planned-work)
-  - [ ] "Needs a person" queue (#257, #259, #263 done), and delete list pages and home panels
+  - [x] "Needs a person" queue, and delete list pages and home panels (#257, #259, #263, #265, #267, #268)
   - [ ] "Take off site" action and report to editor
   - [ ] Delete gate label pages, after D-13
+- R-65: One page for each review job. A reader report opens the record editor with the reader's words on top. The person dismisses it, or edits, types the public text, and clicks "Save and approve". After a decision, the page moves to the next item. A failed approval keeps the typed text. Every approval check stays. PR #271, which filled public text from the private note, is closed. Depends on: R-51 take off site (#270). [Review](architecture/review.md#limits-and-planned-work)
+  - [ ] Save and approve in one transaction, and open the edit form by default
+  - [ ] Reader reports in the editor, closed by the approval
+  - [ ] Move to the next item after a decision
 - R-52: Approve factual links by code. The types are "statement about a vote" and "describes own bill". The types "states position on" and "claims credit for" stay with a person. The public wording "a reviewer approved each link" must change with it. Depends on: R-51. [Review](architecture/review.md#limits-and-planned-work)
   - [ ] Code approval of factual links, and new public wording
 - R-53: AI brief check. A person still approves each brief. A new model task recommends approval or flags where the brief needs more attention. Its design is still to agree. Depends on: R-51. [Briefs](architecture/briefs.md#limits-and-planned-work)
@@ -82,6 +89,16 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [x] `votes draft redraft` (#244)
   - [x] Read Congress.gov subjects in drafts (#248)
   - [ ] Run the subjects backfill and the redraft commands
+  - [ ] Write action text in code when no summary text reaches the model, and move summary bills to the new prompt
+  - [ ] Draft the action backlog, and spot check the issue tags after it
+
+- R-66: Gate model output on confidence. Models give a confidence score. A low score sends the record to the one page review, where a person fixes it or tells the model what to fix. Set the threshold from measured data and a person-labeled set. Depends on: R-65. [Review](architecture/review.md#limits-and-planned-work)
+  - [ ] Agree the design
+  - [ ] Build the gate and the model fix
+- R-67: Measure each prompt. Each prompt version gets a live, budgeted, opt-in measure on fixed bills, and the numbers go on the PR. Use the cheapest setting that holds accuracy. The order is vote, statement draft and gate, document change, relationship, then brief. Depends on: none. [Analysis](architecture/analysis.md#limits-and-planned-work)
+  - [ ] Fix the vote prompt wording and measure it
+  - [ ] Agree one opt-in eval command, and build it
+  - [ ] Measure the other prompts, one PR for each
 
 **Coverage**
 
@@ -100,7 +117,8 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [x] Survey every JSON column
   - [x] Agree the direction
   - [x] Stop parsing JSON where a column already holds the value (#261)
-  - [ ] Move review decisions to columns
+  - [x] Move review decisions to columns, and read them there (#266, #272)
+  - [ ] Drop the decision JSON, after a read-only check of production rows
   - [ ] Add tick bounds and missing foreign keys, after a read-only check of production rows
   - [ ] Agree the table design from one pilot on vote revisions, with measured row counts
   - [ ] Move vote revisions

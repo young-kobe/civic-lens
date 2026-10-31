@@ -85,8 +85,12 @@
         <div class="dashboard">
             <div class="dashboard-main">
                 <Panel Title="Needs a person" Id="needs-a-person">
-                    <Aside>@Count(queue.Total + StuckRows.Count, "record", "records")</Aside>
+                    <Aside>@Count(queue.Total + OwnerRowCount, "record", "records")</Aside>
                     <ChildContent>
+                        @if (queue.NewerCursor is null && UnmatchedOverflow is { } overflow)
+                        {
+                            <Notice Tone="Tone.Warn" id="unmatched-overflow">@overflow</Notice>
+                        }
                         <DataTable Items="QueueRows" Caption="Records that need a person">
                             <Head>
                                 <th class="queue-record">Record</th>

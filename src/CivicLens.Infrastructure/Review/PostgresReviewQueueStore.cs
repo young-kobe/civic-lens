@@ -46,6 +46,13 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
         WHERE review_status <> 'Approved' AND current_revision_number >= 1
         """));
 
+    private const string UnmatchedApprovedLinks = """
+        SELECT 're' AS "KindCode", record_id AS "RecordId", 're-' || record_id AS "QueueId",
+               last_revised_at_utc_ticks AS "LastRevisedAtUtcTicks"
+        FROM relationship_drafts
+        WHERE review_status = 'Approved' AND no_longer_matches AND NOT (record_id = ANY({0}))
+        """;
+
     private static readonly string ApprovedHeadlineMatches = string.Join("\nUNION ALL\n", Kinds.Where(kind => kind.HeadlineProperty is not null)
         .Select(kind => $"""
         SELECT '{kind.Code}' AS "KindCode", draft.{kind.IdColumn} AS "RecordId", '{kind.Code}-' || draft.{kind.IdColumn} AS "QueueId",
@@ -70,6 +77,21 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
         var total = await queue.CountAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new([.. slice.Items.Select(key => ToItem(key, drafts[key.QueueId]))], total, slice.NewerCursor, slice.OlderCursor);
+    }
+
+    public async Task<ReviewQueuePage> ListUnmatchedApprovedLinksAsync(int limit, IReadOnlyCollection<string> excludedRecordIds,
+        CancellationToken cancellationToken)
+    {
+        PageLimit.Validate(limit);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var links = db.Database.SqlQueryRaw<QueueKey>(UnmatchedApprovedLinks, (object)excludedRecordIds.ToArray());
+        var keys = await links.OrderByDescending(key => key.LastRevisedAtUtcTicks).ThenByDescending(key => key.QueueId)
+            .Take(limit).ToArrayAsync(cancellationToken);
+        var drafts = await ReadDraftsAsync(db, keys, cancellationToken);
+        var total = await links.CountAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new([.. keys.Select(key => ToItem(key, drafts[key.QueueId]))], total, null, null);
     }
 
     public async Task<ApprovedRecordPage> SearchApprovedAsync(string text, PageCursor? cursor, int limit, CancellationToken cancellationToken)

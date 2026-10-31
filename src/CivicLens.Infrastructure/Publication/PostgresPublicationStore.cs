@@ -201,14 +201,14 @@ public sealed class PostgresPublicationStore : IPublicationStore
         {
             var (_, table, idColumn) = ReviewTables.For(group.Key);
             var sql = $$"""
-                SELECT DISTINCT ON (d.{{idColumn}}) d.{{idColumn}} AS "RecordId", d.decision_json AS "DecisionJson"
+                SELECT DISTINCT ON (d.{{idColumn}}) d.{{idColumn}} AS "RecordId", d.actor_subject AS "ActorSubject"
                 FROM {{table}} d WHERE d.{{idColumn}} = ANY({0}) AND d.kind = 'Approve'
                 ORDER BY d.{{idColumn}}, d.review_state_version DESC
                 """;
             var rows = await db.Database.SqlQueryRaw<ApprovalRow>(sql, (object)group.Select(record => record.RecordId).ToArray())
                 .ToArrayAsync(cancellationToken);
             foreach (var row in rows)
-                actors[(group.Key, row.RecordId)] = ReviewJson.Deserialize<ReviewDecision>(row.DecisionJson, "decision").ActorSubject;
+                actors[(group.Key, row.RecordId)] = row.ActorSubject;
         }
         return actors;
     }
@@ -216,7 +216,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
     private sealed class ApprovalRow
     {
         public string RecordId { get; set; } = "";
-        public string DecisionJson { get; set; } = "";
+        public string ActorSubject { get; set; } = "";
     }
 
     private static async Task RequireUnchangedReleasesAsync(CollectionAttemptDbContext db, PublicationCommit commit,

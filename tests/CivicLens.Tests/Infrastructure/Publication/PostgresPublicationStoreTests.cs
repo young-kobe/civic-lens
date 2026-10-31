@@ -877,7 +877,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         var (draftTable, idColumn) = DraftTableOf(kind);
         var table = draftTable.Replace("_drafts", "_review_decisions", StringComparison.Ordinal);
         var decisionId = Guid.NewGuid().ToString("N");
-        var json = JsonSerializer.Serialize(new ReviewDecision(decisionId, recordId, 1, stateVersion, ReviewDecisionKind.Approve, actor, null, [],
+        var json = JsonSerializer.Serialize(new ReviewDecision(decisionId, recordId, 1, stateVersion, ReviewDecisionKind.Approve, "auth0|json-copy-must-not-be-read", null, [],
             PublishedAt), JsonSerializerOptions.Web);
         return ExecuteAsync($"""
             SET session_replication_role = replica;

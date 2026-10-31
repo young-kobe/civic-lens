@@ -1451,7 +1451,7 @@ public sealed class ReleaseRendererTests
     {
         var renderer = new ReleaseRenderer("https://api.test", null);
 
-        var home = await renderer.RenderHomeAsync(ReleaseOf(2), null, NoFacets, CancellationToken.None);
+        var home = await renderer.RenderHomeAsync(ReleaseOf(2), null, NoFacets, NoHighlights(ReleaseOf(2)), CancellationToken.None);
         var briefs = await renderer.RenderBriefsAsync(ReleaseOfBriefs(2), [.. ReleaseOfBriefs(2).Records], 1, CancellationToken.None);
 
         Assert.DoesNotContain("data-sort", home, StringComparison.Ordinal);
@@ -1473,7 +1473,7 @@ public sealed class ReleaseRendererTests
         var release = ReleaseOf(30);
         var brief = Brief();
 
-        var html = await new ReleaseRenderer(null, null).RenderHomeAsync(release, brief, NoFacets, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderHomeAsync(release, brief, NoFacets, NoHighlights(release), CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         Assert.Equal("A week of <housing> news", document.QuerySelector("h2")!.TextContent);
@@ -1490,7 +1490,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task HomeSaysSoWhenNoBriefExistsInsteadOfShowingAnEmptyPanel()
     {
-        var html = await new ReleaseRenderer(null, null).RenderHomeAsync(ReleaseOf(1), null, NoFacets, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderHomeAsync(ReleaseOf(1), null, NoFacets, NoHighlights(ReleaseOf(1)), CancellationToken.None);
 
         Assert.Contains("No briefing yet", html, StringComparison.Ordinal);
     }
@@ -1500,8 +1500,8 @@ public sealed class ReleaseRendererTests
     {
         var renderer = new ReleaseRenderer(null, null);
 
-        var withBrief = new HtmlParser().ParseDocument(await renderer.RenderHomeAsync(ReleaseOf(1), Brief(), NoFacets, CancellationToken.None));
-        var without = new HtmlParser().ParseDocument(await renderer.RenderHomeAsync(ReleaseOf(1), null, NoFacets, CancellationToken.None));
+        var withBrief = new HtmlParser().ParseDocument(await renderer.RenderHomeAsync(ReleaseOf(1), Brief(), NoFacets, NoHighlights(ReleaseOf(1)), CancellationToken.None));
+        var without = new HtmlParser().ParseDocument(await renderer.RenderHomeAsync(ReleaseOf(1), null, NoFacets, NoHighlights(ReleaseOf(1)), CancellationToken.None));
 
         Assert.Equal("All weekly briefs", withBrief.QuerySelector("main a[href='briefs.html']")!.TextContent);
         Assert.Null(without.QuerySelector("main a[href='briefs.html']"));
@@ -1640,7 +1640,7 @@ public sealed class ReleaseRendererTests
         var release = ReleaseOf(3) with { Records = [.. ReleaseOf(3).Records.Select(entry => entry with { IssueIds = ["housing", "Not A Path"] })] };
         var facets = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), IssuesNamed("housing", "Housing costs")));
 
-        var home = await new ReleaseRenderer(null, null).RenderHomeAsync(release, null, facets, CancellationToken.None);
+        var home = await new ReleaseRenderer(null, null).RenderHomeAsync(release, null, facets, NoHighlights(release), CancellationToken.None);
         var list = await new ReleaseRenderer(null, null).RenderFacetsAsync(facets, CancellationToken.None);
 
         foreach (var html in new[] { home, list })
@@ -1800,7 +1800,7 @@ public sealed class ReleaseRendererTests
         var facets = ReleaseFacets.From(release, PublicationCatalogs.None);
         var renderer = new ReleaseRenderer(null, null);
 
-        Assert.NotEmpty(await renderer.RenderHomeAsync(release, null, facets, CancellationToken.None));
+        Assert.NotEmpty(await renderer.RenderHomeAsync(release, null, facets, NoHighlights(release), CancellationToken.None));
         Assert.NotEmpty(await renderer.RenderAllRecordsAsync(release, 1, CancellationToken.None));
         Assert.NotEmpty(await renderer.RenderSearchAsync(release, facets, CancellationToken.None));
         Assert.NotEmpty(await renderer.RenderFacetsAsync(facets, CancellationToken.None));
@@ -2032,7 +2032,8 @@ public sealed class ReleaseRendererTests
     [
         PublicationProtocol.HomePath, PublicationProtocol.OfficialsPagePath, PublicationProtocol.FacetsPath,
         PublicationProtocol.AllRecordsPagePath(1), PublicationProtocol.BriefsPagePath(1), PublicationProtocol.SearchPagePath,
-        PublicationProtocol.MethodPagePath, PublicationProtocol.AboutPagePath, PublicationProtocol.GlossaryPagePath, PublicationProtocol.ReportPagePath
+        PublicationProtocol.MethodPagePath, PublicationProtocol.AboutPagePath, PublicationProtocol.GlossaryPagePath, PublicationProtocol.ReportPagePath,
+        .. OfficialBoard.All.Select(board => board.PagePath)
     ];
 
     [Fact]
@@ -2130,7 +2131,7 @@ public sealed class ReleaseRendererTests
             ("relationship", PublicationProtocol.RecordPagePath(relationship.RecordId), await renderer.RenderRelationshipAsync(relationship, PublicationCatalogs.None, CancellationToken.None), "All records"),
             ("brief", PublicationProtocol.RecordPagePath(Brief().RecordId), await renderer.RenderBriefAsync(Brief(), CancellationToken.None), "Briefs"),
             ("withdrawal", PublicationProtocol.RecordPagePath(withdrawal.RecordId), await renderer.RenderWithdrawalAsync(withdrawal, CancellationToken.None), "All records"),
-            ("home", PublicationProtocol.HomePath, await renderer.RenderHomeAsync(release, null, facets, CancellationToken.None), null),
+            ("home", PublicationProtocol.HomePath, await renderer.RenderHomeAsync(release, null, facets, NoHighlights(release), CancellationToken.None), null),
             ("all records", PublicationProtocol.AllRecordsPagePath(1), await renderer.RenderAllRecordsAsync(release, 1, CancellationToken.None), "All records"),
             ("briefs", PublicationProtocol.BriefsPagePath(1), await renderer.RenderBriefsAsync(ReleaseOfBriefs(2), ReleaseOfBriefs(2).Records, 1, CancellationToken.None), "Briefs"),
             ("issue", facets.Issues[0].PagePath(1), await renderer.RenderFacetPageAsync(facets.Issues[0], 1, CancellationToken.None), "Issues"),
@@ -2139,6 +2140,7 @@ public sealed class ReleaseRendererTests
             ("official", official.PagePath, await renderer.RenderOfficialAsync(official, PublicationCatalogs.None, CancellationToken.None), "Officials"),
             ("past congress", pastOfficial.PagePath, await renderer.RenderOfficialAsync(pastOfficial, PublicationCatalogs.None, CancellationToken.None), "Officials"),
             ("officials", PublicationProtocol.OfficialsPagePath, await renderer.RenderOfficialsAsync([new OfficialListing(profile, 0)], DateTimeOffset.UnixEpoch, CancellationToken.None), "Officials"),
+            ("board", OfficialBoard.All[0].PagePath, await renderer.RenderBoardAsync(OfficialBoardPage.All([], []).First(), CancellationToken.None), "Officials"),
             ("search", PublicationProtocol.SearchPagePath, await renderer.RenderSearchAsync(release, facets, CancellationToken.None), "Search"),
             ("method", PublicationProtocol.MethodPagePath, await renderer.RenderMethodAsync(CancellationToken.None), null),
             ("about", PublicationProtocol.AboutPagePath, await renderer.RenderAboutAsync(CancellationToken.None), null),
@@ -2156,6 +2158,7 @@ public sealed class ReleaseRendererTests
         AssertTrail(pages["issues"], ["Home|index.html", "Issues and policy areas"]);
         AssertTrail(pages["search"], ["Home|index.html", "Search records"]);
         AssertTrail(pages["officials"], ["Home|index.html", "Officials"]);
+        AssertTrail(pages["board"], ["Home|index.html", "Officials|officials.html", "House Democrats"]);
         AssertTrail(pages["method"], ["Home|index.html", "How the official page counts work"]);
         AssertTrail(pages["report"], ["Home|index.html", "Report a problem"]);
         AssertTrail(pages["briefs"], ["Home|index.html", "Briefs"]);
@@ -2353,6 +2356,14 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public void TheSortStatusLineTemplateEndsWithTheNoticeThatSortedRowsLeaveOutTheBadgeAndTheCounts()
+    {
+        var script = System.Text.Encoding.UTF8.GetString(new ReleaseRenderer(null, null).Assets.Single(asset => asset.RelativePath == "assets/js/public.js").Content);
+
+        Assert.Contains("sorted by ${label(current.header, current.direction)}. Sorted rows leave out the party badge and the vote counts.", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task EveryPageTypePreloadsInstrumentSansAndOnlyPagesWithNewsreaderTextAboveTheFoldPreloadNewsreader()
     {
         string[] newsreaderPages = ["record", "statement", "action", "vote", "relationship", "brief", "withdrawal"];
@@ -2367,7 +2378,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task TheHomePagePreloadsNewsreaderWhenItShowsABriefBecauseTheBriefTextIsSetInNewsreader()
     {
-        var html = await new ReleaseRenderer(null, null).RenderHomeAsync(ReleaseOf(1), Brief(), NoFacets, CancellationToken.None);
+        var html = await new ReleaseRenderer(null, null).RenderHomeAsync(ReleaseOf(1), Brief(), NoFacets, NoHighlights(ReleaseOf(1)), CancellationToken.None);
 
         Assert.Equal([InstrumentSansFont, NewsreaderFont], FontPreloads(html, PublicationProtocol.HomePath));
     }
@@ -2443,6 +2454,7 @@ public sealed class ReleaseRendererTests
     private static string ReleasePath(string pagePath, string href) => new Uri(new Uri("https://x/" + pagePath), href).AbsolutePath[1..];
 
     private static readonly ReleaseFacets NoFacets = new([], []);
+    private static HomeHighlights NoHighlights(PublicationRelease release) => HomeHighlights.From(release, []);
 
     private static PublicationCatalog HousingCatalog { get; } = new(new Dictionary<string, string>(), IssuesNamed("housing", "Housing costs"));
 

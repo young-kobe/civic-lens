@@ -216,7 +216,7 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
 
     private static ReviewActivityEvent ToDecisionActivity(ReviewDecisionRow row, DocumentChangeDraftRevision revision) =>
         new(ReviewActivityKind.DecisionRecorded, new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero),
-            ReviewJson.Deserialize<ReviewDecision>(row.DecisionJson, "decision").ActorSubject, row.DraftId, revision.Headline, row.Kind);
+            row.ActorSubject, row.DraftId, revision.Headline, row.Kind);
 
     internal sealed record VerifiedComparison(EligibleDocumentComparison Summary,
         DocumentExtraction Before, DocumentExtraction After);

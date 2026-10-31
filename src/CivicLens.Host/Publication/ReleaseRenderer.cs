@@ -112,17 +112,19 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
         });
     }
 
-    public Task<string> RenderHomeAsync(PublicationRelease release, PublishedBrief? brief, ReleaseFacets facets,
+    public Task<string> RenderHomeAsync(PublicationRelease release, PublishedBrief? brief, ReleaseFacets facets, HomeHighlights highlights,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(release);
         ArgumentNullException.ThrowIfNull(facets);
+        ArgumentNullException.ThrowIfNull(highlights);
         brief?.Validate();
         return RenderAsync<PublishedHomePage>(new Dictionary<string, object?>
         {
             [nameof(PublishedHomePage.Release)] = release,
             [nameof(PublishedHomePage.Brief)] = brief,
-            [nameof(PublishedHomePage.Facets)] = facets
+            [nameof(PublishedHomePage.Facets)] = facets,
+            [nameof(PublishedHomePage.Highlights)] = highlights
         });
     }
 
@@ -196,6 +198,12 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
             [nameof(PublishedOfficialsPage.Officials)] = officials,
             [nameof(PublishedOfficialsPage.PublishedAtUtc)] = publishedAtUtc
         });
+    }
+
+    public Task<string> RenderBoardAsync(OfficialBoardPage page, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        return RenderAsync<PublishedBoardPage>(new Dictionary<string, object?> { [nameof(PublishedBoardPage.Page)] = page });
     }
 
     public static ReleaseRenderer FromEnvironment() => new(
