@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
@@ -35,7 +36,7 @@ public sealed class PublicationRecordStatesMigrationTests(PostgresCollection pos
 
         await MigrateForwardAsync();
 
-        await PublishedRecordStateReader.AssertEveryReleaseMatchesAsync(connectionString);
+        await AssertEveryReleaseMatchesRecordsJsonAsync();
         Assert.Equal(["1|2", "5|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, "x"));
         Assert.Equal(["2|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, "y"));
         Assert.Equal(["1|1", "2|2"], await PublishedRecordStateReader.RangesAsync(connectionString, "w"));
@@ -48,7 +49,7 @@ public sealed class PublicationRecordStatesMigrationTests(PostgresCollection pos
     {
         await InsertReleaseAsync(1, """[{"kind":"action","recordId":"x"}]""", active: true);
 
-        var failure = await Assert.ThrowsAsync<PostgresException>(MigrateForwardAsync);
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => MigrateForwardAsync());
 
         Assert.Equal(PostgresErrorCodes.NotNullViolation, failure.SqlState);
         Assert.Empty(await PublishedRecordStateReader.ReadAsync(connectionString,
@@ -57,13 +58,42 @@ public sealed class PublicationRecordStatesMigrationTests(PostgresCollection pos
         Assert.Contains(Migration, await db.Database.GetPendingMigrationsAsync());
     }
 
+    [Fact]
+    public async Task TheDropRemovesRecordsJsonAndKeepsEveryStateRowBecauseTheTableIsTheOnlySourceAfterIt()
+    {
+        await InsertReleaseAsync(1, """[{"kind":"action","recordId":"x","revisionNumber":1}]""");
+        await InsertReleaseAsync(2, """[{"kind":"action","recordId":"x","revisionNumber":2}]""", active: true);
+        await MigrateForwardAsync();
+        var before = await StateRowsAsync();
+
+        await using (var db = NewContext()) await db.Database.MigrateAsync();
+
+        Assert.Empty(await PublishedRecordStateReader.ReadAsync(connectionString,
+            "SELECT 1 FROM information_schema.columns WHERE table_name = 'publication_releases' AND column_name = 'records_json'"));
+        Assert.Equal(before, await StateRowsAsync());
+        Assert.Equal(2, before.Count);
+    }
+
     private CollectionAttemptDbContext NewContext() =>
         new(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
 
-    private async Task MigrateForwardAsync()
+    private async Task MigrateForwardAsync(string target = Migration)
     {
         await using var db = NewContext();
-        await db.Database.MigrateAsync();
+        await db.GetService<IMigrator>().MigrateAsync(target);
+    }
+
+    private async Task AssertEveryReleaseMatchesRecordsJsonAsync()
+    {
+        foreach (var release in (await PublishedRecordStateReader.ReadAsync(connectionString, "SELECT release_number, records_json FROM publication_releases")))
+        {
+            using var document = JsonDocument.Parse(release[1]);
+            SortedSet<string> listed = [.. document.RootElement.EnumerateArray().Select(entry => string.Join('|',
+                entry.TryGetProperty("kind", out var kind) ? kind.GetString() : "documentChange",
+                entry.TryGetProperty("recordId", out var recordId) ? recordId.GetString() : entry.GetProperty("draftId").GetString(),
+                entry.GetProperty("revisionNumber").GetInt32()))];
+            Assert.Equal(listed, await PublishedRecordStateReader.StateAtAsync(connectionString, int.Parse(release[0])));
+        }
     }
 
     private async Task InsertReleaseAsync(int number, string recordsJson, bool active = false)
@@ -80,6 +110,12 @@ public sealed class PublicationRecordStatesMigrationTests(PostgresCollection pos
         command.Parameters.AddWithValue("active", active);
         await command.ExecuteNonQueryAsync();
     }
+
+    private async Task<List<string>> StateRowsAsync() =>
+        [.. (await PublishedRecordStateReader.ReadAsync(connectionString, """
+            SELECT kind || '|' || record_id || '|' || revision_number || '|' || first_release || '|' || COALESCE(last_release::text, 'NULL')
+            FROM publication_record_states ORDER BY 1
+            """)).Select(row => row[0])];
 
     private async Task<List<string>> KindsAsync(string recordId) =>
         [.. (await PublishedRecordStateReader.ReadAsync(connectionString,
