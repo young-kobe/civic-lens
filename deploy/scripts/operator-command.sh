@@ -43,7 +43,7 @@ publish() {
   "$compose" run --rm cli releases publish "$key" "$@"
 }
 
-if [[ $* != status && $* != "worker health" ]]; then
+if [[ $* != status && $* != "worker health" && $* != "release sizes" ]]; then
   exec 9>/run/lock/civic-lens-ops
   if ! flock --nonblock 9; then
     echo "Another listed command is running. Wait for it to finish." >&2
@@ -54,6 +54,8 @@ fi
 case "$*" in
   # usage: status
   status) "$compose" ps --all ;;
+  # usage: release sizes
+  "release sizes") cd /srv/civic-lens/releases; ls -d [0-9]* | sort -V | xargs du -sB1 ;;
   # usage: deploy <full commit SHA on origin/main>
   "deploy "*) [[ $# -eq 2 ]] || refuse; deploy "$2" ;;
   # usage: db migrate
