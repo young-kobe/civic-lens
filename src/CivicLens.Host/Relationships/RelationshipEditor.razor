@@ -36,7 +36,7 @@ else
     var options = detail.Options;
     <TopBarTitle Crumbs="Crumbs" />
     <div class="content">
-        <PageHeader Title="@($"{RelationshipLabels.Type(revision.Type)}: {detail.CitedStatement.Revision.Headline}")" Meta="HeaderMeta(review.CurrentStatus, concerns.Length)" />
+        <PageHeader Title="@($"{RelationshipLabels.Type(revision.Type)}: {detail.CitedStatement.Revision.Headline}")" RecordId="@RecordId" Meta="HeaderMeta(review.CurrentStatus, concerns.Length)" />
 
         @if (error is not null)
         {

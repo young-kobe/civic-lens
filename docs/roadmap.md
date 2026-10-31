@@ -54,11 +54,11 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [ ] `pg_notify` on approval
 - R-46: Sortable tables and vote insights. Add a filter row above the tables. Vote pages get badges and a panel of members who broke with their party. Issue pages get a summary of votes and bills. Depends on: R-44. [Search](architecture/search.md#limits-and-planned-work)
   - [x] Sortable tables and search sort keys (#247)
-  - [x] Vote badges and the party break panel
+  - [x] Vote badges and the party break panel (#252)
   - [ ] Issue summary
-  - [x] Filter row
+  - [x] Filter row (#254)
 - R-47: Insight boards. One contract PR adds vote fields to vote entries, a per-official summary roll-up, and a cosponsor field on action entries. Then build boards for party breakers, loyalists, and missed votes, as static pages for each chamber and party. Then add list badges and home cards for the closest vote, the most breaks, and the newest executive actions. Then add a bill status line, sponsored bills that moved, and bipartisan cosponsorship. Depends on: R-46. [Publication](architecture/publication.md#limits-and-planned-work)
-  - [ ] Contract PR, with one dev reset
+  - [ ] Contract PR, with one operator rewrite of carried entries and no reset
   - [ ] Boards
   - [ ] List badges and home cards
   - [ ] Bill status line and the remaining items
@@ -93,6 +93,18 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 
 - R-61: Finish executive action records. Add the document body text, then an AI summary, then issue tags. Issue tags need a design first, because these documents have no policy area. Depends on: none. [Executive actions](architecture/executive-actions.md#limits-and-planned-work)
 - R-62: Statements from official social accounts, such as Bluesky and YouTube. This needs a list of verified accounts and a new design. X and Meta stay out, because of cost and access limits. Depends on: R-17. [Collection](architecture/collection.md#limits-and-planned-work)
+
+**Data and schemas**
+
+- R-63: Move our own data out of JSON. Our data and our schemas are a first class feature, so the database must enforce their rules. Decisions, revisions, and other data we define move to columns and child tables. Stored JSON stays only for text that must stay verbatim: the hashed configuration revision, the byte-compared document comparison, and raw model and collector input and output. Before a kind drops its JSON, a check rebuilds each revision from the new rows and compares it to the stored JSON. Public release files stay JSON, because they are the published product and not our storage. Each link between records becomes a real row with a foreign key, so that later insights can follow it. The revision steps start after R-51 PR 3 and PR 4. Depends on: none. [Architecture](architecture.md)
+  - [x] Survey every JSON column
+  - [x] Agree the direction
+  - [ ] Stop parsing JSON where a column already holds the value
+  - [ ] Move review decisions to columns
+  - [ ] Add tick bounds and missing foreign keys, after a read-only check of production rows
+  - [ ] Agree the table design from one pilot on vote revisions, with measured row counts
+  - [ ] Move vote revisions
+  - [ ] Move the other revision kinds, one PR for each
 
 **Operations**
 
@@ -134,6 +146,8 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 ## Product direction
 
 The audience is regular citizens who want transparency in U.S. national politics. State and local coverage are possible future extensions. Readers start with reviewed accounts and can inspect the evidence behind them. The editorial flow and the restrained monochrome identity are agreed.
+
+Data is the product. The product is only as good as its data, so data and database schemas are a first class feature. Design them as deliberately as any public page. The goal is rich links between people, records, bills, votes, and issues, so that we can derive insights no single source shows. This may become a graph.
 
 Design for scale. Each record carries rich detail, and coverage of officials, sources, and issues is broad. Automate every step that does not need human judgment.
 

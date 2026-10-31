@@ -41,6 +41,7 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
 
         var page = await host.GetDocumentAsync($"/Review/Votes/{recordId}");
 
+        Assert.Equal("Record ID " + recordId, page.QuerySelector(".page-header-record-id")!.TextContent);
         var members = page.QuerySelector("[aria-labelledby='members']")!.TextContent;
         Assert.Contains("A: Yea", members, StringComparison.Ordinal);
         Assert.Contains("Member: A000001, A, R, AL, Yea", members, StringComparison.Ordinal);

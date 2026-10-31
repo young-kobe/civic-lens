@@ -100,6 +100,7 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
 
         var page = await host.GetDocumentAsync($"/Review/Statements/{candidate}");
 
+        Assert.Equal("Record ID " + candidate, page.QuerySelector(".page-header-record-id")!.TextContent);
         Assert.Contains("The AI drafter wrote this revision in analysis run", page.Body!.TextContent, StringComparison.Ordinal);
         var saved = page.QuerySelector("#saved-approval-target")!.TextContent;
         Assert.Contains(Headline, saved, StringComparison.Ordinal);
@@ -330,6 +331,7 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
         var page = await host.GetDocumentAsync(url);
 
         Assert.Equal("Not drafted", page.QuerySelector(".page-header .badge")!.TextContent);
+        Assert.Equal("Record ID " + skipped, page.QuerySelector(".page-header-record-id")!.TextContent);
         Assert.Null(page.QuerySelector("#draft-form"));
         Assert.Contains(Quote, page.QuerySelector("[aria-labelledby='evidence'] .doc-text")!.TextContent, StringComparison.Ordinal);
         var start = page.QuerySelector("button[form='start-draft']")!;
