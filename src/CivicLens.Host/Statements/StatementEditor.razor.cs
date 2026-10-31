@@ -11,6 +11,7 @@ using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Layout;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Host.Review;
+using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
 
 namespace CivicLens.Host.Statements;
@@ -169,6 +170,14 @@ public sealed partial class StatementEditor
         Input = null;
         return LoadAsync();
     }
+
+    private async Task TakeOffSiteAsync() => NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(
+        PublishedRecordKind.Statement, CandidateId, review!.CurrentStatus, WithdrawAsync, StatementRoutes.Editor(CandidateId, TakeOffSitePanel.DoneStatus),
+        ReloadAfterDecideConflictAsync));
+
+    private Task WithdrawAsync(ReviewDecisionKind kind, string key) =>
+        DecideReview.ExecuteAsync(actor, new DecideStatementReviewRequest(CandidateId, TakeOffExpectedRevision, TakeOffExpectedStateVersion, kind,
+            EmptyToNull(TakeOffNote), [], key), RequestAborted);
 
     private string TextOf(SourceSpan span) => ArticleText.Substring(span.Start, span.Length);
 

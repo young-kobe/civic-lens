@@ -41,7 +41,7 @@ else
             <Notice Tone="@(isConflict ? Tone.Warn : Tone.Ok)" Dismissible="@(!isConflict)">@statusMessage</Notice>
         }
         <ReaderReportBanner Actor="actor" Kind="PublishedRecordKind.ExecutiveAction" RecordId="@RecordId" />
-        <Notice Tone="Tone.Neutral">Code wrote this record from the Federal Register and approved it. No person edits it. Withdraw approval here. Then publish the withdrawal with the command <code>releases publish --withdraw</code>, because the public site changes only when a release publishes.</Notice>
+        <Notice Tone="Tone.Neutral">Code wrote this record from the Federal Register and approved it. No person edits it. The owner can take it off the public site with the Take off site action below. Withdrawing approval alone does not change the public site.</Notice>
         @if (concerns.Length > 0)
         {
             <Notice Tone="Tone.Warn">Approval is blocked. @(concerns.Length == 1 ? "Resolve the open concern below first." : $"Resolve the {concerns.Length} open concerns below first.")</Notice>
@@ -77,6 +77,9 @@ else
                 </ul>
             </Checklist>
         </ReviewDecisionPanel>
+
+        <TakeOffSitePanel Actor="actor" Kind="PublishedRecordKind.ExecutiveAction" RecordId="@RecordId" RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion"
+                          IdempotencyKey="@TakeOffFormKey" Note="@TakeOffNote" Refusal="@takeOffRefusal" OnSubmit="TakeOffSiteAsync" />
 
         <ReviewHistoryPanel Entries="History" ViewerSubject="@actor.Subject" />
     </div>

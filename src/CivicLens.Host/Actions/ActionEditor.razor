@@ -182,6 +182,9 @@ else
             </Checklist>
         </ReviewDecisionPanel>
 
+        <TakeOffSitePanel Actor="actor" Kind="PublishedRecordKind.Action" RecordId="@RecordId" RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion"
+                          IdempotencyKey="@TakeOffFormKey" Note="@TakeOffNote" Refusal="@takeOffRefusal" OnSubmit="TakeOffSiteAsync" />
+
         <ReviewHistoryPanel Entries="History" ViewerSubject="@actor.Subject" />
     </div>
 }

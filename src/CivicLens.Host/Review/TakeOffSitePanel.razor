@@ -1,0 +1,85 @@
+@using CivicLens.Application.Publication
+@using CivicLens.Core.Review
+@using Microsoft.Extensions.DependencyInjection
+@using Microsoft.Extensions.Logging
+
+@if (!offered)
+{
+    <form id="take-off-site-hidden" method="post" @formname="@FormName" @onsubmit="OnSubmit" hidden><AntiforgeryToken /></form>
+}
+@if (isOwner && !configured)
+{
+    <p id="take-off-site-missing" class="muted small">Take off site needs the release directory, collection and issue files</p>
+}
+@if (failed)
+{
+    <Notice Tone="Tone.Warn">The review workspace could not check whether this record is on the public site. Refresh the page to try again.</Notice>
+}
+@if (Refusal is not null)
+{
+    <Notice Tone="Tone.Bad" id="take-off-site-refusal">@Refusal</Notice>
+}
+@if (offered)
+{
+    <Panel Title="Take off site" Id="take-off-site" Padded="true">
+        <p class="small">This record is on the public site now. This action withdraws the approval if the record is still approved. It then removes the record from the public site. Readers see your reason on the page that replaces it.</p>
+        <p class="small muted">If a relationship or a brief on the site cites this record, take that one off first.</p>
+        <form id="take-off-site-form" class="form" method="post" @formname="@FormName" @onsubmit="OnSubmit">
+            <AntiforgeryToken />
+            <input type="hidden" name="expectedRevisionNumber" value="@RevisionNumber" />
+            <input type="hidden" name="expectedReviewStateVersion" value="@ReviewStateVersion" />
+            <input type="hidden" name="idempotencyKey" value="@IdempotencyKey" />
+            <Field Label="Reason" For="TakeOff_Note" Hint="@($"1 to {PublishedCorrection.MaximumNoteLength} characters. Readers see this reason.")">
+                <textarea id="TakeOff_Note" class="plain" name="note" maxlength="@PublishedCorrection.MaximumNoteLength" required aria-describedby="TakeOff_Note-hint" value="@Note"></textarea>
+            </Field>
+            <div class="actions">
+                <Button Variant="ButtonVariant.Danger" Type="submit">Take off site</Button>
+            </div>
+        </form>
+    </Panel>
+}
+
+@code {
+    public const string FormName = "take-off-site";
+    public const string DoneStatus = "off-site";
+
+    private bool isOwner;
+    private bool configured;
+    private bool offered;
+    private bool failed;
+
+    [Inject] private IServiceProvider Services { get; set; } = default!;
+    [Inject] private ILogger<TakeOffSitePanel> Logger { get; set; } = default!;
+
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    [Parameter, EditorRequired] public ReviewActor Actor { get; set; } = default!;
+    [Parameter, EditorRequired] public PublishedRecordKind Kind { get; set; }
+    [Parameter, EditorRequired] public string RecordId { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public int RevisionNumber { get; set; }
+    [Parameter, EditorRequired] public int ReviewStateVersion { get; set; }
+    [Parameter, EditorRequired] public string IdempotencyKey { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public EventCallback OnSubmit { get; set; }
+    [Parameter] public string? Note { get; set; }
+    [Parameter] public string? Refusal { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        isOwner = Actor.Role == ReviewRole.Owner;
+        if (!isOwner) return;
+        var takeOff = Services.GetService<TakeOffSite>();
+        configured = takeOff is not null;
+        if (takeOff is null) return;
+        var cancellationToken = HttpContext.RequestAborted;
+        try
+        {
+            offered = await takeOff.IsOnSiteAsync(Actor, new(Kind, RecordId), cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "The take off site check failed.");
+            failed = true;
+        }
+    }
+}

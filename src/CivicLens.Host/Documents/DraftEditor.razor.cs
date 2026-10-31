@@ -10,6 +10,7 @@ using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Layout;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Host.Review;
+using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
 
 namespace CivicLens.Host.Documents;
@@ -206,6 +207,14 @@ public sealed partial class DraftEditor
         Input = null;
         return LoadAsync();
     }
+
+    private async Task TakeOffSiteAsync() => NavigateWhenSet(review is null ? null : await RunTakeOffSiteAsync(
+        PublishedRecordKind.DocumentChange, DraftId, CurrentStatus, WithdrawAsync, DocumentRoutes.Editor(DraftId, TakeOffSitePanel.DoneStatus),
+        ReloadAfterDecideConflictAsync));
+
+    private Task WithdrawAsync(ReviewDecisionKind kind, string key) =>
+        DecideReview.ExecuteAsync(actor, new DecideDocumentChangeReviewRequest(DraftId, TakeOffExpectedRevision, TakeOffExpectedStateVersion, kind,
+            EmptyToNull(TakeOffNote), [], key), RequestAborted);
 
     private IReadOnlyList<Crumb> Crumbs =>
         [new("Review", "/Review"), new(review is not null ? Headline : notFound ? "Draft not found" : "Draft")];

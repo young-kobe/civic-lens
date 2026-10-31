@@ -3,10 +3,12 @@ using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Relationships;
+using CivicLens.Core.Review;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Layout;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Host.Review;
+using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
 
 namespace CivicLens.Host.Relationships;
@@ -109,6 +111,14 @@ public sealed partial class RelationshipEditor
         Input = null;
         return LoadAsync();
     }
+
+    private async Task TakeOffSiteAsync() => NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(
+        PublishedRecordKind.Relationship, RecordId, detail.Review.CurrentStatus, WithdrawAsync, RelationshipRoutes.Editor(RecordId, TakeOffSitePanel.DoneStatus),
+        ReloadAfterDecideConflictAsync));
+
+    private Task WithdrawAsync(ReviewDecisionKind kind, string key) =>
+        DecideReview.ExecuteAsync(actor, new DecideRelationshipReviewRequest(RecordId, TakeOffExpectedRevision, TakeOffExpectedStateVersion, kind,
+            EmptyToNull(TakeOffNote), [], key), RequestAborted);
 
     private string QuoteText(SourceSpan span) => detail!.CitedStatement.ArticleText.Substring(span.Start, span.Length);
 

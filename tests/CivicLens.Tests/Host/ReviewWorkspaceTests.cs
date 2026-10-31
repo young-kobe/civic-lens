@@ -6,6 +6,7 @@ using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Documents;
+using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Tests.Fixtures;
@@ -378,6 +379,76 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
+    public async Task TakeOffSiteBlocksTheApprovalAndWithdrawsTheRecordOnceEvenWhenThePostRepeatsAsync()
+    {
+        SignIn(Owner);
+        var (draftUrl, draftId) = await ApprovedDraftAsync();
+        var unpublished = await host.GetDocumentAsync(draftUrl);
+        Assert.Null(unpublished.QuerySelector("#take-off-site"));
+        Assert.Null(unpublished.QuerySelector("#take-off-site-missing"));
+        await PublishWithCliAsync("k1", $"documentChange:{draftId}");
+        var fields = Fields((await host.GetDocumentAsync(draftUrl)).QuerySelector("#take-off-site-form")!);
+        Set(fields, "note", "The source was wrong.");
+
+        using var taken = await host.Client.PostAsync(draftUrl, new FormUrlEncodedContent(fields));
+
+        Assert.Equal(HttpStatusCode.Redirect, taken.StatusCode);
+        Assert.EndsWith("?status=off-site", PathOf(taken), StringComparison.Ordinal);
+        Assert.Equal(draftId, Assert.Single(ManifestWithdrawals()).GetProperty("recordId").GetString());
+        var editor = await host.GetDocumentAsync(PathOf(taken));
+        Assert.Contains("off the public site", editor.QuerySelector(".notice")!.TextContent, StringComparison.Ordinal);
+        Assert.Null(editor.QuerySelector("#take-off-site"));
+        Assert.Equal([ReviewDecisionKind.Approve, ReviewDecisionKind.WithdrawApproval], await DecisionKindsAsync(draftId));
+
+        using var repeated = await host.Client.PostAsync(draftUrl, new FormUrlEncodedContent(fields));
+
+        Assert.Equal(HttpStatusCode.Conflict, repeated.StatusCode);
+        Assert.Contains("This record is not on the public site.", (await ParseAsync(repeated)).QuerySelector("#take-off-site-refusal")!.TextContent, StringComparison.Ordinal);
+        Assert.Equal([ReviewDecisionKind.Approve, ReviewDecisionKind.WithdrawApproval], await DecisionKindsAsync(draftId));
+    }
+
+    [Fact]
+    public async Task TakeOffSiteWithAStaleReviewStateShowsTheConflictMessageAndLeavesTheRecordApprovedAndPublishedAsync()
+    {
+        SignIn(Owner);
+        var (draftUrl, draftId) = await ApprovedDraftAsync();
+        await PublishWithCliAsync("k1", $"documentChange:{draftId}");
+        var fields = Fields((await host.GetDocumentAsync(draftUrl)).QuerySelector("#take-off-site-form")!);
+        Set(fields, "note", "The source was wrong.");
+        Set(fields, "expectedReviewStateVersion", "0");
+
+        using var stale = await host.Client.PostAsync(draftUrl, new FormUrlEncodedContent(fields));
+
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        Assert.Contains("changed after you opened this page", (await ParseAsync(stale)).QuerySelector(".notice")!.TextContent, StringComparison.Ordinal);
+        Assert.Empty(ManifestWithdrawals());
+        Assert.Equal([ReviewDecisionKind.Approve], await DecisionKindsAsync(draftId));
+        Assert.NotNull((await host.GetDocumentAsync(draftUrl)).QuerySelector("#take-off-site-form"));
+    }
+
+    [Fact]
+    public async Task AReviewerNeverSeesTakeOffSiteAndAForgedPostIsRefusedBecauseOnlyTheOwnerWithdrawsRecordsAsync()
+    {
+        SignIn(Owner);
+        var (draftUrl, draftId) = await ApprovedDraftAsync();
+        await PublishWithCliAsync("k1", $"documentChange:{draftId}");
+        host.Client.DefaultRequestHeaders.Remove("Cookie");
+        SignIn(Reviewer);
+        var editor = await host.GetDocumentAsync(draftUrl);
+        Assert.Null(editor.QuerySelector("#take-off-site"));
+        Assert.Null(editor.QuerySelector("#take-off-site-missing"));
+        var fields = Fields(editor.QuerySelector("#take-off-site-hidden")!);
+        fields.AddRange([new("expectedRevisionNumber", "1"), new("expectedReviewStateVersion", "2"), new("idempotencyKey", "forged"),
+            new("note", "Forged.")]);
+
+        using var forged = await host.Client.PostAsync(draftUrl, new FormUrlEncodedContent(fields));
+
+        Assert.Equal("/access-denied", PathOf(forged));
+        Assert.Empty(ManifestWithdrawals());
+        Assert.Equal([ReviewDecisionKind.Approve], await DecisionKindsAsync(draftId));
+    }
+
+    [Fact]
     public async Task ARecordStuckAtTheCorrectionCapShowsOnceInTheQueueAsCannotPublishWithTheReasonAsync()
     {
         var draftUrl = await StuckAtTheCapAsync();
@@ -558,6 +629,28 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         record["corrections"] = new JsonArray([.. Enumerable.Range(1, PublishedCorrection.MaximumNotedEntries).Select(number =>
             (JsonNode)new JsonObject { ["replacedRevisionNumber"] = number, ["publishedAtUtc"] = "2026-10-01T00:00:00+00:00", ["note"] = "Fix." })]);
         File.WriteAllText(path, record.ToJsonString());
+    }
+
+    private async Task<(string Url, string Id)> ApprovedDraftAsync()
+    {
+        await SaveComparisonAsync("Fee: 10 dollars.\n", "Fee: 12 dollars.\n");
+        var draftUrl = await StartFirstDraftAsync();
+        await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars");
+        using var approved = await DecideAsync(draftUrl, "Approve");
+        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+        return (draftUrl, draftUrl[("/Review/".Length)..]);
+    }
+
+    private async Task<ReviewDecisionKind[]> DecisionKindsAsync(string draftId)
+    {
+        var review = await PostgresDocumentChangeReviewStore.FromConnectionString(host.ConnectionString).GetAsync(draftId, default);
+        return [.. review!.Decisions.OrderBy(decision => decision.ReviewStateVersion).Select(decision => decision.Kind)];
+    }
+
+    private JsonElement[] ManifestWithdrawals()
+    {
+        var manifest = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(host.ReleaseDirectory, "current", PublicationProtocol.ManifestPath)));
+        return [.. manifest.RootElement.GetProperty("withdrawals").EnumerateArray()];
     }
 
     private Task PublishWithCliAsync(string key, string reference) => RunReleaseCommandAsync(["releases", "publish", key, reference]);

@@ -2,10 +2,12 @@ using System.Collections.Immutable;
 using CivicLens.Application.Briefs;
 using CivicLens.Application.Review;
 using CivicLens.Core.Briefs;
+using CivicLens.Core.Review;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Layout;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Host.Review;
+using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
 
 namespace CivicLens.Host.Briefs;
@@ -113,6 +115,14 @@ public sealed partial class BriefEditor
         Input = null;
         return LoadAsync();
     }
+
+    private async Task TakeOffSiteAsync() => NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(
+        PublishedRecordKind.Brief, RecordId, detail.Review.CurrentStatus, WithdrawAsync, BriefRoutes.Editor(RecordId, TakeOffSitePanel.DoneStatus),
+        ReloadAfterDecideConflictAsync));
+
+    private Task WithdrawAsync(ReviewDecisionKind kind, string key) =>
+        DecideReview.ExecuteAsync(actor, new DecideBriefReviewRequest(RecordId, TakeOffExpectedRevision, TakeOffExpectedStateVersion, kind,
+            EmptyToNull(TakeOffNote), [], key), RequestAborted);
 
     private static string CoverageText(BriefCoverage coverage) =>
         $"Coverage: {coverage.Considered} records considered, {coverage.SentToModel} sent to the AI drafter, {coverage.Omitted} left out, {coverage.Cited} cited.";

@@ -1,9 +1,11 @@
 using CivicLens.Application.ExecutiveActions;
 using CivicLens.Core.ExecutiveActions;
+using CivicLens.Core.Review;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Layout;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Host.Review;
+using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
 
 namespace CivicLens.Host.ExecutiveActions;
@@ -46,6 +48,14 @@ public sealed partial class ExecutiveActionEditor
         _ = await DecideReview.ExecuteAsync(actor, request, RequestAborted);
         return ExecutiveActionRoutes.Editor(RecordId, "decided");
     }
+
+    private async Task TakeOffSiteAsync() => NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(
+        PublishedRecordKind.ExecutiveAction, RecordId, detail.Review.CurrentStatus, WithdrawAsync, ExecutiveActionRoutes.Editor(RecordId, TakeOffSitePanel.DoneStatus),
+        LoadAsync));
+
+    private Task WithdrawAsync(ReviewDecisionKind kind, string key) =>
+        DecideReview.ExecuteAsync(actor, new DecideExecutiveActionReviewRequest(RecordId, TakeOffExpectedRevision, TakeOffExpectedStateVersion, kind,
+            EmptyToNull(TakeOffNote), [], key), RequestAborted);
 
     private IReadOnlyList<Fact> FactsOf(ExecutiveActionRevision revision) =>
     [

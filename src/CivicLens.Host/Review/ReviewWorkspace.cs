@@ -268,7 +268,7 @@ internal static class ReviewWorkspace
                 PostgresCollectionJobStore.FromConnectionString(connectionString),
                 PostgresCollectionAttemptStore.FromConnectionString(connectionString),
                 CivicLens.Infrastructure.Collection.Processing.PostgresEvidenceProcessingStore.FromConnectionString(connectionString)));
-            if (configuredIssues is not null) ConfigurePublication(services, connectionString);
+            if (configuredIssues is not null) ConfigurePublication(services, connectionString, collection, configuredIssues);
         }
     }
 
@@ -346,8 +346,9 @@ internal static class ReviewWorkspace
         services.AddScoped<GetBriefReviewCounts>();
     }
 
-    // The owner release lists need a release directory.
-    private static void ConfigurePublication(IServiceCollection services, string connectionString)
+    // The owner release lists and Take off site need a release directory.
+    private static void ConfigurePublication(IServiceCollection services, string connectionString, CollectionConfiguration collection,
+        IssueConfiguration issues)
     {
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
         if (releaseRoot is null) return;
@@ -355,6 +356,10 @@ internal static class ReviewWorkspace
         var releases = new FileReleaseDirectory(releaseRoot);
         services.AddScoped(_ => new ListPublicationReleases(publications, releases));
         services.AddScoped(_ => new ListBlockedPublished(publications, releases, new BlockedPublishedRecords(publications, releases)));
+        services.AddSingleton(provider => new TakeOffSite(
+            PublicationComposition.Create(connectionString, publications, releases, collection, issues,
+                PublicationComposition.RequireArtifactRoot(), provider.GetRequiredService<ILoggerFactory>()).Publish,
+            publications, releases));
     }
 
     private static void SetHeaders(HttpResponse response)
