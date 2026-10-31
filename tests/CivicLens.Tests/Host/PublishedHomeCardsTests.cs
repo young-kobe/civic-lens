@@ -111,6 +111,14 @@ public sealed class PublishedHomeCardsTests
         Assert.DoesNotContain("Casts of all members of the chamber", cells.Single(cell => cell.QuerySelector($"a[href='records/{Id('a')}.html']") is not null).TextContent, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task WithFewerActionsThanTheCardHoldsTheAsideSaysAllOfThemAreShown()
+    {
+        var main = await HomeAsync(ReleaseOf(Executive('a', 1), Executive('b', 2)), []);
+
+        Assert.Contains("Picked by code: all 2 executive actions on this site, newest first.", main.TextContent, StringComparison.Ordinal);
+    }
+
     private static async Task<AngleSharp.Dom.IElement> HomeAsync(PublicationRelease release, BreakLeader[] leaders)
     {
         var highlights = HomeHighlights.From(release, [], []) with { BreakLeaders = [.. leaders] };
