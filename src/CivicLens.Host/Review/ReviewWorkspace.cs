@@ -248,6 +248,7 @@ internal static class ReviewWorkspace
         services.AddSingleton<IRecordKindStore>(new PostgresRecordKindStore(contexts));
         services.AddSingleton<IReviewQueueStore>(new PostgresReviewQueueStore(contexts));
         services.AddScoped<ListReviewQueue>();
+        services.AddScoped<ListUnmatchedApprovedLinks>();
         services.AddScoped<SearchApprovedRecords>();
         services.AddScoped(provider => new LookupDraft(provider.GetRequiredService<IActionReviewStore>(),
             provider.GetRequiredService<IVoteReviewStore>(), provider.GetRequiredService<IRecordKindStore>(), TimeProvider.System));

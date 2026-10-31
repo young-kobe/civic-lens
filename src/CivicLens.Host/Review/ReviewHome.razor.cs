@@ -35,6 +35,7 @@ public sealed partial class ReviewHome
     private PublicationReleaseList? releases;
     private ReviewQueuePage? queue;
     private IReadOnlyList<BlockedPublishedRecord>? blocked;
+    private ReviewQueuePage? unmatched;
     private int openReports;
     private IReadOnlyList<FeedItem> activity = [];
     private string? error;
@@ -49,6 +50,7 @@ public sealed partial class ReviewHome
     [Inject] private ListDocumentChangeAnalyses ListAnalyses { get; set; } = default!;
     [Inject] private GetDocumentChangeAnalysisStatus GetAnalysisStatus { get; set; } = default!;
     [Inject] private ListReviewQueue ListQueue { get; set; } = default!;
+    [Inject] private ListUnmatchedApprovedLinks ListUnmatched { get; set; } = default!;
     [Inject] private SearchApprovedRecords SearchApproved { get; set; } = default!;
     [Inject] private CountOpenReaderReports CountReports { get; set; } = default!;
     [Inject] private GetRecentActivity GetActivity { get; set; } = default!;
@@ -102,7 +104,11 @@ public sealed partial class ReviewHome
                 configuration = collection.GetConfiguration(actor);
                 health = await collection.GetSourceHealthAsync(actor, cancellationToken);
             }
-            if (actor.Role == ReviewRole.Owner) await LoadPublicationAsync(cancellationToken);
+            if (actor.Role == ReviewRole.Owner)
+            {
+                await LoadPublicationAsync(cancellationToken);
+                unmatched = await ListUnmatched.ExecuteAsync(actor, cancellationToken: cancellationToken);
+            }
             activity = (await GetActivity.ExecuteAsync(actor, cancellationToken: cancellationToken)).Select(Describe).ToArray();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
@@ -203,7 +209,13 @@ public sealed partial class ReviewHome
 
     private IReadOnlyList<QueueRow> StuckRows => [.. blocked?.Select(record => record.StuckText() is { } text ? QueueRow.Of(record, text) : null).OfType<QueueRow>() ?? []];
 
-    private IReadOnlyList<QueueRow> QueueRows => [.. queue!.NewerCursor is null ? StuckRows : [], .. queue!.Items.Select(QueueRow.Of)];
+    private IReadOnlyList<QueueRow> UnmatchedRows => [.. unmatched?.Items.Select(QueueRow.OfUnmatchedApproved) ?? []];
+
+    private int OwnerRowCount => StuckRows.Count + (unmatched?.Total ?? 0);
+
+    private IReadOnlyList<QueueRow> OwnerRows => [.. StuckRows, .. UnmatchedRows];
+
+    private IReadOnlyList<QueueRow> QueueRows => [.. queue!.NewerCursor is null ? OwnerRows : [], .. queue!.Items.Select(QueueRow.Of)];
 
     private static bool IsValidCursor(string? cursor)
     {

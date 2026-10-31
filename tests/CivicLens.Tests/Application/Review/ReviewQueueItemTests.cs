@@ -72,9 +72,22 @@ public sealed class ReviewQueueItemTests
         Assert.Same(cause, entry.Exception);
     }
 
+    [Fact]
+    public async Task OnlyTheOwnerListsUnmatchedApprovedLinksBecauseTheRowsAreForTheOwnerPanel()
+    {
+        var page = new ReviewQueuePage([], 0, null, null);
+        var handler = new ListUnmatchedApprovedLinks(new StubStore(page), new CapturingLogger<ListUnmatchedApprovedLinks>());
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            handler.ExecuteAsync(new ReviewActor("auth0|reviewer", ReviewRole.Reviewer)));
+        Assert.Same(page, await handler.ExecuteAsync(new ReviewActor("auth0|owner", ReviewRole.Owner)));
+    }
+
     private sealed class StubStore(ReviewQueuePage page) : IReviewQueueStore
     {
         public Task<ReviewQueuePage> ListAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken) => Task.FromResult(page);
+
+        public Task<ReviewQueuePage> ListUnmatchedApprovedLinksAsync(int limit, CancellationToken cancellationToken) => Task.FromResult(page);
 
         public Task<ApprovedRecordPage> SearchApprovedAsync(string text, PageCursor? cursor, int limit, CancellationToken cancellationToken) =>
             throw new NotSupportedException();

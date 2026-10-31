@@ -320,6 +320,7 @@ This is an owner command. It prints the count of entries that it queued or moved
 - Filling stops at the first group that does not fit. A smaller group later in the order never takes its place.
 - The text of a person survives later model runs by rule. A person who edited a brief cannot rebind a changed citation to the new revision. The person can only drop the citation.
 - The approval gate reads the flag at the moment of approval only. Publication reads it again.
+- An approved brief whose cited record changed shows only in its editor. No queue row names it until the planned citation rows land. Publication skips such a brief.
 - A published brief page links to the current page of each cited record. A newer revision of a cited record can replace the cited one in a later release. The page then shows the revision number that the brief cited, and the linked page shows the newer text.
 - The cited-record texts on the editor come from one read per page load. A cited record can change while the page is open. The flag shows at the next load.
 - News coverage in briefs is deferred; see [roadmap](../roadmap.md#deferred).

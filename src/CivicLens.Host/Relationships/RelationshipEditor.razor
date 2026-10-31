@@ -57,7 +57,7 @@ else
         }
         @if (review.NoLongerMatches)
         {
-            <Notice Tone="Tone.Warn" id="no-longer-matches">The pair finder no longer finds this pair. The statement or the record changed so that they do not share the bill. Check the link before you approve it.</Notice>
+            <Notice Tone="Tone.Warn" id="no-longer-matches">@RelationshipLabels.NoLongerMatches Check the link before you approve it.</Notice>
         }
         @if (concerns.Length > 0)
         {

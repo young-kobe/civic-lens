@@ -15,6 +15,8 @@ internal static class RelationshipLabels
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Relationship type has no label.")
     };
 
+    public const string NoLongerMatches = "The pair finder no longer finds this pair. The statement or the record changed so that they do not share the bill.";
+
     public static string Title(RelationshipType type, string statementHeadline) => $"{Type(type)}: {statementHeadline}";
 
     public static string Basis(RelationshipMatchBasis basis) => basis == RelationshipMatchBasis.BillNumber ? "Bill number" : "Bill title";

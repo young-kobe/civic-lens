@@ -546,6 +546,7 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 
 ## Limits and planned work
 
+- An approved link whose cited record changed shows only in its editor. No queue row names it until the planned citation rows land. Publication skips such a link. An approved link that no longer matches does show to the owner in the Needs a person queue; see [review](review.md#needs-a-person-queue).
 - Actions are in [actions](actions.md). Weekly briefs are in [briefs](briefs.md).
 - Two parallel preparations of one source can deadlock when their feed items have an equal `pubDate` and swap order. Postgres aborts one transaction, the worker retries it, and no data is lost. The insert order stays as it is.
 - Planned: structured statement extraction and temporal identity resolution.

@@ -185,6 +185,54 @@ public sealed class RelationshipReviewWorkspaceTests(PostgresCollection postgres
         Assert.NotNull(page.QuerySelector("#no-longer-matches"));
     }
 
+    [Fact]
+    public async Task AnApprovedLinkThatNoLongerMatchesShowsInTheQueueForTheOwnerOnlyAndLeavesItWhenTheApprovalIsWithdrawn()
+    {
+        await SeedAsync();
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+        await PostDecisionAsync("Approve");
+        const string flagText = "The pair finder no longer finds this pair.";
+
+        Assert.DoesNotContain(flagText, await OwnerQueueTextAsync(), StringComparison.Ordinal);
+
+        await seeder.ExecuteAsync("UPDATE relationship_drafts SET no_longer_matches = true");
+        var shown = await OwnerQueueTextAsync();
+        Assert.Contains(flagText, shown, StringComparison.Ordinal);
+        Assert.Contains("Withdraw the approval if it is wrong.", shown, StringComparison.Ordinal);
+        Assert.Contains($"href=\"{url}\"", await OwnerQueueHtmlAsync(), StringComparison.Ordinal);
+        Assert.DoesNotContain(flagText, (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='needs-a-person']")!.TextContent,
+            StringComparison.Ordinal);
+
+        await PostDecisionAsync("WithdrawApproval", "The pair is wrong.");
+        Assert.DoesNotContain(flagText, await OwnerQueueTextAsync(), StringComparison.Ordinal);
+    }
+
+    private async Task PostDecisionAsync(string kind, string? note = null)
+    {
+        var fields = Fields((await host.GetDocumentAsync(url)).QuerySelector("#decision-form")!);
+        Set(fields, "kind", kind);
+        if (note is not null) Set(fields, "Decision.Note", note);
+        using var response = await host.Client.PostAsync(url, new FormUrlEncodedContent(fields));
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+    }
+
+    private async Task<string> OwnerQueueHtmlAsync()
+    {
+        var friend = host.Client.DefaultRequestHeaders.GetValues("Cookie").Single();
+        host.Client.DefaultRequestHeaders.Remove("Cookie");
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|owner"));
+        var panel = (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='needs-a-person']")!;
+        host.Client.DefaultRequestHeaders.Remove("Cookie");
+        host.Client.DefaultRequestHeaders.Add("Cookie", friend);
+        return panel.InnerHtml;
+    }
+
+    private async Task<string> OwnerQueueTextAsync()
+    {
+        var html = await OwnerQueueHtmlAsync();
+        return new HtmlParser().ParseDocument("<body>" + html).Body!.TextContent;
+    }
+
     private static string CitedRevision(AngleSharp.Dom.IDocument page, string panel) => page.QuerySelectorAll($"[aria-labelledby='{panel}'] dt")
         .Single(label => label.TextContent == "Cited revision").NextElementSibling!.TextContent;
 
