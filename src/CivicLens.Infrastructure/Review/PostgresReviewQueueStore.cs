@@ -101,11 +101,16 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
         CancellationToken cancellationToken)
     {
         var (reads, unreadable) = await RelationshipDraftRows.Records.ReadQueueAsync(db, recordIds, cancellationToken);
-        var headlines = await RelationshipCitedReader.ReadHeadlinesAsync(db, [.. reads.Values.Select(read => read.Revision.Statement)],
-            cancellationToken);
-        var drafts = reads.ToDictionary(read => read.Key,
-            read => read.Value.ToDraft(headlines[read.Value.Revision.Statement], read.Value.Revision.Type), StringComparer.Ordinal);
-        foreach (var (recordId, error) in unreadable) drafts[recordId] = QueueDraft.Unreadable(recordId, error);
+        var (headlines, unreadableStatements) = await RelationshipCitedReader.ReadStatementHeadlinesAsync(db,
+            [.. reads.Values.Select(read => read.Revision.Statement)], cancellationToken);
+        Dictionary<string, QueueDraft> drafts = [];
+        foreach (var (recordId, read) in reads)
+        {
+            var citation = read.Revision.Statement;
+            drafts[recordId] = headlines.TryGetValue(citation, out var headline) ? read.ToDraft(headline, read.Revision.Type)
+                : QueueDraft.Unreadable(recordId, unreadableStatements[citation]);
+        }
+        foreach (var (recordId, cause) in unreadable) drafts[recordId] = QueueDraft.Unreadable(recordId, cause);
         return drafts;
     }
 
@@ -113,8 +118,8 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
     {
         var kind = KindsByCode[key.KindCode].Kind;
         var revisedAt = new DateTimeOffset(key.LastRevisedAtUtcTicks, TimeSpan.Zero);
-        return draft.UnreadableError is { } error
-            ? ReviewQueueItem.Unreadable(kind, key.RecordId, revisedAt, error)
+        return draft.UnreadableCause is { } cause
+            ? ReviewQueueItem.Unreadable(kind, key.RecordId, revisedAt, cause)
             : new(kind, key.RecordId, draft.Headline, draft.Status, draft.OpenConcerns, draft.HeldReason, revisedAt, draft.EditedByPerson,
                 draft.LinkType);
     }

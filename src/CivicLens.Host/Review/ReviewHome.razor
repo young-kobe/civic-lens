@@ -3,13 +3,10 @@
 @using CivicLens.Host.Analysis
 @using CivicLens.Application.Review
 @using CivicLens.Core.Review
-@using CivicLens.Host.Briefs
 @using CivicLens.Host.Collection
 @using CivicLens.Host.Documents
 @using CivicLens.Host.Publication
-@using CivicLens.Host.Relationships
 @using CivicLens.Host.Reports
-@using CivicLens.Host.Statements
 @using CivicLens.Publication.Contracts
 
 <TopBarTitle Crumbs="Crumbs" />
@@ -120,7 +117,7 @@
                                 }
                                 else
                                 {
-                                    <EmptyState Title="No record needs a person" Text="Code approves an action, a vote, a statement, or an executive action when its checks pass. A record shows here when a check refuses it or a person must decide. To open an approved record, use Find a draft." />
+                                    <EmptyState Title="No record needs a person" Text="Code approves an action, a vote, a statement, or an executive action when its checks pass. A record shows here when a check refuses it or a person must decide. To open an approved record, type words from its headline in Search approved records." />
                                 }
                             </Empty>
                         </DataTable>

@@ -306,7 +306,7 @@ Infrastructure/Statements holds `PostgresStatementReviewStore` and `StatementRev
 **Pages.** `/Review/Statements` lists the drafts and the statements that are not in review.
 
 - The drafts table has the filter tabs All, Needs action, and Approved, with their counts. It has a filter form for issue, official, and dates, and a pager on `ListStatementReviews`. It shows the headline (or "Not drafted"), the source, the status, and the open concern count.
-- The query values are `drafts` (filter), `draftsCursor`, `issue`, `official`, `from`, `to`, `notInReview` (cursor), and `status`, as on the Review home page.
+- The query values are `drafts` (filter), `draftsCursor`, `issue`, `official`, `from`, `to`, `notInReview` (cursor), and `status`.
 - The "Not in review" table has a pager on `ListStatementsNotInReview`. It shows the source, the URL, and the reason code. Each row has a Start draft post form.
 - The page header links `/Review/Statements/Triage`. That page lists the drafts that need action, 10 for each page, with the same filters. `ListStatementTriage` returns each row with the quotes of its revision and the result of the approval check. The check uses the allowed selections of the admitting configuration revision. A row without an open concern has Approve, Request changes, and a note field. See [review](review.md#triage).
 

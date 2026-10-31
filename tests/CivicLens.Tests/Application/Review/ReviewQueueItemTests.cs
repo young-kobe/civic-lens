@@ -48,19 +48,20 @@ public sealed class ReviewQueueItemTests
     }
 
     [Fact]
-    public void AnUnreadableRecordSaysPlainlyThatItsSavedRevisionCouldNotBeRead()
+    public void AnUnreadableRecordSaysPlainlyThatItCannotBeReadAndSendsTheOwnerToTheLogsBecauseTheEditorShowsNoError()
     {
-        var item = ReviewQueueItem.Unreadable(PublishedRecordKind.Vote, "abc", DateTimeOffset.UnixEpoch, "bad json");
+        var item = ReviewQueueItem.Unreadable(PublishedRecordKind.Vote, "abc", DateTimeOffset.UnixEpoch, new InvalidOperationException("bad json"));
 
         Assert.Equal("abc", item.Headline);
-        Assert.Equal("The saved revision of this record could not be read, so its status is not known. Open the record to see the error.",
+        Assert.Equal("This record cannot be read, so its status is not known. The owner must check the logs for this record ID.",
             item.Reason);
     }
 
     [Fact]
     public async Task TheQueueHandlerLogsEachUnreadableRecordWithItsIdBecauseTheRowHidesTheCause()
     {
-        var page = new ReviewQueuePage([ReviewQueueItem.Unreadable(PublishedRecordKind.Vote, "vote-1", DateTimeOffset.UnixEpoch, "Stored revision is invalid."),
+        var cause = new InvalidOperationException("Stored revision is invalid.");
+        var page = new ReviewQueuePage([ReviewQueueItem.Unreadable(PublishedRecordKind.Vote, "vote-1", DateTimeOffset.UnixEpoch, cause),
             Item(PublishedRecordKind.Action, ReviewStatus.AwaitingReview)], 2, null, null);
         var logger = new CapturingLogger<ListReviewQueue>();
 
@@ -68,7 +69,7 @@ public sealed class ReviewQueueItemTests
 
         var entry = Assert.Single(logger.Entries);
         Assert.Contains("vote-1", entry.Message, StringComparison.Ordinal);
-        Assert.Contains("Stored revision is invalid.", entry.Message, StringComparison.Ordinal);
+        Assert.Same(cause, entry.Exception);
     }
 
     private sealed class StubStore(ReviewQueuePage page) : IReviewQueueStore

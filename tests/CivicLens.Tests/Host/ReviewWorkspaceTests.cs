@@ -488,6 +488,10 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         var bothAgain = await host.GetDocumentAsync(OlderHref(secondQueue, "new-changes")!);
         Assert.Equal(queueWalk.Down[1], QueueUrls(bothAgain));
         Assert.Equal(changeWalk.Down[1], ChangeIds(bothAgain));
+
+        var searching = await host.GetDocumentAsync("/Review?q=zzzunmatched");
+        Assert.Contains("q=zzzunmatched", OlderHref(searching, "needs-a-person"), StringComparison.Ordinal);
+        Assert.Contains("q=zzzunmatched", OlderHref(searching, "new-changes"), StringComparison.Ordinal);
     }
 
     private void SignIn(string subject) => host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie(subject));

@@ -4,10 +4,10 @@ using CivicLens.Core.Review;
 namespace CivicLens.Infrastructure.Review;
 
 internal sealed record QueueDraft(string Headline, ReviewStatus Status, int OpenConcerns, string? HeldReason, bool EditedByPerson,
-    RelationshipType? LinkType = null, string? UnreadableError = null)
+    RelationshipType? LinkType = null, Exception? UnreadableCause = null)
 {
-    public static QueueDraft Unreadable(string recordId, string error) =>
-        new(recordId, ReviewStatus.NotDrafted, 0, null, false, UnreadableError: error);
+    public static QueueDraft Unreadable(string recordId, Exception cause) =>
+        new(recordId, ReviewStatus.NotDrafted, 0, null, false, UnreadableCause: cause);
 }
 
 internal sealed record QueueRead<TRevision>(TRevision Revision, ReviewStatus Status, int OpenConcerns, string? HeldReason)

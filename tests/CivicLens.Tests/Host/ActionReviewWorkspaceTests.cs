@@ -91,7 +91,7 @@ public sealed class ActionReviewWorkspaceTests(PostgresCollection postgres) : IA
         var rows = home.QuerySelectorAll("[aria-labelledby='needs-a-person'] tbody tr").ToArray();
         Assert.Equal(2, rows.Length);
         Assert.Contains("Cannot read", rows[0].TextContent, StringComparison.Ordinal);
-        Assert.Contains("could not be read", rows[0].TextContent, StringComparison.Ordinal);
+        Assert.Contains("cannot be read", rows[0].TextContent, StringComparison.Ordinal);
         Assert.NotNull(rows[0].QuerySelector($"a[href='/Review/Votes/{broken.RecordId}']"));
         Assert.NotNull(rows[1].QuerySelector($"a[href='/Review/Actions/{good.RecordId}']"));
     }

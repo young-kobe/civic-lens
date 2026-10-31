@@ -12,7 +12,7 @@ public sealed class ListReviewQueue(IReviewQueueStore store, ILogger<ListReviewQ
         ReviewAuthorization.RequireReviewer(actor);
         var page = await store.ListAsync(ReviewValidation.ValidatePage(cursor, limit), limit, cancellationToken);
         foreach (var item in page.Items.Where(item => item.IsUnreadable))
-            logger.LogWarning("The review queue could not read the {Kind} record {RecordId}: {Error}", item.Kind, item.RecordId, item.UnreadableError);
+            logger.LogWarning(item.UnreadableCause, "The review queue could not read the {Kind} record {RecordId}", item.Kind, item.RecordId);
         return page;
     }
 }
