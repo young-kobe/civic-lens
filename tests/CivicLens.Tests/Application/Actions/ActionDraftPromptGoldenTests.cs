@@ -10,10 +10,10 @@ namespace CivicLens.Tests.Application.Actions;
 
 public sealed class ActionDraftPromptGoldenTests
 {
-    private const string SystemSha256 = "4c95a4e40f9b9169423ba73a7cb3eee0935ec578221d5340ccd225eafd755ca5";
-    private const string NoCandidateSystemSha256 = "4949cc48048c5226cd20a614dcc00f75d86fef7088502194ea6208f960046e29";
+    private const string SystemSha256 = "d62af2685dd1ec265f8063e01350821831907d6708999c0ec481cf9407d94235";
+    private const string NoCandidateSystemSha256 = "7ea8500a184d016db4ec9580b928c7c6c7232929a3a43907be8a61b03c327c05";
     private const string SchemaSha256 = "6d6adb018d7ee24f5df2e21a1f678cc87ed0fb7c144cf0a5c99cd84153a3acf0";
-    private const string InputHash = "47ec30926aa4fea1b163230236529021cb4b5c06491c41377d1af4a855514bea";
+    private const string InputHash = "7992facd4a0362511431945582fe13d5ffecd2df0e60d726baed061ee8dd23ee";
 
     [Fact]
     public async Task ThePromptAndSchemaMatchTheirPinnedVersions()

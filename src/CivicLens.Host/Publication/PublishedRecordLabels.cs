@@ -69,6 +69,8 @@ public static class PublishedRecordLabels
 
     public const string CodeWording = "Written automatically from Congress.gov data, with no AI";
 
+    public const string ModelChosenIssues = "Chosen by an AI model from the bill title and subjects";
+
     public static IEnumerable<Fact> Wording(PublishedTextOrigin origin, string modelWording = ModelWording) => origin switch
     {
         PublishedTextOrigin.Model => [new("Wording", modelWording)],

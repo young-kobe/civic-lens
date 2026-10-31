@@ -612,6 +612,18 @@ public sealed class ReleaseRendererTests
         Assert.Contains("Wording", html, StringComparison.Ordinal);
         Assert.Contains("Written automatically from Congress.gov data, with no AI", html, StringComparison.Ordinal);
         Assert.DoesNotContain("AI summary", html, StringComparison.Ordinal);
+        Assert.Contains("Chosen by an AI model from the bill title and subjects", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnActionPageSaysAModelChoseTheIssuesOnlyBesideCodeWrittenWordingAndOnlyWhenTheRecordHasIssues()
+    {
+        var codeWithoutIssues = await new ReleaseRenderer(null, null).RenderActionAsync(
+            Action() with { TextOrigin = PublishedTextOrigin.Code, TrackedIssueIds = [] }, [], PublicationCatalogs.None, CancellationToken.None);
+        var modelText = await new ReleaseRenderer(null, null).RenderActionAsync(Action(), [], PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.DoesNotContain(PublishedRecordLabels.ModelChosenIssues, codeWithoutIssues, StringComparison.Ordinal);
+        Assert.DoesNotContain(PublishedRecordLabels.ModelChosenIssues, modelText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1578,6 +1590,9 @@ public sealed class ReleaseRendererTests
         Assert.NotNull(document.QuerySelector("main a[href='report.html']"));
         Assert.Contains(PublishedRecordLabels.ModelWording, html, StringComparison.Ordinal);
         Assert.Contains(PublishedRecordLabels.CodeWording, html, StringComparison.Ordinal);
+        Assert.Contains("On an action page or a vote page, a summary that a model wrote has the label \"An AI summary of the official record\". " +
+            "Wording that code wrote from the bill title, the sponsor, and the introduction date has the label \"Written automatically from Congress.gov data, with no AI\".",
+            new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain("unreviewed", html, StringComparison.OrdinalIgnoreCase);
     }
 
