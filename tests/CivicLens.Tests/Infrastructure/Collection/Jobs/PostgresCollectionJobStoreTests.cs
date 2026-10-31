@@ -1043,6 +1043,17 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         Assert.Equal(new DateTimeOffset(100, TimeSpan.Zero), activity.Failed[1].OccurredAt);
     }
 
+    [Fact]
+    public async Task ActivityReadsTheSourceFromItsColumnAndNeverParsesTheDefinition()
+    {
+        var job = await jobs.EnqueueAsync(Source(sourceId: "listed"), "listed", default);
+        await SqlAsync($"UPDATE collection_jobs SET definition_json = 'not json' WHERE job_id = '{job.JobId}'");
+
+        var activity = await jobs.ListActivityAsync(1, default);
+
+        Assert.Equal("listed", Assert.Single(activity.Started).SourceId);
+    }
+
     private async Task<CollectionJobClaim> EnqueueClaimAsync(string key, ConfiguredCollectionSource source)
     {
         var job = await jobs.EnqueueAsync(source, key, default);
