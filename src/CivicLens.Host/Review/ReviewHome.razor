@@ -28,7 +28,7 @@
     {
         <Notice Tone="Tone.Warn" Dismissible="true">@lookupMessage</Notice>
     }
-    <form class="list-filter" method="get" action="/Review" role="search" aria-label="Find a draft by bill, roll call, or record ID">
+    <form class="list-filter" method="get" action="/Review" role="search" aria-label="Find a draft by bill, roll call, record ID, or link">
         <Field Label="Find a draft" For="find" Hint="A bill such as HR 1234 or 118 HR 1234, a roll call such as Roll 245, a record ID, or a link to the record.">
             <input id="find" name="find" value="@Find" maxlength="300" aria-describedby="find-hint" />
         </Field>

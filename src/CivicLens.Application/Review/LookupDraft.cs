@@ -13,16 +13,13 @@ namespace CivicLens.Application.Review;
 
 public sealed partial class LookupDraft(IActionReviewStore actions, IVoteReviewStore votes, IRecordKindStore kinds, TimeProvider clock)
 {
-    private const int DocumentChangeIdLength = 32;
-    private const int RecordIdLength = 64;
-
     public async Task<DraftLookupHit?> ExecuteAsync(ReviewActor actor, string? query, CancellationToken cancellationToken = default)
     {
         ReviewAuthorization.RequireReviewer(actor);
         var text = query?.Trim() ?? "";
         if (Uri.TryCreate(text, UriKind.Absolute, out var link) && link.Scheme is "http" or "https")
             return await FindRecordAsync(RecordIdOfLink(link), cancellationToken);
-        if (IsRecordId(text)) return await FindRecordAsync(text, cancellationToken);
+        if (PublicationProtocol.IsAnyRecordId(text)) return await FindRecordAsync(text, cancellationToken);
         var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
         var congress = CongressCalendar.CongressOn(today) ?? throw new InvalidOperationException("The clock date has no Congress.");
         if (RollPattern().Match(text) is { Success: true } roll)
@@ -41,11 +38,8 @@ public sealed partial class LookupDraft(IActionReviewStore actions, IVoteReviewS
     private static string RecordIdOfLink(Uri link)
     {
         var recordId = Path.GetFileNameWithoutExtension(link.AbsolutePath.TrimEnd('/'));
-        return IsRecordId(recordId) ? recordId : throw new DraftLookupFormatException();
+        return PublicationProtocol.IsAnyRecordId(recordId) ? recordId : throw new DraftLookupFormatException();
     }
-
-    private static bool IsRecordId(string text) =>
-        LowercaseHex.Is(text, DocumentChangeIdLength) || LowercaseHex.Is(text, RecordIdLength);
 
     private async Task<DraftLookupHit?> FindActionAsync(int congress, string billType, int billNumber, CancellationToken cancellationToken) =>
         await actions.FindRecordIdByBillAsync(congress, billType, billNumber, cancellationToken) is { } recordId

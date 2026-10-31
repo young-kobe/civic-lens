@@ -43,6 +43,7 @@ public sealed class BillLinksWorkspaceTests(PostgresCollection postgres) : IAsyn
 
         var page = await host.GetDocumentAsync($"/Review/Actions/{action.RecordId}");
 
+        Assert.Equal("Record ID " + action.RecordId, page.QuerySelector(".page-header-record-id")!.TextContent);
         var rows = page.QuerySelectorAll("[aria-labelledby='bill-votes'] li").ToArray();
         Assert.Equal([Id(3), Id(20), Id(10)], rows.Select(row => row.QuerySelector("a")!.GetAttribute("href")!.Split('/')[^1]));
         Assert.Contains("House roll call 3, Congress 119, session 2", rows[0].TextContent, StringComparison.Ordinal);

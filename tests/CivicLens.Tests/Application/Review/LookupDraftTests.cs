@@ -97,6 +97,7 @@ public sealed class LookupDraftTests
     [InlineData("https://review.example.test/Review/Actions/{0}")]
     [InlineData("https://review.example.test/Review/Actions/{0}?status=saved")]
     [InlineData("  https://review.example.test/Review/Actions/{0}/  ")]
+    [InlineData("https://review.example.test/Review/Actions/{0}#history")]
     [InlineData("https://civic-lens.info/records/{0}.html")]
     public async Task AnEditorLinkOrAPublicRecordLinkGivesItsRecordIdSoACopiedAddressWorks(string link)
     {
@@ -105,6 +106,16 @@ public sealed class LookupDraftTests
 
         Assert.Equal(new DraftLookupHit(PublishedRecordKind.Action, recordId),
             await Lookup().ExecuteAsync(Reviewer, string.Format(CultureInfo.InvariantCulture, link, recordId)));
+    }
+
+    [Fact]
+    public async Task ADocumentChangeEditorLinkGivesItsShortRecordId()
+    {
+        var draftId = new string('e', 32);
+        kinds.Records[draftId] = PublishedRecordKind.DocumentChange;
+
+        Assert.Equal(new DraftLookupHit(PublishedRecordKind.DocumentChange, draftId),
+            await Lookup().ExecuteAsync(Reviewer, "https://review.example.test/Review/" + draftId));
     }
 
     [Theory]
