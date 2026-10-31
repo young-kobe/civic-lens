@@ -7,17 +7,12 @@ namespace CivicLens.Infrastructure.Review;
 /// <summary>A review cycle starts at the latest approval, or at the first decision when no approval exists.</summary>
 internal static class ReviewDecisionHistory
 {
-    public static ImmutableArray<ReviewDecision> Parse(int reviewStateVersion, IEnumerable<IReviewDecisionRow> rows)
+    public static ReviewDecision ToDecision(IReviewDecisionRow row, ImmutableArray<string> resolvedDecisionIds) =>
+        new(row.DecisionId, row.RecordId, row.RevisionNumber, row.ReviewStateVersion, row.Kind, row.ActorSubject, row.Note,
+            resolvedDecisionIds, new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero), row.CorrectionNote);
+
+    public static ImmutableArray<ReviewDecision> RequireContiguousCycle(int reviewStateVersion, ImmutableArray<ReviewDecision> decisions)
     {
-        var decisionRows = rows.ToArray();
-        var decisions = decisionRows.Select(row =>
-        {
-            var decision = ReviewJson.Deserialize<ReviewDecision>(row.DecisionJson, "decision");
-            if (decision.DecisionId != row.DecisionId || decision.DraftId != row.RecordId || decision.Kind != row.Kind ||
-                decision.RevisionNumber != row.RevisionNumber || decision.ReviewStateVersion != row.ReviewStateVersion)
-                throw new InvalidOperationException("Stored decision identity is inconsistent.");
-            return decision;
-        }).ToImmutableArray();
         var start = ApprovalVersionOf(decisions);
         if (decisions.Length != reviewStateVersion - Math.Max(start - 1, 0) ||
             decisions.Select((decision, index) => decision.ReviewStateVersion == Math.Max(start, 1) + index).Any(valid => !valid))
@@ -38,6 +33,8 @@ internal static class ReviewDecisionHistory
         if ((approved?.RevisionNumber ?? 0) != approvedRevision || current.RevisionNumber < approvedRevision)
             throw new InvalidOperationException("Stored approved revision is inconsistent.");
         approved?.ValidateForApproval();
+        if (!cycle.IsEmpty && cycle[0].ResolvedDecisionIds.Intersect(cycle[1..].Select(decision => decision.DecisionId)).Any())
+            throw new InvalidOperationException("An opening approval resolves a concern from its own cycle.");
         var prior = approvedRevision == 0 ? ImmutableArray<ReviewDecision>.Empty : cycle[..1];
         foreach (var decision in cycle[prior.Length..])
         {
