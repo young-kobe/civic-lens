@@ -63,6 +63,8 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         var revision = JsonSerializer.Deserialize<JsonElement>(await TextAsync($"SELECT revision_json FROM statement_revisions WHERE candidate_id = '{candidate}'"));
         Assert.Equal(RentIssue, revision.GetProperty("issueIds")[0].GetString());
         Assert.Equal(HousingArea, revision.GetProperty("policyAreaIds")[0].GetString());
+        Assert.Equal(await ScalarAsync($"SELECT created_at_utc_ticks FROM statement_revisions WHERE candidate_id = '{candidate}' AND revision_number = 1"),
+            await ScalarAsync($"SELECT last_revised_at_utc_ticks FROM statement_drafts WHERE candidate_id = '{candidate}'"));
         Assert.Equal(RentIssue, await TextAsync($"SELECT array_to_string(issue_ids, ',') FROM statement_drafts WHERE candidate_id = '{candidate}'"));
         Assert.Equal(await CaptureDateAsync(candidate), await TextAsync($"SELECT event_on::text FROM statement_drafts WHERE candidate_id = '{candidate}'"));
         Assert.Equal(1_000L, await ScalarAsync($"SELECT charged_tokens FROM statement_analysis_budget WHERE task = '{StatementDraftTask.Task}'"));
@@ -220,6 +222,8 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         Assert.Equal([(StatementDraftTask.Task, "Succeeded", "over-byte-cap")], await QueueAsync(candidate, StatementDraftTask.Task));
         Assert.Equal(0L, await ScalarAsync($"SELECT current_revision_number FROM statement_drafts WHERE candidate_id = '{candidate}'"));
         Assert.Equal(await CaptureDateAsync(candidate), await TextAsync($"SELECT event_on::text FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+        Assert.Equal(await ScalarAsync($"SELECT created_at_utc_ticks FROM statement_drafts WHERE candidate_id = '{candidate}'"),
+            await ScalarAsync($"SELECT last_revised_at_utc_ticks FROM statement_drafts WHERE candidate_id = '{candidate}'"));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM statement_revisions"));
         Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM statement_analysis_runs WHERE task = '{StatementDraftTask.Task}' AND outcome = 'Bypassed' AND reason = 'over-byte-cap' AND charged_tokens = 0"));
     }

@@ -154,9 +154,9 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
             await Drafts(db, DraftStatusFilter.Approved).CountAsync(cancellationToken));
 
     public async Task<(TDraftRow[] Drafts, int Total)> ReadNeedingActionAsync(CollectionAttemptDbContext db, int limit,
-        Expression<Func<TDraftRow, long>> revisedOf, CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
-        var slice = await PageAsync(db, null, limit, DraftStatusFilter.NeedsAction, revisedOf, cancellationToken);
+        var slice = await PageAsync(db, null, limit, DraftStatusFilter.NeedsAction, row => row.LastRevisedAtUtcTicks, cancellationToken);
         return ([.. slice.Items], await Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken));
     }
 

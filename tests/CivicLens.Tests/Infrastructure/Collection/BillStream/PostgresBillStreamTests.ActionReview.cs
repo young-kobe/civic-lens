@@ -167,6 +167,33 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task ACodeThatLeavesARevisionForAnOpenConcernStoresNoHeldReasonBecauseTheStatusShowsTheConcern()
+    {
+        var candidate = await CandidateWithoutSummariesAsync();
+        await SettleAsync(candidate, Revision(candidate, 1));
+        await DecideAsync(1, 0, ReviewDecisionKind.RequestChanges, "Add the summary.");
+        await ExecuteAsync(connectionString, $"UPDATE action_analysis SET status = 'Pending' WHERE candidate_id = '{candidate}'");
+
+        await SettleAsync(candidate, Revision(candidate, 2));
+
+        Assert.Equal("AwaitingReviewWithConcerns", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Null(await HeldReasonAsync());
+    }
+
+    [Fact]
+    public async Task ACodeThatLeavesARevisionForTextAPersonWroteStoresNoHeldReasonBecauseTheStatusShowsTheText()
+    {
+        var candidate = await CandidateWithoutSummariesAsync();
+        await SettleAsync(candidate, Revision(candidate, 1));
+        await ExecuteAsync(connectionString, $"UPDATE action_analysis SET status = 'Pending' WHERE candidate_id = '{candidate}'");
+
+        await SettleAsync(candidate, Revision(candidate, 2) with { TextOrigin = ReviewTextOrigin.Person });
+
+        Assert.Equal(2, await ScalarAsync($"SELECT current_revision_number FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Null(await HeldReasonAsync());
+    }
+
+    [Fact]
     public async Task ACodeApprovalClearsTheHeldReasonOfAnEarlierRevision()
     {
         await DraftAsync(UpdatedAt, DraftableOutput);
