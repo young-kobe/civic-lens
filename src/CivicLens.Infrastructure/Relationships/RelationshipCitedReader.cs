@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Relationships;
 using CivicLens.Core.Actions;
@@ -65,11 +64,15 @@ internal static class RelationshipCitedReader
             {
                 var row = stored.FirstOrDefault(row => row.RecordId == citation.RecordId && row.RevisionNumber == citation.RevisionNumber)
                     ?? throw new InvalidDataException("A cited statement revision is not stored.");
-                headlines[citation] = ReviewJson.Deserialize<StatementDraftRevision>(row.RevisionJson, "revision").Headline;
+                var revision = ReviewJson.Deserialize<StatementDraftRevision>(row.RevisionJson, "revision");
+                if (revision.CandidateId != citation.RecordId || revision.RevisionNumber != citation.RevisionNumber || revision.Headline is null)
+                    throw new InvalidDataException("The stored revision does not match its citation.");
+                headlines[citation] = revision.Headline;
             }
-            catch (Exception exception) when (exception is JsonException or InvalidDataException or InvalidOperationException)
+            catch (Exception exception) when (ReviewJson.IsUnreadableStoredData(exception))
             {
-                unreadable[citation] = exception;
+                unreadable[citation] = new InvalidDataException(
+                    $"Cited statement {citation.RecordId} revision {citation.RevisionNumber} cannot be read.", exception);
             }
         }
         return (headlines, unreadable);

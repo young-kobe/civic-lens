@@ -186,16 +186,14 @@
                     <Panel Title="Releases" Id="releases">
                         <DataTable Items="releases.Releases" Caption="Releases">
                             <Head>
-                                <th class="num">Release</th>
+                                <th>Release</th>
                                 <th class="time">Published</th>
                                 <th class="num hide-narrow">Records</th>
-                                <th>Status</th>
                             </Head>
                             <Row Context="release">
-                                <td class="num">@release.ReleaseNumber</td>
+                                <td>@release.ReleaseNumber @if (release.ReleaseNumber == releases.ActiveReleaseNumber) { <StatusBadge Tone="Tone.Ok" Text="Active" /> }</td>
                                 <td class="time"><Timestamp Value="release.PublishedAtUtc" /></td>
                                 <td class="num hide-narrow">@release.RecordCount</td>
-                                <td>@if (release.ReleaseNumber == releases.ActiveReleaseNumber) { <StatusBadge Tone="Tone.Ok" Text="Active" /> }</td>
                             </Row>
                             <Empty>
                                 <EmptyState Title="No releases yet" />

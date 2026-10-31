@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using System.Runtime.ExceptionServices;
-using System.Text.Json;
 using System.Linq.Expressions;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Review;
@@ -198,9 +197,6 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         return drafts;
     }
 
-    private static bool IsUnreadableStoredData(Exception exception) =>
-        exception is JsonException or InvalidOperationException or ArgumentException or FormatException;
-
     public async Task<IReadOnlyList<(TDraftRow Draft, ReviewHistory<TRevision> History)>>
         ReadUnpublishedApprovedAsync(CollectionAttemptDbContext db, string unpublishedApprovedSql, int limit,
             IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken)
@@ -225,8 +221,9 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         return histories;
     }
 
-    /// <summary>Reads the rows of every draft in a fixed number of queries, then parses each draft alone. Only a failure of that
-    /// parse marks a draft unreadable. A failed query is not caught, so a database error fails the whole read.</summary>
+    /// <summary>Reads the rows of every draft in a fixed number of queries, then parses each draft alone. Only an error from the parse or from the build
+    /// of the history marks a draft unreadable (see <see cref="ReviewJson.IsUnreadableStoredData"/>). That covers a missing revision and
+    /// failed shape or history checks. A failed query is not caught, so a database error fails the whole read.</summary>
     public async Task<(Dictionary<string, ReviewHistory<TRevision>> Histories, Dictionary<string, Exception> Unreadable)>
         ReadHistoriesOrUnreadableAsync(CollectionAttemptDbContext db, IReadOnlyCollection<TDraftRow> drafts, CancellationToken cancellationToken)
     {
@@ -239,7 +236,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         foreach (var draft in drafts)
         {
             try { cycles[draft.RecordId] = ReviewDecisionHistory.Parse(draft.ReviewStateVersion, decisionRows[draft.RecordId]); }
-            catch (Exception exception) when (IsUnreadableStoredData(exception)) { unreadable[draft.RecordId] = exception; }
+            catch (Exception exception) when (ReviewJson.IsUnreadableStoredData(exception)) { unreadable[draft.RecordId] = exception; }
         }
         var readable = drafts.Where(draft => cycles.ContainsKey(draft.RecordId)).ToArray();
         var revisionRows = await ReadCycleRevisionRowsAsync(db, [.. readable.Where(draft => draft.CurrentRevisionNumber > 0).Select(draft => draft.RecordId)],
@@ -248,7 +245,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         foreach (var draft in readable)
         {
             try { histories[draft.RecordId] = BuildHistory(draft, cycles[draft.RecordId], revisionRows); }
-            catch (Exception exception) when (IsUnreadableStoredData(exception)) { unreadable[draft.RecordId] = exception; }
+            catch (Exception exception) when (ReviewJson.IsUnreadableStoredData(exception)) { unreadable[draft.RecordId] = exception; }
         }
         return (histories, unreadable);
     }
@@ -300,8 +297,10 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         var current = ParseRevision(revisionRows.GetValueOrDefault((draft.RecordId, draft.CurrentRevisionNumber))
             ?? throw new InvalidOperationException("Current draft revision is missing."));
         var approvedNumber = ReviewDecisionHistory.ApprovedRevisionOf(cycle);
-        var approved = approvedNumber == 0 ? null : ParseRevision(revisionRows.GetValueOrDefault((draft.RecordId, approvedNumber))
-            ?? throw new InvalidOperationException("Approved draft revision is missing."));
+        var approved = approvedNumber == 0 ? null
+            : approvedNumber == draft.CurrentRevisionNumber ? current
+            : ParseRevision(revisionRows.GetValueOrDefault((draft.RecordId, approvedNumber))
+                ?? throw new InvalidOperationException("Approved draft revision is missing."));
         ReviewDecisionHistory.Validate(draft.RecordId, current, approved, cycle);
         var concerns = ReviewPolicy.GetUnresolvedConcerns(cycle);
         return new(current, approved, cycle, concerns, ReviewPolicy.GetCurrentStatus(draft.CurrentRevisionNumber, cycle, concerns));

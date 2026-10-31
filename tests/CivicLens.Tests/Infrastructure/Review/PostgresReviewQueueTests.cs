@@ -1,12 +1,17 @@
+using System.Data.Common;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Review;
 using CivicLens.Core.Relationships;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Analysis;
+using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace CivicLens.Tests.Infrastructure.Review;
 
@@ -125,12 +130,56 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
     }
 
     [Fact]
-    public async Task ADatabaseFailureWhileReadingTheRowsFailsThePageInsteadOfMarkingEveryRecordUnreadable()
+    public async Task ADatabaseFailureWhileReadingTheRevisionRowsReachesTheCallerEvenWhenItsTypeIsOneOfTheUnreadableDataTypes()
     {
         await SeedThreeKindsAsync();
-        await seeder.ExecuteAsync("DROP TABLE vote_revisions CASCADE");
+        await seeder.ExecuteAsync("UPDATE vote_revisions SET revision_json = '{broken' WHERE record_id = @id", ("id", VoteId));
+        var failure = new InvalidOperationException("The database failed.");
+        var counter = new RevisionQueryInterceptor("vote_revisions", failure);
+        var counted = CountedStore(counter);
 
-        await Assert.ThrowsAnyAsync<Exception>(() => store.ListAsync(null, 10, default));
+        var thrown = await Assert.ThrowsAnyAsync<Exception>(() => counted.ListAsync(null, 10, default));
+
+        Assert.Same(failure, thrown);
+    }
+
+    [Fact]
+    public async Task TheQueueReadsTheSameNumberOfQueriesWhetherOneDraftIsUnreadableOrSeveralAre()
+    {
+        await SeedThreeKindsAsync();
+        var counter = new RevisionQueryInterceptor("no_such_table", null);
+        var counted = CountedStore(counter);
+        await seeder.ExecuteAsync("UPDATE vote_revisions SET revision_json = '{broken' WHERE record_id = @id", ("id", VoteId));
+        await counted.ListAsync(null, 10, default);
+        counter.QueryCount = 0;
+
+        var withOneUnreadable = await counted.ListAsync(null, 10, default);
+        var queriesForOne = counter.QueryCount;
+        await seeder.ExecuteAsync("UPDATE action_revisions SET revision_json = '{broken' WHERE record_id = @id", ("id", ActionId));
+        await seeder.ExecuteAsync("UPDATE statement_revisions SET revision_json = '{broken' WHERE candidate_id = @id", ("id", StatementId));
+        counter.QueryCount = 0;
+        var withThreeUnreadable = await counted.ListAsync(null, 10, default);
+
+        Assert.Equal(1, withOneUnreadable.Items.Count(item => item.IsUnreadable));
+        Assert.All(withThreeUnreadable.Items, item => Assert.True(item.IsUnreadable));
+        Assert.Equal(queriesForOne, counter.QueryCount);
+    }
+
+    [Theory]
+    [InlineData("jsonb_set(revision_json::jsonb, '{candidateId}', '\"ffff\"')::text")]
+    [InlineData("'{}'")]
+    public async Task ACitedStatementWhoseStoredJsonDoesNotMatchItsCitationMarksItsRelationshipUnreadableAndNamesTheCitation(string replacement)
+    {
+        await SeedEveryKindAsync();
+        await seeder.ExecuteAsync($"UPDATE statement_revisions SET revision_json = {replacement} WHERE candidate_id = @id", ("id", StatementId));
+
+        var page = await store.ListAsync(null, 10, default);
+
+        var relationship = Of(page, PublishedRecordKind.Relationship);
+        Assert.True(relationship.IsUnreadable);
+        Assert.Contains(StatementId, relationship.UnreadableCause!.Message);
+        Assert.Contains("revision 1", relationship.UnreadableCause.Message);
+        Assert.False(Of(page, PublishedRecordKind.Vote).IsUnreadable);
     }
 
     [Fact]
@@ -283,5 +332,21 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
         await seeder.ExecuteAsync("UPDATE statement_drafts SET last_revised_at_utc_ticks = 300 WHERE candidate_id = @id", ("id", StatementId));
         await seeder.ActionAsync(RelationshipFixtures.Action(), "AwaitingReview", revisedAtTicks: 200);
         await seeder.VoteAsync(RelationshipFixtures.Vote(), "AwaitingReview", revisedAtTicks: 200);
+    }
+
+    private PostgresReviewQueueStore CountedStore(RevisionQueryInterceptor interceptor) => new(new PooledDbContextFactory<CollectionAttemptDbContext>(
+        new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).AddInterceptors(interceptor).Options));
+
+    private sealed class RevisionQueryInterceptor(string table, Exception? failure) : DbCommandInterceptor
+    {
+        public int QueryCount { get; set; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            QueryCount++;
+            if (failure is not null && command.CommandText.Contains(table, StringComparison.Ordinal)) throw failure;
+            return ValueTask.FromResult(result);
+        }
     }
 }
