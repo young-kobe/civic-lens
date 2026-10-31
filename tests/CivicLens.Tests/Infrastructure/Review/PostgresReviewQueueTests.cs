@@ -106,6 +106,60 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
         Assert.Equal("An executive action fact must equal the text of its citation.", executive.HeldReason);
     }
 
+    [Fact]
+    public async Task OneRecordWhoseStoredRevisionCannotBeReadIsMarkedUnreadableAndTheOtherRowsStillLoad()
+    {
+        await SeedThreeKindsAsync();
+        await seeder.ExecuteAsync("UPDATE vote_revisions SET revision_json = '{broken' WHERE record_id = @id", ("id", VoteId));
+
+        var page = await store.ListAsync(null, 10, default);
+
+        Assert.Equal([StatementId, VoteId, ActionId], page.Items.Select(item => item.RecordId));
+        Assert.Equal(3, page.Total);
+        var broken = page.Items.Single(item => item.RecordId == VoteId);
+        Assert.True(broken.IsUnreadable);
+        Assert.False(string.IsNullOrWhiteSpace(broken.UnreadableError));
+        Assert.Equal(PublishedRecordKind.Vote, broken.Kind);
+        Assert.Equal("Warren on rent", page.Items.Single(item => item.RecordId == StatementId).Headline);
+        Assert.False(page.Items.Single(item => item.RecordId == ActionId).IsUnreadable);
+    }
+
+    [Fact]
+    public async Task SearchFindsApprovedRecordsByHeadlineWordsOfEveryKindThatHasOneAndSkipsRecordsThatWaitForAPerson()
+    {
+        await seeder.StatementAsync(RelationshipFixtures.Statement(dated: false), "Approved");
+        await seeder.ExecuteAsync("UPDATE statement_drafts SET last_revised_at_utc_ticks = 300 WHERE candidate_id = @id", ("id", StatementId));
+        await seeder.ActionAsync(RelationshipFixtures.Action(), "AwaitingReview", revisedAtTicks: 200);
+        var executiveId = await new ExecutiveActionSeeder(connectionString, captureRoot)
+            .AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
+        var executiveWord = FederalRegisterFixtures.Document(FederalRegisterFixtures.TrumpOrder).Title.Split(' ')[^1];
+
+        var statementHits = await store.SearchApprovedAsync("rent", null, 10, default);
+        var executiveHits = await store.SearchApprovedAsync(executiveWord, null, 10, default);
+        var none = await store.SearchApprovedAsync("zzzunmatched", null, 10, default);
+
+        var hit = Assert.Single(statementHits.Items);
+        Assert.Equal((PublishedRecordKind.Statement, StatementId, "Warren on rent"), (hit.Kind, hit.RecordId, hit.Headline));
+        Assert.Contains(executiveHits.Items, item => item.Kind == PublishedRecordKind.ExecutiveAction && item.RecordId == executiveId);
+        Assert.Empty(none.Items);
+    }
+
+    [Fact]
+    public async Task SearchPagesWalkEveryMatchOnce()
+    {
+        await seeder.StatementAsync(RelationshipFixtures.Statement(dated: false), "Approved");
+        var action = RelationshipFixtures.Action(5) with { RecordId = new('d', 64), CandidateId = new('d', 64) };
+        await seeder.ActionAsync(action, "Approved", revisedAtTicks: 900);
+        await seeder.ExecuteAsync("UPDATE action_revisions SET revision_json = replace(revision_json, @old, 'Warren on rent') WHERE record_id = @id",
+            ("old", action.Headline), ("id", action.RecordId));
+
+        var first = await store.SearchApprovedAsync("rent", null, 1, default);
+        var second = await store.SearchApprovedAsync("rent", PageCursor.Parse(first.OlderCursor), 1, default);
+
+        Assert.Equal([action.RecordId, StatementId], new[] { first, second }.Select(page => page.Items.Single().RecordId));
+        Assert.Null(second.OlderCursor);
+    }
+
     private static ReviewQueueItem Of(ReviewQueuePage page, PublishedRecordKind kind) => page.Items.Single(item => item.Kind == kind);
 
     [Fact]

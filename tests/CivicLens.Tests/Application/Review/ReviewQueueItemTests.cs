@@ -1,4 +1,6 @@
+using CivicLens.Application.Paging;
 using CivicLens.Application.Review;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
 
@@ -43,5 +45,37 @@ public sealed class ReviewQueueItemTests
     public void ARecordApprovedAfterTheListWasReadTellsTheReaderToRefresh()
     {
         Assert.Equal("This record is approved. Refresh the page.", Item(PublishedRecordKind.Statement, ReviewStatus.Approved).Reason);
+    }
+
+    [Fact]
+    public void AnUnreadableRecordSaysPlainlyThatItsSavedRevisionCouldNotBeRead()
+    {
+        var item = ReviewQueueItem.Unreadable(PublishedRecordKind.Vote, "abc", DateTimeOffset.UnixEpoch, "bad json");
+
+        Assert.Equal("abc", item.Headline);
+        Assert.Equal("The saved revision of this record could not be read, so its status is not known. Open the record to see the error.",
+            item.Reason);
+    }
+
+    [Fact]
+    public async Task TheQueueHandlerLogsEachUnreadableRecordWithItsIdBecauseTheRowHidesTheCause()
+    {
+        var page = new ReviewQueuePage([ReviewQueueItem.Unreadable(PublishedRecordKind.Vote, "vote-1", DateTimeOffset.UnixEpoch, "Stored revision is invalid."),
+            Item(PublishedRecordKind.Action, ReviewStatus.AwaitingReview)], 2, null, null);
+        var logger = new CapturingLogger<ListReviewQueue>();
+
+        await new ListReviewQueue(new StubStore(page), logger).ExecuteAsync(new ReviewActor("auth0|reviewer", ReviewRole.Reviewer), null);
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.Contains("vote-1", entry.Message, StringComparison.Ordinal);
+        Assert.Contains("Stored revision is invalid.", entry.Message, StringComparison.Ordinal);
+    }
+
+    private sealed class StubStore(ReviewQueuePage page) : IReviewQueueStore
+    {
+        public Task<ReviewQueuePage> ListAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken) => Task.FromResult(page);
+
+        public Task<ApprovedRecordPage> SearchApprovedAsync(string text, PageCursor? cursor, int limit, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 }

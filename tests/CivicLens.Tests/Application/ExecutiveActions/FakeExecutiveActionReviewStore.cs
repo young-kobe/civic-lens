@@ -20,9 +20,6 @@ internal sealed class FakeExecutiveActionReviewStore : IExecutiveActionReviewSto
     public Task<ExecutiveActionReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken) =>
         Task.FromResult(Publishable.GetValueOrDefault(recordId) is { } found ? new ExecutiveActionReviewRead(found.Review, found.Extractions) : null);
 
-    public Task<ExecutiveActionsNeedingAction> ListNeedingActionAsync(int limit, CancellationToken cancellationToken) =>
-        Task.FromResult(new ExecutiveActionsNeedingAction([], 0));
-
     public Task<IReadOnlyList<UnpublishedApprovedExecutiveAction>> ListUnpublishedApprovedAsync(int limit,
         IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<UnpublishedApprovedExecutiveAction>>(

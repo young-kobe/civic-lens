@@ -85,7 +85,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
 
         home = await host.GetDocumentAsync("/Review");
         Assert.Empty(ChangeIds(home));
-        Assert.Equal([editorUrl], DraftUrls(home));
+        Assert.Equal([editorUrl], QueueUrls(home));
         Assert.Equal("No new changes", home.QuerySelector(".empty h3")!.TextContent);
         Assert.Contains("You started an untitled draft.", home.QuerySelector(".feed")!.TextContent, StringComparison.Ordinal);
     }
@@ -357,7 +357,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
-    public async Task OnlyTheOwnerSeesPublishedRecordsThatReviewBlockedWithTheWithdrawHintAsync()
+    public async Task AWithdrawnPublishedRecordShowsOnceInTheQueueWithItsReasonAndALinkToItsEditorAsync()
     {
         await SaveComparisonAsync("Fee: 10 dollars.\n", "Fee: 12 dollars.\n");
         SignIn(Owner);
@@ -367,45 +367,30 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         using var approved = await DecideAsync(draftUrl, "Approve");
         Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
         await PublishWithCliAsync("k1", $"documentChange:{draftId}");
-        Assert.Equal("No published record is blocked",
-            (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='blocked'] .empty h3")!.TextContent);
 
         using var withdrawn = await DecideAsync(draftUrl, "WithdrawApproval", "The source was wrong.");
         Assert.Equal(HttpStatusCode.Redirect, withdrawn.StatusCode);
 
-        var panel = (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='blocked']")!;
-        Assert.Contains("Fee rose to 12 dollars", panel.TextContent, StringComparison.Ordinal);
-        Assert.Contains("Approval withdrawn", panel.TextContent, StringComparison.Ordinal);
-        Assert.Contains($"releases publish <key> --withdraw documentChange:{draftId} \"note\"", panel.TextContent, StringComparison.Ordinal);
-        Assert.NotNull(panel.QuerySelector($"a[href='{draftUrl}']"));
-        var queue = (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='needs-a-person']")!;
+        var queue = QueuePanel(await host.GetDocumentAsync("/Review"));
         Assert.Contains("Fee rose to 12 dollars", queue.TextContent, StringComparison.Ordinal);
         Assert.Contains("A reviewer withdrew the approval. Review the draft again.", queue.TextContent, StringComparison.Ordinal);
-
-        host.Client.DefaultRequestHeaders.Remove("Cookie");
-        SignIn(Reviewer);
-        Assert.Null((await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='blocked']"));
+        Assert.Equal(1, queue.QuerySelectorAll($"tbody a.cell-title[href='{draftUrl}']").Length);
     }
 
     [Fact]
-    public async Task ARecordStuckAtTheCorrectionCapShowsCannotPublishAndTheReasonInsteadOfTheWithdrawHintAsync()
+    public async Task ARecordStuckAtTheCorrectionCapShowsOnceInTheQueueAsCannotPublishWithTheReasonAsync()
     {
-        var (beforeTheCap, draftUrl) = await StuckAtTheCapAsync();
-        var emptyPanel = beforeTheCap.QuerySelector("[aria-labelledby='blocked'] .empty")!;
-        Assert.Equal("A published record shows here when review withdraws its approval, asks for changes, or opens a concern. " +
-            "It also shows here when a person revision cannot publish because the record holds the most corrections with a note.",
-            emptyPanel.QuerySelector("p")!.TextContent);
-        var panel = (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='blocked']")!;
+        var draftUrl = await StuckAtTheCapAsync();
 
-        Assert.Contains("Cannot publish", panel.TextContent, StringComparison.Ordinal);
-        Assert.Contains("This record has 20 corrections with a note, the most it can hold. No new revision can publish.",
-            panel.TextContent, StringComparison.Ordinal);
-        Assert.DoesNotContain("--withdraw", panel.TextContent, StringComparison.Ordinal);
-        Assert.NotNull(panel.QuerySelector($"a[href='{draftUrl}']"));
-        var queue = (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='needs-a-person']")!;
+        var queue = QueuePanel(await host.GetDocumentAsync("/Review"));
+
         Assert.Contains("Cannot publish", queue.TextContent, StringComparison.Ordinal);
-        Assert.Contains("No new revision can publish.", queue.TextContent, StringComparison.Ordinal);
+        Assert.Contains("This record has 20 corrections with a note, the most it can hold. No new revision can publish.",
+            queue.TextContent, StringComparison.Ordinal);
+        Assert.Equal(1, queue.QuerySelectorAll($"tbody a.cell-title[href='{draftUrl}']").Length);
         Assert.Contains("Approved", queue.QuerySelector("tbody td.time")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("1 record", queue.TextContent, StringComparison.Ordinal);
+        Assert.Null((await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='blocked']"));
     }
 
     [Fact]
@@ -457,7 +442,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     private static string? QueueLink(AngleSharp.Dom.IDocument page, string rel) =>
         page.QuerySelector($"nav[aria-label='Needs a person pages'] a[rel='{rel}']")?.GetAttribute("href");
 
-    private async Task<(AngleSharp.Dom.IDocument BeforeTheCap, string DraftUrl)> StuckAtTheCapAsync()
+    private async Task<string> StuckAtTheCapAsync()
     {
         await SaveComparisonAsync("Fee: 10 dollars.\n", "Fee: 12 dollars.\n");
         SignIn(Owner);
@@ -466,12 +451,11 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars");
         await ApproveAsync(draftUrl);
         await PublishWithCliAsync("k1", $"documentChange:{draftId}");
-        var beforeTheCap = await host.GetDocumentAsync("/Review");
         await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars, effective now");
         using var approved = await DecideAsync(draftUrl, "Approve", "Checked again.", correctionNote: "Clarified the date.");
         Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
         FillCorrectionsToTheCap(draftId);
-        return (beforeTheCap, draftUrl);
+        return draftUrl;
     }
 
     [Fact]
@@ -485,50 +469,25 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         for (var index = 0; index < 22; index++) drafts.Add(await StartFirstDraftAsync());
 
         var changeWalk = await WalkAsync("/Review", "new-changes", ChangeIds);
-        var draftWalk = await WalkAsync("/Review", "drafts", DraftUrls);
+        var queueWalk = await WalkAsync("/Review", "needs-a-person", QueueUrls);
 
         var visitedChanges = changeWalk.Down.SelectMany(ids => ids).ToArray();
         Assert.Equal([10, 1], changeWalk.Down.Select(page => page.Length));
         Assert.Equal(visitedChanges.Length, visitedChanges.Distinct().Count());
         Assert.Subset(comparisons.ToHashSet(), visitedChanges.ToHashSet());
-        Assert.Equal(drafts.Order(), draftWalk.Down.SelectMany(ids => ids).Order());
-        Assert.Equal([10, 10, 2], draftWalk.Down.Select(page => page.Length));
+        Assert.Equal(drafts.Order(), queueWalk.Down.SelectMany(ids => ids).Order());
+        Assert.Equal([10, 10, 2], queueWalk.Down.Select(page => page.Length));
         Assert.Equal(changeWalk.Down.SkipLast(1).Reverse().Select(Join), changeWalk.Up.Select(Join));
-        Assert.Equal(draftWalk.Down.SkipLast(1).Reverse().Select(Join), draftWalk.Up.Select(Join));
+        Assert.Equal(queueWalk.Down.SkipLast(1).Reverse().Select(Join), queueWalk.Up.Select(Join));
 
         var secondChanges = await host.GetDocumentAsync(OlderHref(await host.GetDocumentAsync("/Review"), "new-changes")!);
-        var olderDrafts = OlderHref(secondChanges, "drafts")!;
-        var both = await host.GetDocumentAsync(olderDrafts);
+        var both = await host.GetDocumentAsync(OlderHref(secondChanges, "needs-a-person")!);
         Assert.Equal(ChangeIds(secondChanges), ChangeIds(both));
-        Assert.Equal(draftWalk.Down[1], DraftUrls(both));
-    }
-
-    [Fact]
-    public async Task DraftFilterTabsMatchTheOverviewCountsAndFilterTheListAsync()
-    {
-        for (var index = 0; index < 3; index++) await SaveComparisonAsync($"Rule {index} old.\n", $"Rule {index} new.\n");
-        SignIn(Owner);
-        var approvedUrl = await StartFirstDraftAsync();
-        await StartFirstDraftAsync();
-        await StartFirstDraftAsync();
-        await SaveReadyRevisionAsync(approvedUrl, "Rule changed");
-        using var approved = await DecideAsync(approvedUrl, "Approve");
-        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
-
-        var home = await host.GetDocumentAsync("/Review");
-        Assert.Equal(new Dictionary<string, string> { ["All"] = "3", ["Needs action"] = "2", ["Approved"] = "1" }, TabCounts(home));
-        Assert.Equal("2", StatValue(home, "Drafts need action"));
-        Assert.Equal("1", StatValue(home, "Approved, private"));
-        Assert.Equal(3, DraftUrls(home).Length);
-
-        var approvedOnly = await host.GetDocumentAsync(home.QuerySelector("a.stat[href*='drafts=approved']")!.GetAttribute("href")!);
-        Assert.Equal([approvedUrl], DraftUrls(approvedOnly));
-        Assert.Equal("Approved, private", approvedOnly.QuerySelector("[aria-labelledby='drafts'] tbody .badge")!.TextContent);
-        Assert.Equal("true", approvedOnly.QuerySelector("[aria-labelledby='drafts'] a.segmented-item[href*='approved']")!.GetAttribute("aria-current"));
-
-        var needsAction = await host.GetDocumentAsync("/Review?drafts=needs-action");
-        Assert.Equal(2, DraftUrls(needsAction).Length);
-        Assert.DoesNotContain(approvedUrl, DraftUrls(needsAction));
+        Assert.Equal(queueWalk.Down[1], QueueUrls(both));
+        var secondQueue = await host.GetDocumentAsync(OlderHref(await host.GetDocumentAsync("/Review"), "needs-a-person")!);
+        var bothAgain = await host.GetDocumentAsync(OlderHref(secondQueue, "new-changes")!);
+        Assert.Equal(queueWalk.Down[1], QueueUrls(bothAgain));
+        Assert.Equal(changeWalk.Down[1], ChangeIds(bothAgain));
     }
 
     private void SignIn(string subject) => host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie(subject));
@@ -644,17 +603,8 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     private static string[] ChangeIds(IDocument page) =>
         [.. page.QuerySelectorAll("button[form='start-draft']").Select(button => button.GetAttribute("value")!)];
 
-    private static string[] DraftUrls(IDocument page) =>
-        [.. page.QuerySelectorAll("[aria-labelledby='drafts'] a.cell-title").Select(link => link.GetAttribute("href")!)];
-
-    private static Dictionary<string, string> TabCounts(IDocument page) =>
-        page.QuerySelectorAll("[aria-labelledby='drafts'] a.segmented-item").ToDictionary(
-            tab => tab.ChildNodes.OfType<IText>().First().TextContent.Trim(),
-            tab => tab.QuerySelector(".segmented-count")!.TextContent);
-
-    private static string StatValue(IDocument page, string label) =>
-        page.QuerySelectorAll(".stat").Single(stat => stat.QuerySelector(".stat-label")!.TextContent == label)
-            .QuerySelector(".stat-value")!.TextContent;
+    private static string[] QueueUrls(IDocument page) =>
+        [.. page.QuerySelectorAll("[aria-labelledby='needs-a-person'] a.cell-title").Select(link => link.GetAttribute("href")!)];
 
     private static string PathOf(HttpResponseMessage response) => response.Headers.Location!.IsAbsoluteUri
         ? response.Headers.Location.PathAndQuery : response.Headers.Location.ToString();

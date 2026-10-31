@@ -10,7 +10,6 @@ public interface IExecutiveActionReviewStore
 
     Task<ExecutiveActionReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken);
 
-    Task<ExecutiveActionsNeedingAction> ListNeedingActionAsync(int limit, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<UnpublishedApprovedExecutiveAction>> ListUnpublishedApprovedAsync(int limit,
         IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken);

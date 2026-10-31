@@ -7,6 +7,8 @@ using CivicLens.Core.Actions;
 using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Actions;
+using CivicLens.Infrastructure.Analysis;
+using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Relationships;
 using CivicLens.Infrastructure.Votes;
@@ -26,32 +28,16 @@ public sealed class PostgresReviewListTests(PostgresCollection postgres) : IAsyn
     private static readonly ReviewActor Reviewer = new("auth0|reviewer", ReviewRole.Reviewer);
     private string connectionString = null!;
     private RelationshipWorldSeeder seeder = null!;
-    private ListActionsNeedingAction listActions = null!;
-    private ListVotesNeedingAction listVotes = null!;
+    private PostgresReviewQueueStore queue = null!;
 
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
         seeder = new RelationshipWorldSeeder(connectionString);
-        listActions = new ListActionsNeedingAction(PostgresActionReviewStore.FromConnectionString(connectionString));
-        listVotes = new ListVotesNeedingAction(PostgresVoteReviewStore.FromConnectionString(connectionString));
+        queue = new PostgresReviewQueueStore(AnalysisDbContextFactory.Create(connectionString));
     }
 
     public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
-
-    [Fact]
-    public async Task ActionsNeedingActionAreBoundedByTheLimitLeaveOutApprovedRecordsAndTotalEveryOne()
-    {
-        await SeedActionAsync('1', 11, revisedAt: 900, status: "Approved");
-        await SeedActionAsync('2', 12, revisedAt: 100);
-        await SeedActionAsync('3', 13, revisedAt: 300, status: "ChangesRequested");
-        await SeedActionAsync('4', 14, revisedAt: 200, status: "ApprovalWithdrawn");
-
-        var page = await listActions.ExecuteAsync(Reviewer, limit: 2);
-
-        Assert.Equal(Ids('3', '4'), page.Items.Select(item => item.RecordId));
-        Assert.Equal(3, page.Total);
-    }
 
     [Fact]
     public async Task ANewRevisionOfAnOldActionMovesItAboveNewerRecords()
@@ -63,21 +49,8 @@ public sealed class PostgresReviewListTests(PostgresCollection postgres) : IAsyn
         await new SaveActionDraft(PostgresActionReviewStore.FromConnectionString(connectionString)).ExecuteAsync(Reviewer,
             new(Id('1'), 1, "Person headline", "Person summary.", SuggestionChoice.Keep, "save-2"));
 
-        var page = await listActions.ExecuteAsync(Reviewer);
+        var page = await queue.ListAsync(null, 10, default);
         Assert.Equal(Ids('1', '3', '2'), page.Items.Select(item => item.RecordId));
-    }
-
-    [Fact]
-    public async Task VotesNeedingActionAreBoundedByTheLimitLeaveOutApprovedRecordsAndTotalEveryOne()
-    {
-        await SeedVoteAsync('1', 101, revisedAt: 900, status: "Approved");
-        await SeedVoteAsync('2', 102, revisedAt: 300);
-        await SeedVoteAsync('3', 103, revisedAt: 100, status: "ChangesRequested");
-
-        var page = await listVotes.ExecuteAsync(Reviewer, limit: 1);
-
-        Assert.Equal(Ids('2'), page.Items.Select(item => item.RecordId));
-        Assert.Equal(2, page.Total);
     }
 
     [Fact]

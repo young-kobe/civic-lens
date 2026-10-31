@@ -34,40 +34,28 @@ public sealed partial class ReviewHome
     private readonly string renderKey = Guid.NewGuid().ToString("N");
     private ReviewActor? actor;
     private CollectionConfiguration? configuration;
-    private ReviewOverview? overview;
     private NewDocumentChangePage? changes;
     private IReadOnlyDictionary<string, DocumentChangeAnalysisRecord> analyses = new Dictionary<string, DocumentChangeAnalysisRecord>();
     private AnalysisStatus? analysisStatus;
-    private DocumentChangeReviewPage? drafts;
     private SourceHealthReport? health;
     private PublicationReleaseList? releases;
     private ReviewQueuePage? queue;
     private IReadOnlyList<BlockedPublishedRecord>? blocked;
-    private StatementReviewCounts? statementCounts;
-    private BriefReviewCounts? briefCounts;
-    private RelationshipReviewCounts? relationshipCounts;
-    private IReadOnlyList<UnapprovedFact> unapprovedFacts = [];
-    private int unapprovedFactTotal;
     private int openReports;
     private IReadOnlyList<FeedItem> activity = [];
     private string? error;
     private string? lookupMessage;
+    private ApprovedRecordPage? results;
+    private string? searchMessage;
 
     [Inject] private ReviewActorAccessor Actors { get; set; } = default!;
     [Inject] private ILogger<ReviewHome> Logger { get; set; } = default!;
     [Inject] private IServiceProvider Services { get; set; } = default!;
-    [Inject] private GetReviewOverview GetOverview { get; set; } = default!;
     [Inject] private ListEligibleDocumentComparisons ListChanges { get; set; } = default!;
     [Inject] private ListDocumentChangeAnalyses ListAnalyses { get; set; } = default!;
     [Inject] private GetDocumentChangeAnalysisStatus GetAnalysisStatus { get; set; } = default!;
     [Inject] private ListReviewQueue ListQueue { get; set; } = default!;
-    [Inject] private ListDocumentChangeReviews ListDrafts { get; set; } = default!;
-    [Inject] private GetStatementReviewCounts GetStatementCounts { get; set; } = default!;
-    [Inject] private GetBriefReviewCounts GetBriefCounts { get; set; } = default!;
-    [Inject] private GetRelationshipReviewCounts GetRelationshipCounts { get; set; } = default!;
-    [Inject] private ListActionsNeedingAction ListActionExceptions { get; set; } = default!;
-    [Inject] private ListVotesNeedingAction ListVoteExceptions { get; set; } = default!;
-    [Inject] private ListExecutiveActionsNeedingAction ListExecutiveActionExceptions { get; set; } = default!;
+    [Inject] private SearchApprovedRecords SearchApproved { get; set; } = default!;
     [Inject] private CountOpenReaderReports CountReports { get; set; } = default!;
     [Inject] private GetRecentActivity GetActivity { get; set; } = default!;
     [Inject] private LookupDraft Lookup { get; set; } = default!;
@@ -79,15 +67,13 @@ public sealed partial class ReviewHome
 
     [SupplyParameterFromQuery(Name = "queue")] private string? QueueCursor { get; set; }
     [SupplyParameterFromQuery(Name = "changes")] private string? ChangesCursor { get; set; }
-    [SupplyParameterFromQuery(Name = "drafts")] private string? DraftsFilterName { get; set; }
-    [SupplyParameterFromQuery(Name = "draftsCursor")] private string? DraftsCursor { get; set; }
+    [SupplyParameterFromQuery(Name = "results")] private string? ResultsCursor { get; set; }
     [SupplyParameterFromQuery(Name = "status")] private string? Status { get; set; }
     [SupplyParameterFromQuery(Name = "find")] private string? Find { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] private string? Search { get; set; }
 
     [SupplyParameterFromForm(FormName = "start-draft", Name = "comparisonId")] private string? StartComparisonId { get; set; }
     [SupplyParameterFromForm(FormName = "start-draft", Name = "idempotencyKey")] private string? StartKey { get; set; }
-
-    private DraftStatusFilter Filter => DraftFilterNames.Parse(DraftsFilterName);
 
     private string? StatusMessage => Status switch
     {
@@ -102,25 +88,20 @@ public sealed partial class ReviewHome
         if (HttpMethods.IsPost(HttpContext.Request.Method)) return;
         var cancellationToken = HttpContext.RequestAborted;
         if (Find is not null) lookupMessage = await FindDraftAsync(cancellationToken);
-        if (!new[] { ChangesCursor, DraftsCursor, QueueCursor }.All(IsValidCursor))
+        if (!new[] { ChangesCursor, QueueCursor, ResultsCursor }.All(IsValidCursor))
         {
             error = "This page link is no longer valid. Go back to the first page of the list.";
             return;
         }
+        if (Search is not null) searchMessage = await SearchAsync(cancellationToken);
         try
         {
             var collection = actor.Role == ReviewRole.Owner ? Services.GetService<CollectionWorkspace>() : null;
-            overview = await GetOverview.ExecuteAsync(actor, cancellationToken);
             changes = await ListChanges.ExecuteAsync(actor, ChangesCursor, PageSize, cancellationToken);
             analyses = await ListAnalyses.ExecuteAsync(actor,
                 [.. changes.Items.Select(item => item.ComparisonId)], cancellationToken);
             analysisStatus = await GetAnalysisStatus.ExecuteAsync(actor, cancellationToken);
             queue = await ListQueue.ExecuteAsync(actor, QueueCursor, PageSize, cancellationToken);
-            drafts = await ListDrafts.ExecuteAsync(actor, DraftsCursor, PageSize, Filter, cancellationToken);
-            statementCounts = await GetStatementCounts.ExecuteAsync(actor, cancellationToken);
-            briefCounts = await GetBriefCounts.ExecuteAsync(actor, cancellationToken);
-            relationshipCounts = await GetRelationshipCounts.ExecuteAsync(actor, cancellationToken);
-            await LoadUnapprovedFactsAsync(cancellationToken);
             openReports = await CountReports.ExecuteAsync(actor, cancellationToken);
             if (collection is not null)
             {
@@ -134,28 +115,8 @@ public sealed partial class ReviewHome
         catch (Exception exception)
         {
             Logger.LogError(exception, "The review overview could not load.");
-            overview = null;
             error = "The review workspace could not load its records. Refresh the page to try again.";
         }
-    }
-
-    private async Task LoadUnapprovedFactsAsync(CancellationToken cancellationToken)
-    {
-        var actions = await ListActionExceptions.ExecuteAsync(actor!, PageSize, cancellationToken);
-        var votes = await ListVoteExceptions.ExecuteAsync(actor!, PageSize, cancellationToken);
-        var executiveActions = await ListExecutiveActionExceptions.ExecuteAsync(actor!, PageSize, cancellationToken);
-        unapprovedFactTotal = actions.Total + votes.Total + executiveActions.Total;
-        unapprovedFacts =
-        [
-            .. actions.Items.Select(item => new UnapprovedFact(PublishedRecordKind.Action, item.RecordId, item.CurrentRevision.Headline,
-                item.CurrentStatus, item.UnresolvedConcerns.Length, item.CurrentRevision.CreatedAtUtc)),
-            .. votes.Items.Select(item => new UnapprovedFact(PublishedRecordKind.Vote, item.RecordId, item.CurrentRevision.Headline,
-                item.CurrentStatus, item.UnresolvedConcerns.Length, item.CurrentRevision.CreatedAtUtc)),
-            .. executiveActions.Items.Select(item => new UnapprovedFact(PublishedRecordKind.ExecutiveAction, item.RecordId, item.CurrentRevision.Title,
-                item.CurrentStatus, item.UnresolvedConcerns.Length, item.CurrentRevision.CreatedAtUtc))
-        ];
-        unapprovedFacts =
-            [.. unapprovedFacts.OrderByDescending(item => item.RevisedAtUtc).ThenByDescending(item => item.RecordId, StringComparer.Ordinal)];
     }
 
     private async Task<string?> FindDraftAsync(CancellationToken cancellationToken)
@@ -171,6 +132,22 @@ public sealed partial class ReviewHome
         }
         if (hit is null) return $"No draft for “{Find!.Trim()}”.";
         Navigation.NavigateTo(RecordRoutes.Editor(hit.Kind, hit.RecordId));
+        return null;
+    }
+
+    private async Task<string?> SearchAsync(CancellationToken cancellationToken)
+    {
+        try { results = await SearchApproved.ExecuteAsync(actor!, Search, ResultsCursor, PageSize, cancellationToken); }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (ArgumentException)
+        {
+            return $"Type 1 to {SearchApprovedRecords.MaximumQueryLength} characters to search.";
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "The approved record search failed.");
+            return "The search could not run. Refresh the page and try again.";
+        }
         return null;
     }
 
@@ -244,34 +221,23 @@ public sealed partial class ReviewHome
         catch (ArgumentException) { return false; }
     }
 
-    private string? QueueHref(string? cursor) => cursor is null ? null : "/Review?queue=" + Uri.EscapeDataString(cursor) + "#needs-a-person";
+    private string FirstQueueHref => PageHref("needs-a-person", null, ChangesCursor, ResultsCursor);
 
-    private IReadOnlyList<FilterTab> DraftTabs => DraftFilterTabs.For(
-        Filter, name => Href(ChangesCursor, name, null, "drafts"), overview!.DraftsNeedingAction, overview.ApprovedDrafts);
+    private string? QueueHref(string? cursor) => cursor is null ? null : PageHref("needs-a-person", cursor, ChangesCursor, ResultsCursor);
 
-    private string? FilterName => DraftFilterNames.NameOf(Filter);
+    private string? ChangesHref(string? cursor) => cursor is null ? null : PageHref("new-changes", QueueCursor, cursor, ResultsCursor);
 
-    private string? ChangesHref(string? cursor) =>
-        cursor is null ? null : Href(cursor, FilterName, DraftsCursor, "new-changes");
+    private string? ResultsHref(string? cursor) => cursor is null ? null : PageHref("search-results", QueueCursor, ChangesCursor, cursor);
 
-    private string? DraftsHref(string? cursor) =>
-        cursor is null ? null : Href(ChangesCursor, FilterName, cursor, "drafts");
-
-    private static string Href(string? changesCursor, string? filter, string? draftsCursor, string fragment)
+    private string PageHref(string fragment, string? queueCursor, string? changesCursor, string? resultsCursor)
     {
         var query = new List<string>();
+        if (queueCursor is not null) query.Add("queue=" + Uri.EscapeDataString(queueCursor));
         if (changesCursor is not null) query.Add("changes=" + Uri.EscapeDataString(changesCursor));
-        if (filter is not null) query.Add("drafts=" + filter);
-        if (draftsCursor is not null) query.Add("draftsCursor=" + Uri.EscapeDataString(draftsCursor));
+        if (Search is not null) query.Add("q=" + Uri.EscapeDataString(Search));
+        if (resultsCursor is not null) query.Add("results=" + Uri.EscapeDataString(resultsCursor));
         return "/Review" + (query.Count == 0 ? "" : "?" + string.Join('&', query)) + "#" + fragment;
     }
-
-    private (string Title, string Text) DraftsEmpty => Filter switch
-    {
-        DraftStatusFilter.NeedsAction => ("No drafts need action", "Every draft is approved, or no draft exists yet."),
-        DraftStatusFilter.Approved => ("No approved drafts", "Approved drafts show here. Approval keeps them private."),
-        _ => ("No drafts yet", "Start a draft from a new change.")
-    };
 
     private static string Count(int value, string singular, string plural) =>
         $"{value} {(value == 1 ? singular : plural)}";

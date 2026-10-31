@@ -457,7 +457,7 @@ Relationship review uses the shared decision rules and review cycles in [review]
 - notices for a changed cited record, a pair that no longer matches, and a revision from the AI drafter. A changed record also adds a header badge
 - the shared `ReviewDecisionPanel` and `ReviewHistoryPanel`
 
-The rail has a Relationships link. The review home has stat cards for the briefs and the relationships that need action. Each card links to its list.
+The rail has a Relationships link.
 
 **Changed record.** The flag blocks approval only. A relationship that is approved stays approved when a cited record changes, and the notice tells the reviewer to withdraw the approval. No event requeues it. The queue returns a pair to Pending only when its relationship is not approved. After a person withdraws a link with stale citations, the owner runs `relationships draft refresh`. The refresh requeues the pair, because the link is no longer approved. A model call that finishes after an approval does not append a revision: the settlement keeps the approved revision.
 

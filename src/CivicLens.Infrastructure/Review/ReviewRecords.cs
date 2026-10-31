@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text.Json;
 using System.Linq.Expressions;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Review;
@@ -153,13 +154,6 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         (await Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken),
             await Drafts(db, DraftStatusFilter.Approved).CountAsync(cancellationToken));
 
-    public async Task<(TDraftRow[] Drafts, int Total)> ReadNeedingActionAsync(CollectionAttemptDbContext db, int limit,
-        CancellationToken cancellationToken)
-    {
-        var slice = await PageAsync(db, null, limit, DraftStatusFilter.NeedsAction, row => row.LastRevisedAtUtcTicks, cancellationToken);
-        return ([.. slice.Items], await Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken));
-    }
-
     public Task<KeysetSlice<TDraftRow>> PageAsync(CollectionAttemptDbContext db, PageCursor? cursor, int limit,
         DraftStatusFilter filter, CancellationToken cancellationToken) =>
         PageAsync(db, cursor, limit, filter, row => row.CreatedAtUtcTicks, cancellationToken);
@@ -177,23 +171,49 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         db.Set<TDraftRow>().AsNoTracking().Where(row => recordIds.Contains(EF.Property<string>(row, recordIdProperty)))
             .ToArrayAsync(cancellationToken);
 
-    public async Task<Dictionary<string, QueueRead<TRevision>>> ReadQueueAsync(CollectionAttemptDbContext db, string[] recordIds,
-        CancellationToken cancellationToken)
+    /// <summary>Reads each draft for the queue. A draft whose stored data cannot be read gets an error text, so one bad record does
+    /// not hide the others.</summary>
+    public async Task<(Dictionary<string, QueueRead<TRevision>> Readable, Dictionary<string, string> Unreadable)> ReadQueueAsync(
+        CollectionAttemptDbContext db, string[] recordIds, CancellationToken cancellationToken)
     {
         var drafts = await ReadDraftsAsync(db, recordIds, cancellationToken);
-        var histories = await ReadHistoriesAsync(db, drafts, cancellationToken);
-        return drafts.ToDictionary(draft => draft.RecordId, draft =>
+        var (histories, errors) = await ReadReadableHistoriesAsync(db, drafts, cancellationToken);
+        var readable = drafts.Where(draft => histories.ContainsKey(draft.RecordId)).ToDictionary(draft => draft.RecordId, draft =>
         {
             var history = histories[draft.RecordId];
             return new QueueRead<TRevision>(history.CurrentRevision!, history.CurrentStatus, history.UnresolvedConcerns.Length,
                 (draft as IHeldDraftRow)?.HeldReason);
         }, StringComparer.Ordinal);
+        return (readable, errors);
     }
 
     public async Task<Dictionary<string, QueueDraft>> ReadQueueDraftsAsync(CollectionAttemptDbContext db, string[] recordIds,
-        Func<TRevision, string> headlineOf, CancellationToken cancellationToken) =>
-        (await ReadQueueAsync(db, recordIds, cancellationToken))
-        .ToDictionary(read => read.Key, read => read.Value.ToDraft(headlineOf(read.Value.Revision)), StringComparer.Ordinal);
+        Func<TRevision, string> headlineOf, CancellationToken cancellationToken)
+    {
+        var (readable, unreadable) = await ReadQueueAsync(db, recordIds, cancellationToken);
+        var drafts = readable.ToDictionary(read => read.Key, read => read.Value.ToDraft(headlineOf(read.Value.Revision)),
+            StringComparer.Ordinal);
+        foreach (var (recordId, error) in unreadable) drafts[recordId] = QueueDraft.Unreadable(recordId, error);
+        return drafts;
+    }
+
+    private async Task<(Dictionary<string, ReviewHistory<TRevision>> Histories, Dictionary<string, string> Errors)>
+        ReadReadableHistoriesAsync(CollectionAttemptDbContext db, TDraftRow[] drafts, CancellationToken cancellationToken)
+    {
+        try { return (await ReadHistoriesAsync(db, drafts, cancellationToken), []); }
+        catch (Exception exception) when (IsUnreadableStoredData(exception)) { }
+        Dictionary<string, ReviewHistory<TRevision>> histories = [];
+        Dictionary<string, string> errors = [];
+        foreach (var draft in drafts)
+        {
+            try { histories[draft.RecordId] = (await ReadHistoriesAsync(db, [draft], cancellationToken))[draft.RecordId]; }
+            catch (Exception exception) when (IsUnreadableStoredData(exception)) { errors[draft.RecordId] = exception.Message; }
+        }
+        return (histories, errors);
+    }
+
+    private static bool IsUnreadableStoredData(Exception exception) =>
+        exception is JsonException or InvalidOperationException or ArgumentException or FormatException;
 
     public async Task<IReadOnlyList<(TDraftRow Draft, ReviewHistory<TRevision> History)>>
         ReadUnpublishedApprovedAsync(CollectionAttemptDbContext db, string unpublishedApprovedSql, int limit,
