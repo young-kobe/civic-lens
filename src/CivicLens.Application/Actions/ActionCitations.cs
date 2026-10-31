@@ -1,10 +1,19 @@
+using System.Collections.Immutable;
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Application.Documents;
 using CivicLens.Core.Documents;
 
 namespace CivicLens.Application.Actions;
 
 internal static class ActionCitations
 {
+    public static SourceSpan TitleAndIntroduced(string extractionId, ImmutableArray<DocumentLine> detailLines)
+    {
+        var title = LineCitations.Line(extractionId, detailLines, "Title: ")!;
+        var introduced = LineCitations.Line(extractionId, detailLines, "Introduced: ")!;
+        return new(extractionId, title.Start, introduced.Start + introduced.Length - title.Start);
+    }
+
     public static SourceSpan? SummaryBlock(ActionDraftPage page, CongressBillSummary summary)
     {
         var version = CongressBillRenderer.SummaryVersionLine(summary);

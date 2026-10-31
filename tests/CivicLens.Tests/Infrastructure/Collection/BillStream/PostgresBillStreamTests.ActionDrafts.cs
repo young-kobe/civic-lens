@@ -544,10 +544,11 @@ public sealed partial class PostgresBillStreamTests
     public async Task EvidenceFlagsABillWhoseNewestDraftRunUsedAnOlderPromptSoTheStepDraftsAgainInsteadOfSettlingUnchanged()
     {
         var candidate = await CandidateWithoutSummariesAsync();
-        _ = await InsertRunAsync(candidate, ActionDraftTask.PromptVersion, 1);
+        await SettleAsync(candidate, Revision(candidate, 1));
+        _ = await InsertRunAsync(candidate, ActionDraftTask.PromptVersion, DateTimeOffset.UnixEpoch.UtcTicks + 1);
         Assert.False((await ActionStore().ReadEvidenceAsync(candidate, default))!.HasOlderPromptDraft);
 
-        _ = await InsertRunAsync(candidate, "action-draft-prompt-v1", 2);
+        _ = await InsertRunAsync(candidate, "action-draft-prompt-v1", DateTimeOffset.UnixEpoch.UtcTicks + 2);
 
         Assert.True((await ActionStore().ReadEvidenceAsync(candidate, default))!.HasOlderPromptDraft);
     }
@@ -825,9 +826,9 @@ public sealed partial class PostgresBillStreamTests
     }
 
     private async Task<string> ReadableCandidateAsync(string sponsor, DateTimeOffset? updatedAt = null, string? cosponsor = null,
-        string? title = null)
+        string? title = null, string? policyArea = BillGateFixtures.TrackedPolicyArea)
     {
-        var bill = await StartReadableBillAsync([sponsor], summaries: 0, updatedAt, title, cosponsors: cosponsor is null ? 0 : 1);
+        var bill = await StartReadableBillAsync([sponsor], summaries: 0, updatedAt, title, cosponsors: cosponsor is null ? 0 : 1, policyArea);
         if (cosponsor is not null)
         {
             var body = ActionBillWorld.CosponsorBody([new(cosponsor, Backfill.ToString("yyyy-MM-dd"))], null);
@@ -839,11 +840,11 @@ public sealed partial class PostgresBillStreamTests
     }
 
     private async Task<StartedBill> StartReadableBillAsync(string[] sponsors, int summaries, DateTimeOffset? updatedAt = null,
-        string? title = null, int cosponsors = 0)
+        string? title = null, int cosponsors = 0, string? policyArea = BillGateFixtures.TrackedPolicyArea)
     {
         var updated = updatedAt ?? UpdatedAt;
         var detail = await EnqueueDetailAsync("detail-" + updated.UtcTicks);
-        var bill = DetailBill(updated, cosponsors, summaries: summaries) with { SponsorBioguideIds = sponsors };
+        var bill = DetailBill(updated, cosponsors, policyArea, summaries: summaries) with { SponsorBioguideIds = sponsors };
         if (title is not null) bill = bill with { Title = title };
         var result = await store.AdmitDetailAsync(Source(), detail, bill, BillGateOutcome.Passed(BillGateReason.CoveredSponsor),
             BillGateFixtures.Revision().Id, await ReadableExtractionAsync(detail, ApiResource.Bill, ActionBillWorld.DetailBody(bill)), default);

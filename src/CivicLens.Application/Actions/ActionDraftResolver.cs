@@ -50,7 +50,8 @@ public static class ActionDraftResolver
             candidate.SourceId, candidate.Congress, candidate.BillType, candidate.BillNumber, candidate.CandidateId, candidate.UpdateDate,
             candidate.IncludesSummaries, candidate.IncludesSubjects,
             snapshot.Fingerprint, snapshot.SummaryVersion, snapshot.SummaryCitation, snapshot.Bill.PolicyArea, snapshot.PolicyAreaCitation,
-            policyAreaId, trackedIssueIds, issues.CandidateIds, issueRevisionId, snapshot.Sponsorships, snapshot.Bill.Title, subjectsHash);
+            policyAreaId, trackedIssueIds, issues.CandidateIds, issueRevisionId, snapshot.Sponsorships, snapshot.Bill.Title, subjectsHash,
+            text.Origin == ReviewTextOrigin.Code ? snapshot.BillCitation : null);
         revision.ValidateAsWorkerRevision(current);
         return revision;
     }

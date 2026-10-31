@@ -14,7 +14,8 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     string Fingerprint, string? SummaryVersion, SourceSpan? SummaryCitation, string? PolicyArea, SourceSpan? PolicyAreaCitation,
     string? PolicyAreaId, ImmutableArray<string> TrackedIssueIds,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ImmutableArray<string> IssueCandidateIds, string IssueRevisionId, ImmutableArray<ActionSponsorship> Sponsorships, string BillTitle,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SubjectsHash = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SubjectsHash = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SourceSpan? BillCitation = null)
     : IHeadlineSummaryRevision
 {
     public const int MaximumHeadlineLength = 256;
@@ -26,7 +27,8 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     public ReviewAuthorKind AuthorKind => ReviewAuthor.KindOf(AuthorSubject);
 
     public IEnumerable<SourceSpan> Citations => Sponsorships.SelectMany(item => item.Citations)
-        .Concat(SummaryCitation is { } summary ? [summary] : []).Concat(PolicyAreaCitation is { } area ? [area] : []);
+        .Concat(SummaryCitation is { } summary ? [summary] : []).Concat(PolicyAreaCitation is { } area ? [area] : [])
+        .Concat(BillCitation is { } bill ? [bill] : []);
 
     public DateOnly EventOn() => Sponsorships.Max(item => item.WithdrawnOn ?? item.SponsoredOn);
 
@@ -55,8 +57,11 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
             throw new ArgumentException("Each sponsorship needs bounded citations.");
         if (Sponsorships.Any(item => item.WithdrawnOn < item.SponsoredOn))
             throw new ArgumentException("A sponsorship cannot be withdrawn before it began.");
-        if (SummaryCitation is { } summary && !IsBounded(summary) || PolicyAreaCitation is { } area && !IsBounded(area))
+        if (SummaryCitation is { } summary && !IsBounded(summary) || PolicyAreaCitation is { } area && !IsBounded(area) ||
+            BillCitation is { } bill && !IsBounded(bill))
             throw new ArgumentException("Citations must be bounded spans.");
+        if (AuthorKind == ReviewAuthorKind.Code && BillCitation is null)
+            throw new ArgumentException("Code text states the bill title and date, so the revision cites the bill page.");
         if ((SummaryVersion is null) != (SummaryCitation is null) || (PolicyArea is null) != (PolicyAreaCitation is null))
             throw new ArgumentException("A summary version and a policy area each need their citation.");
         if (PolicyAreaId is not null && (PolicyArea is null || string.IsNullOrWhiteSpace(PolicyAreaId)))
@@ -108,6 +113,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         BillNumber == other.BillNumber && CandidateId == other.CandidateId && CandidateUpdateDate == other.CandidateUpdateDate &&
         CandidateIncludesSummaries == other.CandidateIncludesSummaries && CandidateIncludesSubjects == other.CandidateIncludesSubjects &&
         Fingerprint == other.Fingerprint && SummaryCitation == other.SummaryCitation && PolicyAreaCitation == other.PolicyAreaCitation &&
+        BillCitation == other.BillCitation &&
         HasSameBillFactsAs(other) && SubjectsHash == other.SubjectsHash && Sponsorships.SequenceEqual(other.Sponsorships);
 
     private bool HasSameBillFactsAs(ActionDraftRevision other) =>

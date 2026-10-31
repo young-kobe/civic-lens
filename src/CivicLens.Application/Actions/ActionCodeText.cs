@@ -18,19 +18,27 @@ public static class ActionCodeText
         ["sres"] = "S.Res."
     };
 
+    private const string EndMarks = ".?!\"'\u201D\u2019)";
+
     public static ReviewText Of(ActionBillSnapshot snapshot)
     {
         var bill = snapshot.Bill;
         var label = $"{LabelOf(bill.Type)} {bill.Number}";
-        var sponsors = string.Join(", ", snapshot.Sponsorships.Where(item => item.Role == ActionSponsorshipRole.Sponsor)
-            .Select(item => snapshot.OfficialNames[item.PersonId]).Distinct(StringComparer.Ordinal));
-        var headline = sponsors.Length == 0 ? $"{label}: introduced in Congress" : $"{label}: introduced by {sponsors}";
-        var sponsorSentence = sponsors.Length == 0 ? "" : $" Sponsor: {sponsors}.";
+        var names = snapshot.Sponsorships.Where(item => item.Role == ActionSponsorshipRole.Sponsor)
+            .Select(item => snapshot.OfficialNames[item.PersonId]).Distinct(StringComparer.Ordinal).ToArray();
+        var sponsors = string.Join(", ", names);
+        var headline = names.Length == 0 ? $"{label}: introduced in Congress" : $"{label}: introduced by {sponsors}";
+        var sponsorSentence = names.Length == 0 ? "" : $" {(names.Length == 1 ? "Sponsor" : "Sponsors")}: {sponsors}.";
         var introduced = bill.IntroducedDate.ToString("MMMM d, yyyy", CultureInfo.InvariantCulture);
-        var summary = $"{label}, {bill.Title.TrimEnd('.')}.{sponsorSentence} Introduced {introduced}. Congress.gov has no summary of this bill yet.";
+        var summary = $"{label}, {EndedSentence(bill.Title)}{sponsorSentence} Introduced {introduced}. Congress.gov has no summary of this bill yet.";
         return new(headline, summary, ReviewTextOrigin.Code, null);
     }
 
-    private static string LabelOf(string billType) =>
-        BillTypeLabels.GetValueOrDefault(billType.ToLowerInvariant(), billType.ToUpperInvariant());
+    private static string LabelOf(string billType) => BillTypeLabels[billType.ToLowerInvariant()];
+
+    private static string EndedSentence(string title)
+    {
+        var trimmed = title.Trim();
+        return EndMarks.Contains(trimmed[^1]) ? trimmed : trimmed + ".";
+    }
 }

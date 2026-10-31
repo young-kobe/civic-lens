@@ -54,10 +54,12 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
         var revisions = await StoredJobDefinition.LoadRevisionsAsync(db, [row.ConfigurationRevisionId], cancellationToken);
         var candidate = new ActionDraftCandidate(row.CandidateId, recordId, row.SourceId, row.Congress, row.BillType, row.BillNumber,
             new DateTimeOffset(row.UpdateDateUtcTicks, TimeSpan.Zero), row.IncludesSummaries, row.IncludesSubjects);
+        var current = await ActionDraftRows.ReadCurrentAsync(db, recordId, cancellationToken);
+        var hasNewerCandidate = await ActionDraftRows.HasNewerCandidateAsync(db, candidate, cancellationToken);
+        var hasOlderPromptDraft = current is not null && !hasNewerCandidate &&
+            (await StaleCandidateIdsAsync(db, [candidateId], cancellationToken)).Contains(candidateId);
         return new(candidate, StoredJobDefinition.Find(revisions, row.ConfigurationRevisionId), await ReadPagesAsync(db, row.DetailJobId, row.IncludesSummaries, row.IncludesSubjects, cancellationToken),
-            await ActionDraftRows.ReadCurrentAsync(db, recordId, cancellationToken),
-            await ActionDraftRows.HasNewerCandidateAsync(db, candidate, cancellationToken),
-            (await StaleCandidateIdsAsync(db, [candidateId], cancellationToken)).Contains(candidateId));
+            current, hasNewerCandidate, hasOlderPromptDraft);
     }
 
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) =>

@@ -145,6 +145,43 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal(revision.Sponsorships.Length, record.Sponsorships.Length);
     }
 
+    [Fact]
+    public async Task ACodeWrittenActionSettlesWithAFreeBypassedRunIsCodeApprovedAndPublishesWithItsLabelOriginAndCitedBillPage()
+    {
+        _ = await ReadableCandidateAsync(sponsor: "A000001", policyArea: BillGateFixtures.UntrackedPolicyArea);
+
+        var model = await RunActionWorkerAsync(new FakeHeadlineSummaryModel());
+
+        Assert.Empty(model.Requests);
+        Assert.Equal(("Bypassed", "0 codeWritten"), await TupleAsync(
+            "SELECT outcome, charged_tokens || ' ' || reason FROM action_analysis_runs"));
+        Assert.Equal(("Code", "civic-lens:code"), await TupleAsync($"SELECT author_kind, author_subject FROM action_revisions WHERE record_id = '{RecordId}'"));
+        var decision = Assert.Single(await ActionDecisionsAsync());
+        Assert.Equal((ReviewDecisionKind.Approve, ReviewAuthor.CodeSubject), (decision.Kind, decision.ActorSubject));
+        var revision = (await ActionReviews().GetRevisionAsync(RecordId, 1, default))!;
+        var names = revision.Sponsorships.Select(item => item.PersonId).Distinct().ToDictionary(id => id, id => $"Official {id}");
+        var releases = new FileReleaseDirectory(Path.Combine(captureRoot, "releases"));
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString);
+        var publisher = new PublishRelease(publications, releases, new ReleaseRenderer(null, null),
+            new PublishedRecordLoaders(PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
+                PostgresStatementReviewStore.FromConnectionString(connectionString), ActionReviews(),
+                PostgresVoteReviewStore.FromConnectionString(connectionString),
+                new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)), new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString)),
+                PostgresExecutiveActionReviewStore.FromConnectionString(connectionString)),
+            new PublicationCatalog(names, IssueConfiguration.None), FixedRosters.NamedOnly(names.Keys), PhotoCaptures.None(), TimeProvider.System,
+            new PruneReleases(publications, releases, NullLogger<PruneReleases>.Instance));
+
+        var summary = await publisher.ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("publish", new PublishedRecordReference(PublishedRecordKind.Action, RecordId)));
+
+        var record = JsonSerializer.Deserialize<PublishedAction>(await releases.ReadFileAsync(summary.DirectoryName,
+            PublicationProtocol.RecordDataPath(RecordId), PublicationProtocol.MaximumManifestBytes, default), PublicationProtocol.JsonOptions)!;
+        record.Validate();
+        Assert.Equal(PublishedTextOrigin.Code, record.TextOrigin);
+        Assert.Contains(record.Sources, source => source.ExtractionId == revision.BillCitation!.ExtractionId);
+        Assert.Contains("Congress.gov has no summary of this bill yet.", record.Summary, StringComparison.Ordinal);
+    }
+
     private static PublicationCommit ActionCommit(int reviewStateVersion) =>
         new(1, null, $"000001-{Guid.NewGuid():N}", [new(PublishedRecordKind.Action, RecordId, 1)],
             [new(PublishedRecordKind.Action, RecordId, 1, reviewStateVersion)]);

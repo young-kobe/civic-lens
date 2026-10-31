@@ -23,9 +23,10 @@ public sealed class ActionDraftRevisionTests
     [Fact]
     public void ACodeRevisionHoldsCodeTextAndTheCodeAuthorTogetherBecauseTheLabelOnThePageNamesWhoWroteTheWords()
     {
-        var code = Model() with { AuthorSubject = ReviewAuthor.CodeSubject, TextOrigin = ReviewTextOrigin.Code };
+        var code = Model() with { AuthorSubject = ReviewAuthor.CodeSubject, TextOrigin = ReviewTextOrigin.Code, BillCitation = new(ExtractionId, 0, 10) };
 
         code.ValidateAsWorkerRevision(null);
+        Assert.Throws<ArgumentException>(() => (code with { BillCitation = null }).ValidateAsWorkerRevision(null));
         (code with { RevisionNumber = 2 }).ValidateAsWorkerRevision(code);
 
         Assert.Equal(ReviewAuthorKind.Code, code.AuthorKind);
@@ -38,7 +39,7 @@ public sealed class ActionDraftRevisionTests
     public void ACodeRevisionNeverReplacesTextThatAPersonWroteAndNeverCarriesASuggestion()
     {
         var person = PersonEditOf(Model(), "Edited headline", "Edited summary.");
-        var code = Model(3) with { AuthorSubject = ReviewAuthor.CodeSubject, TextOrigin = ReviewTextOrigin.Code };
+        var code = Model(3) with { AuthorSubject = ReviewAuthor.CodeSubject, TextOrigin = ReviewTextOrigin.Code, BillCitation = new(ExtractionId, 0, 10) };
         var suggestion = new ReviewTextSuggestion("New", "New summary.", new string('1', 32), Fingerprint);
 
         Assert.Throws<ArgumentException>(() => code.ValidateAsWorkerRevision(person with { RevisionNumber = 2 }));
