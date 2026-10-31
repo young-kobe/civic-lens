@@ -21,14 +21,13 @@ internal static class RelationshipEvidenceReader
         SELECT r.revision_json AS "Value" FROM action_drafts d
         JOIN action_revisions r ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
         WHERE @@scope
-          AND EXISTS (SELECT 1 FROM jsonb_array_elements(r.revision_json::jsonb -> 'sponsorships') s WHERE s ->> 'personId' = ANY({0}))
+          AND d.official_ids && {0}
         """;
 
     private const string StatementsOfOfficials = """
         SELECT d.candidate_id AS "Value" FROM statement_drafts d
-        JOIN statement_revisions r ON r.candidate_id = d.candidate_id AND r.revision_number = d.current_revision_number
         WHERE @@scope
-          AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(r.revision_json::jsonb -> 'speakerOfficialIds') o WHERE o = ANY({0}))
+          AND d.official_ids && {0}
         """;
 
     private const string StatementsOfOfficialsInCongress = """
@@ -36,7 +35,7 @@ internal static class RelationshipEvidenceReader
         JOIN statement_revisions r ON r.candidate_id = d.candidate_id AND r.revision_number = d.current_revision_number
         WHERE @@scope
           AND r.revision_json::jsonb ->> 'statementDate' >= {1} AND r.revision_json::jsonb ->> 'statementDate' < {2}
-          AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(r.revision_json::jsonb -> 'speakerOfficialIds') o WHERE o = ANY({0}))
+          AND d.official_ids && {0}
         """;
 
     private const string ActionById = """
