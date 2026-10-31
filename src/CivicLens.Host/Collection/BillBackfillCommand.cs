@@ -29,8 +29,8 @@ internal sealed class BillBackfillCommand(BackfillBillSubjects subjects, Backfil
 
     private static int? ReadLimit(string[] args) => args.Length switch
     {
-        4 => DefaultLimit,
-        5 => OwnerCommand.ParseLimit(args[4], Usage),
+        3 => DefaultLimit,
+        4 => OwnerCommand.ParseLimit(args[3], Usage),
         _ => null
     };
 }

@@ -74,6 +74,12 @@ case "$*" in
     number "$4"
     "$compose" run --rm cli bills subjects backfill "$4"
     ;;
+  # usage: bills status backfill <count>
+  "bills status backfill "*)
+    [[ $# -eq 4 ]] || refuse
+    number "$4"
+    "$compose" run --rm cli bills status backfill "$4"
+    ;;
   # usage: releases publish <key> [--rewrite-entries] [--rewrite-officials]
   "releases publish "*) shift 2; publish "$@" ;;
   *) refuse ;;

@@ -5,20 +5,20 @@ using CivicLens.Publication.Contracts;
 namespace CivicLens.Application.Publication;
 
 /// <summary>
-/// Owns the bill status line of a release. Each publish reads the stored status of every action record in the release and writes
-/// the status file. A carried action page is written again only when its latest action or its date differs from the previous release,
-/// so a new check time alone never rewrites a page.
+/// Owns the bill status line of a release. Each publish reads the stored status of every action record in the release and writes the status file.
+/// The rule for the read time: a status keeps the time of the release that first showed its text and date. A later read of the same action
+/// changes no row and no page, so the file and the page never show two times. A carried action page is written again only when its row differs.
 /// </summary>
 internal static class ReleaseBillStatuses
 {
     public static async Task<IReadOnlyDictionary<string, PublishedBillStatus>> LoadAsync(ActionRecordLoader actions, PreviousRelease previous,
-        ImmutableArray<PublishedRecordReference> references, ImmutableArray<PublishedRecordReference> withdrawn, CancellationToken cancellationToken)
+        ImmutableArray<PublishedRecordReference> references, CancellationToken cancellationToken)
     {
-        var gone = withdrawn.Select(record => record.RecordId).ToHashSet(StringComparer.Ordinal);
-        ImmutableArray<string> ids = [.. previous.Entries.Where(entry => entry.Kind == PublishedRecordKind.Action).Select(entry => entry.RecordId)
-            .Concat(references.Where(record => record.Kind == PublishedRecordKind.Action).Select(record => record.RecordId))
-            .Where(id => !gone.Contains(id)).Distinct(StringComparer.Ordinal)];
-        return (await actions.BillStatusesAsync(ids, cancellationToken)).ToDictionary(status => status.RecordId, StringComparer.Ordinal);
+        ImmutableArray<string> ids = [.. ActionIdsOf(previous.Entries).Concat(references.Where(record => record.Kind == PublishedRecordKind.Action)
+            .Select(record => record.RecordId)).Distinct(StringComparer.Ordinal)];
+        return (await actions.BillStatusesAsync(ids, cancellationToken))
+            .Select(read => previous.BillStatuses.TryGetValue(read.RecordId, out var shown) && !Differs(shown, read) ? shown : read)
+            .ToDictionary(status => status.RecordId, StringComparer.Ordinal);
     }
 
     public static IEnumerable<string> ChangedActionIds(IEnumerable<string> actionIds, PreviousRelease previous,
@@ -27,6 +27,9 @@ internal static class ReleaseBillStatuses
 
     public static IEnumerable<string> ActionIdsOf(IEnumerable<PublishedRecordEntry> entries) =>
         entries.Where(entry => entry.Kind == PublishedRecordKind.Action).Select(entry => entry.RecordId);
+
+    public static IEnumerable<string> ActionIdsOf(IEnumerable<PublishedRevisionBinding> bindings) =>
+        bindings.Where(binding => binding.Kind == PublishedRecordKind.Action).Select(binding => binding.RecordId);
 
     public static Task WriteAsync(IReleaseStaging staging, IEnumerable<string> actionIds,
         IReadOnlyDictionary<string, PublishedBillStatus> statuses, CancellationToken cancellationToken)

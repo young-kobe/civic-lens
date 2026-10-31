@@ -92,6 +92,7 @@ if (args is [] or ["--help"] or ["help"])
           votes draft requeue --blocked --code <block-code>
           votes draft redraft
           bills subjects backfill [limit]
+          bills status backfill [limit]
           relationships draft status
           relationships draft list [drafted|unchanged|none|unmatched|pending|failed] [limit]
           relationships draft requeue <pair-id|--all>

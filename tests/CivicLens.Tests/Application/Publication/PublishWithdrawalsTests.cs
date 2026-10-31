@@ -374,6 +374,23 @@ public sealed class PublishWithdrawalsTests
     }
 
     [Fact]
+    public async Task ACarriedVotePageWrittenAgainBecauseItsBillActionWasWithdrawnStillListsItsRelatedRecords()
+    {
+        var scenario = new PublicationScenario();
+        var statement = scenario.AddStatement('b');
+        var action = scenario.AddAction('d');
+        var vote = scenario.AddVote('a', billActionRecordIds: [action]);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Statement, statement), Reference(action), Reference(vote, PublishedRecordKind.Vote)));
+        var link = scenario.AddRelationship('e', statement, vote, PublishedRecordKind.Vote);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", Reference(link, PublishedRecordKind.Relationship)));
+
+        var withdrawn = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k3", Reference(action), "Wrong bill."));
+
+        Assert.Equal($"<html>vote {vote} bill  related {link[..1]}</html>", Page(scenario.Releases.Directories[withdrawn.DirectoryName], PublicationProtocol.RecordPagePath(vote)));
+    }
+
+    [Fact]
     public async Task ARelationshipInTheSameRequestMayCiteTheReturnedRecord()
     {
         var scenario = new PublicationScenario();

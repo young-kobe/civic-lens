@@ -13,7 +13,7 @@ public sealed record CongressBill(
     int ActionCount,
     int SummaryCount,
     int SubjectCount,
-    CongressBillLatestAction? LatestAction = null)
+    CongressBillLatestAction? LatestAction)
 {
     public static bool HasLegislativeSubjects(int subjectCount, string? policyArea) => subjectCount > (policyArea is null ? 0 : 1);
 }

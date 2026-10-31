@@ -35,6 +35,18 @@ public sealed class BackfillBillStatusTests
     }
 
     [Fact]
+    public async Task ACaptureWithAnUnusableLatestActionIsRecordedAsReadWithNoStatusAndTheRunDoesNotStop()
+    {
+        var world = ActionBillWorld.Create(latestAction: new(new DateOnly(2025, 3, 2), new string('x', 1_001)));
+        var store = new RecordingStore(["detail"]);
+
+        var result = await Backfill(world, store).ExecuteAsync(Owner, 10);
+
+        Assert.Equal(new BillStatusBackfillResult(1, 1, 0), result);
+        Assert.Equal(("detail", (CongressBillLatestAction?)null), Assert.Single(store.Calls));
+    }
+
+    [Fact]
     public async Task ABillThatTheStoreAlreadyReadIsExaminedButNotCounted()
     {
         var world = ActionBillWorld.Create(latestAction: Latest);

@@ -51,7 +51,7 @@ public sealed class PublishRelease
         ReviewAuthorization.RequireOwner(actor, allowCode: true);
         var byCode = ReviewAuthor.IsCode(actor.Subject);
         var references = ValidateRequest(request);
-        if (byCode && references.IsEmpty) throw new ArgumentException("The code subject publishes at least one record.", nameof(request));
+        if (byCode && references.IsEmpty && !request.StatusOnly) throw new ArgumentException("The code subject publishes at least one record.", nameof(request));
         var withdrawalNotes = PublicationWithdrawals.ValidateNotes(request.Withdrawals, byCode);
         var payloadHash = ReviewValidation.HashPayload(request);
         var replay = await publications.FindReplayAsync(actor.Subject, request.IdempotencyKey, payloadHash, cancellationToken);
@@ -73,7 +73,7 @@ public sealed class PublishRelease
         var returned = ImmutableArray.CreateRange(references.Where(reference => previous.IsWithdrawn(reference.RecordId)));
         var roster = await officials.ReadRosterAsync(cancellationToken);
         var photos = await officials.ReadPhotosAsync(cancellationToken);
-        var statuses = await ReleaseBillStatuses.LoadAsync(loaders.Actions, previous, references, withdrawn, cancellationToken);
+        var statuses = await ReleaseBillStatuses.LoadAsync(loaders.Actions, previous, references, cancellationToken);
         var build = new PublicationBuild(previous, now, rules, renderer, catalog, corrections, roster, byCode)
             .WithRemoved(withdrawn).WithReturned(returned).WithBillStatuses(statuses);
         var additions = await LoadAdditionsAsync(references, build, cancellationToken);
@@ -100,6 +100,16 @@ public sealed class PublishRelease
         await ServeActiveReleaseAsync(cancellationToken);
         await prune.ExecuteAsync(cancellationToken);
         return summary;
+    }
+
+    // The worker asks this when no record is ready. Reading the previous files and one status query is much cheaper than staging a release.
+    public async Task<bool> HasBillStatusChangeAsync(CancellationToken cancellationToken = default)
+    {
+        var state = await publications.GetStateAsync(cancellationToken);
+        var previous = await PreviousRelease.LoadAsync(releases, state.Active, cancellationToken);
+        if (previous.DirectoryName is null) return false;
+        var statuses = await ReleaseBillStatuses.LoadAsync(loaders.Actions, previous, [], cancellationToken);
+        return ReleaseBillStatuses.ChangedActionIds(ReleaseBillStatuses.ActionIdsOf(previous.Entries), previous, statuses).Any();
     }
 
     // Reads the active release again under the publication lock, so an older command cannot serve a stale release.

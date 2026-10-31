@@ -3,7 +3,8 @@ namespace CivicLens.Publication.Contracts;
 /// <summary>One status row for each action record of a release that has a stored status. The search service never reads it.</summary>
 public sealed record PublishedBillStatuses
 {
-    public const int MaximumBytes = 16 * 1024 * 1024;
+    public const int MaximumBytesPerRow = 4 * 1024;
+    public const int MaximumBytes = PublicationProtocol.MaximumRecordsPerRelease * MaximumBytesPerRow;
 
     public required PublishedBillStatus[] Records { get; init; }
 

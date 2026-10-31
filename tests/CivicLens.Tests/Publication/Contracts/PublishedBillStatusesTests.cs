@@ -27,6 +27,8 @@ public sealed class PublishedBillStatusesTests
         Row('a') with { Text = " " },
         Row('a') with { Text = " padded " },
         Row('a') with { Text = new string('x', PublishedBillStatus.MaximumTextLength + 1) },
+        Row('a') with { Text = "Passed\u0000 House." },
+        Row('a') with { Text = "Passed\tHouse." },
         Row('a') with { ObservedAtUtc = new DateTimeOffset(2026, 1, 30, 9, 0, 0, TimeSpan.FromHours(2)) }
     };
 
@@ -55,12 +57,22 @@ public sealed class PublishedBillStatusesTests
     public void AFileOfTheMaximumNumberOfRealisticRowsStaysUnderTheByteCapSoTheCapNeverRefusesARealRelease()
     {
         var rows = Enumerable.Range(0, PublicationProtocol.MaximumRecordsPerRelease)
-            .Select(index => Row('a') with { RecordId = index.ToString("x64"), Text = new string('x', 300) });
+            .Select(index => Row('a') with { RecordId = index.ToString("x64"), Text = new string('x', 700) });
         var file = new PublishedBillStatuses { Records = [.. rows] };
 
         file.Validate();
 
         Assert.True(JsonSerializer.SerializeToUtf8Bytes(file, PublicationProtocol.JsonOptions).Length < PublishedBillStatuses.MaximumBytes);
+    }
+
+    [Fact]
+    public void ARowOfTheLongestAllowedTextStaysUnderTheByteCapOfARowEvenWithTheWidestCharacters()
+    {
+        var widest = new PublishedBillStatus { RecordId = new string('a', 64), Text = new string('\u20ac', PublishedBillStatus.MaximumTextLength), Date = new DateOnly(2026, 1, 28), ObservedAtUtc = Observed };
+
+        widest.Validate();
+
+        Assert.True(JsonSerializer.SerializeToUtf8Bytes(widest, PublicationProtocol.JsonOptions).Length <= PublishedBillStatuses.MaximumBytesPerRow);
     }
 
     private static PublishedBillStatus Row(char id) =>

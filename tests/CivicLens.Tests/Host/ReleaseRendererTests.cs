@@ -508,17 +508,29 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task ActionPageStatesTheLatestActionWithItsDateAndCheckTimeAndLinksTheBillOnCongressGovSoTheReaderCanCheckIt()
+    public async Task ActionPageStatesTheLatestActionWithItsDateAndReadTimeAndLinksTheBillOnCongressGovSoTheReaderCanCheckIt()
     {
         var status = new PublishedBillStatus { RecordId = Action().RecordId, Text = "Passed House.", Date = new DateOnly(2026, 1, 28), ObservedAtUtc = new DateTimeOffset(2026, 1, 30, 9, 0, 0, TimeSpan.Zero) };
 
         var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action(), status, [], PublicationCatalogs.None, CancellationToken.None);
 
         var facts = new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts dd").Select(dd => dd.TextContent).ToList();
-        Assert.Contains("2026-01-28: Passed House.", facts);
-        Assert.Contains("2026-01-30 09:00 UTC. The bill can move after this time.", facts);
+        Assert.Contains("Latest official action: Passed House. Action date: 2026-01-28.", facts);
+        Assert.Contains("2026-01-30 09:00 UTC. The bill can change after this time.", facts);
         var link = new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts a").Single(anchor => anchor.TextContent == "Bill on Congress.gov");
         Assert.StartsWith("https://www.congress.gov/bill/119th-congress/", link.GetAttribute("href"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ActionPageShowsThePlainMeaningOfARecognizedLatestActionWithItsDateAndNotTheRawText()
+    {
+        var status = new PublishedBillStatus { RecordId = Action().RecordId, Text = "Became Public Law No: 119-21.", Date = new DateOnly(2026, 1, 28), ObservedAtUtc = new DateTimeOffset(2026, 1, 30, 9, 0, 0, TimeSpan.Zero) };
+
+        var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action(), status, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var facts = new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts dd").Select(dd => dd.TextContent).ToList();
+        Assert.Contains("Became law: Public Law 119-21. Action date: 2026-01-28.", facts);
+        Assert.DoesNotContain("Became Public Law No", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -527,7 +539,7 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action(), null, [], PublicationCatalogs.None, CancellationToken.None);
 
         Assert.DoesNotContain("Latest action", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("Status last checked", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Status read on", html, StringComparison.Ordinal);
     }
 
     [Fact]

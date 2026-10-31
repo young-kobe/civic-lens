@@ -210,6 +210,16 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task ABillThatFailsTheGateStillStoresItsLatestActionButHasNoActionRecordSoNoPageEverShowsIt()
+    {
+        var detail = await EnqueueDetailAsync("not-relevant");
+        await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 0, policyArea: null, latestAction: new(new DateOnly(2025, 3, 2), "Passed House.")), BillGateOutcome.NotRelevant(BillGateReason.NoPolicyArea));
+
+        Assert.Equal("Passed House.", await ScalarAsync($"SELECT latest_action_text FROM bill_gates WHERE detail_job_id = '{detail}' AND decision = 'NotRelevant'"));
+        Assert.Empty(await ActionReviews().ReadBillStatusesAsync([RecordId], default));
+    }
+
+    [Fact]
     public async Task TheStatusBackfillListsOnlyTheNewestUnreadVersionRecordsItOnceAndNeverListsItAgain()
     {
         var older = await EnqueueDetailAsync("older");
@@ -239,7 +249,8 @@ public sealed partial class PostgresBillStreamTests
         foreach (var set in new[] { "latest_action_date = '2025-03-02'", "latest_action_text = 'Passed House.'",
                      "latest_action_date = '2025-03-02', latest_action_text = ' '", "latest_action_date = '2025-03-02', latest_action_text = ' Passed House.'",
                      "latest_action_read = false, latest_action_date = '2025-03-02', latest_action_text = 'Passed House.'" })
-            await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(connectionString, "UPDATE bill_gates SET " + set));
+            Assert.Equal("ck_bill_gates_latest_action",
+                (await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, "UPDATE bill_gates SET " + set))).ConstraintName);
     }
 
     [Fact]
