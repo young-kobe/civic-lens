@@ -768,7 +768,7 @@ The worker stage publishes every approval; see [Automatic publication](#automati
 The Review page cannot withdraw a record. The CLI is a local owner command. Set `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER` (the owner subject recorded on the release), and `CIVIC_LENS_RELEASE_DIRECTORY` (an absolute path, for example `$PWD/.runtime/releases`). Publishing also needs `CIVIC_LENS_COLLECTION_CONFIG`, an absolute configuration path that supplies the officials' display names, and `CIVIC_LENS_ISSUES_CONFIG`, an absolute path that supplies the issue and policy area names. `CIVIC_LENS_ARTIFACT_DIRECTORY` is required. Set it to the capture directory (the worker `<artifact-directory>`, for example `$PWD/.runtime/captures`). `releases publish` stops with exit code 2 before it runs when the variable is unset, and prints its generic invalid-configuration line. The review workspace stops at startup with exit code 2 when it has `CIVIC_LENS_RELEASE_DIRECTORY` and no artifact directory. Its configuration line names the artifact directory. A photo that the previous release holds is linked and its capture is not read. A new photo that cannot be read does not fail the publish. The release keeps the earlier photo or shows none, and the log holds an error with the person and the attempt. The worker stage uses the directory of its own command line, and the review workspace reads the same variable. A new photo or another change to an official profile appears at the next publish. To publish it now, run `releases publish <idempotency-key>` with no record. The command refuses to publish when no record and no official changed, unless you add `--rewrite-officials`. It needs an active release. The command trusts the local operator, who already holds database credentials.
 
 ```sh
-dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials]
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries]
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases list [limit]
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases blocked
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases activate <release-number>
@@ -793,6 +793,18 @@ After the deploy that ships the Congress tabs, run this once:
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases publish <idempotency-key> --rewrite-officials
 ```
+
+To fill the new fields of carried vote and action entries, add `--rewrite-entries`. The publish reads the record file of each carried vote and action and builds its manifest entry again. It adds `yeaCount`, `nayCount`, `alignment`, and `cosponsorOfficials`. It changes no other entry field. It keeps the record files linked and writes none of them again. A withdrawn record stays withdrawn. The option adds no record, and it needs an active release. It reads one file for each carried vote and action. On a failure, run the same command again.
+
+Every publish writes `officials-summary.json`, the roll-up of the figures that rankings need. A touched official gets new figures. An untouched official keeps the figures of the previous release. A release from before the roll-up has none, so its untouched officials have no vote figures until `--rewrite-officials` runs. The cosponsor counts come from the manifest entries of every publish. They need `--rewrite-entries` to count the carried actions.
+
+After the deploy that ships the vote fields, the cosponsor field, and the roll-up, run this once:
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases publish <idempotency-key> --rewrite-entries --rewrite-officials
+```
+
+An image from before this change cannot read a release that the new image made, because it refuses the new entry members. To go back to that image, first activate a release that it made. See the [publication limits](architecture/publication.md#limits-and-planned-work).
 
 ### Return a record
 
@@ -948,7 +960,7 @@ SELECT count(*) FROM vote_drafts WHERE chamber = 'Senate';
 
 Production has no Senate vote drafts, because senate.gov returned 403. Production needs no reset for this change.
 
-A release contract change can add a required field to a published file. Old files then do not read, and the next publish fails. On the dev machine, repeat steps 1 to 5. These steps delete all captures and records, not only the releases. Collect again and let code approve the facts, then publish a fresh release with `releases publish` as in [Publish a static release](#publish-a-static-release). Production has no release yet, so it has no older files.
+A release contract change can add a required field to a published file. Old files then do not read, and the next publish fails. On the dev machine, repeat steps 1 to 5. These steps delete all captures and records, not only the releases. Collect again and let code approve the facts, then publish a fresh release with `releases publish` as in [Publish a static release](#publish-a-static-release). Production holds live releases, so do not reset it for a contract change. Add the field as optional and fill the carried entries with `--rewrite-entries`; see [Publish a static release](#publish-a-static-release).
 
 ## Production compose
 

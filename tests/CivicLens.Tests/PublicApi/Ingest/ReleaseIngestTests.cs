@@ -43,6 +43,17 @@ public sealed class ReleaseIngestTests(PostgresCollection postgres) : IAsyncLife
     }
 
     [Fact]
+    public async Task TheOfficialSummariesFileOfAReleaseIsNeverFetchedSoARankingFileCostsTheSearchIndexNothing()
+    {
+        world.Site.Publish(1, PublishedSamples.Statement('a', "Rent cap"));
+
+        var result = await world.IngestAsync();
+
+        Assert.Equal((IngestOutcome.Ingested, 1), (result.Outcome, result.Indexed));
+        Assert.DoesNotContain(PublicationProtocol.OfficialSummariesPath, world.Site.Requests);
+    }
+
+    [Fact]
     public async Task AnUnchangedManifestAnswers304AndTheIngestFetchesNoRecord()
     {
         world.Site.Publish(1, PublishedSamples.Statement('a', "Rent cap"));

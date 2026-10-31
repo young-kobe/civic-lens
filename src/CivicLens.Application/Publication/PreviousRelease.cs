@@ -6,12 +6,14 @@ namespace CivicLens.Application.Publication;
 internal sealed class PreviousRelease
 {
     private PreviousRelease(string? directoryName, IReadOnlyList<PublishedRecordEntry> entries,
-        IReadOnlyList<PublishedWithdrawal> withdrawals, IReadOnlyDictionary<string, PublishedOfficialProfile> officials)
+        IReadOnlyList<PublishedWithdrawal> withdrawals, IReadOnlyDictionary<string, PublishedOfficialProfile> officials,
+        IReadOnlyDictionary<string, PublishedOfficialSummary> summaries)
     {
         DirectoryName = directoryName;
         Entries = entries;
         Withdrawals = withdrawals;
         Officials = officials;
+        Summaries = summaries;
     }
 
     public string? DirectoryName { get; }
@@ -22,12 +24,15 @@ internal sealed class PreviousRelease
 
     public IReadOnlyDictionary<string, PublishedOfficialProfile> Officials { get; }
 
+    public IReadOnlyDictionary<string, PublishedOfficialSummary> Summaries { get; }
+
     public static async Task<PreviousRelease> LoadAsync(IReleaseDirectory releases, PublicationReleaseSummary? active,
         CancellationToken cancellationToken)
     {
-        if (active is null) return new(null, [], [], new Dictionary<string, PublishedOfficialProfile>());
+        if (active is null) return new(null, [], [], new Dictionary<string, PublishedOfficialProfile>(), new Dictionary<string, PublishedOfficialSummary>());
         var manifest = await LoadManifestAsync(releases, active, cancellationToken);
-        return new(active.DirectoryName, manifest.Records, manifest.Withdrawals, await ReadOfficialsAsync(releases, active.DirectoryName, cancellationToken));
+        return new(active.DirectoryName, manifest.Records, manifest.Withdrawals, await ReadOfficialsAsync(releases, active.DirectoryName, cancellationToken),
+            await ReadSummariesAsync(releases, active.DirectoryName, cancellationToken));
     }
 
     public static async Task<PublicationRelease> LoadManifestAsync(IReleaseDirectory releases, PublicationReleaseSummary active,
@@ -64,6 +69,26 @@ internal sealed class PreviousRelease
             ?? throw new InvalidDataException("Release officials file is empty.");
         officials.Validate();
         return officials.Officials.ToDictionary(official => official.Id, StringComparer.Ordinal);
+    }
+
+    // A release from before the roll-up holds no summary file. Its officials then have no carried row.
+    private static async Task<Dictionary<string, PublishedOfficialSummary>> ReadSummariesAsync(IReleaseDirectory releases,
+        string directoryName, CancellationToken cancellationToken)
+    {
+        byte[] bytes;
+        try
+        {
+            bytes = await releases.ReadFileAsync(directoryName, PublicationProtocol.OfficialSummariesPath, PublishedOfficialSummaries.MaximumBytes,
+                cancellationToken);
+        }
+        catch (FileNotFoundException)
+        {
+            return [];
+        }
+        var summaries = JsonSerializer.Deserialize<PublishedOfficialSummaries>(bytes, PublicationProtocol.JsonOptions)
+            ?? throw new InvalidDataException("Release official summaries file is empty.");
+        summaries.Validate();
+        return summaries.Officials.ToDictionary(official => official.Id, StringComparer.Ordinal);
     }
 
     public bool IsWithdrawn(string recordId) => FindWithdrawal(recordId) is not null;

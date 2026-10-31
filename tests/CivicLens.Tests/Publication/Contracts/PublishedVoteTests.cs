@@ -33,6 +33,47 @@ public sealed class PublishedVoteTests
     }
 
     [Fact]
+    public void TheEntryHoldsTheWholeChamberCountsSoAListCanShowThemWithoutReadingTheVoteFile()
+    {
+        var entry = Vote().ToEntry();
+
+        Assert.Equal((1, 1), (entry.YeaCount, entry.NayCount));
+        entry.Validate();
+    }
+
+    [Theory]
+    [InlineData(1, 0, 1, 0, PublishedVoteAlignment.Bipartisan)]
+    [InlineData(0, 1, 1, 0, PublishedVoteAlignment.PartyLine)]
+    [InlineData(1, 1, 1, 0, PublishedVoteAlignment.Mixed)]
+    public void TheEntryNamesHowTheTwoPartiesVotedFromTheirMajorities(int democratYea, int democratNay, int republicanYea, int republicanNay, PublishedVoteAlignment expected)
+    {
+        var vote = Vote() with
+        {
+            Totals = new() { Yea = democratYea + republicanYea, Nay = democratNay + republicanNay, Present = 0, NotVoting = 0 },
+            PartyMajorities = [PublishedPartyMajority.Of("Democrat", democratYea, democratNay), PublishedPartyMajority.Of("Republican", republicanYea, republicanNay)]
+        };
+
+        Assert.Equal(expected, vote.ToEntry().Alignment);
+    }
+
+    [Fact]
+    public void AProceduralVoteKeepsItsCountsButGetsNoAlignmentBecauseThePartyReadingCoversSubstantiveVotesOnly()
+    {
+        var entry = (Vote() with { Kind = PublishedVoteKind.Rule }).ToEntry();
+
+        Assert.Equal((1, 1), (entry.YeaCount, entry.NayCount));
+        Assert.Null(entry.Alignment);
+    }
+
+    [Fact]
+    public void ACandidateVoteHasNoCountsAndNoAlignmentBecauseItHasNoYeaOrNayTotals()
+    {
+        var entry = (Vote() with { Totals = null, PartyMajorities = [] }).ToEntry();
+
+        Assert.Equal((null, null, null), (entry.YeaCount, entry.NayCount, entry.Alignment));
+    }
+
+    [Fact]
     public void TheJsonShapeIsPinnedSoReadersOfOlderReleasesKeepWorking()
     {
         var json = JsonSerializer.Serialize(Vote(), PublicationProtocol.JsonOptions);

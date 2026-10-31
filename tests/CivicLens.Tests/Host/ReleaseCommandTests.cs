@@ -198,6 +198,28 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
+    public async Task TheRewriteEntriesOptionPublishesWithNoRecordAndFillsTheVoteFactsOfACarriedVote()
+    {
+        var scenario = new PublicationScenario();
+        var vote = scenario.AddVote('a');
+        await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", $"vote:{vote}"], scenario.Publisher(), null!, null!, null!,
+            PublicationScenario.Owner, CancellationToken.None);
+        var first = scenario.Publications.Committed[^1].DirectoryName;
+        var manifest = JsonSerializer.Deserialize<PublicationRelease>(scenario.Releases.Directories[first][PublicationProtocol.ManifestPath], PublicationProtocol.JsonOptions)!;
+        scenario.Releases.Directories[first][PublicationProtocol.ManifestPath] = JsonSerializer.SerializeToUtf8Bytes(
+            manifest with { Records = [.. manifest.Records.Select(entry => entry with { YeaCount = null, NayCount = null, Alignment = null })] },
+            PublicationProtocol.JsonOptions);
+
+        var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", "--rewrite-entries"], scenario.Publisher(), null!, null!, null!,
+            PublicationScenario.Owner, CancellationToken.None);
+
+        Assert.Equal(0, exit);
+        var rewritten = JsonSerializer.Deserialize<PublicationRelease>(
+            scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName][PublicationProtocol.ManifestPath], PublicationProtocol.JsonOptions)!;
+        Assert.NotNull(Assert.Single(rewritten.Records).YeaCount);
+    }
+
+    [Fact]
     public async Task PublishWithOnlyAKeyAfterAWithholdFlagMakesAReleaseWithNoPhotoSoATakedownNeedsNoNewRecord()
     {
         var scenario = new PublicationScenario();

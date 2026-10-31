@@ -80,13 +80,14 @@ public sealed class PublishRelease
         var pages = await releasePages.RenderAsync(released, additions, cancellationToken);
         var replaced = references.Concat(withdrawn).ToHashSet();
         var carried = previous.Entries.Where(entry => !replaced.Contains(new(entry.Kind, entry.RecordId))).ToList();
+        if (request.RewriteEntries) carried = await ReleaseEntryRewrite.RebuildAsync(releases, carried, previous, cancellationToken);
         var removed = previous.Entries.Where(entry => withdrawalNotes.ContainsKey(new(entry.Kind, entry.RecordId))).ToList();
         List<PublishedWithdrawal> withdrawals = [.. previous.Withdrawals.Where(withdrawal => !build.Returned.Any(record => record.RecordId == withdrawal.RecordId)), .. newWithdrawals];
         if (carried.Count + additions.Count + withdrawals.Count > PublicationProtocol.MaximumRecordsPerRelease)
             throw new ArgumentException("The release would exceed the maximum record count.", nameof(request));
 
         var number = state.LatestReleaseNumber + 1;
-        var (directory, entries) = await StageAsync(number, now, previous, carried, additions, removed, withdrawals, pages, roster, photos, request.RewriteOfficials, cancellationToken);
+        var (directory, entries) = await StageAsync(number, now, previous, carried, additions, removed, withdrawals, pages, roster, photos, request.RewriteOfficials, request.RewriteEntries, cancellationToken);
         var commit = new PublicationCommit(number, state.Active?.ReleaseNumber, directory,
             [.. entries.Select(PublishedRevisionBinding.Of)],
             [.. additions.Select(addition => addition.Expectation)])
@@ -139,7 +140,7 @@ public sealed class PublishRelease
     private async Task<(string Directory, List<PublishedRecordEntry> Entries)> StageAsync(int number, DateTimeOffset now,
         PreviousRelease previous, List<PublishedRecordEntry> carried, List<PendingRecord> additions,
         List<PublishedRecordEntry> removed, List<PublishedWithdrawal> withdrawals, IReadOnlyDictionary<string, string> pages, IReadOnlyList<RosterMember> roster,
-        IReadOnlyList<OfficialPhoto> photos, bool rewriteOfficials, CancellationToken cancellationToken)
+        IReadOnlyList<OfficialPhoto> photos, bool rewriteOfficials, bool rewriteEntries, CancellationToken cancellationToken)
     {
         List<PublishedRecordEntry> entries = [.. carried, .. additions.Select(addition => addition.Entry)];
         var manifest = new PublicationRelease
@@ -183,7 +184,7 @@ public sealed class PublishRelease
         var facets = ReleaseFacets.From(manifest, catalog);
         await indexPages.WriteAsync(staging, manifest, facets, additions, previous, cancellationToken);
         var officials = await dataFiles.WriteAsync(staging, manifest, facets, additions, previous, roster, photos, cancellationToken);
-        if (additions.Count == 0 && removed.Count == 0 && !rewriteOfficials && !ReleaseOfficialPages.ChangesProfiles(previous, officials))
+        if (additions.Count == 0 && removed.Count == 0 && !rewriteOfficials && !rewriteEntries && !ReleaseOfficialPages.ChangesProfiles(previous, officials))
             throw new ArgumentException("Nothing to publish: no record and no official changed.");
         await officialPages.WriteAsync(staging, manifest, officials, additions, removed, previous, rewriteOfficials, cancellationToken);
         await staging.WriteSiteFilesAsync(manifest, cancellationToken);

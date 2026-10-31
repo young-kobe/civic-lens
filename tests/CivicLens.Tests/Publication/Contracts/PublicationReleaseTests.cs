@@ -124,6 +124,95 @@ public sealed class PublicationReleaseTests
         }).Validate();
     }
 
+    [Fact]
+    public void AnEntryFromBeforeTheVoteAndCosponsorFieldsStillReadsAndKeepsThemEmptySoNoReaderGuessesAValue()
+    {
+        var oldJson = JsonSerializer.Serialize(Entry(PublishedRecordKind.Vote, StatementId), PublicationProtocol.JsonOptions);
+        var node = JsonNode.Parse(oldJson)!.AsObject();
+        foreach (var field in new[] { "yeaCount", "nayCount", "alignment", "cosponsorOfficials" }) node.Remove(field);
+
+        var read = JsonSerializer.Deserialize<PublishedRecordEntry>(node.ToJsonString(), PublicationProtocol.JsonOptions)!;
+        read.Validate();
+
+        Assert.Null(read.YeaCount);
+        Assert.Null(read.NayCount);
+        Assert.Null(read.Alignment);
+        Assert.Null(read.CosponsorOfficials);
+    }
+
+    [Fact]
+    public void VoteFactsRoundTripAndTheAlignmentIsAWordSoNoReaderSeesANumber()
+    {
+        var entry = Entry(PublishedRecordKind.Vote, StatementId) with { YeaCount = 216, NayCount = 214, Alignment = PublishedVoteAlignment.PartyLine };
+        var json = JsonSerializer.Serialize(entry, PublicationProtocol.JsonOptions);
+
+        var read = JsonSerializer.Deserialize<PublishedRecordEntry>(json, PublicationProtocol.JsonOptions)!;
+        read.Validate();
+
+        Assert.Contains("\"alignment\":\"partyLine\"", json, StringComparison.Ordinal);
+        Assert.Equal((216, 214, PublishedVoteAlignment.PartyLine), (read.YeaCount, read.NayCount, read.Alignment));
+    }
+
+    public static TheoryData<PublishedRecordEntry> InvalidVoteFacts()
+    {
+        var vote = Entry(PublishedRecordKind.Vote, StatementId);
+        return new()
+        {
+            vote with { YeaCount = 1 },
+            vote with { NayCount = 1 },
+            vote with { Alignment = PublishedVoteAlignment.Mixed },
+            vote with { YeaCount = -1, NayCount = 0 },
+            vote with { YeaCount = PublishedVote.MaximumMembers, NayCount = 1 },
+            vote with { YeaCount = 1, NayCount = 1, Alignment = (PublishedVoteAlignment)99 },
+            Entry(PublishedRecordKind.Statement, StatementId) with { YeaCount = 1, NayCount = 1 },
+            Entry(PublishedRecordKind.Action, new string('7', 64)) with { Alignment = PublishedVoteAlignment.Mixed }
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(InvalidVoteFacts))]
+    public void VoteFactsBelongToAVoteEntryAsAPairWithBoundedCountsSoNoOtherKindCarriesThem(PublishedRecordEntry entry)
+    {
+        Assert.Throws<InvalidDataException>(entry.Validate);
+    }
+
+    [Fact]
+    public void AVoteEntryWithCountsAndNoAlignmentIsValidBecauseAProceduralVoteHasNoPartyReading()
+    {
+        (Entry(PublishedRecordKind.Vote, StatementId) with { YeaCount = 0, NayCount = 0 }).Validate();
+    }
+
+    public static TheoryData<PublishedRecordEntry> InvalidCosponsors()
+    {
+        var action = Entry(PublishedRecordKind.Action, new string('7', 64));
+        var tooLong = new string('x', PublishedRecordEntry.MaximumFilterValueLength + 1);
+        return new()
+        {
+            Entry(PublishedRecordKind.Statement, StatementId) with { CosponsorOfficials = [] },
+            action with { CosponsorOfficials = [.. Enumerable.Range(0, PublishedAction.MaximumSponsorships + 1).Select(index => new PublishedOfficial { Id = $"person-{index}", Name = "Name" })] },
+            action with { CosponsorOfficials = [new() { Id = "chair", Name = "A" }, new() { Id = "chair", Name = "B" }] },
+            action with { CosponsorOfficials = [new() { Id = "chair", Name = tooLong }] },
+            action with { CosponsorOfficials = [new() { Id = tooLong, Name = "Chair" }] },
+            action with { CosponsorOfficials = [null!] }
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(InvalidCosponsors))]
+    public void CosponsorsBelongToAnActionEntryAndAreDistinctAndBoundedSoOneBillCannotSwellTheManifest(PublishedRecordEntry entry)
+    {
+        Assert.Throws<InvalidDataException>(entry.Validate);
+    }
+
+    [Fact]
+    public void AnActionEntryMayHoldAsManyCosponsorsAsTheRecordHoldsSponsorships()
+    {
+        (Entry(PublishedRecordKind.Action, new string('7', 64)) with
+        {
+            CosponsorOfficials = [.. Enumerable.Range(0, PublishedAction.MaximumSponsorships).Select(index => new PublishedOfficial { Id = $"person-{index}", Name = "Name" })]
+        }).Validate();
+    }
+
     [Theory]
     [InlineData(PublishedRecordKind.Statement, 32)]
     [InlineData(PublishedRecordKind.DocumentChange, 64)]

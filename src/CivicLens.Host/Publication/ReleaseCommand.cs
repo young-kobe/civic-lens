@@ -9,6 +9,7 @@ public static class ReleaseCommand
     private const int DefaultListLimit = 20;
     private const string WithdrawOption = "--withdraw";
     private const string RewriteOfficialsOption = "--rewrite-officials";
+    private const string RewriteEntriesOption = "--rewrite-entries";
 
     public static bool Matches(string[] args) => args is ["releases", ..];
 
@@ -37,7 +38,7 @@ public static class ReleaseCommand
                         CommandOutput.Write(await activate.ExecuteAsync(owner, number, cancellationToken));
                         return 0;
                     default:
-                        Console.Error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, or releases activate <release-number>.");
+                        Console.Error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, or releases activate <release-number>.");
                         return 2;
                 }
             }
@@ -53,12 +54,18 @@ public static class ReleaseCommand
         List<PublishedRecordReference> records = [];
         List<RecordNote> withdrawals = [];
         var rewriteOfficials = false;
+        var rewriteEntries = false;
         for (var index = 0; index < arguments.Length; index++)
         {
             var option = arguments[index];
             if (option == RewriteOfficialsOption)
             {
                 rewriteOfficials = true;
+                continue;
+            }
+            if (option == RewriteEntriesOption)
+            {
+                rewriteEntries = true;
                 continue;
             }
             if (option != WithdrawOption)
@@ -72,7 +79,7 @@ public static class ReleaseCommand
             withdrawals.Add(new(reference.Kind, reference.RecordId, arguments[index + 2]));
             index += 2;
         }
-        return new PublishReleaseRequest([.. records], key) { Withdrawals = [.. withdrawals], RewriteOfficials = rewriteOfficials };
+        return new PublishReleaseRequest([.. records], key) { Withdrawals = [.. withdrawals], RewriteOfficials = rewriteOfficials, RewriteEntries = rewriteEntries };
     }
 
     private static bool TryParsePositive(string text, out int value) =>

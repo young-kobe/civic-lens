@@ -136,9 +136,9 @@ public sealed class PublishReleaseTests
             [PublicationProtocol.AllRecordsPagePath(1), "all-2.html", "all-3.html", PublicationProtocol.BriefsPagePath(1),
                 PublicationProtocol.IssuePagePath("housing", 1), PublicationProtocol.FacetsPath, PublicationProtocol.SearchPagePath,
                 PublicationProtocol.ReportPagePath, PublicationProtocol.MethodPagePath, PublicationProtocol.AboutPagePath, PublicationProtocol.GlossaryPagePath, PublicationProtocol.HomePath,
-                PublicationProtocol.OfficialsPath, PublicationProtocol.CatalogPath, PublicationProtocol.OfficialsPagePath,
+                PublicationProtocol.OfficialsPath, PublicationProtocol.CatalogPath, PublicationProtocol.OfficialSummariesPath, PublicationProtocol.OfficialsPagePath,
                 PublicationProtocol.ManifestPath],
-            order.TakeLast(16));
+            order.TakeLast(17));
         Assert.Equal("all.html", PublicationProtocol.AllRecordsPagePath(1));
         Assert.DoesNotContain("all-4.html", order);
         Assert.Contains("<html>index 3 120</html>", System.Text.Encoding.UTF8.GetString(
@@ -467,7 +467,7 @@ public sealed class PublishReleaseTests
         Assert.DoesNotContain(PublicationProtocol.RecordPagePath(first), scenario.Releases.WriteOrder);
         Assert.Contains(PublicationProtocol.RecordDataPath(second), scenario.Releases.WriteOrder);
         Assert.Contains(PublicationProtocol.RecordPagePath(second), scenario.Releases.WriteOrder);
-        Assert.Equal([PublicationProtocol.ManifestPath, PublicationProtocol.OfficialsPath], scenario.Releases.ReadPaths);
+        Assert.Equal([PublicationProtocol.ManifestPath, PublicationProtocol.OfficialsPath, PublicationProtocol.OfficialSummariesPath], scenario.Releases.ReadPaths);
         Assert.Equal(new ReviewStateExpectation(PublishedRecordKind.DocumentChange, second, 1, 1), Assert.Single(scenario.Publications.LastCommit!.AddedRecords));
         Assert.Equal(2, scenario.Publications.LastCommit.Records.Length);
     }

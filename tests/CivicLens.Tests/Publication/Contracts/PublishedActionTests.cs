@@ -65,6 +65,24 @@ public sealed class PublishedActionTests
     }
 
     [Fact]
+    public void TheEntryListsTheCosponsorsApartFromTheSponsorsSoACosponsorNeverCountsAsASponsoredBill()
+    {
+        var entry = Action().ToEntry();
+
+        Assert.Equal(["chair"], entry.CosponsorOfficials!.Select(official => official.Id));
+        Assert.DoesNotContain(entry.Officials, official => official.Id == "chair");
+        entry.Validate();
+    }
+
+    [Fact]
+    public void AnActionWithNoCosponsorGetsAnEmptyListBecauseNoCosponsorIsADataPointAndNullMeansNoData()
+    {
+        var action = Action() with { Sponsorships = [.. Action().Sponsorships.Where(item => item.Role == PublishedSponsorshipRole.Sponsor)] };
+
+        Assert.Empty(action.ToEntry().CosponsorOfficials!);
+    }
+
+    [Fact]
     public void TheBillTitleIsBoundedInTheRecordAndInItsEntryAtTheLimitOfTheReviewSoTheTwoNeverDisagree()
     {
         Assert.Equal(ActionDraftRevision.MaximumTitleLength, PublishedAction.MaximumBillTitleLength);
@@ -85,7 +103,7 @@ public sealed class PublishedActionTests
 
         Assert.Throws<InvalidDataException>((entry with { BillTitle = null }).Validate);
         Assert.Throws<InvalidDataException>((entry with { Kind = PublishedRecordKind.Statement, RecordId = new string('1', 64) }).Validate);
-        (entry with { Kind = PublishedRecordKind.Statement, RecordId = new string('1', 64), BillTitle = null }).Validate();
+        (entry with { Kind = PublishedRecordKind.Statement, RecordId = new string('1', 64), BillTitle = null, CosponsorOfficials = null }).Validate();
     }
 
     // The quote is exact text of the other source, so only a check against the named source finds the wrong name.

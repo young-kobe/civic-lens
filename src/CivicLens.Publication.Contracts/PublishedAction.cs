@@ -39,7 +39,8 @@ public sealed record PublishedAction
         PolicyAreaIds = PolicyAreaId is null ? [] : [PolicyAreaId],
         SourceHost = Sources[0].Host,
         BillTitle = BillTitle,
-        EventDate = Sponsorships.Max(item => item.LatestDate)
+        EventDate = Sponsorships.Max(item => item.LatestDate),
+        CosponsorOfficials = [.. Sponsorships.Where(item => item.Role == PublishedSponsorshipRole.Cosponsor).Select(item => item.Official)]
     };
 
     public void Validate()

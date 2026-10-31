@@ -75,8 +75,14 @@ public sealed record PublishedVote
         IssueIds = TrackedIssueIds,
         PolicyAreaIds = [],
         SourceHost = Sources[0].Host,
-        EventDate = VotedOn
+        EventDate = VotedOn,
+        YeaCount = Totals?.Yea,
+        NayCount = Totals?.Nay,
+        Alignment = AlignmentOfParties()
     };
+
+    private PublishedVoteAlignment? AlignmentOfParties() =>
+        !Kind.IsSubstantive() || Totals is null ? null : IsSplit() ? PublishedVoteAlignment.PartyLine : PartiesAgree() ? PublishedVoteAlignment.Bipartisan : PublishedVoteAlignment.Mixed;
 
     public IEnumerable<PublishedCitation> Citations() => new[] { VotedOnCitation }.Concat(KindCitation is { } kind ? [kind] : [])
         .Concat(Facts.Select(fact => fact.Citation)).Concat(Members.Select(member => member.Citation));
