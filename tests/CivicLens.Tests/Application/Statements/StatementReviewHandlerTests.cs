@@ -137,7 +137,6 @@ public sealed class StatementReviewHandlerTests
             await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new GetStatementReview(store, Resolver).ExecuteAsync(actor, CandidateId));
             await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new ListStatementReviews(store).ExecuteAsync(actor, null));
             await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new ListStatementsNotInReview(store).ExecuteAsync(actor, null));
-            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new ListStatementTriage(store, Resolver).ExecuteAsync(actor, null));
         }
         Assert.False(store.DecideCalled);
         Assert.Null(store.Created);
@@ -151,7 +150,6 @@ public sealed class StatementReviewHandlerTests
     {
         await Assert.ThrowsAsync<ArgumentException>(() => new ListStatementReviews(null!).ExecuteAsync(Reviewer, cursor, 10));
         await Assert.ThrowsAsync<ArgumentException>(() => new ListStatementsNotInReview(null!).ExecuteAsync(Reviewer, cursor, 10));
-        await Assert.ThrowsAsync<ArgumentException>(() => new ListStatementTriage(null!, null!).ExecuteAsync(Reviewer, cursor));
     }
 
     [Fact]

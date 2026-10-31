@@ -67,7 +67,7 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 
 **Review and approval**
 
-- R-51: Cut the review pages. Make one "Needs a person" queue that says why each record needs a person. Delete the triage files, the relationship and brief list pages, and the home panels that the queue replaces. Add an owner "Take off site" action in the editor, using the existing withdrawal code. Send a reader report correction straight to the editor with its note filled in. Delete the gate label pages after D-13. Depends on: none. [Review](architecture/review.md#limits-and-planned-work)
+- R-51: Cut the review pages. Make one "Needs a person" queue that says why each record needs a person. Delete the relationship and brief list pages, and the home panels that the queue replaces. Add an owner "Take off site" action in the editor, using the existing withdrawal code. Send a reader report correction straight to the editor with its note filled in. Delete the gate label pages after D-13. Depends on: none. [Review](architecture/review.md#limits-and-planned-work)
   - [ ] "Needs a person" queue, and delete triage, list pages and home panels
   - [ ] "Take off site" action and report to editor
   - [ ] Delete gate label pages, after D-13

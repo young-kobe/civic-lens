@@ -26,14 +26,6 @@ internal sealed class AdmittingRevisionReader
         return await LoadAsync(db, revisionId, cancellationToken);
     }
 
-    public async Task<Dictionary<string, CollectionConfigurationRevision>> ReadManyAsync(CollectionAttemptDbContext db,
-        string[] candidateIds, CancellationToken cancellationToken)
-    {
-        var revisionIds = await ReadRevisionIdsAsync(db, candidateIds, cancellationToken);
-        var revisions = await StoredJobDefinition.LoadRevisionsAsync(db, revisionIds.Values, cancellationToken);
-        return revisionIds.ToDictionary(pair => pair.Key, pair => StoredJobDefinition.Find(revisions, pair.Value), StringComparer.Ordinal);
-    }
-
     private async Task<CollectionConfigurationRevision?> LoadAsync(CollectionAttemptDbContext db, string? revisionId,
         CancellationToken cancellationToken)
     {
