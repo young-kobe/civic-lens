@@ -811,8 +811,9 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         await publications.CommitAsync(Owner.Subject, WithdrawalCommit(2, 1, PublishedRecordKind.ExecutiveAction, executive) with { Records = [changeRecord] },
             "key-2", Hash(2), default);
 
-        Assert.Equal(["1|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, change.DraftId));
-        Assert.Equal(["1|1"], await PublishedRecordStateReader.RangesAsync(connectionString, executive));
+        Assert.Equal([$"documentChange|{change.DraftId}|{change.RevisionNumber}", $"executiveAction|{executive}|1"],
+            await PublishedRecordStateReader.StateAtAsync(connectionString, 1));
+        Assert.Equal([$"documentChange|{change.DraftId}|{change.RevisionNumber}"], await PublishedRecordStateReader.StateAtAsync(connectionString, 2));
     }
 
     private static PublicationCommit ReturnCommit(int number, DocumentChangeDraftRevision draft, int reviewStateVersion) =>

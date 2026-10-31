@@ -6,7 +6,6 @@ using CivicLens.Infrastructure.Collection.Discovery;
 using CivicLens.Application.Collection;
 using CivicLens.Core.Collection;
 using CivicLens.Infrastructure.Collection.Persistence;
-using CivicLens.Infrastructure.Publication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;

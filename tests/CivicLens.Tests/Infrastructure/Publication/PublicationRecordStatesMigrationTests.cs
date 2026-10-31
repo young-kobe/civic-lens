@@ -13,6 +13,7 @@ namespace CivicLens.Tests.Infrastructure.Publication;
 public sealed class PublicationRecordStatesMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private const string Migration = "20261030182714_PublicationRecordStates";
+    private const string DropMigration = "20261031175813_DropPublicationRecordsJson";
     private string connectionString = null!;
 
     public async Task InitializeAsync()
@@ -66,13 +67,29 @@ public sealed class PublicationRecordStatesMigrationTests(PostgresCollection pos
         await MigrateForwardAsync();
         var before = await StateRowsAsync();
 
-        await using (var db = NewContext()) await db.Database.MigrateAsync();
+        await MigrateForwardAsync(DropMigration);
 
-        Assert.Empty(await PublishedRecordStateReader.ReadAsync(connectionString,
-            "SELECT 1 FROM information_schema.columns WHERE table_name = 'publication_releases' AND column_name = 'records_json'"));
+        Assert.False(await RecordsJsonExistsAsync());
         Assert.Equal(before, await StateRowsAsync());
         Assert.Equal(2, before.Count);
     }
+
+    [Fact]
+    public async Task TheDropFailsAndKeepsRecordsJsonWhenAStateRowDiffersFromTheReleasesBecauseTheDataCannotComeBack()
+    {
+        await InsertReleaseAsync(1, """[{"kind":"action","recordId":"x","revisionNumber":1}]""");
+        await MigrateForwardAsync();
+        await InsertReleaseAsync(2, """[{"kind":"action","recordId":"x","revisionNumber":1},{"kind":"action","recordId":"y","revisionNumber":1}]""", active: true);
+
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => MigrateForwardAsync(DropMigration));
+
+        Assert.Equal(PostgresErrorCodes.RaiseException, failure.SqlState);
+        Assert.True(await RecordsJsonExistsAsync());
+    }
+
+    private async Task<bool> RecordsJsonExistsAsync() =>
+        (await PublishedRecordStateReader.ReadAsync(connectionString,
+            "SELECT 1 FROM information_schema.columns WHERE table_name = 'publication_releases' AND column_name = 'records_json'")).Count > 0;
 
     private CollectionAttemptDbContext NewContext() =>
         new(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
