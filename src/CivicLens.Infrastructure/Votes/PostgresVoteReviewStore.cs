@@ -65,7 +65,7 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
                 if (decision.Kind != ReviewDecisionKind.Approve) return;
                 var current = history.CurrentRevision!;
                 await ValidateApprovalAsync(db, current, cancellationToken);
-            }, NewDecisionRow, afterDecision, cancellationToken);
+            }, afterDecision, cancellationToken);
 
     public async Task<VoteReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken)
     {
@@ -204,15 +204,4 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
             .ToDictionaryAsync(row => row.CandidateId, row => row.ConfigurationRevisionId, StringComparer.Ordinal, cancellationToken);
         return await ConfiguredPersonNames.ReadAsync(db, candidateIds, revisionIds, cancellationToken);
     }
-
-    internal static VoteReviewDecisionRow NewDecisionRow(ReviewDecision decision) => new()
-    {
-        DecisionId = decision.DecisionId,
-        RecordId = decision.DraftId,
-        RevisionNumber = decision.RevisionNumber,
-        ReviewStateVersion = decision.ReviewStateVersion,
-        DecisionJson = ReviewJson.Serialize(decision),
-        Kind = decision.Kind,
-        CreatedAtUtcTicks = decision.CreatedAtUtc.UtcTicks
-    };
 }

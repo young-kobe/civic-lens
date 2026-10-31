@@ -887,8 +887,8 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
             PublishedAt), JsonSerializerOptions.Web);
         return ExecuteAsync($"""
             SET session_replication_role = replica;
-            INSERT INTO {table} (decision_id, {idColumn}, revision_number, review_state_version, decision_json, kind, created_at_utc_ticks)
-            VALUES ('{decisionId}', @id, 1, {stateVersion}, '{json}', 'Approve', 1)
+            INSERT INTO {table} (decision_id, {idColumn}, revision_number, review_state_version, decision_json, kind, actor_subject, created_at_utc_ticks)
+            VALUES ('{decisionId}', @id, 1, {stateVersion}, '{json}', 'Approve', '{actor}', 1)
             """, recordId);
     }
 

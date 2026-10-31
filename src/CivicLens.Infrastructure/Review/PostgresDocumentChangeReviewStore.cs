@@ -91,7 +91,7 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
                 if (current.OfficialIds.Any(id => !allowedOfficialIds.Contains(id)) || current.IssueIds.Any(id => !allowedIssueIds.Contains(id)))
                     throw new ArgumentException("The saved revision includes selections that are no longer configured.");
                 current.ValidateForApproval();
-            }, NewDecisionRow, BriefStaleness.AfterDecision(briefQueue, PublishedRecordKind.DocumentChange), cancellationToken);
+            }, BriefStaleness.AfterDecision(briefQueue, PublishedRecordKind.DocumentChange), cancellationToken);
 
     public async Task<DocumentChangeReview?> GetAsync(string draftId, CancellationToken cancellationToken)
     {
@@ -313,17 +313,6 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
         });
         db.Add(NewRevisionRow(revision));
     }
-
-    private static ReviewDecisionRow NewDecisionRow(ReviewDecision decision) => new()
-    {
-        DecisionId = decision.DecisionId,
-        DraftId = decision.DraftId,
-        RevisionNumber = decision.RevisionNumber,
-        ReviewStateVersion = decision.ReviewStateVersion,
-        DecisionJson = ReviewJson.Serialize(decision),
-        Kind = decision.Kind,
-        CreatedAtUtcTicks = decision.CreatedAtUtc.UtcTicks
-    };
 
     private static DocumentChangeRevisionRow NewRevisionRow(DocumentChangeDraftRevision revision) => new()
     {

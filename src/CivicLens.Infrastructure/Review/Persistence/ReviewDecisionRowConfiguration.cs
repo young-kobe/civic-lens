@@ -20,6 +20,7 @@ internal sealed class ReviewDecisionRowConfiguration : IEntityTypeConfiguration<
         builder.Property(row => row.DecisionJson).HasColumnName("decision_json").IsRequired();
         builder.Property(row => row.Kind).HasColumnName("kind").HasConversion<string>().IsRequired();
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks").IsRequired();
+        ReviewDecisionTableConfiguration.ConfigureDecisionColumns(builder, "document_change_review_decisions", nameof(ReviewDecisionRow.DraftId));
         builder.HasOne<DocumentChangeRevisionRow>().WithMany()
             .HasForeignKey(row => new { row.DraftId, row.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(row => new { row.DraftId, row.ReviewStateVersion }).IsUnique();

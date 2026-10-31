@@ -34,7 +34,6 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
         afterDecision = AfterDecisionHooks.ForRecordKind(contextFactory, RelationshipRecordKind.Statement, PublishedRecordKind.Statement);
     }
 
-
     private const string CreateOperation = "statement-create";
     private const string SaveOperation = "statement-save";
     private const string DecideOperation = "statement-decide";
@@ -79,7 +78,7 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
             idempotencyKey, payloadHash, (db, _, history) => decision.Kind == ReviewDecisionKind.Approve
                 ? ValidateApprovalAsync(db, history.CurrentRevision!, approvalSelections, cancellationToken)
-                : Task.CompletedTask, NewDecisionRow, afterDecision, cancellationToken);
+                : Task.CompletedTask, afterDecision, cancellationToken);
 
     public async Task<StatementReviewRead?> GetAsync(string candidateId, CancellationToken cancellationToken)
     {
@@ -218,17 +217,6 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
             ?? throw new InvalidOperationException("The extraction of a statement candidate is missing.");
         allowed.RequireApprovable(revision, article.Extraction);
     }
-
-    internal static StatementReviewDecisionRow NewDecisionRow(ReviewDecision decision) => new()
-    {
-        DecisionId = decision.DecisionId,
-        CandidateId = decision.DraftId,
-        RevisionNumber = decision.RevisionNumber,
-        ReviewStateVersion = decision.ReviewStateVersion,
-        DecisionJson = ReviewJson.Serialize(decision),
-        Kind = decision.Kind,
-        CreatedAtUtcTicks = decision.CreatedAtUtc.UtcTicks
-    };
 
     private static Task<Dictionary<string, StatementCandidateRow>> ReadCandidatesAsync(CollectionAttemptDbContext db,
         string[] candidateIds, CancellationToken cancellationToken) =>

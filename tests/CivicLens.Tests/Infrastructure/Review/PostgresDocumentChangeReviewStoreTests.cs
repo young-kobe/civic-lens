@@ -543,6 +543,42 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
     }
 
     [Fact]
+    public async Task TheDecisionColumnsAndTheResolvedConcernsEqualTheJsonOfEveryDecisionBecauseOneStepWritesBoth()
+    {
+        var (actor, catalog, saved) = await SavedDraftAsync();
+        var decide = new DecideDocumentChangeReview(reviews, catalog);
+        var concern = await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 0, ReviewDecisionKind.RequestChanges, "Context missing.", [], "concern"));
+        await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 1, ReviewDecisionKind.Approve, "Resolved.", [concern.DecisionId], "approve", "Date corrected."));
+
+        var fromColumns = await ReadRowsAsync("""
+            SELECT d.kind || '|' || d.actor_subject || '|' || coalesce(d.note, '') || '|' || coalesce(d.correction_note, '') || '|'
+                || coalesce((SELECT string_agg(r.resolved_decision_id, ',') FROM document_change_review_decision_resolutions r
+                    WHERE r.decision_id = d.decision_id), '')
+            FROM document_change_review_decisions d ORDER BY d.review_state_version
+            """);
+        var fromJson = await ReadRowsAsync("""
+            SELECT CASE j ->> 'kind' WHEN '0' THEN 'Approve' WHEN '1' THEN 'RequestChanges' ELSE 'WithdrawApproval' END
+                || '|' || (j ->> 'actorSubject') || '|' || coalesce(j ->> 'note', '') || '|' || coalesce(j ->> 'correctionNote', '') || '|'
+                || coalesce((SELECT string_agg(x, ',') FROM jsonb_array_elements_text(j -> 'resolvedDecisionIds') x), '')
+            FROM (SELECT decision_json::jsonb AS j, review_state_version FROM document_change_review_decisions) d ORDER BY review_state_version
+            """);
+
+        Assert.Equal(fromJson, fromColumns);
+        Assert.Equal(["RequestChanges|auth0|owner|Context missing.||", $"Approve|auth0|owner|Resolved.|Date corrected.|{concern.DecisionId}"], fromColumns);
+    }
+
+    private async Task<List<string>> ReadRowsAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        var rows = new List<string>();
+        while (await reader.ReadAsync()) rows.Add(reader.GetString(0));
+        return rows;
+    }
+
+    [Fact]
     public async Task StoredStatusEqualsThePolicyStatusAfterEveryKindOfWrite()
     {
         var actor = new ReviewActor("auth0|owner", ReviewRole.Owner);
