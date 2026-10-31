@@ -4,6 +4,24 @@
 
 <PublicPage Section="PublicSection.Issues" Title="@Facet.Name" CanonicalPath="@Facet.PagePath(Page)" Page="Page" PageCount="Facet.PageCount" Description="@($"{KindLabel} {Facet.Name}: {Facet.Records.Length} published records that name it, newest event date first.")" RootPath="../" Crumbs="Crumbs">
     <PageHeader Title="@Facet.Name" Lede="@($"{KindLabel}. {Facet.Records.Length} published records, newest event date first. A record with no event date uses its first publication day.")" />
+    @if (Page == 1)
+    {
+        <Panel Title="@PublishedFacetSummaryView.Title(KindName)" Padded="true">
+            <p class="muted small">@PublishedFacetSummaryView.Lede(KindName)</p>
+            <ul>
+                <li>@PublishedFacetSummaryView.Votes(Summary, KindName)</li>
+                @if (Summary.SplitVotes > 0)
+                {
+                    <li>@PublishedFacetSummaryView.SplitVotes(Summary)</li>
+                }
+                @if (Summary.PartiesAgreedVotes > 0)
+                {
+                    <li>@PublishedFacetSummaryView.PartiesAgreedVotes(Summary)</li>
+                }
+                <li>@PublishedFacetSummaryView.Bills(Summary, KindName)</li>
+            </ul>
+        </Panel>
+    }
     <Panel Label="Records">
         <PublishedRecordTable Records="Facet.RecordsOnPage(Page)" Caption="@Facet.Name" RootPath="../" Columns="RecordTableColumns.Facet" Sort="Sort" />
         <Pager Label="Pages" Summary="@($"Page {Page} of {Facet.PageCount}")" NewerText="Previous" OlderText="Next"
@@ -21,6 +39,10 @@
 
     private RecordSort? Sort => PublicApiUrl is null ? null
         : new(PublicApiUrl, Facet.Records.Length, $"{(Facet.Kind == FacetKind.Issue ? "issue" : "policyArea")}={Facet.Id}");
+
+    private FacetSummary Summary => FacetSummary.From(Facet.Records);
+
+    private string KindName => KindLabel.ToLowerInvariant();
 
     private string KindLabel => Facet.Kind == FacetKind.Issue ? "Issue" : "Policy area";
 }

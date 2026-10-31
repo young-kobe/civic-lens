@@ -1427,6 +1427,50 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task AnIssuePageSummaryCountsItsVotesAndBillsInPlainSentencesAndSaysATagTakesNoSideOnFirstPageOnly()
+    {
+        PublishedRecordEntry Entry(PublishedRecordKind kind, int index, PublishedVoteAlignment? alignment) => ReleaseOf(1).Records[0] with
+        {
+            Kind = kind,
+            RecordId = index.ToString("x32"),
+            IssueIds = ["housing"],
+            Alignment = alignment
+        };
+        var records = new[]
+        {
+            Entry(PublishedRecordKind.Vote, 1, PublishedVoteAlignment.Split), Entry(PublishedRecordKind.Vote, 2, PublishedVoteAlignment.Split),
+            Entry(PublishedRecordKind.Vote, 3, null), Entry(PublishedRecordKind.Action, 4, null)
+        };
+        var facet = ReleaseFacets.From(ReleaseOf(0) with { Records = [.. records] }, PublicationCatalogs.None).Issues.Single();
+        var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderFacetPageAsync(facet, 1, CancellationToken.None))
+            .QuerySelector("main")!.TextContent;
+
+        Assert.Contains("Votes and bills for this issue", text);
+        Assert.Contains("3 roll call votes on this site have this issue as a tag.", text);
+        Assert.Contains("2 of them were split votes.", text);
+        Assert.DoesNotContain("where both parties agreed", text);
+        Assert.Contains("1 bill on this site has this issue as a tag.", text);
+        Assert.Contains("does not say if the record supports or opposes it", text);
+
+        var manyRecords = records.Concat(Enumerable.Range(10, 60).Select(index => Entry(PublishedRecordKind.Action, index, null)));
+        var second = ReleaseFacets.From(ReleaseOf(0) with { Records = [.. manyRecords] }, PublicationCatalogs.None).Issues.Single();
+        Assert.DoesNotContain("Votes and bills for this issue", await new ReleaseRenderer(null, null).RenderFacetPageAsync(second, 2, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task APolicyAreaPageSummaryWithNoVotesOrBillsSaysSoInsteadOfShowingZeroRatios()
+    {
+        var release = ReleaseOf(1) with { Records = [.. ReleaseOf(1).Records.Select(entry => entry with { PolicyAreaIds = ["health-care"] })] };
+        var facet = ReleaseFacets.From(release, PublicationCatalogs.None).PolicyAreas.Single();
+
+        var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderFacetPageAsync(facet, 1, CancellationToken.None)).QuerySelector("main")!.TextContent;
+
+        Assert.Contains("No roll call vote on this site has this policy area as a tag.", text);
+        Assert.Contains("No bill on this site has this policy area as a tag.", text);
+        Assert.DoesNotContain("split vote", text);
+    }
+
+    [Fact]
     public async Task EachSortedTableNamesItsColumnsInTheOrderOfItsHeadersBecauseTheScriptBuildsRowsFromThatList()
     {
         var release = ReleaseOf(3) with { Records = [.. ReleaseOf(3).Records.Select(entry => entry with { IssueIds = ["housing"] })] };
