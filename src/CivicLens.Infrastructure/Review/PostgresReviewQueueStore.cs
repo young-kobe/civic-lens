@@ -50,7 +50,7 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
         SELECT 're' AS "KindCode", record_id AS "RecordId", 're-' || record_id AS "QueueId",
                last_revised_at_utc_ticks AS "LastRevisedAtUtcTicks"
         FROM relationship_drafts
-        WHERE review_status = 'Approved' AND no_longer_matches
+        WHERE review_status = 'Approved' AND no_longer_matches AND NOT (record_id = ANY({0}))
         """;
 
     private static readonly string ApprovedHeadlineMatches = string.Join("\nUNION ALL\n", Kinds.Where(kind => kind.HeadlineProperty is not null)
@@ -79,12 +79,13 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
         return new([.. slice.Items.Select(key => ToItem(key, drafts[key.QueueId]))], total, slice.NewerCursor, slice.OlderCursor);
     }
 
-    public async Task<ReviewQueuePage> ListUnmatchedApprovedLinksAsync(int limit, CancellationToken cancellationToken)
+    public async Task<ReviewQueuePage> ListUnmatchedApprovedLinksAsync(int limit, IReadOnlyCollection<string> excludedRecordIds,
+        CancellationToken cancellationToken)
     {
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var links = db.Database.SqlQueryRaw<QueueKey>(UnmatchedApprovedLinks);
+        var links = db.Database.SqlQueryRaw<QueueKey>(UnmatchedApprovedLinks, (object)excludedRecordIds.ToArray());
         var keys = await links.OrderByDescending(key => key.LastRevisedAtUtcTicks).ThenByDescending(key => key.QueueId)
             .Take(limit).ToArrayAsync(cancellationToken);
         var drafts = await ReadDraftsAsync(db, keys, cancellationToken);

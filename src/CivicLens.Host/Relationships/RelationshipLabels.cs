@@ -15,7 +15,12 @@ internal static class RelationshipLabels
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Relationship type has no label.")
     };
 
-    public const string NoLongerMatches = "The pair finder no longer finds this pair. The statement or the record changed so that they do not share the bill.";
+    public const string NoLongerMatches = "This statement and this action or vote no longer share a bill.";
+
+    public const string CheckBeforeApproving = "Check the link before you approve it.";
+
+    public const string CheckApprovedLink =
+        "Open the link and check it. Withdraw the approval if it is wrong. If it is right, it stays on the site and this row stays here.";
 
     public static string Title(RelationshipType type, string statementHeadline) => $"{Type(type)}: {statementHeadline}";
 

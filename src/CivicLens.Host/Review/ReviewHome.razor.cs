@@ -107,7 +107,7 @@ public sealed partial class ReviewHome
             if (actor.Role == ReviewRole.Owner)
             {
                 await LoadPublicationAsync(cancellationToken);
-                unmatched = await ListUnmatched.ExecuteAsync(actor, cancellationToken: cancellationToken);
+                unmatched = await ListUnmatched.ExecuteAsync(actor, StuckLinkIds, PageSize, cancellationToken);
             }
             activity = (await GetActivity.ExecuteAsync(actor, cancellationToken: cancellationToken)).Select(Describe).ToArray();
         }
@@ -208,6 +208,13 @@ public sealed partial class ReviewHome
     }
 
     private IReadOnlyList<QueueRow> StuckRows => [.. blocked?.Select(record => record.StuckText() is { } text ? QueueRow.Of(record, text) : null).OfType<QueueRow>() ?? []];
+
+    private string[] StuckLinkIds =>
+        [.. blocked?.Where(record => record.Kind == PublishedRecordKind.Relationship && record.StuckText() is not null).Select(record => record.RecordId) ?? []];
+
+    private string? UnmatchedOverflow => unmatched is { } page && page.Total > page.Items.Length
+        ? $"Showing the newest {page.Items.Length} of {page.Total} approved links that no longer match."
+        : null;
 
     private IReadOnlyList<QueueRow> UnmatchedRows => [.. unmatched?.Items.Select(QueueRow.OfUnmatchedApproved) ?? []];
 

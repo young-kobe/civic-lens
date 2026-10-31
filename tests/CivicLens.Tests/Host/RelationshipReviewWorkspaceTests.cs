@@ -12,6 +12,11 @@ namespace CivicLens.Tests.Host;
 [Trait("Category", "Postgres")]
 public sealed class RelationshipReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLifetime
 {
+    private const string FlagText = "This statement and this action or vote no longer share a bill.";
+    private const string CheckBeforeText = "Check the link before you approve it.";
+    private const string CheckApprovedText =
+        "Open the link and check it. Withdraw the approval if it is wrong. If it is right, it stays on the site and this row stays here.";
+
     private readonly ReviewWorkspaceHost host = new(postgres);
     private RelationshipWorldSeeder seeder = null!;
     private string url = null!;
@@ -186,26 +191,67 @@ public sealed class RelationshipReviewWorkspaceTests(PostgresCollection postgres
     }
 
     [Fact]
-    public async Task AnApprovedLinkThatNoLongerMatchesShowsInTheQueueForTheOwnerOnlyAndLeavesItWhenTheApprovalIsWithdrawn()
+    public async Task AnApprovedLinkThatNoLongerMatchesShowsToTheOwnerOnlyAndBecomesAnOrdinaryQueueRowAfterTheApprovalIsWithdrawn()
     {
         await SeedAsync();
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
         await PostDecisionAsync("Approve");
-        const string flagText = "The pair finder no longer finds this pair.";
 
-        Assert.DoesNotContain(flagText, await OwnerQueueTextAsync(), StringComparison.Ordinal);
+        Assert.DoesNotContain(FlagText, await OwnerQueueTextAsync(), StringComparison.Ordinal);
 
         await seeder.ExecuteAsync("UPDATE relationship_drafts SET no_longer_matches = true");
         var shown = await OwnerQueueTextAsync();
-        Assert.Contains(flagText, shown, StringComparison.Ordinal);
-        Assert.Contains("Withdraw the approval if it is wrong.", shown, StringComparison.Ordinal);
-        Assert.Contains($"href=\"{url}\"", await OwnerQueueHtmlAsync(), StringComparison.Ordinal);
-        Assert.DoesNotContain(flagText, (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='needs-a-person']")!.TextContent,
+        Assert.Contains(FlagText + " " + CheckApprovedText, shown, StringComparison.Ordinal);
+        Assert.DoesNotContain("Showing the newest", shown, StringComparison.Ordinal);
+        Assert.Equal(1, Links(await OwnerQueueHtmlAsync()));
+        Assert.DoesNotContain(FlagText, (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='needs-a-person']")!.TextContent,
             StringComparison.Ordinal);
+        var editor = await host.GetDocumentAsync(url);
+        Assert.Contains(CheckApprovedText, editor.QuerySelector("#no-longer-matches")!.TextContent, StringComparison.Ordinal);
 
         await PostDecisionAsync("WithdrawApproval", "The pair is wrong.");
-        Assert.DoesNotContain(flagText, await OwnerQueueTextAsync(), StringComparison.Ordinal);
+        var after = await OwnerQueueTextAsync();
+        Assert.DoesNotContain(FlagText, after, StringComparison.Ordinal);
+        Assert.Contains("A reviewer withdrew the approval. Review the draft again.", after, StringComparison.Ordinal);
+        Assert.Equal(1, Links(await OwnerQueueHtmlAsync()));
+        var reopened = await host.GetDocumentAsync(url);
+        Assert.Contains(CheckBeforeText, reopened.QuerySelector("#no-longer-matches")!.TextContent, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task MoreUnmatchedApprovedLinksThanRowsShowTheOwnerHowManyAreHiddenAndTheTotalCountsAllOfThem()
+    {
+        await SeedAsync();
+        for (var index = 1; index <= 13; index++) await seeder.RevisionAsync(Revision() with { RecordId = Id(index) });
+        await seeder.ExecuteAsync("UPDATE relationship_drafts SET review_status = 'Approved', no_longer_matches = true");
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|owner"));
+
+        var panel = (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='needs-a-person']")!;
+
+        Assert.Equal("Showing the newest 10 of 14 approved links that no longer match.", panel.QuerySelector("#unmatched-overflow")!.TextContent);
+        Assert.Equal(10, panel.QuerySelectorAll("tbody tr").Length);
+        Assert.Contains("14 records", panel.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheSecondQueuePageHidesTheUnmatchedLinkRowsAndTheirOverflowLine()
+    {
+        await SeedAsync();
+        await seeder.ExecuteAsync("UPDATE relationship_drafts SET review_status = 'Approved', no_longer_matches = true");
+        for (var index = 1; index <= 11; index++) await seeder.RevisionAsync(Revision() with { RecordId = Id(index) });
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|owner"));
+
+        var first = await host.GetDocumentAsync("/Review");
+        var older = first.QuerySelector("nav[aria-label='Needs a person pages'] a[rel='next']")!.GetAttribute("href")!;
+        var second = await host.GetDocumentAsync(older);
+
+        Assert.Contains(FlagText, first.QuerySelector("[aria-labelledby='needs-a-person']")!.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain(FlagText, second.QuerySelector("[aria-labelledby='needs-a-person']")!.TextContent, StringComparison.Ordinal);
+    }
+
+    private static string Id(int index) => index.ToString("x").PadLeft(64, 'a');
+
+    private static int Links(string html) => new HtmlParser().ParseDocument("<body>" + html).QuerySelectorAll($"tbody a.cell-title[href='/Review/Relationships/{ActionPair().PairId}']").Length;
 
     private async Task PostDecisionAsync(string kind, string? note = null)
     {

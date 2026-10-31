@@ -57,6 +57,24 @@ public sealed class PostgresReviewListTests(PostgresCollection postgres) : IAsyn
         await Assert.ThrowsAsync<ArgumentException>(() => queue.ListAsync(ranked, 1, default));
     }
 
+    [Fact]
+    public async Task AnUnmatchedApprovedLinkThatIsAlsoStuckIsLeftOutOfTheRowsAndTheTotalSoItShowsOnce()
+    {
+        await seeder.StatementAsync(RelationshipFixtures.Statement());
+        var link = RelationshipFixtures.Revision();
+        var other = link with { RecordId = Id('2') };
+        await seeder.RevisionAsync(link);
+        await seeder.RevisionAsync(other);
+        await seeder.ExecuteAsync("UPDATE relationship_drafts SET review_status = 'Approved', no_longer_matches = true");
+
+        var both = await queue.ListUnmatchedApprovedLinksAsync(10, [], default);
+        var withoutStuck = await queue.ListUnmatchedApprovedLinksAsync(10, [link.RecordId], default);
+
+        Assert.Equal(2, both.Total);
+        Assert.Equal(1, withoutStuck.Total);
+        Assert.Equal([other.RecordId], withoutStuck.Items.Select(item => item.RecordId));
+    }
+
     private static string Id(char digit) => new(digit, 64);
 
     private static string[] Ids(params char[] digits) => [.. digits.Select(Id)];
