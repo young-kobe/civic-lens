@@ -58,7 +58,7 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [ ] Issue summary
   - [x] Filter row (#254)
 - R-47: Insight boards. One contract PR adds vote fields to vote entries, a per-official summary roll-up, and a cosponsor field on action entries. Then build boards for party breakers, loyalists, and missed votes, as static pages for each chamber and party. Then add list badges and home cards for the closest vote, the most breaks, and the newest executive actions. Then add a bill status line, sponsored bills that moved, and bipartisan cosponsorship. Depends on: R-46. [Publication](architecture/publication.md#limits-and-planned-work)
-  - [ ] Contract PR, with one operator rewrite of carried entries and no reset
+  - [x] Contract PR (#258), with one operator rewrite of carried entries and no reset, not yet run
   - [ ] Boards
   - [ ] List badges and home cards
   - [ ] Bill status line and the remaining items
@@ -68,7 +68,7 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 **Review and approval**
 
 - R-51: Cut the review pages. Make one "Needs a person" queue that says why each record needs a person. Delete the triage files, the relationship and brief list pages, and the home panels that the queue replaces. Add an owner "Take off site" action in the editor, using the existing withdrawal code. Send a reader report correction straight to the editor with its note filled in. Delete the gate label pages after D-13. Depends on: none. [Review](architecture/review.md#limits-and-planned-work)
-  - [ ] "Needs a person" queue, and delete triage, list pages and home panels
+  - [ ] "Needs a person" queue (#257, #259, #263 done), and delete triage, list pages and home panels
   - [ ] "Take off site" action and report to editor
   - [ ] Delete gate label pages, after D-13
 - R-52: Approve factual links by code. The types are "statement about a vote" and "describes own bill". The types "states position on" and "claims credit for" stay with a person. The public wording "a reviewer approved each link" must change with it. Depends on: R-51. [Review](architecture/review.md#limits-and-planned-work)
@@ -99,7 +99,7 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 - R-63: Move our own data out of JSON. Our data and our schemas are a first class feature, so the database must enforce their rules. Decisions, revisions, and other data we define move to columns and child tables. Stored JSON stays only for text that must stay verbatim: the hashed configuration revision, the byte-compared document comparison, and raw model and collector input and output. Before a kind drops its JSON, a check rebuilds each revision from the new rows and compares it to the stored JSON. Public release files stay JSON, because they are the published product and not our storage. Each link between records becomes a real row with a foreign key, so that later insights can follow it. The revision steps start after R-51 PR 3 and PR 4. Depends on: none. [Architecture](architecture.md)
   - [x] Survey every JSON column
   - [x] Agree the direction
-  - [ ] Stop parsing JSON where a column already holds the value
+  - [x] Stop parsing JSON where a column already holds the value (#261)
   - [ ] Move review decisions to columns
   - [ ] Add tick bounds and missing foreign keys, after a read-only check of production rows
   - [ ] Agree the table design from one pilot on vote revisions, with measured row counts
