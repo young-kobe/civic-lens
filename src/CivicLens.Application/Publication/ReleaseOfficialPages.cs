@@ -7,7 +7,7 @@ namespace CivicLens.Application.Publication;
 
 /// <summary>
 /// Writes the vote files and pages of the officials, and the page that lists the officials. A publish rebuilds the files of an
-/// official only when the official is touched or the operator asks for a rewrite of all officials, and links every other file from the previous release. An official who left the configuration is always touched. The current Congress of an
+/// official only when the official is touched or the operator asks for a rewrite of all officials, and links every other file from the previous release. It also writes the summary row of each official: new for a touched official, carried for the others. An official who left the configuration is always touched. The current Congress of an
 /// official is the newest Congress with a vote file of that official. A change to a bill or a vote also touches the matched official of each link that cites it.
 /// </summary>
 internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, PublicationOfficials officials, IReleaseRenderer renderer,
@@ -22,18 +22,28 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
         var entriesByOfficial = manifest.Records.SelectMany(entry => entry.Officials.Select(official => (official.Id, Entry: entry)))
             .ToLookup(pair => pair.Id, pair => pair.Entry, StringComparer.Ordinal);
         var namedByChange = OfficialsNamedByChanges(manifest, additions, removed, previous);
+        var cosponsored = ReleaseOfficialSummaries.CosponsoredCounts(manifest.Records);
         var listings = new List<OfficialListing>();
+        var summaries = new List<PublishedOfficialSummary>();
         foreach (var profile in published.Officials)
         {
             ImmutableArray<PublishedRecordEntry> entries = [.. entriesByOfficial[profile.Id]];
             listings.Add(new(profile, entries.Length));
             previous.Officials.TryGetValue(profile.Id, out var earlier);
             var tracked = officials.IsConfigured(profile.Id);
+            PublishedOfficialSummary summary;
             if (rewriteAll || !tracked || !SameProfile(earlier, profile) || namedByChange.Contains(profile.Id) || changes.Touches(profile.Id))
-                await WriteTouchedAsync(staging, profile, tracked, entries, release, changes, previous, rewriteAll || earlier?.Name != profile.Name, manifest.PublishedAtUtc, cancellationToken);
+            {
+                summary = await WriteTouchedAsync(staging, profile, tracked, entries, release, changes, previous, rewriteAll || earlier?.Name != profile.Name, manifest.PublishedAtUtc, cancellationToken);
+            }
             else
+            {
                 await LinkAsync(staging, profile.Id, previous, cancellationToken);
+                summary = previous.Summaries.GetValueOrDefault(profile.Id) ?? PublishedOfficialSummary.Empty(profile.Id);
+            }
+            summaries.Add(summary with { CosponsoredBills = cosponsored?.GetValueOrDefault(profile.Id) });
         }
+        await ReleaseOfficialSummaries.WriteAsync(staging, summaries, cancellationToken);
         await WriteAsync(staging, PublicationProtocol.OfficialsPagePath, await renderer.RenderOfficialsAsync(listings, manifest.PublishedAtUtc, cancellationToken),
             cancellationToken);
     }
@@ -68,7 +78,7 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
         Task Link(string path) => staging.LinkFileAsync(previous.DirectoryName!, path, cancellationToken);
     }
 
-    private async Task WriteTouchedAsync(IReleaseStaging staging, PublishedOfficialProfile profile, bool tracked,
+    private async Task<PublishedOfficialSummary> WriteTouchedAsync(IReleaseStaging staging, PublishedOfficialProfile profile, bool tracked,
         ImmutableArray<PublishedRecordEntry> entries, IReadOnlyDictionary<(PublishedRecordKind, string), PublishedRecordEntry> release,
         OfficialVoteChanges changes, PreviousRelease previous, bool rewritePast, DateTimeOffset publishedAtUtc,
         CancellationToken cancellationToken)
@@ -114,6 +124,7 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
         await WriteAsync(staging, PublicationProtocol.OfficialPagePath(profile.Id), await renderer.RenderOfficialAsync(
             new(profile, tracked, current, true, newestFirst, entries, currentRows, publishedAtUtc, talkAndAction,
                 current is { } newestCongress ? LinkedPair.In(profile.Id, newestCongress, entries, release, currentRows) : []), catalog, cancellationToken), cancellationToken);
+        return ReleaseOfficialSummaries.Of(profile.Id, current, talkAndAction);
     }
 
     private static Task WriteAsync(IReleaseStaging staging, string path, string html, CancellationToken cancellationToken) =>

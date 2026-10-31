@@ -22,6 +22,10 @@ public sealed record PublishedRecordEntry
     public string? TargetRecordId { get; init; }
     public string? MatchedOfficialId { get; init; }
     public PublishedExecutiveActionKind? DocumentType { get; init; }
+    public int? YeaCount { get; init; }
+    public int? NayCount { get; init; }
+    public PublishedVoteAlignment? Alignment { get; init; }
+    public string[]? CosponsorIds { get; init; }
 
     public void Validate()
     {
@@ -38,7 +42,22 @@ public sealed record PublishedRecordEntry
             throw new InvalidDataException("An executive action manifest entry names its document type. Other entries name none.");
         if (Kind == PublishedRecordKind.Relationship ? !HasValidLink : HasAnyLink)
             throw new InvalidDataException("A relationship manifest entry names its link type, statement, and target. Other entries name none.");
+        if (!HasValidVoteFacts)
+            throw new InvalidDataException("A vote manifest entry holds both Yea and Nay counts or none, and an alignment only with them. Other entries hold none.");
+        if (!HasValidCosponsors)
+            throw new InvalidDataException(
+                $"An action manifest entry may hold at most {PublishedAction.MaximumSponsorships} distinct cosponsors. Other entries hold none.");
     }
+
+    private bool HasValidVoteFacts =>
+        YeaCount is null && NayCount is null && Alignment is null ||
+        Kind == PublishedRecordKind.Vote && YeaCount is >= 0 && NayCount is >= 0 &&
+        (long)YeaCount.Value + NayCount.Value <= PublishedVote.MaximumMembers && (Alignment is null || Enum.IsDefined(Alignment.Value));
+
+    private bool HasValidCosponsors =>
+        CosponsorIds is null ||
+        Kind == PublishedRecordKind.Action && CosponsorIds.Length <= PublishedAction.MaximumSponsorships &&
+        CosponsorIds.All(IsFilterValue) && PublishedEvidenceRules.AreDistinctAndNotBlank(CosponsorIds);
 
     private bool HasValidBillTitle => !string.IsNullOrWhiteSpace(BillTitle) && BillTitle.Length <= PublishedAction.MaximumBillTitleLength;
 

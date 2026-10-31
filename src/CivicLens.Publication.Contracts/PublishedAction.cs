@@ -39,8 +39,17 @@ public sealed record PublishedAction
         PolicyAreaIds = PolicyAreaId is null ? [] : [PolicyAreaId],
         SourceHost = Sources[0].Host,
         BillTitle = BillTitle,
-        EventDate = Sponsorships.Max(item => item.LatestDate)
+        EventDate = Sponsorships.Max(item => item.LatestDate),
+        CosponsorIds = CosponsorIdsOfEntry()
     };
+
+    private string[] CosponsorIdsOfEntry()
+    {
+        var sponsorIds = Sponsorships.Where(item => item.Role == PublishedSponsorshipRole.Sponsor).Select(item => item.Official.Id).ToHashSet(StringComparer.Ordinal);
+        return [.. Sponsorships
+            .Where(item => item.Role == PublishedSponsorshipRole.Cosponsor && item.WithdrawnOn is null && !sponsorIds.Contains(item.Official.Id))
+            .Select(item => item.Official.Id).Distinct(StringComparer.Ordinal)];
+    }
 
     public void Validate()
     {
