@@ -9,10 +9,10 @@ namespace CivicLens.Tests.Application.Votes;
 
 public sealed class VoteDraftPromptGoldenTests
 {
-    private const string SystemSha256 = "8f310b7a9702e20518a122e21e6eb95c39994815b6d0e23373d8f62cfa02af11";
-    private const string SenateSystemSha256 = "ef3d7c6bbaeb8d3f33ded79fca235bb01dab8360b7e3faea2c9511f1aa80f57c";
+    private const string SystemSha256 = "f923da3e62e5216e23ede153e3d06a3026b0fbfb78343ad94f3d13a14f5ce7ee";
+    private const string SenateSystemSha256 = "9120ed0e9a6e89f3e3d7f7ab165209e75d6cb11364ed358b4b9a768f2120c231";
     private const string SchemaSha256 = "6d6adb018d7ee24f5df2e21a1f678cc87ed0fb7c144cf0a5c99cd84153a3acf0";
-    private const string InputHash = "8ed7dd40fc2ac4d239948d1a04b486cab93b8f1283bd717c3d7a3d2a27ded781";
+    private const string InputHash = "f46e352694c61d0ed863a51c19a1e714d15bb455e59dc1f1a2f30f1f03a44f56";
 
     [Fact]
     public async Task ThePromptAndSchemaMatchTheirPinnedVersions()
@@ -24,7 +24,7 @@ public sealed class VoteDraftPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(VoteDraftTask.PromptVersion)} ({VoteDraftTask.PromptVersion}) or " +
             $"{nameof(VoteDraftTask.SchemaVersion)} ({VoteDraftTask.SchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("vote-draft", "vote-draft-v1", "vote-draft-prompt-v4", "vote-draft-schema-v2", "claude-haiku-5-5"),
+        Assert.Equal(("vote-draft", "vote-draft-v1", "vote-draft-prompt-v5", "vote-draft-schema-v2", "claude-haiku-5-5"),
             (VoteDraftTask.Task, VoteDraftTask.TaskVersion, VoteDraftTask.PromptVersion, VoteDraftTask.SchemaVersion, VoteDraftTask.Model));
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
         Assert.True(Sha256(request.SchemaJson) == SchemaSha256, $"{bump} Schema: {Sha256(request.SchemaJson)}");
@@ -45,6 +45,22 @@ public sealed class VoteDraftPromptGoldenTests
         Assert.Contains("roll-call vote of the United States Senate", request.SystemPrompt, StringComparison.Ordinal);
         Assert.Contains("checked against the Senate roll call data and Congress.gov data", request.SystemPrompt, StringComparison.Ordinal);
         Assert.Contains("states what the Senate voted on", request.SystemPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheSystemPromptBansInternalWordsAndIsCachedWhileAFailedNameCheckLeaksNone()
+    {
+        var world = VoteWorld.Create();
+        var snapshot = (await world.Reader().ReadAsync(world.Evidence(), default)).Snapshot!;
+
+        var request = VoteDraftPrompt.Build(snapshot, NoChoice(), VoteDraftTask.MaximumPromptBytes,
+            ["The headline names \"A\". The list beside the text names the members and their votes, so name no person."])!;
+
+        Assert.True(request.CacheSystemPrompt);
+        Assert.Contains("Never use the words tracked, entry, or candidate", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("Never describe how Civic Lens works", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("tracked member", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("tracked member", request.UserPrompt, StringComparison.Ordinal);
     }
 
     [Fact]
