@@ -58,7 +58,7 @@ public sealed class PostgresRelationshipReviewStore(IDbContextFactory<Collection
                 current.ValidateForApproval();
                 if ((await RelationshipCitedReader.FindChangedAsync(db, [current.Statement, current.Target], cancellationToken)).Count > 0)
                     throw new ArgumentException("Approval needs the cited statement and the cited target to be at their approved revisions.");
-            }, NewDecisionRow, (_, _, _, _) => Task.CompletedTask, cancellationToken);
+            }, (_, _, _, _) => Task.CompletedTask, cancellationToken);
 
     public async Task<RelationshipReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken)
     {
@@ -168,17 +168,6 @@ public sealed class PostgresRelationshipReviewStore(IDbContextFactory<Collection
     private static RelationshipReview ToReview(RelationshipDraftRow draft, ReviewHistory<RelationshipRevision> history) =>
         new(draft.RecordId, history.CurrentRevision!, history.LoadedRevisions, draft.ReviewStateVersion,
             history.CurrentStatus, history.Decisions, history.UnresolvedConcerns, draft.NoLongerMatches);
-
-    private static RelationshipReviewDecisionRow NewDecisionRow(ReviewDecision decision) => new()
-    {
-        DecisionId = decision.DecisionId,
-        RecordId = decision.DraftId,
-        RevisionNumber = decision.RevisionNumber,
-        ReviewStateVersion = decision.ReviewStateVersion,
-        DecisionJson = ReviewJson.Serialize(decision),
-        Kind = decision.Kind,
-        CreatedAtUtcTicks = decision.CreatedAtUtc.UtcTicks
-    };
 
     private sealed class CitingRow
     {

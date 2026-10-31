@@ -21,7 +21,7 @@ internal static class StatementDraftRows
         SetListing(draft, revision, capturedOn);
         db.Add(draft);
         await PostgresStatementReviewStore.Records.AppendCodeApprovedAsync(db, draft, revision, NewRevision(revision, runId), [],
-            () => Task.FromResult(codeApproval), PostgresStatementReviewStore.NewDecisionRow);
+            () => Task.FromResult(codeApproval));
         return true;
     }
 
