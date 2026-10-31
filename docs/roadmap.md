@@ -54,11 +54,11 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [ ] `pg_notify` on approval
 - R-46: Sortable tables and vote insights. Add a filter row above the tables. Vote pages get badges and a panel of members who broke with their party. Issue pages get a summary of votes and bills. Depends on: R-44. [Search](architecture/search.md#limits-and-planned-work)
   - [x] Sortable tables and search sort keys (#247)
-  - [x] Vote badges and the party break panel
+  - [x] Vote badges and the party break panel (#252)
   - [ ] Issue summary
-  - [x] Filter row
+  - [x] Filter row (#254)
 - R-47: Insight boards. One contract PR adds vote fields to vote entries, a per-official summary roll-up, and a cosponsor field on action entries. Then build boards for party breakers, loyalists, and missed votes, as static pages for each chamber and party. Then add list badges and home cards for the closest vote, the most breaks, and the newest executive actions. Then add a bill status line, sponsored bills that moved, and bipartisan cosponsorship. Depends on: R-46. [Publication](architecture/publication.md#limits-and-planned-work)
-  - [ ] Contract PR, with one dev reset
+  - [ ] Contract PR, with one operator rewrite of carried entries and no reset
   - [ ] Boards
   - [ ] List badges and home cards
   - [ ] Bill status line and the remaining items
@@ -93,6 +93,13 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 
 - R-61: Finish executive action records. Add the document body text, then an AI summary, then issue tags. Issue tags need a design first, because these documents have no policy area. Depends on: none. [Executive actions](architecture/executive-actions.md#limits-and-planned-work)
 - R-62: Statements from official social accounts, such as Bluesky and YouTube. This needs a list of verified accounts and a new design. X and Meta stay out, because of cost and access limits. Depends on: R-17. [Collection](architecture/collection.md#limits-and-planned-work)
+
+**Data and schemas**
+
+- R-63: Audit how we store data. Our data and our schemas are a first class feature, so each column must earn its form. The schema has 16 distinct `*_json` column names, and many repeat across the draft tables. A field gets a real column if we filter, sort, join, or enforce a rule on it. A value stays JSON only if it is an immutable snapshot that we read whole, such as a model output as received. `records_json` already failed this rule and goes in R-45. Survey first, with no migration: list each column, its readers and fields used, and a recommendation. The owner then chooses, and each accepted move is its own PR. Public release files stay JSON, because they are the published product and not our storage. Depends on: R-54. [Architecture](architecture.md)
+  - [ ] Survey every JSON column, with a recommendation for each
+  - [ ] Agree the moves
+  - [ ] Build the agreed moves
 
 **Operations**
 
@@ -134,6 +141,8 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 ## Product direction
 
 The audience is regular citizens who want transparency in U.S. national politics. State and local coverage are possible future extensions. Readers start with reviewed accounts and can inspect the evidence behind them. The editorial flow and the restrained monochrome identity are agreed.
+
+Data is the product. The product is only as good as its data, so data and database schemas are a first class feature. Design them as deliberately as any public page.
 
 Design for scale. Each record carries rich detail, and coverage of officials, sources, and issues is broad. Automate every step that does not need human judgment.
 
