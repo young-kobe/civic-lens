@@ -1,0 +1,76 @@
+@using CivicLens.Application.Publication
+@using CivicLens.Host.Components.Layout
+@using CivicLens.Publication.Contracts
+
+<PublicPage Section="PublicSection.Officials" CanonicalPath="@Board.PagePath" Title="@PublishedBoardView.Title(Board)" Description="@PublishedBoardView.Description(Page)" Crumbs="Crumbs">
+    <PageHeader Title="@PublishedBoardView.Title(Board)" Lede="@PublishedBoardView.Lede(Page)" />
+    <FilterTabs Label="@PublishedBoardView.TabsLabel" Tabs="PublishedBoardView.Tabs(Board)" />
+    @if (Page.Congress is { } congress)
+    {
+        @if (Page.NewestRollCall is { } newest)
+        {
+            <p class="muted small">@PublishedBoardView.NewestRollCall(newest)</p>
+        }
+        <Panel Title="@PublishedBoardView.BreakersTitle(Board)" Padded="true">
+            <p>@PublishedOfficialView.SplitVoteMeaning</p>
+            <p class="muted small">@PublishedBoardView.RankingRule(Board) @PublishedBoardView.ReadingNote</p>
+            @Split(Page.Breakers, PublishedBoardView.BreakersTitle(Board), PublishedBoardView.AgainstShareHeader(Board), member => member.Breaks, member => member.BreakShare, congress)
+        </Panel>
+        <Panel Title="@PublishedBoardView.LoyalistsTitle(Board)" Padded="true">
+            <p class="muted small">@PublishedBoardView.RankingRule(Board)</p>
+            @Split(Page.Loyalists, PublishedBoardView.LoyalistsTitle(Board), PublishedBoardView.WithShareHeader(Board), member => member.Matched, member => member.MatchShare, congress)
+        </Panel>
+        <Panel Title="@PublishedBoardView.MissedTitle(Board)" Padded="true">
+            <p>@PublishedOfficialView.MissedVoteMeaning</p>
+            <p class="muted small">@PublishedBoardView.Cause</p>
+            <DataTable Roles="true" Items="Page.MostMissed" Caption="@PublishedBoardView.MissedTitle(Board)" DefaultOrder="@PublishedBoardView.MostMissedOrder">
+                <Head><TableCell Header Sort="SortKind.Text">Official</TableCell><TableCell Header Sort="SortKind.Number" DefaultSort="true">Missed votes</TableCell></Head>
+                <Row Context="member">
+                    <TableCell Main><CellTitle Href="@member.Official.PagePath">@member.Official.Profile.Name</CellTitle></TableCell>
+                    <TableCell Label="Missed votes" SortValue="@member.Missed!.Missed.ToString()">@PublishedOfficialView.MissedVotes(member.Missed, congress)</TableCell>
+                </Row>
+                <Empty><EmptyState Title="No roll calls yet" Text="@PublishedBoardView.NoMissedList(Board)" /></Empty>
+            </DataTable>
+        </Panel>
+        @if (!Page.TooFewSplitVotes.IsEmpty)
+        {
+            <Panel Title="@PublishedBoardView.TooFewTitle" Padded="true">
+                <p>@PublishedBoardView.TooFew(Page.TooFewSplitVotes.Length)</p>
+                <ul>
+                    @foreach (var member in Page.TooFewSplitVotes)
+                    {
+                        <li><a href="@member.Official.PagePath">@member.Official.Profile.Name</a>: @member.Cast split @PublishedOfficialView.Noun(member.Cast, "vote") cast</li>
+                    }
+                </ul>
+            </Panel>
+        }
+    }
+    <Panel Title="@PublishedBoardView.LeftOutTitle" Padded="true">
+        <ul>
+            @foreach (var line in PublishedBoardView.LeftOut(Page))
+            {
+                <li>@line</li>
+            }
+        </ul>
+        <p class="muted small"><a href="@PublicationProtocol.MethodPagePath">How these lists are built</a></p>
+    </Panel>
+</PublicPage>
+
+@code {
+    [Parameter, EditorRequired] public OfficialBoardPage Page { get; set; } = default!;
+
+    private OfficialBoard Board => Page.Board;
+
+    private IReadOnlyList<Crumb> Crumbs => [PublicCrumbs.Home(""), PublicCrumbs.Section(PublicSection.Officials, ""), new(PublishedBoardView.PartyOf(Board))];
+
+    private RenderFragment Split(IReadOnlyList<BoardMember> members, string caption, string header, Func<BoardMember, int> counted, Func<BoardMember, double> share, int congress) => @<text>
+        <DataTable Roles="true" Items="members" Caption="@caption" DefaultOrder="@PublishedBoardView.ShareOrder">
+            <Head><TableCell Header Sort="SortKind.Text">Official</TableCell><TableCell Header Sort="SortKind.Number" SortLabel="@PublishedBoardView.ShareSortName" DefaultSort="true">@header</TableCell></Head>
+            <Row Context="member">
+                <TableCell Main><CellTitle Href="@member.Official.PagePath">@member.Official.Profile.Name</CellTitle></TableCell>
+                <TableCell Label="@header" SortValue="@PublishedBoardView.SortShare(share(member))">@PublishedOfficialView.SplitVoteCount(counted(member), member.Cast)</TableCell>
+            </Row>
+            <Empty><EmptyState Title="No ranked members" Text="@PublishedBoardView.NoRankedMembers(Board, congress)" /></Empty>
+        </DataTable>
+    </text>;
+}

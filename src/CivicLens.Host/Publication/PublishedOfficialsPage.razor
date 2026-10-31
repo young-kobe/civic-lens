@@ -4,6 +4,10 @@
 
 <PublicPage Section="PublicSection.Officials" CanonicalPath="@PublicationProtocol.OfficialsPagePath" Title="Officials" Description="Every official with a published record or vote. Each page lists the records and votes that name one official." Crumbs="Crumbs">
     <PageHeader Title="Officials" Lede="Each page lists the published records of one official. The page of a member of Congress also shows their votes in the current Congress. Each card counts the records other than votes that name the official. An official with none can still have votes." />
+    <Panel Title="Voting boards" Padded="true">
+        <p>@PublishedBoardView.OfficialsLede</p>
+        <FilterTabs Label="@PublishedBoardView.TabsLabel" Tabs="PublishedBoardView.Tabs(null)" />
+    </Panel>
     <Panel Label="Officials" Padded="true">
         @if (Cards.Count == 0)
         {

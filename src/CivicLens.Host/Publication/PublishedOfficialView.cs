@@ -194,7 +194,7 @@ internal static class PublishedOfficialView
 
     public static string MissedVotes(MissedVotes missed, int congress)
     {
-        var share = missed.Share is { } value ? $" ({Percent(value)})" : "";
+        var share = missed.Share is not null ? $" ({Percent(missed.Missed, missed.Held)})" : "";
         var days = missed.First == missed.Last ? $"on {Moment.Day(missed.First)}" : $"{Moment.Day(missed.First)} to {Moment.Day(missed.Last)}";
         return $"Missed {missed.Missed} of the {missed.Held} roll call {Noun(missed.Held, "vote")} of {ChamberName(missed.Chamber)} on this site{share}, {days} ({CongressCalendar.Ordinal(congress)} Congress).";
     }
@@ -203,13 +203,18 @@ internal static class PublishedOfficialView
 
     public static string WithParty(VotesWithParty votes, int congress)
     {
-        var share = votes.Share is { } value ? $" ({Percent(value)})" : "";
         var inCongress = $"in the {CongressCalendar.Ordinal(congress)} Congress";
         var sentence = votes.Cast == 0
             ? $"No Yea or Nay cast yet on a split vote in {ChamberName(votes.Chamber)} as a {votes.Party} {inCongress}."
-            : $"Voted with most {PartyOf(votes)} on {votes.Matched} of {votes.Cast} split {Noun(votes.Cast, "vote")}{share} {inCongress}.";
+            : $"Voted with most {PartyOf(votes)} on {SplitVoteCount(votes.Matched, votes.Cast)} {inCongress}.";
         var other = votes.Cast == 0 ? "" : "other ";
         return votes.NotCast == 0 ? sentence : $"{sentence} They did not cast Yea or Nay on {votes.NotCast} {other}split {Noun(votes.NotCast, "vote")}.";
+    }
+
+    public static string SplitVoteCount(int count, int cast)
+    {
+        var share = TalkAndActionProfile.ShareOf(count, cast) is not null ? $" ({Percent(count, cast)})" : "";
+        return $"{count} of {cast} split {Noun(cast, "vote")}{share}";
     }
 
     public static string PartyOf(VotesWithParty votes) => PartyOf(votes.Chamber, votes.Party);
@@ -224,7 +229,13 @@ internal static class PublishedOfficialView
 
     public static string Noun(int count, string singular) => count == 1 ? singular : singular + "s";
 
-    private static string Percent(double share) => string.Create(CultureInfo.InvariantCulture, $"{share * 100:0}%");
+    private static string Percent(int count, int of)
+    {
+        var percent = 100.0 * count / of;
+        if (count > 0 && percent < 0.5) return "under 1%";
+        if (count < of && percent >= 99.5) return "over 99%";
+        return string.Create(CultureInfo.InvariantCulture, $"{percent:0}%");
+    }
 
     public static string RollCall(PublishedOfficialVote vote)
     {

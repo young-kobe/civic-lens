@@ -69,7 +69,7 @@ public sealed class VotesWithPartyTests
     {
         var result = Assert.Single(VotesWithParty.Of([Vote(1, "Yea") with { SplitVote = false }]));
 
-        Assert.Equal((0, null), (result.Cast, result.Share));
+        Assert.Equal((0, null), (result.Cast, TalkAndActionProfile.ShareOf(result.Matched, result.Cast)));
     }
 
     [Fact]
@@ -107,7 +107,8 @@ public sealed class VotesWithPartyTests
     {
         var votes = Enumerable.Range(0, cast).Select(index => Vote(index, index == 0 ? "Nay" : "Yea"));
 
-        var share = Assert.Single(VotesWithParty.Of(votes)).Share;
+        var result = Assert.Single(VotesWithParty.Of(votes));
+        var share = TalkAndActionProfile.ShareOf(result.Matched, result.Cast);
 
         Assert.Equal(showsShare ? (cast - 1.0) / cast : null, share);
     }
