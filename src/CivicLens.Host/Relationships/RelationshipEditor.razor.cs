@@ -29,8 +29,7 @@ public sealed partial class RelationshipEditor
     private string TargetHeadline => detail!.CitedTarget.Headline;
 
     private IReadOnlyList<Crumb> Crumbs =>
-        [new("Review", "/Review"), new("Relationships", RelationshipRoutes.List),
-            new(detail is not null ? RelationshipLabels.Type(Revision.Type) : notFound ? "Relationship not found" : "Relationship")];
+        [new("Review", "/Review"), new(detail is not null ? RelationshipLabels.Type(Revision.Type) : notFound ? "Relationship not found" : "Relationship")];
 
     private IReadOnlyList<TabDefinition> RecordTabs =>
         [new("saved", $"Saved revision {Revision.RevisionNumber}"), new("edit", "Edit link")];

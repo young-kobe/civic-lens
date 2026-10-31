@@ -120,7 +120,6 @@ public sealed class PostgresRelationshipReviewStoreTests(PostgresCollection post
         Assert.True(read.CitedRecordsChanged);
         Assert.Equal(change.StartsWith("statement", StringComparison.Ordinal), read.StatementChanged);
         Assert.Equal(change.StartsWith("target", StringComparison.Ordinal), read.TargetChanged);
-        Assert.True(Assert.Single((await reviews.ListAsync(null, 10, DraftStatusFilter.All, default)).Items).CitedRecordsChanged);
     }
 
     [Fact]
@@ -139,12 +138,11 @@ public sealed class PostgresRelationshipReviewStoreTests(PostgresCollection post
     }
 
     [Fact]
-    public async Task ANoLongerMatchingPairShowsTheFlagInTheReadAndTheList()
+    public async Task ANoLongerMatchingPairShowsTheFlagInTheRead()
     {
         await seeder.ExecuteAsync("UPDATE relationship_drafts SET no_longer_matches = true");
 
         Assert.True((await reviews.GetAsync(recordId, default))!.Review.NoLongerMatches);
-        Assert.True(Assert.Single((await reviews.ListAsync(null, 10, DraftStatusFilter.All, default)).Items).Review.NoLongerMatches);
     }
 
     [Fact]
@@ -154,8 +152,8 @@ public sealed class PostgresRelationshipReviewStoreTests(PostgresCollection post
 
         await ChangeAsync("statement");
 
-        var item = Assert.Single((await reviews.ListAsync(null, 10, DraftStatusFilter.Approved, default)).Items);
-        Assert.Equal((ReviewStatus.Approved, true), (item.Review.CurrentStatus, item.CitedRecordsChanged));
+        var read = (await reviews.GetAsync(recordId, default))!;
+        Assert.Equal((ReviewStatus.Approved, true), (read.Review.CurrentStatus, read.CitedRecordsChanged));
         _ = await DecideAsync(1, 1, ReviewDecisionKind.WithdrawApproval, "A cited record changed.");
         Assert.Equal("ApprovalWithdrawn", await ReadAsync($"SELECT review_status FROM relationship_drafts WHERE record_id = '{recordId}'"));
     }
@@ -171,20 +169,6 @@ public sealed class PostgresRelationshipReviewStoreTests(PostgresCollection post
         Assert.DoesNotContain("Newer action headline", read.CitedTarget.Facts.Select(fact => fact.Text));
         Assert.Equal([Span(BillWords), Span(BillSentence)], read.Options.Quotes.Select(quote => quote.Span));
         Assert.Equal(read.CitedTarget.Facts, read.Options.Facts);
-    }
-
-    [Fact]
-    public async Task TheListShowsTheHeadlinesOfBothSidesAndTheCountsFollowTheStatusRule()
-    {
-        var item = Assert.Single((await reviews.ListAsync(null, 10, DraftStatusFilter.NeedsAction, default)).Items);
-        Assert.Equal(("Warren on rent", Action().Headline, false), (item.StatementHeadline, item.TargetHeadline, item.CitedRecordsChanged));
-        Assert.Equal(new RelationshipReviewCounts(1, 0), await reviews.CountAsync(default));
-
-        _ = await DecideAsync(1, 0, ReviewDecisionKind.Approve);
-
-        Assert.Equal(new RelationshipReviewCounts(0, 1), await reviews.CountAsync(default));
-        Assert.Empty((await reviews.ListAsync(null, 10, DraftStatusFilter.NeedsAction, default)).Items);
-        Assert.Single((await reviews.ListAsync(null, 10, DraftStatusFilter.Approved, default)).Items);
     }
 
     [Fact]
@@ -207,8 +191,6 @@ public sealed class PostgresRelationshipReviewStoreTests(PostgresCollection post
         var analysis = new ReviewActor(ReviewAuthor.AnalysisSubject, ReviewRole.Owner);
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new GetRelationshipReview(null!).ExecuteAsync(outsider, recordId));
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new ListRelationshipReviews(null!).ExecuteAsync(outsider, null));
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new GetRelationshipReviewCounts(null!).ExecuteAsync(outsider));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new SaveRelationshipDraft(null!).ExecuteAsync(outsider,
             new(recordId, 1, RelationshipType.StatesPositionOn, "Reason.", Span(BillSentence), "F1", "save-1")));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new DecideRelationshipReview(reviews).ExecuteAsync(analysis,

@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Core.Briefs;
@@ -18,10 +17,6 @@ public interface IBriefReviewStore
         int expectedReviewStateVersion, string idempotencyKey, string payloadHash, CancellationToken cancellationToken);
 
     Task<BriefReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken);
-
-    Task<BriefReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter, CancellationToken cancellationToken);
-
-    Task<BriefReviewCounts> CountAsync(CancellationToken cancellationToken);
 
     Task<IReadOnlyList<UnpublishedApprovedBrief>> ListUnpublishedApprovedAsync(int limit, IReadOnlyCollection<string> excludedRecordIds,
         CancellationToken cancellationToken);

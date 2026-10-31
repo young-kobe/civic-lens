@@ -322,8 +322,6 @@ internal static class ReviewWorkspace
         services.AddScoped<SaveRelationshipDraft>();
         services.AddScoped<DecideRelationshipReview>();
         services.AddScoped<GetRelationshipReview>();
-        services.AddScoped<ListRelationshipReviews>();
-        services.AddScoped<GetRelationshipReviewCounts>();
     }
 
     private static void ConfigureReportReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)
@@ -342,8 +340,6 @@ internal static class ReviewWorkspace
         services.AddScoped<SaveBriefDraft>();
         services.AddScoped<DecideBriefReview>();
         services.AddScoped<GetBriefReview>();
-        services.AddScoped<ListBriefReviews>();
-        services.AddScoped<GetBriefReviewCounts>();
     }
 
     // The owner release lists need a release directory.

@@ -57,8 +57,4 @@ internal sealed class FakeBriefReviewStore : IBriefReviewStore
 
     public Task<BriefReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-    public Task<BriefReviewPage> ListAsync(PageCursor? cursor, int limit, DraftStatusFilter filter, CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
-
-    public Task<BriefReviewCounts> CountAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
 }

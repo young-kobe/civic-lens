@@ -54,12 +54,9 @@ public sealed class PostgresReviewListTests(PostgresCollection postgres) : IAsyn
     }
 
     [Fact]
-    public async Task AListWithoutTiersRefusesARankedCursorSoACursorFromAnotherListCannotMovePastItsRows()
+    public async Task TheQueueRefusesARankedCursorSoACursorFromAnotherListCannotMovePastItsRows()
     {
-        var relationships = new ListRelationshipReviews(new PostgresRelationshipReviewStore(
-            new PooledDbContextFactory<CollectionAttemptDbContext>(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options)));
-
-        await Assert.ThrowsAsync<ArgumentException>(() => relationships.ExecuteAsync(Reviewer, "o.1.5." + Id('1'), 1));
+        await Assert.ThrowsAsync<ArgumentException>(() => queue.ListAsync(PageCursor.Parse("o.1.5." + Id('1')), 1, default));
     }
 
     private static string Id(char digit) => new(digit, 64);

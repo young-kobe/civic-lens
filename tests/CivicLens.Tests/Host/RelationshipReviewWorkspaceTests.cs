@@ -26,28 +26,6 @@ public sealed class RelationshipReviewWorkspaceTests(PostgresCollection postgres
     public Task DisposeAsync() => host.StopAsync();
 
     [Fact]
-    public async Task TheRailLinksTheRelationshipListWhichCountsEachFilterAndListsTheLinkWithBothHeadlines()
-    {
-        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
-
-        var empty = await host.GetDocumentAsync("/Review/Relationships");
-
-        Assert.Equal("page", empty.QuerySelector(".nav a[href='/Review/Relationships']")!.GetAttribute("aria-current"));
-        Assert.Null(empty.QuerySelector(".nav a[href='/Review']")!.GetAttribute("aria-current"));
-        Assert.Equal(["0", "0", "0"], empty.QuerySelectorAll("[aria-labelledby='drafts'] .segmented-count").Select(count => count.TextContent));
-        Assert.Equal("No relationships yet", empty.QuerySelector("[aria-labelledby='drafts'] .empty h3")!.TextContent);
-
-        await SeedAsync();
-        var listed = await host.GetDocumentAsync("/Review/Relationships");
-
-        Assert.Equal(["1", "1", "0"], listed.QuerySelectorAll("[aria-labelledby='drafts'] .segmented-count").Select(count => count.TextContent));
-        var row = Assert.Single(listed.QuerySelectorAll("[aria-labelledby='drafts'] tbody tr"));
-        Assert.Contains("Describes own bill", row.TextContent, StringComparison.Ordinal);
-        Assert.Contains("Warren on rent", row.TextContent, StringComparison.Ordinal);
-        Assert.DoesNotContain("Cited records changed", row.TextContent, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public async Task TheLookupBoxOpensTheEditorOfARelationshipIdAndTheEditorShowsTheIdToCopy()
     {
         await SeedAsync();
@@ -73,7 +51,7 @@ public sealed class RelationshipReviewWorkspaceTests(PostgresCollection postgres
         }
         host.Client.DefaultRequestHeaders.Remove("Cookie");
 
-        foreach (var page in new[] { "/Review/Relationships", url })
+        foreach (var page in new[] { url })
         {
             using var anonymous = await host.Client.GetAsync(page);
             Assert.NotEqual(HttpStatusCode.OK, anonymous.StatusCode);
@@ -107,19 +85,17 @@ public sealed class RelationshipReviewWorkspaceTests(PostgresCollection postgres
     }
 
     [Fact]
-    public async Task AChangedCitedRecordShowsTheFlagOnTheListAndInTheEditorAndRefusesApprovalWhileAnApprovedLinkStaysApproved()
+    public async Task AChangedCitedRecordShowsTheFlagInTheEditorAndRefusesApprovalWhileAnApprovedLinkStaysApproved()
     {
         await SeedAsync();
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
         await seeder.StatementAsync(Statement(revision: 2));
 
-        var list = await host.GetDocumentAsync("/Review/Relationships");
         var page = await host.GetDocumentAsync(url);
         var decision = Fields(page.QuerySelector("#decision-form")!);
         decision.Add(new("kind", "Approve"));
         using var refused = await host.Client.PostAsync(url, new FormUrlEncodedContent(decision));
 
-        Assert.Contains("Cited records changed", list.QuerySelector("[aria-labelledby='drafts'] tbody")!.TextContent, StringComparison.Ordinal);
         Assert.Contains("Approval is blocked", page.QuerySelector("#cited-changed")!.TextContent, StringComparison.Ordinal);
         Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
         await seeder.StatementAsync(Statement());
@@ -200,16 +176,14 @@ public sealed class RelationshipReviewWorkspaceTests(PostgresCollection postgres
     }
 
     [Fact]
-    public async Task ANoLongerMatchingPairShowsABadgeOnTheListAndANoticeInTheEditor()
+    public async Task ANoLongerMatchingPairShowsANoticeInTheEditor()
     {
         await SeedAsync();
         await seeder.ExecuteAsync("UPDATE relationship_drafts SET no_longer_matches = true");
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
 
-        var list = await host.GetDocumentAsync("/Review/Relationships");
         var page = await host.GetDocumentAsync(url);
 
-        Assert.Contains("No longer matches", list.QuerySelector("[aria-labelledby='drafts'] tbody")!.TextContent, StringComparison.Ordinal);
         Assert.NotNull(page.QuerySelector("#no-longer-matches"));
     }
 
