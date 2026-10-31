@@ -239,20 +239,46 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         var (actor, catalog, saved) = await SavedDraftAsync();
         var decide = new DecideDocumentChangeReview(reviews, catalog);
         var concern = await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 0, ReviewDecisionKind.RequestChanges, "Context missing.", [], "concern"));
+        var columnTime = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero);
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""
-            UPDATE document_change_review_decisions SET actor_subject = 'auth0|column', note = 'Column note.' WHERE decision_id = @id
+            UPDATE document_change_review_decisions
+            SET actor_subject = 'auth0|column', note = 'Column note.', correction_note = 'Column correction.', created_at_utc_ticks = @ticks,
+                decision_json = (decision_json::jsonb || '{"actorSubject":"auth0|json","note":"Json note.","correctionNote":"Json correction.","createdAtUtc":"2020-05-06T07:08:09+00:00"}'::jsonb)::text
+            WHERE decision_id = @id
             """, connection);
         command.Parameters.AddWithValue("id", concern.DecisionId);
+        command.Parameters.AddWithValue("ticks", columnTime.UtcTicks);
         Assert.Equal(1, await command.ExecuteNonQueryAsync());
 
         var review = (await reviews.GetAsync(saved.DraftId, default))!;
         var activity = await reviews.ListRecentActivityAsync(5, default);
 
         var read = Assert.Single(review.UnresolvedConcerns);
-        Assert.Equal(("auth0|column", "Column note."), (read.ActorSubject, read.Note));
+        Assert.Equal(("auth0|column", "Column note.", "Column correction.", columnTime),
+            (read.ActorSubject, read.Note, read.CorrectionNote, read.CreatedAtUtc));
         Assert.Equal("auth0|column", Assert.Single(activity, item => item.Kind == ReviewActivityKind.DecisionRecorded).ActorSubject);
+    }
+
+    [Fact]
+    public async Task AnOpeningApprovalThatResolvesAConcernOfItsOwnCycleFailsTheReadBecauseItCouldHideThatConcern()
+    {
+        var (actor, catalog, saved) = await SavedDraftAsync();
+        var decide = new DecideDocumentChangeReview(reviews, catalog);
+        var approval = await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 0, ReviewDecisionKind.Approve, null, [], "approve"));
+        var concern = await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 1, ReviewDecisionKind.RequestChanges, "Date wrong.", [], "concern"));
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("""
+            INSERT INTO document_change_review_decision_resolutions (decision_id, resolved_decision_id, draft_id) VALUES (@approval, @concern, @draft)
+            """, connection);
+        command.Parameters.AddWithValue("approval", approval.DecisionId);
+        command.Parameters.AddWithValue("concern", concern.DecisionId);
+        command.Parameters.AddWithValue("draft", saved.DraftId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => reviews.GetAsync(saved.DraftId, default));
     }
 
     [Fact]

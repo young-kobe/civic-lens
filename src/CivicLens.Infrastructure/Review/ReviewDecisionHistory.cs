@@ -33,6 +33,8 @@ internal static class ReviewDecisionHistory
         if ((approved?.RevisionNumber ?? 0) != approvedRevision || current.RevisionNumber < approvedRevision)
             throw new InvalidOperationException("Stored approved revision is inconsistent.");
         approved?.ValidateForApproval();
+        if (!cycle.IsEmpty && cycle[0].ResolvedDecisionIds.Intersect(cycle[1..].Select(decision => decision.DecisionId)).Any())
+            throw new InvalidOperationException("An opening approval resolves a concern from its own cycle.");
         var prior = approvedRevision == 0 ? ImmutableArray<ReviewDecision>.Empty : cycle[..1];
         foreach (var decision in cycle[prior.Length..])
         {
