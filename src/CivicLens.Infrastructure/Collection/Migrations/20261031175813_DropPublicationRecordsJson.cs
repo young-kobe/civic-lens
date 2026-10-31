@@ -53,10 +53,14 @@ namespace CivicLens.Infrastructure.Collection.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.Sql("""
-                DO $$
-                BEGIN
-                    RAISE EXCEPTION 'Cannot roll back DropPublicationRecordsJson: the records of the releases are only in publication_record_states. Restore a backup.';
-                END $$;
+                LOCK TABLE publication_releases IN SHARE ROW EXCLUSIVE MODE;
+                ALTER TABLE publication_releases ADD COLUMN records_json text;
+                UPDATE publication_releases r SET records_json = COALESCE((
+                    SELECT jsonb_agg(jsonb_build_object('kind', s.kind, 'recordId', s.record_id, 'revisionNumber', s.revision_number)
+                        ORDER BY s.kind, s.record_id)
+                    FROM publication_record_states s
+                    WHERE s.first_release <= r.release_number AND (s.last_release IS NULL OR s.last_release >= r.release_number))::text, '[]');
+                ALTER TABLE publication_releases ALTER COLUMN records_json SET NOT NULL;
                 """);
         }
     }

@@ -30,11 +30,7 @@ public sealed class PublicationRecordStatesMigrationTests(PostgresCollection pos
     public async Task TheBackfillRebuildsEveryReleaseFromRecordsJsonWithLegacyEntriesGapsAndReturnedRecords()
     {
         var legacyDraft = new string('1', 32);
-        await InsertReleaseAsync(1, $$"""[{"draftId":"{{legacyDraft}}","revisionNumber":1},{"kind":"action","recordId":"x","revisionNumber":1},{"kind":"statement","recordId":"w","revisionNumber":1}]""");
-        await InsertReleaseAsync(2, """[{"kind":"documentChange","recordId":"y","revisionNumber":1},{"kind":"action","recordId":"x","revisionNumber":1},{"kind":"statement","recordId":"w","revisionNumber":2}]""");
-        await InsertReleaseAsync(4, """[{"kind":"documentChange","recordId":"y","revisionNumber":1},{"kind":"vote","recordId":"z","revisionNumber":1}]""");
-        await InsertReleaseAsync(5, """[{"kind":"documentChange","recordId":"y","revisionNumber":1},{"kind":"action","recordId":"x","revisionNumber":1},{"kind":"vote","recordId":"z","revisionNumber":1}]""");
-        await InsertReleaseAsync(6, "[]", active: true);
+        await SeedHardReleasesAsync(legacyDraft);
 
         await MigrateForwardAsync();
 
@@ -48,6 +44,33 @@ public sealed class PublicationRecordStatesMigrationTests(PostgresCollection pos
         await MigrateForwardAsync(DropMigration);
 
         Assert.False(await RecordsJsonExistsAsync());
+    }
+
+    [Fact]
+    public async Task TheRollbackRebuildsRecordsJsonOfEveryReleaseFromTheStateTableAndTheDropRunsAgain()
+    {
+        await SeedHardReleasesAsync(new string('1', 32));
+        await MigrateForwardAsync();
+        var before = await RecordsJsonOfEveryReleaseAsync();
+
+        await MigrateForwardAsync(DropMigration);
+        await using (var db = NewContext())
+            await db.GetService<IMigrator>().MigrateAsync(db.Database.GetMigrations().TakeWhile(id => id != DropMigration).Last());
+
+        Assert.Equal(before, await RecordsJsonOfEveryReleaseAsync());
+        Assert.Equal(["[]"], (await PublishedRecordStateReader.ReadAsync(connectionString,
+            "SELECT records_json FROM publication_releases WHERE release_number = 6")).Select(row => row[0]));
+        await MigrateForwardAsync(DropMigration);
+        Assert.False(await RecordsJsonExistsAsync());
+    }
+
+    private async Task SeedHardReleasesAsync(string legacyDraft)
+    {
+        await InsertReleaseAsync(1, $$"""[{"draftId":"{{legacyDraft}}","revisionNumber":1},{"kind":"action","recordId":"x","revisionNumber":1},{"kind":"statement","recordId":"w","revisionNumber":1}]""");
+        await InsertReleaseAsync(2, """[{"kind":"documentChange","recordId":"y","revisionNumber":1},{"kind":"action","recordId":"x","revisionNumber":1},{"kind":"statement","recordId":"w","revisionNumber":2}]""");
+        await InsertReleaseAsync(4, """[{"kind":"documentChange","recordId":"y","revisionNumber":1},{"kind":"vote","recordId":"z","revisionNumber":1}]""");
+        await InsertReleaseAsync(5, """[{"kind":"documentChange","recordId":"y","revisionNumber":1},{"kind":"action","recordId":"x","revisionNumber":1},{"kind":"vote","recordId":"z","revisionNumber":1}]""");
+        await InsertReleaseAsync(6, "[]", active: true);
     }
 
     [Fact]
@@ -108,15 +131,23 @@ public sealed class PublicationRecordStatesMigrationTests(PostgresCollection pos
 
     private async Task AssertEveryReleaseMatchesRecordsJsonAsync()
     {
-        foreach (var release in (await PublishedRecordStateReader.ReadAsync(connectionString, "SELECT release_number, records_json FROM publication_releases")))
+        foreach (var (release, listed) in await RecordsJsonOfEveryReleaseAsync())
+            Assert.Equal(listed, await PublishedRecordStateReader.StateAtAsync(connectionString, release));
+    }
+
+    private async Task<Dictionary<int, SortedSet<string>>> RecordsJsonOfEveryReleaseAsync()
+    {
+        var releases = new Dictionary<int, SortedSet<string>>();
+        foreach (var release in await PublishedRecordStateReader.ReadAsync(connectionString, "SELECT release_number, records_json FROM publication_releases"))
         {
             using var document = JsonDocument.Parse(release[1]);
-            SortedSet<string> listed = [.. document.RootElement.EnumerateArray().Select(entry => string.Join('|',
+            releases[int.Parse(release[0])] = [.. document.RootElement.EnumerateArray().Select(entry => string.Join('|',
                 entry.TryGetProperty("kind", out var kind) ? kind.GetString() : "documentChange",
                 entry.TryGetProperty("recordId", out var recordId) ? recordId.GetString() : entry.GetProperty("draftId").GetString(),
                 entry.GetProperty("revisionNumber").GetInt32()))];
-            Assert.Equal(listed, await PublishedRecordStateReader.StateAtAsync(connectionString, int.Parse(release[0])));
         }
+
+        return releases;
     }
 
     private async Task InsertReleaseAsync(int number, string recordsJson, bool active = false)
