@@ -96,7 +96,7 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 
 **Data and schemas**
 
-- R-63: Audit how we store data. Our data and our schemas are a first class feature, so each column must earn its form. The schema has 16 distinct `*_json` column names, and many repeat across the draft tables. A field gets a real column if we filter, sort, join, or enforce a rule on it. A value stays JSON only if it is an immutable snapshot that we read whole, such as a model output as received. `records_json` already failed this rule and goes in R-45. Survey first, with no migration: list each column, its readers and fields used, and a recommendation. The owner then chooses, and each accepted move is its own PR. Public release files stay JSON, because they are the published product and not our storage. Depends on: R-54. [Architecture](architecture.md)
+- R-63: Audit how we store data. Our data and our schemas are a first class feature, so each column must earn its form. The schema has 16 distinct `*_json` column names, and many repeat across the draft tables. A field gets a real column if we filter, sort, join, or enforce a rule on it. A value stays JSON only if it is an immutable snapshot that we read whole, such as a model output as received. `records_json` already failed this rule and goes in R-45. Survey first, with no migration: list each column, its readers and fields used, and a recommendation. The owner then chooses, and each accepted move is its own PR. Public release files stay JSON, because they are the published product and not our storage. Depends on: none. [Architecture](architecture.md)
   - [ ] Survey every JSON column, with a recommendation for each
   - [ ] Agree the moves
   - [ ] Build the agreed moves
