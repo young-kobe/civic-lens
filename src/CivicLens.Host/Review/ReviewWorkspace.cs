@@ -28,6 +28,7 @@ using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Statements;
 using CivicLens.Infrastructure.Votes;
 using CivicLens.Host.Publication;
+using CivicLens.Publication.Contracts;
 using CivicLens.Host.Components;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
@@ -246,8 +247,9 @@ internal static class ReviewWorkspace
         ConfigureRelationshipReview(services, contexts);
         ConfigureBriefReview(services, contexts);
         ConfigureReportReview(services, contexts);
+        services.AddSingleton<IRecordKindStore>(new PostgresRecordKindStore(contexts));
         services.AddScoped(provider => new LookupDraft(provider.GetRequiredService<IActionReviewStore>(),
-            provider.GetRequiredService<IVoteReviewStore>(), TimeProvider.System));
+            provider.GetRequiredService<IVoteReviewStore>(), provider.GetRequiredService<IRecordKindStore>(), TimeProvider.System));
         var collection = ConfigurationFile.ReadCollectionFromEnvironment();
         var officials = ReviewOfficials.From(collection);
         services.AddSingleton(officials);

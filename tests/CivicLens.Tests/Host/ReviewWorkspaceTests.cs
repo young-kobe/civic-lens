@@ -75,6 +75,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.Equal(editorUrl, PathOf(replay));
 
         var editor = await host.GetDocumentAsync(editorUrl);
+        Assert.Equal("Record ID " + editorUrl["/Review/".Length..], editor.QuerySelector(".page-header-record-id")!.TextContent);
         Assert.Equal("Untitled draft", editor.QuerySelector("#saved-approval-target h2")!.TextContent);
         var missingUrl = "/Review/" + Guid.NewGuid().ToString("N");
         using var missing = await host.Client.GetAsync(missingUrl);

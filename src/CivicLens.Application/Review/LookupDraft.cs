@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Votes;
+using CivicLens.Core;
 using CivicLens.Core.Relationships;
 using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
@@ -10,12 +11,15 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Review;
 
-public sealed partial class LookupDraft(IActionReviewStore actions, IVoteReviewStore votes, TimeProvider clock)
+public sealed partial class LookupDraft(IActionReviewStore actions, IVoteReviewStore votes, IRecordKindStore kinds, TimeProvider clock)
 {
     public async Task<DraftLookupHit?> ExecuteAsync(ReviewActor actor, string? query, CancellationToken cancellationToken = default)
     {
         ReviewAuthorization.RequireReviewer(actor);
         var text = query?.Trim() ?? "";
+        if (Uri.TryCreate(text, UriKind.Absolute, out var link) && link.Scheme is "http" or "https")
+            return await FindRecordAsync(RecordIdOfLink(link), cancellationToken);
+        if (PublicationProtocol.IsAnyRecordId(text)) return await FindRecordAsync(text, cancellationToken);
         var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
         var congress = CongressCalendar.CongressOn(today) ?? throw new InvalidOperationException("The clock date has no Congress.");
         if (RollPattern().Match(text) is { Success: true } roll)
@@ -26,6 +30,15 @@ public sealed partial class LookupDraft(IActionReviewStore actions, IVoteReviewS
         var type = CongressBillListItem.NormalizeCitationType(Regex.Replace(bill.Groups["type"].Value, @"\s", ""));
         if (billCongress < 1 || type is null) throw new DraftLookupFormatException();
         return await FindActionAsync(billCongress, type, Number(bill), cancellationToken);
+    }
+
+    private async Task<DraftLookupHit?> FindRecordAsync(string recordId, CancellationToken cancellationToken) =>
+        await kinds.FindKindAsync(recordId, cancellationToken) is { } kind ? new(kind, recordId) : null;
+
+    private static string RecordIdOfLink(Uri link)
+    {
+        var recordId = Path.GetFileNameWithoutExtension(link.AbsolutePath.TrimEnd('/'));
+        return PublicationProtocol.IsAnyRecordId(recordId) ? recordId : throw new DraftLookupFormatException();
     }
 
     private async Task<DraftLookupHit?> FindActionAsync(int congress, string billType, int billNumber, CancellationToken cancellationToken) =>
