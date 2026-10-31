@@ -1,4 +1,5 @@
 using CivicLens.Application.Issues;
+using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Review;
@@ -104,9 +105,10 @@ public sealed partial class VoteEditor
         return LoadAsync();
     }
 
-    private async Task TakeOffSiteAsync() => NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(
-        PublishedRecordKind.Vote, RecordId, detail.Review.CurrentStatus, WithdrawAsync, VoteRoutes.Editor(RecordId, TakeOffSitePanel.DoneStatus),
-        ReloadAfterDecideConflictAsync));
+    public override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.Vote, RecordId);
+
+    private async Task TakeOffSiteAsync() =>
+        NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(detail.Review.CurrentStatus, WithdrawAsync, ReloadAfterDecideConflictAsync));
 
     private Task WithdrawAsync(ReviewDecisionKind kind, string key) =>
         DecideReview.ExecuteAsync(actor, new DecideVoteReviewRequest(RecordId, TakeOffExpectedRevision, TakeOffExpectedStateVersion, kind,

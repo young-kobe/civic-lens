@@ -409,7 +409,7 @@ The CLI command `releases blocked` shows the list. The CLI JSON holds the reason
 
 ### Corrections and withdrawal
 
-A correction replaces a record. A withdrawal removes it. Withdrawing approval in review does not change published artifacts. Only a publish with `--withdraw` does.
+A correction replaces a record. A withdrawal removes it. Withdrawing approval in review does not change published artifacts. Only a publish with a withdrawal does. The CLI option `--withdraw` and Take off site on the record editor both run that publish.
 
 Each of the six record files holds a `corrections` list of `PublishedCorrection`. An entry holds the replaced revision number, the publication time, and an optional note. A note means a person correction. No note means that code updated the record from the source. The list runs newest first. It holds at most 20 entries with a note. A code update replaces a newest code entry, so code entries never pile up. A record that no release replaced has an empty list.
 
@@ -421,7 +421,7 @@ A withdrawal needs the owner and a note. `PublishReleaseRequest.Withdrawals` car
 
 `PublicationWithdrawals` builds one `PublishedWithdrawal` for each withdrawn record. It holds the kind, the record ID, the withdrawn revision, both times, the note, and the correction list of the record. The manifest keeps the entry in `withdrawals`. The release holds no `records/{id}.json` for the record. The page `records/{id}.html` is a notice. Each publish renders every notice again, so the notices always have the current page head.
 
-`WithdrawalCascade` runs after the publish loads its additions. It refuses the withdrawal while a relationship or a brief that stays in the release cites a withdrawn record. It finds relationships with `IRelationshipReviewStore.FindCitingAsync` over the carried relationship IDs. It reads each carried brief file for its citations. The error lists the citing records. A record that the same request adds meets the same rule earlier. `PublicationBuild.WithRemoved` takes the withdrawn records out of the release records that the loaders check.
+`WithdrawalCascade` runs after the publish loads its additions. It refuses the withdrawal while a relationship or a brief that stays in the release cites a withdrawn record. It finds relationships with `IRelationshipReviewStore.FindCitingAsync` over the carried relationship IDs. It reads each carried brief file for its citations. The error lists the citing records. A record that the same request adds meets the same rule earlier. `PublicationBuild.WithRemoved` takes the withdrawn records out of the release records that the loaders check. Take off site calls the read-only `WithdrawalCascade.FindCitersAsync` before it writes a decision, so a predictable refusal writes nothing. The commit-time check stays.
 
 A withdrawn relationship leaves the related panels of the statement and of the action or vote that it cited. The publish writes those pages again. A withdrawn or returned action changes the bill link of the carried votes on its bill. The store finds those votes with `FindVoteRecordIdsOnBillsOfActionsAsync`, the inverse of the bill lookup, and the publish writes their pages again. A withdrawn vote leaves the vote files of its members. It reads only the Congress of the vote file, and the members come from the database as for a replaced vote. A Congress with no row left disappears. A withdrawn record counts as a change for each official it named, so the publish writes their pages again. A withdrawal requeues the brief of the week of the record; see [briefs](briefs.md#staleness).
 
@@ -565,7 +565,7 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - An action record embeds at most `PublishedAction.MaximumSources` sources. The worst case is the detail page, 3 cosponsor pages (250 rows), and the summaries page, which is 5 sources. A record over the cap fails publish loudly.
 - The stage `publishing` leaves out a withdrawn record that is approved again at the withdrawn revision, by code, or by a person without a note. It logs one line for each skipped record at every tick, until a person approves a higher revision with a note.
 - A returned record counts against the cap of 20 notes. A record with 20 notes cannot return yet.
-- The worker or the CLI returns a record. Only the CLI withdraws.
+- The worker or the CLI returns a record. The CLI and Take off site on the record editor withdraw.
 - A relationship or a brief that cited a withdrawn record stays withdrawn when the record returns. A person must publish it again.
 - A withdrawn record still answers with its notice page and status 200. A static 410 needs a Cloudflare rule, which comes with [R-24](../roadmap.md#later). The search service has the same limit; see [search](search.md). The notice page has `noindex`, so search engines drop it.
 - The withdrawal check of citations reads every carried brief file when the request withdraws a statement, a document change, or an action. The cost grows with the number of briefs.

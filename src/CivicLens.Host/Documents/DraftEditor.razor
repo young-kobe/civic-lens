@@ -1,5 +1,5 @@
 @page "/Review/{DraftId}"
-@inherits ReviewRecordPage
+@inherits PublishedRecordEditorPage
 @using CivicLens.Core.Review
 @using CivicLens.Host.Reports
 @using CivicLens.Host.Review
@@ -230,7 +230,7 @@ else
             </Checklist>
         </ReviewDecisionPanel>
 
-        <TakeOffSitePanel Actor="actor" Kind="PublishedRecordKind.DocumentChange" RecordId="@DraftId" RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion"
+        <TakeOffSitePanel Actor="actor" Record="TakeOffRecord" RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion"
                           IdempotencyKey="@TakeOffFormKey" Note="@TakeOffNote" Refusal="@takeOffRefusal" OnSubmit="TakeOffSiteAsync" />
 
         <ReviewHistoryPanel Entries="History" ViewerSubject="@actor.Subject" />

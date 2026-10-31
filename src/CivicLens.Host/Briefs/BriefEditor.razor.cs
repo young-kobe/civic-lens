@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Briefs;
+using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Core.Briefs;
 using CivicLens.Core.Review;
@@ -116,9 +117,10 @@ public sealed partial class BriefEditor
         return LoadAsync();
     }
 
-    private async Task TakeOffSiteAsync() => NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(
-        PublishedRecordKind.Brief, RecordId, detail.Review.CurrentStatus, WithdrawAsync, BriefRoutes.Editor(RecordId, TakeOffSitePanel.DoneStatus),
-        ReloadAfterDecideConflictAsync));
+    public override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.Brief, RecordId);
+
+    private async Task TakeOffSiteAsync() =>
+        NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(detail.Review.CurrentStatus, WithdrawAsync, ReloadAfterDecideConflictAsync));
 
     private Task WithdrawAsync(ReviewDecisionKind kind, string key) =>
         DecideReview.ExecuteAsync(actor, new DecideBriefReviewRequest(RecordId, TakeOffExpectedRevision, TakeOffExpectedStateVersion, kind,

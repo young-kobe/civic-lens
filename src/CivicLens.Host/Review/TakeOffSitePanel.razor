@@ -3,7 +3,7 @@
 @using Microsoft.Extensions.DependencyInjection
 @using Microsoft.Extensions.Logging
 
-@if (!offered)
+@if (!status.CanTakeOff)
 {
     <form id="take-off-site-hidden" method="post" @formname="@FormName" @onsubmit="OnSubmit" hidden><AntiforgeryToken /></form>
 }
@@ -19,11 +19,26 @@
 {
     <Notice Tone="Tone.Bad" id="take-off-site-refusal">@Refusal</Notice>
 }
-@if (offered)
+@if (status.TakenOff && !status.ReadersSeeOldSite)
+{
+    <p id="take-off-site-off" class="small">This record is off the public site. It returns only when a person approves a newer revision with a correction note.</p>
+}
+@if (status.CanTakeOff)
 {
     <Panel Title="Take off site" Id="take-off-site" Padded="true">
-        <p class="small">This record is on the public site now. This action withdraws the approval if the record is still approved. It then removes the record from the public site. Readers see your reason on the page that replaces it.</p>
-        <p class="small muted">If a relationship or a brief on the site cites this record, take that one off first.</p>
+        @if (status.ReadersSeeOldSite)
+        {
+            <Notice Tone="Tone.Warn" id="take-off-site-unserved">The release that took this record off is saved, but readers still see the old site. Press Take off site to finish.</Notice>
+        }
+        else
+        {
+            <p class="small">This record is on the public site now. If the record is approved, this action withdraws the approval. If a newer revision waits for review, it requests changes on that revision. Then it removes the record from the public site. Readers see your reason on the page that replaces it.</p>
+            <p class="small muted">If a relationship or a brief on the site cites this record, take that one off first.</p>
+        }
+        @if (status.RolledBack)
+        {
+            <Notice Tone="Tone.Warn" id="take-off-site-rollback">The public site shows an older release than the latest one. This action publishes a new release and ends the rollback pause. The worker then publishes every ready approval.</Notice>
+        }
         <form id="take-off-site-form" class="form" method="post" @formname="@FormName" @onsubmit="OnSubmit">
             <AntiforgeryToken />
             <input type="hidden" name="expectedRevisionNumber" value="@RevisionNumber" />
@@ -43,9 +58,9 @@
     public const string FormName = "take-off-site";
     public const string DoneStatus = "off-site";
 
+    private TakeOffSiteStatus status = TakeOffSiteStatus.NotPublished;
     private bool isOwner;
     private bool configured;
-    private bool offered;
     private bool failed;
 
     [Inject] private IServiceProvider Services { get; set; } = default!;
@@ -54,8 +69,7 @@
     [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
 
     [Parameter, EditorRequired] public ReviewActor Actor { get; set; } = default!;
-    [Parameter, EditorRequired] public PublishedRecordKind Kind { get; set; }
-    [Parameter, EditorRequired] public string RecordId { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public PublishedRecordReference Record { get; set; } = default!;
     [Parameter, EditorRequired] public int RevisionNumber { get; set; }
     [Parameter, EditorRequired] public int ReviewStateVersion { get; set; }
     [Parameter, EditorRequired] public string IdempotencyKey { get; set; } = string.Empty;
@@ -63,8 +77,9 @@
     [Parameter] public string? Note { get; set; }
     [Parameter] public string? Refusal { get; set; }
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
+        failed = false;
         isOwner = Actor.Role == ReviewRole.Owner;
         if (!isOwner) return;
         var takeOff = Services.GetService<TakeOffSite>();
@@ -73,7 +88,7 @@
         var cancellationToken = HttpContext.RequestAborted;
         try
         {
-            offered = await takeOff.IsOnSiteAsync(Actor, new(Kind, RecordId), cancellationToken);
+            status = await takeOff.GetStatusAsync(Actor, Record, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception exception)

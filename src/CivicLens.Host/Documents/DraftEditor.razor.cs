@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Documents;
+using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Documents;
@@ -208,9 +209,10 @@ public sealed partial class DraftEditor
         return LoadAsync();
     }
 
-    private async Task TakeOffSiteAsync() => NavigateWhenSet(review is null ? null : await RunTakeOffSiteAsync(
-        PublishedRecordKind.DocumentChange, DraftId, CurrentStatus, WithdrawAsync, DocumentRoutes.Editor(DraftId, TakeOffSitePanel.DoneStatus),
-        ReloadAfterDecideConflictAsync));
+    public override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.DocumentChange, DraftId);
+
+    private async Task TakeOffSiteAsync() =>
+        NavigateWhenSet(review is null ? null : await RunTakeOffSiteAsync(CurrentStatus, WithdrawAsync, ReloadAfterDecideConflictAsync));
 
     private Task WithdrawAsync(ReviewDecisionKind kind, string key) =>
         DecideReview.ExecuteAsync(actor, new DecideDocumentChangeReviewRequest(DraftId, TakeOffExpectedRevision, TakeOffExpectedStateVersion, kind,

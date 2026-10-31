@@ -1,4 +1,5 @@
 using CivicLens.Application.Relationships;
+using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
 using CivicLens.Core.Documents;
@@ -112,9 +113,10 @@ public sealed partial class RelationshipEditor
         return LoadAsync();
     }
 
-    private async Task TakeOffSiteAsync() => NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(
-        PublishedRecordKind.Relationship, RecordId, detail.Review.CurrentStatus, WithdrawAsync, RelationshipRoutes.Editor(RecordId, TakeOffSitePanel.DoneStatus),
-        ReloadAfterDecideConflictAsync));
+    public override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.Relationship, RecordId);
+
+    private async Task TakeOffSiteAsync() =>
+        NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(detail.Review.CurrentStatus, WithdrawAsync, ReloadAfterDecideConflictAsync));
 
     private Task WithdrawAsync(ReviewDecisionKind kind, string key) =>
         DecideReview.ExecuteAsync(actor, new DecideRelationshipReviewRequest(RecordId, TakeOffExpectedRevision, TakeOffExpectedStateVersion, kind,

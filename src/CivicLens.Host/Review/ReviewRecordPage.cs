@@ -1,10 +1,7 @@
-using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
-using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Host.Review;
@@ -24,25 +21,17 @@ public abstract class ReviewRecordPage : ComponentBase
         "The decision needs valid details. Requesting changes and withdrawing approval need a reason. Approval must resolve every open concern.",
         "The decision could not be saved. The current review state shows below. Try again.");
 
-    protected static readonly ReviewFailureMessages TakeOffFailures = new(
-        "The revision or review state changed after you opened this page. Check the latest state, then take the record off site again.",
-        "Give a reason of 1 to 500 characters.",
-        "The record could not be taken off the site. The current state shows below. Try again.");
-
     protected readonly string saveKey = Guid.NewGuid().ToString("N");
     protected readonly string decisionKey = Guid.NewGuid().ToString("N");
-    private readonly string newTakeOffKey = Guid.NewGuid().ToString("N");
     protected ReviewActor actor = default!;
     protected string? error;
     protected string? statusMessage;
     protected bool isConflict;
     protected bool hasUnsavedInput;
     protected bool notFound;
-    protected string? takeOffRefusal;
 
     [Inject] protected ReviewActorAccessor Actors { get; set; } = default!;
     [Inject] protected NavigationManager Navigation { get; set; } = default!;
-    [Inject] protected IServiceProvider Services { get; set; } = default!;
     [Inject] protected ILogger<ReviewRecordPage> Logger { get; set; } = default!;
 
     [CascadingParameter] protected HttpContext HttpContext { get; set; } = default!;
@@ -58,12 +47,6 @@ public abstract class ReviewRecordPage : ComponentBase
     [SupplyParameterFromForm(FormName = DecideForm, Name = "idempotencyKey")] protected string? DecideKey { get; set; }
     [SupplyParameterFromForm(FormName = DecideForm, Name = "kind")] protected string? Kind { get; set; }
 
-    [SupplyParameterFromForm(FormName = TakeOffSitePanel.FormName, Name = "expectedRevisionNumber")] protected int TakeOffExpectedRevision { get; set; }
-    [SupplyParameterFromForm(FormName = TakeOffSitePanel.FormName, Name = "expectedReviewStateVersion")] protected int TakeOffExpectedStateVersion { get; set; }
-    [SupplyParameterFromForm(FormName = TakeOffSitePanel.FormName, Name = "idempotencyKey")] protected string? TakeOffKey { get; set; }
-    [SupplyParameterFromForm(FormName = TakeOffSitePanel.FormName, Name = "note")] protected string? TakeOffNote { get; set; }
-
-    protected string TakeOffFormKey => TakeOffKey ?? newTakeOffKey;
     protected CancellationToken RequestAborted => HttpContext.RequestAborted;
     protected bool CanDecide => !hasUnsavedInput && !isConflict && error is null;
     protected string SelectedTab => hasUnsavedInput || isConflict ? "edit" : "saved";
@@ -81,7 +64,6 @@ public abstract class ReviewRecordPage : ComponentBase
     {
         "saved" => "The new revision is saved. Review it before you record a decision.",
         "decided" => "Your decision on this revision is saved.",
-        TakeOffSitePanel.DoneStatus => "The record is off the public site. Its page now shows a notice.",
         _ => null
     };
 
@@ -131,23 +113,6 @@ public abstract class ReviewRecordPage : ComponentBase
                 break;
         }
         return target;
-    }
-
-    protected async Task<string?> RunTakeOffSiteAsync(PublishedRecordKind kind, string recordId, ReviewStatus status,
-        Func<ReviewDecisionKind, string, Task> recordDecision, string doneTarget, Func<Task> reload)
-    {
-        string? refusal = null;
-        var target = await RunCommandAsync(async () =>
-        {
-            var request = new TakeOffSiteRequest(new(kind, recordId), status, TakeOffNote ?? "", TakeOffKey ?? "");
-            refusal = await Services.GetRequiredService<TakeOffSite>().ExecuteAsync(actor, request, recordDecision, RequestAborted);
-            return doneTarget;
-        }, TakeOffFailures, reload);
-        if (refusal is null) return target;
-        takeOffRefusal = refusal;
-        HttpContext.Response.StatusCode = StatusCodes.Status409Conflict;
-        await reload();
-        return null;
     }
 
     protected void NavigateWhenSet(string? target)

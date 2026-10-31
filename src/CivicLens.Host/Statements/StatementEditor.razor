@@ -1,5 +1,5 @@
 @page "/Review/Statements/{CandidateId}"
-@inherits ReviewRecordPage
+@inherits PublishedRecordEditorPage
 @using CivicLens.Application.Statements
 @using CivicLens.Core.Review
 @using CivicLens.Core.Statements
@@ -201,7 +201,7 @@ else
                 </Checklist>
             </ReviewDecisionPanel>
 
-            <TakeOffSitePanel Actor="actor" Kind="PublishedRecordKind.Statement" RecordId="@CandidateId" RevisionNumber="Revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion"
+            <TakeOffSitePanel Actor="actor" Record="TakeOffRecord" RevisionNumber="Revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion"
                               IdempotencyKey="@TakeOffFormKey" Note="@TakeOffNote" Refusal="@takeOffRefusal" OnSubmit="TakeOffSiteAsync" />
 
             <ReviewHistoryPanel Entries="History" ViewerSubject="@actor.Subject" />

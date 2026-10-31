@@ -356,10 +356,12 @@ internal static class ReviewWorkspace
         var releases = new FileReleaseDirectory(releaseRoot);
         services.AddScoped(_ => new ListPublicationReleases(publications, releases));
         services.AddScoped(_ => new ListBlockedPublished(publications, releases, new BlockedPublishedRecords(publications, releases)));
-        services.AddSingleton(provider => new TakeOffSite(
-            PublicationComposition.Create(connectionString, publications, releases, collection, issues,
-                PublicationComposition.RequireArtifactRoot(), provider.GetRequiredService<ILoggerFactory>()).Publish,
-            publications, releases));
+        services.AddSingleton(provider =>
+        {
+            var parts = PublicationComposition.Create(connectionString, publications, releases, collection, issues,
+                PublicationComposition.RequireArtifactRoot(), provider.GetRequiredService<ILoggerFactory>());
+            return new TakeOffSite(parts.Publish, publications, releases, parts.Loaders, provider.GetRequiredService<ILogger<TakeOffSite>>());
+        });
     }
 
     private static void SetHeaders(HttpResponse response)

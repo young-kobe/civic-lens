@@ -808,12 +808,17 @@ An image from before this change cannot read a release that the new image made, 
 
 ### Take a record off the site
 
-Only the owner sees Take off site. It is on the editor of every record kind that releases publish, below the decision panel. The button shows only while the active release holds the record. Type a reason of 1 to 500 characters and press the button. The page then does two steps:
+Only the owner sees Take off site. It is on the editor of every record kind that releases publish, below the decision panel. The button shows only while the active release holds the record. Type a reason of 1 to 500 characters and press the button. The page then does these steps:
 
-1. It records a decision on the record. An approved record gets Withdraw approval. A record with a newer revision that waits for review gets Request changes. A record that review already blocks gets no new decision.
-2. It withdraws the record in the review workspace with the same code as `releases publish --withdraw`. The release makes the record page a notice. The reason shows on the notice.
+1. It checks that the record is on the site, and that no relationship or brief on the site cites it. If a check fails, the page writes no decision and names the citing records. Take those off first.
+2. It records a decision on the record. An approved record gets Withdraw approval. A record with a newer revision that waits for review gets Request changes. A record that review already blocks gets no new decision.
+3. It withdraws the record in the review workspace with the same code as `releases publish --withdraw`. The release makes the record page a notice. The reason shows on the notice.
 
-Both steps use keys that come from the key of the form. If step 2 fails, press the button again. The retry records no second decision. A relationship or a brief on the site that cites the record stops step 2. The page shows the message and the citing records. Take those off first. A change of the review state while the page was open shows a conflict message. Then nothing changed, and the page shows the current state.
+Both writes use keys that come from the key of the form. If step 3 fails, press the button again. The retry records no second decision. If the release committed but the serve failed, readers still see the old site. The panel then shows a warning and keeps the button. Press it again to serve the release. A change of the review state while the page was open shows a conflict message, and the page writes nothing. If another release goes out first during step 3, the page says that the site still shows the record. It also says that the decision is saved. Press the button again. If the server cannot write or move the release, the page says so and keeps the button. Check the release directory, then press it again.
+
+The panel warns when the active release is not the latest one. Taking a record off then publishes a new release. That ends the rollback pause, and the worker then publishes every ready approval. The panel does not refuse the action.
+
+An off-site record returns only when a person approves a newer revision with a correction note. A code approval never returns it.
 
 The review workspace needs `CIVIC_LENS_RELEASE_DIRECTORY`, `CIVIC_LENS_ARTIFACT_DIRECTORY`, `CIVIC_LENS_COLLECTION_CONFIG`, and `CIVIC_LENS_ISSUES_CONFIG`. The `review` service in `deploy/compose.yaml` has all four. It mounts the release directory read and write.
 

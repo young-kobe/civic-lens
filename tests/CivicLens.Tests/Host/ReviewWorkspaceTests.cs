@@ -379,7 +379,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
-    public async Task TakeOffSiteBlocksTheApprovalAndWithdrawsTheRecordOnceEvenWhenThePostRepeatsAsync()
+    public async Task TakeOffSiteBlocksTheApprovalAndWithdrawsTheRecordOnceBecauseARepeatedPostReplaysTheSameKeysAsync()
     {
         SignIn(Owner);
         var (draftUrl, draftId) = await ApprovedDraftAsync();
@@ -398,13 +398,15 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         var editor = await host.GetDocumentAsync(PathOf(taken));
         Assert.Contains("off the public site", editor.QuerySelector(".notice")!.TextContent, StringComparison.Ordinal);
         Assert.Null(editor.QuerySelector("#take-off-site"));
+        Assert.Equal("This record is off the public site. It returns only when a person approves a newer revision with a correction note.",
+            editor.QuerySelector("#take-off-site-off")!.TextContent);
         Assert.Equal([ReviewDecisionKind.Approve, ReviewDecisionKind.WithdrawApproval], await DecisionKindsAsync(draftId));
 
         using var repeated = await host.Client.PostAsync(draftUrl, new FormUrlEncodedContent(fields));
 
-        Assert.Equal(HttpStatusCode.Conflict, repeated.StatusCode);
-        Assert.Contains("This record is not on the public site.", (await ParseAsync(repeated)).QuerySelector("#take-off-site-refusal")!.TextContent, StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.Redirect, repeated.StatusCode);
         Assert.Equal([ReviewDecisionKind.Approve, ReviewDecisionKind.WithdrawApproval], await DecisionKindsAsync(draftId));
+        Assert.Single(ManifestWithdrawals());
     }
 
     [Fact]
@@ -424,6 +426,58 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.Empty(ManifestWithdrawals());
         Assert.Equal([ReviewDecisionKind.Approve], await DecisionKindsAsync(draftId));
         Assert.NotNull((await host.GetDocumentAsync(draftUrl)).QuerySelector("#take-off-site-form"));
+    }
+
+    [Fact]
+    public async Task TakeOffSiteRequestsChangesOnANewerRevisionThatWaitsForReviewAndWithdrawsTheRecordAsync()
+    {
+        SignIn(Owner);
+        var (draftUrl, draftId) = await ApprovedDraftAsync();
+        await PublishWithCliAsync("k1", $"documentChange:{draftId}");
+        await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars, effective now");
+        var fields = Fields((await host.GetDocumentAsync(draftUrl)).QuerySelector("#take-off-site-form")!);
+        Set(fields, "note", "The newer wording is wrong too.");
+
+        using var taken = await host.Client.PostAsync(draftUrl, new FormUrlEncodedContent(fields));
+
+        Assert.Equal(HttpStatusCode.Redirect, taken.StatusCode);
+        Assert.Equal([ReviewDecisionKind.Approve, ReviewDecisionKind.RequestChanges], await DecisionKindsAsync(draftId));
+        Assert.Equal(draftId, Assert.Single(ManifestWithdrawals()).GetProperty("recordId").GetString());
+    }
+
+    [Fact]
+    public async Task AFailedWithdrawalStepKeepsTheSavedDecisionAndTheRetryWithTheSameKeyRecordsNoSecondOneAsync()
+    {
+        SignIn(Owner);
+        var (draftUrl, draftId) = await ApprovedDraftAsync();
+        await PublishWithCliAsync("k1", $"documentChange:{draftId}");
+        var fields = Fields((await host.GetDocumentAsync(draftUrl)).QuerySelector("#take-off-site-form")!);
+        Set(fields, "note", "The source was wrong.");
+        SetMode(host.ReleaseDirectory, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        IDocument failedPage;
+        try
+        {
+            using var failed = await host.Client.PostAsync(draftUrl, new FormUrlEncodedContent(fields));
+            Assert.Equal(HttpStatusCode.Conflict, failed.StatusCode);
+            failedPage = await ParseAsync(failed);
+            Assert.Contains("The public site could not be updated.", failedPage.QuerySelector("#take-off-site-refusal")!.TextContent, StringComparison.Ordinal);
+            Assert.Contains("readers still see the old site", failedPage.QuerySelector("#take-off-site-unserved")!.TextContent, StringComparison.Ordinal);
+        }
+        finally
+        {
+            SetMode(host.ReleaseDirectory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+        Assert.Equal([ReviewDecisionKind.Approve, ReviewDecisionKind.WithdrawApproval], await DecisionKindsAsync(draftId));
+        Assert.Empty(ManifestWithdrawals());
+        var retryFields = Fields(failedPage.QuerySelector("#take-off-site-form")!);
+        Assert.Equal(fields.Single(field => field.Key == "idempotencyKey").Value, retryFields.Single(field => field.Key == "idempotencyKey").Value);
+        Set(retryFields, "note", "The source was wrong.");
+
+        using var retried = await host.Client.PostAsync(draftUrl, new FormUrlEncodedContent(retryFields));
+
+        Assert.Equal(HttpStatusCode.Redirect, retried.StatusCode);
+        Assert.Equal([ReviewDecisionKind.Approve, ReviewDecisionKind.WithdrawApproval], await DecisionKindsAsync(draftId));
+        Assert.Equal(draftId, Assert.Single(ManifestWithdrawals()).GetProperty("recordId").GetString());
     }
 
     [Fact]
@@ -629,6 +683,12 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         record["corrections"] = new JsonArray([.. Enumerable.Range(1, PublishedCorrection.MaximumNotedEntries).Select(number =>
             (JsonNode)new JsonObject { ["replacedRevisionNumber"] = number, ["publishedAtUtc"] = "2026-10-01T00:00:00+00:00", ["note"] = "Fix." })]);
         File.WriteAllText(path, record.ToJsonString());
+    }
+
+    private static void SetMode(string path, UnixFileMode mode)
+    {
+        if (OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
+        File.SetUnixFileMode(path, mode);
     }
 
     private async Task<(string Url, string Id)> ApprovedDraftAsync()
