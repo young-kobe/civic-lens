@@ -32,8 +32,8 @@
             </Field>
             @if (Status != ReviewStatus.Approved)
             {
-                <Field Label="Correction note" For="Decision_CorrectionNote" Hint="Needed if this record replaces or returns a public one. Without it, the public page does not change.">
-                    <textarea id="Decision_CorrectionNote" class="plain" name="Decision.CorrectionNote" maxlength="@PublishedCorrection.MaximumNoteLength" aria-describedby="Decision_CorrectionNote-hint" value="@CorrectionNote"></textarea>
+                <Field Label="Public text" For="Decision_CorrectionNote" Hint="A reader sees this text on the record page as a correction. Needed if this record replaces or returns a public one. Without it, the public page does not change.">
+                    <textarea id="Decision_CorrectionNote" class="plain" name="Decision.CorrectionNote" maxlength="@PublishedCorrection.MaximumNoteLength" aria-describedby="Decision_CorrectionNote-hint" value="@(CorrectionNote ?? SuggestedCorrectionNote)"></textarea>
                 </Field>
             }
             <div class="actions">
@@ -64,6 +64,7 @@
     [Parameter, EditorRequired] public string IdempotencyKey { get; set; } = string.Empty;
     [Parameter] public string? Note { get; set; }
     [Parameter] public string? CorrectionNote { get; set; }
+    [SupplyParameterFromQuery(Name = RecordRoutes.CorrectionNoteQuery)] private string? SuggestedCorrectionNote { get; set; }
     [Parameter, EditorRequired] public EventCallback OnDecide { get; set; }
     [Parameter] public RenderFragment? Checklist { get; set; }
 }

@@ -57,7 +57,7 @@
                 <form id="decision-form" class="form" method="post" @formname="decide" @onsubmit="DecideAsync">
                     <AntiforgeryToken />
                     <input type="hidden" name="expectedReviewStateVersion" value="@report.Version" />
-                    <Field Label="Note" For="Decision_Note" Hint="A report that needs a correction needs a note. The record page shows the note until a newer revision is published.">
+                    <Field Label="Note" For="Decision_Note" Hint="A report that needs a correction needs a note. The record page shows the note until a newer revision is published. The editor can offer the note as public text of up to 500 characters.">
                         <textarea id="Decision_Note" class="plain" name="Decision.Note" maxlength="@ResolveReaderReport.MaximumNoteCharacters" aria-describedby="Decision_Note-hint"></textarea>
                     </Field>
                     <div class="actions">
@@ -72,6 +72,10 @@
         {
             <Panel Title="Resolution" Id="resolution" Padded="true">
                 <Facts Items="ResolutionFacts" />
+                @if (corrections is not null)
+                {
+                    <CorrectionEditorLink Reports="corrections" Kind="report.Kind" RecordId="@report.RecordId" />
+                }
                 <div class="actions"><Button Href="@ReportRoutes.List">Back to the list</Button></div>
             </Panel>
             <form @formname="decide" @onsubmit="DecideAsync" hidden></form>

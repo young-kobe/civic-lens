@@ -11,6 +11,11 @@ namespace CivicLens.Host.Review;
 
 internal static class RecordRoutes
 {
+    public const string CorrectionNoteQuery = "correctionNote";
+
+    public static string EditorWithCorrectionNote(PublishedRecordKind kind, string recordId, string note) =>
+        $"{Editor(kind, recordId)}?{CorrectionNoteQuery}={Uri.EscapeDataString(note)}";
+
     public static string Editor(PublishedRecordKind kind, string recordId) => kind switch
     {
         PublishedRecordKind.DocumentChange => DocumentRoutes.Editor(recordId),

@@ -16,8 +16,10 @@ public sealed partial class ReportDetail
         "The report could not be saved. Try again.");
 
     private ReaderReportListItem? item;
+    private IReadOnlyList<ReaderReport>? corrections;
 
     [Inject] private GetReaderReport GetReport { get; set; } = default!;
+    [Inject] private ListUnansweredCorrections ListCorrections { get; set; } = default!;
     [Inject] private ResolveReaderReport Resolve { get; set; } = default!;
 
     [Parameter] public Guid ReportId { get; set; }
@@ -46,6 +48,8 @@ public sealed partial class ReportDetail
     {
         item = await GetReport.ExecuteAsync(actor, ReportId, RequestAborted);
         if (item is null) ShowNotFound();
+        else if (item.Report.Status == ReaderReportStatus.CorrectionNeeded)
+            corrections = await ListCorrections.ExecuteAsync(actor, item.Report.Kind, item.Report.RecordId, RequestAborted);
     }
 
     protected override void ShowNotFound()

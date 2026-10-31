@@ -15,6 +15,10 @@
         <a href="@ReportRoutes.Detail(report.ReportId)">Open the report</a>
     </Notice>
 }
+@if (reports.Count > 0)
+{
+    <CorrectionEditorLink Reports="reports" Kind="Kind" RecordId="@RecordId" />
+}
 
 @code {
     private IReadOnlyList<ReaderReport> reports = [];

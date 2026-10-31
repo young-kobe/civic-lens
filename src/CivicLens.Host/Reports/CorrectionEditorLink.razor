@@ -1,0 +1,28 @@
+@using CivicLens.Application.Reports
+@using CivicLens.Host.Review
+@using CivicLens.Publication.Contracts
+
+<p class="small" id="correction-editor-link">
+    @if (Reports.Count == 0)
+    {
+        <text>No report still needs a correction on this record, so the editor does not fill in public text.</text>
+    }
+    else if (Reports.Count > 1)
+    {
+        <text>@Reports.Count reports need a correction on this record. The editor does not fill in public text. Write it yourself.</text>
+    }
+    else
+    {
+        <a href="@RecordRoutes.EditorWithCorrectionNote(Kind, RecordId, Reports[0].Note!)">Open the editor with the reviewer note as public text</a>
+        @if (Reports[0].Note!.Length > PublishedCorrection.MaximumNoteLength)
+        {
+            <text> The note has @Reports[0].Note!.Length characters. Public text holds up to @PublishedCorrection.MaximumNoteLength. Shorten it in the editor before you approve.</text>
+        }
+    }
+</p>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ReaderReport> Reports { get; set; } = [];
+    [Parameter, EditorRequired] public PublishedRecordKind Kind { get; set; }
+    [Parameter, EditorRequired] public string RecordId { get; set; } = string.Empty;
+}

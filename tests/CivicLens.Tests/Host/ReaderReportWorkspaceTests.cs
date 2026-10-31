@@ -137,6 +137,55 @@ public sealed class ReaderReportWorkspaceTests(PostgresCollection postgres) : IA
     }
 
     [Fact]
+    public async Task OneCorrectionReportFillsThePublicTextFromTheReviewerNoteAndNeverFromTheReaderText()
+    {
+        await SeedRelationshipAsync();
+        var report = await SaveReportAsync(Report() with { RecordId = ActionPair().PairId, Kind = PublishedRecordKind.Relationship, Text = Script });
+        await store.ResolveAsync("auth0|friend", report.ReportId, 0, CivicLens.Application.Reports.ReaderReportStatus.CorrectionNeeded, "Use the full quote & date.", default);
+
+        var detail = await host.GetDocumentAsync($"/Review/Reports/{report.ReportId:D}");
+        var link = detail.QuerySelector("#correction-editor-link a")!.GetAttribute("href")!;
+        var filled = await host.GetDocumentAsync(link);
+
+        Assert.Equal("Use the full quote & date.", filled.QuerySelector("textarea[name='Decision.CorrectionNote']")!.TextContent.Trim());
+        Assert.DoesNotContain(Script, link, StringComparison.Ordinal);
+        Assert.Equal("Public text", filled.QuerySelector("label[for='Decision_CorrectionNote']")!.TextContent.Trim());
+    }
+
+    [Fact]
+    public async Task SeveralCorrectionReportsFillNothingAndSayWhy()
+    {
+        await SeedRelationshipAsync();
+        foreach (var note in new[] { "Fix the quote.", "Fix the date." })
+        {
+            var report = await SaveReportAsync(Report() with { RecordId = ActionPair().PairId, Kind = PublishedRecordKind.Relationship });
+            await store.ResolveAsync("auth0|friend", report.ReportId, 0, CivicLens.Application.Reports.ReaderReportStatus.CorrectionNeeded, note, default);
+        }
+
+        var shown = await host.GetDocumentAsync(editor);
+
+        var message = shown.QuerySelector("#correction-editor-link")!;
+        Assert.Contains("2 reports need a correction", message.TextContent, StringComparison.Ordinal);
+        Assert.Null(message.QuerySelector("a"));
+        Assert.Equal("", shown.QuerySelector("textarea[name='Decision.CorrectionNote']")!.TextContent.Trim());
+    }
+
+    [Fact]
+    public async Task ANoteOverThePublicTextLimitIsFilledWholeAndTheEditorIsToldToShortenIt()
+    {
+        await SeedRelationshipAsync();
+        var report = await SaveReportAsync(Report() with { RecordId = ActionPair().PairId, Kind = PublishedRecordKind.Relationship });
+        var note = new string('a', PublishedCorrection.MaximumNoteLength + 1);
+        await store.ResolveAsync("auth0|friend", report.ReportId, 0, CivicLens.Application.Reports.ReaderReportStatus.CorrectionNeeded, note, default);
+
+        var shown = await host.GetDocumentAsync(editor);
+        var filled = await host.GetDocumentAsync(shown.QuerySelector("#correction-editor-link a")!.GetAttribute("href")!);
+
+        Assert.Contains("Shorten it", shown.QuerySelector("#correction-editor-link")!.TextContent, StringComparison.Ordinal);
+        Assert.Equal(note, filled.QuerySelector("textarea[name='Decision.CorrectionNote']")!.TextContent.Trim());
+    }
+
+    [Fact]
     public async Task TheReviewHomeCountsTheOpenReports()
     {
         await SaveReportAsync(Report());
