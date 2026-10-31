@@ -84,9 +84,10 @@ public sealed class PublishReleaseTests
         var order = scenario.Releases.WriteOrder;
         Assert.Equal(PublicationProtocol.ManifestPath, order[^1]);
         Assert.Equal(PublicationProtocol.OfficialsPagePath, order[^2]);
-        Assert.Equal(PublicationProtocol.CatalogPath, order[^3]);
-        Assert.Equal(PublicationProtocol.OfficialsPath, order[^4]);
-        Assert.Equal(PublicationProtocol.HomePath, order[^5]);
+        Assert.Equal(PublicationProtocol.OfficialSummariesPath, order[^3]);
+        Assert.Equal(PublicationProtocol.CatalogPath, order[^4]);
+        Assert.Equal(PublicationProtocol.OfficialsPath, order[^5]);
+        Assert.Equal(PublicationProtocol.HomePath, order[^6]);
         Assert.True(order.IndexOf(PublicationProtocol.RecordDataPath(draft)) < order.IndexOf("assets/site.css"));
     }
 
