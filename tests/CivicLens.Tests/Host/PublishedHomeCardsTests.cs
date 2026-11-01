@@ -86,8 +86,8 @@ public sealed class PublishedHomeCardsTests
     }
 
     [Theory]
-    [InlineData(PublishedVoteAlignment.Split, "Split vote", "On this substantive vote, most Democrats and most Republicans who cast Yea or Nay voted on opposite sides.")]
-    [InlineData(PublishedVoteAlignment.PartiesAgree, "Both parties agreed", "On this substantive vote, most Democrats and most Republicans who cast Yea or Nay voted the same way.")]
+    [InlineData(PublishedVoteAlignment.Split, "Split vote", "A split vote is a substantive roll call vote where most Democrats and most Republicans who cast Yea or Nay voted on opposite sides.")]
+    [InlineData(PublishedVoteAlignment.PartiesAgree, "Both parties agreed", "A vote where both parties agreed is a substantive roll call vote where most Democrats and most Republicans who cast Yea or Nay voted the same way.")]
     public async Task AVoteInAListShowsItsPartyBadgeWithItsMeaningAndItsCounts(PublishedVoteAlignment alignment, string badge, string meaning)
     {
         var main = await HomeAsync(ReleaseOf(Vote('a', 216, 214, alignment)), []);

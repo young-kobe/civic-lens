@@ -199,7 +199,11 @@ internal static class PublishedOfficialView
         return $"Missed {missed.Missed} of the {missed.Held} roll call {Noun(missed.Held, "vote")} of {ChamberName(missed.Chamber)} on this site{share}, {days} ({CongressCalendar.Ordinal(congress)} Congress).";
     }
 
-    public static readonly string SplitVoteMeaning = $"A split vote is a substantive roll call vote where most {PublishedPartyMajority.Democrat}s and most {PublishedPartyMajority.Republican}s voted on opposite sides.";
+    private static readonly string BothMajorities = $"most {PublishedPartyMajority.Democrat}s and most {PublishedPartyMajority.Republican}s who cast Yea or Nay";
+
+    public static readonly string SplitVoteMeaning = $"A split vote is a substantive roll call vote where {BothMajorities} voted on opposite sides.";
+
+    public static readonly string PartiesAgreedMeaning = $"A vote where both parties agreed is a substantive roll call vote where {BothMajorities} voted the same way.";
 
     public static string WithParty(VotesWithParty votes, int congress)
     {
