@@ -173,6 +173,43 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         Assert.Equal(0, capped.DuplicateCount);
     }
 
+    [Fact]
+    public async Task ANewUrlTakesTheSlotBeforeARecheckOfAKnownUrlSoRechecksCannotStarveNewItems()
+    {
+        var known = "https://example.test/articles/known";
+        var fresh = "https://example.test/articles/fresh";
+        var seeded = await jobs.AdmitAsync(Source(), await SaveFeedAsync([known]), "manual-seed", default);
+        Assert.NotNull(await jobs.CancelAsync(Assert.Single(seeded.Jobs).JobId, default));
+
+        var configured = Source(policy: new DiscoveryAdmissionPolicy { MaxJobs = 1 });
+        var result = await jobs.AdmitAutomaticCheckAsync(configured, await SaveFeedAsync([known, fresh]), "automatic-check", default);
+
+        Assert.Equal(fresh, Assert.Single(result.Jobs).Url);
+        Assert.Equal(1, result.DeferredCount);
+    }
+
+    [Fact]
+    public async Task NewUrlsThenRechecksAreAdmittedEachGroupInFeedOrderAndAReplayReturnsTheSameResult()
+    {
+        var knownOne = "https://example.test/articles/known-one";
+        var knownTwo = "https://example.test/articles/known-two";
+        var freshOne = "https://example.test/articles/fresh-one";
+        var freshTwo = "https://example.test/articles/fresh-two";
+        var seeded = await jobs.AdmitAsync(Source(), await SaveFeedAsync([knownOne, knownTwo]), "manual-seed", default);
+        foreach (var job in seeded.Jobs)
+            Assert.NotNull(await jobs.CancelAsync(job.JobId, default));
+
+        var configured = Source(policy: new DiscoveryAdmissionPolicy { MaxJobs = 3 });
+        var attempt = await SaveFeedAsync([knownTwo, freshTwo, knownOne, freshOne]);
+        var result = await jobs.AdmitAutomaticCheckAsync(configured, attempt, "automatic-check", default);
+        var replay = await jobs.AdmitAutomaticCheckAsync(configured, attempt, "automatic-check", default);
+
+        Assert.Equal([freshTwo, freshOne, knownTwo], result.Jobs.Select(job => job.Url));
+        Assert.Equal(1, result.DeferredCount);
+        Assert.Equal(result.Jobs, replay.Jobs);
+        Assert.Equal(result.DeferredCount, replay.DeferredCount);
+    }
+
     private sealed class CandidateSelectCounter : DbCommandInterceptor
     {
         public int CandidateSelectCount { get; private set; }

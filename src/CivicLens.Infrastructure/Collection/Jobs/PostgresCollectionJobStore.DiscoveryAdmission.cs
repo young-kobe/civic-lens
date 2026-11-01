@@ -104,6 +104,7 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                 ? new Dictionary<string, JobRow>(StringComparer.Ordinal) :
                 await db.Set<JobRow>().Where(row => existingJobIds.Contains(row.JobId))
                     .ToDictionaryAsync(row => row.JobId, cancellationToken);
+            var admissible = new List<(CollectionJobDefinition Definition, string Hash, DiscoveryCandidateJobRow? Existing)>();
             var candidateIndex = 0;
             foreach (var url in discovery.Urls)
             {
@@ -133,6 +134,11 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                     }
                 }
 
+                admissible.Add((definition, hash, existing));
+            }
+
+            foreach (var (definition, hash, existing) in admissible.OrderBy(candidate => candidate.Existing is not null))
+            {
                 if (!budget.TryReserve())
                 {
                     deferred++;
@@ -141,17 +147,17 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
 
                 var job = await jobWriter.AddJobAsync(DiscoveryAdmissionKeyPrefix + Guid.NewGuid().ToString("N"),
                     definition, cancellationToken);
-                if (existingCandidates.TryGetValue(hash, out var candidateRow))
-                    candidateRow.JobId = job.JobId;
+                if (existing is not null)
+                    existing.JobId = job.JobId;
                 else
                     db.Add(new DiscoveryCandidateJobRow
                     {
                         SourceId = definition.SourceId,
                         CandidateHash = hash,
-                        Url = url,
+                        Url = definition.Url,
                         JobId = job.JobId
                     });
-                jobs.Add(new DiscoveryAdmissionJob(job.JobId, url));
+                jobs.Add(new DiscoveryAdmissionJob(job.JobId, definition.Url));
             }
 
             var result = new DiscoveryAdmissionResult(jobs, deferred, duplicates);
