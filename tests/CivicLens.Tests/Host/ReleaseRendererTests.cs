@@ -269,19 +269,25 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task EveryPublicPageShowsDatesInTheOneDayMonthYearForm()
     {
-        var pages = await RenderEveryPageTypeAsync();
-        var shown = 0;
-        foreach (var (name, _, html, _) in pages)
+        string[] pagesWithADate = ["record", "statement", "action", "vote", "brief", "withdrawal", "home", "all records", "briefs", "official", "search", "executive action"];
+        var pages = (await RenderEveryPageTypeAsync()).Select(page => (page.Name, page.Html))
+            .Append(("executive action", await new ReleaseRenderer(null, null).RenderExecutiveActionAsync(FullExecutiveAction(), CancellationToken.None))).ToArray();
+        var other = new[]
+        {
+            @"\d{4}-\d{2}-\d{2}", @"\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2}, \d{4}", @"\b\d{1,2}/\d{1,2}/\d{2,4}\b",
+            @"\b\d{1,2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec), \d{1,2}:\d{2}"
+        };
+        foreach (var (name, html) in pages)
         {
             var document = new HtmlParser().ParseDocument(html);
-            foreach (var hidden in document.QuerySelectorAll("script, style, template").ToList()) hidden.Remove();
+            foreach (var verbatim in document.QuerySelectorAll("script, style, template, .doc-text, blockquote, mark").ToList()) verbatim.Remove();
+            foreach (var evidence in document.QuerySelectorAll("li").Where(item => item.TextContent.StartsWith("Evidence for", StringComparison.Ordinal)).ToList()) evidence.Remove();
             var text = document.Body!.TextContent;
 
-            Assert.False(Regex.IsMatch(text, @"\b\d{4}-\d{2}-\d{2}\b"), $"{name} shows a numeric date");
-            shown += Regex.Count(text, @"\b\d{1,2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4}\b");
+            foreach (var pattern in other) Assert.False(Regex.IsMatch(text, pattern), $"{name} shows a date that is not in the form 27 Mar 2026: {Regex.Match(text, pattern).Value}");
+            if (pagesWithADate.Contains(name))
+                Assert.True(Regex.IsMatch(text, @"\b\d{1,2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4}\b"), $"{name} shows no date");
         }
-
-        Assert.True(shown > 0);
     }
 
     [Fact]
@@ -420,8 +426,8 @@ public sealed class ReleaseRendererTests
         Assert.Equal(["Inside quotation marks", "Not in quotation marks"],
             document.QuerySelectorAll("[aria-labelledby='quotations-title'] .badge").Select(badge => badge.TextContent));
         Assert.Equal("<b>a rent cap</b>", document.QuerySelector("mark#cite-1")!.TextContent);
-        Assert.Equal("Signed 1 May 2026.", document.QuerySelector("mark#cite-2")!.TextContent);
-        Assert.Equal("Signed 1 May 2026.", document.QuerySelector("mark#cite-statement-date")!.TextContent);
+        Assert.Equal("Signed 2026-05-01.", document.QuerySelector("mark#cite-2")!.TextContent);
+        Assert.Equal("Signed 2026-05-01.", document.QuerySelector("mark#cite-statement-date")!.TextContent);
         Assert.Contains("Evidence for the statement date", html, StringComparison.Ordinal);
         Assert.Contains("href=\"https://example.gov/story\"", html, StringComparison.Ordinal);
         Assert.Contains("Observed 3 May 2026, 10:45 UTC", html, StringComparison.Ordinal);
@@ -455,7 +461,7 @@ public sealed class ReleaseRendererTests
         Assert.Contains("Checked by code on 10 May 2026, 12:00 UTC", text, StringComparison.Ordinal);
         Assert.Contains("Checked by code, 10 May 2026, 12:00 UTC", text, StringComparison.Ordinal);
         Assert.Contains("Policy areas (chosen by AI)", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("Approved 20", text, StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"Approved \d", text);
     }
 
     [Fact]
@@ -638,7 +644,7 @@ public sealed class ReleaseRendererTests
                      await renderer.RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None) })
         {
             Assert.Contains("From the official record, checked", html, StringComparison.Ordinal);
-            Assert.DoesNotContain("Approved 20", html, StringComparison.Ordinal);
+            Assert.DoesNotMatch(@"Approved \d", html);
         }
     }
 
@@ -957,7 +963,7 @@ public sealed class ReleaseRendererTests
         var renderer = new ReleaseRenderer(null, null);
         var pages = new[]
         {
-            (await renderer.RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None), "Signed 1 May 2026."),
+            (await renderer.RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None), "Signed 2026-05-01."),
             (await renderer.RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None), Record().ChangeDateEvidence!.Quote)
         };
 
@@ -3054,9 +3060,9 @@ public sealed class ReleaseRendererTests
 
     private static PublishedStatement Statement()
     {
-        const string text = "Jane said <b>a rent cap</b> helps tenants. Signed 1 May 2026. <script>x</script>";
+        const string text = "Jane said <b>a rent cap</b> helps tenants. Signed 2026-05-01. <script>x</script>";
         var cap = text.IndexOf("<b>a rent cap</b>", StringComparison.Ordinal);
-        var signed = text.IndexOf("Signed 1 May 2026.", StringComparison.Ordinal);
+        var signed = text.IndexOf("Signed 2026-05-01.", StringComparison.Ordinal);
         return new PublishedStatement
         {
             Corrections = [],
@@ -3066,7 +3072,7 @@ public sealed class ReleaseRendererTests
             Summary = "Doe supports a cap.",
             TextOrigin = PublishedTextOrigin.Person,
             StatementDate = new DateOnly(2026, 5, 1),
-            StatementDateEvidence = new PublishedCitation { ExtractionId = AfterId, Start = signed, Length = 18, Quote = "Signed 1 May 2026." },
+            StatementDateEvidence = new PublishedCitation { ExtractionId = AfterId, Start = signed, Length = 18, Quote = "Signed 2026-05-01." },
             Speakers = [new PublishedOfficial { Id = "o1", Name = "Jane <Doe>" }],
             OtherSpeakers = ["Aide One"],
             IssueIds = ["housing", "transit"],
@@ -3075,7 +3081,7 @@ public sealed class ReleaseRendererTests
             Quotations =
             [
                 new PublishedQuotation { ExtractionId = AfterId, Start = cap, Length = 17, Quote = "<b>a rent cap</b>", Kind = PublishedQuotationKind.DirectQuotation },
-                new PublishedQuotation { ExtractionId = AfterId, Start = signed, Length = 18, Quote = "Signed 1 May 2026.", Kind = PublishedQuotationKind.ReleaseText }
+                new PublishedQuotation { ExtractionId = AfterId, Start = signed, Length = 18, Quote = "Signed 2026-05-01.", Kind = PublishedQuotationKind.ReleaseText }
             ],
             Source = new PublishedDocumentVersion
             {

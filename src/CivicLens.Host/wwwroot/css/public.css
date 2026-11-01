@@ -21,7 +21,7 @@
 .official-card { display: flex; align-items: center; gap: var(--s3); padding: var(--s3); border: 1px solid var(--line); border-radius: var(--r-panel); background: var(--surface); }
 .official-card-text { display: grid; min-width: 0; }
 .official-card .cell-title { display: inline-flex; align-items: center; min-height: 44px; font-weight: 650; }
-.official-card .cell-sub { max-width: none; white-space: normal; }
+.official-card .cell-sub, .search-results .cell-sub { max-width: none; white-space: normal; }
 
 .caveat { padding-left: var(--s3); border-left: 2px solid var(--line-strong); color: var(--muted); font-size: var(--t-sm); }
 

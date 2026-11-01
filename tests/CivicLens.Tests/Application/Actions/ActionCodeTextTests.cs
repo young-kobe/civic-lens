@@ -29,7 +29,7 @@ public sealed class ActionCodeTextTests
         var text = ActionCodeText.Of(Snapshot("Put School Counselors Where They're Needed Act", "hr", 0, ("warren", ActionSponsorshipRole.Sponsor)));
 
         Assert.Equal("H.R. 3567: introduced by Elizabeth Warren", text.Headline);
-        Assert.Equal("H.R. 3567, Put School Counselors Where They're Needed Act. Sponsor: Elizabeth Warren. Introduced May 21, 2025. " +
+        Assert.Equal("H.R. 3567, Put School Counselors Where They're Needed Act. Sponsor: Elizabeth Warren. Introduced 21 May 2025. " +
             "Congress.gov has no summary of this bill yet.", text.Summary);
         Assert.Equal(ReviewTextOrigin.Code, text.Origin);
     }
@@ -40,7 +40,7 @@ public sealed class ActionCodeTextTests
         var text = ActionCodeText.Of(Snapshot("A bill.", "hr", 0, ("markey", ActionSponsorshipRole.Cosponsor)));
 
         Assert.Equal("H.R. 3567: introduced in Congress", text.Headline);
-        Assert.Equal("H.R. 3567, A bill. Introduced May 21, 2025. Congress.gov has no summary of this bill yet.", text.Summary);
+        Assert.Equal("H.R. 3567, A bill. Introduced 21 May 2025. Congress.gov has no summary of this bill yet.", text.Summary);
         Assert.DoesNotContain("Markey", text.Headline + text.Summary, StringComparison.Ordinal);
     }
 
@@ -72,8 +72,8 @@ public sealed class ActionCodeTextTests
         var text = ActionCodeText.Of(Snapshot("A bill", "hr", summaryCount, ("warren", ActionSponsorshipRole.Sponsor)));
 
         Assert.Equal(sentence, text.Summary.Contains(ActionCodeText.NoSummarySentence, StringComparison.Ordinal));
-        Assert.Equal(sentence ? "H.R. 3567, A bill. Sponsor: Elizabeth Warren. Introduced May 21, 2025. Congress.gov has no summary of this bill yet."
-            : "H.R. 3567, A bill. Sponsor: Elizabeth Warren. Introduced May 21, 2025.", text.Summary);
+        Assert.Equal(sentence ? "H.R. 3567, A bill. Sponsor: Elizabeth Warren. Introduced 21 May 2025. Congress.gov has no summary of this bill yet."
+            : "H.R. 3567, A bill. Sponsor: Elizabeth Warren. Introduced 21 May 2025.", text.Summary);
     }
 
     [Theory]
