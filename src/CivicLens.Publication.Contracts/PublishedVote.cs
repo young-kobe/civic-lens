@@ -15,6 +15,7 @@ public sealed record PublishedVote
     public const int MaximumSources = 3;
     public const int MaximumParties = 16;
     public const string ResultPrefix = "Result: ";
+    public const string CountPrefix = "Count: ";
     public const string CandidateTotalPrefix = "Candidate total ";
     public const string PartyTotalPrefix = "Party total ";
 

@@ -5,21 +5,8 @@
                       Caveat="@PublishedExecutiveActionView.Caveat">
     <PublishedTimeline Events="PublishedTimelineView.For(Record)" />
 
-    <Panel Title="Evidence" Id="evidence-title" Padded="true">
-        <p class="muted small">Each quote is exact text from the saved <Term Key="federal-register">Federal Register</Term> API record as Civic Lens renders it. The source panel marks the quotes in the full saved text.</p>
-        <ul class="choices">
-            @foreach (var fact in Record.Facts)
-            {
-                <li>
-                    <CitationQuote Label="@fact.Label" Quote="@fact.Citation.Quote">
-                        <ContextLink Href="@("#" + PublishedExecutiveActionView.Anchor(Record, fact))" Target="@PublishedRecordView.QuoteTarget(fact.Label.ToLowerInvariant())" />
-                    </CitationQuote>
-                </li>
-            }
-        </ul>
-    </Panel>
-
     <Panel Title="Sources" Id="sources-title" Padded="true">
+        <SourceLinesNote><Term Key="federal-register">Federal Register</Term> API record</SourceLinesNote>
         @for (var index = 0; index < Record.Sources.Length; index++)
         {
             var source = Record.Sources[index];

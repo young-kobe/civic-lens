@@ -1,0 +1,7 @@
+<li class="small">@Label: <span>@EncodedEvidence.Markup(Quote)</span> @ChildContent</li>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Quote { get; set; } = string.Empty;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

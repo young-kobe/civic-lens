@@ -21,7 +21,7 @@ public static class PublicColumn
     public const string Link = "Link";
     public const string WhatTheyDid = "What they did";
     public const string Result = "Result";
-    public const string Evidence = "Evidence";
+    public const string Source = "Source";
     public const string Role = "Role";
     public const string Original = "Original";
     public const string Sponsored = "Sponsored";

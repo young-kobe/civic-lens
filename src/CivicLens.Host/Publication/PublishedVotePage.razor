@@ -31,34 +31,6 @@
         </Panel>
     }
 
-    <Panel Title="Result" Id="result-title" Padded="true">
-        <p class="muted small">Each quote is exact text from the saved @PublishedVoteView.SavedData(Record) as Civic Lens renders it. Each source panel marks the quotes in the full saved text.</p>
-        <ul class="choices">
-            <li>
-                <CitationQuote Label="Date" Quote="@Record.VotedOnCitation.Quote">
-                    <ContextLink Href="@("#" + PublishedVoteView.Anchor(Record, Record.VotedOnCitation))" Target="@PublishedRecordView.QuoteTarget("date")" />
-                </CitationQuote>
-            </li>
-            @if (Record.KindCitation is { } kind)
-            {
-                <li>
-                    <CitationQuote Label="Kind" Quote="@kind.Quote">
-                        <ContextLink Href="@("#" + PublishedVoteView.Anchor(Record, kind))" Target="@PublishedRecordView.QuoteTarget("kind")" />
-                    </CitationQuote>
-                </li>
-            }
-            @foreach (var fact in PublishedVoteView.ResultFacts(Record))
-            {
-                var label = PublishedRecordLabels.VoteResultLabel(fact);
-                <li>
-                    <CitationQuote Label="@label" Quote="@fact.Text">
-                        <ContextLink Href="@("#" + PublishedVoteView.Anchor(Record, fact.Citation))" Target="@PublishedRecordView.QuoteTarget(label.ToLowerInvariant())" />
-                    </CitationQuote>
-                </li>
-            }
-        </ul>
-    </Panel>
-
     @if (PublishedVoteView.Breakers(Record).ToArray() is { Length: > 0 } breakers)
     {
         <Panel Title="Members who voted against most of their party" Id="breakers-title" Padded="true">
@@ -101,6 +73,7 @@
     </Panel>
 
     <Panel Title="Sources" Id="sources-title" Padded="true">
+        <SourceLinesNote>@PublishedVoteView.SavedData(Record)</SourceLinesNote>
         @for (var index = 0; index < Record.Sources.Length; index++)
         {
             var source = Record.Sources[index];

@@ -1,0 +1,6 @@
+<ContextLink Class="small source-line" Text="Source line" Href="@("#" + Anchor)" Target="@Target" />
+
+@code {
+    [Parameter, EditorRequired] public string Anchor { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Target { get; set; } = string.Empty;
+}

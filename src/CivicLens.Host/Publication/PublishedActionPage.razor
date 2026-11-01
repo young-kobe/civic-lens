@@ -9,51 +9,35 @@
     <PublishedTimeline Events="PublishedTimelineView.For(Record)" />
 
     <Panel Title="Sponsorships" Id="sponsorships-title" Padded="true">
-        <p class="muted small">Each quote is exact text from the saved Congress.gov API page as Civic Lens renders it. Each source panel marks the quotes in the full saved text.</p>
         <DataTable Roles="true" Items="Record.Sponsorships" Caption="Sponsorships of tracked officials">
-            <Head><TableCell Header>Official</TableCell><TableCell Header>@PublicColumn.Role</TableCell><TableCell Header>@PublicColumn.Original</TableCell><TableCell Header Class="fit num">@PublicColumn.Sponsored</TableCell><TableCell Header Class="fit num">@PublicColumn.Withdrawn</TableCell><TableCell Header>@PublicColumn.Evidence</TableCell></Head>
+            <Head><TableCell Header>Official</TableCell><TableCell Header>@PublicColumn.Role</TableCell><TableCell Header>@PublicColumn.Original</TableCell><TableCell Header Class="fit num">@PublicColumn.Sponsored</TableCell><TableCell Header Class="fit num">@PublicColumn.Withdrawn</TableCell><TableCell Header>@PublicColumn.Source</TableCell></Head>
             <Row Context="sponsorship">
                 <TableCell Main><PublishedOfficialName Official="sponsorship.Official" Linked="@(sponsorship.Role == PublishedSponsorshipRole.Sponsor)" /></TableCell>
                 <TableCell Label="@PublicColumn.Role">@PublishedRecordLabels.Role(sponsorship.Role)</TableCell>
                 <TableCell Label="@PublicColumn.Original">@(sponsorship.IsOriginal ? "Yes" : "No")</TableCell>
                 <TableCell Class="fit num" Label="@PublicColumn.Sponsored">@Moment.Iso(sponsorship.SponsoredOn)</TableCell>
                 <TableCell Class="fit num" Label="@PublicColumn.Withdrawn">@(sponsorship.WithdrawnOn is { } withdrawn ? Moment.Iso(withdrawn) : "None")</TableCell>
-                <TableCell Label="@PublicColumn.Evidence">
+                <TableCell Label="@PublicColumn.Source">
                     @for (var index = 0; index < sponsorship.Citations.Length; index++)
                     {
-                        <blockquote class="quote">@EncodedEvidence.Markup(sponsorship.Citations[index].Quote)</blockquote>
-                        <ContextLink Class="small" Href="@("#" + PublishedActionView.SponsorshipAnchor(Record, sponsorship, index))" Target="@PublishedRecordView.QuoteTarget(sponsorship.Official.Name, index, sponsorship.Citations.Length)" />
+                        <SourceLineLink Anchor="@PublishedActionView.SponsorshipAnchor(Record, sponsorship, index)" Target="@PublishedRecordView.SourceLineTarget($"{sponsorship.Official.Name}, sponsorship", index, sponsorship.Citations.Length)" />
                     }
                 </TableCell>
             </Row>
         </DataTable>
     </Panel>
 
-    @if (Record.SummaryCitation is not null || Record.PolicyAreaCitation is not null)
+    @if (Record.SummaryCitation is { } summary)
     {
         <Panel Title="Bill evidence" Id="bill-evidence-title" Padded="true">
-            <ul class="choices">
-                @if (Record.PolicyAreaCitation is { } area)
-                {
-                    <li>
-                        <CitationQuote Label="Policy area" Quote="@area.Quote">
-                            <ContextLink Href="@("#" + PublishedActionView.PolicyAreaAnchor(Record))" Target="@PublishedRecordView.QuoteTarget("policy area")" />
-                        </CitationQuote>
-                    </li>
-                }
-                @if (Record.SummaryCitation is { } summary)
-                {
-                    <li>
-                        <CitationQuote Label="CRS summary" Quote="@summary.Quote">
-                            <ContextLink Href="@("#" + PublishedActionView.SummaryAnchor(Record))" Target="@PublishedRecordView.QuoteTarget("CRS summary")" />
-                        </CitationQuote>
-                    </li>
-                }
-            </ul>
+            <CitationQuote Label="CRS summary" Quote="@summary.Quote">
+                <SourceLineLink Anchor="@PublishedActionView.SummaryAnchor(Record)" Target="CRS summary" />
+            </CitationQuote>
         </Panel>
     }
 
     <Panel Title="Sources" Id="sources-title" Padded="true">
+        <SourceLinesNote>Congress.gov API page</SourceLinesNote>
         @for (var index = 0; index < Record.Sources.Length; index++)
         {
             var source = Record.Sources[index];
