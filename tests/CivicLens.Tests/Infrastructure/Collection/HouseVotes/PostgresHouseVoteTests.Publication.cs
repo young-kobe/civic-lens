@@ -84,18 +84,41 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
-    public async Task FindBillActionRecordIdsOfVotesReturnsTheActionRecordsOnTheBillOfEachNamedVoteInOneQuery()
+    public async Task FindBillActionRecordIdsOfVotesReturnsTheActionRecordsOnTheBillOfEachNamedVoteRevisionInOneQuery()
     {
         var recordId = await ApprovedVoteAsync();
         var sameBill = new string('7', 64);
         await InsertActionDraftAsync(sameBill, "hconres", 14);
         await InsertActionDraftAsync(new string('9', 64), "hr", 14);
 
-        var found = await VoteReviews().FindBillActionRecordIdsOfVotesAsync([recordId, "unknown"], default);
+        var found = await VoteReviews().FindBillActionRecordIdsOfVotesAsync([new(PublishedRecordKind.Vote, recordId, 1)], default);
 
         Assert.Equal([sameBill], [.. found[recordId]]);
-        Assert.False(found.ContainsKey("unknown"));
         Assert.Empty(await VoteReviews().FindBillActionRecordIdsOfVotesAsync([], default));
+    }
+
+    [Fact]
+    public async Task FindBillActionRecordIdsOfVotesUsesTheBillOfThePublishedRevisionAndNotTheBillOfTheCurrentCandidate()
+    {
+        var recordId = await ApprovedVoteAsync();
+        var publishedBill = new string('7', 64);
+        var newerBill = new string('8', 64);
+        await InsertActionDraftAsync(publishedBill, "hconres", 14);
+        await InsertActionDraftAsync(newerBill, "hr", 99);
+        var newer = new string('1', 64);
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO vote_candidates (candidate_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks,
+                bill_type, bill_number, detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
+            SELECT '{newer}', source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks + 1,
+                'hr', 99, 'newer-detail', 'newer-members', detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks
+            FROM vote_candidates WHERE candidate_id = (SELECT candidate_id FROM vote_drafts WHERE record_id = '{recordId}');
+            UPDATE vote_drafts SET candidate_id = '{newer}' WHERE record_id = '{recordId}';
+            """);
+
+        var found = await VoteReviews().FindBillActionRecordIdsOfVotesAsync([new(PublishedRecordKind.Vote, recordId, 1)], default);
+
+        Assert.Equal([publishedBill], [.. found[recordId]]);
     }
 
     [Fact]

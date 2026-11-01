@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
@@ -5,15 +6,16 @@ namespace CivicLens.Application.Publication;
 /// <summary>Plans every page that this publish writes. A page lists the related records of the new release.</summary>
 internal sealed class ReleasePages(IReleaseDirectory releases, PublishedRecordLoaders loaders)
 {
-    // A page reads and renders when the staging writes it, so the text of one page is in memory at a time.
+    // A page reads and renders when the staging writes it, so one page text is in memory at a time. ReleaseLinks.all still holds the carried relationships.
     public async Task<IReadOnlyDictionary<string, StagedPage>> PlanAsync(PublicationBuild build, IReadOnlyList<PendingRecord> additions,
         bool rewriteAll, CancellationToken cancellationToken)
     {
         var changedWithoutLinks = await CarriedWithChangedFactsAsync(build, additions, rewriteAll, cancellationToken);
         var links = await ReleaseLinks.LoadAsync(releases, build, loaders.Relationships, additions, changedWithoutLinks, cancellationToken);
         var carriedPages = CarriedToRender(links, changedWithoutLinks, build, additions).ToList();
+        var carriedVotes = carriedPages.Where(carried => carried.Kind == PublishedRecordKind.Vote).Select(carried => carried.RecordId).ToHashSet(StringComparer.Ordinal);
         var withBills = build.WithVoteBillActions(await loaders.Votes.BillActionRecordIdsAsync(
-            carriedPages.Where(carried => carried.Kind == PublishedRecordKind.Vote).Select(carried => carried.RecordId), cancellationToken));
+            [.. build.ReleaseRecords.Where(record => record.Kind == PublishedRecordKind.Vote && carriedVotes.Contains(record.RecordId))], cancellationToken));
         var pages = new Dictionary<string, StagedPage>(StringComparer.Ordinal);
         foreach (var addition in additions)
             pages[addition.RecordId] = token => addition.RenderPage(links.Citing(addition.Entry.Kind, addition.RecordId), token);
@@ -25,9 +27,16 @@ internal sealed class ReleasePages(IReleaseDirectory releases, PublishedRecordLo
     private async Task<string> RenderCarriedAsync(PublishedRecordReference carried, ReleaseLinks links, PublicationBuild build,
         CancellationToken cancellationToken)
     {
-        var json = await releases.ReadFileAsync(build.Previous.DirectoryName!, PublicationProtocol.RecordDataPath(carried.RecordId),
-            PublishedRecordFiles.MaximumCitedRecordBytes, cancellationToken);
-        return await loaders.For(carried.Kind).RenderCarriedAsync(carried.RecordId, json, links, build, cancellationToken);
+        try
+        {
+            var json = await releases.ReadFileAsync(build.Previous.DirectoryName!, PublicationProtocol.RecordDataPath(carried.RecordId),
+                PublishedRecordFiles.MaximumCitedRecordBytes, cancellationToken);
+            return await loaders.For(carried.Kind).RenderCarriedAsync(carried.RecordId, json, links, build, cancellationToken);
+        }
+        catch (Exception exception) when (exception is JsonException or InvalidDataException)
+        {
+            throw new ReleaseRewriteException($"The record file of {carried.Kind} {carried.RecordId} is invalid, so its page cannot be rendered again.", exception);
+        }
     }
 
     // A carried page changes when a link of its related panel changes, when its bill link points at an action that this publish withdraws or returns,

@@ -57,14 +57,9 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
         return ids.IsEmpty ? new HashSet<string>() : await votes.FindVoteRecordIdsOnBillsOfActionsAsync(ids, cancellationToken);
     }
 
-    public Task<IReadOnlyDictionary<string, ImmutableArray<string>>> BillActionRecordIdsAsync(IEnumerable<string> voteRecordIds,
-        CancellationToken cancellationToken)
-    {
-        ImmutableArray<string> ids = [.. voteRecordIds];
-        return ids.IsEmpty
-            ? Task.FromResult<IReadOnlyDictionary<string, ImmutableArray<string>>>(ImmutableDictionary<string, ImmutableArray<string>>.Empty)
-            : votes.FindBillActionRecordIdsOfVotesAsync(ids, cancellationToken);
-    }
+    public Task<IReadOnlyDictionary<string, ImmutableArray<string>>> BillActionRecordIdsAsync(ImmutableArray<PublishedRevisionBinding> revisions,
+        CancellationToken cancellationToken) =>
+        votes.FindBillActionRecordIdsOfVotesAsync(revisions, cancellationToken);
 
     public override Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
         CancellationToken cancellationToken) =>

@@ -14,7 +14,7 @@ public sealed class PublishPageRewriteTests
     {
         var scenario = new PublicationScenario();
         var records = await PublishEveryKindAsync(scenario);
-        var first = scenario.Publications.Committed.Single().DirectoryName;
+        var first = scenario.Publications.Committed[^1].DirectoryName;
         scenario.PageLayout = " layout-2";
         scenario.Releases.Links.Clear();
 
@@ -31,7 +31,7 @@ public sealed class PublishPageRewriteTests
     }
 
     [Fact]
-    public async Task ARewrittenPageKeepsItsBillLinkItsRelatedRecordsAndItsCorrectionsBecauseTheLayoutChangesNoFact()
+    public async Task ARewrittenPageKeepsItsBillLinkItsRelatedRecordsItsCorrectionsAndItsBillStatusBecauseTheLayoutChangesNoFact()
     {
         var scenario = new PublicationScenario();
         var records = await PublishEveryKindAsync(scenario);
@@ -41,7 +41,7 @@ public sealed class PublishPageRewriteTests
 
         Assert.Equal($"<html>vote {records.Vote.RecordId} bill {records.Action.RecordId} layout-2</html>", PageOf(scenario, summary.DirectoryName, records.Vote.RecordId));
         Assert.Equal($"<html>statement {records.Statement.RecordId} related e layout-2</html>", PageOf(scenario, summary.DirectoryName, records.Statement.RecordId));
-        Assert.Equal($"<html>action {records.Action.RecordId} related e layout-2</html>", PageOf(scenario, summary.DirectoryName, records.Action.RecordId));
+        Assert.Equal($"<html>action {records.Action.RecordId} related e corrections 1 status Passed House. 2026-01-28 layout-2</html>", PageOf(scenario, summary.DirectoryName, records.Action.RecordId));
     }
 
     [Fact]
@@ -101,14 +101,14 @@ public sealed class PublishPageRewriteTests
     {
         var scenario = new PublicationScenario();
         var records = await PublishEveryKindAsync(scenario);
-        var first = scenario.Publications.Committed.Single().DirectoryName;
+        var first = scenario.Publications.Committed[^1].DirectoryName;
         scenario.PageLayout = " layout-2";
         scenario.Releases.Links.Clear();
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("k2", new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('b'))));
 
-        foreach (var record in new[] { records.Action, records.Vote, records.Document, records.Executive })
+        foreach (var record in records.All)
         {
             Assert.Contains((first, PublicationProtocol.RecordPagePath(record.RecordId)), scenario.Releases.Links);
             Assert.DoesNotContain("layout-2", PageOf(scenario, summary.DirectoryName, record.RecordId));
@@ -150,10 +150,13 @@ public sealed class PublishPageRewriteTests
     {
         var statement = scenario.AddStatement('c', statementDate: new DateOnly(2026, 1, 2));
         var action = scenario.AddAction('d');
+        scenario.Actions.BillStatuses[action] = new() { RecordId = action, Text = "Passed House.", Date = new DateOnly(2026, 1, 28), ObservedAtUtc = new DateTimeOffset(2026, 1, 30, 9, 0, 0, TimeSpan.Zero) };
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k0", new PublishedRecordReference(PublishedRecordKind.Action, action)));
+        scenario.ReviseAction(action, 2, correctionNote: "Fixed the issue.");
         var vote = scenario.AddVote('f', billActionRecordIds: [action]);
         var document = scenario.AddDraft('a');
         var executive = scenario.AddExecutiveAction('9');
-        var relationship = scenario.AddRelationship('e', statement, action);
+        var relationship = scenario.AddRelationship('e', statement, action, targetRevision: 2);
         var brief = scenario.AddBrief(Week, [new(PublishedRecordKind.Statement, statement, 1)]);
         var all = new Published(
             new(PublishedRecordKind.Statement, statement), new(PublishedRecordKind.Action, action), new(PublishedRecordKind.Vote, vote),

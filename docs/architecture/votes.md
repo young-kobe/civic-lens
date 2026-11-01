@@ -328,7 +328,7 @@ Vote review uses the shared decision rules and review cycles in [review](review.
 - the tracked members: the name and the cast of each member, with the cited member line
 - the shared `ReviewDecisionPanel` and `ReviewHistoryPanel`
 
-The action link comes from `GetVoteReview`. The review read finds the action draft of the bill with `ReadBillActionRecordIdsAsync` in the same transaction. Publication finds the same actions for carried votes with `FindBillActionRecordIdsOfVotesAsync`. The clerk link is the HTML vote page: `https://clerk.house.gov/Votes/{year}{number}`. The year is the calendar year of the session. The roll number has no padding, so roll 100 of 2025 is `2025100` and roll 5 is `20255`. The format was checked against the live site on 2026-10-19.
+The action link comes from `GetVoteReview`. The review read finds the action draft of the bill with `ReadBillActionRecordIdsAsync` in the same transaction. Publication finds the actions for carried votes with `FindBillActionRecordIdsOfVotesAsync`, from the bill of the published revision. The clerk link is the HTML vote page: `https://clerk.house.gov/Votes/{year}{number}`. The year is the calendar year of the session. The roll number has no padding, so roll 100 of 2025 is `2025100` and roll 5 is `20255`. The format was checked against the live site on 2026-10-19.
 
 A person cannot edit the member votes.
 
