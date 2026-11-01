@@ -230,7 +230,7 @@ public sealed class PublishRelease
         {
             summary = await publications.CommitAsync(actor.Subject, commit, idempotencyKey, payloadHash, cancellationToken);
         }
-        catch (Exception exception) when (exception is PublicationConflictException or ArgumentException)
+        catch (Exception exception) when (exception is PublicationConflictException or PublicationStateMismatchException or ArgumentException)
         {
             await DiscardAsync(commit.DirectoryName);
             throw;

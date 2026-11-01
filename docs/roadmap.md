@@ -44,7 +44,7 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [x] Page cache of 60 seconds and search poll of 30 seconds (#246)
   - [x] Move readers to the per-record table (#251)
   - [x] Drop `records_json` and the drift check (#276)
-  - [ ] Check the row count inside each publish, after `records_json` is dropped
+  - [x] Check the row count inside each publish, after `records_json` is dropped (#287)
   - [ ] `pg_notify` on approval, after the action draft drain
 - R-47: Insight boards. One contract PR adds vote fields to vote entries, a per-official summary roll-up, and a cosponsor field on action entries. Then build boards for party breakers, loyalists, and missed votes, as static pages for each chamber and party. Then add list badges and home cards for the closest vote, the most breaks, and the newest executive actions. Then add a bill status line, sponsored bills that moved, and bipartisan cosponsorship. Depends on: none stated. [Publication](architecture/publication.md#limits-and-planned-work)
   - [x] Contract PR (#258), with one operator rewrite of carried entries and no reset, not yet run
@@ -93,7 +93,8 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 **Coverage**
 
 - R-55: Stop losing feed items. Items past `maxJobs` are dropped for good today, and every member feed uses `maxJobs` 2. Survey a drain of deferred candidates, then build it. Depends on: none. [Collection](architecture/collection.md#limits-and-planned-work)
-  - [ ] Admit new URLs before rechecks, with a starvation test first
+  - [x] Admit new URLs before rechecks, with a starvation test first (#286)
+  - [ ] Survey and build a drain of deferred candidates
 - R-56: Publish source coverage. Add a coverage field for each official and a "sources we could read" panel, so uneven coverage is visible. Depends on: none. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-57: Finish the executive and judicial sources, after a check of what shipped. The plan is Cabinet officials from agency pages where the official speaks, then the 9 justices, speeches and remarks only. Opinions wait for a case record kind and a PDF reader. Executive orders as a record kind shipped with the Federal Register work. Depends on: none. [Executive actions](architecture/executive-actions.md#limits-and-planned-work)
 - R-58: More data sources, each from an official API or bulk file, with a terms and robots check. The order is committees, NOMINATE scores, FEC, LDA, and Census. Financial disclosures come last. Depends on: R-47. [Roster](architecture/roster.md#limits-and-planned-work)
