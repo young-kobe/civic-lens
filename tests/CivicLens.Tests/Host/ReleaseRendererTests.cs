@@ -1765,9 +1765,14 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task HomeHidesTheBriefingPanelWhenNoBriefExistsInsteadOfShowingAnEmptyPanel()
     {
-        var html = await new ReleaseRenderer(null, null).RenderHomeAsync(ReleaseOf(1), null, NoFacets, NoHighlights(ReleaseOf(1)), CancellationToken.None);
+        var renderer = new ReleaseRenderer(null, null);
 
-        Assert.DoesNotContain("briefing", html, StringComparison.OrdinalIgnoreCase);
+        var with = new HtmlParser().ParseDocument(await renderer.RenderHomeAsync(ReleaseOf(1), Brief(), NoFacets, NoHighlights(ReleaseOf(1)), CancellationToken.None));
+        var without = new HtmlParser().ParseDocument(await renderer.RenderHomeAsync(ReleaseOf(1), null, NoFacets, NoHighlights(ReleaseOf(1)), CancellationToken.None));
+
+        Assert.Contains("A week of <housing> news", with.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("A week of <housing> news", without.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("briefing", without.QuerySelector("main")!.TextContent, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

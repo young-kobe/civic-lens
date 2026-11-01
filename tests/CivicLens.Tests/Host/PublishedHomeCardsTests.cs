@@ -78,17 +78,36 @@ public sealed class PublishedHomeCardsTests
     }
 
     [Fact]
-    public async Task ALaterExecutiveTermOfAnotherPartyDoesNotChangeTheLabelOfAMemberOfTheHouse()
+    public async Task ALaterExecutiveTermOfTheSamePartyDoesNotChangeTheLabelOfAMemberOfTheHouse()
     {
-        var main = await HomeAsync(ReleaseOf(), [Leader([Term("Democrat", "TX", startYear: 2021), Term("Republican", null, startYear: 2025, kind: PublishedOfficeKind.Executive)])]);
+        var main = await HomeAsync(ReleaseOf(), [Leader([Term("Democrat", "TX", startYear: 2021), Term("Democrat", null, startYear: 2025, kind: PublishedOfficeKind.Executive)])]);
 
         Assert.Equal("Jane Doe (D, Texas) sided against most House Democrats on 12 of 40 votes where the parties split.", main.QuerySelector("li")!.TextContent);
+    }
+
+    [Fact]
+    public async Task ALaterTermOfTheSamePartyInTheOtherChamberDoesNotChangeTheStateOfAMemberOfTheHouse()
+    {
+        var main = await HomeAsync(ReleaseOf(), [Leader([Term("Democrat", "TX", startYear: 2021), Term("Democrat", "NM", startYear: 2025, kind: PublishedOfficeKind.Senator)])]);
+
+        Assert.Equal("Jane Doe (D, Texas) sided against most House Democrats on 12 of 40 votes where the parties split.", main.QuerySelector("li")!.TextContent);
+    }
+
+    [Fact]
+    public async Task ASenateLeaderTakesTheStateOfTheSenateTermNotOfALaterHouseTerm()
+    {
+        var terms = new[] { Term("Democrat", "NM", startYear: 2021, kind: PublishedOfficeKind.Senator), Term("Democrat", "TX", startYear: 2025) };
+
+        var main = await HomeAsync(ReleaseOf(), [Leader(terms, PublishedChamber.Senate)]);
+
+        Assert.Equal("Jane Doe (D, New Mexico) sided against most Senate Democrats on 12 of 40 votes where the parties split.", main.QuerySelector("li")!.TextContent);
     }
 
     [Theory]
     [InlineData("Independent", "Democrat", "ME", "Jane Doe (I, Maine) ")]
     [InlineData("Democrat", null, null, "Jane Doe (D) ")]
     [InlineData(null, "Democrat", "TX", "Jane Doe (Texas) ")]
+    [InlineData("Libertarian", "Democrat", "ME", "Jane Doe (Maine) ")]
     [InlineData("Democrat", null, "DC", "Jane Doe (D, District of Columbia) ")]
     public async Task TheBreakCardShowsOnlyThePartyLetterAndStateNameThatTheTermHolds(string? party, string? caucus, string? state, string expectedStart)
     {
@@ -168,7 +187,7 @@ public sealed class PublishedHomeCardsTests
         return new HtmlParser().ParseDocument(html).QuerySelector("main")!;
     }
 
-    private static BreakLeader Leader(PublishedOfficeTerm[]? terms = null) => new(PublishedChamber.House, PublishedPartyMajority.Democrat,
+    private static BreakLeader Leader(PublishedOfficeTerm[]? terms = null, PublishedChamber chamber = PublishedChamber.House) => new(chamber, PublishedPartyMajority.Democrat,
         new OfficialListing(new PublishedOfficialProfile { Id = "doe", Name = "Jane Doe", Terms = terms ?? [Term("Democrat", "TX")] }, 0), 40, 12);
 
     private static PublishedOfficeTerm Term(string? party, string? state, string? caucus = null, int startYear = 2025, PublishedOfficeKind kind = PublishedOfficeKind.Representative) => new()
