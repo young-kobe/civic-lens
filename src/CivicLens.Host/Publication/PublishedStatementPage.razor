@@ -25,11 +25,9 @@
             }
             @if (Record.StatementDateEvidence is { } evidence)
             {
-                <li>
-                    <CitationQuote Label="Evidence for the statement date" Quote="@evidence.Quote">
-                        <ContextLink Href="@("#" + PublishedStatementView.StatementDateAnchor)" Target="@PublishedRecordView.QuoteTarget("statement date")" />
-                    </CitationQuote>
-                </li>
+                <DateEvidenceLine Label="Evidence for the statement date" Quote="@evidence.Quote">
+                    <ContextLink Href="@("#" + PublishedStatementView.StatementDateAnchor)" Target="@PublishedRecordView.QuoteTarget("statement date")" />
+                </DateEvidenceLine>
             }
         </ul>
     </Panel>

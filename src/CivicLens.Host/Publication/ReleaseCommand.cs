@@ -42,7 +42,7 @@ public static class ReleaseCommand
                         return 2;
                 }
             }
-            catch (Exception exception) when (exception is PublicationConflictException or ReleaseRewriteException)
+            catch (Exception exception) when (exception is PublicationConflictException or PublicationStateMismatchException or ReleaseRewriteException)
             {
                 Console.Error.WriteLine(exception.Message);
                 return 1;

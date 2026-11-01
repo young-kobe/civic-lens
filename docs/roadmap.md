@@ -51,18 +51,14 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [x] Page cache of 60 seconds and search poll of 30 seconds (#246)
   - [x] Move readers to the per-record table (#251)
   - [x] Drop `records_json` and the drift check (#276)
-  - [ ] Check the row count inside each publish, after `records_json` is dropped
+  - [x] Check the row count inside each publish, after `records_json` is dropped (#287)
   - [ ] `pg_notify` on approval, after the action draft drain
-- R-46: Sortable tables and vote insights. Add a filter row above the tables. Vote pages get badges and a panel of members who broke with their party. Issue pages get a summary of votes and bills. Depends on: R-44. [Search](architecture/search.md#limits-and-planned-work)
-  - [x] Sortable tables and search sort keys (#247)
-  - [x] Vote badges and the party break panel (#252)
-  - [ ] Issue summary
-  - [x] Filter row (#254)
-- R-47: Insight boards. One contract PR adds vote fields to vote entries, a per-official summary roll-up, and a cosponsor field on action entries. Then build boards for party breakers, loyalists, and missed votes, as static pages for each chamber and party. Then add list badges and home cards for the closest vote, the most breaks, and the newest executive actions. Then add a bill status line, sponsored bills that moved, and bipartisan cosponsorship. Depends on: R-46. [Publication](architecture/publication.md#limits-and-planned-work)
+- R-47: Insight boards. One contract PR adds vote fields to vote entries, a per-official summary roll-up, and a cosponsor field on action entries. Then build boards for party breakers, loyalists, and missed votes, as static pages for each chamber and party. Then add list badges and home cards for the closest vote, the most breaks, and the newest executive actions. Then add a bill status line, sponsored bills that moved, and bipartisan cosponsorship. Depends on: none stated. [Publication](architecture/publication.md#limits-and-planned-work)
   - [x] Contract PR (#258), with one operator rewrite of carried entries and no reset, not yet run
-  - [ ] Boards
+  - [x] Boards (#269)
   - [x] List badges and home cards (#273)
-  - [ ] Bill status line and the remaining items
+  - [x] Bill status line (#281)
+  - [ ] The remaining items
   - [ ] Show the prior Congress on the vote boards until a new Congress has votes
 - R-48: What an official said and how they voted. The profile lists pairs, not totals: the quote with its date, then the cast with its question, date, and result. It shows no Yea or Nay totals and no talk against action quadrant, because a bare total lacks context. Depends on: R-47. [Publication](architecture/publication.md#limits-and-planned-work)
   - [ ] Said and voted pairs on the profile
@@ -72,7 +68,8 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 
 - R-51: Cut the review pages. Make one "Needs a person" queue that says why each record needs a person. Delete the relationship and brief list pages, and the home panels that the queue replaces. Add an owner "Take off site" action in the editor, using the existing withdrawal code. Send a reader report correction straight to the editor with its note filled in. Delete the gate label pages after D-13. Depends on: none. [Review](architecture/review.md#limits-and-planned-work)
   - [x] "Needs a person" queue, and delete list pages and home panels (#257, #259, #263, #265, #267, #268)
-  - [ ] "Take off site" action and report to editor
+  - [x] "Take off site" action (#270)
+  - [ ] Report to editor
   - [ ] Delete gate label pages, after D-13
 - R-65: One page for each review job. A reader report opens the record editor with the reader's words on top. The person dismisses it, or edits, types the public text, and clicks "Save and approve". After a decision, the page moves to the next item. A failed approval keeps the typed text. Every approval check stays. PR #271, which filled public text from the private note, is closed. Depends on: R-51 take off site (#270). [Review](architecture/review.md#limits-and-planned-work)
   - [ ] Save and approve in one transaction, and open the edit form by default
@@ -89,21 +86,22 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [x] `votes draft redraft` (#244)
   - [x] Read Congress.gov subjects in drafts (#248)
   - [ ] Run the subjects backfill and the redraft commands
-  - [ ] Write action text in code when no summary text reaches the model, and move summary bills to the new prompt
+  - [x] Write action text in code when no summary text reaches the model, and move summary bills to the new prompt (#277)
   - [ ] Draft the action backlog, and spot check the issue tags after it
 
 - R-66: Gate model output on confidence. Models give a confidence score. A low score sends the record to the one page review, where a person fixes it or tells the model what to fix. Set the threshold from measured data and a person-labeled set. Depends on: R-65. [Review](architecture/review.md#limits-and-planned-work)
   - [ ] Agree the design
   - [ ] Build the gate and the model fix
 - R-67: Measure each prompt. Each prompt version gets a live, budgeted, opt-in measure on fixed bills, and the numbers go on the PR. Use the cheapest setting that holds accuracy. The order is vote, statement draft and gate, document change, relationship, then brief. Depends on: none. [Analysis](architecture/analysis.md#limits-and-planned-work)
-  - [ ] Fix the vote prompt wording and measure it
+  - [x] Fix the vote prompt wording and measure it (#280)
   - [ ] Agree one opt-in eval command, and build it
   - [ ] Measure the other prompts, one PR for each
 
 **Coverage**
 
 - R-55: Stop losing feed items. Items past `maxJobs` are dropped for good today, and every member feed uses `maxJobs` 2. Survey a drain of deferred candidates, then build it. Depends on: none. [Collection](architecture/collection.md#limits-and-planned-work)
-  - [ ] Admit new URLs before rechecks, with a starvation test first
+  - [x] Admit new URLs before rechecks, with a starvation test first (#286)
+  - [ ] Survey and build a drain of deferred candidates
 - R-56: Publish source coverage. Add a coverage field for each official and a "sources we could read" panel, so uneven coverage is visible. Depends on: none. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-57: Finish the executive and judicial sources, after a check of what shipped. The plan is Cabinet officials from agency pages where the official speaks, then the 9 justices, speeches and remarks only. Opinions wait for a case record kind and a PDF reader. Executive orders as a record kind shipped with the Federal Register work. Depends on: none. [Executive actions](architecture/executive-actions.md#limits-and-planned-work)
 - R-58: More data sources, each from an official API or bulk file, with a terms and robots check. The order is committees, NOMINATE scores, FEC, LDA, and Census. Financial disclosures come last. Depends on: R-47. [Roster](architecture/roster.md#limits-and-planned-work)

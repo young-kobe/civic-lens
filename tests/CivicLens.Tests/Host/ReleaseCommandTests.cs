@@ -341,6 +341,29 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
+    public async Task AStateMismatchExitsWithOneAndPrintsItsCountsInsteadOfTheGenericFailure()
+    {
+        var scenario = new PublicationScenario();
+        var statement = scenario.AddStatement('b');
+        scenario.Publications.FailOnCommit = new PublicationStateMismatchException("Release 2 lists 1 records, but the state table holds 2 rows for it.");
+        var error = new StringWriter();
+        var original = Console.Error;
+        Console.SetError(error);
+        try
+        {
+            var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "key", $"statement:{statement}"],
+                scenario.Publisher(), null!, null!, null!, PublicationScenario.Owner, CancellationToken.None);
+
+            Assert.Equal(1, exit);
+            Assert.Contains("lists 1 records, but the state table holds 2 rows", error.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Console.SetError(original);
+        }
+    }
+
+    [Fact]
     public async Task APublishConflictExitsWithOneSoTheOwnerRebuildsInsteadOfFixingInput()
     {
         var scenario = new PublicationScenario();
