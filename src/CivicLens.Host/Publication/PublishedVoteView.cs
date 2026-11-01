@@ -15,10 +15,11 @@ internal static class PublishedVoteView
     public static IReadOnlyList<Fact> Facts(PublishedVote vote, PublicationCatalog catalog) =>
     [
         new Fact("Voted on", Moment.Iso(vote.VotedOn)).CitedAt(Anchor(vote, vote.VotedOnCitation)),
-        new Fact("Kind", KindValue(vote)) { TermKey = PublishedRecordLabels.VoteKindTermKey(vote.Kind) }.CitedAt(vote.KindCitation is { } kind ? Anchor(vote, kind) : null),
+        new Fact("Kind", KindValue(vote)) { TermKey = PublishedRecordLabels.VoteKindTermKey(vote.Kind) },
+        .. Question(vote),
         new Fact("Result", vote.Result).CitedAt(Anchor(vote, ResultFact(vote).Citation)),
         .. Totals(vote),
-        .. ResultFacts(vote).Select(fact => new Fact(PublishedRecordLabels.VoteResultLabel(fact), PublishedRecordLabels.VoteFactValue(fact.Text)).CitedAt(Anchor(vote, fact.Citation))),
+        .. ResultFacts(vote).Select(fact => new Fact(PublishedRecordLabels.VoteResultLabel(fact, MemberNoun(vote) + "s"), PublishedRecordLabels.VoteFactValue(fact.Text)).CitedAt(Anchor(vote, fact.Citation))),
         new("Chamber", vote.Chamber.ToString()),
         new("Roll call", $"{vote.RollCallNumber}, Congress {vote.Congress}, session {vote.Session}"),
         new("Data source", PublishedRecordLabels.VoteSource(vote.Source)),
@@ -31,13 +32,17 @@ internal static class PublishedVoteView
     ];
 
     private static string KindValue(PublishedVote vote) =>
-        vote.Kind != PublishedVoteKind.Other ? PublishedRecordLabels.VoteKind(vote.Kind)
-            : vote.KindCitation is { } kind ? $"{PublishedRecordLabels.OtherQuestion}. {PublishedRecordLabels.VoteFactValue(kind.Quote)}"
-            : $"{PublishedRecordLabels.OtherQuestion}. The source gives no question.";
+        vote.Kind == PublishedVoteKind.Other && vote.KindCitation is null
+            ? $"{PublishedRecordLabels.OtherQuestion}. The source gives no question."
+            : PublishedRecordLabels.VoteKind(vote.Kind);
+
+    private static IEnumerable<Fact> Question(PublishedVote vote) =>
+        vote.KindCitation is { } kind ? [new Fact("Question", PublishedRecordLabels.VoteFactValue(kind.Quote)).CitedAt(Anchor(vote, kind))] : [];
 
     private static IEnumerable<Fact> Totals(PublishedVote vote) =>
         vote.Totals is { } totals
-            ? [new("Totals", $"Casts of all {MemberNoun(vote)}s: Yea {totals.Yea}, Nay {totals.Nay}, Present {totals.Present}, Not voting {totals.NotVoting}")]
+            ? [new Fact("Totals", $"Casts of all {MemberNoun(vote)}s: Yea {totals.Yea}, Nay {totals.Nay}, Present {totals.Present}, Not voting {totals.NotVoting}")
+                .CitedAt(CountFact(vote) is { } count ? Anchor(vote, count.Citation) : null)]
             : [];
 
     private static string MemberNoun(PublishedVote vote) => vote.Chamber == PublishedChamber.Senate ? "senator" : "House member";
@@ -64,10 +69,13 @@ internal static class PublishedVoteView
     private static PublishedVoteFact ResultFact(PublishedVote vote) =>
         vote.Facts.First(fact => fact.Text == PublishedVote.ResultPrefix + vote.Result);
 
+    private static PublishedVoteFact? CountFact(PublishedVote vote) =>
+        vote.Facts.FirstOrDefault(fact => fact.Text.StartsWith(PublishedVote.CountPrefix, StringComparison.Ordinal));
+
     private static IEnumerable<PublishedVoteFact> ResultFacts(PublishedVote vote)
     {
-        var result = ResultFact(vote);
-        return vote.Facts.Where(fact => fact != result && fact.Citation != vote.VotedOnCitation && fact.Citation != vote.KindCitation);
+        var shownElsewhere = new[] { ResultFact(vote), CountFact(vote) };
+        return vote.Facts.Where(fact => !shownElsewhere.Contains(fact) && fact.Citation != vote.VotedOnCitation && fact.Citation != vote.KindCitation);
     }
 
     public static IEnumerable<CastGroup> CastGroups(PublishedVote vote) =>

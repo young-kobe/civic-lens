@@ -161,7 +161,7 @@ a.cell-title:hover { text-decoration: underline; }
 .facts:first-child { padding-top: 0; border-top: 0; }
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; overflow-wrap: anywhere; }
-.facts .source-line { margin-inline-start: var(--s3); white-space: nowrap; }
+.facts .source-line, .source-line + .source-line { margin-inline-start: var(--s3); white-space: nowrap; }
 
 .doc-text { max-height: 72vh; overflow: auto; padding: var(--s5); border-radius: var(--r-control); background: var(--raised); color: var(--ink-2); font-family: var(--read); font-size: var(--t-md); line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
 .doc-text mark { padding: 0 1px; border-radius: 2px; background: var(--info-bg); color: inherit; }
@@ -173,6 +173,8 @@ a.cell-title:hover { text-decoration: underline; }
 @media (max-width: 760px) {
     html { scroll-padding-top: 0; }
     .side-by-side { grid-template-columns: minmax(0, 1fr); }
+    .facts { grid-template-columns: minmax(0, 1fr); row-gap: 0; }
+    .facts dd + dt { margin-top: var(--s2); }
     .page-header h1 { font-size: var(--t-lg); }
     .record-headline { font-size: var(--t-xl); }
 }
