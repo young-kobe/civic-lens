@@ -7,7 +7,7 @@ internal sealed class DocumentChangeAnalysisRowConfiguration : IEntityTypeConfig
 {
     public void Configure(EntityTypeBuilder<DocumentChangeAnalysisRow> builder)
     {
-        AnalysisTableConfiguration.ConfigureQueue(builder, "document_change_analysis", nameof(DocumentChangeAnalysisRow.ComparisonId),
+        AnalysisTableConfiguration.ConfigureQueue<DocumentChangeAnalysisRow, DocumentChangeAnalysisRunRow>(builder, "document_change_analysis", nameof(DocumentChangeAnalysisRow.ComparisonId),
             "comparison_id");
         builder.Property(row => row.DraftId).HasColumnName("draft_id").HasMaxLength(32);
         builder.HasOne<Documents.Persistence.DocumentComparisonRow>().WithMany()

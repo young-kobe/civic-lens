@@ -129,12 +129,14 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
         Assert.False(page.Items.Single(item => item.RecordId == ActionId).IsUnreadable);
     }
 
+    // The database now refuses such a time, so the test drops the check to stand for a row that the check did not guard.
     [Fact]
     public async Task OneDecisionWithAnImpossibleTimeMarksOnlyItsRecordUnreadableAndTheOtherRowsStillLoad()
     {
         await SeedThreeKindsAsync();
         await seeder.ExecuteAsync("""
             SET session_replication_role = replica;
+            ALTER TABLE vote_review_decisions DROP CONSTRAINT ck_vote_review_decisions_created_at_utc_ticks;
             UPDATE vote_drafts SET review_state_version = 1 WHERE record_id = @id;
             INSERT INTO vote_review_decisions (decision_id, record_id, revision_number, review_state_version, decision_json, kind, actor_subject, note, created_at_utc_ticks)
             VALUES (repeat('b', 32), @id, 1, 1, '{}', 'RequestChanges', 'auth0|reviewer', 'Check it.', -1)

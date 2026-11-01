@@ -8,8 +8,8 @@ namespace CivicLens.Infrastructure.Analysis.Persistence;
 
 internal static class AnalysisTableConfiguration
 {
-    public static void ConfigureQueue<TRow>(EntityTypeBuilder<TRow> builder, string table, string keyProperty, string keyColumn)
-        where TRow : class, IAnalysisRow
+    public static void ConfigureQueue<TRow, TRunRow>(EntityTypeBuilder<TRow> builder, string table, string keyProperty, string keyColumn)
+        where TRow : class, IAnalysisRow where TRunRow : class, IAnalysisRunRow
     {
         builder.ToTable(table, constraints =>
         {
@@ -44,6 +44,7 @@ internal static class AnalysisTableConfiguration
         builder.Property<long>(nameof(IAnalysisRow.CreatedAtUtcTicks)).HasColumnName("created_at_utc_ticks");
         builder.Property<int>(nameof(IAnalysisRow.Priority)).HasColumnName("priority").HasColumnType("smallint")
             .HasDefaultValue(ReviewPriority.Lowest);
+        builder.HasOne<TRunRow>().WithMany().HasForeignKey(nameof(IAnalysisRow.RetryOfRunId)).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(nameof(IAnalysisRow.Status), nameof(IAnalysisRow.CreatedAtUtcTicks), keyProperty);
         builder.HasIndex([nameof(IAnalysisRow.Task), nameof(IAnalysisRow.Priority), nameof(IAnalysisRow.CreatedAtUtcTicks), keyProperty], $"ix_{table}_active_claim")
             .HasFilter("status IN ('Pending','RetryWaiting','WaitingForBudget','Running')");

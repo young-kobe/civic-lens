@@ -376,6 +376,7 @@ public sealed class PostgresEvidenceProcessingStoreTests(PostgresCollection post
             await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync();
             await using var command = new NpgsqlCommand("""
+                SET session_replication_role = replica;
                 UPDATE evidence_processing SET outcome = @outcome, comparison_id = @comparison, observed_at_utc_ticks = @ticks
                  WHERE job_id = @job AND attempt_id <> 'prepare'
                 """, connection);

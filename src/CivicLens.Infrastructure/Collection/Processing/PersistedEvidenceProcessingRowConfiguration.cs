@@ -1,3 +1,4 @@
+using CivicLens.Infrastructure.Documents.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -36,6 +37,8 @@ internal sealed class PersistedEvidenceProcessingRowConfiguration : IEntityTypeC
         builder.Property(row => row.AdmittedCount).HasColumnName("admitted_count");
         builder.Property(row => row.DeferredCount).HasColumnName("deferred_count");
         builder.Property(row => row.DuplicateCount).HasColumnName("duplicate_count");
+        builder.HasOne<DocumentExtractionRow>().WithMany().HasForeignKey(row => row.ExtractionId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<DocumentComparisonRow>().WithMany().HasForeignKey(row => row.ComparisonId).OnDelete(DeleteBehavior.Restrict);
         builder.HasKey(row => new { row.JobId, row.AttemptId });
         builder.HasIndex(row => new { row.JobId, row.Stage, row.Status });
         builder.HasIndex(row => new { row.Status, row.ObservedAtUtcTicks, row.AttemptId, row.JobId });
