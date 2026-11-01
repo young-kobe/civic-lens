@@ -9,7 +9,7 @@ public sealed record VoteDraftContext(VoteDraftEvidence Evidence, VoteSnapshot S
     public VoteChange ChangeSinceCurrent()
     {
         var previous = Evidence.Current;
-        if (previous is null || previous.Source != Snapshot.Source || !previous.Facts.Select(fact => fact.Text).SequenceEqual(Snapshot.Facts.Select(fact => fact.Text)) ||
+        if (previous is null || Evidence.DraftedUnderOlderPrompt || previous.Source != Snapshot.Source || !previous.Facts.Select(fact => fact.Text).SequenceEqual(Snapshot.Facts.Select(fact => fact.Text)) ||
             previous.IssueCandidateIds.IsDefault || !previous.IssueCandidateIds.SequenceEqual(Issues.CandidateIds) || previous.IssueRevisionId != IssueRevisionId ||
             previous.SubjectsHash != Issues.SubjectsHash)
             return VoteChange.Other;

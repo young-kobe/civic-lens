@@ -261,8 +261,8 @@ public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysis
             string? requestId, string? outputJson)
         {
             var identity = worker.step.Identity;
-            return new(RunId!, Claim.Record.SubjectId, identity.Task, identity.TaskVersion, request!.Model, identity.PromptVersion,
-                identity.SchemaVersion, request.InputHash, previousRunId, outcome, usage, Math.Max(charged, usage.Total), stopReason,
+            return new(RunId!, Claim.Record.SubjectId, identity.Task, identity.TaskVersion, request!.Model,
+                request.PromptVersion ?? identity.PromptVersion, request.SchemaVersion ?? identity.SchemaVersion, request.InputHash, previousRunId, outcome, usage, Math.Max(charged, usage.Total), stopReason,
                 requestId, outputJson, [], ContextJson, started, worker.clock.GetUtcNow());
         }
 

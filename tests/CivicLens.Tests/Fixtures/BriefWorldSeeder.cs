@@ -26,8 +26,27 @@ internal sealed class BriefWorldSeeder(string connectionString)
         foreach (var record in records) await DecisionAsync(record.Kind, record.RecordId, record.RevisionNumber, record.RevisionNumber, ReviewDecisionKind.Approve);
     }
 
-    public Task ReleaseWithoutApprovalsAsync(int number, DateTimeOffset publishedAt, bool active, params PublishedRevisionBinding[] records) =>
-        ReleaseJsonAsync(number, publishedAt, active, JsonSerializer.Serialize(records, Web), records.Length);
+    public async Task ReleaseWithoutApprovalsAsync(int number, DateTimeOffset publishedAt, bool active, params PublishedRevisionBinding[] records)
+    {
+        await ExecuteAsync("""
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+            VALUES (@number, @directory, 'auth0|owner', @ticks, @count, @active)
+            """, ("number", number), ("directory", $"{number:D6}-{Guid.NewGuid():N}"), ("ticks", publishedAt.UtcTicks), ("count", records.Length),
+            ("active", active));
+        await ExecuteAsync("""
+            WITH released AS (
+                SELECT * FROM unnest(@kinds, @ids, @revisions) AS k(kind, record_id, revision_number)),
+            closed AS (
+                UPDATE publication_record_states s SET last_release = (SELECT max(release_number) FROM publication_releases WHERE release_number < @number)
+                WHERE s.last_release IS NULL
+                    AND NOT EXISTS (SELECT 1 FROM released r WHERE (r.kind, r.record_id, r.revision_number) = (s.kind, s.record_id, s.revision_number)))
+            INSERT INTO publication_record_states (kind, record_id, revision_number, first_release)
+            SELECT r.kind, r.record_id, r.revision_number, @number FROM released r
+            WHERE NOT EXISTS (SELECT 1 FROM publication_record_states s
+                WHERE s.last_release IS NULL AND (r.kind, r.record_id, r.revision_number) = (s.kind, s.record_id, s.revision_number))
+            """, ("number", number), ("kinds", records.Select(record => PublishedRecordReference.NameOf(record.Kind)).ToArray()),
+            ("ids", records.Select(record => record.RecordId).ToArray()), ("revisions", records.Select(record => record.RevisionNumber).ToArray()));
+    }
 
     public Task DecisionAsync(PublishedRecordKind kind, string id, int revision, int version, ReviewDecisionKind decision)
     {
@@ -45,16 +64,6 @@ internal sealed class BriefWorldSeeder(string connectionString)
             VALUES (md5(@id || '|' || @revision::text || '|' || @version::text), @id, @revision, @version, 'x', @kind, 'auth0|seed', 1)
             ON CONFLICT DO NOTHING
             """, ("id", id), ("revision", revision), ("version", version), ("kind", decision.ToString()));
-    }
-
-    public async Task ReleaseJsonAsync(int number, DateTimeOffset publishedAt, bool active, string recordsJson, int count)
-    {
-        await ExecuteAsync("""
-            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, records_json, is_active)
-            VALUES (@number, @directory, 'auth0|owner', @ticks, @count, @json, @active)
-            """, ("number", number), ("directory", $"{number:D6}-{Guid.NewGuid():N}"), ("ticks", publishedAt.UtcTicks), ("count", count),
-            ("json", recordsJson), ("active", active));
-        await PublishedRecordStateReader.MigrateAsync(connectionString);
     }
 
     public Task StatementAsync(string id, int revision, string headline, params string[] officials) => ExecuteAsync("""

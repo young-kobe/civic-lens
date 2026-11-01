@@ -26,6 +26,7 @@ public static class ReviewTextRules
     /// <summary>An analysis revision with new text keeps person text and offers its own text as a suggestion.</summary>
     public static void RequireAnalysisText(IHeadlineSummaryRevision revision, IHeadlineSummaryRevision? previous)
     {
+        if (revision.TextOrigin == ReviewTextOrigin.Code) throw new ArgumentException("Only a code revision holds code text.");
         if (previous is not null && HasSameText(revision, previous)) return;
         if (previous?.TextOrigin == ReviewTextOrigin.Person)
         {
@@ -35,6 +36,13 @@ public static class ReviewTextRules
         }
         else if (revision.TextOrigin != ReviewTextOrigin.Model || revision.Suggestion is not null)
             throw new ArgumentException("Model text has no suggestion.");
+    }
+
+    /// <summary>A code revision holds code text. It never replaces text that a person wrote.</summary>
+    public static void RequireCodeText(IHeadlineSummaryRevision revision, IHeadlineSummaryRevision? previous)
+    {
+        if (revision.TextOrigin != ReviewTextOrigin.Code || revision.Suggestion is not null || previous?.TextOrigin == ReviewTextOrigin.Person)
+            throw new ArgumentException("Code text has no suggestion and never replaces text that a person wrote.");
     }
 
     public static void RequireSuggestionKeptOrCleared(IHeadlineSummaryRevision revision, IHeadlineSummaryRevision previous)

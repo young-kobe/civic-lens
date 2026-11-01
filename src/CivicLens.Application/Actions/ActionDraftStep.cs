@@ -28,8 +28,7 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
         if (evidence is null) return await attempt.CompleteAsync(State.Blocked, ActionDraftErrorCodes.EvidenceUnavailable, cancellationToken);
         if (evidence.HasNewerCandidate)
             return await attempt.CompleteAsync(State.Succeeded, ActionDraftErrorCodes.SupersededByNewerCandidate, cancellationToken);
-        var summariesOmitted = evidence.SummaryPageCount > ActionDraftTask.MaximumSummaryPages;
-        if (summariesOmitted) evidence = evidence with { Pages = [.. evidence.Pages.Where(page => page.Resource != ApiResource.BillSummaries)] };
+        if (evidence.SummaryPageCount > ActionDraftTask.MaximumSummaryPages) evidence = evidence with { Pages = [.. evidence.Pages.Where(page => page.Resource != ApiResource.BillSummaries)] };
 
         var read = await reader.ReadAsync(evidence, cancellationToken);
         if (read.Snapshot is not { } snapshot)
@@ -48,46 +47,62 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
         {
             ActionChange.None =>
                 await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken),
-            ActionChange.SponsorshipsOnly => await CopyTextAsync(attempt, context, cancellationToken),
-            _ => await DraftAsync(attempt, context, summariesOmitted, cancellationToken)
+            ActionChange.SponsorshipsOnly => await SettleRevisionWithoutCallAsync(attempt, context, ActionDraftErrorCodes.SponsorshipsChanged,
+                ActionDraftResolver.CopyText, cancellationToken),
+            var change => await DraftOrWriteAsync(attempt, context, change, cancellationToken)
         };
     }
 
-    private Task<bool> CopyTextAsync(IAnalysisAttempt<ActionDraftRun> attempt, ActionDraftContext context,
+    private async Task<bool> DraftOrWriteAsync(IAnalysisAttempt<ActionDraftRun> attempt, ActionDraftContext context, ActionChange change,
         CancellationToken cancellationToken)
     {
+        var request = context.Snapshot.NewestSummary is null ? null : BuildTextRequest(context, default);
+        if (request is not null) return await RunLoopAsync(attempt, TextLoop(attempt, context, request), cancellationToken);
+        if (context.KeepsCurrentText)
+            return change == ActionChange.OlderPromptOnly
+                ? await SettleWithoutCallAsync(attempt, context.Snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken)
+                : await SettleRevisionWithoutCallAsync(attempt, context, ActionDraftErrorCodes.TextKept, ActionDraftResolver.CopyText, cancellationToken);
+        return context.Issues.CandidateIds.IsEmpty
+            ? await SettleRevisionWithoutCallAsync(attempt, context, ActionDraftErrorCodes.CodeWritten,
+                (draft, createdAtUtc) => ActionDraftResolver.WriteByCode(draft, createdAtUtc), cancellationToken)
+            : await RunLoopAsync(attempt, IssueLoop(attempt, context), cancellationToken);
+    }
+
+    private static Task<bool> SettleRevisionWithoutCallAsync(IAnalysisAttempt<ActionDraftRun> attempt, ActionDraftContext context,
+        string reason, Func<ActionDraftContext, DateTimeOffset, ActionDraftRevision> write, CancellationToken cancellationToken)
+    {
         var run = attempt.BypassRun(ActionDraftTask.Model, context.Snapshot.Fingerprint, null);
-        var revision = ActionDraftResolver.CopyText(context, run.FinishedAtUtc);
-        return attempt.SettleAsync(new ActionDraftRun(run, ActionDraftErrorCodes.SponsorshipsChanged),
+        var revision = write(context, run.FinishedAtUtc);
+        return attempt.SettleAsync(new ActionDraftRun(run, reason),
             ActionDraftCheckpoint.From(attempt.Claim, revision), cancellationToken);
     }
 
-    private async Task<bool> DraftAsync(IAnalysisAttempt<ActionDraftRun> attempt, ActionDraftContext context,
-        bool summariesOmitted, CancellationToken cancellationToken)
-    {
-        var snapshot = context.Snapshot;
-        var summaryOmittedInputHashes = new HashSet<string>(StringComparer.Ordinal);
-        AnalysisModelRequest? BuildRequest(ImmutableArray<string> errors)
-        {
-            var request = context.Issues.BuildDroppingSubjectsWhenOverTheCap(
-                issues => ActionDraftPrompt.Build(snapshot, issues, settings.PromptByteCap, errors));
-            if (request is not null) return request;
-            var withoutSummary = context.Issues.BuildDroppingSubjectsWhenOverTheCap(
-                issues => ActionDraftPrompt.Build(snapshot, issues, settings.PromptByteCap, errors, includeSummary: false));
-            if (withoutSummary is not null) summaryOmittedInputHashes.Add(withoutSummary.InputHash);
-            return withoutSummary;
-        }
-        ActionDraftRun WrapWithReason(AnalysisRun run) =>
-            new(run, summariesOmitted || summaryOmittedInputHashes.Contains(run.InputHash) ? ActionDraftErrorCodes.SummaryOmitted : null);
+    private AnalysisModelRequest? BuildTextRequest(ActionDraftContext context, ImmutableArray<string> errors) =>
+        context.Issues.BuildDroppingSubjectsWhenOverTheCap(choice => ActionDraftPrompt.Build(context.Snapshot, choice, settings.PromptByteCap, errors));
 
-        var loop = new AnalysisValidationLoop<ActionDraftRun, ActionDraftRevision>(WrapWithReason, attempt, AnalysisRunOutcome.Drafted,
-            ActionDraftTask.MaximumValidationPasses, BuildRequest, model.DraftAsync,
-            (json, run) => ActionDraftResolver.Resolve(json, context, run.RunId, run.FinishedAtUtc),
-            async (runId, token) => (await store.GetRunAsync(runId, token))?.Run);
+    private AnalysisValidationLoop<ActionDraftRun, ActionDraftRevision> TextLoop(IAnalysisAttempt<ActionDraftRun> attempt,
+        ActionDraftContext context, AnalysisModelRequest firstRequest) =>
+        new(Wrap, attempt, AnalysisRunOutcome.Drafted, ActionDraftTask.MaximumValidationPasses,
+            errors => errors.IsDefaultOrEmpty ? firstRequest : BuildTextRequest(context, errors), model.DraftAsync,
+            (json, run) => ActionDraftResolver.Resolve(json, context, run.RunId, run.FinishedAtUtc), ReadRunAsync);
+
+    private AnalysisValidationLoop<ActionDraftRun, ActionDraftRevision> IssueLoop(IAnalysisAttempt<ActionDraftRun> attempt,
+        ActionDraftContext context) =>
+        new(Wrap, attempt, AnalysisRunOutcome.Drafted, ActionDraftTask.MaximumValidationPasses,
+            errors => context.Issues.BuildDroppingSubjectsWhenOverTheCap(
+                choice => ActionIssuePrompt.Build(context.Snapshot, choice, settings.PromptByteCap, errors)), model.DraftAsync,
+            (json, run) => ActionDraftResolver.ResolveIssueChoice(json, context, run.FinishedAtUtc), ReadRunAsync);
+
+    private async Task<AnalysisRun?> ReadRunAsync(string runId, CancellationToken cancellationToken) =>
+        (await store.GetRunAsync(runId, cancellationToken))?.Run;
+
+    private async Task<bool> RunLoopAsync(IAnalysisAttempt<ActionDraftRun> attempt,
+        AnalysisValidationLoop<ActionDraftRun, ActionDraftRevision> loop, CancellationToken cancellationToken)
+    {
         var result = await loop.RunAsync(cancellationToken);
         return result.End switch
         {
-            AnalysisLoopEnd.Accepted => await attempt.SettleAsync(WrapWithReason(result.Run!),
+            AnalysisLoopEnd.Accepted => await attempt.SettleAsync(Wrap(result.Run!),
                 ActionDraftCheckpoint.From(attempt.Claim, result.Accepted!), cancellationToken),
             AnalysisLoopEnd.NotSent when result.Run is null =>
                 await attempt.CompleteAsync(State.Blocked, ActionDraftErrorCodes.OverByteCap, cancellationToken),

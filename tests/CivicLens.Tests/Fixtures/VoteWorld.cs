@@ -102,10 +102,11 @@ internal sealed class VoteWorld
 
     public VoteReader Reader() => new(Stores, new ApiResponseReader(Stores, Stores), "artifacts");
 
-    public VoteDraftEvidence Evidence(VoteDraftRevision? current = null, DateTimeOffset? updatedAt = null, bool hasNewerCandidate = false) =>
+    public VoteDraftEvidence Evidence(VoteDraftRevision? current = null, DateTimeOffset? updatedAt = null, bool hasNewerCandidate = false,
+        bool draftedUnderOlderPrompt = false) =>
         new(new VoteDraftCandidate(CandidateId, RecordId, SourceId, Chamber.House, 119, 1, 100, "hconres", 14, updatedAt ?? UpdatedAt, null), Revision,
             Page("detail", HouseVoteParser.ExtractionVersion), Page("members", HouseVoteMembersParser.ExtractionVersion), BillPage(),
-            hasSubjects ? [Page("subjects", CongressBillSubjectsParser.ExtractionVersion)] : [], current, hasNewerCandidate);
+            hasSubjects ? [Page("subjects", CongressBillSubjectsParser.ExtractionVersion)] : [], current, hasNewerCandidate, draftedUnderOlderPrompt);
 
     public static string ExtractionIdOf(string jobId) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(jobId)));
 

@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Analysis;
@@ -315,6 +316,58 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal(0, await VoteStore().RequeueOlderPromptAsync(default));
 
         Assert.Equal((status, 2), Assert.Single((await StatusAndAttemptsAsync()).Values));
+    }
+
+    [Theory]
+    [InlineData("vote-draft-prompt-v1", true)]
+    [InlineData(VoteDraftTask.PromptVersion, false)]
+    public async Task TheEvidenceNamesAnOlderPromptOnlyWhenTheNewestDraftRunUsedOneSoARerunSpendsNothingAfterTheRedraft(string prompt, bool older)
+    {
+        var candidate = await PendingCandidateAsync();
+        await InsertRunAsync(candidate, prompt, 1);
+
+        Assert.Equal(older, (await VoteStore().ReadEvidenceAsync(candidate, default))!.DraftedUnderOlderPrompt);
+    }
+
+    [Fact]
+    public async Task AVoteThatAWorkerSettledUnderTheCurrentPromptHasNoOlderPromptSoTheRedraftSettlesItForGood()
+    {
+        var candidate = await PendingCandidateAsync();
+        await SettleAsync(candidate, await RevisionAsync(candidate, 1));
+
+        Assert.False((await VoteStore().ReadEvidenceAsync(candidate, default))!.DraftedUnderOlderPrompt);
+        Assert.Equal(0, await VoteStore().RequeueOlderPromptAsync(default));
+    }
+
+    [Theory]
+    [InlineData("none", 1)]
+    [InlineData("person", 0)]
+    [InlineData("AwaitingReviewWithConcerns", 0)]
+    [InlineData("ChangesRequested", 0)]
+    [InlineData("ApprovalWithdrawn", 0)]
+    public async Task ARedraftSkipsAVoteWhoseCurrentRevisionHoldsPersonTextAnOpenConcernOrAWithdrawnApproval(string change, int requeued)
+    {
+        var candidate = await PendingCandidateAsync();
+        var revision = await RevisionAsync(candidate, 1);
+        await SettleAsync(candidate, revision);
+        await ExecuteAsync("UPDATE vote_analysis_runs SET prompt_version = 'vote-draft-prompt-v1'");
+        if (change == "person")
+            await ExecuteAsync($"UPDATE vote_revisions SET revision_json = $json${JsonSerializer.Serialize(revision with { TextOrigin = ReviewTextOrigin.Person }, new JsonSerializerOptions(JsonSerializerDefaults.Web))}$json$");
+        else if (change != "none")
+            await ExecuteAsync($"UPDATE vote_drafts SET review_status = '{change}'");
+
+        Assert.Equal(requeued == 1, (await VoteStore().ReadEvidenceAsync(candidate, default))!.DraftedUnderOlderPrompt);
+        Assert.Equal(requeued, await VoteStore().RequeueOlderPromptAsync(default));
+    }
+
+    [Fact]
+    public async Task TheEvidenceOfAVoteWithANewerCandidateNamesNoOlderPromptBecauseTheNewerCandidateWillDraftIt()
+    {
+        var older = await PendingCandidateAsync();
+        await InsertRunAsync(older, "vote-draft-prompt-v1", 1);
+        await PendingCandidateAsync(Updated.AddDays(1));
+
+        Assert.False((await VoteStore().ReadEvidenceAsync(older, default))!.DraftedUnderOlderPrompt);
     }
 
     [Fact]

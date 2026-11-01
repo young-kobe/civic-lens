@@ -32,6 +32,19 @@ public static class AnalysisSchema
         return schema.ToJsonString(AnalysisPromptText.CompactJson);
     }
 
+    public static string IssueChoice(JsonObject issueIds)
+    {
+        var properties = new JsonObject { ["issueIds"] = issueIds, ["confidence"] = Number() };
+        var schema = new JsonObject
+        {
+            ["type"] = "object",
+            ["additionalProperties"] = false,
+            ["required"] = new JsonArray("issueIds", "confidence"),
+            ["properties"] = properties
+        };
+        return schema.ToJsonString(AnalysisPromptText.CompactJson);
+    }
+
     private static JsonObject TextWithConfidence() => new()
     {
         ["type"] = "object",

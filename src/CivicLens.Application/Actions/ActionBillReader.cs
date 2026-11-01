@@ -64,7 +64,8 @@ public sealed class ActionBillReader(ICollectionJobStore jobs, ApiResponseReader
             newestPage is null ? null : ActionCitations.SummaryBlock(newestPage, newest!.Summary),
             bill.PolicyArea is null ? null : LineCitations.Line(detailPage.ExtractionId, detailLines, "Policy area: "),
             configuredPeople.Where(person => involved.Contains(person.Id)).ToImmutableDictionary(person => person.Id, person => person.Name),
-            [.. configuredPeople.Where(person => !involved.Contains(person.Id)).Select(person => person.Name)]);
+            [.. configuredPeople.Where(person => !involved.Contains(person.Id)).Select(person => person.Name)],
+            ActionCitations.TitleAndIntroduced(detailPage.ExtractionId, detailLines));
     }
 
     private static (string, ActionSponsorshipRole, bool, DateOnly, DateOnly?) Identity(ActionSponsorship item) =>

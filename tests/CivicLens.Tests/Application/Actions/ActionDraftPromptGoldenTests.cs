@@ -10,9 +10,10 @@ namespace CivicLens.Tests.Application.Actions;
 
 public sealed class ActionDraftPromptGoldenTests
 {
-    private const string SystemSha256 = "c60a70a558a5b17d3c31029a5a95a271cf6833850327f49241efb1b9f89de11b";
+    private const string SystemSha256 = "d62af2685dd1ec265f8063e01350821831907d6708999c0ec481cf9407d94235";
+    private const string NoCandidateSystemSha256 = "7ea8500a184d016db4ec9580b928c7c6c7232929a3a43907be8a61b03c327c05";
     private const string SchemaSha256 = "6d6adb018d7ee24f5df2e21a1f678cc87ed0fb7c144cf0a5c99cd84153a3acf0";
-    private const string InputHash = "4fc66c31f6bcbf09d08ca9c54d19549039560df0e2a30769b763964a0f509222";
+    private const string InputHash = "7992facd4a0362511431945582fe13d5ffecd2df0e60d726baed061ee8dd23ee";
 
     [Fact]
     public async Task ThePromptAndSchemaMatchTheirPinnedVersions()
@@ -25,12 +26,44 @@ public sealed class ActionDraftPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(ActionDraftTask.PromptVersion)} ({ActionDraftTask.PromptVersion}) or " +
             $"{nameof(ActionDraftTask.SchemaVersion)} ({ActionDraftTask.SchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("action-draft", "action-draft-v1", "action-draft-prompt-v3", "action-draft-schema-v2", "claude-haiku-5-5"),
+        Assert.Equal(("action-draft", "action-draft-v1", "action-draft-prompt-v5", "action-draft-schema-v2", "claude-haiku-5-5"),
             (ActionDraftTask.Task, ActionDraftTask.TaskVersion, ActionDraftTask.PromptVersion, ActionDraftTask.SchemaVersion, ActionDraftTask.Model));
         Assert.NotEqual(StatementDraftTaskName, ActionDraftTask.Task);
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
         Assert.True(Sha256(request.SchemaJson) == SchemaSha256, $"{bump} Schema: {Sha256(request.SchemaJson)}");
         Assert.True(request.InputHash == InputHash, $"{bump} Input hash: {request.InputHash}");
+    }
+
+    [Fact]
+    public async Task ThePublicTextRulesAreInTheCachedSystemPromptAndNoCodeSentenceIsAskedOfTheModel()
+    {
+        var world = Create();
+        var snapshot = (await world.Reader().ReadAsync(world.Evidence(), default)).Snapshot!;
+
+        var request = ActionDraftPrompt.Build(snapshot, NoChoice(), ActionDraftTask.MaximumPromptBytes)!;
+
+        Assert.True(request.CacheSystemPrompt);
+        Assert.Equal(NoCandidateSystemSha256, Sha256(request.SystemPrompt));
+        Assert.Contains("Never use the words tracked, entry, or candidate", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("Use those words only when the bill itself is about the thing they name.", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("Never write that it passed, was enacted, became law, or is law", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Congress.gov has no summary of this bill yet.", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Rent aid", request.SystemPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheSummaryReachesTheModelAsTextAloneWithNoActionDescriptionNoActionDateAndNoVersionCode()
+    {
+        var world = Create(summaries: [new("00", "2025-01-03", "2025-01-05T10:00:00Z", "<p>It funds rent aid.</p>")]);
+        var snapshot = (await world.Reader().ReadAsync(world.Evidence(), default)).Snapshot!;
+
+        var user = ActionDraftPrompt.Build(snapshot, NoChoice(), ActionDraftTask.MaximumPromptBytes)!.UserPrompt;
+
+        using var facts = System.Text.Json.JsonDocument.Parse(user["Facts:\n".Length..]);
+        var summary = facts.RootElement.GetProperty("summary");
+        Assert.Equal(["text"], summary.EnumerateObject().Select(property => property.Name));
+        Assert.Contains("It funds rent aid.", summary.GetProperty("text").GetString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("actionDate", ActionDraftPrompt.SerializeContext(snapshot, NoChoice(), "issues"), StringComparison.Ordinal);
     }
 
     [Fact]

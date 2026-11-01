@@ -450,9 +450,8 @@ try
     {
         var database = CreateDatabase();
         executing = true;
-        var rebuilt = await database.MigrateAsync(cancellation.Token);
+        await database.MigrateAsync(cancellation.Token);
         Console.WriteLine("Database migrations applied.");
-        if (rebuilt) Console.WriteLine("Rebuilt published record state from releases.");
         return 0;
     }
 

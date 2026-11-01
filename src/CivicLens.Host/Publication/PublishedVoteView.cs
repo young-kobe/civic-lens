@@ -84,14 +84,10 @@ internal static class PublishedVoteView
 
     public const string PartiesAgreedText = "Both parties agreed";
 
-    private static readonly string Democrats = PublishedPartyMajority.Democrat + "s";
-
-    private static readonly string Republicans = PublishedPartyMajority.Republican + "s";
-
     public static (string Text, string Meaning)? ListBadge(PublishedRecordEntry entry) => entry.Alignment switch
     {
-        PublishedVoteAlignment.Split => (SplitVoteText, $"On this substantive vote, most {Democrats} and most {Republicans} who cast Yea or Nay voted on opposite sides."),
-        PublishedVoteAlignment.PartiesAgree => (PartiesAgreedText, $"On this substantive vote, most {Democrats} and most {Republicans} who cast Yea or Nay voted the same way."),
+        PublishedVoteAlignment.Split => (SplitVoteText, PublishedOfficialView.SplitVoteMeaning),
+        PublishedVoteAlignment.PartiesAgree => (PartiesAgreedText, PublishedOfficialView.PartiesAgreedMeaning),
         _ => null
     };
 

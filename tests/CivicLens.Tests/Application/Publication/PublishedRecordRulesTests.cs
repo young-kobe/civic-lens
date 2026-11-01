@@ -7,6 +7,13 @@ namespace CivicLens.Tests.Application.Publication;
 
 public sealed class PublishedRecordRulesTests
 {
+    [Theory]
+    [InlineData(ReviewTextOrigin.Model, PublishedTextOrigin.Model)]
+    [InlineData(ReviewTextOrigin.Person, PublishedTextOrigin.Person)]
+    [InlineData(ReviewTextOrigin.Code, PublishedTextOrigin.Code)]
+    public void EveryTextOriginHasItsOwnPublishedOriginSoCodeTextIsNeverLabeledAsAModelSummary(ReviewTextOrigin origin, PublishedTextOrigin published) =>
+        Assert.Equal(published, PublishedRecordRules.TextOriginOf(origin));
+
     [Fact]
     public void ApproverAndTimeComeFromTheSameDecisionWhenCodeApprovedThenAPersonApprovedAfterAReopen()
     {

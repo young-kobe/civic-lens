@@ -31,7 +31,7 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
 
     public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
 
-    // Readers answer "what did release R hold" from the table, so it must equal records_json for every release.
+    // Readers answer "what did release R hold" from the table.
     // The rollback makes the highest release differ from the active one. Release 4 withdraws X, release 3 comes back,
     // and release 5 keeps X. A diff against the active release would never reopen X.
     [Fact]
@@ -51,7 +51,12 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
         await SetRevisionAsync(A, 3);
         await PublishAsync(6, 5, [(A, 3), (X, 1), (C, 1), (B, 1)], added: [A]);
 
-        await PublishedRecordStateReader.AssertEveryReleaseMatchesAsync(connectionString);
+        await AssertReleaseHoldsAsync(1, (A, 1), (B, 1), (X, 1));
+        await AssertReleaseHoldsAsync(2, (A, 1), (B, 1), (X, 1), (C, 1));
+        await AssertReleaseHoldsAsync(3, (A, 2), (X, 1), (C, 1));
+        await AssertReleaseHoldsAsync(4, (A, 2), (C, 1));
+        await AssertReleaseHoldsAsync(5, (A, 2), (X, 1), (C, 1), (B, 1));
+        await AssertReleaseHoldsAsync(6, (A, 3), (X, 1), (C, 1), (B, 1));
         Assert.Equal(["1|3", "5|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, X));
         Assert.Equal(["1|2", "3|5", "6|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, A));
     }
@@ -116,85 +121,6 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
         Assert.Equal(releases, await PublishedRecordStateReader.ReadAsync(connectionString, "SELECT * FROM publication_releases ORDER BY release_number"));
     }
 
-    // An old binary runs during a deploy rollback. It commits a release and writes no rows.
-    [Fact]
-    public async Task MigrateRebuildsTheTableWhenAnOldBinaryCommittedAReleaseWithoutRowsBecauseReadersTrustTheTable()
-    {
-        await SeedActionsAsync(A, B);
-        await PublishAsync(1, null, [(A, 1)], added: [A]);
-        await InsertOldBinaryReleaseAsync(2, (A, 1), (B, 1));
-
-        Assert.True(await PublishedRecordStateReader.MigrateAsync(connectionString));
-
-        await PublishedRecordStateReader.AssertEveryReleaseMatchesAsync(connectionString);
-        Assert.Equal(["2|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, B));
-    }
-
-    [Fact]
-    public async Task MigrateClosesTheRangeOfARecordThatAnOldBinaryLeftOutBecauseAnOpenRangeWouldKeepItPublished()
-    {
-        await SeedActionsAsync(A, B);
-        await PublishAsync(1, null, [(A, 1), (B, 1)], added: [A, B]);
-        await InsertOldBinaryReleaseAsync(2, (B, 1));
-
-        Assert.True(await PublishedRecordStateReader.MigrateAsync(connectionString));
-
-        await PublishedRecordStateReader.AssertEveryReleaseMatchesAsync(connectionString);
-        Assert.Equal(["1|1"], await PublishedRecordStateReader.RangesAsync(connectionString, A));
-    }
-
-    [Fact]
-    public async Task MigrateRemovesARowThatNoReleaseListsEvenWhenNoRowIsMissingBecauseTheTableMustHoldExactlyTheReleases()
-    {
-        await SeedActionsAsync(A, C);
-        await PublishAsync(1, null, [(A, 1)], added: [A]);
-        await ExecuteAsync($"INSERT INTO publication_record_states (kind, record_id, revision_number, first_release) VALUES ('action', '{C}', 1, 1)");
-
-        Assert.True(await PublishedRecordStateReader.MigrateAsync(connectionString));
-
-        await PublishedRecordStateReader.AssertEveryReleaseMatchesAsync(connectionString);
-        Assert.Empty(await PublishedRecordStateReader.RangesAsync(connectionString, C));
-    }
-
-    [Fact]
-    public async Task MigrateLeavesTheRowsUntouchedWhenTheTableMatchesBecauseARebuildTakesLocksForNothing()
-    {
-        await SeedActionsAsync(A, C);
-        await PublishAsync(1, null, [(A, 1)], added: [A]);
-        await PublishAsync(2, 1, [(A, 1), (C, 1)], added: [C]);
-        var before = await VersionedRowsAsync();
-
-        Assert.False(await PublishedRecordStateReader.MigrateAsync(connectionString));
-
-        Assert.Equal(before, await VersionedRowsAsync());
-    }
-
-    [Fact]
-    public async Task ACommitAfterTheRebuildOpensRangesFromTheRebuiltStateBecauseTheStaleRowsNoLongerHideTheDrift()
-    {
-        await SeedActionsAsync(A, B);
-        await PublishAsync(1, null, [(A, 1)], added: [A]);
-        await InsertOldBinaryReleaseAsync(2, (A, 1), (B, 1));
-        await PublishedRecordStateReader.MigrateAsync(connectionString);
-
-        await PublishAsync(3, 2, [(A, 1)]);
-
-        await PublishedRecordStateReader.AssertEveryReleaseMatchesAsync(connectionString);
-        Assert.Equal(["2|2"], await PublishedRecordStateReader.RangesAsync(connectionString, B));
-    }
-
-    private Task InsertOldBinaryReleaseAsync(int number, params (string Id, int Revision)[] records) => ExecuteAsync($"""
-        UPDATE publication_releases SET is_active = false;
-        INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, records_json, is_active)
-        VALUES ({number}, '{number:D6}-' || md5('old'), 'auth0|owner', 0, {records.Length},
-            '[{string.Join(",", records.Select(record => $$"""{"kind":"action","recordId":"{{record.Id}}","revisionNumber":{{record.Revision}}}"""))}]', true)
-        """);
-
-    private async Task<List<string>> VersionedRowsAsync() =>
-        [.. (await PublishedRecordStateReader.ReadAsync(connectionString, """
-            SELECT xmin::text || '|' || kind || record_id || revision_number || '|' || first_release FROM publication_record_states ORDER BY 1
-            """)).Select(row => row[0])];
-
     [Fact]
     public async Task ACommitOfFifteenThousandRecordsStaysFastBecauseTheDiffReadsOneReleaseAndWritesInTwoStatements()
     {
@@ -211,8 +137,15 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
 
         Assert.True(opening < TimeSpan.FromSeconds(5), $"The first commit took {opening}.");
         Assert.True(revising < TimeSpan.FromSeconds(5), $"The revising commit took {revising}.");
-        await PublishedRecordStateReader.AssertEveryReleaseMatchesAsync(connectionString);
+        Assert.Equal([ids.Length.ToString(), ids.Length.ToString()], (await PublishedRecordStateReader.ReadAsync(connectionString, """
+            SELECT count(*), count(*) FILTER (WHERE revision_number = 2) FROM publication_record_states
+            WHERE first_release <= 2 AND (last_release IS NULL OR last_release >= 2)
+            """)).Single());
     }
+
+    private async Task AssertReleaseHoldsAsync(int release, params (string Id, int Revision)[] records) =>
+        Assert.Equal(records.Select(record => $"action|{record.Id}|{record.Revision}").Order(StringComparer.Ordinal),
+            await PublishedRecordStateReader.StateAtAsync(connectionString, release));
 
     private static async Task<TimeSpan> TimeAsync(Func<Task> action)
     {

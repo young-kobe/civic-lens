@@ -19,6 +19,7 @@ internal static class PublishedActionView
         .. PublishedRecordView.Issues("Tracked issues", action.TrackedIssueIds, catalog),
         new("Published", $"From the official record, checked {Moment.Full(action.ApprovedAtUtc)}; first published {Moment.Full(action.FirstPublishedAtUtc)}"),
         .. PublishedRecordLabels.Wording(action.TextOrigin),
+        .. IssueWording(action),
         new("Revision", action.RevisionNumber.ToString(CultureInfo.InvariantCulture))
     ];
 
@@ -32,6 +33,9 @@ internal static class PublishedActionView
             Fact.LinkList("Official bill page", [new FactLink("Bill on Congress.gov", SourcePages.Bill(action.Congress, action.BillType, action.BillNumber))])
         ];
     }
+
+    private static IEnumerable<Fact> IssueWording(PublishedAction action) =>
+        action.TextOrigin == PublishedTextOrigin.Code && action.TrackedIssueIds.Length > 0 ? [new("Issues", PublishedRecordLabels.ModelChosenIssues)] : [];
 
     private static IEnumerable<Fact> PolicyArea(PublishedAction action, PublicationCatalog catalog) =>
         PublishedRecordView.Links("Policy area", action.PolicyArea is null ? [] : [PublishedRecordView.PolicyAreaLink(action.PolicyAreaId, action.PolicyArea, catalog)]);

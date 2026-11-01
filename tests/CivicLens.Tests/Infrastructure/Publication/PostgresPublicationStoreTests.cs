@@ -594,21 +594,13 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     public async Task APublishedStatementWithAnIdShapedLikeADraftDoesNotHideTheDocumentChange()
     {
         var draft = await CreateApprovedDraftAsync("a");
-        await InsertActiveReleaseAsync($$"""[{"kind":"statement","recordId":"{{draft.DraftId}}","revisionNumber":{{draft.RevisionNumber}}}]""");
+        await new BriefWorldSeeder(connectionString).ReleaseWithoutApprovalsAsync(1, PublishedAt, active: true,
+            new PublishedRevisionBinding(PublishedRecordKind.Statement, draft.DraftId, draft.RevisionNumber));
 
         var ready = await reviews.ListUnpublishedApprovedDraftsAsync(10, [], default);
 
         var item = Assert.Single(ready);
         Assert.Equal(draft.DraftId, item.Draft.DraftId);
-    }
-
-    [Fact]
-    public async Task ReleaseRowWrittenBeforeKindsExistedStillCountsItsDraftsAsPublishedDocumentChanges()
-    {
-        var draft = await CreateApprovedDraftAsync("a");
-        await InsertActiveReleaseAsync($$"""[{"draftId":"{{draft.DraftId}}","revisionNumber":{{draft.RevisionNumber}}}]""");
-
-        Assert.Empty(await reviews.ListUnpublishedApprovedDraftsAsync(10, [], default));
     }
 
     [Fact]
@@ -819,7 +811,9 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         await publications.CommitAsync(Owner.Subject, WithdrawalCommit(2, 1, PublishedRecordKind.ExecutiveAction, executive) with { Records = [changeRecord] },
             "key-2", Hash(2), default);
 
-        await PublishedRecordStateReader.AssertEveryReleaseMatchesAsync(connectionString);
+        Assert.Equal([$"documentChange|{change.DraftId}|{change.RevisionNumber}", $"executiveAction|{executive}|1"],
+            await PublishedRecordStateReader.StateAtAsync(connectionString, 1));
+        Assert.Equal([$"documentChange|{change.DraftId}|{change.RevisionNumber}"], await PublishedRecordStateReader.StateAtAsync(connectionString, 2));
     }
 
     private static PublicationCommit ReturnCommit(int number, DocumentChangeDraftRevision draft, int reviewStateVersion) =>
@@ -952,21 +946,6 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(sql, connection);
         return (long)(await command.ExecuteScalarAsync())!;
-    }
-
-    private async Task InsertActiveReleaseAsync(string recordsJson)
-    {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand("""
-            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, records_json, is_active)
-            VALUES (1, @directory, 'auth0|owner', @ticks, 1, @records, true)
-            """, connection);
-        command.Parameters.AddWithValue("directory", $"000001-{Guid.NewGuid():N}");
-        command.Parameters.AddWithValue("ticks", PublishedAt.UtcTicks);
-        command.Parameters.AddWithValue("records", recordsJson);
-        await command.ExecuteNonQueryAsync();
-        await PublishedRecordStateReader.MigrateAsync(connectionString);
     }
 
     private static PublicationCommit Commit(int number, string draftId, int revision, int reviewStateVersion) =>

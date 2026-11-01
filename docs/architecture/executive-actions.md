@@ -21,7 +21,7 @@ The executive actions feature records presidential documents from the Federal Re
 - The signer is the configured person whose `President` office covers the signing date. The person ID must equal the President identifier that the Federal Register cites. Both Presidents hold office on 2025-01-20, so the cited identifier picks one. A document with no match is invalid data and blocks the job.
 - Issue and policy area lists are empty at launch.
 - The published kind is `executiveAction`. It adds no manifest version bump.
-- A reviewer or the owner can withdraw approval on the review page, as for a vote. The page has the decision panel only. The withdrawal reaches the public site when the owner publishes it with `releases publish --withdraw`.
+- A reviewer or the owner can withdraw approval on the review page, as for a vote. The page has the decision panel and, for the owner, Take off site; see [review](review.md#take-off-site). Withdrawing approval alone does not change the public site.
 
 ## Invariants
 
