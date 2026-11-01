@@ -38,7 +38,6 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     private PostgresStatementDraftStore statementDrafts = null!;
     private StatementCandidateSeeder statementSeeder = null!;
     private string connectionString = null!;
-    private static readonly TimeSpan PruneAge = TimeSpan.FromHours(48);
     private const string DatabaseClockTicksSql =
         "((EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint)";
     private int statementCount;
@@ -245,126 +244,37 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         await publications.ActivateAsync(1, (_, _) => Task.CompletedTask, default);
         (int Below, string? Active)? offered = null;
 
-        await publications.PruneAsync(2, TimeSpan.Zero, (below, active, _) => { offered = (below, active); return Task.CompletedTask; }, default);
+        await publications.PruneAsync(2, (below, active, _) => { offered = (below, active); return Task.CompletedTask; }, default);
 
         Assert.Equal((2, first.DirectoryName), offered);
         Assert.Equal(3, (await publications.ListAsync(10, default)).Count);
     }
 
     [Fact]
-    public async Task PruneKeepsEveryReleaseYoungerThanTheMinimumAgeEvenPastTheCountSoFrequentPublishesCannotPushOutARecentRollbackTarget()
-    {
-        var draft = await CreateDraftAsync();
-        for (var number = 1; number <= 4; number++)
-            await publications.CommitAsync(Owner.Subject, Commit(number, draft, 1, 0), $"key-{number}", Hash(number), default);
-        await AgeReleaseAsync(1, PruneAge + TimeSpan.FromMinutes(1));
-        await AgeReleaseAsync(2, PruneAge + TimeSpan.FromMinutes(1));
-        await AgeReleaseAsync(3, PruneAge - TimeSpan.FromMinutes(1));
-
-        var below = await LowestKeptAsync(keep: 1);
-
-        Assert.Equal(2, below);
-    }
-
-    [Fact]
-    public async Task PruneKeepsEveryReleaseWhenAllAreYoungerThanTheMinimumAgeEvenPastTheCount()
-    {
-        var draft = await CreateDraftAsync();
-        for (var number = 1; number <= 3; number++)
-            await publications.CommitAsync(Owner.Subject, Commit(number, draft, 1, 0), $"key-{number}", Hash(number), default);
-
-        var below = await LowestKeptAsync(keep: 1);
-
-        Assert.Equal(1, below);
-    }
-
-    [Fact]
-    public async Task PruneKeepsTheCountLimitWhenAYoungReleaseExistsSoAnOldReleaseInsideTheCountSurvives()
-    {
-        var draft = await CreateDraftAsync();
-        for (var number = 1; number <= 4; number++)
-            await publications.CommitAsync(Owner.Subject, Commit(number, draft, 1, 0), $"key-{number}", Hash(number), default);
-        for (var number = 1; number <= 3; number++)
-            await AgeReleaseAsync(number, PruneAge + TimeSpan.FromMinutes(1));
-
-        var below = await LowestKeptAsync(keep: 3);
-
-        Assert.Equal(2, below);
-    }
-
-    [Fact]
-    public async Task PruneKeepsTheNewestReleaseOlderThanTheWindowAfterABurstBecauseItWasLiveWhenTheWindowOpened()
-    {
-        var draft = await CreateDraftAsync();
-        for (var number = 1; number <= 33; number++)
-            await publications.CommitAsync(Owner.Subject, Commit(number, draft, 1, 0), $"key-{number}", Hash(number), default);
-        for (var number = 1; number <= 2; number++)
-            await AgeReleaseAsync(number, PruneAge + TimeSpan.FromMinutes(1));
-
-        var below = await LowestKeptAsync(keep: 30);
-
-        Assert.Equal(2, below);
-    }
-
-    [Fact]
-    public async Task PruneRetiresAnOldReleaseThatIsPastTheCountSoDiskUseStaysBounded()
-    {
-        var draft = await CreateDraftAsync();
-        for (var number = 1; number <= 3; number++)
-            await publications.CommitAsync(Owner.Subject, Commit(number, draft, 1, 0), $"key-{number}", Hash(number), default);
-        for (var number = 1; number <= 3; number++)
-            await AgeReleaseAsync(number, PruneAge + TimeSpan.FromMinutes(1));
-
-        var below = await LowestKeptAsync(keep: 2);
-
-        Assert.Equal(2, below);
-    }
-
-    [Fact]
-    public async Task PruneNamesTheActiveReleaseEvenWhenItIsOldSoARollbackTargetIsNeverRetired()
+    public async Task PruneNamesTheActiveReleaseEvenWhenItIsBelowTheKeptNumbersSoARollbackTargetIsNeverRetired()
     {
         var draft = await CreateDraftAsync();
         var first = await publications.CommitAsync(Owner.Subject, Commit(1, draft, 1, 0), "key-1", Hash(1), default);
         await publications.CommitAsync(Owner.Subject, Commit(2, draft, 1, 0), "key-2", Hash(2), default);
         await publications.ActivateAsync(1, (_, _) => Task.CompletedTask, default);
-        await AgeReleaseAsync(1, PruneAge + TimeSpan.FromDays(30));
-        await AgeReleaseAsync(2, PruneAge + TimeSpan.FromDays(30));
         string? active = null;
 
-        await publications.PruneAsync(1, PruneAge, (_, name, _) => { active = name; return Task.CompletedTask; }, default);
+        await publications.PruneAsync(1, (_, name, _) => { active = name; return Task.CompletedTask; }, default);
 
         Assert.Equal(first.DirectoryName, active);
     }
 
-    private async Task<int> LowestKeptAsync(int keep)
-    {
-        var below = 0;
-        await publications.PruneAsync(keep, PruneAge, (lowest, _, _) => { below = lowest; return Task.CompletedTask; }, default);
-        return below;
-    }
-
-    private async Task AgeReleaseAsync(int number, TimeSpan age)
-    {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            $"UPDATE publication_releases SET published_at_utc_ticks = {DatabaseClockTicksSql} - @age WHERE release_number = @number", connection);
-        command.Parameters.AddWithValue("age", age.Ticks);
-        command.Parameters.AddWithValue("number", number);
-        await command.ExecuteNonQueryAsync();
-    }
-
     [Fact]
-    public async Task PruneKeepsTheThirtyHighestNumbersAtTheRealLimit()
+    public async Task PruneRetiresEverythingBelowTheThirtyHighestNumbersAfterABurstBecauseADrainMustNotFillTheDisk()
     {
         var draft = await CreateDraftAsync();
-        for (var number = 1; number <= PruneReleases.KeepReleases + 1; number++)
+        for (var number = 1; number <= PruneReleases.KeepReleases + 10; number++)
             await publications.CommitAsync(Owner.Subject, Commit(number, draft, 1, 0), $"key-{number}", Hash(number), default);
         var below = 0;
 
-        await publications.PruneAsync(PruneReleases.KeepReleases, TimeSpan.Zero, (lowestKept, _, _) => { below = lowestKept; return Task.CompletedTask; }, default);
+        await publications.PruneAsync(PruneReleases.KeepReleases, (lowestKept, _, _) => { below = lowestKept; return Task.CompletedTask; }, default);
 
-        Assert.Equal(2, below);
+        Assert.Equal(11, below);
     }
 
     [Fact]
@@ -375,7 +285,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         await publications.CommitAsync(Owner.Subject, Commit(2, draft, 1, 0), "key-2", Hash(2), default);
         var lockWasFree = true;
 
-        await publications.PruneAsync(1, TimeSpan.Zero, async (_, _, _) =>
+        await publications.PruneAsync(1, async (_, _, _) =>
         {
             await using var other = new NpgsqlConnection(connectionString);
             await other.OpenAsync();

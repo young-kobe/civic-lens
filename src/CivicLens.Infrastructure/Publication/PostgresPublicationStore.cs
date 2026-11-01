@@ -102,21 +102,15 @@ public sealed class PostgresPublicationStore : IPublicationStore
         return active is null ? null : ToSummary(active);
     }
 
-    public async Task PruneAsync(int keep, TimeSpan minimumAge, Func<int, string?, CancellationToken, Task> retireOlder, CancellationToken cancellationToken)
+    public async Task PruneAsync(int keep, Func<int, string?, CancellationToken, Task> retireOlder, CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(keep, 1);
         ArgumentNullException.ThrowIfNull(retireOlder);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.ReviewKeysInOrder, cancellationToken);
         var releases = db.Set<PublicationReleaseRow>().AsNoTracking();
-        var youngestAllowedTicks = (await DatabaseClock.ReadAsync(db, cancellationToken)).Ticks - minimumAge.Ticks;
-        var lowestByCount = await releases.OrderByDescending(row => row.ReleaseNumber).Take(keep)
+        var lowestKept = await releases.OrderByDescending(row => row.ReleaseNumber).Take(keep)
             .Select(row => (int?)row.ReleaseNumber).MinAsync(cancellationToken);
-        var lowestByAge = await releases.Where(row => row.PublishedAtUtcTicks >= youngestAllowedTicks)
-            .Select(row => (int?)row.ReleaseNumber).MinAsync(cancellationToken);
-        var newestBeforeWindow = await releases.Where(row => row.PublishedAtUtcTicks < youngestAllowedTicks)
-            .Select(row => (int?)row.ReleaseNumber).MaxAsync(cancellationToken);
-        var lowestKept = new[] { lowestByCount, lowestByAge, newestBeforeWindow }.Min();
         var active = await releases.Where(row => row.IsActive).Select(row => row.DirectoryName).SingleOrDefaultAsync(cancellationToken);
         if (lowestKept is not null) await retireOlder(lowestKept.Value, active, cancellationToken);
         await transaction.CommitAsync(cancellationToken);

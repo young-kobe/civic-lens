@@ -138,7 +138,7 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
         var rows = await AllRowsAsync();
         var releases = await PublishedRecordStateReader.ReadAsync(connectionString, "SELECT * FROM publication_releases ORDER BY release_number");
 
-        await publications.PruneAsync(1, TimeSpan.Zero, (_, _, _) => Task.CompletedTask, default);
+        await publications.PruneAsync(1, (_, _, _) => Task.CompletedTask, default);
 
         Assert.Equal(rows, await AllRowsAsync());
         Assert.Equal(releases, await PublishedRecordStateReader.ReadAsync(connectionString, "SELECT * FROM publication_releases ORDER BY release_number"));
