@@ -1768,6 +1768,23 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task AVoteWhoseTextAloneChangedSaysSoOnThePageAndInTheTimeline()
+    {
+        var vote = Vote() with
+        {
+            RevisionNumber = 2,
+            Corrections = [new() { ReplacedRevisionNumber = 1, PublishedAtUtc = new DateTimeOffset(2026, 2, 2, 9, 0, 0, TimeSpan.Zero), FactsUnchanged = true }]
+        };
+
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var entry = new HtmlParser().ParseDocument(html).QuerySelector("ul.corrections > li strong")!.ShownText();
+        Assert.Equal("Summary rewritten by an updated AI model prompt, 2026-02-02. Replaces revision 1. The vote facts did not change.", entry);
+        var timeline = await TimelineOf(renderer => renderer.RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None));
+        Assert.Contains("2026-02-02|Summary rewritten by an updated AI model prompt, replaces revision 1, 2026-02-02 09:00 UTC. The vote facts did not change.", timeline);
+    }
+
+    [Fact]
     public async Task AWithdrawalNoticeShowsTheKindTheRevisionTheDatesTheEscapedNoteAndTheHistoryButNoRecordContent()
     {
         var withdrawal = new PublishedWithdrawal

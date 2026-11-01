@@ -36,7 +36,10 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
         var review = addition.Vote.Review;
         RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build);
         var record = new PublishedVoteBuilder(build.Rules).Build(review.CurrentRevision, review.Decisions, addition.Vote.Extractions,
-            build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId, review.CurrentRevision.RevisionNumber, review.Decisions), build.Now, addition.Parties);
+            build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId, review.CurrentRevision.RevisionNumber, review.Decisions,
+                replaced => review.Revisions.FirstOrDefault(revision => revision.RevisionNumber == replaced) is { } earlier &&
+                    review.CurrentRevision.HasSameVoteFactsAs(earlier)),
+            build.Now, addition.Parties);
         var billActionRecordId = BillActionRecordIn(addition.Vote.BillActionRecordIds, build);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
             (related, cancellationToken) => build.Renderer.RenderVoteAsync(record, billActionRecordId, related, build.Catalog, cancellationToken));

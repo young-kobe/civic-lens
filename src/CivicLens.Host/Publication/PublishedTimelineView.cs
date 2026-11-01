@@ -52,15 +52,15 @@ internal static class PublishedTimelineView
     public static IReadOnlyList<TimelineEvent> For(PublishedBrief record) =>
         WithPublication([new(record.WeekStart, "Week starts")], record.ApprovedAtUtc, record.FirstPublishedAtUtc, record.Corrections, PublishedRecordLabels.PersonApproval);
 
-    private static TimelineEvent At(DateTimeOffset at, string text) =>
-        new(DateOnly.FromDateTime(at.UtcDateTime), $"{text}, {Moment.Full(at)}", TimeOnly.FromDateTime(at.UtcDateTime));
+    private static TimelineEvent At(DateTimeOffset at, string text, string end = "") =>
+        new(DateOnly.FromDateTime(at.UtcDateTime), $"{text}, {Moment.Full(at)}{end}", TimeOnly.FromDateTime(at.UtcDateTime));
 
     private static IReadOnlyList<TimelineEvent> WithPublication(List<TimelineEvent> events, DateTimeOffset approvedAtUtc,
         DateTimeOffset firstPublishedAtUtc, PublishedCorrection[] corrections, string approvalText)
     {
         events.Add(At(approvedAtUtc, approvalText));
         events.Add(At(firstPublishedAtUtc, "First published"));
-        events.AddRange(corrections.Select(correction => At(correction.PublishedAtUtc, PublishedCorrectionView.TimelineText(correction))));
+        events.AddRange(corrections.Select(correction => At(correction.PublishedAtUtc, PublishedCorrectionView.TimelineText(correction), PublishedCorrectionView.TimelineEnd(correction))));
         return [.. events.OrderBy(item => item.Day).ThenBy(item => item.Time)];
     }
 }

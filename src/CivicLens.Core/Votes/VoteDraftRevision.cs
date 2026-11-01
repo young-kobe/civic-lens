@@ -96,13 +96,15 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
                 ?? throw new ArgumentException("A vote citation names a missing extraction."), span.Start, span.Length);
     }
 
-    private bool HasSameStructuredPartAs(VoteDraftRevision other) =>
+    public bool HasSameVoteFactsAs(VoteDraftRevision other) =>
         RecordId == other.RecordId && SourceId == other.SourceId && Source == other.Source && Chamber == other.Chamber && Congress == other.Congress && SessionNumber == other.SessionNumber &&
         RollCallNumber == other.RollCallNumber && BillType == other.BillType && BillNumber == other.BillNumber &&
         CandidateId == other.CandidateId && CandidateUpdateDate == other.CandidateUpdateDate && VotedOn == other.VotedOn &&
         VotedOnCitation == other.VotedOnCitation && Facts.SequenceEqual(other.Facts) &&
-        Kind == other.Kind && KindCitation == other.KindCitation && Members.SequenceEqual(other.Members) &&
-        TrackedIssueIds.SequenceEqual(other.TrackedIssueIds) && IssueCandidateIds.IsDefault == other.IssueCandidateIds.IsDefault &&
+        Kind == other.Kind && KindCitation == other.KindCitation && Members.SequenceEqual(other.Members);
+
+    private bool HasSameStructuredPartAs(VoteDraftRevision other) =>
+        HasSameVoteFactsAs(other) && TrackedIssueIds.SequenceEqual(other.TrackedIssueIds) && IssueCandidateIds.IsDefault == other.IssueCandidateIds.IsDefault &&
         (IssueCandidateIds.IsDefault || IssueCandidateIds.SequenceEqual(other.IssueCandidateIds)) && IssueRevisionId == other.IssueRevisionId &&
         SubjectsHash == other.SubjectsHash;
 

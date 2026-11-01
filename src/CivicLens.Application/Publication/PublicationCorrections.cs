@@ -35,7 +35,9 @@ internal sealed class PublicationCorrections
 
     // A code approval needs no note. A person approval that replaces a published record needs the note that its approval holds.
     // A note on a first publication is dropped.
-    public PublishedCorrection[] For(PublishedRecordKind kind, string recordId, int revisionNumber, ImmutableArray<ReviewDecision> decisions)
+    // A vote passes factsUnchangedSince. It compares the replaced revision with the new one, so the reason comes from the facts and not from a flag.
+    public PublishedCorrection[] For(PublishedRecordKind kind, string recordId, int revisionNumber, ImmutableArray<ReviewDecision> decisions,
+        Func<int, bool>? factsUnchangedSince = null)
     {
         var reference = new PublishedRecordReference(kind, recordId);
         var replacedRevision = previous.Find(kind, recordId)?.RevisionNumber ?? previous.FindWithdrawal(recordId)?.WithdrawnRevisionNumber;
@@ -46,7 +48,13 @@ internal sealed class PublicationCorrections
         var kept = earlier[reference];
         if (note is not null && PublishedCorrection.IsAtNoteLimit(kept))
             throw new CorrectionLimitException(reference);
-        return PublishedCorrection.Prepend(kept, new() { ReplacedRevisionNumber = replaced, PublishedAtUtc = now, Note = note });
+        return PublishedCorrection.Prepend(kept, new()
+        {
+            ReplacedRevisionNumber = replaced,
+            PublishedAtUtc = now,
+            Note = note,
+            FactsUnchanged = note is null && factsUnchangedSince?.Invoke(replaced) == true
+        });
     }
 
     public PublishedCorrection[] Earlier(PublishedRecordReference record) => earlier[record];

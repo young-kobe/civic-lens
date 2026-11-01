@@ -1,11 +1,48 @@
+using System.Text.Json;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Tests.Publication.Contracts;
 
 public sealed class PublishedCorrectionTests
 {
-    private static PublishedCorrection Entry(int replaced, string? note = null) =>
-        new() { ReplacedRevisionNumber = replaced, PublishedAtUtc = DateTimeOffset.UnixEpoch, Note = note };
+    private static PublishedCorrection Entry(int replaced, string? note = null, bool factsUnchanged = false) =>
+        new() { ReplacedRevisionNumber = replaced, PublishedAtUtc = DateTimeOffset.UnixEpoch, Note = note, FactsUnchanged = factsUnchanged };
+
+    [Fact]
+    public void AFactsUnchangedUpdateAndASourceUpdateKeepTheirOwnEntriesNextToEachOther()
+    {
+        PublishedCorrection.ValidateAll([Entry(2, factsUnchanged: true), Entry(1)], 3);
+        PublishedCorrection.ValidateAll([Entry(2), Entry(1, factsUnchanged: true)], 3);
+        Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(2, factsUnchanged: true), Entry(1, factsUnchanged: true)], 3));
+    }
+
+    [Fact]
+    public void ANotedEntryCannotClaimThatTheFactsDidNotChange()
+    {
+        Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(1, "Fix.", factsUnchanged: true)], 2));
+    }
+
+    [Fact]
+    public void PrependMergesOnlyCodeUpdatesOfTheSameKind()
+    {
+        var textOnly = Entry(2, factsUnchanged: true);
+
+        Assert.Equal([textOnly], PublishedCorrection.Prepend([Entry(1, factsUnchanged: true)], textOnly));
+        Assert.Equal([textOnly, Entry(1)], PublishedCorrection.Prepend([Entry(1)], textOnly));
+        Assert.Equal([Entry(2), textOnly], PublishedCorrection.Prepend([textOnly], Entry(2)));
+    }
+
+    [Fact]
+    public void AnOlderRecordFileWithoutTheFieldReadsAsASourceUpdateAndAPlainEntryWritesNoField()
+    {
+        const string older = """{"replacedRevisionNumber":1,"publishedAtUtc":"2026-02-02T09:00:00+00:00"}""";
+
+        var read = JsonSerializer.Deserialize<PublishedCorrection>(older, PublicationProtocol.JsonOptions)!;
+
+        Assert.False(read.FactsUnchanged);
+        Assert.DoesNotContain("factsUnchanged", JsonSerializer.Serialize(read, PublicationProtocol.JsonOptions));
+        Assert.Contains("\"factsUnchanged\":true", JsonSerializer.Serialize(Entry(1, factsUnchanged: true), PublicationProtocol.JsonOptions));
+    }
 
     [Fact]
     public void AcceptsEntriesFromTheNewestReplacedRevisionDown()
