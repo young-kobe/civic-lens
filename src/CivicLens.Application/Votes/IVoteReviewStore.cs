@@ -30,10 +30,11 @@ public interface IVoteReviewStore
     Task<string?> FindRecordIdByRollAsync(Chamber chamber, int congress, int sessionNumber, int rollCallNumber,
         CancellationToken cancellationToken);
 
-    Task<IReadOnlyDictionary<string, ImmutableArray<string>>> FindBillActionRecordIdsAsync(ImmutableArray<VoteBill> bills,
+    /// <summary>The action records on the bill of each named vote record. A vote with no bill, or a bill with no action, is not in the result.</summary>
+    Task<IReadOnlyDictionary<string, ImmutableArray<string>>> FindBillActionRecordIdsOfVotesAsync(ImmutableArray<string> voteRecordIds,
         CancellationToken cancellationToken);
 
-    /// <summary>The inverse of <see cref="FindBillActionRecordIdsAsync"/>: the vote records on the bill of each named action record.</summary>
+    /// <summary>The inverse of <see cref="FindBillActionRecordIdsOfVotesAsync"/>: the vote records on the bill of each named action record.</summary>
     Task<IReadOnlySet<string>> FindVoteRecordIdsOnBillsOfActionsAsync(ImmutableArray<string> actionRecordIds,
         CancellationToken cancellationToken);
 }

@@ -47,12 +47,14 @@ internal sealed class FakeVoteReviewStore : IVoteReviewStore
         return Task.FromResult(members);
     }
 
-    public Task<IReadOnlyDictionary<string, ImmutableArray<string>>> FindBillActionRecordIdsAsync(ImmutableArray<VoteBill> bills,
+    public Task<IReadOnlyDictionary<string, ImmutableArray<string>>> FindBillActionRecordIdsOfVotesAsync(ImmutableArray<string> voteRecordIds,
         CancellationToken cancellationToken)
     {
         BillLookups++;
-        IReadOnlyDictionary<string, ImmutableArray<string>> found = bills.ToDictionary(bill => bill.VoteRecordId,
-            bill => BillActions.GetValueOrDefault((bill.Congress, bill.BillType, bill.BillNumber), []));
+        IReadOnlyDictionary<string, ImmutableArray<string>> found = voteRecordIds
+            .Select(id => (id, bill: VoteBill.Of(Publishable[id].Review.CurrentRevision)))
+            .Where(item => item.bill is not null)
+            .ToDictionary(item => item.id, item => BillActions.GetValueOrDefault((item.bill!.Congress, item.bill.BillType, item.bill.BillNumber), []));
         return Task.FromResult(found);
     }
 

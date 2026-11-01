@@ -84,19 +84,18 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
-    public async Task FindBillActionRecordIdsReturnsTheActionRecordsOfEachNamedBillWithoutReadingTheVoteRows()
+    public async Task FindBillActionRecordIdsOfVotesReturnsTheActionRecordsOnTheBillOfEachNamedVoteInOneQuery()
     {
-        var match = new string('7', 64);
-        await InsertActionDraftAsync(match, "hconres", 14);
+        var recordId = await ApprovedVoteAsync();
+        var sameBill = new string('7', 64);
+        await InsertActionDraftAsync(sameBill, "hconres", 14);
         await InsertActionDraftAsync(new string('9', 64), "hr", 14);
 
-        var found = await VoteReviews().FindBillActionRecordIdsAsync(
-            [new("first", 119, "hconres", 14), new("second", 119, "hr", 14), new("third", 119, "hr", 99)], default);
+        var found = await VoteReviews().FindBillActionRecordIdsOfVotesAsync([recordId, "unknown"], default);
 
-        Assert.Equal([match], [.. found["first"]]);
-        Assert.Equal([new string('9', 64)], [.. found["second"]]);
-        Assert.Empty(found["third"]);
-        Assert.Empty(await VoteReviews().FindBillActionRecordIdsAsync([], default));
+        Assert.Equal([sameBill], [.. found[recordId]]);
+        Assert.False(found.ContainsKey("unknown"));
+        Assert.Empty(await VoteReviews().FindBillActionRecordIdsOfVotesAsync([], default));
     }
 
     [Fact]

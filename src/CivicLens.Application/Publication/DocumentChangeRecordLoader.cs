@@ -31,4 +31,8 @@ internal sealed class DocumentChangeRecordLoader(IDocumentChangeReviewStore revi
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
             (_, cancellationToken) => build.Renderer.RenderRecordAsync(record, build.Catalog, cancellationToken));
     }
+
+    public override Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
+        CancellationToken cancellationToken) =>
+        build.Renderer.RenderRecordAsync(Parse<PublishedDocumentChange>(json), build.Catalog, cancellationToken);
 }

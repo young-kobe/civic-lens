@@ -133,11 +133,19 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
             .SelectMany(revision => revision.OfficialIds().Select(personId => new VoteMembership(revision.RecordId, personId)))];
     }
 
-    public async Task<IReadOnlyDictionary<string, ImmutableArray<string>>> FindBillActionRecordIdsAsync(ImmutableArray<VoteBill> bills,
-        CancellationToken cancellationToken)
+    public async Task<IReadOnlyDictionary<string, ImmutableArray<string>>> FindBillActionRecordIdsOfVotesAsync(
+        ImmutableArray<string> voteRecordIds, CancellationToken cancellationToken)
     {
+        if (voteRecordIds.IsEmpty) return ImmutableDictionary<string, ImmutableArray<string>>.Empty;
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await ReadBillActionRecordIdsAsync(db, bills, cancellationToken);
+        var pairs = await db.Database.SqlQueryRaw<VoteBillAction>("""
+                SELECT d.record_id AS "VoteRecordId", a.record_id AS "ActionRecordId" FROM vote_drafts d
+                JOIN vote_candidates c ON c.candidate_id = d.candidate_id
+                JOIN action_drafts a ON a.congress = c.congress AND a.bill_type = c.bill_type AND a.bill_number = c.bill_number
+                WHERE d.record_id = ANY({0})
+                """, (object)voteRecordIds.ToArray()).ToArrayAsync(cancellationToken);
+        return pairs.GroupBy(pair => pair.VoteRecordId, StringComparer.Ordinal).ToDictionary(group => group.Key,
+            group => group.Select(pair => pair.ActionRecordId).Order(StringComparer.Ordinal).ToImmutableArray(), StringComparer.Ordinal);
     }
 
     public async Task<IReadOnlySet<string>> FindVoteRecordIdsOnBillsOfActionsAsync(ImmutableArray<string> actionRecordIds,
@@ -193,4 +201,6 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
             .ToDictionaryAsync(row => row.CandidateId, row => row.ConfigurationRevisionId, StringComparer.Ordinal, cancellationToken);
         return await ConfiguredPersonNames.ReadAsync(db, candidateIds, revisionIds, cancellationToken);
     }
+
+    private sealed record VoteBillAction(string VoteRecordId, string ActionRecordId);
 }
