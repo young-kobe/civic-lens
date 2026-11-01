@@ -19,6 +19,10 @@ public static class BillStreamJobKeys
     public static string NextBillPage(string sourceId, ApiResource resource, string parentJobId) =>
         $"{Prefix}{sourceId}/{Segment(resource)}/page/{parentJobId}";
 
+    public static string BillText(string sourceId, string versionsJobId) => $"{Prefix}{sourceId}/text/{versionsJobId}";
+
+    public static string ParentJobId(string key) => key[(key.LastIndexOf('/') + 1)..];
+
     private static string Segment(ApiResource resource) =>
         BillPageUrl.SegmentOf(resource) ?? throw new ArgumentOutOfRangeException(nameof(resource));
 }

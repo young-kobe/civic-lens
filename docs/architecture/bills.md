@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The bills feature follows the Congress.gov bill list each day. It fetches the detail, cosponsors, actions, summaries, and legislative subjects of each bill as durable jobs. A relevance gate decides which bills matter. Each passed bill version with complete evidence becomes an action candidate, which [action drafting](actions.md) drains.
+The bills feature follows the Congress.gov bill list each day. It fetches the detail, cosponsors, actions, summaries, and legislative subjects of each bill as durable jobs. It also fetches the official text of a bill that has no Congress.gov summary. A relevance gate decides which bills matter. Each passed bill version with complete evidence becomes an action candidate, which [action drafting](actions.md) drains.
 
 ## Decisions
 
@@ -27,6 +27,9 @@ The bills feature follows the Congress.gov bill list each day. It fetches the de
 - `subjects.count` of the detail includes the policy area. A bill has legislative subjects when the count is above 1 with a policy area, or above 0 with none (`CongressBill.HasLegislativeSubjects`). A bill with only a policy area gets no subjects chain and no candidate with subjects.
 - A subjects chain is admitted at the detail for every bill that has legislative subjects, also when the gate is `notRelevant`. A [vote](votes.md) can name a bill that never passed the gate.
 - The gate row of each bill version stores the `latestAction` of the detail: its date and its text. The row is the status of the bill as of the fetch. The newest version of a bill holds its current status. Status is never part of an action candidate or an action revision, because a bill moves after approval. [Publication](publication.md#bill-status-line) reads it.
+- A bill with `summary_count` 0 gets a text versions job at the detail, whatever the gate decision is, when an enabled [bill text source](#bill-text) exists. The text is for a later AI summary. A bill with a Congress.gov summary needs no text.
+- The text comes from the official API of the Government Publishing Office (`api.govinfo.gov`), never from `www.congress.gov`. The Congress.gov `/text` list names the versions. The package ID is the file name of the Formatted Text URL.
+- A text read never blocks a candidate. The text chain has no `bill_pages` row.
 - A candidate is an immutable input. Late summaries or subjects add a new candidate and never change an older one.
 
 ## Invariants
@@ -37,6 +40,11 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - The reason fits the decision, and only a decided gate has a decision time. Enforced by `ck_bill_gates_reason` and `ck_bill_gates_decided`. Test: `PostgresBillStreamTests.TheDatabaseRefusesAReasonThatDoesNotBelongToItsDecision`.
 - A decided gate never changes. Enforced by `PostgresCollectionJobStore`, which settles only a Pending gate. Test: `PostgresBillStreamTests.ALaterCosponsorPageNeverChangesAGateThatAnEarlierStepDecided`.
 - A bill with only a policy area admits no subjects chain, and the backfill is bounded and idempotent. Enforced by `BillGateRow.HasSubjectsChain` and `PostgresCollectionJobStore.AdmitSubjectsChainAsync`. Tests: `PostgresBillStreamTests.TheSubjectsCountIncludesThePolicyAreaSoAPolicyOnlyBillAdmitsNoSubjectsChain`, `PostgresBillStreamTests.TheBackfillAdmitsTheChainOfTheNewestVersionOnceStoresTheCountAndNeverListsAnExaminedBillAgain`, and `PostgresBillStreamTests.TheBackfillOfAPolicyOnlyBillAdmitsNothingButRecordsTheCountSoItIsNotListedAgain`.
+- A bill gets a text versions job only when its `summary_count` is 0 and an enabled bill text source exists. A replay admits no second job. Enforced by `PostgresCollectionJobStore.DetailFollowOns` and the unique job key. Tests: `PostgresBillStreamTests.ABillWithNoSummaryGetsAVersionsJobAtDetailForEveryGateOutcomeAndItsTextStateStartsUnread`, `PostgresBillStreamTests.ABillWithACongressGovSummaryGetsNoVersionsJobBecauseTheSummaryAlreadyExplainsIt`, `PostgresBillStreamTests.ADisabledTextSourceMakesNoVersionsJob`, `PostgresBillStreamTests.AConfigurationWithoutATextSourceMakesNoVersionsJob`, `PostgresBillStreamTests.ReadingTheSameVersionsPageTwiceAdmitsOneTextJob`.
+- The text of a bill comes from the newest version that has a Formatted Text entry. A version with no date loses to a dated version. A package that does not belong to the bill is invalid data. Enforced by `CongressBillTextVersionsPage.Newest` and `CongressBillTextVersionsParser`. Tests: `CongressBillTextVersionsParserTests.TheNewestVersionByDateIsChosenWhateverTheListOrder`, `CongressBillTextVersionsParserTests.AVersionWithNoDateLosesToADatedVersionBecauseItsAgeIsUnknown`, `CongressBillTextVersionsParserTests.ANewerVersionWithoutFormattedTextIsSkippedSoTheNewestReadableVersionWins`, `CongressBillTextVersionsParserTests.ABillWithNoFormattedTextHasNoNewestVersionSoTheReadEndsAsNoText`, `CongressBillTextVersionsParserTests.AFileNameThatIsNotAPackageOfThisBillIsInvalidSoOneBillNeverStoresTheTextOfAnother`.
+- The stored text window is at most 60,000 characters, cut at a line break, and its header states the characters read and the total. Enforced by `CongressBillRenderer.RenderText`. Tests: `CongressBillTextRendererTests.LongTextIsCutAtTheLastLineBreakInsideTheWindowAndTheHeaderStatesTheHonestCounts`, `CongressBillTextRendererTests.TextOfExactlyTheWindowIsNotCut`, `CongressBillTextRendererTests.LongTextWithNoLineBreakInsideTheWindowIsInvalidInsteadOfCutThroughAWord`.
+- A bill version has at most one text row for each package, and a row has counts that agree, a hash, and an extraction. Enforced by the primary key of `bill_text_versions`, `ck_bill_text_versions_chars`, `ck_bill_text_versions_hash`, `ck_bill_text_versions_package`, and the foreign key to `document_extractions`. Tests: `PostgresBillStreamTests.StoringTheSameTextTwiceAddsNoSecondRow`, `PostgresBillStreamTests.ADifferentVersionOfTheSameBillGetsItsOwnRow`, `PostgresBillStreamTests.TheDatabaseRefusesATextRowWhoseCountsHashOrPackageAreWrong`, `PostgresBillStreamTests.AVersionRowNeedsItsExtraction`.
+- A null `text_state` means unread. `NoText` means that no version has Formatted Text. `Read` means that a version row exists. A later update of a bill whose version is stored reads it without a second download. Enforced by `ck_bill_gates_text_state` and `PostgresCollectionJobStore.AdmitTextVersionsAsync`. Tests: `PostgresBillStreamTests.TheDatabaseRefusesATextStateOtherThanNoTextOrRead`, `PostgresBillStreamTests.ABillWithNoFormattedTextEndsAsNoTextAndMakesNoTextJob`, `PostgresBillStreamTests.ALaterUpdateOfABillWhoseVersionIsStoredReadsItWithoutAnotherDownload`.
 - A stored latest action has both a date and a trimmed text of 1 to 1,000 characters, and only a row marked read holds one. The parser gives no status for an unusable `latestAction`. That means a missing field, a text over the cap, or a control character. A detail with no `latestAction` stores no status. The status backfill lists only the newest unread version of a bill, once. Enforced by `ck_bill_gates_latest_action`, `CongressBillParser`, and `PostgresCollectionJobStore.RecordStatusAsync`. Tests: `PostgresBillStreamTests.TheDatabaseRefusesALatestActionWithOnlyADateOrWithBlankOrPaddedTextSoNoHalfStatusIsStored`, `CongressBillParserTests.AnUnusableLatestActionGivesNoStatusAndOneWarningAndNeverBlocksTheBill`, `CongressBillParserTests.ADetailWithNoLatestActionHasNoStatusSoNoReaderSeesAFalseNoActionLine`, `PostgresBillStreamTests.TheGateStoresTheLatestActionOfTheDetailAndMarksItReadAlsoWhenTheDetailHasNoneSoNoBackfillListsItAgain`, and `PostgresBillStreamTests.TheStatusBackfillListsOnlyTheNewestUnreadVersionRecordsItOnceAndNeverListsItAgain`.
 - A bill version has at most three action candidates, one for each growing set of closed chains. Enforced by `ux_action_candidates_detail_job` and `ActionCandidateInputs`. Test: `PostgresBillStreamTests.SubjectsAndSummariesThatCloseLaterGiveAtMostThreeCandidatesWhicheverComesFirstAndReplayAddsNoMore`.
 - A candidate ID of an older input set never changes. Enforced by `PostgresCollectionJobStore.HashActionCandidate`. Test: `PostgresBillStreamTests.TheCandidateIdsOfTheOldInputCombinationsStayTheSameAndTheSubjectsSuffixComesLast`.
@@ -84,13 +92,13 @@ A malformed list page blocks preparation, and the cursor stays. The next due che
 
 ### Resource kinds and URLs
 
-A job definition of a bill list source carries `apiResource`. The kinds are `billList` (a list page), `bill` (a detail), and `billCosponsors`, `billActions`, `billSummaries`, and `billSubjects` (the follow-on pages of one bill). A kind needs a source with `apiParser` `congressBillList` and a bound configuration revision. A job without a kind keeps the source URL.
+A job definition of a bill list source carries `apiResource`. The kinds are `billList` (a list page), `bill` (a detail), and `billCosponsors`, `billActions`, `billSummaries`, `billSubjects`, and `billTextVersions` (the follow-on pages of one bill). A kind needs a source with `apiParser` `congressBillList` and a bound configuration revision. The kind `billText` belongs to the [bill text source](#bill-text) instead. A job without a kind keeps the source URL.
 
 The configuration binding check requires the exact URL form of each kind:
 
 - `billList`: the source URL, a query, and a window with the fixed sort (`BillStreamWindow.IsRequestUrl`).
 - `bill`: exactly the detail form `{source url}/{congress}/{type}/{number}?format=json` that `CongressBillListItem.DetailUrl` builds (`CongressBillListItem.IsDetailUrl`).
-- Follow-on pages: `{source url}/{congress}/{type}/{number}/cosponsors`, `/actions`, `/summaries`, or `/subjects`, with `format=json&limit=250` and optionally one `offset` of 0 or more.
+- Follow-on pages: `{source url}/{congress}/{type}/{number}/cosponsors`, `/actions`, `/summaries`, `/subjects`, or `/text`, with `format=json&limit=250` and optionally one `offset` of 0 or more.
 - `billSummaries` uses `limit=1` (`BillPageUrl.SummariesPageLimit`, chosen through `BillPageUrl.LimitOf`). A summaries page with another `limit` is not a valid page URL.
 
 `BillPageUrl` builds the first page and reads every page, including the `next` form of the API, which orders the parameters differently. Numbers must be canonical, and the type must be known. Any other or repeated parameter, including `api_key`, fails. `ApiPageQuery` owns the page parameter rule (`limit`, `format`, and `offset`) and the canonical number rule. It also owns the page split. It owns the next link check too: scope, exact form, same series, and advancing offset. `BillPageUrl` adds the bill identity and resource segment. The list window uses `ApiPageQuery` too.
@@ -109,6 +117,8 @@ Each succeeded page job goes through [preparation](collection.md#preparation). T
 | `CongressBillActionsParser` | `congress-bill-actions-v1` | One actions page of at most 250 items |
 | `CongressBillSummariesParser` | `congress-bill-summaries-v1+html-text-v1` | One summaries page of at most 1 item |
 | `CongressBillSubjectsParser` | `congress-bill-subjects-v1` | One subjects page of at most 250 names |
+| `CongressBillTextVersionsParser` | none, because a versions page has no extraction | One text versions page of at most 250 versions |
+| `CongressBillTextParser` | `congress-bill-text-v1+html-text-v1` | The govinfo HTML of one package |
 
 The list parser checks the type against `hr`, `s`, `hjres`, `sjres`, `hconres`, `sconres`, `hres`, and `sres`. A list `next` link must stay inside the source origin and path prefix. It must carry the same window and must not carry `api_key`.
 
@@ -128,7 +138,7 @@ For each list item with a congress of at least `minimumCongress`, the store admi
 
 The aggregate budgets come from the source `admissionPolicy` through `DiscoveryAdmissionPolicy`, the same owner as [article admission](collection.md#discovery-and-admission). A page of 250 items plus the next page needs 251 jobs. `CollectionConfiguration.Validate` rejects a bill list source whose policy cannot reserve `ApiPageQuery.PageLimit + 1` jobs. A source without `admissionPolicy` uses the small defaults and fails this check.
 
-The configured source sets `maxJobs` 251, and request, byte, and time totals for 251 jobs with two attempts each. A detail admits at most four follow-on jobs and a follow-on page admits at most three, so the 251 job limit holds. The worker treats an admission that throws `InvalidDataException` as a permanent failure.
+The configured source sets `maxJobs` 251, and request, byte, and time totals for 251 jobs with two attempts each. A detail admits at most four follow-on jobs and a follow-on page admits at most three, so the 251 job limit holds. The text versions job replaces the summaries job, because a bill has one or the other, so the limit of four holds. The worker treats an admission that throws `InvalidDataException` as a permanent failure.
 
 These jobs never register statement candidates, because only the key prefix `discovery-admission/` does that.
 
@@ -142,8 +152,10 @@ The detail admission also queues the [vote](votes.md#admission) candidates that 
 |---|---|
 | Detail | `bill-stream/{source}/bill/{congress}/{type}/{number}/{updateDate}` |
 | Next list page | `bill-stream/{source}/page/{list job ID}` |
-| First follow-on page | `bill-stream/{source}/{cosponsors, actions, summaries, or subjects}/{congress}/{type}/{number}/{update date}` |
+| First follow-on page | `bill-stream/{source}/{cosponsors, actions, summaries, subjects, or text}/{congress}/{type}/{number}/{update date}` |
 | Next follow-on page | `bill-stream/{source}/{cosponsors, actions, summaries, or subjects}/page/{parent job ID}` |
+
+| Bill text | `bill-stream/{text source}/text/{text versions job ID}` |
 
 The follow-on update date is the exact UTC time as `yyyy-MM-ddTHH:mm:ssZ`.
 
@@ -174,7 +186,7 @@ The issue configuration comes from `CIVIC_LENS_ISSUES_CONFIG`, as an `IssueConfi
 
 ### Follow-on pages
 
-A detail job with a cosponsor count above 0 always admits the first cosponsor page, as evidence. It admits the first subjects page the same way when the bill has legislative subjects. A detail job whose gate passed also admits the first actions page. It admits the first summaries page when `summaries.count` is above 0.
+A detail job with a cosponsor count above 0 always admits the first cosponsor page, as evidence. It admits the first subjects page the same way when the bill has legislative subjects. It admits the first text versions page when `summaries.count` is 0 and an enabled bill text source exists. A detail job whose gate passed also admits the first actions page. It admits the first summaries page when `summaries.count` is above 0.
 
 A cosponsor page job reads its page and finds its gate. The gate may be pending, and the page may list a covered cosponsor who is not withdrawn. Then the gate passes with `coveredCosponsor`, and the job admits the first actions page. It admits the first summaries page when the stored `summary_count` is above 0.
 
@@ -189,6 +201,8 @@ An actions, summaries, or subjects page job admits the next page of its own kind
 Every captured API page of a bill is saved as one `DocumentExtraction`: the detail and each cosponsor, actions, summaries, and subjects page. A bill list page is not saved. API jobs get no processing stage.
 
 `CongressBillRenderer` has one method for each page kind and owns the text. A renderer change bumps the extraction version of each page kind it renders. The extraction version is the `ExtractionVersion` constant of the parser that read the page. The source attempt of the extraction is the captured attempt of the job.
+
+A text versions page has no extraction and no `bill_pages` row. The govinfo text of a package is saved as one extraction; see [Bill text](#bill-text).
 
 A summaries page is the exception. Its extraction version is `{CongressBillSummariesParser.Version}+{extractor.ExtractionVersion}`. Today that is `congress-bill-summaries-v1+html-text-v1`.
 
@@ -211,6 +225,21 @@ If the rendered text of a page is over the extraction limit of 2,000,000 charact
 `JobPreparation` saves the extraction right after the parse, before the gate or follow-on step. It does this for every parsed page, also for a bill that the gate marks not relevant. A blocked detail job (no issue configuration) saves nothing.
 
 The extraction ID is deterministic and the save is idempotent. A replayed preparation repeats safe work and creates no second extraction. The extraction store registers a statement candidate only for the key prefix `discovery-admission/`, so a bill extraction never creates one. Tests protect this against a real database.
+
+### Bill text
+
+The source `congress-bill-text` has `apiParser` `congressBillText`. Its URL is `https://api.govinfo.gov/packages` and its allowed path prefix is `/packages`. It sends the Congress.gov credential in the `X-Api-Key` header, because both hosts accept an `api.data.gov` key. The shipped source is `enabled: false`. A disabled or missing source makes no text job. The text source is one of the sources that cover no people, and a configuration has at most one. Its admission policy holds exactly the one job of a versions read. The origin of govinfo has its own pacing key.
+
+1. A detail with `summaries.count` 0 admits a text versions job at `{congress source url}/{congress}/{type}/{number}/text`. This job belongs to the bill list source and shares the Congress.gov pacing key.
+2. `CongressBillTextVersionsParser` reads `textVersions`. Each entry has a `type` such as "Introduced in House", a `date` that can be null, and `formats`. An entry without a Formatted Text format is skipped. The package ID is the file name of the Formatted Text URL without `.htm`, for example `BILLS-119hr2658ih`. The file name must belong to the bill. A page with a `next` link is invalid, because a later page could hold a newer version.
+3. `CongressBillTextVersionsPage.Newest` picks the version with the latest date. A version with no date counts as the oldest. If all dates are missing, the first listed version wins.
+4. With no version, `AdmitTextVersionsAsync` sets `text_state` `NoText` and admits nothing. If a row for the package exists, it sets `Read` and admits nothing. Otherwise it admits one `billText` job on the text source in the same transaction. The job key holds the versions job ID, and the job is linked to the detail job in `bill_follow_on_jobs`.
+5. The text job fetches `https://api.govinfo.gov/packages/{packageId}/htm`. The collector keeps the raw bytes as an immutable capture. The job URL form is the only form the configuration binding accepts for `billText`.
+6. Preparation of the text job finds its versions job from the last segment of the job key. It reads the versions capture again, because the version type and date exist only there. It decodes the body as strict UTF-8 and renders it with `IDocumentTextExtractor.ExtractHtmlFragmentAsync`, like a summary.
+7. `CongressBillRenderer.RenderText` keeps the first 60,000 characters, cut at the last line break inside the window. Text of 60,000 characters or less stays whole. The header has the lines `Bill`, `Version`, `Version date` (or `not given`), `Package`, `Characters read: {read} of {total}`, and `Text:`. The extraction holds the header and the window. Publication will embed only this window.
+8. `AdmitTextAsync` adds the `bill_text_versions` row and sets `text_state` `Read` in one transaction. A repeat adds no second row.
+
+A bill text job whose versions job is missing or not succeeded blocks with `billTextVersionsMissing`. A package that the versions page does not list is invalid data.
 
 ### Page chains
 
@@ -264,10 +293,12 @@ The write that creates a candidate also adds its `action_analysis` queue row in 
 - `summary_count` is 0 or more. Rows written before the column existed have 0, so those bills fetch no summaries until their update date changes.
 - `subject_count` is null or 0 or more. Null means that nobody has read the count. A gate write stores `subjects.count` of the detail, which includes the policy area. Rows written before the column existed stay null, and the backfill reads them. The [subjects backfill](#subjects-backfill) fills the null rows. `BillGateRow.HasSubjectsChain` is false for a null count. A bill with legislative subjects admits the chain whatever the gate decision is.
 - `latest_action_read` is false for rows written before the status columns existed and true for every row that a detail admission writes. `latest_action_date` and `latest_action_text` are both null or both set, and set only on a row marked read. A null pair on a read row means that the detail had no `latestAction`. The time that Civic Lens read the status is `created_at_utc_ticks` of the row. The [status backfill](#status-backfill) fills the unread rows.
+- `text_state` is null, `NoText`, or `Read`. It is stored as a PascalCase string. Null means that no text read has finished for this bill version. The precedent is `subject_count`.
+- `bill_text_versions` holds one row for each package of a bill, keyed by congress, bill type, bill number, and package ID. It also holds the version type, the version date, and the Formatted Text URL of Congress.gov. The date is null when Congress.gov gives none. The row holds the extraction ID, `chars_total`, `chars_read`, and the SHA-256 of the raw govinfo body. `chars_read` is at most `chars_total`.
 - `cosponsor_count` stores the detail cosponsor count, because the completeness check must know whether a cosponsor chain exists. Gates written before this column existed have 0 and no detail page row, so they never get a candidate.
 - The decision and reason are stored as PascalCase strings, like other enums.
 - A second detail job for a gated version records nothing, admits nothing, and counts as a duplicate.
-- `bill_follow_on_jobs` holds one row for each cosponsor, actions, summaries, or subjects page job, first or next. Its `detail_job_id` points to the root row in `bill_gates`.
+- `bill_follow_on_jobs` holds one row for each cosponsor, actions, summaries, subjects, or text versions page job, first or next, and for each bill text job. Its `detail_job_id` points to the root row in `bill_gates`.
 - The store writes the `bill_follow_on_jobs` row in the transaction that inserts the job. A page job without a row is invalid data.
 - `bill_pages` holds one row for the detail and one for each admitted follow-on page. Each row names its chain root, its role, its order, its extraction, and whether it closes the chain.
 - `action_candidates` holds one row for each passed bill version with complete evidence. A later closing summaries or subjects chain adds a row. `includes_summaries` and `includes_subjects` tell which chains the row holds. Rows written before `includes_subjects` existed have false.
@@ -285,6 +316,7 @@ The write that creates a candidate also adds its `action_analysis` queue row in 
 | Gate and renderer | `src/CivicLens.Application/Collection/Bills/BillGate.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillRenderer.cs` |
 | Resource kinds and parser list | `src/CivicLens.Application/Collection/ApiResource.cs`, `src/CivicLens.Application/Collection/ApiParser.cs` |
 | Coverage exception | `src/CivicLens.Application/Collection/CollectionConfiguration.cs` |
+| Bill text | `src/CivicLens.Application/Collection/Bills/CongressBillTextVersionsParser.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillTextVersionsPage.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillTextVersionsJob.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillTextParser.cs`, `src/CivicLens.Application/Collection/Bills/BillTextUrl.cs`, `src/CivicLens.Application/Collection/Bills/BillTextState.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.BillText.cs`, `src/CivicLens.Infrastructure/Collection/BillStream/BillTextVersionRow.cs` |
 | Subjects backfill | `src/CivicLens.Application/Collection/Bills/BackfillBillSubjects.cs`, `src/CivicLens.Application/Collection/Bills/IBillSubjectsBackfillStore.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.SubjectsBackfill.cs`, `src/CivicLens.Host/Collection/BillBackfillCommand.cs` |
 | Status backfill | `src/CivicLens.Application/Collection/Bills/BackfillBillStatus.cs`, `src/CivicLens.Application/Collection/Bills/IBillStatusBackfillStore.cs`, `src/CivicLens.Application/Collection/Bills/CongressBillLatestAction.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.StatusBackfill.cs`, `src/CivicLens.Host/Collection/BillBackfillCommand.cs` |
 | Preparation | `src/CivicLens.Application/Collection/Processing/JobPreparation.cs`, `src/CivicLens.Application/Collection/Processing/ApiResponseReader.cs` |
@@ -298,4 +330,7 @@ The write that creates a candidate also adds its `action_analysis` queue row in 
 - A Blocked cosponsor or actions page leaves its chain open, so the bill gets no candidate. [Operations](../operations.md#congressgov-bill-stream) has queries that list these bills.
 - Planned: list bills for each Congress from `/v3/bill/{congress}`, for each Congress at or above the configured minimum. The date-window bill list pages through thousands of older bills.
 - Planned: pull the shared line-format rules out of the bill renderer when a second renderer needs them.
+- Text for a bill without a summary is collected only. Drafting an AI summary from it, a backfill command for older bills, and publication of the summary are planned.
+- A bill text over 2,000,000 characters after conversion is invalid data, so the job ends `Failed` and the bill stays unread.
+- The text versions job runs for every bill with `summary_count` 0, also for bills that the gate marks `notRelevant`. A later change can limit it to bills that can reach a reader.
 - Planned: use the saved subjects in the search filters when they are designed. Today they only inform action and vote drafting.

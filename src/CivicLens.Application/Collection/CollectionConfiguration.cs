@@ -109,6 +109,8 @@ public sealed record CollectionConfiguration
                 ValidateListAdmissionCapacity(source, VoteviewFollowOnJobs);
             if (source.ApiParser == ApiParser.MemberPhotos)
                 ValidateListAdmissionCapacity(source, People.Count(person => person.BioguideId is not null));
+            if (source.ApiParser == ApiParser.CongressBillText)
+                ValidateListAdmissionCapacity(source, 1);
             if (source.ApiParser == ApiParser.FederalRegisterDocuments)
                 ValidateListAdmissionCapacity(source, FederalRegisterUrl.PageLimit);
             if (source.CheckIntervalSeconds is { } interval && interval is
@@ -139,7 +141,7 @@ public sealed record CollectionConfiguration
         IEnumerable<string> ids = source.ApiParser switch
         {
             ApiParser.CongressBillList or ApiParser.CongressHouseVoteList or ApiParser.SenateVoteList or ApiParser.VoteviewSenateVoteList => asOf < source.BackfillFrom ? [] : BioguidePersonIds(),
-            ApiParser.CongressLegislators or ApiParser.CongressLegislatorsExecutive or ApiParser.MemberPhotos or ApiParser.FederalRegisterDocuments => [],
+            ApiParser.CongressLegislators or ApiParser.CongressLegislatorsExecutive or ApiParser.MemberPhotos or ApiParser.CongressBillText or ApiParser.FederalRegisterDocuments => [],
             null => source.Coverage!.Where(coverage => new DateRange(coverage.StartsOn, coverage.EndsBefore).Contains(asOf))
                 .Select(coverage => coverage.PersonId),
             _ => throw new ArgumentOutOfRangeException(nameof(source))
@@ -192,6 +194,9 @@ public sealed record CollectionConfiguration
             case ApiParser.MemberPhotos:
                 ValidatePublicFileSource(source);
                 break;
+            case ApiParser.CongressBillText:
+                ValidateBillTextSource(source);
+                break;
             case ApiParser.FederalRegisterDocuments:
                 ValidateFederalRegisterSource(source);
                 break;
@@ -203,7 +208,7 @@ public sealed record CollectionConfiguration
     private const int VoteviewFollowOnJobs = 2;
 
     private static bool CoversNoPeople(ApiParser? parser) =>
-        IsRosterFile(parser) || parser is ApiParser.MemberPhotos or ApiParser.FederalRegisterDocuments;
+        IsRosterFile(parser) || parser is ApiParser.MemberPhotos or ApiParser.CongressBillText or ApiParser.FederalRegisterDocuments;
 
     private static bool IsRosterFile(ApiParser? parser) =>
         parser is ApiParser.CongressLegislators or ApiParser.CongressLegislatorsExecutive;
@@ -212,6 +217,18 @@ public sealed record CollectionConfiguration
     {
         if (source.Credential is not null)
             throw new ArgumentException($"Source '{source.Id}' reads a public file and cannot set a credential.");
+        ValidateWholeFileSource(source);
+    }
+
+    private static void ValidateBillTextSource(WatchedSourceConfiguration source)
+    {
+        if (source.Credential is null)
+            throw new ArgumentException($"Source '{source.Id}' needs a credential for its API parser.");
+        ValidateWholeFileSource(source);
+    }
+
+    private static void ValidateWholeFileSource(WatchedSourceConfiguration source)
+    {
         if (source.ETag is not null || source.LastModified is not null)
             throw new ArgumentException($"Source '{source.Id}' downloads its whole file on every check and cannot set validators.");
         if (source.Coverage is not null || source.MinimumCongress is not null || source.BackfillFrom is not null)

@@ -5,6 +5,7 @@ namespace CivicLens.Application.Collection.Bills;
 
 public static class CongressBillRenderer
 {
+    private const int TextWindowLength = 60_000;
     private const string TimeFormat = "HH:mm:ss";
     internal const string UpdateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'";
 
@@ -52,6 +53,32 @@ public static class CongressBillRenderer
         ArgumentNullException.ThrowIfNull(summaries);
         var blocks = summaries.Select(SummaryBlock).Prepend(IdentityLine(bill.Congress, bill.Type, bill.Number));
         return string.Join("\n\n", blocks);
+    }
+
+    public static CongressBillTextReading RenderText(CongressBillListItem bill, CongressBillTextVersion version, string text)
+    {
+        ArgumentNullException.ThrowIfNull(bill);
+        ArgumentNullException.ThrowIfNull(version);
+        ArgumentNullException.ThrowIfNull(text);
+        var window = TextWindow(text);
+        var lines = new[]
+        {
+            IdentityLine(bill.Congress, bill.Type, bill.Number),
+            Line("Version", version.Type),
+            Line("Version date", version.Date is { } date ? Date(BillGate.DayOf(date)) : "not given"),
+            Line("Package", version.PackageId),
+            Line("Characters read", $"{Count(window.Length)} of {Count(text.Length)}"),
+            "Text:",
+            window
+        };
+        return new CongressBillTextReading(string.Join('\n', lines), window.Length, text.Length);
+    }
+
+    private static string TextWindow(string text)
+    {
+        if (text.Length <= TextWindowLength) return text;
+        var lineBreak = text.LastIndexOf('\n', TextWindowLength);
+        return lineBreak > 0 ? text[..lineBreak] : throw new InvalidDataException("Bill text has no line break inside the window.");
     }
 
     private static string SummaryBlock(CongressBillSummaryText item)

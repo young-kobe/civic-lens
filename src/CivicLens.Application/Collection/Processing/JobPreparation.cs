@@ -40,6 +40,7 @@ public sealed class JobPreparation(
     private const string FeedStatementTextInvalid = "feedStatementTextInvalid";
     private const string ApiResourceMissing = "apiResourceMissing";
     private const string RetiredApiResource = "retiredApiResource";
+    private const string BillTextVersionsMissing = "billTextVersionsMissing";
     private const string IssuesConfigurationUnavailable = "issuesConfigurationUnavailable";
     private readonly IssueConfiguration? issueConfiguration = issues?.ReadConfiguration();
     private readonly ApiResponseReader responses = new(attempts, bodies);
@@ -130,6 +131,8 @@ public sealed class JobPreparation(
             ApiResource.BillActions => AdmitActionsPageAsync(job, artifactRoot, cancellationToken),
             ApiResource.BillSummaries => AdmitSummariesPageAsync(job, artifactRoot, cancellationToken),
             ApiResource.BillSubjects => AdmitSubjectsPageAsync(job, artifactRoot, cancellationToken),
+            ApiResource.BillTextVersions => AdmitTextVersionsAsync(job, artifactRoot, cancellationToken),
+            ApiResource.BillText => AdmitBillTextAsync(job, artifactRoot, cancellationToken),
             ApiResource.HouseVoteList => AdmitHouseVoteListAsync(job, artifactRoot, cancellationToken),
             ApiResource.HouseVoteDetail => AdmitHouseVoteDetailAsync(job, artifactRoot, cancellationToken),
             ApiResource.HouseVoteMembers => AdmitHouseVoteMembersAsync(job, artifactRoot, cancellationToken),
@@ -221,6 +224,33 @@ public sealed class JobPreparation(
         var extractionId = await SaveExtractionAsync(response.Captured, CongressBillSubjectsParser.ExtractionVersion,
             CongressBillRenderer.RenderSubjects(bill, page), cancellationToken);
         return PreparedFrom(await billAdmissions.AdmitSubjectsPageAsync(configured, job.JobId, page, extractionId, cancellationToken));
+    }
+
+    private async Task<JobPreparationResult> AdmitTextVersionsAsync(CollectionJobRecord job, string artifactRoot,
+        CancellationToken cancellationToken)
+    {
+        var (_, page) = CongressBillTextVersionsJob.Parse(job, await responses.ReadAsync(job, artifactRoot, cancellationToken));
+        return PreparedFrom(await billAdmissions.AdmitTextVersionsAsync(ConfiguredSourceOf(job), job.JobId, page.Newest, cancellationToken));
+    }
+
+    private async Task<JobPreparationResult> AdmitBillTextAsync(CollectionJobRecord job, string artifactRoot,
+        CancellationToken cancellationToken)
+    {
+        var packageId = BillTextUrl.ReadPackageId(ConfiguredSourceOf(job).SourceUrl, job.Definition.Url);
+        var versionsJob = await jobs.GetAsync(BillStreamJobKeys.ParentJobId(job.IdempotencyKey), cancellationToken);
+        if (versionsJob is not { State: CollectionJobState.Succeeded } || versionsJob.Definition.ApiResource != ApiResource.BillTextVersions)
+            return JobPreparationResult.Blocked(BillTextVersionsMissing);
+        var (bill, page) = CongressBillTextVersionsJob.Parse(versionsJob, await responses.ReadAsync(versionsJob, artifactRoot, cancellationToken));
+        var version = page.Versions.FirstOrDefault(candidate => candidate.PackageId == packageId)
+            ?? throw new InvalidDataException("Bill text job names a package that is not in its versions page.");
+        var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
+        var text = await textExtractor.ExtractHtmlFragmentAsync(CongressBillTextParser.ReadHtml(response.Body), cancellationToken);
+        var reading = CongressBillRenderer.RenderText(bill, version, text);
+        var extractionId = await SaveExtractionAsync(response.Captured, CongressBillTextParser.ExtractionVersion(textExtractor),
+            reading.Text, cancellationToken);
+        await billAdmissions.AdmitTextAsync(job.JobId,
+            new CongressBillTextEvidence(version, reading, extractionId, response.Captured.Capture.Sha256), cancellationToken);
+        return JobPreparationResult.Prepared();
     }
 
     private async Task<JobPreparationResult> AdmitHouseVoteListAsync(CollectionJobRecord job, string artifactRoot,

@@ -119,6 +119,16 @@ public sealed class ConfiguredCollectionSource
             CreateApiJobDefinition(resource, BillPageUrl.FirstPage(ReadBillStreamSource().Url, resource, bill),
                 currentDate, CollectionJobPriority.OfDay(bill.UpdateDate, currentDate)));
 
+    public ConfiguredCollectionSource? EnabledBillTextSource() =>
+        Revision.Configuration.RosterSourceOf(ApiParser.CongressBillText) is { Enabled: true } source
+            ? new ConfiguredCollectionSource(Revision, source.Id, AsOf)
+            : null;
+
+    public ApiJob CreateBillTextJob(string versionsJobId, string packageId, DateOnly billDay, DateOnly currentDate) =>
+        new(BillStreamJobKeys.BillText(SourceId, versionsJobId),
+            CreateApiJobDefinition(ApiResource.BillText, BillTextUrl.Package(ReadBillTextSource().Url, packageId), currentDate,
+                CollectionJobPriority.OfDay(billDay, currentDate)));
+
     public ApiJob CreateNextPageJob(ApiResource resource, string parentJobId, string nextUrl, DateOnly billDay,
         DateOnly currentDate) =>
         new(BillStreamJobKeys.NextBillPage(SourceId, resource, parentJobId),
@@ -290,6 +300,7 @@ public sealed class ConfiguredCollectionSource
             case ApiParser.CongressLegislatorsExecutive:
                 return new ApiTarget(ApiResource.ExecutiveRoster, source.Url, CollectionJobPriority.Check);
             case ApiParser.MemberPhotos:
+            case ApiParser.CongressBillText:
             case ApiParser.FederalRegisterDocuments:
             case ApiParser.SenateVoteList:
                 return null;
@@ -319,6 +330,11 @@ public sealed class ConfiguredCollectionSource
         ReadSource() is { ApiParser: ApiParser.MemberPhotos } source
             ? source
             : throw new ArgumentException("Member photo admission requires a configured member photo source.");
+
+    private WatchedSourceConfiguration ReadBillTextSource() =>
+        ReadSource() is { ApiParser: ApiParser.CongressBillText } source
+            ? source
+            : throw new ArgumentException("Bill text admission requires a configured bill text source.");
 
     private WatchedSourceConfiguration ReadApiSource() =>
         ReadSource() is { ApiParser: not null } source
