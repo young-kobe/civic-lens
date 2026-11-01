@@ -17,14 +17,13 @@ public sealed class PruneReleasesTests
     }
 
     [Fact]
-    public async Task AsksTheStoreToKeepThirtyReleasesAndEveryReleaseFromTheLastFortyEightHours()
+    public async Task AsksTheStoreToKeepThirtyReleases()
     {
         var scenario = Seed(1, active: 1);
 
         await Prune(scenario).ExecuteAsync();
 
         Assert.Equal(30, scenario.Publications.PrunedKeep);
-        Assert.Equal(TimeSpan.FromHours(48), scenario.Publications.PrunedMinimumAge);
     }
 
     [Fact]

@@ -5,12 +5,11 @@ namespace CivicLens.Application.Publication;
 public sealed class PruneReleases(IPublicationStore publications, IReleaseDirectory releases, ILogger<PruneReleases> logger)
 {
     public const int KeepReleases = 30;
-    public static readonly TimeSpan MinimumAge = TimeSpan.FromHours(48);
 
     // The publish is done when this runs, so no failure and no shutdown may fail it.
     public async Task ExecuteAsync(CancellationToken cancellationToken = default)
     {
-        await TryAsync(() => publications.PruneAsync(KeepReleases, MinimumAge, RetireAsync, CancellationToken.None));
+        await TryAsync(() => publications.PruneAsync(KeepReleases, RetireAsync, CancellationToken.None));
         await TryAsync(() => releases.DeleteRetiredAsync(cancellationToken));
     }
 
