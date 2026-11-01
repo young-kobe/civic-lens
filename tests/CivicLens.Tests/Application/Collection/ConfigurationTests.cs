@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using CivicLens.Application.Collection;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Application.Configuration;
@@ -9,6 +10,16 @@ namespace CivicLens.Tests.Application.Collection;
 
 public sealed class ConfigurationTests
 {
+    [Fact]
+    public void ANameSuffixComesLastBecauseTheNameIsShownToReadersAsWritten()
+    {
+        var shipped = JsonSerializer.Deserialize<CollectionConfiguration>(
+            File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "config", "federal-coverage.json")), ConfigurationJson.Options)!;
+
+        var suffixBeforeSurname = new Regex(@"(?<!\p{L})(Jr\.|Sr\.|II|III|IV)(?=\s+\p{L})", RegexOptions.None, TimeSpan.FromSeconds(1));
+        Assert.DoesNotContain(shipped.People, person => suffixBeforeSurname.IsMatch(person.Name));
+    }
+
     [Fact]
     public void OversizedSourceIdentityIsRejectedBeforeCollectionOrJobAdmission()
     {
