@@ -5,7 +5,7 @@ namespace CivicLens.Application.Collection.Bills;
 
 public static class CongressBillRenderer
 {
-    private const int TextWindowLength = 60_000;
+    public const int TextWindowLength = 60_000;
     private const string TimeFormat = "HH:mm:ss";
     internal const string UpdateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'";
 
@@ -60,6 +60,7 @@ public static class CongressBillRenderer
         ArgumentNullException.ThrowIfNull(bill);
         ArgumentNullException.ThrowIfNull(version);
         ArgumentNullException.ThrowIfNull(text);
+        if (text.Length == 0) throw new InvalidDataException("Bill text is empty.");
         var window = TextWindow(text);
         var lines = new[]
         {
@@ -77,8 +78,9 @@ public static class CongressBillRenderer
     private static string TextWindow(string text)
     {
         if (text.Length <= TextWindowLength) return text;
-        var lineBreak = text.LastIndexOf('\n', TextWindowLength);
-        return lineBreak > 0 ? text[..lineBreak] : throw new InvalidDataException("Bill text has no line break inside the window.");
+        for (var index = TextWindowLength; index > 0; index--)
+            if (char.IsWhiteSpace(text[index])) return text[..index];
+        throw new InvalidDataException("Bill text has no whitespace inside the window.");
     }
 
     private static string SummaryBlock(CongressBillSummaryText item)

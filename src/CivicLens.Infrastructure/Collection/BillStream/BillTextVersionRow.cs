@@ -12,5 +12,4 @@ internal sealed class BillTextVersionRow
     public string ExtractionId { get; set; } = "";
     public int CharsTotal { get; set; }
     public int CharsRead { get; set; }
-    public string ContentSha256 { get; set; } = "";
 }

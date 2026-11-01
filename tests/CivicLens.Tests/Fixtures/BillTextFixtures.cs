@@ -11,6 +11,8 @@ internal static class BillTextFixtures
     public const string SourceId = "congress-bill-text";
     public const string SourceUrl = "https://api.govinfo.gov/packages";
     public const string PackageId = "BILLS-119hr7ih";
+    public const string PublicLawId = "PLAW-119publ21";
+    public const string PublicLawUrl = "https://www.congress.gov/119/plaws/publ21/PLAW-119publ21.htm";
     public const string VersionsUrl = "https://api.congress.gov/v3/bill/119/hr/7/text?format=json&limit=250";
 
     public static string PackageUrl(string packageId = PackageId) => BillTextUrl.Package(SourceUrl, packageId);
@@ -19,10 +21,11 @@ internal static class BillTextFixtures
         $"https://www.congress.gov/119/bills/hr7/{packageId}.{extension}";
 
     /// <summary>A /text response entry in the Congress.gov shape; a null date is written as JSON null.</summary>
-    public static string Version(string type, string? date, string packageId = PackageId, bool withFormattedText = true)
+    public static string Version(string type, string? date, string packageId = PackageId, bool withFormattedText = true,
+        string? url = null)
     {
         var formats = withFormattedText
-            ? $$$"""{"type":"Formatted Text","url":"{{{CongressUrl(packageId)}}}"},"""
+            ? $$$"""{"type":"Formatted Text","url":"{{{url ?? CongressUrl(packageId)}}}"},"""
             : "";
         var dateJson = date is null ? "null" : $"\"{date}\"";
         return $$$"""{"date":{{{dateJson}}},"formats":[{{{formats}}}{"type":"PDF","url":"{{{CongressUrl(packageId, "pdf")}}}"}],"type":"{{{type}}}"}""";

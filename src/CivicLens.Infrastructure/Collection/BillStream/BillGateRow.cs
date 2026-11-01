@@ -15,6 +15,7 @@ internal sealed class BillGateRow
     public int SummaryCount { get; set; }
     public int? SubjectCount { get; set; }
     public BillTextState? TextState { get; set; }
+    public string? TextPackageId { get; set; }
     public bool LatestActionRead { get; set; }
     public DateOnly? LatestActionDate { get; set; }
     public string? LatestActionText { get; set; }

@@ -12,10 +12,13 @@ internal sealed class BillTextVersionRowConfiguration : IEntityTypeConfiguration
         builder.ToTable("bill_text_versions", table =>
         {
             table.HasCheckConstraint("ck_bill_text_versions_bill", "congress >= 1 AND bill_number >= 1");
-            table.HasCheckConstraint("ck_bill_text_versions_package", "package_id ~ '^BILLS-[0-9]+[a-z]+[0-9]+[a-z]+$'");
+            table.HasCheckConstraint("ck_bill_text_versions_package",
+                "package_id ~ ('^BILLS-' || congress || bill_type || bill_number || '[a-z]+$') OR package_id ~ ('^PLAW-' || congress || 'publ[0-9]+$')");
             table.HasCheckConstraint("ck_bill_text_versions_type", "version_type = btrim(version_type) AND char_length(version_type) >= 1");
-            table.HasCheckConstraint("ck_bill_text_versions_chars", "chars_total >= 0 AND chars_read >= 0 AND chars_read <= chars_total");
-            table.HasCheckConstraint("ck_bill_text_versions_hash", "content_sha256 ~ '^[0-9a-f]{64}$'");
+            table.HasCheckConstraint("ck_bill_text_versions_chars",
+                $"chars_read >= 1 AND chars_read <= {CongressBillRenderer.TextWindowLength} AND chars_read <= chars_total AND " +
+                $"(chars_read = chars_total OR chars_total > {CongressBillRenderer.TextWindowLength})");
+            table.HasCheckConstraint("ck_bill_text_versions_url", $"source_url LIKE '{CongressBillTextVersion.UrlPrefix}%'");
         });
         builder.Property(row => row.Congress).HasColumnName("congress");
         builder.Property(row => row.BillType).HasColumnName("bill_type").HasMaxLength(16);
@@ -27,7 +30,6 @@ internal sealed class BillTextVersionRowConfiguration : IEntityTypeConfiguration
         builder.Property(row => row.ExtractionId).HasColumnName("extraction_id").HasMaxLength(64);
         builder.Property(row => row.CharsTotal).HasColumnName("chars_total");
         builder.Property(row => row.CharsRead).HasColumnName("chars_read");
-        builder.Property(row => row.ContentSha256).HasColumnName("content_sha256").HasMaxLength(64);
         builder.HasKey(row => new { row.Congress, row.BillType, row.BillNumber, row.PackageId });
         builder.HasOne<DocumentExtractionRow>().WithMany().HasForeignKey(row => row.ExtractionId).OnDelete(DeleteBehavior.Restrict);
     }

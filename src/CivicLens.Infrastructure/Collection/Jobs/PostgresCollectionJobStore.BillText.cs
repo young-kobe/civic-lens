@@ -24,6 +24,7 @@ public sealed partial class PostgresCollectionJobStore
             if (await HasTextVersionAsync(db, gate, newest.PackageId, cancellationToken))
             {
                 gate.TextState = BillTextState.Read;
+                gate.TextPackageId = newest.PackageId;
                 return NoAdmission with { DuplicateCount = 1 };
             }
             var textSource = source.EnabledBillTextSource()
@@ -39,8 +40,10 @@ public sealed partial class PostgresCollectionJobStore
         ArgumentNullException.ThrowIfNull(evidence);
         return TransactionAsync(async (db, _) =>
         {
+            await EnsureExtractionIsOfJobAsync(db, textJobId, evidence.ExtractionId, cancellationToken);
             var gate = await ReadGateOfPageJobAsync(db, textJobId, cancellationToken);
             gate.TextState = BillTextState.Read;
+            gate.TextPackageId = evidence.Version.PackageId;
             if (!await HasTextVersionAsync(db, gate, evidence.Version.PackageId, cancellationToken))
                 db.Add(NewTextVersionRow(gate, evidence));
             return 0;
@@ -63,7 +66,6 @@ public sealed partial class PostgresCollectionJobStore
         SourceUrl = evidence.Version.Url,
         ExtractionId = evidence.ExtractionId,
         CharsTotal = evidence.Reading.CharsTotal,
-        CharsRead = evidence.Reading.CharsRead,
-        ContentSha256 = evidence.ContentSha256
+        CharsRead = evidence.Reading.CharsRead
     };
 }

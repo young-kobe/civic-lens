@@ -51,7 +51,7 @@ public sealed class CongressBillTextSourceTests
         Assert.Equal("bill-stream/congress-bill-text/text/versions-job", job.IdempotencyKey);
         Assert.Equal((ApiResource.BillText, PackageUrl(), CollectionCredentials.CongressGov, "https://api.govinfo.gov"),
             (job.Definition.ApiResource, job.Definition.Url, job.Definition.Credential, job.Definition.AllowedOrigin));
-        Assert.Equal("versions-job", BillStreamJobKeys.ParentJobId(job.IdempotencyKey));
+        Assert.Equal("versions-job", ApiJobKeys.ParentJobId(job.IdempotencyKey));
     }
 
     [Fact]

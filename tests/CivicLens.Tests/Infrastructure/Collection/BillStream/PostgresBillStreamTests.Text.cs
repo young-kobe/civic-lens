@@ -123,7 +123,7 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal("Read", await ScalarAsync("SELECT text_state FROM bill_gates"));
         Assert.Equal(("BILLS-119hr7ih", "Introduced in House", new DateOnly(2025, 3, 1), BillTextFixtures.CongressUrl(), 59_993, 143_221),
             await TextRowAsync());
-        Assert.Equal(new string('b', 64), await ScalarAsync("SELECT content_sha256 FROM bill_text_versions"));
+        Assert.Equal("BILLS-119hr7ih", await ScalarAsync("SELECT text_package_id FROM bill_gates"));
     }
 
     [Fact]
@@ -174,18 +174,89 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM bill_text_versions"));
     }
 
-    [Theory]
-    [InlineData("chars_read = 11, chars_total = 10")]
-    [InlineData("chars_total = -1, chars_read = -1")]
-    [InlineData("content_sha256 = 'ABC'")]
-    [InlineData("package_id = 'PLAW-119publ7'")]
-    [InlineData("version_type = ' '")]
-    public async Task TheDatabaseRefusesATextRowWhoseCountsHashOrPackageAreWrong(string badAssignment)
-    {
-        var textJob = await StartTextJobAsync();
-        await AdmitTextAsync(textJob, 10, 10);
+    private const string CheckViolation = "23514";
+    private const string ForeignKeyViolation = "23503";
 
-        await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, $"UPDATE bill_text_versions SET {badAssignment}"));
+    [Fact]
+    public async Task AnUnchangedCopyOfARowWithANewPackageIsAcceptedSoEachRefusalBelowComesFromItsOwnColumn()
+    {
+        await AdmitTextAsync(await StartTextJobAsync(), 10, 10);
+
+        await InsertVariantAsync("version_type", "'Reported in House'");
+
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM bill_text_versions"));
+    }
+
+    [Theory]
+    [InlineData("chars_total", "30")]
+    [InlineData("chars_read", "60001")]
+    [InlineData("chars_read", "0")]
+    [InlineData("version_type", "' '")]
+    [InlineData("source_url", "'https://example.com/119/bills/hr7/BILLS-119hr7rh.htm'")]
+    [InlineData("package_id", "'BILLS-119hr8ih'")]
+    [InlineData("package_id", "'BILLS-118hr7ih'")]
+    [InlineData("package_id", "'PLAW-118publ21'")]
+    public async Task TheDatabaseRefusesATextRowWhoseCountsUrlOrPackageContradictItsBill(string column, string valueSql)
+    {
+        await AdmitTextAsync(await StartTextJobAsync(), 10, 10);
+
+        var refusal = await Assert.ThrowsAsync<PostgresException>(() => InsertVariantAsync(column, valueSql));
+
+        Assert.Equal(CheckViolation, refusal.SqlState);
+    }
+
+    [Fact]
+    public async Task AReadStateNeedsItsPackageAndAPackageNeedsTheReadStateSoThePackageIsNeverGuessedFromNewest()
+    {
+        await AdmitTextAsync(await StartTextJobAsync(), 10, 10);
+        var (second, _) = await StartVersionsAsync("second");
+
+        var noPackage = await Assert.ThrowsAsync<PostgresException>(() =>
+            ExecuteAsync(connectionString, $"UPDATE bill_gates SET text_state = 'Read' WHERE detail_job_id = '{second}'"));
+        var noState = await Assert.ThrowsAsync<PostgresException>(() =>
+            ExecuteAsync(connectionString, $"UPDATE bill_gates SET text_package_id = 'BILLS-119hr7ih' WHERE detail_job_id = '{second}'"));
+        var noText = await Assert.ThrowsAsync<PostgresException>(() =>
+            ExecuteAsync(connectionString, $"UPDATE bill_gates SET text_state = 'NoText', text_package_id = 'BILLS-119hr7ih' WHERE detail_job_id = '{second}'"));
+
+        Assert.Equal([CheckViolation, CheckViolation, CheckViolation], [noPackage.SqlState, noState.SqlState, noText.SqlState]);
+    }
+
+    [Fact]
+    public async Task AGateCannotPointAtAPackageThatHasNoRowSoReadAlwaysMeansTheTextIsStored()
+    {
+        var (detail, _) = await StartVersionsAsync();
+
+        var refusal = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString,
+            $"UPDATE bill_gates SET text_state = 'Read', text_package_id = 'BILLS-119hr7zz' WHERE detail_job_id = '{detail}'"));
+
+        Assert.Equal(ForeignKeyViolation, refusal.SqlState);
+    }
+
+    [Fact]
+    public async Task ABillWithACongressGovSummaryCannotHaveATextStateBecauseNoTextJobExistsForIt()
+    {
+        var detail = await EnqueueDetailAsync("detail");
+        await AdmitDetailWithTextAsync(detail, DetailBill(UpdatedAt, cosponsors: 0, summaries: 2), passed: true);
+
+        var refusal = await Assert.ThrowsAsync<PostgresException>(() =>
+            ExecuteAsync(connectionString, $"UPDATE bill_gates SET text_state = 'NoText' WHERE detail_job_id = '{detail}'"));
+
+        Assert.Equal(CheckViolation, refusal.SqlState);
+    }
+
+    [Fact]
+    public async Task ATextExtractionOfAnotherJobIsRefusedSoARowNeverCitesEvidenceThatTheJobDidNotCapture()
+    {
+        var (_, versions) = await StartVersionsAsync();
+        var result = await store.AdmitTextVersionsAsync(BillsWithText(), versions, IntroducedText, default);
+        var textJob = Assert.Single(result.Jobs).JobId;
+        var foreignExtraction = await ExtractionAsync(versions);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            store.AdmitTextAsync(textJob, TextEvidence(IntroducedText, foreignExtraction, 10, 10), default));
+
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM bill_text_versions"));
+        Assert.Equal(DBNull.Value, await ScalarAsync("SELECT text_state FROM bill_gates"));
     }
 
     [Fact]
@@ -204,6 +275,16 @@ public sealed partial class PostgresBillStreamTests
 
         await Assert.ThrowsAsync<PostgresException>(() =>
             ExecuteAsync(connectionString, $"UPDATE bill_text_versions SET extraction_id = '{new string('0', 64)}'"));
+    }
+
+    private Task InsertVariantAsync(string column, string valueSql)
+    {
+        string[] columns = ["congress", "bill_type", "bill_number", "package_id", "version_type", "version_date", "source_url",
+            "extraction_id", "chars_total", "chars_read"];
+        var select = string.Join(", ", columns.Select(name =>
+            name == column ? $"{valueSql} AS {name}" : name == "package_id" ? "'BILLS-119hr7rh' AS package_id" : name));
+        return ExecuteAsync(connectionString,
+            $"INSERT INTO bill_text_versions ({string.Join(", ", columns)}) SELECT {select} FROM bill_text_versions");
     }
 
     private static ConfiguredCollectionSource BillsWithText(bool enabled = true) =>
@@ -232,7 +313,7 @@ public sealed partial class PostgresBillStreamTests
         await store.AdmitTextAsync(textJob, TextEvidence(IntroducedText, await ExtractionAsync(textJob), charsRead, charsTotal), default);
 
     private static CongressBillTextEvidence TextEvidence(CongressBillTextVersion version, string extractionId, int charsRead, int charsTotal) =>
-        new(version, new CongressBillTextReading("Bill: 119 hr 7", charsRead, charsTotal), extractionId, new string('b', 64));
+        new(version, new CongressBillTextReading("Bill: 119 hr 7", charsRead, charsTotal), extractionId);
 
     private async Task<(string Package, string Type, DateOnly Date, string Url, int CharsRead, int CharsTotal)> TextRowAsync()
     {

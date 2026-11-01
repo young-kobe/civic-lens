@@ -43,9 +43,31 @@ public sealed class CongressBillTextVersionsParserTests
     [Fact]
     public void ThePublicLawIsChosenOverTheUndatedEnrolledBillBecauseItIsLaterAndListedLast()
     {
-        string[] versions = [.. EnrolledBillWithoutPublicLaw(), Version("Public Law", "2025-07-05T04:00:00Z", "BILLS-119hr7pl")];
+        string[] versions = [.. EnrolledBillWithoutPublicLaw(), Version("Public Law", "2025-07-05T04:00:00Z", PublicLawId, url: PublicLawUrl)];
 
-        Assert.Equal("BILLS-119hr7pl", Parse(Versions(versions)).Newest!.PackageId);
+        var newest = Parse(Versions(versions)).Newest!;
+
+        Assert.Equal((PublicLawId, "Public Law", PublicLawUrl), (newest.PackageId, newest.Type, newest.Url));
+        Assert.Equal(new DateTimeOffset(2025, 7, 5, 4, 0, 0, TimeSpan.Zero), newest.Date);
+    }
+
+    [Fact]
+    public void AnUndatedVersionThatIsNotAnEnrolledBillCountsAsOldestSoItNeverBeatsADatedVersion()
+    {
+        var page = Parse(Versions(
+            Version("Engrossed in House", null, "BILLS-119hr7eh"),
+            Version("Introduced in House", "2025-03-01T05:00:00Z", "BILLS-119hr7ih")));
+
+        Assert.Equal("BILLS-119hr7ih", page.Newest!.PackageId);
+    }
+
+    [Fact]
+    public void APublicLawPackageNamesALawNumberSoItIsAcceptedForAnyBillOfTheSameCongressAndNotForAnotherCongress()
+    {
+        Assert.Equal(PublicLawId, Assert.Single(Parse(Versions(
+            Version("Public Law", "2025-07-05T04:00:00Z", PublicLawId, url: PublicLawUrl))).Versions).PackageId);
+        Assert.Throws<InvalidDataException>(() => Parse(Versions(
+            Version("Public Law", "2025-07-05T04:00:00Z", "PLAW-118publ21", url: "https://www.congress.gov/118/plaws/publ21/PLAW-118publ21.htm"))));
     }
 
     [Fact]
@@ -122,6 +144,7 @@ public sealed class CongressBillTextVersionsParserTests
     [Theory]
     [InlineData("""{"textVersions":[{"date":null,"formats":[{"type":"Formatted Text","url":"http://www.congress.gov/119/bills/hr7/BILLS-119hr7ih.htm"}],"type":"X"}]}""")]
     [InlineData("""{"textVersions":[{"date":null,"formats":[{"type":"Formatted Text","url":"https://www.congress.gov/119/bills/hr7/BILLS-119hr7ih.pdf"}],"type":"X"}]}""")]
+    [InlineData("""{"textVersions":[{"date":null,"formats":[{"type":"Formatted Text","url":"https://example.com/119/bills/hr7/BILLS-119hr7ih.htm"}],"type":"X"}]}""")]
     [InlineData("""{"textVersions":[{"date":null,"formats":[{"type":"Formatted Text"}],"type":"X"}]}""")]
     [InlineData("""{"textVersions":[{"date":null,"formats":[],"type":" "}]}""")]
     [InlineData("""{"textVersions":[null]}""")]
@@ -146,7 +169,8 @@ public sealed class CongressBillTextVersionsParserTests
         Assert.Equal(PackageId, BillTextUrl.TryReadPackageId(SourceUrl, PackageUrl()));
         Assert.Null(BillTextUrl.TryReadPackageId(SourceUrl, SourceUrl + "/BILLS-119hr7ih/pdf"));
         Assert.Null(BillTextUrl.TryReadPackageId(SourceUrl, SourceUrl + "/BILLS-119hr7ih/htm?x=1"));
-        Assert.Null(BillTextUrl.TryReadPackageId(SourceUrl, SourceUrl + "/PLAW-119publ7/htm"));
+        Assert.Equal(PublicLawId, BillTextUrl.TryReadPackageId(SourceUrl, BillTextUrl.Package(SourceUrl, PublicLawId)));
+        Assert.Null(BillTextUrl.TryReadPackageId(SourceUrl, SourceUrl + "/PLAW-119/htm"));
         Assert.Null(BillTextUrl.TryReadPackageId(SourceUrl, "https://www.congress.gov/packages/BILLS-119hr7ih/htm"));
     }
 }

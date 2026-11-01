@@ -4,4 +4,5 @@ public sealed record CongressBillTextVersion(string PackageId, string Type, Date
 {
     public const int MaximumTypeLength = 128;
     public const int MaximumUrlLength = 2048;
+    public const string UrlPrefix = "https://www.congress.gov/";
 }

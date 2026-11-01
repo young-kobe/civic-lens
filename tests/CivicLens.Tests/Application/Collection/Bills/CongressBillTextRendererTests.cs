@@ -4,7 +4,7 @@ namespace CivicLens.Tests.Application.Collection.Bills;
 
 public sealed class CongressBillTextRendererTests
 {
-    private const int Window = 60_000;
+    private const int Window = CongressBillRenderer.TextWindowLength;
     private static readonly CongressBillListItem Bill = new(119, "hr", 7, default);
     private static readonly CongressBillTextVersion Introduced = new("BILLS-119hr7ih", "Introduced in House",
         new DateTimeOffset(2025, 3, 1, 5, 0, 0, TimeSpan.Zero), "https://www.congress.gov/119/bills/hr7/BILLS-119hr7ih.htm");
@@ -69,9 +69,25 @@ public sealed class CongressBillTextRendererTests
     }
 
     [Fact]
-    public void LongTextWithNoLineBreakInsideTheWindowIsInvalidInsteadOfCutThroughAWord() =>
+    public void FlatTextFromTheExtractorIsCutAtTheLastSpaceInsideTheWindowSoNoWordIsCut()
+    {
+        var text = string.Join(' ', Enumerable.Range(0, 20_000).Select(index => "word" + index));
+
+        var reading = CongressBillRenderer.RenderText(Bill, Introduced, text);
+
+        Assert.True(reading.CharsRead <= Window && text[reading.CharsRead] == ' ');
+        Assert.Equal(text.Length, reading.CharsTotal);
+        Assert.EndsWith(text[..reading.CharsRead], reading.Text);
+    }
+
+    [Fact]
+    public void LongTextWithNoWhitespaceInsideTheWindowIsInvalidInsteadOfCutThroughAWord() =>
         Assert.Throws<InvalidDataException>(() =>
             CongressBillRenderer.RenderText(Bill, Introduced, new string('a', Window + 1)));
+
+    [Fact]
+    public void EmptyTextIsInvalidBecauseAnEmptyRowCouldNeverBeSummarized() =>
+        Assert.Throws<InvalidDataException>(() => CongressBillRenderer.RenderText(Bill, Introduced, ""));
 
     [Fact]
     public void AVersionWithNoDateSaysSoInTheHeader()

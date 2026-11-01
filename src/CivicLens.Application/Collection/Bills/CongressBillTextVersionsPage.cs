@@ -4,14 +4,15 @@ namespace CivicLens.Application.Collection.Bills;
 public sealed record CongressBillTextVersionsPage(IReadOnlyList<CongressBillTextVersion> Versions)
 {
     private const string PublicLaw = "Public Law";
+    private const string EnrolledBill = "Enrolled Bill";
 
     public CongressBillTextVersion? Newest
     {
         get
         {
-            var newestDated = Versions.Where(version => version.Date is not null).MaxBy(version => version.Date);
-            if (newestDated?.Type == PublicLaw) return newestDated;
-            return Versions.FirstOrDefault(version => version.Date is null) ?? newestDated;
+            var newest = Versions.MaxBy(version => version.Date ?? DateTimeOffset.MinValue);
+            if (newest?.Type == PublicLaw) return newest;
+            return Versions.FirstOrDefault(version => version.Date is null && version.Type == EnrolledBill) ?? newest;
         }
     }
 }

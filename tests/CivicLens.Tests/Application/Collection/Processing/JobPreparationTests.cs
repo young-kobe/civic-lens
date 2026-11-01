@@ -148,27 +148,9 @@ public sealed class JobPreparationTests
             saved.Text == "Bill: 119 hr 7\nVersion: Introduced in House\nVersion date: 2025-03-01\nPackage: BILLS-119hr7ih\n" +
                 "Characters read: 10 of 10\nText:\nSection 1.");
         var call = Assert.Single(admissions.TextCalls);
-        Assert.Equal(("job", saved.ExtractionId, new string('a', 64), 10, 10),
-            (call.JobId, call.Evidence.ExtractionId, call.Evidence.ContentSha256, call.Evidence.Reading.CharsRead, call.Evidence.Reading.CharsTotal));
+        Assert.Equal(("job", saved.ExtractionId, 10, 10),
+            (call.JobId, call.Evidence.ExtractionId, call.Evidence.Reading.CharsRead, call.Evidence.Reading.CharsTotal));
         Assert.Equal("BILLS-119hr7ih", call.Evidence.Version.PackageId);
-    }
-
-    [Fact]
-    public async Task TheBillTextJobReadsTheBodyAsUtf8SoTheExtractorSeesTheMarkup()
-    {
-        _ = await Prepare(ApiResource.BillText, BillTextFixtures.PackageUrl(), "<pre>H.R. 7 \u00a7 1</pre>", null);
-
-        Assert.Equal("text of <pre>H.R. 7 \u00a7 1</pre>", Assert.Single(admissions.TextCalls).Evidence.Reading.Text.Split("Text:\n")[1]);
-    }
-
-    [Fact]
-    public async Task ABillTextBodyThatIsNotUtf8IsInvalidDataSoNoRowIsStored()
-    {
-        await Assert.ThrowsAsync<InvalidDataException>(() => Prepare(ApiResource.BillText, BillTextFixtures.PackageUrl(), "",
-            null, bytes: [0x3C, 0xFF, 0xFE, 0x3E]));
-
-        Assert.Empty(admissions.TextCalls);
-        Assert.Empty(extractions.Saved);
     }
 
     [Fact]
@@ -1008,7 +990,7 @@ public sealed class JobPreparationTests
         public string ExtractionVersion => "fake-extraction";
 
         public Task<string> ExtractAsync(CapturedAttemptResult attempt, string artifactRoot, DocumentContentProfile? profile,
-            CancellationToken cancellationToken) => throw new NotSupportedException();
+            CancellationToken cancellationToken) => Task.FromResult(fragmentText ?? "extracted text");
 
         public Task<string> ExtractHtmlFragmentAsync(string markup, CancellationToken cancellationToken) =>
             Task.FromResult(fragmentText ?? "text of " + markup);

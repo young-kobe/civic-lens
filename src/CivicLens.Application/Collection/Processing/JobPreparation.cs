@@ -237,19 +237,18 @@ public sealed class JobPreparation(
         CancellationToken cancellationToken)
     {
         var packageId = BillTextUrl.ReadPackageId(ConfiguredSourceOf(job).SourceUrl, job.Definition.Url);
-        var versionsJob = await jobs.GetAsync(BillStreamJobKeys.ParentJobId(job.IdempotencyKey), cancellationToken);
-        if (versionsJob is not { State: CollectionJobState.Succeeded } || versionsJob.Definition.ApiResource != ApiResource.BillTextVersions)
-            return JobPreparationResult.Blocked(BillTextVersionsMissing);
+        var versionsJob = await ReadParentJobAsync(ApiJobKeys.ParentJobId(job.IdempotencyKey), ApiResource.BillTextVersions, cancellationToken);
+        if (versionsJob is null) return JobPreparationResult.Blocked(BillTextVersionsMissing);
         var (bill, page) = CongressBillTextVersionsJob.Parse(versionsJob, await responses.ReadAsync(versionsJob, artifactRoot, cancellationToken));
         var version = page.Versions.FirstOrDefault(candidate => candidate.PackageId == packageId)
             ?? throw new InvalidDataException("Bill text job names a package that is not in its versions page.");
         var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
-        var text = await textExtractor.ExtractHtmlFragmentAsync(CongressBillTextParser.ReadHtml(response.Body), cancellationToken);
+        var text = await textExtractor.ExtractAsync(response.Captured, artifactRoot, null, cancellationToken);
         var reading = CongressBillRenderer.RenderText(bill, version, text);
         var extractionId = await SaveExtractionAsync(response.Captured, CongressBillTextParser.ExtractionVersion(textExtractor),
             reading.Text, cancellationToken);
         await billAdmissions.AdmitTextAsync(job.JobId,
-            new CongressBillTextEvidence(version, reading, extractionId, response.Captured.Capture.Sha256), cancellationToken);
+            new CongressBillTextEvidence(version, reading, extractionId), cancellationToken);
         return JobPreparationResult.Prepared();
     }
 
@@ -323,9 +322,9 @@ public sealed class JobPreparation(
     {
         var configured = ConfiguredSourceOf(job);
         var congress = VoteviewUrl.ReadCongress(configured.SourceUrl, ApiResource.VoteviewVotes, job.Definition.Url);
-        var members = await ReadVoteviewParentAsync(job.IdempotencyKey, ApiResource.VoteviewMembers, cancellationToken);
+        var members = await ReadParentJobAsync(ApiJobKeys.ParentJobId(job.IdempotencyKey), ApiResource.VoteviewMembers, cancellationToken);
         if (members is null) return JobPreparationResult.Blocked(VoteviewJobMissing);
-        var rollCalls = await ReadVoteviewParentAsync(members.IdempotencyKey, ApiResource.VoteviewRollCalls, cancellationToken);
+        var rollCalls = await ReadParentJobAsync(ApiJobKeys.ParentJobId(members.IdempotencyKey), ApiResource.VoteviewRollCalls, cancellationToken);
         if (rollCalls is null) return JobPreparationResult.Blocked(VoteviewJobMissing);
         var chain = new VoteviewChain(congress, rollCalls.JobId, members.JobId, job.JobId);
         var rollCallsCapture = await responses.ReadCaptureAsync(rollCalls, cancellationToken);
@@ -354,9 +353,9 @@ public sealed class JobPreparation(
         return prepared with { ErrorCode = VoteviewCountMismatch };
     }
 
-    private async Task<CollectionJobRecord?> ReadVoteviewParentAsync(string childKey, ApiResource expected, CancellationToken cancellationToken)
+    private async Task<CollectionJobRecord?> ReadParentJobAsync(string parentJobId, ApiResource expected, CancellationToken cancellationToken)
     {
-        var parent = await jobs.GetAsync(VoteviewJobKeys.ParentJobId(childKey), cancellationToken);
+        var parent = await jobs.GetAsync(parentJobId, cancellationToken);
         return parent is { State: CollectionJobState.Succeeded } && parent.Definition.ApiResource == expected ? parent : null;
     }
 
@@ -404,7 +403,7 @@ public sealed class JobPreparation(
         ?? throw new InvalidDataException("Bill page job URL is not a page of its bill resource.");
 
     private static ConfiguredCollectionSource? EnabledPhotoSourceOf(CollectionJobRecord job) =>
-        job.Definition.ConfigurationRevision!.Configuration.RosterSourceOf(ApiParser.MemberPhotos) is { Enabled: true } source
+        job.Definition.ConfigurationRevision!.Configuration.SourceOf(ApiParser.MemberPhotos) is { Enabled: true } source
             ? new ConfiguredCollectionSource(job.Definition.ConfigurationRevision, source.Id, job.Definition.CoverageAsOf)
             : null;
 

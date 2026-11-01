@@ -15,6 +15,8 @@ internal sealed class BillGateRowConfiguration : IEntityTypeConfiguration<BillGa
             table.HasCheckConstraint("ck_bill_gates_summary_count", "summary_count >= 0");
             table.HasCheckConstraint("ck_bill_gates_subject_count", "subject_count >= 0");
             table.HasCheckConstraint("ck_bill_gates_text_state", "text_state IN ('NoText','Read')");
+            table.HasCheckConstraint("ck_bill_gates_text_package", "COALESCE(text_state = 'Read', false) = (text_package_id IS NOT NULL)");
+            table.HasCheckConstraint("ck_bill_gates_text_without_summary", "text_state IS NULL OR summary_count = 0");
             table.HasCheckConstraint("ck_bill_gates_latest_action",
                 "(latest_action_date IS NULL) = (latest_action_text IS NULL) AND (latest_action_text IS NULL OR latest_action_read AND char_length(latest_action_text) BETWEEN 1 AND 1000 AND latest_action_text = btrim(latest_action_text))");
             table.HasCheckConstraint("ck_bill_gates_update", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
@@ -38,6 +40,7 @@ internal sealed class BillGateRowConfiguration : IEntityTypeConfiguration<BillGa
         builder.Property(row => row.SummaryCount).HasColumnName("summary_count");
         builder.Property(row => row.SubjectCount).HasColumnName("subject_count");
         builder.Property(row => row.TextState).HasColumnName("text_state").HasMaxLength(16).HasConversion<string>();
+        builder.Property(row => row.TextPackageId).HasColumnName("text_package_id").HasMaxLength(64);
         builder.Property(row => row.LatestActionRead).HasColumnName("latest_action_read").HasDefaultValue(false);
         builder.Property(row => row.LatestActionDate).HasColumnName("latest_action_date");
         builder.Property(row => row.LatestActionText).HasColumnName("latest_action_text");
@@ -53,5 +56,7 @@ internal sealed class BillGateRowConfiguration : IEntityTypeConfiguration<BillGa
         builder.HasIndex(row => new { row.SourceId, row.Congress, row.BillType, row.BillNumber, row.UpdateDateUtcTicks })
             .IsUnique().HasDatabaseName("ux_bill_gates_bill_version");
         builder.HasOne<JobRow>().WithMany().HasForeignKey(row => row.DetailJobId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<BillTextVersionRow>().WithMany()
+            .HasForeignKey(row => new { row.Congress, row.BillType, row.BillNumber, row.TextPackageId }).OnDelete(DeleteBehavior.Restrict);
     }
 }

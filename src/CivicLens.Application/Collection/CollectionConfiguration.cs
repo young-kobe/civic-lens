@@ -27,7 +27,7 @@ public sealed record CollectionConfiguration
         return PacingGroups.Where(group => group.Matches(host)).MaxBy(group => group.HostSuffix.Length);
     }
 
-    public WatchedSourceConfiguration? RosterSourceOf(ApiParser parser) =>
+    public WatchedSourceConfiguration? SourceOf(ApiParser parser) =>
         Sources.FirstOrDefault(source => source.ApiParser == parser);
 
     public void Validate()
@@ -72,7 +72,7 @@ public sealed record CollectionConfiguration
         ValidatePacingGroups();
 
         if (Sources.Where(source => CoversNoPeople(source?.ApiParser)).GroupBy(source => source.ApiParser).Any(kind => kind.Count() > 1))
-            throw new ArgumentException("A configuration may have only one roster or photo source of each kind.");
+            throw new ArgumentException("A configuration may have only one roster, photo, bill text, or Federal Register source of each kind.");
 
         if (Sources.Count(source => source is { Enabled: true, ApiParser: ApiParser.VoteviewSenateVoteList }) > 1)
             throw new ArgumentException("A configuration may enable only one Senate vote source.");

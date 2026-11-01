@@ -30,7 +30,7 @@ public static class CongressBillTextVersionsParser
     private static string ReadPackageId(string? url, CongressBillListItem expected)
     {
         if (url is null || url.Length > CongressBillTextVersion.MaximumUrlLength ||
-            !Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps ||
+            !url.StartsWith(CongressBillTextVersion.UrlPrefix, StringComparison.Ordinal) || !Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
             !uri.AbsolutePath.EndsWith(FormattedTextExtension, StringComparison.Ordinal))
             throw new InvalidDataException("Formatted Text entry has no usable URL.");
         var packageId = uri.Segments[^1][..^FormattedTextExtension.Length];

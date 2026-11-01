@@ -120,7 +120,7 @@ public sealed class ConfiguredCollectionSource
                 currentDate, CollectionJobPriority.OfDay(bill.UpdateDate, currentDate)));
 
     public ConfiguredCollectionSource? EnabledBillTextSource() =>
-        Revision.Configuration.RosterSourceOf(ApiParser.CongressBillText) is { Enabled: true } source
+        Revision.Configuration.SourceOf(ApiParser.CongressBillText) is { Enabled: true } source
             ? new ConfiguredCollectionSource(Revision, source.Id, AsOf)
             : null;
 
