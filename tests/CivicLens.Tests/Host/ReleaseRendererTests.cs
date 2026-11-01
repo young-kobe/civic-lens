@@ -764,6 +764,16 @@ public sealed class ReleaseRendererTests
         Assert.Contains("Votes for Emmer, all senators", (await VoteFactsOf(vote with { Chamber = PublishedChamber.Senate })).Keys);
     }
 
+    [Theory]
+    [InlineData("Present", "Present, all House members")]
+    [InlineData("Not Voting", "Not voting, all House members")]
+    public async Task ACandidateTotalThatIsNotACandidateReadsAsACastAndNotAsVotesForIt(string name, string label)
+    {
+        var vote = Vote($"Candidate total {name}: 3") with { Totals = null, PartyMajorities = [] };
+
+        Assert.Equal("3", (await VoteFactsOf(vote))[label]);
+    }
+
     private static async Task<Dictionary<string, string>> VoteFactsOf(PublishedVote vote)
     {
         var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);

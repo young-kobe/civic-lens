@@ -192,9 +192,16 @@ public static class PublishedRecordLabels
         if (label.StartsWith(PublishedVote.PartyTotalPrefix, StringComparison.Ordinal))
             return PartyTotal(label[PublishedVote.PartyTotalPrefix.Length..]) ?? label;
         return label.StartsWith(PublishedVote.CandidateTotalPrefix, StringComparison.Ordinal)
-            ? $"Votes for {label[PublishedVote.CandidateTotalPrefix.Length..]}, all {members}"
+            ? CandidateTotal(label[PublishedVote.CandidateTotalPrefix.Length..], members)
             : label;
     }
+
+    private static string CandidateTotal(string name, string members) => name switch
+    {
+        PublishedOfficialVote.NotVoting => $"Not voting, all {members}",
+        Present => $"{Present}, all {members}",
+        _ => $"Votes for {name}, all {members}"
+    };
 
     private static string? PartyTotal(string letter) => PartyLetters.NameOf(letter) switch
     {
