@@ -23,11 +23,12 @@ public sealed class PublishedHomeCardsTests
     }
 
     [Fact]
-    public async Task WithNoVoteInTheWindowTheCardSaysSoAndNamesTheDatesInsteadOfShowingAnOlderVote()
+    public async Task WithNoVoteInTheWindowTheClosestVoteCardIsHiddenInsteadOfShowingAnOlderVoteOrAnEmptyCard()
     {
-        var main = await HomeAsync(ReleaseOf(Vote('a', 216, 214, PublishedVoteAlignment.Split) with { EventDate = new DateOnly(2026, 1, 1) }), []);
+        var main = await HomeAsync(ReleaseOf(Vote('a', 216, 214, PublishedVoteAlignment.Split) with { EventDate = new DateOnly(2026, 1, 1) }), [Leader()]);
 
-        Assert.Contains("No substantive roll call vote with Yea and Nay counts is dated 5 May 2026 to 11 May 2026 on this site.", main.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("Closest vote", main.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Voted against their party most often", main.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -39,27 +40,32 @@ public sealed class PublishedHomeCardsTests
     }
 
     [Fact]
-    public async Task TheBreakCardNamesWhoWhatAndWhichCongressLinksTheOfficialAndStatesTheMinimum()
+    public async Task TheBreakCardNamesWhoWithPartyAndStateAndWhatWasCountedLinksTheOfficialAndStatesTheMinimum()
     {
-        var leaders = new[] { new BreakLeader(PublishedChamber.House, PublishedPartyMajority.Democrat, 119,
-            new OfficialListing(new PublishedOfficialProfile { Id = "doe", Name = "Jane Doe", Terms = [] }, 0), 40, 12) };
-
-        var main = await HomeAsync(ReleaseOf(), leaders);
+        var main = await HomeAsync(ReleaseOf(), [Leader()]);
 
         var item = main.QuerySelector("li")!;
-        Assert.Equal("Jane Doe voted against most House Democrats on 12 of the 40 split votes they cast with Yea or Nay in the 119th Congress.", item.TextContent);
+        Assert.Equal("Jane Doe (D, Texas) sided against most House Democrats on 12 of 40 votes where the parties split.", item.TextContent);
         Assert.Equal("officials/doe.html", item.QuerySelector("a")!.GetAttribute("href"));
         Assert.Contains("A chamber and party with no line has no member with vote figures on this site who meets these rules.", main.TextContent, StringComparison.Ordinal);
         Assert.Contains("at least 25 split votes", main.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task WithNoLeaderTheBreakCardSaysSoInsteadOfShowingAnEmptyList()
+    public async Task WithNoVoteAndNoLeaderTheWholePicksPanelIsHiddenInsteadOfShowingAnEmptyPanel()
     {
         var main = await HomeAsync(ReleaseOf(), []);
 
-        Assert.Null(main.QuerySelector("li"));
-        Assert.Contains("with vote figures on this site has 25 split votes cast", main.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("Chosen by a fixed rule", main.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("Newest executive actions", main.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheBreakCardLeavesOutThePartyAndStateItDoesNotHoldInsteadOfPrintingEmptyBrackets()
+    {
+        var main = await HomeAsync(ReleaseOf(), [Leader(terms: [])]);
+
+        Assert.Equal("Jane Doe sided against most House Democrats on 12 of 40 votes where the parties split.", main.QuerySelector("li")!.TextContent);
     }
 
     [Fact]
@@ -71,18 +77,17 @@ public sealed class PublishedHomeCardsTests
 
         var table = main.QuerySelector("table")!;
         Assert.Equal([Id('d'), Id('c'), Id('b')], table.QuerySelectorAll("a.cell-title").Select(link => link.GetAttribute("href")!.Split('/')[1][..32]));
-        Assert.Contains("Picked by code: the 3 newest of 4 executive actions on this site.", main.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Chosen by a fixed rule: the 3 newest of 4 executive actions on this site.", main.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task TheExecutiveActionAsideSaysTheOnlyActionForOneAndShowsNoAsideForNoneInsteadOfZeroNewestOfZero()
+    public async Task TheExecutiveActionAsideSaysTheOnlyActionForOneAndTheCardIsHiddenForNone()
     {
         var one = await HomeAsync(ReleaseOf(Executive('a', 1)), []);
         var none = await HomeAsync(ReleaseOf(), []);
 
-        Assert.Contains("Picked by code: the only executive action on this site.", one.TextContent, StringComparison.Ordinal);
-        Assert.DoesNotContain("newest of 0", none.TextContent, StringComparison.Ordinal);
-        Assert.Contains("No executive action is on this site yet.", none.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Chosen by a fixed rule: the only executive action on this site.", one.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("Newest executive actions", none.TextContent, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -116,7 +121,7 @@ public sealed class PublishedHomeCardsTests
     {
         var main = await HomeAsync(ReleaseOf(Executive('a', 1), Executive('b', 2)), []);
 
-        Assert.Contains("Picked by code: all 2 executive actions on this site, newest first.", main.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Chosen by a fixed rule: all 2 executive actions on this site, newest first.", main.TextContent, StringComparison.Ordinal);
     }
 
     private static async Task<AngleSharp.Dom.IElement> HomeAsync(PublicationRelease release, BreakLeader[] leaders)
@@ -125,6 +130,14 @@ public sealed class PublishedHomeCardsTests
         var html = await new ReleaseRenderer(null, null).RenderHomeAsync(release, null, new ReleaseFacets([], []), highlights, CancellationToken.None);
         return new HtmlParser().ParseDocument(html).QuerySelector("main")!;
     }
+
+    private static BreakLeader Leader(PublishedOfficeTerm[]? terms = null) => new(PublishedChamber.House, PublishedPartyMajority.Democrat, 119,
+        new OfficialListing(new PublishedOfficialProfile
+        {
+            Id = "doe",
+            Name = "Jane Doe",
+            Terms = terms ?? [new PublishedOfficeTerm { Office = "Representative", Kind = PublishedOfficeKind.Representative, State = "TX", Party = "Democrat", Start = new DateOnly(2025, 1, 3) }]
+        }, 0), 40, 12);
 
     private static string Id(char letter) => new(letter, 32);
 

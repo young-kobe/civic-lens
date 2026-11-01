@@ -1,7 +1,7 @@
 @using CivicLens.Host.Components.Layout
 @using CivicLens.Publication.Contracts
 
-<PublicPage CanonicalPath="@PublicationProtocol.AboutPagePath" Title="About Civic Lens" Description="What Civic Lens covers, where its records come from, and who approves them." Crumbs="Crumbs">
+<PublicPage Section="PublicSection.About" CanonicalPath="@PublicationProtocol.AboutPagePath" Title="About Civic Lens" Description="What Civic Lens covers, where its records come from, and who approves them." Crumbs="Crumbs">
     <PageHeader Title="About Civic Lens" Lede="Civic Lens publishes records of what members of Congress say and do. Each record shows its sources. Civic Lens is not part of any government office, party, campaign or company." />
     <Panel Title="What it covers" Padded="true">
         <p>Civic Lens covers the federal government of the United States. It covers the members of Congress.</p>
@@ -67,7 +67,7 @@
     private const string VoteviewCitation = "Lewis, Jeffrey B., Keith Poole, Howard Rosenthal, Adam Boche, Aaron Rudkin, and Luke Sonnet (2026). Voteview: Congressional Roll-Call Votes Database. https://voteview.com/";
     private const string CreditLine = "\"Civic Lens, civic-lens.info\" and a link to the record.";
 
-    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), new("About")];
+    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), PublicCrumbs.Current(PublicSection.About)];
 
     private static readonly IReadOnlyList<PrivacyRow> PrivacyRows =
     [
