@@ -11,7 +11,7 @@ public interface IBriefReviewStore
     Task<BriefRevision?> GetRevisionAsync(string recordId, int revisionNumber, CancellationToken cancellationToken);
 
     Task<BriefRevision> SaveRevisionAsync(string actorSubject, BriefRevision revision, int expectedRevisionNumber,
-        string idempotencyKey, string payloadHash, CancellationToken cancellationToken);
+        ReviewDecision? approval, string idempotencyKey, string payloadHash, CancellationToken cancellationToken);
 
     Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
         int expectedReviewStateVersion, string idempotencyKey, string payloadHash, CancellationToken cancellationToken);

@@ -138,6 +138,29 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task ANoEditPressThatPostsCrlfLineBreaksApprovesTheSameRevisionAsync()
+    {
+        var candidate = await AiDraftedAsync();
+        SignIn(Owner);
+        var url = $"/Review/Statements/{candidate}";
+        var typed = await SaveFieldsAsync(url);
+        Set(typed, "Input.Summary", "a\n\nb");
+        typed.Add(new("Input.StatementDateChecked", "true"));
+        using var saved = await host.Client.PostAsync(url, new FormUrlEncodedContent(typed));
+        Assert.Equal(HttpStatusCode.Redirect, saved.StatusCode);
+
+        var fields = await SaveFieldsAsync(url);
+        Set(fields, "Input.Summary", "a\r\n\r\nb");
+        fields.Add(new("approve", "true"));
+        using var approved = await host.Client.PostAsync(url, new FormUrlEncodedContent(fields));
+
+        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+        var review = (await reviews.GetAsync(candidate, default))!.Review;
+        Assert.Equal((2, Owner, ReviewStatus.Approved), (review.CurrentRevision!.RevisionNumber, review.CurrentRevision.AuthorSubject, review.CurrentStatus));
+        Assert.Equal(2, Assert.Single(review.Decisions).RevisionNumber);
+    }
+
+    [Fact]
     public async Task ASaveWithoutTheDateTickDropsTheAiDateAsync()
     {
         var candidate = await AiDraftedAsync();

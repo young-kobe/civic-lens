@@ -122,6 +122,22 @@ public sealed class PostgresRelationshipReviewStoreTests(PostgresCollection post
         Assert.Equal(change.StartsWith("target", StringComparison.Ordinal), read.TargetChanged);
     }
 
+    [Theory]
+    [InlineData("statement")]
+    [InlineData("target")]
+    public async Task ASaveWhoseApprovalFailsBecauseACitedRecordChangedWritesNoRevisionAndNoDecision(string change)
+    {
+        await ChangeAsync(change);
+        var request = new SaveRelationshipDraftRequest(recordId, 1, RelationshipType.ClaimsCreditFor, "She claims credit for the bill.",
+            Span(BillSentence), "F1", "save-and-approve", new ApprovalWithSave(0, null, [], null));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => new SaveRelationshipDraft(reviews).ExecuteAsync(Reviewer, request));
+
+        Assert.Equal(("1", "0"), (await ReadAsync("SELECT count(*) FROM relationship_revisions"),
+            await ReadAsync("SELECT count(*) FROM relationship_review_decisions")));
+        Assert.Equal(1, (await reviews.GetAsync(recordId, default))!.Review.CurrentRevision.RevisionNumber);
+    }
+
     [Fact]
     public async Task TheApprovalGateReadsTheCitedRecordsAfterItTakesTheRelationshipLockSoAStatementApprovalThatCommitsFirstBlocksIt()
     {

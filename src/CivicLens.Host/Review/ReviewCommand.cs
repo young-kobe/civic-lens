@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Host.Review;
 
-internal enum ReviewCommandFailure { None, AccessDenied, Conflict, Invalid, Unavailable }
+internal enum ReviewCommandFailure { None, AccessDenied, Conflict, NothingToSave, Invalid, Unavailable }
 
 internal static class ReviewCommand
 {
@@ -18,6 +18,7 @@ internal static class ReviewCommand
         }
         catch (OperationCanceledException) when (requestAborted.IsCancellationRequested) { throw; }
         catch (UnauthorizedAccessException) { return (default, ReviewCommandFailure.AccessDenied); }
+        catch (NothingToSaveException) { return Fail<T>(response, StatusCodes.Status400BadRequest, ReviewCommandFailure.NothingToSave); }
         catch (ReviewConflictException) { return Fail<T>(response, StatusCodes.Status409Conflict, ReviewCommandFailure.Conflict); }
         catch (ArgumentException) { return Fail<T>(response, StatusCodes.Status400BadRequest, ReviewCommandFailure.Invalid); }
         catch (Exception exception)

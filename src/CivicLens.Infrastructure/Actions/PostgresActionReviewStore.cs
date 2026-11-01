@@ -50,13 +50,15 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
     }
 
     public Task<ActionDraftRevision> SaveRevisionAsync(string actorSubject, ActionDraftRevision revision, int expectedRevisionNumber,
-        string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
+        ReviewDecision? approval, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
         Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
             payloadHash, (_, _, current) =>
             {
                 revision.ValidatePersonEditOf(current);
                 return Task.FromResult(revision);
-            }, saved => ActionDraftRows.NewRevision(saved, null), cancellationToken);
+            }, saved => ActionDraftRows.NewRevision(saved, null),
+            approval is null ? null : new(approval, (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken),
+                afterDecision, revision => revision.ComparableForm()), cancellationToken);
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
         int expectedReviewStateVersion, string idempotencyKey, string payloadHash,

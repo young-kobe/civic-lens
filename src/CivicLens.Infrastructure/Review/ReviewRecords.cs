@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Runtime.ExceptionServices;
+using System.Text.Json.Nodes;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
@@ -32,13 +33,26 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         }, cancellationToken);
     }
 
+    private static readonly string[] IdentityProperties = ["revisionNumber", "authorSubject", "authorKind", "createdAtUtc", "textOrigin"];
+
+    /// <summary>The approval that a save carries. It runs in the save transaction, on the revision that the save wrote.
+    /// <paramref name="MustWriteRevision"/> tells that an unchanged input still needs a new person revision.</summary>
+    public sealed record ApprovalAfterSave(ReviewDecision Decision,
+        Func<CollectionAttemptDbContext, TDraftRow, ReviewHistory<TRevision>, Task> Validate,
+        Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> AfterDecision,
+        Func<TRevision, TRevision> Comparable, Func<TRevision, bool>? MustWriteRevision = null);
+
+    /// <summary>Saves a revision. With an approval, the same transaction then approves the saved revision with every check of a
+    /// separate decision. A failed check rolls the saved revision back. When the input equals the current revision, no revision is
+    /// written and the approval binds to the current one. That refuses when the current revision is already approved.</summary>
     public async Task<TRevision> SaveRevisionAsync(IDbContextFactory<CollectionAttemptDbContext> contextFactory, string actorSubject,
         TRevision revision, int expectedRevisionNumber, string operation, string idempotencyKey, string payloadHash,
         Func<CollectionAttemptDbContext, TDraftRow, TRevision, Task<TRevision>> prepareAndList, Func<TRevision, TRevisionRow> toRow,
-        CancellationToken cancellationToken)
+        ApprovalAfterSave? approval, CancellationToken cancellationToken)
     {
         ReviewIdempotency.ValidateRequest(actorSubject, idempotencyKey, payloadHash);
         ArgumentNullException.ThrowIfNull(revision);
+        if (approval is not null) ReviewWriteRules.RequireDecisionActor(approval.Decision, actorSubject);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         return await ReviewIdempotency.WriteOnceAsync(db, lockKey, actorSubject, operation, idempotencyKey, payloadHash, async () =>
         {
@@ -49,10 +63,35 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
             var current = await FindRevisionAsync(db, draft.RecordId, draft.CurrentRevisionNumber, cancellationToken)
                 ?? throw new InvalidOperationException("Current draft revision is missing.");
             var saved = await prepareAndList(db, draft, current);
+            if (approval is not null && !(approval.MustWriteRevision?.Invoke(current) ?? false) && HasSameContent(current, saved, approval.Comparable))
+            {
+                if (draft.ReviewStatus == ReviewStatus.Approved) throw new NothingToSaveException();
+                await ApproveSavedAsync(db, approval with { Decision = approval.Decision with { RevisionNumber = current.RevisionNumber } },
+                    cancellationToken);
+                return current;
+            }
             AppendRevision(db, draft, saved, toRow(saved), cycle);
+            if (approval is null) return saved;
+            await db.SaveChangesAsync(cancellationToken);
+            await ApproveSavedAsync(db, approval, cancellationToken);
             return saved;
         }, cancellationToken);
     }
+
+    private static bool HasSameContent(TRevision current, TRevision saved, Func<TRevision, TRevision> comparable) =>
+        JsonNode.DeepEquals(WithoutIdentity(comparable(current)), WithoutIdentity(comparable(saved)));
+
+    private static JsonObject WithoutIdentity(TRevision revision)
+    {
+        var node = ReviewJson.ToObject(revision);
+        foreach (var property in IdentityProperties) node.Remove(property);
+        return node;
+    }
+
+    private Task<ReviewDecision> ApproveSavedAsync(CollectionAttemptDbContext db, ApprovalAfterSave approval,
+        CancellationToken cancellationToken) =>
+        DecideInTransactionAsync(db, approval.Decision, approval.Decision.RevisionNumber, approval.Decision.ReviewStateVersion - 1,
+            approval.Validate, approval.AfterDecision, cancellationToken);
 
     /// <summary>The one step that appends a revision for a person or for analysis. It recomputes the stored status. It clears the
     /// held reason, because the reason described an older revision.</summary>
@@ -142,18 +181,25 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         ReviewIdempotency.ValidateRequest(actorSubject, idempotencyKey, payloadHash);
         ReviewWriteRules.RequireDecisionActor(decision, actorSubject);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await ReviewIdempotency.WriteOnceAsync(db, lockKey, actorSubject, operation, idempotencyKey, payloadHash, async () =>
-        {
-            var draft = await ReadDraftForWriteAsync(db, decision.DraftId, cancellationToken);
-            var history = (await ReadHistoriesAsync(db, [draft], cancellationToken))[draft.RecordId];
-            ReviewWriteRules.RequireDecidable(draft.CurrentRevisionNumber, draft.ReviewStateVersion, expectedRevisionNumber,
-                expectedReviewStateVersion, decision);
-            ReviewPolicy.ValidateDecision(draft.RecordId, draft.CurrentRevisionNumber, draft.ReviewStateVersion, history.Decisions, decision);
-            await validateDecision(db, draft, history);
-            RecordDecision(db, draft, history.Decisions, decision);
-            await afterDecision(db, draft.RecordId, decision.RevisionNumber, cancellationToken);
-            return decision;
-        }, cancellationToken);
+        return await ReviewIdempotency.WriteOnceAsync(db, lockKey, actorSubject, operation, idempotencyKey, payloadHash,
+            () => DecideInTransactionAsync(db, decision, expectedRevisionNumber, expectedReviewStateVersion, validateDecision,
+                afterDecision, cancellationToken), cancellationToken);
+    }
+
+    private async Task<ReviewDecision> DecideInTransactionAsync(CollectionAttemptDbContext db, ReviewDecision decision,
+        int expectedRevisionNumber, int expectedReviewStateVersion,
+        Func<CollectionAttemptDbContext, TDraftRow, ReviewHistory<TRevision>, Task> validateDecision,
+        Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision, CancellationToken cancellationToken)
+    {
+        var draft = await ReadDraftForWriteAsync(db, decision.DraftId, cancellationToken);
+        var history = (await ReadHistoriesAsync(db, [draft], cancellationToken))[draft.RecordId];
+        ReviewWriteRules.RequireDecidable(draft.CurrentRevisionNumber, draft.ReviewStateVersion, expectedRevisionNumber,
+            expectedReviewStateVersion, decision);
+        ReviewPolicy.ValidateDecision(draft.RecordId, draft.CurrentRevisionNumber, draft.ReviewStateVersion, history.Decisions, decision);
+        await validateDecision(db, draft, history);
+        RecordDecision(db, draft, history.Decisions, decision);
+        await afterDecision(db, draft.RecordId, decision.RevisionNumber, cancellationToken);
+        return decision;
     }
 
     public IQueryable<TDraftRow> Drafts(CollectionAttemptDbContext db, DraftStatusFilter filter)

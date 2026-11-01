@@ -29,25 +29,32 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
     }
 
     public Task<BriefRevision> SaveRevisionAsync(string actorSubject, BriefRevision revision, int expectedRevisionNumber,
-        string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
+        ReviewDecision? approval, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
         Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
             payloadHash, (_, _, current) =>
             {
                 revision.ValidatePersonEditOf(current);
                 return Task.FromResult(revision);
-            }, saved => BriefDraftRows.NewRevision(saved, null), cancellationToken);
+            }, saved => BriefDraftRows.NewRevision(saved, null),
+            approval is null ? null : new(approval, (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken),
+                NoAfterDecision, revision => revision.ComparableForm()), cancellationToken);
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
         int expectedReviewStateVersion, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
-            idempotencyKey, payloadHash, async (db, _, history) =>
-            {
-                if (decision.Kind != ReviewDecisionKind.Approve) return;
-                var current = history.CurrentRevision!;
-                current.ValidateForApproval();
-                if ((await BriefRecordReader.FindChangedInActiveReleaseAsync(db, current.Citations, cancellationToken)).Count > 0)
-                    throw new ArgumentException("Approval needs every cited revision to be approved and in the active release.");
-            }, (_, _, _, _) => Task.CompletedTask, cancellationToken);
+            idempotencyKey, payloadHash, (db, _, history) => decision.Kind == ReviewDecisionKind.Approve
+                ? ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken)
+                : Task.CompletedTask, NoAfterDecision, cancellationToken);
+
+    private static Task NoAfterDecision(CollectionAttemptDbContext db, string recordId, int revisionNumber, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
+
+    private static async Task ValidateApprovalAsync(CollectionAttemptDbContext db, BriefRevision current, CancellationToken cancellationToken)
+    {
+        current.ValidateForApproval();
+        if ((await BriefRecordReader.FindChangedInActiveReleaseAsync(db, current.Citations, cancellationToken)).Count > 0)
+            throw new ArgumentException("Approval needs every cited revision to be approved and in the active release.");
+    }
 
     public async Task<BriefReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken)
     {

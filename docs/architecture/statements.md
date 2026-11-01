@@ -292,7 +292,7 @@ Infrastructure/Statements holds `PostgresStatementReviewStore` and `StatementRev
 
 **Published labels.** A published statement holds `textOrigin` and `approvedBy`. `approvedBy` is `code` when `StatementCodeApproval` approved the statement, and `person` otherwise. A code approval with a date also shows a date label; see [Statement code approval](#statement-code-approval). See [publication](publication.md#release-content).
 
-**AI date.** An AI-proposed statement date survives a person's save only when the person ticks that it was checked. `AiProposedDate` in Core/Review owns this rule for statements and document changes. A person cannot approve an AI revision that has a date. Only code can, when it read the date from the release; see [Statement code approval](#statement-code-approval).
+**AI date.** An AI-proposed statement date survives a person's save only when the person ticks that it was checked. `AiProposedDate` in Core/Review owns this rule for statements and document changes. A person cannot approve an AI revision that has a date as it is. Ticking Date checked and pressing Save and approve writes a person revision that keeps the date and approves it. Code can approve the AI revision, when it read the date from the release; see [Statement code approval](#statement-code-approval).
 
 **Decide.** `DecideStatementReview` checks the expected revision number and review state version, then applies `ReviewPolicy`. `ReviewValidation.CreateDecision` builds the decision for both record types. An approval runs `StatementAllowedSelections.RequireApprovable`, which calls `StatementDraftRevision.ValidateForApproval`. A person approval also runs `RequireConfirmedDate`. The approval needs a headline, a summary, at least one speaker, at least one quotation, and a date with evidence or no date. It also checks the allowed selections again and checks the spans against the extraction.
 
@@ -308,7 +308,7 @@ Infrastructure/Statements holds `PostgresStatementReviewStore` and `StatementRev
 - The query values are `drafts` (filter), `draftsCursor`, `issue`, `official`, `from`, `to`, `notInReview` (cursor), and `status`.
 - The "Not in review" table has a pager on `ListStatementsNotInReview`. It shows the source, the URL, and the reason code. Each row has a Start draft post form.
 
-`/Review/Statements/{CandidateId}` mirrors the document-change editor. It shows the AI authorship notice with the analysis run, the open-concern notice, and the compare panel after a stale save. It also shows the failure text of `Approval` in a notice at the top, so a person sees why Approve fails.
+`/Review/Statements/{CandidateId}` mirrors the document-change editor. It shows the AI authorship notice with the analysis run, the open-concern notice, and the compare panel after a stale save. It also shows the failure text of `Approval` in a notice at the top, so a person sees why Save and approve fails.
 
 - The Statement panel has the tabs "Saved revision N" (`StatementRecord`) and "Edit wording".
 - The Evidence panel shows the article text with the cited spans marked through `DocumentText` and `CitedText`.

@@ -16,6 +16,11 @@ public abstract class ReviewRecordPage : ComponentBase
         "Some fields or selections are not valid. Correct them and save again.",
         "The revision could not be saved. Your wording is kept in the form. Try again.");
 
+    protected static readonly ReviewFailureMessages SaveAndApproveFailures = new(
+        "Someone changed this record after you opened the page. Nothing was saved or approved. Your wording is kept below. Compare both versions, then press Save and approve again.",
+        "Nothing was saved or approved. Some fields are not valid, or an approval check failed. Approval must resolve every open concern. Correct the form and press Save and approve again.",
+        "Nothing was saved or approved. Your wording is kept in the form. Press Save and approve again.");
+
     protected static readonly ReviewFailureMessages DecideFailures = new(
         "The revision or review state changed after you opened this page. Check the latest state before you record a decision.",
         "The decision needs valid details. Requesting changes and withdrawing approval need a reason. Approval must resolve every open concern.",
@@ -41,6 +46,9 @@ public abstract class ReviewRecordPage : ComponentBase
 
     [SupplyParameterFromForm(FormName = SaveForm, Name = "expectedRevisionNumber")] protected int SaveExpectedRevision { get; set; }
     [SupplyParameterFromForm(FormName = SaveForm, Name = "idempotencyKey")] protected string? SaveKey { get; set; }
+    [SupplyParameterFromForm(FormName = SaveForm, Name = "expectedReviewStateVersion")] protected int ApprovalExpectedStateVersion { get; set; }
+    [SupplyParameterFromForm(FormName = SaveForm, Name = "approve")] protected string? ApproveAfterSave { get; set; }
+    [SupplyParameterFromForm(FormName = SaveForm)] protected ReviewDecisionInput? Approval { get; set; }
     [SupplyParameterFromForm(FormName = DecideForm)] protected ReviewDecisionInput? Decision { get; set; }
     [SupplyParameterFromForm(FormName = DecideForm, Name = "expectedRevisionNumber")] protected int DecideExpectedRevision { get; set; }
     [SupplyParameterFromForm(FormName = DecideForm, Name = "expectedReviewStateVersion")] protected int DecideExpectedStateVersion { get; set; }
@@ -49,7 +57,9 @@ public abstract class ReviewRecordPage : ComponentBase
 
     protected CancellationToken RequestAborted => HttpContext.RequestAborted;
     protected bool CanDecide => !hasUnsavedInput && !isConflict && error is null;
-    protected string SelectedTab => hasUnsavedInput || isConflict ? "edit" : "saved";
+    protected bool IsSaveAndApprove => ApproveAfterSave is not null;
+    protected ReviewFailureMessages SaveMessages => IsSaveAndApprove ? SaveAndApproveFailures : SaveFailures;
+    protected string SavedStatus => IsSaveAndApprove ? "decided" : "saved";
 
     protected abstract Task LoadAsync();
 
@@ -105,6 +115,9 @@ public abstract class ReviewRecordPage : ComponentBase
                 statusMessage = messages.Conflict;
                 await reloadAfterConflict();
                 break;
+            case ReviewCommandFailure.NothingToSave:
+                error = new NothingToSaveException().Message;
+                break;
             case ReviewCommandFailure.Invalid:
                 error = messages.Invalid;
                 break;
@@ -126,6 +139,11 @@ public abstract class ReviewRecordPage : ComponentBase
             throw new ArgumentException("Choose a valid review action.");
         return kind;
     }
+
+    protected ApprovalWithSave? ApprovalOfSave() => IsSaveAndApprove
+        ? new(ApprovalExpectedStateVersion, EmptyToNull(Approval?.Note), [.. Approval?.ResolvedDecisionIds ?? []],
+            EmptyToNull(Approval?.CorrectionNote))
+        : null;
 
     protected string? CorrectionNoteOfApproval() =>
         ParseDecisionKind(Kind) == ReviewDecisionKind.Approve ? EmptyToNull(Decision?.CorrectionNote) : null;

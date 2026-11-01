@@ -60,7 +60,7 @@ public sealed partial class ActionEditor
     private async Task<string?> TrySaveAsync()
     {
         if (detail is null) return null;
-        var target = await RunCommandAsync(PersistDraftAsync, SaveFailures, ReloadAfterSaveConflictAsync);
+        var target = await RunCommandAsync(PersistDraftAsync, SaveMessages, ReloadAfterSaveConflictAsync);
         hasUnsavedInput = target is null;
         return target;
     }
@@ -70,12 +70,12 @@ public sealed partial class ActionEditor
         if (SaveExpectedRevision != Revision.RevisionNumber)
             throw new ReviewConflictException("The draft has a newer revision. Refresh before saving.");
         _ = await SaveDraft.ExecuteAsync(actor, BuildSaveRequest(Input ?? new ActionInput()), RequestAborted);
-        return ActionRoutes.Editor(RecordId, "saved");
+        return ActionRoutes.Editor(RecordId, SavedStatus);
     }
 
     private SaveActionDraftRequest BuildSaveRequest(ActionInput input) =>
         new(RecordId, SaveExpectedRevision, input.Headline ?? "", input.Summary ?? "",
-            SuggestionActions.ChoiceOf(input.SuggestionAction), SaveKey ?? "");
+            SuggestionActions.ChoiceOf(input.SuggestionAction), SaveKey ?? "", ApprovalOfSave());
 
     private Task ReloadAfterSaveConflictAsync()
     {

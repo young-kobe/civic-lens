@@ -8,4 +8,4 @@ public sealed record SaveDocumentChangeDraftRequest(string DraftId, int Expected
     DateOnly? ChangeDate, SourceSpan? ChangeDateEvidence,
     ImmutableArray<string> OfficialIds, ImmutableArray<string> IssueIds,
     ImmutableArray<SourceSpan> Citations, string IdempotencyKey,
-    bool ChangeDateChecked = false);
+    bool ChangeDateChecked = false, ApprovalWithSave? Approval = null);

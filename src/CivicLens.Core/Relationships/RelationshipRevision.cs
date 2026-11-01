@@ -12,6 +12,8 @@ public sealed record RelationshipRevision(string RecordId, int RevisionNumber, s
     public const int MaximumFactIdLength = 16;
     public const int MaximumOfficialIdLength = 256;
 
+    public RelationshipRevision ComparableForm() => this with { Reason = ComparableText.Lines(Reason) };
+
     public void ValidateShape()
     {
         if (!LowercaseHex.Is(RecordId, 64))

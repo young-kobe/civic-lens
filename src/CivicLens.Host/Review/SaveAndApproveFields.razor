@@ -1,0 +1,40 @@
+@using System.Collections.Immutable
+@using CivicLens.Application.Publication
+@using CivicLens.Core.Review
+
+<section class="stack" id="save-and-approve">
+    @Checklist
+    <input type="hidden" name="expectedReviewStateVersion" value="@ReviewStateVersion" />
+    <Field Label="Note" For="Approval_Note" Hint="Resolving concerns needs a note.">
+        <textarea id="Approval_Note" class="plain" name="Approval.Note" maxlength="4000" aria-describedby="Approval_Note-hint" value="@Approval?.Note"></textarea>
+    </Field>
+    <ApprovalInputs Prefix="Approval" Concerns="Concerns" ResolvedIds="Approval?.ResolvedDecisionIds" CorrectionNote="@Approval?.CorrectionNote" />
+    @if (OffSiteAndCannotReturn)
+    {
+        <p id="save-and-approve-off-site" class="small">This record is off the site. Saving with no edit does not bring it back. Change the wording to return it.</p>
+    }
+    <div class="actions">
+        <Button Variant="ButtonVariant.Primary" Type="submit" name="approve" value="true">Save and approve</Button>
+        <span class="actions-hint">If you change nothing, it approves this revision as it is. @Hint @(PublishesSoon ? "Publishes soon." : "")</span>
+    </div>
+</section>
+
+@code {
+    private TakeOffSiteStatus Status => View.Status;
+
+    private bool OwnerKnowsPublishedState => View is { IsOwner: true, Configured: true, Failed: false };
+
+    private bool PublishesSoon => OwnerKnowsPublishedState &&
+        ((!Status.CanTakeOff && !Status.TakenOff) || !string.IsNullOrWhiteSpace(Approval?.CorrectionNote));
+
+    private bool OffSiteAndCannotReturn => OwnerKnowsPublishedState && Status.WithdrawnRevisionNumber is { } withdrawn &&
+        !PublishedRecordRules.CanReturn(RevisionNumber, withdrawn);
+
+    [Parameter, EditorRequired] public TakeOffSiteView View { get; set; } = TakeOffSiteView.Hidden;
+    [Parameter, EditorRequired] public int RevisionNumber { get; set; }
+    [Parameter, EditorRequired] public int ReviewStateVersion { get; set; }
+    [Parameter, EditorRequired] public ImmutableArray<ReviewDecision> Concerns { get; set; }
+    [Parameter] public ReviewDecisionInput? Approval { get; set; }
+    [Parameter] public string? Hint { get; set; }
+    [Parameter] public RenderFragment? Checklist { get; set; }
+}

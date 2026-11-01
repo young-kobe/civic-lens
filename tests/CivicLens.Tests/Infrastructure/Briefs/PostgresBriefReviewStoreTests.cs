@@ -105,7 +105,7 @@ public sealed class PostgresBriefReviewStoreTests(PostgresCollection postgres) :
         forged.ValidateShape();
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            reviews.SaveRevisionAsync(Reviewer.Subject, forged, 1, "save-2", new string('6', 64), default));
+            reviews.SaveRevisionAsync(Reviewer.Subject, forged, 1, null, "save-2", new string('6', 64), default));
 
         Assert.Equal(1, await ScalarAsync($"SELECT current_revision_number FROM brief_drafts WHERE record_id = '{RecordId}'"));
     }
@@ -138,7 +138,7 @@ public sealed class PostgresBriefReviewStoreTests(PostgresCollection postgres) :
             Suggestion = third.Suggestion! with { Headline = "A forged suggestion" }
         };
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            reviews.SaveRevisionAsync(Reviewer.Subject, forged, 5, "save-6", new string('6', 64), default));
+            reviews.SaveRevisionAsync(Reviewer.Subject, forged, 5, null, "save-6", new string('6', 64), default));
         Assert.Equal(5, await ScalarAsync($"SELECT current_revision_number FROM brief_drafts WHERE record_id = '{RecordId}'"));
     }
 
@@ -176,7 +176,7 @@ public sealed class PostgresBriefReviewStoreTests(PostgresCollection postgres) :
             Citations = [.. suggestion.Citations.Select(citation => citation with { RevisionNumber = citation.RevisionNumber + 1 })]
         };
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            reviews.SaveRevisionAsync(Reviewer.Subject, forged, 3, "save-6", new string('6', 64), default));
+            reviews.SaveRevisionAsync(Reviewer.Subject, forged, 3, null, "save-6", new string('6', 64), default));
         Assert.Equal(3, await ScalarAsync($"SELECT current_revision_number FROM brief_drafts WHERE record_id = '{RecordId}'"));
         await Assert.ThrowsAsync<ArgumentException>(() =>
             SaveAsync(1, "Headline", ReviewableRevision().Paragraphs, "save-7", SuggestionChoice.Use));
@@ -230,6 +230,43 @@ public sealed class PostgresBriefReviewStoreTests(PostgresCollection postgres) :
         var read = (await reviews.GetAsync(RecordId, default))!;
         Assert.True(read.CitedRecordsChanged);
         Assert.Equal([("R1", true), ("R2", false), ("R3", false)], read.Cited.OrderBy(pair => pair.Key).Select(pair => (pair.Key, pair.Value.Changed)));
+    }
+
+    [Fact]
+    public async Task ASaveWhoseApprovalFailsBecauseACitationLeftTheActiveReleaseWritesNoRevisionAndNoDecision()
+    {
+        await ChangeCitedStatementAsync("absent");
+        var request = new SaveBriefDraftRequest(RecordId, 1, "Typed headline", ReviewableRevision().Paragraphs, SuggestionChoice.Keep,
+            "save-and-approve", new ApprovalWithSave(0, null, [], null));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => new SaveBriefDraft(reviews).ExecuteAsync(Reviewer, request));
+
+        Assert.Equal(1, await ScalarAsync($"SELECT current_revision_number FROM brief_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM brief_review_decisions"));
+        Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM brief_revisions WHERE record_id = '{RecordId}'"));
+    }
+
+    [Fact]
+    public async Task ANoEditPressWithCitationIdsInFormOrderWritesNoRevisionButAChangedParagraphOrderDoes()
+    {
+        var stored = await SaveAsync(1, "Person headline", [new("Text.", ["R2", "R1"]), new("Other.", ["R3"])], "two");
+        var request = new SaveBriefDraftRequest(RecordId, 2, stored.Headline, [new("Text.", ["R1", "R2"]), new("Other.", ["R3"])],
+            SuggestionChoice.Keep, "form-order", new ApprovalWithSave(0, null, [], null));
+
+        var result = await new SaveBriefDraft(reviews).ExecuteAsync(Reviewer, request);
+
+        Assert.Equal(2, result.RevisionNumber);
+        Assert.Equal(2L, await ScalarAsync($"SELECT count(*) FROM brief_revisions WHERE record_id = '{RecordId}'"));
+        Assert.Equal(2, await ScalarAsync("SELECT revision_number FROM brief_review_decisions"));
+
+        var reordered = request with
+        {
+            Paragraphs = [new("Other.", ["R3"]), new("Text.", ["R1", "R2"])],
+            IdempotencyKey = "reordered",
+            Approval = new(1, null, [], null),
+            ExpectedRevisionNumber = 2
+        };
+        Assert.Equal(3, (await new SaveBriefDraft(reviews).ExecuteAsync(Reviewer, reordered)).RevisionNumber);
     }
 
     [Fact]

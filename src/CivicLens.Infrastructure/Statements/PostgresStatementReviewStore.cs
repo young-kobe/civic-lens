@@ -61,16 +61,22 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
         }, cancellationToken);
 
     public Task<StatementDraftRevision> SaveRevisionAsync(string actorSubject, StatementDraftRevision revision,
-        int expectedRevisionNumber, bool statementDateChecked, string idempotencyKey, string payloadHash,
-        CancellationToken cancellationToken) =>
+        int expectedRevisionNumber, bool statementDateChecked, ReviewDecision? approval, StatementAllowedSelections? approvalSelections,
+        string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
         Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
             payloadHash, async (db, draft, current) =>
             {
+                if (approval is not null)
+                    AiProposedDate.RequireCheckedOrCleared(current.AuthorSubject, current.StatementDate, revision.StatementDate, statementDateChecked, "statement date");
                 var saved = revision.KeepingAiStatementDateOnlyIfChecked(current, statementDateChecked);
                 saved.ValidateShape();
                 StatementDraftRows.SetListing(draft, saved, await StatementDraftRows.RequireCandidateExtractionAsync(db, saved, cancellationToken));
                 return saved;
-            }, saved => StatementDraftRows.NewRevision(saved, null), cancellationToken);
+            }, saved => StatementDraftRows.NewRevision(saved, null),
+            approval is null ? null : new(approval,
+                (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, approvalSelections, cancellationToken), afterDecision,
+                revision => revision.ComparableForm(), current => AiProposedDate.IsProposed(current.AuthorSubject, current.StatementDate)),
+            cancellationToken);
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
         int expectedReviewStateVersion, StatementAllowedSelections? approvalSelections, string idempotencyKey, string payloadHash,
