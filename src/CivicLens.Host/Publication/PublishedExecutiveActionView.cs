@@ -1,4 +1,5 @@
 using System.Globalization;
+using CivicLens.Core.ExecutiveActions;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Publication.Contracts;
@@ -13,14 +14,16 @@ internal static class PublishedExecutiveActionView
 
     public static IReadOnlyList<Fact> Facts(PublishedExecutiveAction action) =>
     [
-        new("Type", PublishedRecordLabels.ExecutiveActionKind(action.Kind)) { TermKey = PublishedRecordLabels.ExecutiveActionTermKey(action.Kind) },
-        .. PublishedRecordView.Officials("President", [action.President]),
-        new("Signed", Moment.Iso(action.SignedOn)),
-        new("Published in the Federal Register", Moment.Iso(action.PublishedOn)),
-        new("Federal Register citation", action.FederalRegisterCitation),
-        new("Federal Register document number", action.DocumentNumber),
-        .. action.CorrectionNotices.Select(notice => CorrectionFact(notice)),
-        Fact.LinkList("Read the document", [new FactLink("Open the Federal Register page", action.DocumentUrl)]),
+        new Fact("Type", PublishedRecordLabels.ExecutiveActionKind(action.Kind)) { TermKey = PublishedRecordLabels.ExecutiveActionTermKey(action.Kind) }
+            .CitedAt(AnchorOf(action, ExecutiveActionFacts.Type)),
+        .. PublishedRecordView.Officials("President", [action.President]).Select(fact => fact.CitedAt(AnchorOf(action, ExecutiveActionFacts.President))),
+        new Fact("Signed", Moment.Iso(action.SignedOn)).CitedAt(AnchorOf(action, ExecutiveActionFacts.Signed)),
+        new Fact("Published in the Federal Register", Moment.Iso(action.PublishedOn)).CitedAt(AnchorOf(action, ExecutiveActionFacts.Published)),
+        new Fact("Federal Register citation", action.FederalRegisterCitation).CitedAt(AnchorOf(action, ExecutiveActionFacts.Citation)),
+        new Fact("Federal Register document number", action.DocumentNumber).CitedAt(AnchorOf(action, ExecutiveActionFacts.DocumentNumber)),
+        .. action.Facts.Where(fact => fact.Label == ExecutiveActionFacts.PresidentialNumber).Select(fact => new Fact(fact.Label, fact.Value).CitedAt(Anchor(action, fact))),
+        .. action.CorrectionNotices.Select((notice, index) => CorrectionFact(action, notice, index)),
+        Fact.LinkList("Read the document", [new FactLink("Open the Federal Register page", action.DocumentUrl)]).CitedAt(AnchorOf(action, ExecutiveActionFacts.Url)),
         new("Published", $"Checked by code {Moment.Full(action.ApprovedAtUtc)}; first published {Moment.Full(action.FirstPublishedAtUtc)}"),
         new("Revision", action.RevisionNumber.ToString(CultureInfo.InvariantCulture))
     ];
@@ -29,9 +32,10 @@ internal static class PublishedExecutiveActionView
 
     public static string CorrectionTimelineText(PublishedExecutiveActionNotice notice) => CorrectionParts(notice)[0].Text.TrimEnd();
 
-    private static Fact CorrectionFact(PublishedExecutiveActionNotice notice) =>
-        new("Correction notice", CorrectionText(notice), [.. CorrectionParts(notice).Select(part => new FactLink(part.Text, part.IsLink ? notice.Url : null))])
-        { Separator = "" };
+    private static Fact CorrectionFact(PublishedExecutiveAction action, PublishedExecutiveActionNotice notice, int index) =>
+        new Fact("Correction notice", CorrectionText(notice), [.. CorrectionParts(notice).Select(part => new FactLink(part.Text, part.IsLink ? notice.Url : null))])
+        { Separator = "" }.CitedAt(AnchorOf(action, ExecutiveActionFacts.CorrectionNotice, notice.Value),
+            PublishedRecordView.SourceLineTarget("Correction notice", index, action.CorrectionNotices.Length));
 
     private static (string Text, bool IsLink)[] CorrectionParts(PublishedExecutiveActionNotice notice) =>
     [
@@ -45,6 +49,9 @@ internal static class PublishedExecutiveActionView
         .Where(item => item.citation.ExtractionId == source.ExtractionId)
         .Select(item => new CitedRange(item.anchor, item.citation.Start, item.citation.Length))];
 
-    public static string Anchor(PublishedExecutiveAction action, PublishedExecutiveActionFact fact) =>
+    private static string Anchor(PublishedExecutiveAction action, PublishedExecutiveActionFact fact) =>
         PublishedRecordView.CitationAnchor(Array.IndexOf(action.Facts, fact));
+
+    private static string? AnchorOf(PublishedExecutiveAction action, string label, string? value = null) =>
+        action.Facts.FirstOrDefault(fact => fact.Label == label && (value is null || fact.Value == value)) is { } found ? Anchor(action, found) : null;
 }

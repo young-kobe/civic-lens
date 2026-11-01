@@ -14,10 +14,11 @@ internal static class PublishedVoteView
 {
     public static IReadOnlyList<Fact> Facts(PublishedVote vote, PublicationCatalog catalog) =>
     [
-        new("Voted on", Moment.Iso(vote.VotedOn)),
-        new("Kind", KindValue(vote)) { TermKey = PublishedRecordLabels.VoteKindTermKey(vote.Kind) },
-        new("Result", vote.Result),
-        new("Totals", Totals(vote)),
+        new Fact("Voted on", Moment.Iso(vote.VotedOn)).CitedAt(Anchor(vote, vote.VotedOnCitation)),
+        new Fact("Kind", KindValue(vote)) { TermKey = PublishedRecordLabels.VoteKindTermKey(vote.Kind) }.CitedAt(vote.KindCitation is { } kind ? Anchor(vote, kind) : null),
+        new Fact("Result", vote.Result).CitedAt(Anchor(vote, ResultFact(vote).Citation)),
+        .. Totals(vote),
+        .. ResultFacts(vote).Select(fact => new Fact(PublishedRecordLabels.VoteResultLabel(fact), PublishedRecordLabels.VoteFactValue(fact.Text)).CitedAt(Anchor(vote, fact.Citation))),
         new("Chamber", vote.Chamber.ToString()),
         new("Roll call", $"{vote.RollCallNumber}, Congress {vote.Congress}, session {vote.Session}"),
         new("Data source", PublishedRecordLabels.VoteSource(vote.Source)),
@@ -31,22 +32,15 @@ internal static class PublishedVoteView
 
     private static string KindValue(PublishedVote vote) =>
         vote.Kind != PublishedVoteKind.Other ? PublishedRecordLabels.VoteKind(vote.Kind)
-            : vote.KindCitation is null ? $"{PublishedRecordLabels.OtherQuestion}. The source gives no question."
-            : $"{PublishedRecordLabels.OtherQuestion}. The Kind quote in the Result panel gives the question.";
+            : vote.KindCitation is { } kind ? $"{PublishedRecordLabels.OtherQuestion}. {PublishedRecordLabels.VoteFactValue(kind.Quote)}"
+            : $"{PublishedRecordLabels.OtherQuestion}. The source gives no question.";
 
-    public static string Totals(PublishedVote vote)
-    {
-        var body = MemberNoun(vote) + "s";
-        return vote.Totals is { } totals
-            ? $"Casts of all {body}: Yea {totals.Yea}, Nay {totals.Nay}, Present {totals.Present}, Not voting {totals.NotVoting}"
-            : $"Votes for each candidate from all {body}: {string.Join(", ", CandidateTotals(vote))}";
-    }
+    private static IEnumerable<Fact> Totals(PublishedVote vote) =>
+        vote.Totals is { } totals
+            ? [new("Totals", $"Casts of all {MemberNoun(vote)}s: Yea {totals.Yea}, Nay {totals.Nay}, Present {totals.Present}, Not voting {totals.NotVoting}")]
+            : [];
 
     private static string MemberNoun(PublishedVote vote) => vote.Chamber == PublishedChamber.Senate ? "senator" : "House member";
-
-    private static IEnumerable<string> CandidateTotals(PublishedVote vote) =>
-        vote.Facts.Where(fact => fact.Text.StartsWith(PublishedVote.CandidateTotalPrefix, StringComparison.Ordinal))
-            .Select(fact => fact.Text[PublishedVote.CandidateTotalPrefix.Length..].Replace(": ", " ", StringComparison.Ordinal));
 
     public static string Caveat(PublishedVote vote) =>
         "This record lists only the officials that Civic Lens tracks. " + vote.Source switch
@@ -67,8 +61,14 @@ internal static class PublishedVoteView
     public static string? Bill(PublishedVote vote) =>
         vote.BillType is null ? null : ActionLabels.Bill(vote.Congress, vote.BillType, vote.BillNumber!.Value);
 
-    public static IEnumerable<PublishedVoteFact> ResultFacts(PublishedVote vote) =>
-        vote.Facts.Where(fact => fact.Citation != vote.VotedOnCitation && fact.Citation != vote.KindCitation);
+    private static PublishedVoteFact ResultFact(PublishedVote vote) =>
+        vote.Facts.First(fact => fact.Text == PublishedVote.ResultPrefix + vote.Result);
+
+    private static IEnumerable<PublishedVoteFact> ResultFacts(PublishedVote vote)
+    {
+        var result = ResultFact(vote);
+        return vote.Facts.Where(fact => fact != result && fact.Citation != vote.VotedOnCitation && fact.Citation != vote.KindCitation);
+    }
 
     public static IEnumerable<CastGroup> CastGroups(PublishedVote vote) =>
         vote.Members.GroupBy(member => member.Cast)

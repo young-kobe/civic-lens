@@ -27,11 +27,9 @@
             }
             @if (Record.ChangeDateEvidence is { } evidence)
             {
-                <li>
-                    <CitationQuote Label="@($"Evidence for the actual change date, {VersionLabel(evidence).ToLowerInvariant()}")" Quote="@evidence.Quote">
-                        <ContextLink Href="@($"#{PublishedRecordView.ChangeDateAnchor}")" Text="@ContextLink.FullVersionText" Target="@PublishedRecordView.QuoteTarget("actual change date")" />
-                    </CitationQuote>
-                </li>
+                <DateEvidenceLine Label="@($"Evidence for the actual change date, {VersionLabel(evidence).ToLowerInvariant()}")" Quote="@evidence.Quote">
+                    <ContextLink Href="@($"#{PublishedRecordView.ChangeDateAnchor}")" Text="@ContextLink.FullVersionText" Target="@PublishedRecordView.QuoteTarget("actual change date")" />
+                </DateEvidenceLine>
             }
         </ul>
     </Panel>

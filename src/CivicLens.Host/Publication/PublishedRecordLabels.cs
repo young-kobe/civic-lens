@@ -184,6 +184,8 @@ public static class PublishedRecordLabels
         }
     };
 
+    public static string VoteFactValue(string text) => text[(text.IndexOf(':') + 1)..].TrimStart();
+
     public static string VoteResultLabel(PublishedVoteFact fact)
     {
         var label = fact.Text[..fact.Text.IndexOf(':')];

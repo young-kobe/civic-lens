@@ -27,6 +27,10 @@
                     }
                 }
             }
+            @if (fact.Source is { } source)
+            {
+                <SourceLineLink Anchor="@source.Anchor" Target="@source.Target" />
+            }
         </dd>
     }
 </dl>
