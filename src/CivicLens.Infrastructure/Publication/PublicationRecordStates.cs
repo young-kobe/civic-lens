@@ -35,6 +35,18 @@ internal static class PublicationRecordStates
         if (opened.Length > 0)
             await db.Database.ExecuteSqlRawAsync(OpenRanges, [commit.ReleaseNumber, opened.Select(entry => entry.Key.Kind).ToArray(),
                 opened.Select(entry => entry.Key.RecordId).ToArray(), opened.Select(entry => entry.Value).ToArray()], cancellationToken);
+        await RequireOneRowForEachRecordAsync(db, commit, cancellationToken);
+    }
+
+    private static async Task RequireOneRowForEachRecordAsync(CollectionAttemptDbContext db, PublicationCommit commit,
+        CancellationToken cancellationToken)
+    {
+        var rows = await db.Set<PublicationRecordStateRow>().AsNoTracking()
+            .CountAsync(row => row.FirstRelease <= commit.ReleaseNumber && (row.LastRelease == null || row.LastRelease >= commit.ReleaseNumber),
+                cancellationToken);
+        if (rows != commit.Records.Length)
+            throw new InvalidOperationException(
+                $"Release {commit.ReleaseNumber} lists {commit.Records.Length} records, but the state table holds {rows} rows for it.");
     }
 
     private static bool Matches(Dictionary<(string Kind, string RecordId), int> revisions, KeyValuePair<(string Kind, string RecordId), int> entry) =>

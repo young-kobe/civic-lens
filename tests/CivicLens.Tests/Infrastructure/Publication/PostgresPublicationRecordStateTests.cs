@@ -105,6 +105,24 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
     }
 
     [Fact]
+    public async Task AStateTableThatHoldsAnotherRowCountThanTheReleaseListsStopsThePublishAndKeepsTheActiveRelease()
+    {
+        await SeedActionsAsync(A, C);
+        await PublishAsync(1, null, [(A, 1)], added: [A]);
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO publication_record_states (kind, record_id, revision_number, first_release, last_release) VALUES ('action', '{C}', 1, 2, 2)
+            """);
+
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => PublishAsync(2, 1, [(A, 1)]));
+
+        Assert.IsNotType<PublicationConflictException>(failure);
+        Assert.Contains("lists 1 records, but the state table holds 2 rows", failure.Message);
+        Assert.Equal(["1|True"], (await PublishedRecordStateReader.ReadAsync(connectionString,
+            "SELECT release_number, is_active FROM publication_releases")).Select(row => $"{row[0]}|{row[1]}"));
+    }
+
+    [Fact]
     public async Task PruneLeavesEveryReleaseRowAndStateRowAloneBecauseOldStatesStayForReaders()
     {
         await SeedActionsAsync(A, C);
