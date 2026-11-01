@@ -40,6 +40,15 @@ public sealed class PublishedHomeCardsTests
     }
 
     [Fact]
+    public async Task ThePicksPanelSaysAFixedRuleChoosesTheItemsAndLinksTheMethodOfTheChoices()
+    {
+        var main = await HomeAsync(ReleaseOf(Vote('a', 216, 214, PublishedVoteAlignment.Split)), []);
+
+        Assert.Contains("A fixed rule chooses these items from the published records. The same records on the same release day give the same choices.", main.TextContent, StringComparison.Ordinal);
+        Assert.Equal("How these choices are made", main.QuerySelector("a[href='method.html#home-picks']")!.TextContent);
+    }
+
+    [Fact]
     public async Task TheBreakCardNamesWhoWithPartyAndStateAndWhatWasCountedLinksTheOfficialAndStatesTheMinimum()
     {
         var main = await HomeAsync(ReleaseOf(), [Leader()]);
@@ -58,6 +67,34 @@ public sealed class PublishedHomeCardsTests
 
         Assert.DoesNotContain("Chosen by a fixed rule", main.TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain("Newest executive actions", main.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheBreakCardUsesThePartyOfTheCountedChamberSoAMemberWhoChangedPartyIsNotLabeledWithTheNewParty()
+    {
+        var main = await HomeAsync(ReleaseOf(), [Leader([Term("Democrat", "TX", startYear: 2021), Term("Republican", "FL", startYear: 2025)])]);
+
+        Assert.Equal("Jane Doe (D, Texas) sided against most House Democrats on 12 of 40 votes where the parties split.", main.QuerySelector("li")!.TextContent);
+    }
+
+    [Fact]
+    public async Task ALaterExecutiveTermOfAnotherPartyDoesNotChangeTheLabelOfAMemberOfTheHouse()
+    {
+        var main = await HomeAsync(ReleaseOf(), [Leader([Term("Democrat", "TX", startYear: 2021), Term("Republican", null, startYear: 2025, kind: PublishedOfficeKind.Executive)])]);
+
+        Assert.Equal("Jane Doe (D, Texas) sided against most House Democrats on 12 of 40 votes where the parties split.", main.QuerySelector("li")!.TextContent);
+    }
+
+    [Theory]
+    [InlineData("Independent", "Democrat", "ME", "Jane Doe (I, Maine) ")]
+    [InlineData("Democrat", null, null, "Jane Doe (D) ")]
+    [InlineData(null, "Democrat", "TX", "Jane Doe (Texas) ")]
+    [InlineData("Democrat", null, "DC", "Jane Doe (D, District of Columbia) ")]
+    public async Task TheBreakCardShowsOnlyThePartyLetterAndStateNameThatTheTermHolds(string? party, string? caucus, string? state, string expectedStart)
+    {
+        var main = await HomeAsync(ReleaseOf(), [Leader([Term(party, state, caucus)])]);
+
+        Assert.StartsWith(expectedStart + "sided against most House Democrats", main.QuerySelector("li")!.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -131,13 +168,18 @@ public sealed class PublishedHomeCardsTests
         return new HtmlParser().ParseDocument(html).QuerySelector("main")!;
     }
 
-    private static BreakLeader Leader(PublishedOfficeTerm[]? terms = null) => new(PublishedChamber.House, PublishedPartyMajority.Democrat, 119,
-        new OfficialListing(new PublishedOfficialProfile
-        {
-            Id = "doe",
-            Name = "Jane Doe",
-            Terms = terms ?? [new PublishedOfficeTerm { Office = "Representative", Kind = PublishedOfficeKind.Representative, State = "TX", Party = "Democrat", Start = new DateOnly(2025, 1, 3) }]
-        }, 0), 40, 12);
+    private static BreakLeader Leader(PublishedOfficeTerm[]? terms = null) => new(PublishedChamber.House, PublishedPartyMajority.Democrat,
+        new OfficialListing(new PublishedOfficialProfile { Id = "doe", Name = "Jane Doe", Terms = terms ?? [Term("Democrat", "TX")] }, 0), 40, 12);
+
+    private static PublishedOfficeTerm Term(string? party, string? state, string? caucus = null, int startYear = 2025, PublishedOfficeKind kind = PublishedOfficeKind.Representative) => new()
+    {
+        Office = kind.ToString(),
+        Kind = kind,
+        State = state,
+        Party = party,
+        Caucus = caucus,
+        Start = new DateOnly(startYear, 1, 3)
+    };
 
     private static string Id(char letter) => new(letter, 32);
 

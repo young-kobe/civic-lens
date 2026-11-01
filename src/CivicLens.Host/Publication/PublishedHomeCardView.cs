@@ -8,7 +8,7 @@ internal static class PublishedHomeCardView
 {
     public const string PickedTitle = "Chosen by a fixed rule";
 
-    public const string PickedLede = "Code picks these items from the published records. The same records on the same release day give the same picks. A vote headline can be an AI summary of the official record, and its vote page says so.";
+    public const string PickedLede = "A fixed rule chooses these items from the published records. The same records on the same release day give the same choices. A vote headline can be an AI summary of the official record, and its vote page says so.";
 
     public const string BreaksTitle = "Voted against their party most often";
 
@@ -16,7 +16,7 @@ internal static class PublishedHomeCardView
 
     public const string BreaksLeftOut = "A chamber and party with no line has no member with vote figures on this site who meets these rules.";
 
-    public const string MethodLinkText = "How these picks are made";
+    public const string MethodLinkText = "How these choices are made";
 
     public const string ExecutiveActionsTitle = "Newest executive actions";
 
@@ -36,14 +36,19 @@ internal static class PublishedHomeCardView
         : $"The pick is the closest of {highlights.VotesInWindow} substantive roll call votes with counts in these dates. The gap is the difference between the Yea count and the Nay count.";
 
     public static string Leader(BreakLeader leader, DateTimeOffset publishedAtUtc) =>
-        $"{Identity(leader.Official.Profile, publishedAtUtc)}sided against most {PublishedOfficialView.PartyOf(leader.Chamber, leader.Party)} on {leader.Breaks} of {leader.Cast} votes where the parties split.";
+        $"{Identity(leader, publishedAtUtc)}sided against most {PublishedOfficialView.PartyOf(leader.Chamber, leader.Party)} on {leader.Breaks} of {leader.Cast} votes where the parties split.";
 
-    private static string Identity(PublishedOfficialProfile profile, DateTimeOffset publishedAtUtc)
+    private static string Identity(BreakLeader leader, DateTimeOffset publishedAtUtc)
     {
-        if (PublishedOfficialView.LatestTerm(profile.Terms, publishedAtUtc) is not { } term) return "";
-        var parts = new[] { term.Party?[..1], term.State is null ? null : UsStates.NameOf(term.State) }.OfType<string>().ToList();
+        var counted = leader.Official.Profile.Terms.Where(term => IsCountedWith(term, leader));
+        if (PublishedOfficialView.LatestTerm(counted, publishedAtUtc) is not { } term) return "";
+        var parts = new[] { term.Party is null ? null : PartyLetters.LetterOf(term.Party), term.State is null ? null : UsStates.NameOf(term.State) }.OfType<string>().ToList();
         return parts.Count == 0 ? "" : $"({string.Join(", ", parts)}) ";
     }
+
+    private static bool IsCountedWith(PublishedOfficeTerm term, BreakLeader leader) =>
+        term.Kind == (leader.Chamber == PublishedChamber.Senate ? PublishedOfficeKind.Senator : PublishedOfficeKind.Representative) &&
+        (term.Caucus ?? term.Party) == leader.Party;
 
     public static bool LeavesOutGroups(HomeHighlights highlights) =>
         highlights.BreakLeaders.Length < Enum.GetValues<PublishedChamber>().Length * 2;

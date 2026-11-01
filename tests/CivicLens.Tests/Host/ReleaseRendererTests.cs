@@ -1771,6 +1771,38 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task TheUnderstandABillButtonLandsOnTheBillsAndCongressGroupOfTheGlossaryInsteadOfTheTopOfALongPage()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var home = new HtmlParser().ParseDocument(await renderer.RenderHomeAsync(ReleaseOf(1), null, NoFacets, NoHighlights(ReleaseOf(1)), CancellationToken.None));
+        var glossary = new HtmlParser().ParseDocument(await renderer.RenderGlossaryAsync(CancellationToken.None));
+
+        var anchor = home.QuerySelector(".home-actions a[href^='glossary.html#']")!.GetAttribute("href")!.Split('#')[1];
+
+        Assert.Equal("Bills and Congress", glossary.QuerySelector($"h2[id='{anchor}']")!.TextContent);
+    }
+
+    [Fact]
+    public async Task HomeLabelsTheBriefPanelAsAWeeklyBriefOnlyWhenABriefExists()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+
+        var with = new HtmlParser().ParseDocument(await renderer.RenderHomeAsync(ReleaseOf(1), Brief(), NoFacets, NoHighlights(ReleaseOf(1)), CancellationToken.None));
+        var without = new HtmlParser().ParseDocument(await renderer.RenderHomeAsync(ReleaseOf(1), null, NoFacets, NoHighlights(ReleaseOf(1)), CancellationToken.None));
+
+        Assert.Equal("A week of <housing> news", with.QuerySelectorAll("main p.muted.small").Single(label => label.TextContent == "Weekly brief").NextElementSibling!.QuerySelector("h2")!.TextContent);
+        Assert.DoesNotContain("Weekly brief", without.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheMethodPageSaysThatTheClosestVoteCardDoesNotAppearWhenNoVoteFitsInsteadOfClaimingItSaysSo()
+    {
+        var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None)).QuerySelector("main")!.TextContent;
+
+        Assert.Contains("It names the dates. With no such vote in these dates, the card does not appear.", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task HomeSaysWhatTheSiteIsAndOffersThreeFirstStepsSoANewReaderKnowsWhereToStart()
     {
         var html = await new ReleaseRenderer(null, null).RenderHomeAsync(ReleaseOf(1), null, NoFacets, NoHighlights(ReleaseOf(1)), CancellationToken.None);
@@ -1779,7 +1811,7 @@ public sealed class ReleaseRendererTests
         Assert.Equal("Civic Lens", document.Title);
         Assert.Equal("Civic Lens", document.QuerySelector("h1")!.TextContent);
         Assert.Equal("Civic Lens shows what U.S. officials say and do, using official records you can check yourself.", document.QuerySelector(".home-lead")!.TextContent);
-        Assert.Equal([("Find your representative or senators", "officials.html"), ("Understand a bill", "glossary.html"), ("Search all records", "search.html")],
+        Assert.Equal([("Find your representative or senators", "officials.html"), ("Understand a bill", "glossary.html#glossary-group-bills-and-congress"), ("Search all records", "search.html")],
             document.QuerySelectorAll(".home-actions a").Select(link => (link.TextContent, link.GetAttribute("href")!)));
         Assert.Matches("^Release 4, published ", document.QuerySelector(".home-lead + p.small")!.TextContent);
     }

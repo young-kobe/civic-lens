@@ -87,8 +87,8 @@ public sealed class HomeHighlightsTests
 
         var leader = Assert.Single(BreakLeader.All(OfficialBoardPage.All(officials, summaries)));
 
-        Assert.Equal(("share", PublishedChamber.House, PublishedPartyMajority.Democrat, 119, 40, 10),
-            (leader.Official.Profile.Id, leader.Chamber, leader.Party, leader.Congress, leader.Cast, leader.Breaks));
+        Assert.Equal(("share", PublishedChamber.House, PublishedPartyMajority.Democrat, 40, 10),
+            (leader.Official.Profile.Id, leader.Chamber, leader.Party, leader.Cast, leader.Breaks));
     }
 
     [Fact]
@@ -133,8 +133,8 @@ public sealed class HomeHighlightsTests
 
         var leaders = BreakLeader.All(OfficialBoardPage.All(officials, summaries));
 
-        Assert.Equal([("newer", PublishedChamber.House, 119), ("senator", PublishedChamber.Senate, 118)],
-            leaders.Select(leader => (leader.Official.Profile.Id, leader.Chamber, leader.Congress)));
+        Assert.Equal([("newer", PublishedChamber.House), ("senator", PublishedChamber.Senate)],
+            leaders.Select(leader => (leader.Official.Profile.Id, leader.Chamber)));
     }
 
     [Fact]

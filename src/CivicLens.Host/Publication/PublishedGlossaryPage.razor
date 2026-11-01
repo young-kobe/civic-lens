@@ -5,7 +5,7 @@
     <PageHeader Title="Glossary" />
     @foreach (var group in Glossary.Groups)
     {
-        <Panel Title="@group.Title" Padded="true">
+        <Panel Title="@group.Title" Id="@group.AnchorId" Padded="true">
             @foreach (var term in group.Terms)
             {
                 <section class="glossary-term" aria-labelledby="@term.AnchorId">
