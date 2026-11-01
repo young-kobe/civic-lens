@@ -188,6 +188,27 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         Assert.Equal(1, result.DeferredCount);
     }
 
+    [Fact]
+    public async Task NewUrlsThenRechecksAreAdmittedEachGroupInFeedOrderAndAReplayReturnsTheSameResult()
+    {
+        var knownOne = "https://example.test/articles/known-one";
+        var knownTwo = "https://example.test/articles/known-two";
+        var fresh = "https://example.test/articles/fresh";
+        var seeded = await jobs.AdmitAsync(Source(), await SaveFeedAsync([knownOne, knownTwo]), "manual-seed", default);
+        foreach (var job in seeded.Jobs)
+            Assert.NotNull(await jobs.CancelAsync(job.JobId, default));
+
+        var configured = Source(policy: new DiscoveryAdmissionPolicy { MaxJobs = 2 });
+        var attempt = await SaveFeedAsync([knownOne, knownTwo, fresh]);
+        var result = await jobs.AdmitAutomaticCheckAsync(configured, attempt, "automatic-check", default);
+        var replay = await jobs.AdmitAutomaticCheckAsync(configured, attempt, "automatic-check", default);
+
+        Assert.Equal([fresh, knownOne], result.Jobs.Select(job => job.Url));
+        Assert.Equal(1, result.DeferredCount);
+        Assert.Equal(result.Jobs, replay.Jobs);
+        Assert.Equal(result.DeferredCount, replay.DeferredCount);
+    }
+
     private sealed class CandidateSelectCounter : DbCommandInterceptor
     {
         public int CandidateSelectCount { get; private set; }

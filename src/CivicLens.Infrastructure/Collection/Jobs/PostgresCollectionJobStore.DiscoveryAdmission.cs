@@ -104,13 +104,14 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                 ? new Dictionary<string, JobRow>(StringComparer.Ordinal) :
                 await db.Set<JobRow>().Where(row => existingJobIds.Contains(row.JobId))
                     .ToDictionaryAsync(row => row.JobId, cancellationToken);
-            var admissible = new List<(string Url, string Hash, bool IsRecheck)>();
+            var admissible = new List<(CollectionJobDefinition Definition, string Hash, DiscoveryCandidateJobRow? Existing)>();
             var candidateIndex = 0;
             foreach (var url in discovery.Urls)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var hash = candidateHashes[candidateIndex++];
-                if ((request.ArticleTemplate with { Url = url }).IsListingPage())
+                var definition = request.ArticleTemplate with { Url = url };
+                if (definition.IsListingPage())
                 {
                     duplicates++;
                     continue;
@@ -133,10 +134,10 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                     }
                 }
 
-                admissible.Add((url, hash, existing is not null));
+                admissible.Add((definition, hash, existing));
             }
 
-            foreach (var (url, hash, _) in admissible.OrderBy(candidate => candidate.IsRecheck))
+            foreach (var (definition, hash, existing) in admissible.OrderBy(candidate => candidate.Existing is not null))
             {
                 if (!budget.TryReserve())
                 {
@@ -144,20 +145,19 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                     continue;
                 }
 
-                var definition = request.ArticleTemplate with { Url = url };
                 var job = await jobWriter.AddJobAsync(DiscoveryAdmissionKeyPrefix + Guid.NewGuid().ToString("N"),
                     definition, cancellationToken);
-                if (existingCandidates.TryGetValue(hash, out var candidateRow))
-                    candidateRow.JobId = job.JobId;
+                if (existing is not null)
+                    existing.JobId = job.JobId;
                 else
                     db.Add(new DiscoveryCandidateJobRow
                     {
                         SourceId = definition.SourceId,
                         CandidateHash = hash,
-                        Url = url,
+                        Url = definition.Url,
                         JobId = job.JobId
                     });
-                jobs.Add(new DiscoveryAdmissionJob(job.JobId, url));
+                jobs.Add(new DiscoveryAdmissionJob(job.JobId, definition.Url));
             }
 
             var result = new DiscoveryAdmissionResult(jobs, deferred, duplicates);

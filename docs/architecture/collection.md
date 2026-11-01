@@ -219,7 +219,7 @@ A batch reserves the full aggregate retry allowance of each admitted job against
 
 `DiscoveryAdmissionPolicy.OpenBudget` computes the reservation of one job once for the template. It returns a `DiscoveryAdmissionBudget` that owns the running totals and checked sums. Article admission and bill stream admission both use it.
 
-Admission uses the job coordination transaction and lock. It reads the candidate bindings in one bounded hash lookup. Collision checks and budget reservations then follow the retained URL order. The batch input, the result, the URL bindings, and the new jobs commit together.
+Admission uses the job coordination transaction and lock. It reads the candidate bindings in one bounded hash lookup. Collision checks follow the retained URL order. Budget reservations take new URLs first, then rechecks, each in retained URL order. The batch input, the result, the URL bindings, and the new jobs commit together.
 
 - The same key and inputs return the saved result. Conflicting reuse of a key fails. Enforced by `ConfiguredCollectionSource.PrepareDefinition` for the template and by the saved input comparison in `PostgresCollectionJobStore`. Test: `PostgresDiscoveryAdmissionTests.ConflictingReuseOfAnAdmissionKeyFails`.
 - Source plus exact resolved URL identifies an initial article admission, across feed and HTML discoveries from that source.
@@ -227,6 +227,7 @@ Admission uses the job coordination transaction and lock. It reads the candidate
 - Admission skips a discovered URL that is a listing page of its source. That is a URL with the path of the configured URL or of the allowed path prefix. The query and a trailing slash do not count, and the path compare is case sensitive. The root job already checks the configured page, and an admitted copy would be a second root job. The skipped URL counts as a duplicate, also when the batch rechecks known candidates.
 - Manual admission never admits an existing binding again, also when its job was cancelled or failed.
 - Automatic source checks may recheck a known URL after its latest job is terminal, within the same batch limits. Active jobs are skipped.
+- A URL with no candidate row takes a slot before a recheck of a known URL, so rechecks cannot starve new items. Each group keeps the order of the discovery result. Enforced by `PostgresCollectionJobStore`. Tests: `PostgresDiscoveryAdmissionTests.ANewUrlTakesTheSlotBeforeARecheckOfAKnownUrlSoRechecksCannotStarveNewItems` and `PostgresDiscoveryAdmissionTests.NewUrlsThenRechecksAreAdmittedEachGroupInFeedOrderAndAReplayReturnsTheSameResult`.
 - Unadmitted candidates stay available for another batch with a new key.
 
 Admission only enqueues jobs. The worker runs them under the existing retry, pacing, cancellation, and recovery rules.
@@ -387,7 +388,7 @@ An active root job of the same source suppresses the scheduled admission and use
 
 `JobPreparation` in `Application/Collection/Processing` owns the preparation stage. It reads a succeeded job and its attempts. It admits article batches, bill stream pages, or House vote pages and returns a `JobPreparationResult`. `EvidenceProcessingWorker` checkpoints that result and does not know the preparation rules. `ApiResponseReader` reads the saved capture of an API job. Bill stream preparation is in [bills](bills.md). House vote preparation is in [votes](votes.md).
 
-Each successful configured discovery check admits one idempotent article batch, with its retained configuration and coverage date. New candidates and rechecks share the configured batch limits. A URL with no candidate row takes a slot before a recheck of a known URL, so rechecks cannot starve new items. Each group keeps the order of the discovery result. A replay of a parent check cannot create another batch. Later passes do not drain every deferred candidate. Test: `PostgresDiscoveryAdmissionTests.ANewUrlTakesTheSlotBeforeARecheckOfAKnownUrlSoRechecksCannotStarveNewItems`. A preparation failure shows as such, not as a collection failure.
+Each successful configured discovery check admits one idempotent article batch, with its retained configuration and coverage date. New candidates and rechecks share the configured batch limits. New URLs take slots before rechecks; see the admission invariants. A replay of a parent check cannot create another batch. Later passes do not drain every deferred candidate. A preparation failure shows as such, not as a collection failure.
 
 **Extraction and comparison.** Captured pages use retained content profiles for readable text; see [documents](documents.md). A comparison that waits for an earlier extraction parks as a durable dependency and leaves capacity for preparation. The park writes `WaitingForPredecessor` and `predecessor_attempt_id`. A later claim changes the status to Running, and the column stays as a record of the last wait. No trigger or release step clears it.
 
