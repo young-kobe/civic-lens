@@ -269,7 +269,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task EveryPublicPageShowsDatesInTheOneDayMonthYearForm()
     {
-        string[] pagesWithADate = ["record", "statement", "action", "vote", "brief", "withdrawal", "home", "all records", "briefs", "official", "search", "executive action"];
+        string[] pagesWithADate = ["record", "statement", "action", "vote", "relationship", "brief", "withdrawal", "home", "all records", "briefs", "official", "search", "executive action"];
         var pages = (await RenderEveryPageTypeAsync()).Select(page => (page.Name, page.Html))
             .Append(("executive action", await new ReleaseRenderer(null, null).RenderExecutiveActionAsync(FullExecutiveAction(), CancellationToken.None))).ToArray();
         var other = new[]
@@ -280,7 +280,7 @@ public sealed class ReleaseRendererTests
         foreach (var (name, html) in pages)
         {
             var document = new HtmlParser().ParseDocument(html);
-            foreach (var verbatim in document.QuerySelectorAll("script, style, template, .doc-text, blockquote, mark").ToList()) verbatim.Remove();
+            foreach (var verbatim in document.QuerySelectorAll("script, style, template, .doc-text, blockquote").ToList()) verbatim.Remove();
             foreach (var evidence in document.QuerySelectorAll("li").Where(item => item.TextContent.StartsWith("Evidence for", StringComparison.Ordinal)).ToList()) evidence.Remove();
             var text = document.Body!.TextContent;
 
