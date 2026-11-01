@@ -141,6 +141,7 @@ public sealed class PublishApprovedRecordsTests
         var earlier = JsonSerializer.Serialize(new { request.Records, request.IdempotencyKey, request.Withdrawals, request.RewriteOfficials, request.RewriteEntries });
         Assert.Equal(earlier, JsonSerializer.Serialize(request));
         Assert.NotEqual(earlier, JsonSerializer.Serialize(request with { StatusOnly = true }));
+        Assert.NotEqual(earlier, JsonSerializer.Serialize(request with { RewritePages = true }));
     }
 
     private static PublishedBillStatus Status(string recordId, string text) =>

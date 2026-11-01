@@ -2,6 +2,7 @@ using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Application.Publication;
 
 namespace CivicLens.Tests.Infrastructure.Collection.HouseVotes;
@@ -84,19 +85,70 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
-    public async Task FindBillActionRecordIdsReturnsTheActionRecordsOfEachNamedBillWithoutReadingTheVoteRows()
+    public async Task FindBillActionRecordIdsOfVotesReturnsTheActionRecordsOnTheBillOfEachNamedVoteRevisionInOneQuery()
     {
-        var match = new string('7', 64);
-        await InsertActionDraftAsync(match, "hconres", 14);
+        var recordId = await ApprovedVoteAsync();
+        var sameBill = new string('7', 64);
+        await InsertActionDraftAsync(sameBill, "hconres", 14);
         await InsertActionDraftAsync(new string('9', 64), "hr", 14);
 
-        var found = await VoteReviews().FindBillActionRecordIdsAsync(
-            [new("first", 119, "hconres", 14), new("second", 119, "hr", 14), new("third", 119, "hr", 99)], default);
+        var found = await VoteReviews().FindBillActionRecordIdsOfVotesAsync([new(PublishedRecordKind.Vote, recordId, 1)], default);
 
-        Assert.Equal([match], [.. found["first"]]);
-        Assert.Equal([new string('9', 64)], [.. found["second"]]);
-        Assert.Empty(found["third"]);
-        Assert.Empty(await VoteReviews().FindBillActionRecordIdsAsync([], default));
+        Assert.Equal([sameBill], [.. found[recordId]]);
+        Assert.Empty(await VoteReviews().FindBillActionRecordIdsOfVotesAsync([], default));
+    }
+
+    [Fact]
+    public async Task FindBillActionRecordIdsOfVotesLeavesOutAVoteWithNoBillAndStillAnswersTheVoteWithABill()
+    {
+        var withBill = await ApprovedVoteAsync();
+        var match = new string('7', 64);
+        await InsertActionDraftAsync(match, "hconres", 14);
+        var noBill = HouseVoteFixtures.Vote(101, Updated, billType: null, billNumber: null);
+        var (_, members) = await DetailWithMembersJobAsync(noBill);
+        await AdmitMembersAsync(members, noBill);
+        var noBillCandidate = (string)(await ScalarAsync("SELECT candidate_id FROM vote_candidates WHERE bill_type IS NULL"))!;
+        await SettleAsync(noBillCandidate, await RevisionAsync(noBillCandidate, 1));
+        var noBillRecord = await RecordIdAsync(noBillCandidate);
+
+        var found = await VoteReviews().FindBillActionRecordIdsOfVotesAsync(
+            [new(PublishedRecordKind.Vote, withBill, 1), new(PublishedRecordKind.Vote, noBillRecord, 1)], default);
+
+        Assert.Equal([match], [.. found[withBill]]);
+        Assert.False(found.ContainsKey(noBillRecord));
+    }
+
+    [Fact]
+    public async Task FindBillActionRecordIdsOfVotesThrowsForAnUnstoredRevisionBecauseAReleaseNeverNamesOne()
+    {
+        var recordId = await ApprovedVoteAsync();
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            VoteReviews().FindBillActionRecordIdsOfVotesAsync([new(PublishedRecordKind.Vote, recordId, 7)], default));
+    }
+
+    [Fact]
+    public async Task FindBillActionRecordIdsOfVotesUsesTheBillOfThePublishedRevisionAndNotTheBillOfTheCurrentCandidate()
+    {
+        var recordId = await ApprovedVoteAsync();
+        var publishedBill = new string('7', 64);
+        var newerBill = new string('8', 64);
+        await InsertActionDraftAsync(publishedBill, "hconres", 14);
+        await InsertActionDraftAsync(newerBill, "hr", 99);
+        var newer = new string('1', 64);
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO vote_candidates (candidate_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks,
+                bill_type, bill_number, detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
+            SELECT '{newer}', source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks + 1,
+                'hr', 99, 'newer-detail', 'newer-members', detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks
+            FROM vote_candidates WHERE candidate_id = (SELECT candidate_id FROM vote_drafts WHERE record_id = '{recordId}');
+            UPDATE vote_drafts SET candidate_id = '{newer}' WHERE record_id = '{recordId}';
+            """);
+
+        var found = await VoteReviews().FindBillActionRecordIdsOfVotesAsync([new(PublishedRecordKind.Vote, recordId, 1)], default);
+
+        Assert.Equal([publishedBill], [.. found[recordId]]);
     }
 
     [Fact]

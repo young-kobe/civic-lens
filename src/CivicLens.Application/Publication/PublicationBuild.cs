@@ -12,11 +12,17 @@ internal sealed record PublicationBuild(PreviousRelease Previous, DateTimeOffset
 
     public IReadOnlyDictionary<string, PublishedBillStatus> BillStatuses { get; private init; } = new Dictionary<string, PublishedBillStatus>();
 
+    public IReadOnlyDictionary<string, ImmutableArray<string>> VoteBillActions { get; private init; } =
+        ImmutableDictionary<string, ImmutableArray<string>>.Empty;
+
     public ImmutableArray<PublishedRecordReference> Removed { get; private init; } = [];
 
     public ImmutableArray<PublishedRecordReference> Returned { get; private init; } = [];
 
     public PublicationBuild WithBillStatuses(IReadOnlyDictionary<string, PublishedBillStatus> statuses) => this with { BillStatuses = statuses };
+
+    public PublicationBuild WithVoteBillActions(IReadOnlyDictionary<string, ImmutableArray<string>> voteBillActions) =>
+        this with { VoteBillActions = voteBillActions };
 
     public PublicationBuild WithReturned(ImmutableArray<PublishedRecordReference> returned) => this with { Returned = returned };
 
