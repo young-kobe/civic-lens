@@ -281,7 +281,7 @@ The protocol, configuration, schema, parser, and behavior versions start at the 
 | Action draft schema | `action-draft-schema-v2` | same file | Action analysis runs | The model output schema changes |
 | Action issue schema | `action-issue-schema-v1` | same file | Action analysis runs | The model output schema changes |
 | Vote draft task | `vote-draft-v1` | `src/CivicLens.Application/Votes/VoteDraftTask.cs` | Vote analysis runs | Task flow or output handling changes |
-| Vote draft prompt | `vote-draft-prompt-v4` | same file | Vote analysis runs | Prompt text or input framing changes |
+| Vote draft prompt | `vote-draft-prompt-v5` | same file | Vote analysis runs | Prompt text or input framing changes |
 | Vote draft schema | `vote-draft-schema-v2` | same file | Vote analysis runs | The model output schema changes |
 | Vote fingerprint | `vote-fingerprint-v1` | `src/CivicLens.Application/Votes/VoteFingerprint.cs` | The run input hash of a draft that makes no call | The canonical text of the fingerprint changes |
 | Sponsorship fingerprint | `action-fingerprint-v1` | `src/CivicLens.Application/Collection/Bills/ActionFingerprint.cs` | The fingerprint in each action revision | The canonical text of an entry changes |

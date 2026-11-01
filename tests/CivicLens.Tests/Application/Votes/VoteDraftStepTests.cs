@@ -331,6 +331,7 @@ public sealed class VoteDraftStepTests
         var (store, _) = await RunAsync(Create(), model);
 
         Assert.Contains("so name no person", model.Requests[1].UserPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("tracked", model.Requests[1].UserPrompt, StringComparison.OrdinalIgnoreCase);
         Assert.Equal([AnalysisRunOutcome.OutputRejected, AnalysisRunOutcome.Drafted], store.Runs.Select(run => run.Run.Outcome));
         Assert.Single(store.Revisions);
     }
@@ -693,6 +694,44 @@ public sealed class VoteDraftStepTests
 
         Assert.Empty(model.Requests);
         Assert.Equal("unchanged", store.Entries[0].ErrorCode);
+    }
+
+    [Fact]
+    public async Task AVoteDraftedUnderAnOlderPromptDraftsAgainOnceAndTheNextRunSpendsNothing()
+    {
+        var world = Create();
+        var current = await FirstRevisionAsync(world);
+        var model = new FakeHeadlineSummaryModel().Draft(Drafted);
+
+        var (redrafted, _) = await RunAsync(world, model, evidence: world.Evidence(current, draftedUnderOlderPrompt: true));
+        var (rerun, _) = await RunAsync(world, model, redrafted.Revisions[0]);
+
+        Assert.Single(model.Requests);
+        Assert.Equal("unchanged", rerun.Entries[0].ErrorCode);
+    }
+
+    [Fact]
+    public async Task AKindChangeOnAVoteDraftedUnderAnOlderPromptDraftsAgainInsteadOfCopyingTheOldText()
+    {
+        var world = Create();
+        var current = (await FirstRevisionAsync(world)) with { Kind = VoteKind.Rule };
+        var model = new FakeHeadlineSummaryModel().Draft(Drafted);
+
+        await RunAsync(world, model, evidence: world.Evidence(current, UpdatedAt.AddDays(1), draftedUnderOlderPrompt: true));
+
+        Assert.Single(model.Requests);
+    }
+
+    [Fact]
+    public async Task ACorrectedMemberVoteOnAVoteDraftedUnderAnOlderPromptDraftsAgainInsteadOfCopyingTheOldText()
+    {
+        var current = await FirstRevisionAsync(Create());
+        var corrected = Create(members: [new(Aderholt, "Robert", "Aderholt", "Nay"), new(Auchincloss, "Jake", "Auchincloss", "Nay")]);
+        var model = new FakeHeadlineSummaryModel().Draft(Drafted);
+
+        await RunAsync(corrected, model, evidence: corrected.Evidence(current, UpdatedAt.AddDays(1), draftedUnderOlderPrompt: true));
+
+        Assert.Single(model.Requests);
     }
 
     [Fact]

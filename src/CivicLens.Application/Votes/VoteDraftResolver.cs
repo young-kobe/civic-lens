@@ -37,7 +37,7 @@ public static class VoteDraftResolver
     private static void CheckNoNames(string text, string field, VoteSnapshot snapshot, List<string> errors)
     {
         foreach (var name in snapshot.PersonNames.Where(name => text.Contains(name, StringComparison.OrdinalIgnoreCase)))
-            errors.Add($"The {field} names \"{Shorten(name)}\". Code lists the tracked members and their votes, so name no person.");
+            errors.Add($"The {field} names \"{Shorten(name)}\". The list beside the text names the members and their votes, so name no person.");
     }
 
     private static VoteDraftRevision Assemble(VoteDraftContext context, DateTimeOffset createdAtUtc, ReviewText text,
