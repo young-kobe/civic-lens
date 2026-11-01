@@ -69,7 +69,7 @@ public sealed class PostgresFederalRegisterTests(PostgresCollection postgres) : 
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM executive_action_revisions WHERE revision_number = 1"));
         Assert.Equal("Approved", await ScalarAsync("SELECT review_status FROM executive_action_drafts"));
         Assert.Equal(1, await ScalarAsync("SELECT review_state_version FROM executive_action_drafts"));
-        Assert.Equal("civic-lens:code", await ScalarAsync("SELECT decision_json::jsonb ->> 'actorSubject' FROM executive_action_review_decisions"));
+        Assert.Equal("civic-lens:code", await ScalarAsync("SELECT actor_subject FROM executive_action_review_decisions"));
         Assert.Equal(new DateOnly(2025, 1, 20), await ScalarAsync("SELECT event_on FROM executive_action_drafts"));
         Assert.Equal("{donald-trump}", await ScalarAsync("SELECT official_ids::text FROM executive_action_drafts"));
         Assert.Equal(new DateOnly(2025, 1, 28), await ScalarAsync("SELECT published_on FROM executive_action_documents"));

@@ -60,8 +60,8 @@ internal sealed class BriefWorldSeeder(string connectionString)
         };
         return ExecuteAsync($"""
             SET session_replication_role = replica;
-            INSERT INTO {table} (decision_id, {column}, revision_number, review_state_version, decision_json, kind, actor_subject, created_at_utc_ticks)
-            VALUES (md5(@id || '|' || @revision::text || '|' || @version::text), @id, @revision, @version, 'x', @kind, 'auth0|seed', 1)
+            INSERT INTO {table} (decision_id, {column}, revision_number, review_state_version, kind, actor_subject, created_at_utc_ticks)
+            VALUES (md5(@id || '|' || @revision::text || '|' || @version::text), @id, @revision, @version, @kind, 'auth0|seed', 1)
             ON CONFLICT DO NOTHING
             """, ("id", id), ("revision", revision), ("version", version), ("kind", decision.ToString()));
     }

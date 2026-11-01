@@ -319,11 +319,7 @@ public sealed partial class PostgresHouseVoteTests
         return recordId;
     }
 
-    private async Task<IReadOnlyList<ReviewDecision>> VoteDecisionsAsync()
-    {
-        var json = (string)(await ScalarAsync("SELECT coalesce(jsonb_agg(decision_json::jsonb ORDER BY review_state_version), '[]')::text FROM vote_review_decisions"))!;
-        return System.Text.Json.JsonSerializer.Deserialize<ReviewDecision[]>(json, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
-    }
+    private Task<IReadOnlyList<StoredDecision>> VoteDecisionsAsync() => ReviewDecisionRows.ReadAsync(connectionString, "vote_review_decisions");
 
     private PostgresVoteReviewStore VoteReviews() => new(new PooledDbContextFactory<CollectionAttemptDbContext>(
         new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options));
