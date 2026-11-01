@@ -285,10 +285,9 @@ internal sealed class PublicationScenario
     {
         var publishable = Votes.Publishable[recordId];
         var review = publishable.Review;
-        var revised = (change ?? (revision => revision)).Invoke(review.CurrentRevision) with
+        var revised = (change?.Invoke(review.CurrentRevision) ?? review.CurrentRevision with { TrackedIssueIds = [$"issue-{revisionNumber}"] }) with
         {
-            RevisionNumber = revisionNumber,
-            TrackedIssueIds = [$"issue-{revisionNumber}"]
+            RevisionNumber = revisionNumber
         };
         Votes.Publishable[recordId] = publishable with
         {

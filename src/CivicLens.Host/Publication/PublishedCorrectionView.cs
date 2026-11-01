@@ -5,6 +5,8 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublishedCorrectionView
 {
+    // The owner approves this wording. Change it here only.
+    private const string TextRewrittenTitle = "Summary rewritten by the AI model";
     private const string FactsUnchangedText = "The vote facts did not change.";
 
     public static string AfterTitle(PublishedCorrection correction) =>
@@ -16,7 +18,7 @@ internal static class PublishedCorrectionView
     public static string TimelineEnd(PublishedCorrection correction) => correction.FactsUnchanged ? ". " + FactsUnchangedText : "";
 
     public static string Title(PublishedCorrection correction) =>
-        correction.Note is not null ? "Correction" : correction.FactsUnchanged ? "Summary rewritten by an updated AI model prompt" : "Updated from the source";
+        correction.Note is not null ? "Correction" : correction.FactsUnchanged ? TextRewrittenTitle : "Updated from the source";
 
     private static string Replaces(PublishedCorrection correction) => $"Replaces revision {correction.ReplacedRevisionNumber}.";
 }

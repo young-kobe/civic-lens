@@ -221,7 +221,7 @@ public sealed class PublishCorrectionsTests
     }
 
     [Fact]
-    public async Task ACodeRevisionWithTheSameVoteFactsIsMarkedAsUnchangedFactsBecauseOnlyTheModelTextChanged()
+    public async Task ACodeRevisionThatOnlyRewritesTheTextOfThePublishedVoteIsMarkedAsFactsUnchanged()
     {
         var (scenario, vote) = await PublishedVoteAsync();
         scenario.ReviseVote(vote, 2, approverSubject: ReviewAuthor.CodeSubject,
@@ -259,6 +259,48 @@ public sealed class PublishCorrectionsTests
 
         var corrections = ReadVote(scenario, third.DirectoryName, vote).Corrections;
         Assert.Equal([(2, false), (1, true)], corrections.Select(item => (item.ReplacedRevisionNumber, item.FactsUnchanged)));
+    }
+
+    [Fact]
+    public async Task ACodeRevisionThatAlsoChangesTheIssuesStaysAnUpdateFromTheSource()
+    {
+        var (scenario, vote) = await PublishedVoteAsync();
+        scenario.ReviseVote(vote, 2, approverSubject: ReviewAuthor.CodeSubject,
+            change: revision => revision with { Summary = "New summary.", TrackedIssueIds = ["issue-2"] });
+
+        var second = await scenario.Publisher().ExecuteAsync(Code, VoteRequest("k2", vote));
+
+        Assert.False(Assert.Single(ReadVote(scenario, second.DirectoryName, vote).Corrections).FactsUnchanged);
+    }
+
+    [Fact]
+    public async Task TheLabelComparesWithThePublishedRevisionAndNotWithAnUnpublishedOneBetween()
+    {
+        var (scenario, vote) = await PublishedVoteAsync();
+        scenario.ReviseVote(vote, 2, approverSubject: ReviewAuthor.CodeSubject,
+            change: revision => revision with { RollCallNumber = revision.RollCallNumber + 1, Summary = "Two." });
+        scenario.ReviseVote(vote, 3, approverSubject: ReviewAuthor.CodeSubject,
+            change: revision => revision with { Summary = "Three." });
+
+        var third = await scenario.Publisher().ExecuteAsync(Code, VoteRequest("k3", vote));
+
+        var entry = Assert.Single(ReadVote(scenario, third.DirectoryName, vote).Corrections);
+        Assert.Equal((1, false), (entry.ReplacedRevisionNumber, entry.FactsUnchanged));
+    }
+
+    [Fact]
+    public async Task TheLabelFiresWhenAnUnpublishedRevisionChangedFactsAndTheNewRevisionRestoresThePublishedFacts()
+    {
+        var (scenario, vote) = await PublishedVoteAsync();
+        scenario.ReviseVote(vote, 2, approverSubject: ReviewAuthor.CodeSubject,
+            change: revision => revision with { RollCallNumber = revision.RollCallNumber + 1 });
+        scenario.ReviseVote(vote, 3, approverSubject: ReviewAuthor.CodeSubject,
+            change: revision => revision with { RollCallNumber = revision.RollCallNumber - 1, Summary = "Three." });
+
+        var third = await scenario.Publisher().ExecuteAsync(Code, VoteRequest("k3", vote));
+
+        var entry = Assert.Single(ReadVote(scenario, third.DirectoryName, vote).Corrections);
+        Assert.Equal((1, true), (entry.ReplacedRevisionNumber, entry.FactsUnchanged));
     }
 
     private static async Task<(PublicationScenario Scenario, string Vote)> PublishedVoteAsync()

@@ -17,19 +17,27 @@ public sealed class PublishedCorrectionTests
     }
 
     [Fact]
+    public void ARunBetweenPersonCorrectionsHoldsAtMostOneCodeUpdateOfEachKind()
+    {
+        Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(3), Entry(2, factsUnchanged: true), Entry(1)], 4));
+        PublishedCorrection.ValidateAll([Entry(4), Entry(3, factsUnchanged: true), Entry(2, "Fix."), Entry(1)], 5);
+    }
+
+    [Fact]
     public void ANotedEntryCannotClaimThatTheFactsDidNotChange()
     {
         Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(1, "Fix.", factsUnchanged: true)], 2));
     }
 
     [Fact]
-    public void PrependMergesOnlyCodeUpdatesOfTheSameKind()
+    public void PrependKeepsOneCodeUpdateOfEachKindInTheNewestRun()
     {
         var textOnly = Entry(2, factsUnchanged: true);
 
         Assert.Equal([textOnly], PublishedCorrection.Prepend([Entry(1, factsUnchanged: true)], textOnly));
         Assert.Equal([textOnly, Entry(1)], PublishedCorrection.Prepend([Entry(1)], textOnly));
-        Assert.Equal([Entry(2), textOnly], PublishedCorrection.Prepend([textOnly], Entry(2)));
+        Assert.Equal([Entry(3), textOnly], PublishedCorrection.Prepend([textOnly, Entry(1)], Entry(3)));
+        Assert.Equal([Entry(3), Entry(2, "Fix.")], PublishedCorrection.Prepend([Entry(2, "Fix.")], Entry(3)));
     }
 
     [Fact]
@@ -82,11 +90,19 @@ public sealed class PublishedCorrectionTests
     }
 
     [Fact]
-    public void AcceptsCodeUpdatesBetweenNotedEntriesSoTheListHoldsAtMostFortyOne()
+    public void AcceptsTwoCodeUpdatesAroundEachNotedEntrySoTheListHoldsAtMostSixtyTwo()
     {
-        var list = Enumerable.Range(1, 41).Reverse().Select(number => Entry(number, number % 2 == 0 ? "Fix." : null)).ToArray();
+        var list = new List<PublishedCorrection>();
+        var number = 62;
+        for (var gap = 0; gap <= PublishedCorrection.MaximumNotedEntries; gap++)
+        {
+            list.Add(Entry(number--, factsUnchanged: true));
+            list.Add(Entry(number--));
+            if (gap < PublishedCorrection.MaximumNotedEntries) list.Add(Entry(number--, "Fix."));
+        }
 
-        PublishedCorrection.ValidateAll(list, 42);
+        PublishedCorrection.ValidateAll([.. list], 63);
+        Assert.Equal(62, list.Count);
     }
 
     [Theory]

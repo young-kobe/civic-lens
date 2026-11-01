@@ -1779,9 +1779,9 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
 
         var entry = new HtmlParser().ParseDocument(html).QuerySelector("ul.corrections > li strong")!.ShownText();
-        Assert.Equal("Summary rewritten by an updated AI model prompt, 2026-02-02. Replaces revision 1. The vote facts did not change.", entry);
+        Assert.Equal("Summary rewritten by the AI model, 2026-02-02. Replaces revision 1. The vote facts did not change.", entry);
         var timeline = await TimelineOf(renderer => renderer.RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None));
-        Assert.Contains("2026-02-02|Summary rewritten by an updated AI model prompt, replaces revision 1, 2026-02-02 09:00 UTC. The vote facts did not change.", timeline);
+        Assert.Contains("2026-02-02|Summary rewritten by the AI model, replaces revision 1, 2026-02-02 09:00 UTC. The vote facts did not change.", timeline);
     }
 
     [Fact]
