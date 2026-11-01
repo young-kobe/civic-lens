@@ -14,7 +14,7 @@ namespace CivicLens.Tests.Infrastructure.Review;
 [Trait("Category", "Postgres")]
 public sealed class DropDecisionJsonMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    public const string Migration = "20261101195619_DropDecisionJson";
+    private const string Migration = "20261101195619_DropDecisionJson";
     private static readonly string Concern = new('c', 32);
     private static readonly string Approval = new('a', 32);
     private static readonly DateTimeOffset CreatedAt = new DateTimeOffset(2026, 10, 19, 1, 2, 3, TimeSpan.Zero).AddTicks(1_234_567);
@@ -72,6 +72,7 @@ public sealed class DropDecisionJsonMigrationTests(PostgresCollection postgres) 
 
         var failure = await Assert.ThrowsAsync<PostgresException>(() => MigrateToAsync(Migration));
 
+        Assert.Contains("Cannot drop decision_json", failure.MessageText);
         Assert.Contains("brief_review_decisions", failure.MessageText);
         Assert.Contains(Concern, failure.MessageText);
         Assert.Equal(Tables.Length, (await ReadAsync("SELECT 1 FROM information_schema.columns WHERE column_name = 'decision_json'")).Count);
@@ -88,6 +89,7 @@ public sealed class DropDecisionJsonMigrationTests(PostgresCollection postgres) 
 
         var failure = await Assert.ThrowsAsync<PostgresException>(() => MigrateToAsync(Migration));
 
+        Assert.Contains("Cannot drop decision_json", failure.MessageText);
         Assert.Contains($"{prefix}_review_decisions", failure.MessageText);
         Assert.Contains(Concern, failure.MessageText);
     }
@@ -101,6 +103,7 @@ public sealed class DropDecisionJsonMigrationTests(PostgresCollection postgres) 
 
         var failure = await Assert.ThrowsAsync<PostgresException>(() => MigrateToAsync(Migration));
 
+        Assert.Contains("Cannot drop decision_json", failure.MessageText);
         Assert.Contains(other, failure.MessageText);
         Assert.Equal(Tables.Length, (await ReadAsync("SELECT 1 FROM information_schema.columns WHERE column_name = 'decision_json'")).Count);
     }
@@ -134,25 +137,49 @@ public sealed class DropDecisionJsonMigrationTests(PostgresCollection postgres) 
 
         var failure = await Assert.ThrowsAsync<PostgresException>(() => MigrateToAsync(Migration));
 
+        Assert.Contains("Cannot drop decision_json", failure.MessageText);
         Assert.Contains(Approval, failure.MessageText);
         Assert.Equal(Tables.Length, (await ReadAsync("SELECT 1 FROM information_schema.columns WHERE column_name = 'decision_json'")).Count);
     }
 
+    // A rollback goes one step down and, after the fix, up again. Both steps must keep every column and the old reader must read the JSON.
     [Theory]
     [MemberData(nameof(TableData))]
-    public async Task TheMigrationGoesDownWithAJsonCopyThatReadsBackAsTheSameDecisionBecauseARollbackNeedsTheOldReaderToWork(string prefix, string idColumn)
+    public async Task TheRollbackRebuildsAJsonCopyThatReadsBackAsTheSameDecisionAndTheNextRunKeepsEveryColumnBecauseARollbackMustLoseNothing(
+        string prefix, string idColumn)
     {
-        await InsertConcernAndApprovalAsync(prefix, idColumn);
-        await MigrateToAsync(Migration);
+        var codeApproval = Decision(new string('d', 32), 3, ReviewDecisionKind.Approve, null, [], null) with { ActorSubject = "civic-lens:code" };
+        var nonAscii = Decision(new string('e', 32), 4, ReviewDecisionKind.WithdrawApproval, "Caf\u00e9 d'accord \u00f1 \u65e5\u672c.", [], "L'\u00e9t\u00e9.");
+        ReviewDecision[] decisions =
+        [
+            Decision(Concern, 1, ReviewDecisionKind.RequestChanges, "Context missing.", [], null),
+            Decision(Approval, 2, ReviewDecisionKind.Approve, "Fixed.", [Concern], "Date corrected."),
+            codeApproval,
+            nonAscii
+        ];
+        foreach (var decision in decisions) await InsertAsync(prefix, idColumn, decision);
+        var columnsBefore = await ReadColumnsAsync(prefix, idColumn);
 
+        await MigrateToAsync(Migration);
         await MigrateToAsync(Before());
 
         var restored = (await ReadAsync($"SELECT decision_json FROM {prefix}_review_decisions ORDER BY review_state_version"))
             .Select(json => JsonSerializer.Deserialize<ReviewDecision>(json, JsonSerializerOptions.Web)!).ToList();
-        Assert.Equal(2, restored.Count);
-        Assert.Equal(Decision(Concern, 1, ReviewDecisionKind.RequestChanges, "Context missing.", [], null), restored[0], DecisionComparer.Instance);
-        Assert.Equal(Decision(Approval, 2, ReviewDecisionKind.Approve, "Fixed.", [Concern], "Date corrected."), restored[1], DecisionComparer.Instance);
+        Assert.Equal(decisions.Length, restored.Count);
+        for (var index = 0; index < decisions.Length; index++) Assert.Equal(decisions[index], restored[index], DecisionComparer.Instance);
+
+        await MigrateToAsync(Migration);
+
+        Assert.Equal(columnsBefore, await ReadColumnsAsync(prefix, idColumn));
+        Assert.Empty(await ReadAsync("SELECT 1 FROM information_schema.columns WHERE column_name = 'decision_json'"));
     }
+
+    private Task<List<string>> ReadColumnsAsync(string prefix, string idColumn) => ReadAsync($"""
+        SELECT d.decision_id || '|' || d.{idColumn} || '|' || d.revision_number || '|' || d.review_state_version || '|' || d.kind || '|' || d.actor_subject
+            || '|' || coalesce(d.note, '<null>') || '|' || coalesce(d.correction_note, '<null>') || '|' || d.created_at_utc_ticks || '|'
+            || coalesce((SELECT string_agg(r.resolved_decision_id, ',') FROM {prefix}_review_decision_resolutions r WHERE r.decision_id = d.decision_id), '')
+        FROM {prefix}_review_decisions d ORDER BY d.review_state_version
+        """);
 
     private async Task InsertConcernAndApprovalAsync(string prefix, string idColumn)
     {

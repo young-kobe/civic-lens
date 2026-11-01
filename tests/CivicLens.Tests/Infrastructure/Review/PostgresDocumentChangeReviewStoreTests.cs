@@ -17,7 +17,6 @@ using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
@@ -500,7 +499,7 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         var approval = await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 1, ReviewDecisionKind.Approve, "Resolved.", [concern.DecisionId], "approve", "Date corrected."));
 
         var columns = await ReadRowsAsync("""
-            SELECT d.decision_id || '|' || d.revision_number || '|' || d.review_state_version || '|' || d.kind || '|' || d.actor_subject || '|'
+            SELECT d.decision_id || '|' || d.draft_id || '|' || d.revision_number || '|' || d.review_state_version || '|' || d.kind || '|' || d.actor_subject || '|'
                 || coalesce(d.note, '<null>') || '|' || coalesce(d.correction_note, '<null>') || '|' || d.created_at_utc_ticks || '|'
                 || coalesce((SELECT string_agg(r.resolved_decision_id, ',') FROM document_change_review_decision_resolutions r
                     WHERE r.decision_id = d.decision_id), '')
@@ -508,26 +507,8 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
             """);
 
         Assert.Equal([
-            $"{concern.DecisionId}|2|1|RequestChanges|auth0|owner|Context missing.|<null>|{concern.CreatedAtUtc.UtcTicks}|",
-            $"{approval.DecisionId}|2|2|Approve|auth0|owner|Resolved.|Date corrected.|{approval.CreatedAtUtc.UtcTicks}|{concern.DecisionId}"], columns);
-    }
-
-    // The migration DropDecisionJson checks every decision that Down rebuilds, so a row from the production writer must pass both checks.
-    [Fact]
-    public async Task TheJsonThatDownRebuildsFromDecisionsOfTheProductionWriterPassesTheChecksOfBothMigrationsWhenTheyRunAgain()
-    {
-        var (actor, catalog, saved) = await SavedDraftAsync();
-        var decide = new DecideDocumentChangeReview(reviews, catalog);
-        var concern = await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 0, ReviewDecisionKind.RequestChanges, "Context missing.", [], "concern"));
-        await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 1, ReviewDecisionKind.Approve, "Resolved.", [concern.DecisionId], "approve", "Date corrected."));
-        await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
-        var migrator = db.GetService<IMigrator>();
-
-        await migrator.MigrateAsync(db.Database.GetMigrations().TakeWhile(id => id != ReviewDecisionColumnsMigrationTests.Migration).Last());
-        await migrator.MigrateAsync(DropDecisionJsonMigrationTests.Migration);
-
-        Assert.Equal(["2"], await ReadRowsAsync("SELECT count(*)::text FROM document_change_review_decisions"));
-        Assert.Empty(await ReadRowsAsync("SELECT 1::text FROM information_schema.columns WHERE column_name = 'decision_json'"));
+            $"{concern.DecisionId}|{saved.DraftId}|2|1|RequestChanges|auth0|owner|Context missing.|<null>|{concern.CreatedAtUtc.UtcTicks}|",
+            $"{approval.DecisionId}|{saved.DraftId}|2|2|Approve|auth0|owner|Resolved.|Date corrected.|{approval.CreatedAtUtc.UtcTicks}|{concern.DecisionId}"], columns);
     }
 
     private async Task<List<string>> ReadRowsAsync(string sql)

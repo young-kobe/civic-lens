@@ -16,7 +16,7 @@ namespace CivicLens.Tests.Infrastructure.Review;
 [Trait("Category", "Postgres")]
 public sealed partial class ReviewDecisionColumnsMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    public const string Migration = "20261031041526_ReviewDecisionColumns";
+    private const string Migration = "20261031041526_ReviewDecisionColumns";
     private static readonly string Concern = new('c', 32);
     private static readonly string Approval = new('a', 32);
     private static readonly string[] HiddenColumns = ["actor_subject", "note", "correction_note", "decision_json"];
