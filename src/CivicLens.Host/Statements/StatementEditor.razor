@@ -1,5 +1,5 @@
 @page "/Review/Statements/{CandidateId}"
-@inherits ReviewRecordPage
+@inherits PublishedRecordEditorPage
 @using CivicLens.Application.Statements
 @using CivicLens.Core.Review
 @using CivicLens.Core.Statements
@@ -191,7 +191,7 @@ else
         @if (Revision is not null)
         {
             <ReviewDecisionPanel RevisionNumber="Revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="status"
-                                 Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" CorrectionNote="@Decision?.CorrectionNote" OnDecide="DecideAsync">
+                                 Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" CorrectionNote="@Decision?.CorrectionNote" WithdrawnRevisionNumber="TakeOffView.Status.WithdrawnRevisionNumber" OnDecide="DecideAsync">
                 <Checklist>
                     <ul class="checklist">
                         <li>Does each quotation appear in the article as written?</li>
@@ -200,6 +200,9 @@ else
                     </ul>
                 </Checklist>
             </ReviewDecisionPanel>
+
+            <TakeOffSitePanel View="TakeOffView" RevisionNumber="Revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion"
+                              IdempotencyKey="@TakeOffFormKey" Note="@TakeOffNote" Refusal="@takeOffRefusal" OnSubmit="TakeOffSiteAsync" />
 
             <ReviewHistoryPanel Entries="History" ViewerSubject="@actor.Subject" />
         }

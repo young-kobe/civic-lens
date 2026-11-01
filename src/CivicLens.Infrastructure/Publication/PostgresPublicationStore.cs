@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Text.Json;
 using CivicLens.Application.Briefs;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Relationships;
@@ -30,7 +29,6 @@ public sealed class PostgresPublicationStore : IPublicationStore
     private const string PublishOperation = "publish-release";
     private const int MaximumPageSize = 100;
     private const string UniqueViolation = PostgresErrorCodes.UniqueViolation;
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
     private readonly PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue;
@@ -403,7 +401,6 @@ public sealed class PostgresPublicationStore : IPublicationStore
         ActorSubject = actorSubject,
         PublishedAtUtcTicks = publishedAt.Ticks,
         RecordCount = commit.Records.Length,
-        RecordsJson = JsonSerializer.Serialize(commit.Records, JsonOptions),
         IsActive = true
     };
 

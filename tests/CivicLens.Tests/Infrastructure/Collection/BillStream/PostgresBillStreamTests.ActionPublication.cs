@@ -49,7 +49,7 @@ public sealed partial class PostgresBillStreamTests
         await PostgresPublicationStore.FromConnectionString(connectionString).CommitAsync(PublicationScenario.Owner.Subject,
             ActionCommit(reviewStateVersion: 1), "key", ReleaseHash(1), default);
 
-        Assert.Equal("action", await ScalarAsync("SELECT records_json::jsonb -> 0 ->> 'kind' FROM publication_releases"));
+        Assert.Equal("action", await ScalarAsync("SELECT kind FROM publication_record_states"));
         Assert.Empty(await ActionReviews().ListUnpublishedApprovedAsync(10, [], default));
 
         await AddSponsorAsync(UpdatedAt.AddDays(1));
@@ -68,8 +68,8 @@ public sealed partial class PostgresBillStreamTests
             ALTER TABLE action_review_decisions SET (autovacuum_enabled = false);
             ALTER TABLE publication_releases SET (autovacuum_enabled = false);
             ALTER TABLE publication_record_states SET (autovacuum_enabled = false);
-            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, records_json, is_active)
-            VALUES (1, '000001-' || md5('bulk'), 'bulk', 0, 15000, '[]', true);
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+            VALUES (1, '000001-' || md5('bulk'), 'bulk', 0, 15000, true);
             ANALYZE action_drafts, action_review_decisions, publication_releases, publication_record_states;
             CREATE TEMP TABLE seeded AS
             SELECT md5(n::text) || md5('x' || n::text) AS record_id, n FROM generate_series(1, 15000) n;
