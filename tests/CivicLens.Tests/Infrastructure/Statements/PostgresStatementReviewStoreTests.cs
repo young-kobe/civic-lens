@@ -246,6 +246,51 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     }
 
     [Fact]
+    public async Task SavingAndApprovingWithNoEditApprovesTheCurrentRevisionAndStillQueuesItsRelationshipPairs()
+    {
+        var candidate = await ApprovableAsync();
+        await Relationships.ActionAsync(RelationshipFixtures.Action(title: Quote));
+        Assert.Equal(0, await CountRowsAsync("relationship_analysis"));
+        var request = await SaveRequestAsync(candidate, 2, "no-edit") with { Approval = new(0, null, [], null) };
+
+        var result = await Save.ExecuteAsync(Owner, request);
+
+        Assert.Equal(2, result.RevisionNumber);
+        Assert.Equal(2L, await ScalarAsync($"SELECT count(*) FROM statement_revisions WHERE candidate_id = '{candidate}'"));
+        Assert.Equal([["Pending", candidate, "Action"]], await Relationships.ReadAsync(
+            "SELECT status, statement_candidate_id, target_kind FROM relationship_analysis"));
+    }
+
+    [Fact]
+    public async Task ANoEditPressWithTheSpeakersInFormOrderWritesNoRevisionBecauseTheUiCannotReorderChips()
+    {
+        var configuration = StatementDraftFixtures.Configuration();
+        var bothSpeakers = configuration with
+        {
+            Sources = [configuration.Sources[0] with { Coverage = [new() { PersonId = Warren }, new() { PersonId = Markey }] }]
+        };
+        var candidate = await CandidateAsync(AdmittedDefinition(bothSpeakers));
+        await Create.ExecuteAsync(Owner, new(candidate, "create-two"));
+        var stored = await SaveRequestAsync(candidate, 1, "two-speakers") with { SpeakerOfficialIds = [Warren, Markey] };
+        await Save.ExecuteAsync(Owner, stored);
+        var posted = stored with
+        {
+            ExpectedRevisionNumber = 2,
+            SpeakerOfficialIds = [Markey, Warren],
+            IdempotencyKey = "form-order",
+            Approval = new(0, null, [], null)
+        };
+
+        var result = await Save.ExecuteAsync(Owner, posted);
+
+        Assert.Equal(2, result.RevisionNumber);
+        Assert.Equal(2L, await ScalarAsync($"SELECT count(*) FROM statement_revisions WHERE candidate_id = '{candidate}'"));
+        Assert.Equal(2, await ScalarAsync("SELECT revision_number FROM statement_review_decisions"));
+        var edited = posted with { ExpectedRevisionNumber = 2, Summary = posted.Summary + " Changed.", IdempotencyKey = "edit", Approval = new(1, null, [], null) };
+        Assert.Equal(3, (await Save.ExecuteAsync(Owner, edited)).RevisionNumber);
+    }
+
+    [Fact]
     public async Task ADecisionWakesAnIdleRelationshipWorkerSoANewApprovalIsDraftedWithoutAnyOtherEvent()
     {
         var candidate = await ApprovableAsync();

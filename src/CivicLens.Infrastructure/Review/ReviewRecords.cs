@@ -40,7 +40,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
     public sealed record ApprovalAfterSave(ReviewDecision Decision,
         Func<CollectionAttemptDbContext, TDraftRow, ReviewHistory<TRevision>, Task> Validate,
         Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> AfterDecision,
-        Func<TRevision, bool>? MustWriteRevision = null);
+        Func<TRevision, TRevision> Comparable, Func<TRevision, bool>? MustWriteRevision = null);
 
     /// <summary>Saves a revision. With an approval, the same transaction then approves the saved revision with every check of a
     /// separate decision. A failed check rolls the saved revision back. When the input equals the current revision, no revision is
@@ -63,7 +63,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
             var current = await FindRevisionAsync(db, draft.RecordId, draft.CurrentRevisionNumber, cancellationToken)
                 ?? throw new InvalidOperationException("Current draft revision is missing.");
             var saved = await prepareAndList(db, draft, current);
-            if (approval is not null && !(approval.MustWriteRevision?.Invoke(current) ?? false) && HasSameContent(current, saved))
+            if (approval is not null && !(approval.MustWriteRevision?.Invoke(current) ?? false) && HasSameContent(current, saved, approval.Comparable))
             {
                 if (draft.ReviewStatus == ReviewStatus.Approved) throw new NothingToSaveException();
                 await ApproveSavedAsync(db, approval with { Decision = approval.Decision with { RevisionNumber = current.RevisionNumber } },
@@ -78,8 +78,8 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         }, cancellationToken);
     }
 
-    private static bool HasSameContent(TRevision current, TRevision saved) =>
-        JsonNode.DeepEquals(WithoutIdentity(current), WithoutIdentity(saved));
+    private static bool HasSameContent(TRevision current, TRevision saved, Func<TRevision, TRevision> comparable) =>
+        JsonNode.DeepEquals(WithoutIdentity(comparable(current)), WithoutIdentity(comparable(saved)));
 
     private static JsonObject WithoutIdentity(TRevision revision)
     {

@@ -165,6 +165,20 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
+    public async Task AReviewerIsPromisedNothingAboutPublishingBecauseOnlyTheOwnerCanSeeThePublishedStateAsync()
+    {
+        await SaveComparisonAsync("Before policy.\n", "After policy.\n");
+        SignIn(Owner);
+        var editorUrl = await StartFirstDraftAsync();
+        host.Client.DefaultRequestHeaders.Remove("Cookie");
+        SignIn(Reviewer);
+
+        var editor = await host.GetDocumentAsync(editorUrl);
+
+        Assert.DoesNotContain("Publishes soon.", editor.QuerySelector("#save-and-approve .actions-hint")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TheFirstSubmitButtonOfTheEditFormIsDisabledSoEnterInAFieldNeverApprovesAsync()
     {
         await SaveComparisonAsync("Before policy.\n", "After policy.\n");
@@ -453,6 +467,8 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.Equal("This record is off the public site. It returns only when a person approves a newer revision with a correction note.",
             editor.QuerySelector("[aria-labelledby='decision'] #take-off-site-off")!.TextContent);
         Assert.DoesNotContain("Publishes soon.", editor.QuerySelector("#save-and-approve .actions-hint")!.TextContent, StringComparison.Ordinal);
+        Assert.Equal("This record is off the site. Saving with no edit does not bring it back. Change the wording to return it.",
+            editor.QuerySelector("#save-and-approve-off-site")!.TextContent.Trim());
         Assert.Equal([ReviewDecisionKind.Approve, ReviewDecisionKind.WithdrawApproval], await DecisionKindsAsync(draftId));
 
         using var repeated = await host.Client.PostAsync(draftUrl, new FormUrlEncodedContent(fields));

@@ -34,6 +34,9 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
 
     public ImmutableArray<string> OfficialIds() => [.. Sponsorships.Select(item => item.PersonId).Distinct(StringComparer.Ordinal)];
 
+    public ActionDraftRevision ComparableForm() =>
+        this with { Headline = ComparableText.Lines(Headline), Summary = ComparableText.Lines(Summary) };
+
     public void ValidateShape()
     {
         if (!LowercaseHex.Is(RecordId, 64) || !LowercaseHex.Is(CandidateId, 64) || !LowercaseHex.Is(Fingerprint, 64) ||

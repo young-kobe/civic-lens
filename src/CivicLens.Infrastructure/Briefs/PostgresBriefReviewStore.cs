@@ -37,7 +37,7 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
                 return Task.FromResult(revision);
             }, saved => BriefDraftRows.NewRevision(saved, null),
             approval is null ? null : new(approval, (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken),
-                NoAfterDecision), cancellationToken);
+                NoAfterDecision, revision => revision.ComparableForm()), cancellationToken);
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
         int expectedReviewStateVersion, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>

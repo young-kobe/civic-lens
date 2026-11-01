@@ -392,6 +392,51 @@ public sealed partial class PostgresBillStreamTests
             SuggestionChoice.Keep, key, new ApprovalWithSave(stateVersion, null, [], null)));
 
     [Fact]
+    public async Task AfterAWithdrawalANoEditPressNeedsTheNoteAndTheResolvedConcernAndStoresTheCorrectionNote()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        var before = (await ActionReviews().GetRevisionAsync(RecordId, 1, default))!;
+        await SaveUnchangedAndApproveAsync(before, "first");
+        var withdrawal = await DecideAsync(1, 1, ReviewDecisionKind.WithdrawApproval, "Wrong date.");
+        var save = new SaveActionDraft(ActionReviews());
+        SaveActionDraftRequest Press(string key, ApprovalWithSave approval) =>
+            new(RecordId, 1, before.Headline, before.Summary, SuggestionChoice.Keep, key, approval);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => save.ExecuteAsync(Reviewer, Press("no-note", new(2, null, [], null))));
+
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM action_review_decisions"));
+        var result = await save.ExecuteAsync(Reviewer, Press("with-note", new(2, "Date fixed.", [withdrawal.DecisionId], "Clarified the date.")));
+        Assert.Equal(1, result.RevisionNumber);
+        Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM action_revisions WHERE record_id = '{RecordId}'"));
+        Assert.Equal("Clarified the date.", await ScalarAsync("SELECT correction_note FROM action_review_decisions WHERE review_state_version = 3"));
+    }
+
+    [Fact]
+    public async Task RetryingANoEditPressWithTheSameKeyReturnsTheSameRevisionAndWritesOneDecision()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        var before = (await ActionReviews().GetRevisionAsync(RecordId, 1, default))!;
+
+        var first = await SaveUnchangedAndApproveAsync(before, "same-key");
+        var second = await SaveUnchangedAndApproveAsync(before, "same-key");
+
+        Assert.Equal((first.RevisionNumber, first.CreatedAtUtc), (second.RevisionNumber, second.CreatedAtUtc));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_review_decisions"));
+    }
+
+    [Fact]
+    public async Task ATrailingSpaceIsARealEditSoTheLineBreakRuleCannotHideWordingChanges()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        var before = (await ActionReviews().GetRevisionAsync(RecordId, 1, default))!;
+
+        var result = await new SaveActionDraft(ActionReviews()).ExecuteAsync(Reviewer, new(RecordId, 1, before.Headline,
+            before.Summary + " ", SuggestionChoice.Keep, "space", new ApprovalWithSave(0, null, [], null)));
+
+        Assert.Equal((2, ReviewTextOrigin.Person), (result.RevisionNumber, result.TextOrigin));
+    }
+
+    [Fact]
     public async Task APersonSaveMayKeepOrClearTheSuggestionButTheStoreRefusesAChangedOne()
     {
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);

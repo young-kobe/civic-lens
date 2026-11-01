@@ -163,6 +163,36 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
     }
 
     [Fact]
+    public async Task ANoEditPressOnTheActiveRevisionOfADocumentChangeStillMarksTheBriefOfItsWeekStale()
+    {
+        var (actor, catalog, saved) = await SavedDraftAsync();
+        var briefs = new BriefWorldSeeder(connectionString);
+        await briefs.ReleaseWithoutApprovalsAsync(1, BriefFixtures.InWeek, active: true,
+            BriefWorldSeeder.Binding(PublishedRecordKind.DocumentChange, saved.DraftId, 2));
+        await briefs.FinishedWeekAsync(BriefFixtures.Week);
+        var request = SaveRequest(saved, "no-edit") with { Approval = new(0, null, [], null) };
+
+        var result = await new SaveDocumentChangeDraft(reviews, catalog).ExecuteAsync(actor, request);
+
+        Assert.Equal(2, result.RevisionNumber);
+        Assert.Equal("Pending:0", await briefs.BriefQueueStatusAsync(BriefFixtures.Week));
+    }
+
+    [Fact]
+    public async Task ANoEditPressWithAnEmptyLimitsFieldAndCrlfIsStillNoEditBecauseTheFormPostsThemThatWay()
+    {
+        var (actor, catalog, saved) = await SavedDraftAsync();
+        var save = new SaveDocumentChangeDraft(reviews, catalog);
+        var stored = await save.ExecuteAsync(actor, SaveRequest(saved, "two") with { Summary = "a\n\nb", Limits = null });
+        var posted = SaveRequest(stored, "no-edit") with { Summary = "a\r\n\r\nb", Limits = null, Approval = new(0, null, [], null) };
+
+        var result = await save.ExecuteAsync(actor, posted);
+
+        Assert.Equal(stored.RevisionNumber, result.RevisionNumber);
+        Assert.Equal(ReviewStatus.Approved, (await StatusAsync(saved.DraftId)).Status);
+    }
+
+    [Fact]
     public async Task ASaveWhoseApprovalFailsLeavesNoNewRevisionAndAnOpenConcernBlocksIt()
     {
         var (actor, catalog, saved) = await SavedDraftAsync();

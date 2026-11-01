@@ -57,7 +57,7 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
                 return Task.FromResult(revision);
             }, saved => VoteDraftRows.NewRevision(saved, null),
             approval is null ? null : new(approval, (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken),
-                afterDecision), cancellationToken);
+                afterDecision, revision => revision.ComparableForm()), cancellationToken);
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
         int expectedReviewStateVersion, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>

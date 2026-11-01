@@ -247,6 +247,29 @@ public sealed class PostgresBriefReviewStoreTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task ANoEditPressWithCitationIdsInFormOrderWritesNoRevisionButAChangedParagraphOrderDoes()
+    {
+        var stored = await SaveAsync(1, "Person headline", [new("Text.", ["R2", "R1"]), new("Other.", ["R3"])], "two");
+        var request = new SaveBriefDraftRequest(RecordId, 2, stored.Headline, [new("Text.", ["R1", "R2"]), new("Other.", ["R3"])],
+            SuggestionChoice.Keep, "form-order", new ApprovalWithSave(0, null, [], null));
+
+        var result = await new SaveBriefDraft(reviews).ExecuteAsync(Reviewer, request);
+
+        Assert.Equal(2, result.RevisionNumber);
+        Assert.Equal(2L, await ScalarAsync($"SELECT count(*) FROM brief_revisions WHERE record_id = '{RecordId}'"));
+        Assert.Equal(2, await ScalarAsync("SELECT revision_number FROM brief_review_decisions"));
+
+        var reordered = request with
+        {
+            Paragraphs = [new("Other.", ["R3"]), new("Text.", ["R1", "R2"])],
+            IdempotencyKey = "reordered",
+            Approval = new(1, null, [], null),
+            ExpectedRevisionNumber = 2
+        };
+        Assert.Equal(3, (await new SaveBriefDraft(reviews).ExecuteAsync(Reviewer, reordered)).RevisionNumber);
+    }
+
+    [Fact]
     public async Task ApprovingTheCitedRecordAgainClearsTheFlagAndLetsTheBriefBeApproved()
     {
         await ChangeCitedStatementAsync("withdrawn");

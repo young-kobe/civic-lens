@@ -48,7 +48,7 @@ public sealed class PostgresRelationshipReviewStore(IDbContextFactory<Collection
                 return revision;
             }, saved => RelationshipDraftRows.NewRevision(saved, null),
             approval is null ? null : new(approval, (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken),
-                NoAfterDecision), cancellationToken);
+                NoAfterDecision, revision => revision.ComparableForm()), cancellationToken);
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
         int expectedReviewStateVersion, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>

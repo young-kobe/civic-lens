@@ -29,6 +29,9 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
 
     public ImmutableArray<string> OfficialIds() => [.. Members.Select(member => member.PersonId).Distinct(StringComparer.Ordinal)];
 
+    public VoteDraftRevision ComparableForm() =>
+        this with { Headline = ComparableText.Lines(Headline), Summary = ComparableText.Lines(Summary) };
+
     public void ValidateShape()
     {
         if (!LowercaseHex.Is(RecordId, 64) || !LowercaseHex.Is(CandidateId, 64) || !LowercaseHex.Is(IssueRevisionId, 64))
