@@ -184,13 +184,24 @@ public static class PublishedRecordLabels
         }
     };
 
-    public static string VoteResultLabel(PublishedVoteFact fact)
+    public static string VoteFactValue(string text) => text[(text.IndexOf(':') + 1)..].TrimStart();
+
+    public static string VoteResultLabel(PublishedVoteFact fact, string members)
     {
         var label = fact.Text[..fact.Text.IndexOf(':')];
-        return label.StartsWith(PublishedVote.PartyTotalPrefix, StringComparison.Ordinal)
-            ? PartyTotal(label[PublishedVote.PartyTotalPrefix.Length..]) ?? label
+        if (label.StartsWith(PublishedVote.PartyTotalPrefix, StringComparison.Ordinal))
+            return PartyTotal(label[PublishedVote.PartyTotalPrefix.Length..]) ?? label;
+        return label.StartsWith(PublishedVote.CandidateTotalPrefix, StringComparison.Ordinal)
+            ? CandidateTotal(label[PublishedVote.CandidateTotalPrefix.Length..], members)
             : label;
     }
+
+    private static string CandidateTotal(string name, string members) => name switch
+    {
+        PublishedOfficialVote.NotVoting => $"Not voting, all {members}",
+        Present => $"{Present}, all {members}",
+        _ => $"Votes for {name}, all {members}"
+    };
 
     private static string? PartyTotal(string letter) => PartyLetters.NameOf(letter) switch
     {

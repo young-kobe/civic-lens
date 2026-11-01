@@ -38,7 +38,8 @@ internal static class PublishedActionView
         action.TextOrigin == PublishedTextOrigin.Code && action.TrackedIssueIds.Length > 0 ? [new("Issues", PublishedRecordLabels.ModelChosenIssues)] : [];
 
     private static IEnumerable<Fact> PolicyArea(PublishedAction action, PublicationCatalog catalog) =>
-        PublishedRecordView.Links("Policy area", action.PolicyArea is null ? [] : [PublishedRecordView.PolicyAreaLink(action.PolicyAreaId, action.PolicyArea, catalog)]);
+        PublishedRecordView.Links("Policy area", action.PolicyArea is null ? [] : [PublishedRecordView.PolicyAreaLink(action.PolicyAreaId, action.PolicyArea, catalog)])
+            .Select(fact => fact.CitedAt(action.PolicyAreaCitation is null ? null : PolicyAreaAnchor(action)));
 
     public static IReadOnlyList<CitedRange> RangesIn(PublishedAction action, PublishedDocumentVersion source) =>
     [.. action.Citations().Select((citation, index) => (citation, anchor: PublishedRecordView.CitationAnchor(index)))
@@ -49,7 +50,7 @@ internal static class PublishedActionView
         PublishedRecordView.CitationAnchor(action.Sponsorships.TakeWhile(item => !ReferenceEquals(item, sponsorship))
             .Sum(item => item.Citations.Length) + citationIndex);
 
-    public static string PolicyAreaAnchor(PublishedAction action) => PublishedRecordView.CitationAnchor(SponsorshipCitationCount(action));
+    private static string PolicyAreaAnchor(PublishedAction action) => PublishedRecordView.CitationAnchor(SponsorshipCitationCount(action));
 
     public static string SummaryAnchor(PublishedAction action) =>
         PublishedRecordView.CitationAnchor(SponsorshipCitationCount(action) + (action.PolicyAreaCitation is null ? 0 : 1));

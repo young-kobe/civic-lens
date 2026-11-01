@@ -6,6 +6,11 @@ public sealed record Fact(string Label, string Value, IReadOnlyList<FactLink>? L
 
     public string? TermKey { get; init; }
 
+    public FactSource? Source { get; init; }
+
+    public Fact CitedAt(string? anchor, string? target = null) =>
+        anchor is null ? this : this with { Source = new(anchor, target ?? Label) };
+
     public static Fact List(string label, IEnumerable<string> values) =>
         new(label, values.Any() ? string.Join(", ", values) : "None");
 

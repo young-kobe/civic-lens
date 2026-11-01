@@ -1,3 +1,4 @@
+using CivicLens.Core.ExecutiveActions;
 using CivicLens.Application.Issues;
 using System.Text.RegularExpressions;
 using AngleSharp.Html.Dom;
@@ -302,7 +303,7 @@ public sealed class ReleaseRendererTests
         foreach (var html in pages)
         {
             var names = new HtmlParser().ParseDocument(html).QuerySelectorAll("main a")
-                .Where(link => link.TextContent.StartsWith("Show ", StringComparison.Ordinal) || link.TextContent.StartsWith("Why they are linked", StringComparison.Ordinal))
+                .Where(link => link.TextContent.StartsWith("Show ", StringComparison.Ordinal) || link.TextContent.StartsWith("Source line", StringComparison.Ordinal) || link.TextContent.StartsWith("Why they are linked", StringComparison.Ordinal))
                 .Select(link => link.TextContent).ToList();
 
             Assert.NotEmpty(names);
@@ -595,8 +596,10 @@ public sealed class ReleaseRendererTests
         Assert.Equal("Housing and Community Development", facts["Policy area"]);
         Assert.Equal("Housing costs", facts["Tracked issues"]);
         var rows = document.QuerySelectorAll("[aria-labelledby='sponsorships-title'] tbody tr")
-            .Select(row => string.Join("|", row.QuerySelectorAll("td").Select(cell => cell.QuerySelector("blockquote")?.TextContent ?? cell.TextContent.Trim())));
-        Assert.Equal(["Jane <Doe>|Sponsor|No|2026-01-03|None|Sponsor: D000001", "Ann Roe|Cosponsor|Yes|2026-01-05|2026-01-20|Cosponsor: R000002, original"], rows);
+            .Select(row => string.Join("|", row.QuerySelectorAll("td").Select(cell => cell.ShownText().Trim())));
+        Assert.Equal(["Jane <Doe>|Sponsor|No|2026-01-03|None|", "Ann Roe|Cosponsor|Yes|2026-01-05|2026-01-20|"], rows);
+        Assert.Equal(["Source line: Jane <Doe>, sponsorship", "Source line: Ann Roe, sponsorship"],
+            document.QuerySelectorAll("[aria-labelledby='sponsorships-title'] a.source-line").Select(link => link.TextContent));
         Assert.Contains("Summary version: 00 <i>funds</i> rent aid.", document.QuerySelector("[aria-labelledby='bill-evidence-title']")!.TextContent,
             StringComparison.Ordinal);
         var sources = document.QuerySelector("[aria-labelledby='sources-title']")!;
@@ -669,13 +672,32 @@ public sealed class ReleaseRendererTests
         var document = new HtmlParser().ParseDocument(html);
         var links = document.QuerySelectorAll("a[href^='#cite-']").ToArray();
         Assert.Equal(4, links.Length);
-        foreach (var link in links)
-        {
-            var quote = link.Closest("td, .choice")!.QuerySelector("blockquote")!.TextContent;
-            Assert.Equal(quote, document.QuerySelector(link.GetAttribute("href")!)!.TextContent);
-        }
+        Assert.Equal(Action().Citations().Select(citation => citation.Quote).Order(StringComparer.Ordinal),
+            links.Select(link => document.QuerySelector(link.GetAttribute("href")!)!.TextContent).Order(StringComparer.Ordinal));
         Assert.Equal(["Source text 1 of 2", "Source text 2 of 2"],
             document.QuerySelectorAll("[aria-labelledby='sources-title'] [aria-label]").Select(item => item.GetAttribute("aria-label")));
+    }
+
+    [Fact]
+    public async Task EachActionFactRowThatTheSourceStatesLinksToItsLineAndTheOthersHaveNoLink()
+    {
+        var lines = LinkedLines(await new ReleaseRenderer(null, null).RenderActionAsync(Action(), null, [], HousingCatalog, CancellationToken.None));
+
+        Assert.Equal("Policy area: Housing and Community Development", lines["Policy area"]);
+        Assert.Null(lines["Bill"]);
+        Assert.Null(lines["Title"]);
+    }
+
+    [Fact]
+    public async Task TwoSourceLinesOfOneSponsorshipAreNamedByNumberSoTheyAreNotTheSameLink()
+    {
+        var action = Action();
+        var first = action.Sponsorships[0] with { Citations = [action.Sponsorships[0].Citations[0], action.SummaryCitation!] };
+        var html = await new ReleaseRenderer(null, null).RenderActionAsync(action with { Sponsorships = [first, action.Sponsorships[1]] }, null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var row = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='sponsorships-title'] tbody tr")!;
+        Assert.Equal(["Source line: Jane <Doe>, sponsorship, line 1", "Source line: Jane <Doe>, sponsorship, line 2"],
+            row.QuerySelectorAll("a.source-line").Select(link => link.TextContent));
     }
 
     [Fact]
@@ -696,13 +718,13 @@ public sealed class ReleaseRendererTests
             .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.ShownText());
         Assert.Equal("2025-04-10", facts["Voted on"]);
         Assert.Equal("Passage", facts["Kind"]);
+        Assert.Equal("On Passage", facts["Question"]);
         Assert.Equal("House", facts["Chamber"]);
         Assert.Equal("100, Congress 119, session 1", facts["Roll call"]);
         Assert.Equal("Housing costs", facts["Tracked issues"]);
         Assert.Equal("Passed <b>", facts["Result"]);
-        var result = document.QuerySelector("[aria-labelledby='result-title']")!;
-        Assert.Equal(["Started: 2025-04-10T11:08:00-04:00", "Question: On Passage", "Result: Passed <b>"],
-            result.QuerySelectorAll("blockquote").Select(quote => quote.TextContent));
+        Assert.Null(document.QuerySelector("[aria-labelledby='result-title']"));
+        Assert.Empty(document.QuerySelectorAll("blockquote"));
         var members = document.QuerySelector("[aria-labelledby='members-title']")!;
         Assert.Equal(["Voted Yea (1 tracked House member)"], members.QuerySelectorAll("h3").Select(heading => heading.ShownText()));
         Assert.Equal(["Jane <Doe>"], members.QuerySelectorAll("li a:first-child").Select(link => link.TextContent));
@@ -736,8 +758,20 @@ public sealed class ReleaseRendererTests
 
         var facts = await VoteFactsOf(vote);
 
-        Assert.Equal("Votes for each candidate from all House members: Emmer 1, Johnson (LA) 218", facts["Totals"]);
-        Assert.DoesNotContain("Yea", facts["Totals"], StringComparison.Ordinal);
+        Assert.Equal("1", facts["Votes for Emmer, all House members"]);
+        Assert.Equal("218", facts["Votes for Johnson (LA), all House members"]);
+        Assert.DoesNotContain("Totals", facts.Keys);
+        Assert.Contains("Votes for Emmer, all senators", (await VoteFactsOf(vote with { Chamber = PublishedChamber.Senate })).Keys);
+    }
+
+    [Theory]
+    [InlineData("Present", "Present, all House members")]
+    [InlineData("Not Voting", "Not voting, all House members")]
+    public async Task ACandidateTotalThatIsNotACandidateReadsAsACastAndNotAsVotesForIt(string name, string label)
+    {
+        var vote = Vote($"Candidate total {name}: 3") with { Totals = null, PartyMajorities = [] };
+
+        Assert.Equal("3", (await VoteFactsOf(vote))[label]);
     }
 
     private static async Task<Dictionary<string, string>> VoteFactsOf(PublishedVote vote)
@@ -761,7 +795,7 @@ public sealed class ReleaseRendererTests
             .ToDictionary(pair => pair.First.TextContent, pair => pair.Second);
         Assert.Contains(expectedSource, facts["Data source"].TextContent, StringComparison.Ordinal);
         Assert.Equal(expectedLink, facts["Official roll call page"].QuerySelector("a")!.GetAttribute("href"));
-        Assert.Contains(expectedSource.Split(' ')[0].TrimEnd(','), document.QuerySelector("[aria-labelledby='result-title'] p")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains(expectedSource.Split(' ')[0].TrimEnd(','), document.QuerySelector("[aria-labelledby='sources-title'] p")!.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -801,24 +835,64 @@ public sealed class ReleaseRendererTests
 
     // The saved line says "Party total D". The label above the exact quote must say which party that is.
     [Fact]
-    public async Task TheVoteResultPanelNamesEachPartyTotalInWordsAndKeepsTheSavedQuoteExact()
+    public async Task TheVoteFactsNameEachPartyTotalInWordsAndKeepTheSavedValueExact()
     {
         var totals = new[] { "Party total D: Yea 0, Nay 1", "Party total R: Yea 2, Nay 0", "Party total I: Yea 0, Nay 0", "Party total X: Yea 0, Nay 0" };
-        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote(totals), null, [], PublicationCatalogs.None, CancellationToken.None);
-
-        var result = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='result-title']")!;
-        Assert.Equal(["Result", "Democratic party total", "Republican party total", "Independent members' total", "Party total X"],
-            result.QuerySelectorAll(".choice-label").Select(label => label.TextContent).Skip(2));
-        Assert.Equal(totals, result.QuerySelectorAll("blockquote").Select(quote => quote.TextContent).Skip(3));
-        Assert.Contains("Show this quote in the saved text: democratic party total, quote", result.TextContent, StringComparison.Ordinal);
+        var facts = await VoteFactsOf(Vote(totals));
+        Assert.Equal(["Democratic party total", "Republican party total", "Independent members' total", "Party total X"],
+            facts.Keys.Where(label => label.Contains("total", StringComparison.OrdinalIgnoreCase) && label != "Totals"));
+        string[] labels = ["Democratic party total", "Republican party total", "Independent members' total", "Party total X"];
+        Assert.Equal(["Yea 0, Nay 1", "Yea 2, Nay 0", "Yea 0, Nay 0", "Yea 0, Nay 0"], labels.Select(label => facts[label]));
     }
 
     [Fact]
-    public async Task AnOtherKindVoteWithAQuestionQuoteIsCalledAnOtherQuestionAndPointsTheReaderToTheKindQuote()
+    public async Task EachVoteFactRowLinksToItsOwnLineInTheSourceAndRowsThatAreNotInTheSourceHaveNoLink()
+    {
+        var lines = await LinkedLinesOf(Vote("Party total D: Yea 0, Nay 1"));
+
+        Assert.Equal("Started: 2025-04-10T11:08:00-04:00", lines["Voted on"]);
+        Assert.Equal("Question: On Passage", lines["Question"]);
+        Assert.Equal("Result: Passed <b>", lines["Result"]);
+        Assert.Equal("Party total D: Yea 0, Nay 1", lines["Democratic party total"]);
+        Assert.Null(lines["Kind"]);
+        Assert.Null(lines["Chamber"]);
+        Assert.Null(lines["Roll call"]);
+        Assert.Null(lines["Totals"]);
+    }
+
+    [Fact]
+    public async Task TheCountLineOfAVoteIsCitedOnTheTotalsRowAndNotShownAsASecondRow()
+    {
+        var count = "Count: Yea 1, Nay 0, Present 0, Not Voting 0";
+        var vote = Vote(count);
+
+        var facts = await VoteFactsOf(vote);
+        var lines = await LinkedLinesOf(vote);
+
+        Assert.Equal(count, lines["Totals"]);
+        Assert.DoesNotContain("Count", facts.Keys);
+        Assert.Single(facts.Keys, label => label == "Totals");
+    }
+
+    private static async Task<Dictionary<string, string?>> LinkedLinesOf(PublishedVote vote) =>
+        LinkedLines(await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None));
+
+    private static Dictionary<string, string?> LinkedLines(string html)
+    {
+        var document = new HtmlParser().ParseDocument(html);
+        return document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
+            .ToDictionary(pair => pair.First.TextContent,
+                pair => pair.Second.QuerySelector("a.source-line") is { } link ? document.QuerySelector(link.GetAttribute("href")!)!.TextContent : null);
+    }
+
+    [Fact]
+    public async Task AnOtherKindVoteWithAQuestionQuoteIsCalledAnOtherQuestionAndShowsTheQuestion()
     {
         var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote() with { Kind = PublishedVoteKind.Other }, null, [], PublicationCatalogs.None, CancellationToken.None);
 
-        Assert.Equal("Other question. The Kind quote in the Result panel gives the question.", Facts(html)["Kind"]);
+        var facts = Facts(html);
+        Assert.Equal("Other question", facts["Kind"]);
+        Assert.Equal("On Passage", facts["Question"]);
     }
 
     [Fact]
@@ -829,7 +903,9 @@ public sealed class ReleaseRendererTests
 
         var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
 
-        Assert.Equal("Other question. The source gives no question.", Facts(html)["Kind"]);
+        var facts = Facts(html);
+        Assert.Equal("Other question. The source gives no question.", facts["Kind"]);
+        Assert.DoesNotContain("Question", facts.Keys);
     }
 
     [Fact]
@@ -854,6 +930,26 @@ public sealed class ReleaseRendererTests
             Assert.DoesNotContain("Bill numbers", labels);
             Assert.DoesNotContain("Officials", labels);
             Assert.DoesNotContain("None", Facts(html).Values);
+        }
+    }
+
+    [Fact]
+    public async Task ADateEvidenceQuoteIsOneLineWithALinkToItsMarkAndNoQuoteBox()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var pages = new[]
+        {
+            (await renderer.RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None), "Signed 2026-05-01."),
+            (await renderer.RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None), Record().ChangeDateEvidence!.Quote)
+        };
+
+        foreach (var (html, quote) in pages)
+        {
+            var document = new HtmlParser().ParseDocument(html);
+            var line = document.QuerySelectorAll("li").Single(item => item.TextContent.StartsWith("Evidence for the", StringComparison.Ordinal));
+            Assert.Contains(quote, line.TextContent, StringComparison.Ordinal);
+            Assert.Empty(line.QuerySelectorAll("blockquote"));
+            Assert.Equal(quote, document.QuerySelector(line.QuerySelector("a")!.GetAttribute("href")!)!.TextContent);
         }
     }
 
@@ -886,11 +982,8 @@ public sealed class ReleaseRendererTests
         var document = new HtmlParser().ParseDocument(html);
         var links = document.QuerySelectorAll("a[href^='#cite-']").ToArray();
         Assert.Equal(4, links.Length);
-        foreach (var link in links)
-        {
-            var quote = link.Closest(".choice, li")!.QuerySelector("blockquote")?.TextContent ?? vote.Members.Single().Citation.Quote!;
-            Assert.Equal(quote, document.QuerySelector(link.GetAttribute("href")!)!.TextContent);
-        }
+        Assert.Equal(vote.Citations().Select(citation => citation.Quote).Distinct().Order(StringComparer.Ordinal),
+            links.Select(link => document.QuerySelector(link.GetAttribute("href")!)!.TextContent).Order(StringComparer.Ordinal));
     }
 
     // A House vote lists about 435 members. A quote for each member once made the page grow past 200 KB.
@@ -1148,14 +1241,49 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task TheExecutiveActionEvidenceTextNamesTheFederalRegisterAsATerm()
+    public async Task AnExecutiveActionShowsEachFactOnceWithALinkToItsSourceLineAndNoEvidencePanel()
+    {
+        var record = FullExecutiveAction();
+        var html = await new ReleaseRenderer(null, null).RenderExecutiveActionAsync(record, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.Null(document.QuerySelector("[aria-labelledby='evidence-title']"));
+        Assert.Empty(document.QuerySelectorAll("blockquote"));
+        var cited = record.Facts.Where(fact => fact.Label != ExecutiveActionFacts.Title).Select(fact => fact.Citation.Quote).Order(StringComparer.Ordinal);
+        var linked = document.QuerySelectorAll(".facts a.source-line").Select(link => document.QuerySelector(link.GetAttribute("href")!)!.TextContent).Order(StringComparer.Ordinal);
+        Assert.Equal(cited, linked);
+    }
+
+    private static PublishedExecutiveAction FullExecutiveAction()
+    {
+        var sample = (PublishedExecutiveAction)PublicApi.PublishedSamples.ExecutiveAction("Title", "Tail").Body;
+        var notice = new PublishedExecutiveActionNotice { DocumentNumber = "2025-02000", PublishedOn = new DateOnly(2025, 2, 1), Url = "https://www.federalregister.gov/documents/2025/02/01/2025-02000/x" };
+        (string Label, string Value)[] extra =
+            [(ExecutiveActionFacts.Type, "Executive Order"), (ExecutiveActionFacts.President, "Official o1"), (ExecutiveActionFacts.PresidentialNumber, "14148"),
+             (ExecutiveActionFacts.CorrectionNotice, notice.Value)];
+        var text = sample.Sources[0].Text + "\n" + string.Join('\n', extra.Select(item => ExecutiveActionFacts.Line(item.Label, item.Value)));
+        var facts = sample.Facts.Concat(extra.Select(item =>
+        {
+            var line = ExecutiveActionFacts.Line(item.Label, item.Value);
+            return new PublishedExecutiveActionFact
+            {
+                Label = item.Label,
+                Value = item.Value,
+                Citation = sample.Facts[0].Citation with { Start = text.IndexOf(line, StringComparison.Ordinal), Length = line.Length, Quote = line }
+            };
+        }));
+        return sample with { Facts = [.. facts], CorrectionNotices = [notice], Sources = [sample.Sources[0] with { Text = text }] };
+    }
+
+    [Fact]
+    public async Task TheExecutiveActionSourceNoteNamesTheFederalRegisterAsATerm()
     {
         var record = (PublishedExecutiveAction)PublicApi.PublishedSamples.ExecutiveAction("Title", "Tail").Body;
         var html = await new ReleaseRenderer(null, null).RenderExecutiveActionAsync(record, CancellationToken.None);
 
-        var evidence = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='evidence-title']")!;
-        Assert.Equal("term-federal-register", evidence.QuerySelector("button.term")!.GetAttribute("popovertarget"));
-        Assert.Equal("Federal Register", evidence.QuerySelector("button.term")!.TextContent);
+        var sources = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='sources-title']")!;
+        Assert.Equal("term-federal-register", sources.QuerySelector("button.term")!.GetAttribute("popovertarget"));
+        Assert.Equal("Federal Register", sources.QuerySelector("button.term")!.TextContent);
     }
 
     [Theory]
@@ -2400,8 +2528,8 @@ public sealed class ReleaseRendererTests
 
         var unconfigured = await renderer.RenderActionAsync(Action() with { PolicyAreaId = "mystery" }, null, [], HousingCatalog, CancellationToken.None);
         var plain = FactValue(unconfigured, "Policy area");
-        Assert.Equal("Housing and Community Development", plain.TextContent.Trim());
-        Assert.Empty(plain.QuerySelectorAll("a"));
+        Assert.Equal("Housing and Community Development", plain.ShownText().Trim());
+        Assert.Empty(plain.QuerySelectorAll("a:not(.source-line)"));
     }
 
     private static AngleSharp.Dom.IElement FactValue(string html, params string[] labels) =>
@@ -2409,7 +2537,7 @@ public sealed class ReleaseRendererTests
 
     private static void AssertSingleLink(AngleSharp.Dom.IElement scope, string href, string text)
     {
-        var link = Assert.Single(scope.QuerySelectorAll("a"));
+        var link = Assert.Single(scope.QuerySelectorAll("a:not(.source-line)"));
         Assert.Equal(href, link.GetAttribute("href"));
         Assert.Equal(text, link.TextContent);
     }
