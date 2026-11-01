@@ -540,6 +540,98 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal("Succeeded", queue[older]);
     }
 
+    [Fact]
+    public async Task EvidenceFlagsABillWhoseNewestDraftRunUsedAnOlderPromptSoTheStepDraftsAgainInsteadOfSettlingUnchanged()
+    {
+        var candidate = await CandidateWithoutSummariesAsync();
+        await SettleAsync(candidate, Revision(candidate, 1));
+        _ = await InsertRunAsync(candidate, ActionDraftTask.PromptVersion, DateTimeOffset.UnixEpoch.UtcTicks + 1);
+        Assert.False((await ActionStore().ReadEvidenceAsync(candidate, default))!.HasOlderPromptDraft);
+
+        _ = await InsertRunAsync(candidate, "action-draft-prompt-v1", DateTimeOffset.UnixEpoch.UtcTicks + 2);
+
+        Assert.True((await ActionStore().ReadEvidenceAsync(candidate, default))!.HasOlderPromptDraft);
+    }
+
+    [Theory]
+    [InlineData("action-draft-prompt-v3", 1)]
+    [InlineData("action-draft-prompt-v4", 1)]
+    [InlineData("action-draft-prompt-v5", 0)]
+    [InlineData("action-issue-prompt-v3", 0)]
+    public async Task RedraftTreatsOnlyAnOldFullDraftAsStaleBecauseBothCurrentPromptsNameAFinishedDraft(string newestDraftPrompt, int requeued)
+    {
+        var (older, newer) = await TwoSettledCandidatesAsync(ActionDraftErrorCodes.SupersededByNewerCandidate, null);
+        await InsertRunAsync(older, "action-draft-prompt-v1", 1);
+        await InsertRunAsync(newer, newestDraftPrompt, 2);
+
+        Assert.Equal(requeued, await ActionStore().RequeueOlderPromptAsync(default));
+    }
+
+    [Fact]
+    public async Task ACodeWrittenCurrentRevisionWithAnIssueRunIsNeverStaleBecauseItWouldQueueForever()
+    {
+        var (older, newer) = await TwoSettledCandidatesAsync(ActionDraftErrorCodes.SupersededByNewerCandidate, null);
+        await InsertRunAsync(older, "action-draft-prompt-v3", 1);
+        var issueRun = await InsertRunAsync(newer, "action-issue-prompt-v3", 2);
+        await InsertDraftAndRevisionAsync("Code", "civic-lens:code", issueRun);
+
+        Assert.Equal(0, await ActionStore().RequeueOlderPromptAsync(default));
+    }
+
+    [Fact]
+    public async Task ACodeWrittenCurrentRevisionIsNeverStaleBecauseItHasNoPromptAndRedraftWouldQueueItForever()
+    {
+        var (older, newer) = await TwoSettledCandidatesAsync(ActionDraftErrorCodes.SupersededByNewerCandidate, null);
+        _ = await InsertRunAsync(older, "action-draft-prompt-v1", 1);
+        var codeRun = await InsertRunAsync(newer, ActionDraftTask.PromptVersion, 2, "Bypassed", ActionDraftErrorCodes.CodeWritten);
+        await InsertDraftAndRevisionAsync("Code", "civic-lens:code", codeRun);
+
+        Assert.Equal(0, await ActionStore().RequeueOlderPromptAsync(default));
+    }
+
+    [Fact]
+    public async Task TheDatabaseAcceptsACodeRevisionOnlyWithItsNoChargeRunAndRefusesOneWithoutIt()
+    {
+        var candidate = await CandidateWithoutSummariesAsync();
+        var codeRun = await InsertRunAsync(candidate, ActionDraftTask.PromptVersion, 1, "Bypassed", ActionDraftErrorCodes.CodeWritten);
+        await ExecuteAsync(connectionString, $"""
+            INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, review_state_version,
+                review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
+            VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0)
+            """);
+
+        await Assert.ThrowsAsync<PostgresException>(() => InsertRevisionAsync("Code", "civic-lens:code", null));
+        await Assert.ThrowsAsync<PostgresException>(() => InsertRevisionAsync("Person", "auth0|person", codeRun));
+        await InsertRevisionAsync("Code", "civic-lens:code", codeRun);
+
+        Assert.Equal(("Code", codeRun), await TupleAsync($"SELECT author_kind, run_id FROM action_revisions WHERE record_id = '{RecordId}'"));
+    }
+
+    [Fact]
+    public async Task TheDatabaseAllowsTheCodeWrittenReasonAndRefusesAnUnknownOne()
+    {
+        var candidate = await CandidateWithoutSummariesAsync();
+
+        _ = await InsertRunAsync(candidate, ActionDraftTask.PromptVersion, 1, "Bypassed", ActionDraftErrorCodes.CodeWritten);
+
+        await Assert.ThrowsAsync<PostgresException>(() => InsertRunAsync(candidate, ActionDraftTask.PromptVersion, 2, "Bypassed", "codeWrote"));
+    }
+
+    private async Task InsertDraftAndRevisionAsync(string authorKind, string authorSubject, string runId)
+    {
+        await ExecuteAsync(connectionString, $"""
+            INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, review_state_version,
+                review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
+            VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0)
+            """);
+        await InsertRevisionAsync(authorKind, authorSubject, runId);
+    }
+
+    private Task InsertRevisionAsync(string authorKind, string authorSubject, string? runId) => ExecuteAsync(connectionString, $"""
+        INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
+        VALUES ('{RecordId}', 1, '{authorSubject}', '{authorKind}', {SqlLiteral(runId)}, 'x', 0)
+        """);
+
     private async Task<(string Older, string Newer)> TwoSettledCandidatesAsync(string? olderCode, string? newerCode)
     {
         var older = await ReadableCandidateAsync(sponsor: "A000001");
@@ -553,12 +645,17 @@ public sealed partial class PostgresBillStreamTests
 
     private static string SqlLiteral(string? value) => value is null ? "NULL" : $"'{value}'";
 
-    private async Task InsertRunAsync(string candidate, string promptVersion, long startedAtTicks, string outcome = "Drafted") => await ExecuteAsync(connectionString, $"""
+    private async Task<string> InsertRunAsync(string candidate, string promptVersion, long startedAtTicks, string outcome = "Drafted", string? reason = null)
+    {
+        var runId = Guid.NewGuid().ToString("N");
+        await ExecuteAsync(connectionString, $"""
         INSERT INTO action_analysis_runs (run_id, candidate_id, task, task_version, model, prompt_version, schema_version, input_hash, outcome,
-            input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, charged_tokens, started_at_utc_ticks, finished_at_utc_ticks)
-        VALUES ('{Guid.NewGuid():N}', '{candidate}', '{ActionDraftTask.Task}', '{ActionDraftTask.TaskVersion}', '{ActionDraftTask.Model}', '{promptVersion}',
-            '{ActionDraftTask.SchemaVersion}', '{new string('1', 64)}', '{outcome}', 0, 0, 0, 0, 0, {startedAtTicks}, {startedAtTicks})
+            input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, charged_tokens, started_at_utc_ticks, finished_at_utc_ticks, reason)
+        VALUES ('{runId}', '{candidate}', '{ActionDraftTask.Task}', '{ActionDraftTask.TaskVersion}', '{ActionDraftTask.Model}', '{promptVersion}',
+            '{ActionDraftTask.SchemaVersion}', '{new string('1', 64)}', '{outcome}', 0, 0, 0, 0, 0, {startedAtTicks}, {startedAtTicks}, {SqlLiteral(reason)})
         """);
+        return runId;
+    }
 
     [Fact]
     public async Task ADraftedSettlementWritesTheDraftTheRevisionTheRunAndTheBudgetInOneTransaction()
@@ -754,25 +851,31 @@ public sealed partial class PostgresBillStreamTests
     }
 
     private async Task<string> ReadableCandidateAsync(string sponsor, DateTimeOffset? updatedAt = null, string? cosponsor = null,
-        string? title = null)
+        string? title = null, string? policyArea = BillGateFixtures.TrackedPolicyArea, bool withSummary = true)
     {
-        var bill = await StartReadableBillAsync([sponsor], summaries: 0, updatedAt, title, cosponsors: cosponsor is null ? 0 : 1);
+        var bill = await StartReadableBillAsync([sponsor], summaries: withSummary ? 1 : 0, updatedAt, title, cosponsors: cosponsor is null ? 0 : 1, policyArea);
         if (cosponsor is not null)
         {
             var body = ActionBillWorld.CosponsorBody([new(cosponsor, Backfill.ToString("yyyy-MM-dd"))], null);
             _ = await store.AdmitCosponsorPageAsync(Source(), bill.Cosponsors!, Cosponsors([cosponsor], next: null),
                 await ReadableExtractionAsync(bill.Cosponsors!, ApiResource.BillCosponsors, body), default);
         }
+        if (withSummary)
+        {
+            var summary = ActionBillWorld.SummaryBody(new SummarySpec("00", "2025-01-03", "2025-01-05T10:00:00Z", "<p>It funds rent aid.</p>"), null);
+            _ = await store.AdmitSummariesPageAsync(Source(), bill.Summaries!, new CongressBillSummariesPage([], null),
+                await ReadableExtractionAsync(bill.Summaries!, ApiResource.BillSummaries, summary), default);
+        }
         await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
         return (await CandidatesAsync()).Single(candidate => candidate.DetailJobId == bill.Detail).CandidateId;
     }
 
     private async Task<StartedBill> StartReadableBillAsync(string[] sponsors, int summaries, DateTimeOffset? updatedAt = null,
-        string? title = null, int cosponsors = 0)
+        string? title = null, int cosponsors = 0, string? policyArea = BillGateFixtures.TrackedPolicyArea)
     {
         var updated = updatedAt ?? UpdatedAt;
         var detail = await EnqueueDetailAsync("detail-" + updated.UtcTicks);
-        var bill = DetailBill(updated, cosponsors, summaries: summaries) with { SponsorBioguideIds = sponsors };
+        var bill = DetailBill(updated, cosponsors, policyArea, summaries: summaries) with { SponsorBioguideIds = sponsors };
         if (title is not null) bill = bill with { Title = title };
         var result = await store.AdmitDetailAsync(Source(), detail, bill, BillGateOutcome.Passed(BillGateReason.CoveredSponsor),
             BillGateFixtures.Revision().Id, await ReadableExtractionAsync(detail, ApiResource.Bill, ActionBillWorld.DetailBody(bill)), default);

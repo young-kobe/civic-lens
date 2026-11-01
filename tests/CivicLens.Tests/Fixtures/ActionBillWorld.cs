@@ -83,11 +83,12 @@ internal sealed class ActionBillWorld
 
     public ActionBillReader Reader() => new(Stores, new ApiResponseReader(Stores, Stores), new FragmentExtractor(), "artifacts");
 
-    public ActionDraftEvidence Evidence(ActionDraftRevision? current = null, DateTimeOffset? updatedAt = null, bool hasNewerCandidate = false) =>
+    public ActionDraftEvidence Evidence(ActionDraftRevision? current = null, DateTimeOffset? updatedAt = null, bool hasNewerCandidate = false,
+        bool hasOlderPromptDraft = false) =>
         new(new ActionDraftCandidate(ActionRevisionFixtures.CandidateId, ActionRevisionFixtures.RecordId, SourceId, 119, "hr", 1,
             updatedAt ?? UpdatedAt, pages.Any(page => page.Resource == ApiResource.BillSummaries),
             pages.Any(page => page.Resource == ApiResource.BillSubjects)),
-            Revision, [.. pages.Select(page => new ActionDraftPage(page.Resource, page.JobId, ExtractionIdOf(page.JobId), versionOverrides.GetValueOrDefault(page.JobId) ?? ExtractionVersionOf(page.Resource), page.Text))], current, hasNewerCandidate);
+            Revision, [.. pages.Select(page => new ActionDraftPage(page.Resource, page.JobId, ExtractionIdOf(page.JobId), versionOverrides.GetValueOrDefault(page.JobId) ?? ExtractionVersionOf(page.Resource), page.Text))], current, hasNewerCandidate, hasOlderPromptDraft);
 
     public static string ExtractionVersionOf(ApiResource resource) => resource switch
     {

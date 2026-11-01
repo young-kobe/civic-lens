@@ -8,6 +8,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using CivicLens.Application.Publication;
+using CivicLens.Core.Actions;
 using CivicLens.Core.Review;
 using CivicLens.Host.Publication;
 using CivicLens.Infrastructure.Analysis;
@@ -48,7 +49,7 @@ public sealed partial class PostgresBillStreamTests
         await PostgresPublicationStore.FromConnectionString(connectionString).CommitAsync(PublicationScenario.Owner.Subject,
             ActionCommit(reviewStateVersion: 1), "key", ReleaseHash(1), default);
 
-        Assert.Equal("action", await ScalarAsync("SELECT records_json::jsonb -> 0 ->> 'kind' FROM publication_releases"));
+        Assert.Equal("action", await ScalarAsync("SELECT kind FROM publication_record_states"));
         Assert.Empty(await ActionReviews().ListUnpublishedApprovedAsync(10, [], default));
 
         await AddSponsorAsync(UpdatedAt.AddDays(1));
@@ -67,8 +68,8 @@ public sealed partial class PostgresBillStreamTests
             ALTER TABLE action_review_decisions SET (autovacuum_enabled = false);
             ALTER TABLE publication_releases SET (autovacuum_enabled = false);
             ALTER TABLE publication_record_states SET (autovacuum_enabled = false);
-            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, records_json, is_active)
-            VALUES (1, '000001-' || md5('bulk'), 'bulk', 0, 15000, '[]', true);
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+            VALUES (1, '000001-' || md5('bulk'), 'bulk', 0, 15000, true);
             ANALYZE action_drafts, action_review_decisions, publication_releases, publication_record_states;
             CREATE TEMP TABLE seeded AS
             SELECT md5(n::text) || md5('x' || n::text) AS record_id, n FROM generate_series(1, 15000) n;
@@ -143,6 +144,87 @@ public sealed partial class PostgresBillStreamTests
         record.Validate();
         Assert.Equal(revision.Citations.Select(span => span.ExtractionId).Distinct(), record.Sources.Select(source => source.ExtractionId));
         Assert.Equal(revision.Sponsorships.Length, record.Sponsorships.Length);
+    }
+
+    [Fact]
+    public async Task ACodeWrittenActionSettlesWithAFreeBypassedRunIsCodeApprovedAndPublishesWithItsLabelOriginAndCitedBillPage()
+    {
+        _ = await ReadableCandidateAsync(sponsor: "A000001", policyArea: BillGateFixtures.UntrackedPolicyArea, withSummary: false);
+
+        var model = await RunActionWorkerAsync(new FakeHeadlineSummaryModel());
+
+        Assert.Empty(model.Requests);
+        Assert.Equal(("Bypassed", "0 codeWritten"), await TupleAsync(
+            "SELECT outcome, charged_tokens || ' ' || reason FROM action_analysis_runs"));
+        Assert.Equal(("Code", "civic-lens:code"), await TupleAsync($"SELECT author_kind, author_subject FROM action_revisions WHERE record_id = '{RecordId}'"));
+        var decision = Assert.Single(await ActionDecisionsAsync());
+        Assert.Equal((ReviewDecisionKind.Approve, ReviewAuthor.CodeSubject), (decision.Kind, decision.ActorSubject));
+        var revision = (await ActionReviews().GetRevisionAsync(RecordId, 1, default))!;
+
+        var record = await PublishActionAsync(revision);
+
+        Assert.Equal(PublishedTextOrigin.Code, record.TextOrigin);
+        Assert.Contains(record.Sources, source => source.ExtractionId == revision.BillCitation!.ExtractionId);
+        Assert.Contains("Congress.gov has no summary of this bill yet.", record.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ACodeWrittenActionWithOnlyACosponsorAndNoPolicyAreaPublishesBecauseItsBillPageIsCited()
+    {
+        _ = await ReadableCandidateAsync(sponsor: "Z000009", cosponsor: "B000002", policyArea: null, withSummary: false);
+        _ = await RunActionWorkerAsync(new FakeHeadlineSummaryModel());
+        var revision = (await ActionReviews().GetRevisionAsync(RecordId, 1, default))!;
+
+        var record = await PublishActionAsync(revision);
+
+        Assert.All(revision.Sponsorships, sponsorship => Assert.Equal(ActionSponsorshipRole.Cosponsor, sponsorship.Role));
+        Assert.Null(record.PolicyAreaCitation);
+        Assert.Equal(revision.BillCitation!.ExtractionId, record.BillCitation!.ExtractionId);
+        Assert.Contains(record.Sources, source => source.ExtractionId == record.BillCitation.ExtractionId);
+    }
+
+    [Fact]
+    public async Task ACodeWrittenRecordWithAnIssueCallHoldsTheDraftedRunAndPublishesItsIssues()
+    {
+        _ = await ReadableCandidateAsync(sponsor: "A000001", withSummary: false);
+
+        var model = await RunActionWorkerAsync(new FakeHeadlineSummaryModel().Draft(HeadlineSummaryOutputsIssue("rent")));
+
+        Assert.Single(model.Requests);
+        var run = (string)(await ScalarAsync("SELECT run_id FROM action_analysis_runs WHERE outcome = 'Drafted'"))!;
+        Assert.Equal(("Code", run), await TupleAsync($"SELECT author_kind, run_id FROM action_revisions WHERE record_id = '{RecordId}'"));
+        Assert.Equal(("action-issue-prompt-v3", "Drafted"), await TupleAsync("SELECT prompt_version, outcome FROM action_analysis_runs"));
+        var revision = (await ActionReviews().GetRevisionAsync(RecordId, 1, default))!;
+        Assert.Equal(["rent"], revision.TrackedIssueIds.ToArray());
+        Assert.Single(await ActionDecisionsAsync());
+
+        var record = await PublishActionAsync(revision);
+
+        Assert.Equal(PublishedTextOrigin.Code, record.TextOrigin);
+        Assert.Equal(["rent"], record.TrackedIssueIds);
+    }
+
+    private static string HeadlineSummaryOutputsIssue(params string[] ids) => JsonSerializer.Serialize(new { issueIds = ids, confidence = 0.8 });
+
+    private async Task<PublishedAction> PublishActionAsync(ActionDraftRevision revision)
+    {
+        var names = revision.Sponsorships.Select(item => item.PersonId).Distinct().ToDictionary(id => id, id => $"Official {id}");
+        var releases = new FileReleaseDirectory(Path.Combine(captureRoot, "releases"));
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString);
+        var publisher = new PublishRelease(publications, releases, new ReleaseRenderer(null, null),
+            new PublishedRecordLoaders(PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
+                PostgresStatementReviewStore.FromConnectionString(connectionString), ActionReviews(),
+                PostgresVoteReviewStore.FromConnectionString(connectionString),
+                new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)), new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString)),
+                PostgresExecutiveActionReviewStore.FromConnectionString(connectionString)),
+            new PublicationCatalog(names, IssueConfiguration.None), FixedRosters.NamedOnly(names.Keys), PhotoCaptures.None(), TimeProvider.System,
+            new PruneReleases(publications, releases, NullLogger<PruneReleases>.Instance));
+        var summary = await publisher.ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("publish", new PublishedRecordReference(PublishedRecordKind.Action, RecordId)));
+        var record = JsonSerializer.Deserialize<PublishedAction>(await releases.ReadFileAsync(summary.DirectoryName,
+            PublicationProtocol.RecordDataPath(RecordId), PublicationProtocol.MaximumManifestBytes, default), PublicationProtocol.JsonOptions)!;
+        record.Validate();
+        return record;
     }
 
     private static PublicationCommit ActionCommit(int reviewStateVersion) =>

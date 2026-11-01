@@ -1,11 +1,14 @@
 using CivicLens.Application.Issues;
+using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Application.Votes;
+using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Layout;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Host.Review;
+using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
 
 namespace CivicLens.Host.Votes;
@@ -101,6 +104,15 @@ public sealed partial class VoteEditor
         Input = null;
         return LoadAsync();
     }
+
+    protected override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.Vote, RecordId);
+
+    private async Task TakeOffSiteAsync() =>
+        NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(detail.Review.CurrentStatus, WithdrawAsync, ReloadAfterDecideConflictAsync));
+
+    private Task WithdrawAsync(ReviewDecisionKind kind, string key) =>
+        DecideReview.ExecuteAsync(actor, new DecideVoteReviewRequest(RecordId, TakeOffExpectedRevision, TakeOffExpectedStateVersion, kind,
+            EmptyToNull(TakeOffNote), [], key), RequestAborted);
 
     private string Describe(MemberVote member) =>
         $"{detail!.PersonNames.GetValueOrDefault(member.PersonId, member.PersonId)}: {member.Cast}";

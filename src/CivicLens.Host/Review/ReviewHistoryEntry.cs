@@ -8,7 +8,8 @@ public sealed record ReviewHistoryEntry(DateTimeOffset When, string Event, Revie
 {
     public static ReviewHistoryEntry ForRevision(DateTimeOffset createdAtUtc, int revisionNumber, string authorSubject, string headline) =>
         new(createdAtUtc, revisionNumber > 1 ? $"Revision {revisionNumber} saved"
-                : ReviewAuthor.IsAnalysis(authorSubject) ? "AI draft written" : "Draft started", null,
+                : ReviewAuthor.IsAnalysis(authorSubject) ? "AI draft written"
+                : ReviewAuthor.IsCode(authorSubject) ? "Code draft written" : "Draft started", null,
             authorSubject, DraftStatusDisplay.DraftName(headline));
 
     public static ReviewHistoryEntry ForDecision(ReviewDecision decision) =>

@@ -211,7 +211,7 @@ public sealed class ReleaseRendererTests
         Assert.Contains("A missed vote means the official did not vote on it. The count includes procedural votes. It counts only the roll calls on this site, which can be fewer than the chamber held.", text, StringComparison.Ordinal);
         Assert.DoesNotContain("all roll calls of the current Congress", text, StringComparison.Ordinal);
         Assert.Contains("A roll call that is not on this site is in neither number.", text, StringComparison.Ordinal);
-        Assert.Contains("A split vote is a substantive roll call vote where most Democrats and most Republicans voted on opposite sides.", text, StringComparison.Ordinal);
+        Assert.Contains("A split vote is a substantive roll call vote where most Democrats and most Republicans who cast Yea or Nay voted on opposite sides.", text, StringComparison.Ordinal);
         Assert.Contains($"on at least {TalkAndActionProfile.MinimumRecordsForShare} split votes", text, StringComparison.Ordinal);
         Assert.Contains("An independent who caucuses with the Democrats or the Republicans, which means they work with that party in Congress, counts with that party.", text, StringComparison.Ordinal);
         Assert.Contains("The page leaves out votes that the official cast while in another party and not caucusing with either.", text, StringComparison.Ordinal);
@@ -601,6 +601,29 @@ public sealed class ReleaseRendererTests
 
         Assert.All(model, html => Assert.Contains("An AI summary of the official record", html, StringComparison.Ordinal));
         Assert.All(written, html => Assert.DoesNotContain("AI summary", html, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AnActionPageLabelsCodeWrittenWordingWithItsSourceAndNeverCallsItAnAiSummary()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action() with { TextOrigin = PublishedTextOrigin.Code }, [],
+            PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.Contains("Wording", html, StringComparison.Ordinal);
+        Assert.Contains("Written automatically from Congress.gov data, with no AI", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("AI summary", html, StringComparison.Ordinal);
+        Assert.Contains("Chosen by an AI model from the bill title and subjects", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnActionPageSaysAModelChoseTheIssuesOnlyBesideCodeWrittenWordingAndOnlyWhenTheRecordHasIssues()
+    {
+        var codeWithoutIssues = await new ReleaseRenderer(null, null).RenderActionAsync(
+            Action() with { TextOrigin = PublishedTextOrigin.Code, TrackedIssueIds = [] }, [], PublicationCatalogs.None, CancellationToken.None);
+        var modelText = await new ReleaseRenderer(null, null).RenderActionAsync(Action(), [], PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.DoesNotContain(PublishedRecordLabels.ModelChosenIssues, codeWithoutIssues, StringComparison.Ordinal);
+        Assert.DoesNotContain(PublishedRecordLabels.ModelChosenIssues, modelText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1426,6 +1449,95 @@ public sealed class ReleaseRendererTests
         Assert.Equal("policyArea=health-care", (await Read(facets.PolicyAreas.Single())).Filter);
     }
 
+    private static PublishedRecordEntry FacetEntry(PublishedRecordKind kind, int index, PublishedVoteAlignment? alignment, DateTimeOffset published, string[] issues, string[] policyAreas) =>
+        ReleaseOf(1).Records[0] with
+        {
+            Kind = kind,
+            RecordId = index.ToString("x32"),
+            FirstPublishedAtUtc = published,
+            IssueIds = issues,
+            PolicyAreaIds = policyAreas,
+            Alignment = alignment
+        };
+
+    private static async Task<AngleSharp.Dom.IElement> FacetMainAsync(PublicationRelease release, FacetKind kind, int page)
+    {
+        var facets = ReleaseFacets.From(release, PublicationCatalogs.None);
+        var facet = kind == FacetKind.Issue ? facets.Issues.Single() : facets.PolicyAreas.Single();
+        return new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderFacetPageAsync(facet, page, CancellationToken.None)).QuerySelector("main")!;
+    }
+
+    private static async Task<string> FacetSummaryTextAsync(PublicationRelease release, FacetKind kind, int page) =>
+        (await FacetMainAsync(release, kind, page)).TextContent;
+
+    [Fact]
+    public async Task AnIssuePageSummaryCountsEveryPageOfItsFacetSoAVoteOnPageTwoStillCountsAndEachLineStatesWhatItCounts()
+    {
+        var newest = new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero);
+        var bills = Enumerable.Range(100, 60).Select(index => FacetEntry(PublishedRecordKind.Action, index, null, newest.AddMinutes(index), ["housing"], []));
+        PublishedRecordEntry Vote(int index, PublishedVoteAlignment? alignment) =>
+            FacetEntry(PublishedRecordKind.Vote, index, alignment, newest.AddDays(-index), ["housing"], []);
+        PublishedRecordEntry[] votes = [Vote(1, PublishedVoteAlignment.Split), Vote(2, PublishedVoteAlignment.Split), Vote(3, PublishedVoteAlignment.PartiesAgree),
+            Vote(4, PublishedVoteAlignment.Mixed), Vote(5, null)];
+        var release = ReleaseOf(0) with { Records = [.. bills, .. votes] };
+
+        var text = await FacetSummaryTextAsync(release, FacetKind.Issue, 1);
+
+        Assert.DoesNotContain("Vote headline", text);
+        Assert.Contains("Votes and bills tagged with this issue", text);
+        Assert.Contains("5 roll call votes on this site are tagged with this issue.", text);
+        Assert.Contains("2 of them were split votes. A split vote is a substantive roll call vote where most Democrats and most Republicans who cast Yea or Nay voted on opposite sides.", text);
+        Assert.Contains("1 of them was a vote where both parties agreed. A vote where both parties agreed is a substantive roll call vote where most Democrats and most Republicans who cast Yea or Nay voted the same way.", text);
+        Assert.Contains("2 of them are in neither group.", text);
+        Assert.Contains("60 bills and resolutions on this site are tagged with this issue.", text);
+        Assert.Contains("An AI model picks the issue tag of a bill or vote, and no person checks it", text);
+        Assert.Single(text.Split("It does not show a position on the issue.").Skip(1));
+        var links = (await FacetMainAsync(release, FacetKind.Issue, 1)).QuerySelectorAll("a").Select(link => link.GetAttribute("href")).ToArray();
+        Assert.Contains("../method.html#issue-tags", links);
+        Assert.Contains("../method.html#vote-badges", links);
+    }
+
+    [Fact]
+    public async Task AnIssuePageSummaryOmitsTheSplitAgreedAndOtherLinesWhenTheirCountIsZeroAndOnlyTheFirstPageShowsThePanel()
+    {
+        var published = new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero);
+        var release = ReleaseOf(0) with
+        {
+            Records = [.. Enumerable.Range(0, 51).Select(index => FacetEntry(PublishedRecordKind.Action, index, null, published.AddMinutes(index), ["housing"], []))]
+        };
+
+        var first = await FacetSummaryTextAsync(release, FacetKind.Issue, 1);
+
+        Assert.Contains("No roll call vote on this site is tagged with this issue.", first);
+        Assert.Contains("51 bills and resolutions on this site are tagged with this issue.", first);
+        Assert.DoesNotContain("split vote", first);
+        Assert.DoesNotContain("both parties agreed", first);
+        Assert.DoesNotContain("neither group", first);
+        Assert.DoesNotContain("Votes and bills tagged", await FacetSummaryTextAsync(release, FacetKind.Issue, 2));
+    }
+
+    [Fact]
+    public async Task APolicyAreaPageSummaryCountsOnlyBillsBecauseAVoteEntryNeverCarriesAPolicyArea()
+    {
+        var published = new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero);
+        var release = ReleaseOf(0) with
+        {
+            Records =
+            [
+                FacetEntry(PublishedRecordKind.Action, 1, null, published, ["housing"], ["health-care"]),
+                FacetEntry(PublishedRecordKind.Vote, 2, PublishedVoteAlignment.Split, published, ["housing"], [])
+            ]
+        };
+
+        var text = await FacetSummaryTextAsync(release, FacetKind.PolicyArea, 1);
+
+        Assert.Contains("Bills tagged with this policy area", text);
+        Assert.Contains("1 bill or resolution on this site is tagged with this policy area.", text);
+        Assert.DoesNotContain("roll call", text);
+        Assert.DoesNotContain("split vote", text);
+        Assert.DoesNotContain("AI model", text);
+    }
+
     [Fact]
     public async Task EachSortedTableNamesItsColumnsInTheOrderOfItsHeadersBecauseTheScriptBuildsRowsFromThatList()
     {
@@ -1566,6 +1678,10 @@ public sealed class ReleaseRendererTests
         Assert.NotNull(document.QuerySelector("main a[href='method.html']"));
         Assert.NotNull(document.QuerySelector("main a[href='report.html']"));
         Assert.Contains(PublishedRecordLabels.ModelWording, html, StringComparison.Ordinal);
+        Assert.Contains(PublishedRecordLabels.CodeWording, html, StringComparison.Ordinal);
+        Assert.Contains("On an action page or a vote page, a summary that a model wrote has the label \"An AI summary of the official record\". " +
+            "Wording that code wrote from the bill title, the sponsor, and the introduction date has the label \"Written automatically from Congress.gov data, with no AI\".",
+            new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain("unreviewed", html, StringComparison.OrdinalIgnoreCase);
     }
 

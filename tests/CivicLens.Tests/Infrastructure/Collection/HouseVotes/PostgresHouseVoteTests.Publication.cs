@@ -20,7 +20,7 @@ public sealed partial class PostgresHouseVoteTests
             Hash(2), default);
 
         Assert.Equal(1, committed.ReleaseNumber);
-        Assert.Equal("vote", await ScalarAsync("SELECT records_json::jsonb -> 0 ->> 'kind' FROM publication_releases"));
+        Assert.Equal("vote", await ScalarAsync("SELECT kind FROM publication_record_states"));
     }
 
     [Fact]

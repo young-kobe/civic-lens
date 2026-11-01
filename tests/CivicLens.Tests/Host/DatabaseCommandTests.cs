@@ -247,28 +247,6 @@ public sealed class DatabaseCommandTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
-    public async Task DbMigratePrintsTheRebuildLineOnlyWhenItRebuiltThePublishedRecordStateBecauseTheOperatorMustSeeARepair()
-    {
-        await using (var connection = new NpgsqlConnection(connectionString))
-        {
-            await connection.OpenAsync();
-            await using var command = new NpgsqlCommand("""
-                INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, records_json, is_active)
-                VALUES (1, '000001-' || md5('old'), 'auth0|owner', 0, 1, '[{"kind":"action","recordId":"x","revisionNumber":1}]', true)
-                """, connection);
-            await command.ExecuteNonQueryAsync();
-        }
-
-        var repaired = await HostProcess.RunAsync(connectionString, "db", "migrate");
-        var clean = await HostProcess.RunAsync(connectionString, "db", "migrate");
-
-        Assert.True(repaired.ExitCode == 0, repaired.Error);
-        Assert.True(clean.ExitCode == 0, clean.Error);
-        Assert.Contains("Rebuilt published record state from releases.", repaired.Output, StringComparison.Ordinal);
-        Assert.DoesNotContain("Rebuilt published record state", clean.Output, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public async Task FailedImportCanReplayAfterRelocationWithoutConfigurationOrCollector()
     {
         var id = await SpoolReceiptAsync();

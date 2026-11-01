@@ -1,35 +1,14 @@
-using System.Text.Json;
-using CivicLens.Infrastructure.Collection;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.Publication;
 
 public static class PublishedRecordStateReader
 {
-    private static async Task<SortedSet<string>> ReadReleaseNumbersAsync(string connectionString) =>
-        [.. (await ReadAsync(connectionString, "SELECT release_number::text FROM publication_releases")).Select(row => row[0])];
-
-    private static async Task<SortedSet<string>> ReadFromRecordsJsonAsync(string connectionString, int release)
-    {
-        var json = await ReadAsync(connectionString, $"SELECT records_json FROM publication_releases WHERE release_number = {release}");
-        using var document = JsonDocument.Parse(json.Single()[0]);
-        return [.. document.RootElement.EnumerateArray().Select(entry => string.Join('|',
-            entry.TryGetProperty("kind", out var kind) ? kind.GetString() : "documentChange",
-            entry.TryGetProperty("recordId", out var recordId) ? recordId.GetString() : entry.GetProperty("draftId").GetString(),
-            entry.GetProperty("revisionNumber").GetInt32()))];
-    }
-
-    private static async Task<SortedSet<string>> ReadFromStateTableAsync(string connectionString, int release) =>
+    public static async Task<SortedSet<string>> StateAtAsync(string connectionString, int release) =>
         [.. (await ReadAsync(connectionString, $"""
             SELECT kind || '|' || record_id || '|' || revision_number FROM publication_record_states
             WHERE first_release <= {release} AND (last_release IS NULL OR last_release >= {release})
             """)).Select(row => row[0])];
-
-    public static async Task<bool> MigrateAsync(string connectionString) =>
-        await new PostgresCollectionAttemptStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
-            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options)).MigrateAsync();
 
     public static async Task<List<string[]>> ReadAsync(string connectionString, string sql)
     {
@@ -48,12 +27,4 @@ public static class PublishedRecordStateReader
             SELECT first_release || '|' || COALESCE(last_release::text, 'NULL') FROM publication_record_states
             WHERE record_id = '{recordId}' ORDER BY first_release
             """)).Select(row => row[0])];
-
-    public static async Task AssertEveryReleaseMatchesAsync(string connectionString)
-    {
-        var releases = await ReadReleaseNumbersAsync(connectionString);
-        Assert.NotEmpty(releases);
-        foreach (var release in releases.Select(int.Parse))
-            Assert.Equal(await ReadFromRecordsJsonAsync(connectionString, release), await ReadFromStateTableAsync(connectionString, release));
-    }
 }

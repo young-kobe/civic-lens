@@ -29,6 +29,7 @@ internal sealed class PublishedActionBuilder(PublishedRecordRules rules)
             PolicyAreaCitation = revision.PolicyAreaCitation is { } area ? Cite(area) : null,
             TrackedIssueIds = [.. revision.TrackedIssueIds],
             SummaryCitation = revision.SummaryCitation is { } summary ? Cite(summary) : null,
+            BillCitation = revision.BillCitation is { } bill ? Cite(bill) : null,
             Sponsorships = [.. revision.Sponsorships.Select(sponsorship => new PublishedSponsorship
             {
                 Official = rules.MapOfficial(review.RecordId, sponsorship.PersonId),

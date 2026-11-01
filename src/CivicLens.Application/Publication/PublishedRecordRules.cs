@@ -32,8 +32,12 @@ public sealed class PublishedRecordRules(PublicationCatalog catalog)
             .Where(item => item.RevisionNumber == revisionNumber && item.Kind == ReviewDecisionKind.Approve)
             .MaxBy(item => item.ReviewStateVersion)!;
 
-    public static PublishedTextOrigin TextOriginOf(ReviewTextOrigin origin) =>
-        origin == ReviewTextOrigin.Person ? PublishedTextOrigin.Person : PublishedTextOrigin.Model;
+    public static PublishedTextOrigin TextOriginOf(ReviewTextOrigin origin) => origin switch
+    {
+        ReviewTextOrigin.Person => PublishedTextOrigin.Person,
+        ReviewTextOrigin.Code => PublishedTextOrigin.Code,
+        _ => PublishedTextOrigin.Model
+    };
 
     public static PublishedCitation Cite(SourceSpan source, DocumentExtraction extraction)
     {

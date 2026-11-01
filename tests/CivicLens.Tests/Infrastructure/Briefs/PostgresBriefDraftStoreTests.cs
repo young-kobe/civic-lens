@@ -164,20 +164,6 @@ public sealed class PostgresBriefDraftStoreTests(PostgresCollection postgres) : 
     }
 
     [Fact]
-    public async Task AnOldReleaseEntryWithoutAKindIsADocumentChangeSoOldReleasesStillCount()
-    {
-        _ = await store.RedraftAsync(Week, default);
-        await seeder.DocumentChangeAsync(D1, 2, "Old format change");
-        await seeder.ReleaseJsonAsync(1, InWeek, active: true, $$"""[{"draftId":"{{D1}}","revisionNumber":2}]""", 1);
-        await seeder.DecisionAsync(PublishedRecordKind.DocumentChange, D1, 2, 2, ReviewDecisionKind.Approve);
-
-        var records = (await store.ReadEvidenceAsync(BriefWeek.RecordIdOf(Week), default))!.Records;
-
-        var record = Assert.Single(records);
-        Assert.Equal((BriefCitationKind.DocumentChange, D1, 2), (record.Kind, record.RecordId, record.RevisionNumber));
-    }
-
-    [Fact]
     public async Task AReleaseThatNamesARevisionThatIsNotStoredFailsLoudInsteadOfDroppingTheRecord()
     {
         _ = await store.RedraftAsync(Week, default);
@@ -299,8 +285,8 @@ public sealed class PostgresBriefDraftStoreTests(PostgresCollection postgres) : 
     {
         await SeedWeekAsync();
         await DraftAsync(new FakeBriefDraftModel().Draft(BriefFixtures.Output(paragraphs: [("Text.", ["R1"])])));
-        await seeder.ReleaseJsonAsync(9, InWeek.AddHours(1), active: false,
-            $$"""[{"kind":"statement","recordId":"{{S2}}","revisionNumber":1},{"kind":"statement","recordId":"{{S3}}","revisionNumber":1}]""", 2);
+        await seeder.ReleaseWithoutApprovalsAsync(9, InWeek.AddHours(1), active: false,
+            Binding(PublishedRecordKind.Statement, S2, 1), Binding(PublishedRecordKind.Statement, S3, 1));
         _ = await store.RedraftAsync(Week, default);
 
         await DraftAsync(new FakeBriefDraftModel().Draft(BriefFixtures.Output(paragraphs: [("Newer text.", ["R1"])])));
@@ -314,8 +300,8 @@ public sealed class PostgresBriefDraftStoreTests(PostgresCollection postgres) : 
     {
         await SeedWeekAsync();
         await DraftAsync(new FakeBriefDraftModel().Draft(BriefFixtures.Output(paragraphs: [("Text.", ["R1"])])));
-        await seeder.ReleaseJsonAsync(9, InWeek.AddHours(1), active: false,
-            $$"""[{"kind":"statement","recordId":"{{S2}}","revisionNumber":1},{"kind":"statement","recordId":"{{S3}}","revisionNumber":1}]""", 2);
+        await seeder.ReleaseWithoutApprovalsAsync(9, InWeek.AddHours(1), active: false,
+            Binding(PublishedRecordKind.Statement, S2, 1), Binding(PublishedRecordKind.Statement, S3, 1));
         _ = await store.RedraftAsync(Week, default);
 
         var fingerprint = (await store.ReadEvidenceAsync(BriefWeek.RecordIdOf(Week), default))!.Current!.Fingerprint;
