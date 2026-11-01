@@ -188,7 +188,7 @@ internal static class PublishedOfficialView
 
     public static string TheirVote(LinkedPair pair) => pair.TargetKind == PublishedRecordKind.Vote ? pair.Cast ?? NoVoteOnRecord : NotAVote;
 
-    public static string StatementDay(LinkedPair pair) => pair.StatementDay is { } day ? Moment.Iso(day) : NoStatementDate;
+    public static string StatementDay(LinkedPair pair) => pair.StatementDay is { } day ? Moment.Day(day) : NoStatementDate;
 
     public const string MissedVoteMeaning = "A missed vote means the official did not vote on it. The count includes procedural votes. It counts only the roll calls on this site, which can be fewer than the chamber held.";
 

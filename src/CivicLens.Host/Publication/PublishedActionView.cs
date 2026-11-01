@@ -28,7 +28,7 @@ internal static class PublishedActionView
         if (billStatus is null) return [];
         return
         [
-            new("Latest action on Congress.gov", $"{BillStatusMeaning.Of(billStatus.Text, action.BillType)} Action date: {Moment.Iso(billStatus.Date)}."),
+            new("Latest action on Congress.gov", $"{BillStatusMeaning.Of(billStatus.Text, action.BillType)} Action date: {Moment.Day(billStatus.Date)}."),
             new("Status read on", $"{Moment.Full(billStatus.ObservedAtUtc)}. The bill can change after this time."),
             Fact.LinkList("Official bill page", [new FactLink("Bill on Congress.gov", SourcePages.Bill(action.Congress, action.BillType, action.BillNumber))])
         ];

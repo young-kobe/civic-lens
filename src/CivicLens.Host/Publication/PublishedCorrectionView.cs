@@ -10,7 +10,7 @@ internal static class PublishedCorrectionView
     private const string FactsUnchangedText = "The vote facts did not change.";
 
     public static string AfterTitle(PublishedCorrection correction) =>
-        $", {Moment.Iso(DateOnly.FromDateTime(correction.PublishedAtUtc.UtcDateTime))}. {Replaces(correction)}{(correction.FactsUnchanged ? " " + FactsUnchangedText : "")}";
+        $", {Moment.Day(correction.PublishedAtUtc)}. {Replaces(correction)}{(correction.FactsUnchanged ? " " + FactsUnchangedText : "")}";
 
     public static string TimelineText(PublishedCorrection correction) =>
         $"{Title(correction)}, replaces revision {correction.ReplacedRevisionNumber}";

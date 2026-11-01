@@ -14,7 +14,7 @@ internal static class PublishedVoteView
 {
     public static IReadOnlyList<Fact> Facts(PublishedVote vote, PublicationCatalog catalog) =>
     [
-        new Fact("Voted on", Moment.Iso(vote.VotedOn)).CitedAt(Anchor(vote, vote.VotedOnCitation)),
+        new Fact("Voted on", Moment.Day(vote.VotedOn)).CitedAt(Anchor(vote, vote.VotedOnCitation)),
         new Fact("Kind", KindValue(vote)) { TermKey = PublishedRecordLabels.VoteKindTermKey(vote.Kind) },
         .. Question(vote),
         new Fact("Result", vote.Result).CitedAt(Anchor(vote, ResultFact(vote).Citation)),

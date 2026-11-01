@@ -26,10 +26,10 @@
         {
             case RecordTableColumns.Facet:
                 <TableCell Label="@PublicColumn.Officials">@string.Join(", ", entry.Officials.Select(official => official.Name))</TableCell>
-                <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Iso(ReleaseRecordOrder.Day(entry))</TableCell>
+                <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Day(ReleaseRecordOrder.Day(entry))</TableCell>
                 break;
             case RecordTableColumns.Week:
-                <TableCell Class="fit num" Label="@PublicColumn.WeekOf">@Moment.Iso(ReleaseRecordOrder.Day(entry))</TableCell>
+                <TableCell Class="fit num" Label="@PublicColumn.WeekOf">@Moment.Day(ReleaseRecordOrder.Day(entry))</TableCell>
                 <TableCell Class="time fit num" Label="@PublicColumn.FirstPublished"><Timestamp Value="entry.FirstPublishedAtUtc" Format="TimestampFormat.Day" /></TableCell>
                 break;
             case RecordTableColumns.FirstPublished:
