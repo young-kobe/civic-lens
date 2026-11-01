@@ -56,7 +56,7 @@
         get
         {
             var facts = new List<Fact> { new("Source institution", Record.Institution) };
-            if (Record.ChangeDate is { } date) facts.Add(new("Actual change date", Moment.Iso(date)));
+            if (Record.ChangeDate is { } date) facts.Add(new("Actual change date", Moment.Day(date)));
             facts.Add(new("Observed", $"Earlier version {Moment.Full(Record.Before.ObservedAtUtc)}; later version {Moment.Full(Record.After.ObservedAtUtc)}"));
             facts.AddRange(PublishedRecordView.Officials("Officials", Record.Officials));
             facts.AddRange(PublishedRecordView.Issues("Issues", Record.IssueIds, Catalog));

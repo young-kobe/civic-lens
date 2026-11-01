@@ -3,6 +3,8 @@ namespace CivicLens.Host.Publication;
 /// <summary>The approved glossary wording. A change to any text here needs the approval of the owner.</summary>
 public static class Glossary
 {
+    public const string BillsAndCongress = "Bills and Congress";
+
     public static readonly IReadOnlyList<GlossaryGroup> Groups =
     [
         new("How members vote",
@@ -84,7 +86,7 @@ public static class Glossary
                 "It decides who holds the post. A cloture vote on the same nomination is a different vote, so check which one you are reading.",
                 "SMAN Rule XXXI")
         ]),
-        new("Bills and Congress",
+        new(BillsAndCongress,
         [
             new("bill", "Bill",
                 "A proposed law. \"H.R.\" bills start in the House and \"S.\" bills start in the Senate.",

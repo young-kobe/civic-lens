@@ -41,4 +41,8 @@ internal sealed class RelationshipRecordLoader(IRelationshipReviewStore relation
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
             (_, cancellationToken) => build.Renderer.RenderRelationshipAsync(record, build.Catalog, cancellationToken));
     }
+
+    public override Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
+        CancellationToken cancellationToken) =>
+        build.Renderer.RenderRelationshipAsync(Parse<PublishedRelationship>(json), build.Catalog, cancellationToken);
 }

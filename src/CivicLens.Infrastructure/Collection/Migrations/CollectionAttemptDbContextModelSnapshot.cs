@@ -1470,11 +1470,23 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("summary_count");
 
+                    b.Property<string>("TextPackageId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("text_package_id");
+
+                    b.Property<string>("TextState")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("text_state");
+
                     b.Property<long>("UpdateDateUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("update_date_utc_ticks");
 
                     b.HasKey("DetailJobId");
+
+                    b.HasIndex("Congress", "BillType", "BillNumber", "TextPackageId");
 
                     b.HasIndex("SourceId", "Congress", "BillType", "BillNumber", "UpdateDateUtcTicks")
                         .IsUnique()
@@ -1499,6 +1511,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_bill_gates_subject_count", "subject_count >= 0");
 
                             t.HasCheckConstraint("ck_bill_gates_summary_count", "summary_count >= 0");
+
+                            t.HasCheckConstraint("ck_bill_gates_text_package", "COALESCE(text_state = 'Read', false) = (text_package_id IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_bill_gates_text_state", "text_state IN ('NoText','Read')");
+
+                            t.HasCheckConstraint("ck_bill_gates_text_without_summary", "text_state IS NULL OR summary_count = 0");
 
                             t.HasCheckConstraint("ck_bill_gates_update", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
                         });
@@ -1606,6 +1624,74 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_bill_stream_pages_recorded", "recorded_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_bill_stream_pages_unknown_types", "unknown_type_count >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.BillTextVersionRow", b =>
+                {
+                    b.Property<int>("Congress")
+                        .HasColumnType("integer")
+                        .HasColumnName("congress");
+
+                    b.Property<string>("BillType")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("bill_type");
+
+                    b.Property<int>("BillNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("bill_number");
+
+                    b.Property<string>("PackageId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("package_id");
+
+                    b.Property<int>("CharsRead")
+                        .HasColumnType("integer")
+                        .HasColumnName("chars_read");
+
+                    b.Property<int>("CharsTotal")
+                        .HasColumnType("integer")
+                        .HasColumnName("chars_total");
+
+                    b.Property<string>("ExtractionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("extraction_id");
+
+                    b.Property<string>("SourceUrl")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("source_url");
+
+                    b.Property<DateOnly?>("VersionDate")
+                        .HasColumnType("date")
+                        .HasColumnName("version_date");
+
+                    b.Property<string>("VersionType")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("version_type");
+
+                    b.HasKey("Congress", "BillType", "BillNumber", "PackageId");
+
+                    b.HasIndex("ExtractionId");
+
+                    b.ToTable("bill_text_versions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_bill_text_versions_bill", "congress >= 1 AND bill_number >= 1");
+
+                            t.HasCheckConstraint("ck_bill_text_versions_chars", "chars_read >= 1 AND chars_read <= 60000 AND chars_read <= chars_total AND (chars_read = chars_total OR chars_total > 60000)");
+
+                            t.HasCheckConstraint("ck_bill_text_versions_package", "package_id ~ ('^BILLS-' || congress || bill_type || bill_number || '[a-z]+$') OR package_id ~ ('^PLAW-' || congress || '(publ|pvtl)[0-9]+$')");
+
+                            t.HasCheckConstraint("ck_bill_text_versions_type", "version_type = btrim(version_type) AND char_length(version_type) >= 1");
+
+                            t.HasCheckConstraint("ck_bill_text_versions_url", "source_url LIKE 'https://www.congress.gov/%'");
                         });
                 });
 
@@ -5263,6 +5349,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasForeignKey("DetailJobId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Collection.BillStream.BillTextVersionRow", null)
+                        .WithMany()
+                        .HasForeignKey("Congress", "BillType", "BillNumber", "TextPackageId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.BillPageRow", b =>
@@ -5291,6 +5382,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Collection.Jobs.Persistence.JobRow", null)
                         .WithMany()
                         .HasForeignKey("ListJobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.BillTextVersionRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ExtractionId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

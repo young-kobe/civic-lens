@@ -47,6 +47,31 @@ public sealed class PublishedRelatedRecordsTests : IDisposable
         Assert.Equal([$"../records/{statement}.html", $"../records/{relationship}.html"], RelatedLinks(second, action));
     }
 
+    [Fact]
+    public async Task ARewriteOfThePagesWritesEveryCarriedPageAgainWhileTheRecordFilesStayTheSameFilesAndTheRelatedLinksStay()
+    {
+        var scenario = new PublicationScenario();
+        var statement = scenario.AddStatement('c');
+        var action = scenario.AddAction('d');
+        var directory = new FileReleaseDirectory(root);
+        var publish = new PublishRelease(scenario.Publications, directory, new ReleaseRenderer(null, null), scenario.Loaders(),
+            new PublicationCatalog(scenario.OfficialNames, IssueConfiguration.None), FixedRosters.NamedOnly(scenario.OfficialNames.Keys), PhotoCaptures.None(), scenario.Clock,
+            new PruneReleases(scenario.Publications, directory, NullLogger<PruneReleases>.Instance));
+        var relationship = scenario.AddRelationship('e', statement, action);
+        var first = await publish.ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Statement, statement), new PublishedRecordReference(PublishedRecordKind.Action, action),
+            new PublishedRecordReference(PublishedRecordKind.Relationship, relationship)));
+
+        var second = await publish.ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewritePages = true });
+
+        foreach (var recordId in new[] { statement, action, relationship })
+        {
+            Assert.Equal(Inode(first, PublicationProtocol.RecordDataPath(recordId)), Inode(second, PublicationProtocol.RecordDataPath(recordId)));
+            Assert.NotEqual(Inode(first, PublicationProtocol.RecordPagePath(recordId)), Inode(second, PublicationProtocol.RecordPagePath(recordId)));
+        }
+        Assert.Equal([$"../records/{action}.html", $"../records/{relationship}.html"], RelatedLinks(second, statement));
+    }
+
     private string[] RelatedLinks(PublicationReleaseSummary release, string recordId) =>
         [.. new HtmlParser().ParseDocument(File.ReadAllText(PathOf(release, PublicationProtocol.RecordPagePath(recordId))))
             .QuerySelectorAll("[aria-labelledby='related-title'] a").Select(link => link.GetAttribute("href")!)];

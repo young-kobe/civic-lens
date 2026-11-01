@@ -280,7 +280,7 @@ public sealed class ActionDraftStepTests
         var revision = Assert.Single(store.Revisions);
         Assert.Equal(("civic-lens:code", ReviewTextOrigin.Code, null), (revision.AuthorSubject, revision.TextOrigin, revision.Suggestion));
         Assert.Equal("H.R. 1: introduced by Elizabeth Warren", revision.Headline);
-        Assert.Equal("H.R. 1, A housing bill. Sponsor: Elizabeth Warren. Introduced January 3, 2025. Congress.gov has no summary of this bill yet.",
+        Assert.Equal("H.R. 1, A housing bill. Sponsor: Elizabeth Warren. Introduced 3 Jan 2025. Congress.gov has no summary of this bill yet.",
             revision.Summary);
         Assert.Empty(revision.TrackedIssueIds);
         var run = Assert.Single(store.Runs);
@@ -505,7 +505,7 @@ public sealed class ActionDraftStepTests
         Assert.Empty(model.Requests);
         var revision = Assert.Single(second.Revisions);
         Assert.Equal((ReviewTextOrigin.Code, 2), (revision.TextOrigin, revision.RevisionNumber));
-        Assert.Equal("H.R. 1, A housing bill. Sponsor: Elizabeth Warren. Introduced January 3, 2025.", revision.Summary);
+        Assert.Equal("H.R. 1, A housing bill. Sponsor: Elizabeth Warren. Introduced 3 Jan 2025.", revision.Summary);
     }
 
     [Fact]

@@ -6,8 +6,7 @@ using CivicLens.Publication.Contracts;
 namespace CivicLens.Application.Publication;
 
 internal sealed class VoteRecordLoader(IVoteReviewStore votes)
-    : PublishedRecordLoader<UnpublishedApprovedVote, VoteRecordLoader.VoteAddition>(PublishedRecordKind.Vote, "Vote"),
-      ICarriedPageLoader
+    : PublishedRecordLoader<UnpublishedApprovedVote, VoteRecordLoader.VoteAddition>(PublishedRecordKind.Vote, "Vote")
 {
     internal sealed record VoteAddition(PublishableVote Vote, VoteParties Parties);
 
@@ -58,16 +57,14 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
         return ids.IsEmpty ? new HashSet<string>() : await votes.FindVoteRecordIdsOnBillsOfActionsAsync(ids, cancellationToken);
     }
 
-    public async Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
-        CancellationToken cancellationToken)
-    {
-        var vote = Parse<PublishedVote>(json);
-        var billActionRecordIds = VoteBill.Of(vote) is { } bill
-            ? (await votes.FindBillActionRecordIdsAsync([bill], cancellationToken)).GetValueOrDefault(recordId, [])
-            : [];
-        return await build.Renderer.RenderVoteAsync(vote, BillActionRecordIn(billActionRecordIds, build), links.Citing(Kind, recordId),
-            build.Catalog, cancellationToken);
-    }
+    public Task<IReadOnlyDictionary<string, ImmutableArray<string>>> BillActionRecordIdsAsync(ImmutableArray<PublishedRevisionBinding> revisions,
+        CancellationToken cancellationToken) =>
+        votes.FindBillActionRecordIdsOfVotesAsync(revisions, cancellationToken);
+
+    public override Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
+        CancellationToken cancellationToken) =>
+        build.Renderer.RenderVoteAsync(Parse<PublishedVote>(json), BillActionRecordIn(build.VoteBillActions.GetValueOrDefault(recordId, []), build),
+            links.Citing(Kind, recordId), build.Catalog, cancellationToken);
 
     private static string? BillActionRecordIn(ImmutableArray<string> billActionRecordIds, PublicationBuild build) =>
         billActionRecordIds.FirstOrDefault(id =>

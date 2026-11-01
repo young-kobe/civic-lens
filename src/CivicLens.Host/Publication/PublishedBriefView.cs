@@ -9,7 +9,7 @@ internal static class PublishedBriefView
 {
     public static IReadOnlyList<Fact> Facts(PublishedBrief brief) =>
     [
-        new("Week", $"Starts Monday {Moment.Iso(brief.WeekStart)}, New York time"),
+        new("Week", $"Starts Monday {Moment.Day(brief.WeekStart)}, New York time"),
         new("Cutoff release", brief.CutoffReleaseNumber.ToString(CultureInfo.InvariantCulture)),
         new("Records considered", brief.Coverage.Considered.ToString(CultureInfo.InvariantCulture)),
         new("Records sent to the drafting model", brief.Coverage.SentToModel.ToString(CultureInfo.InvariantCulture)),

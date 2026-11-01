@@ -39,7 +39,7 @@ publish() {
   local key=$1 option
   shift
   for option in "$@"; do
-    [[ $option == --rewrite-entries || $option == --rewrite-officials ]] || refuse
+    [[ $option == --rewrite-entries || $option == --rewrite-officials || $option == --rewrite-pages ]] || refuse
   done
   "$compose" run --rm cli releases publish "$key" "$@"
 }
@@ -80,7 +80,7 @@ case "$*" in
     number "$4"
     "$compose" run --rm cli bills status backfill "$4"
     ;;
-  # usage: releases publish <key> [--rewrite-entries] [--rewrite-officials]
+  # usage: releases publish <key> [--rewrite-entries] [--rewrite-officials] [--rewrite-pages]
   "releases publish "*) shift 2; publish "$@" ;;
   *) refuse ;;
 esac

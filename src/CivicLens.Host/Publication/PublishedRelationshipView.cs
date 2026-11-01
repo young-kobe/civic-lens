@@ -12,7 +12,7 @@ internal static class PublishedRelationshipView
     {
         var facts = new List<Fact> { new("Type", PublishedRecordLabels.RelationshipType(relationship.Type)) };
         facts.AddRange(PublishedRecordView.Officials("Speakers", relationship.Officials));
-        if (relationship.StatementDate is { } date) facts.Add(new("Statement date", Moment.Iso(date)));
+        if (relationship.StatementDate is { } date) facts.Add(new("Statement date", Moment.Day(date)));
         facts.AddRange(PublishedRecordView.Issues("Issues", relationship.IssueIds, catalog));
         facts.AddRange(PublishedRecordView.PolicyAreas("Policy areas", relationship.PolicyAreaIds, catalog));
         facts.Add(new("Published", $"Approved {Moment.Full(relationship.ApprovedAtUtc)}; first published {Moment.Full(relationship.FirstPublishedAtUtc)}"));

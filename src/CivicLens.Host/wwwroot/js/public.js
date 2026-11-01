@@ -1,5 +1,10 @@
 (() => {
     const markStart = "\uE000", markEnd = "\uE001";
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const formatDay = isoDay => {
+        const [year, month, day] = isoDay.slice(0, 10).split("-");
+        return `${Number(day)} ${months[Number(month) - 1]} ${year}`;
+    };
     const snippetNodes = snippet => snippet.split(markStart).flatMap((part, index) => {
         if (index === 0) return [part];
         const [match, ...rest] = part.split(markEnd);
@@ -23,7 +28,7 @@
             link.textContent = hit.headline;
             const facts = document.createElement("span");
             facts.className = "cell-sub";
-            facts.textContent = [kindLabels.get(hit.kind), ...hit.officials.map(official => official.name), ...hit.issueIds, hit.eventDate]
+            facts.textContent = [kindLabels.get(hit.kind), ...hit.officials.map(official => official.name), ...hit.issueIds, hit.eventDate && formatDay(hit.eventDate)]
                 .filter(Boolean).join(" \u00B7 ");
             item.append(link, facts);
             if (hit.snippet) {
@@ -234,7 +239,6 @@
         number: { first: "desc", words: { desc: "most first", asc: "fewest first" }, ranked: { desc: "highest first", asc: "lowest first" }, compare: (a, b) => Number(a) - Number(b) },
         date: { first: "desc", words: { desc: "newest first", asc: "oldest first" }, compare: codeUnitOrder }
     };
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const opposite = direction => (direction === "asc" ? "desc" : "asc");
     let sortableTables = 0;
     const sortFailure = status => status === 429 ? "Too many requests. Try again in a minute." : "Sorting is not available now. Try again later.";
@@ -254,13 +258,12 @@
             return cell;
         },
         officials: hit => hit.officials.map(official => official.name).join(", "),
-        date: hit => hit.eventDate ?? hit.firstPublishedAtUtc.slice(0, 10),
+        date: hit => formatDay(hit.eventDate ?? hit.firstPublishedAtUtc),
         published: hit => {
             const time = document.createElement("time");
-            const [year, month, day] = hit.firstPublishedAtUtc.slice(0, 10).split("-");
             time.dateTime = hit.firstPublishedAtUtc;
-            time.title = `${hit.firstPublishedAtUtc.slice(0, 10)} ${hit.firstPublishedAtUtc.slice(11, 16)} UTC`;
-            time.textContent = `${Number(day)} ${months[Number(month) - 1]} ${year}`;
+            time.title = `${formatDay(hit.firstPublishedAtUtc)}, ${hit.firstPublishedAtUtc.slice(11, 16)} UTC`;
+            time.textContent = formatDay(hit.firstPublishedAtUtc);
             return time;
         }
     };

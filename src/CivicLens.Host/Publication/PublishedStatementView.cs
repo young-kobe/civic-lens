@@ -14,7 +14,7 @@ internal static class PublishedStatementView
         var facts = new List<Fact>();
         facts.AddRange(PublishedRecordView.Officials("Speakers", statement.Speakers));
         facts.AddRange(PublishedRecordView.Values(PublishedRecordLabels.OtherPeopleQuoted, statement.OtherSpeakers));
-        if (statement.StatementDate is { } date) facts.Add(new("Statement date", PublishedRecordLabels.StatementDate(statement, Moment.Iso(date))));
+        if (statement.StatementDate is { } date) facts.Add(new("Statement date", PublishedRecordLabels.StatementDate(statement, Moment.Day(date))));
         facts.AddRange(PublishedRecordView.Issues("Issues", statement.IssueIds, catalog));
         facts.AddRange(PublishedRecordView.PolicyAreas(PublishedRecordLabels.StatementPolicyAreas(statement.ApprovedBy), statement.PolicyAreaIds, catalog));
         facts.AddRange(PublishedRecordView.Values("Bill numbers", statement.BillNumbers));

@@ -31,7 +31,7 @@ public static class ActionCodeText
         var sponsors = string.Join(", ", names);
         var headline = names.Length == 0 ? $"{label}: introduced in Congress" : $"{label}: introduced by {sponsors}";
         var sponsorSentence = names.Length == 0 ? "" : $" {(names.Length == 1 ? "Sponsor" : "Sponsors")}: {sponsors}.";
-        var introduced = bill.IntroducedDate.ToString("MMMM d, yyyy", CultureInfo.InvariantCulture);
+        var introduced = bill.IntroducedDate.ToString("d MMM yyyy", CultureInfo.InvariantCulture);
         var noSummary = bill.SummaryCount == 0 ? " " + NoSummarySentence : "";
         var summary = $"{label}, {EndedSentence(bill.Title)}{sponsorSentence} Introduced {introduced}.{noSummary}";
         return new(headline, summary, ReviewTextOrigin.Code, null);

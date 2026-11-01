@@ -86,6 +86,7 @@ public sealed class JobPreparationTests
     [InlineData(ApiResource.BillActions, ActionsUrl)]
     [InlineData(ApiResource.BillSummaries, SummariesUrl)]
     [InlineData(ApiResource.BillSubjects, SubjectsUrl)]
+    [InlineData(ApiResource.BillTextVersions, BillTextFixtures.VersionsUrl)]
     public async Task AMalformedBillResponseIsInvalidDataSoTheWorkerBlocksThePermanentFailure(ApiResource resource, string url)
     {
         await Assert.ThrowsAsync<InvalidDataException>(() => Prepare(resource, url, """{"unexpected":true}""", BillGateFixtures.Revision()));
@@ -111,6 +112,67 @@ public sealed class JobPreparationTests
         AssertPinned(saved, "congress-bill-subjects-v1", "CongressBillSubjectsParser.ExtractionVersion",
             saved.Text == "Bill: 119 hr 1\nSubject: Rent and rental housing");
         Assert.Equal(saved.ExtractionId, Assert.Single(admissions.ExtractionIds));
+    }
+
+    [Fact]
+    public async Task AVersionsPageGivesTheStoreTheNewestFormattedTextVersionAndNoExtraction()
+    {
+        var older = BillTextFixtures.Version("Introduced in House", "2025-03-01T05:00:00Z", "BILLS-119hr7ih");
+        var newer = BillTextFixtures.Version("Reported in House", "2025-05-01T04:00:00Z", "BILLS-119hr7rh");
+
+        var result = await Prepare(ApiResource.BillTextVersions, BillTextFixtures.VersionsUrl, BillTextFixtures.Versions(older, newer),
+            BillGateFixtures.Revision());
+
+        var call = Assert.Single(admissions.TextVersionCalls);
+        Assert.Equal(("job", "BILLS-119hr7rh"), (call.JobId, call.Newest!.PackageId));
+        Assert.Equal(1, result!.AdmittedCount);
+        Assert.Empty(extractions.Saved);
+    }
+
+    [Fact]
+    public async Task AVersionsPageWithNoFormattedTextTellsTheStoreThereIsNoNewestVersion()
+    {
+        _ = await Prepare(ApiResource.BillTextVersions, BillTextFixtures.VersionsUrl, BillTextFixtures.Versions(), BillGateFixtures.Revision());
+
+        Assert.Null(Assert.Single(admissions.TextVersionCalls).Newest);
+    }
+
+    [Fact]
+    public async Task TheBillTextIsRenderedWithTheVersionOfItsVersionsPageSavedAsOneExtractionAndPassedToTheStoreWithTheCaptureHash()
+    {
+        var result = await Prepare(ApiResource.BillText, BillTextFixtures.PackageUrl(), "<pre>Section 1.</pre>", null, extractedText: "Section 1.");
+
+        Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
+        var saved = Assert.Single(extractions.Saved);
+        AssertPinned(saved, "congress-bill-text-v1+fake-extraction", "CongressBillTextParser.ExtractionVersion",
+            saved.Text == "Bill: 119 hr 7\nVersion: Introduced in House\nVersion date: 2025-03-01\nPackage: BILLS-119hr7ih\n" +
+                "Characters read: 10 of 10\nText:\nSection 1.");
+        var call = Assert.Single(admissions.TextCalls);
+        Assert.Equal(("job", saved.ExtractionId, 10, 10),
+            (call.JobId, call.Evidence.ExtractionId, call.Evidence.Reading.CharsRead, call.Evidence.Reading.CharsTotal));
+        Assert.Equal("BILLS-119hr7ih", call.Evidence.Version.PackageId);
+    }
+
+    [Fact]
+    public async Task ABillTextJobWhoseVersionsJobIsMissingIsBlockedInsteadOfGuessingTheVersion()
+    {
+        var result = await Prepare(ApiResource.BillText, BillTextFixtures.PackageUrl(), "<pre>x</pre>", null, withVersionsJob: false);
+
+        Assert.Equal(EvidenceStatus.Blocked, result!.Status);
+        Assert.Equal("billTextVersionsMissing", result.ErrorCode);
+        Assert.Empty(admissions.TextCalls);
+        Assert.Empty(extractions.Saved);
+    }
+
+    [Fact]
+    public async Task ABillTextJobForAPackageThatItsVersionsPageDoesNotListIsInvalidData()
+    {
+        var other = BillTextFixtures.Version("Reported in House", "2025-05-01T04:00:00Z", "BILLS-119hr7rh");
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => Prepare(ApiResource.BillText, BillTextFixtures.PackageUrl(), "<pre>x</pre>",
+            null, versionsBody: BillTextFixtures.Versions(other)));
+
+        Assert.Empty(admissions.TextCalls);
     }
 
     [Fact]
@@ -299,6 +361,8 @@ public sealed class JobPreparationTests
         { ApiResource.BillActions, ActionsUrl, """{"actions":[],"pagination":{}}""" },
         { ApiResource.BillSummaries, SummariesUrl, """{"summaries":[],"pagination":{}}""" },
         { ApiResource.BillSubjects, SubjectsUrl, """{"subjects":{"legislativeSubjects":[]},"pagination":{}}""" },
+        { ApiResource.BillTextVersions, BillTextFixtures.VersionsUrl, BillTextFixtures.Versions() },
+        { ApiResource.BillText, BillTextFixtures.PackageUrl(), "<html><body>Section 1.</body></html>" },
         { ApiResource.HouseVoteList, VoteListUrl, """{"houseRollCallVotes":[],"pagination":{}}""" },
         { ApiResource.HouseVoteDetail, VoteDetailUrl, HouseVoteFixtures.Detail() },
         { ApiResource.HouseVoteMembers, VoteMembersUrl, HouseVoteFixtures.Members() },
@@ -656,7 +720,7 @@ public sealed class JobPreparationTests
     [MemberData(nameof(EveryResource))]
     public async Task ApiJobsNeverGetAnExtractionStage(ApiResource? resource, string url, string body)
     {
-        var result = await Prepare(resource, url, body, BillGateFixtures.Revision());
+        var result = await Prepare(resource, url, body, BillGateFixtures.Revision(), extractedText: "Section 1.");
 
         Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
         Assert.Equal(0, processing.EnsureCalls);
@@ -664,12 +728,13 @@ public sealed class JobPreparationTests
 
     private async Task<JobPreparationResult?> Prepare(ApiResource? resource, string url, string body,
         IssueConfigurationRevision? issues, string? fragmentText = null, byte[]? bytes = null, string? contentType = null,
-        CollectionConfiguration? rosterConfiguration = null)
+        CollectionConfiguration? rosterConfiguration = null, string? versionsBody = null, bool withVersionsJob = true,
+        string? extractedText = null)
     {
         var isPhoto = resource == ApiResource.MemberPhoto;
         bytes ??= isPhoto ? MemberPhotoFixtures.Jpeg() : Encoding.UTF8.GetBytes(body);
         contentType ??= isPhoto ? "image/jpeg" : "application/json";
-        var textExtractor = new FakeTextExtractor(fragmentText);
+        var textExtractor = new FakeTextExtractor(fragmentText, extractedText);
         var configured = resource switch
         {
             ApiResource.MemberRoster => new ConfiguredCollectionSource(rosterConfiguration ?? RosterFixtures.Configuration(), RosterFixtures.SourceId, Backfill),
@@ -677,6 +742,7 @@ public sealed class JobPreparationTests
             ApiResource.MemberPhoto => new ConfiguredCollectionSource(
                 MemberPhotoFixtures.Configuration(RosterFixtures.Person("a-person", "A Person", MemberPhotoFixtures.Bioguide)),
                 MemberPhotoFixtures.SourceId, Backfill),
+            ApiResource.BillText => new ConfiguredCollectionSource(BillTextFixtures.Configuration(), BillTextFixtures.SourceId, Backfill),
             ApiResource.FederalRegisterList or ApiResource.FederalRegisterDocument =>
                 new ConfiguredCollectionSource(FederalRegisterFixtures.Configuration(), FederalRegisterFixtures.SourceId, Backfill),
             ApiResource.SenateVoteMenu or ApiResource.SenateVote =>
@@ -693,7 +759,12 @@ public sealed class JobPreparationTests
             new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
         var job = new CollectionJobRecord("job", definition, "key", CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,
             false, [attempt]);
-        var (jobs, bodyOf) = resource == ApiResource.VoteviewVotes ? VoteviewChainOf(configured, job, bytes) : ([job], _ => bytes);
+        var (jobs, bodyOf) = resource switch
+        {
+            ApiResource.VoteviewVotes => VoteviewChainOf(configured, job, bytes),
+            ApiResource.BillText => BillTextChainOf(job, bytes, versionsBody ?? BillTextFixtures.Versions(IntroducedVersion), withVersionsJob),
+            _ => ([job], _ => bytes)
+        };
         var preparation = new JobPreparation(new SingleJob(jobs), new CapturedAttempts(contentType), new NoDiscoveryAdmissions(), admissions, votes, federalRegister, roster, executives,
             new FixedBody(bodyOf, bodyReads), processing, extractions, textExtractor, issues, warnings);
         return await preparation.PrepareAsync("job", "artifacts", default);
@@ -720,6 +791,21 @@ public sealed class JobPreparationTests
             _ => votesBody
         };
         return ([rollCalls, members, voteJob], BodyOf);
+    }
+
+    private static string IntroducedVersion => BillTextFixtures.Version("Introduced in House", "2025-03-01T05:00:00Z");
+
+    private static (CollectionJobRecord[] Jobs, Func<string, byte[]> BodyOf) BillTextChainOf(CollectionJobRecord text, byte[] textBody,
+        string versionsBody, bool withVersionsJob)
+    {
+        var bills = new ConfiguredCollectionSource(BillTextFixtures.Configuration(), "congress-bills", Backfill);
+        var definition = bills.CreateApiJobDefinition(ApiResource.BillTextVersions, BillTextFixtures.VersionsUrl, Backfill, CollectionJobPriority.Check);
+        var attempt = new CollectionJobAttempt("attempt-versions-job", definition.CreateRequest("versions-job", Path.GetFullPath("captures")),
+            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
+        var versionsJob = new CollectionJobRecord("versions-job", definition, "key", CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null, false, [attempt]);
+        var textJob = text with { IdempotencyKey = BillStreamJobKeys.BillText(BillTextFixtures.SourceId, versionsJob.JobId) };
+        byte[] BodyOf(string attemptId) => attemptId == attempt.AttemptId ? Encoding.UTF8.GetBytes(versionsBody) : textBody;
+        return (withVersionsJob ? [versionsJob, textJob] : [textJob], BodyOf);
     }
 
     private static bool IsHouseVote(ApiResource? resource) =>
@@ -755,6 +841,8 @@ public sealed class JobPreparationTests
         public List<(string JobId, CongressBillActionsPage Page)> ActionPages { get; } = [];
         public List<(string JobId, CongressBillSummariesPage Page)> SummaryPages { get; } = [];
         public List<(string JobId, CongressBillSubjectsPage Page)> SubjectPages { get; } = [];
+        public List<(string JobId, CongressBillTextVersion? Newest)> TextVersionCalls { get; } = [];
+        public List<(string JobId, CongressBillTextEvidence Evidence)> TextCalls { get; } = [];
         public List<string> ExtractionIds { get; } = [];
         public bool DuplicatesOnly { get; set; }
 
@@ -803,6 +891,19 @@ public sealed class JobPreparationTests
             SubjectPages.Add((pageJobId, page));
             ExtractionIds.Add(extractionId);
             return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
+        }
+
+        public Task<DiscoveryAdmissionResult> AdmitTextVersionsAsync(ConfiguredCollectionSource source, string versionsJobId,
+            CongressBillTextVersion? newest, CancellationToken cancellationToken)
+        {
+            TextVersionCalls.Add((versionsJobId, newest));
+            return Task.FromResult(new DiscoveryAdmissionResult([new DiscoveryAdmissionJob("text", "https://z")], 0, 0));
+        }
+
+        public Task AdmitTextAsync(string textJobId, CongressBillTextEvidence evidence, CancellationToken cancellationToken)
+        {
+            TextCalls.Add((textJobId, evidence));
+            return Task.CompletedTask;
         }
     }
 
@@ -885,12 +986,12 @@ public sealed class JobPreparationTests
         }
     }
 
-    private sealed class FakeTextExtractor(string? fragmentText = null) : IDocumentTextExtractor
+    private sealed class FakeTextExtractor(string? fragmentText = null, string? extractedText = null) : IDocumentTextExtractor
     {
         public string ExtractionVersion => "fake-extraction";
 
         public Task<string> ExtractAsync(CapturedAttemptResult attempt, string artifactRoot, DocumentContentProfile? profile,
-            CancellationToken cancellationToken) => throw new NotSupportedException();
+            CancellationToken cancellationToken) => Task.FromResult(extractedText ?? throw new InvalidOperationException("Test set no extracted text."));
 
         public Task<string> ExtractHtmlFragmentAsync(string markup, CancellationToken cancellationToken) =>
             Task.FromResult(fragmentText ?? "text of " + markup);

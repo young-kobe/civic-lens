@@ -18,6 +18,10 @@ internal abstract class PublishedRecordLoader(PublishedRecordKind kind)
     public abstract Task<List<PendingRecord>> LoadAsync(ImmutableArray<string> recordIds, PublicationBuild build,
         CancellationToken cancellationToken);
 
+    // Renders the page of a record that the previous release holds, from its record file.
+    public abstract Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
+        CancellationToken cancellationToken);
+
     protected static TRecord Parse<TRecord>(byte[] json) =>
         JsonSerializer.Deserialize<TRecord>(json, PublicationProtocol.JsonOptions)
         ?? throw new InvalidDataException("A carried record file is empty.");

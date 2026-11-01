@@ -33,7 +33,7 @@ public sealed class PublishedExecutiveActionPageTests : IDisposable
             PublicationScenario.Request("k", new PublishedRecordReference(PublishedRecordKind.ExecutiveAction, record)));
 
         var page = Regex.Replace(File.ReadAllText(Path.Combine(root, "releases", release.DirectoryName, PublicationProtocol.RecordPagePath(record))), @"\s+", " ");
-        const string plain = "The Federal Register published a correction on 2024-11-20. This page shows the original document.";
+        const string plain = "The Federal Register published a correction on 20 Nov 2024. This page shows the original document.";
         const string link = "https://www.federalregister.gov/documents/2024/11/20/R1-2024-26714/to-facilitate-positive-adjustment-to-competition-from-imports-of-fine-denier-polyester-staple-fiber";
         Assert.Equal(2, page.Split(plain).Length - 1);
         Assert.Contains($"{plain} <a href=\"{link}\">Open the correction</a> to see what changed.", page);
