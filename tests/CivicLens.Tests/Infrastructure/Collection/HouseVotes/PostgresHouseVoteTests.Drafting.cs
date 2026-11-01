@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Analysis;
@@ -339,16 +340,21 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Theory]
-    [InlineData("", 1)]
-    [InlineData("UPDATE vote_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{textOrigin}', '\"Person\"')::text", 0)]
-    [InlineData("UPDATE vote_drafts SET review_status = 'AwaitingReviewWithConcerns'", 0)]
-    [InlineData("UPDATE vote_drafts SET review_status = 'ApprovalWithdrawn'", 0)]
+    [InlineData("none", 1)]
+    [InlineData("person", 0)]
+    [InlineData("AwaitingReviewWithConcerns", 0)]
+    [InlineData("ChangesRequested", 0)]
+    [InlineData("ApprovalWithdrawn", 0)]
     public async Task ARedraftSkipsAVoteWhoseCurrentRevisionHoldsPersonTextAnOpenConcernOrAWithdrawnApproval(string change, int requeued)
     {
         var candidate = await PendingCandidateAsync();
-        await SettleAsync(candidate, await RevisionAsync(candidate, 1));
+        var revision = await RevisionAsync(candidate, 1);
+        await SettleAsync(candidate, revision);
         await ExecuteAsync("UPDATE vote_analysis_runs SET prompt_version = 'vote-draft-prompt-v1'");
-        if (change.Length > 0) await ExecuteAsync(change);
+        if (change == "person")
+            await ExecuteAsync($"UPDATE vote_revisions SET revision_json = $json${JsonSerializer.Serialize(revision with { TextOrigin = ReviewTextOrigin.Person }, new JsonSerializerOptions(JsonSerializerDefaults.Web))}$json$");
+        else if (change != "none")
+            await ExecuteAsync($"UPDATE vote_drafts SET review_status = '{change}'");
 
         Assert.Equal(requeued == 1, (await VoteStore().ReadEvidenceAsync(candidate, default))!.DraftedUnderOlderPrompt);
         Assert.Equal(requeued, await VoteStore().RequeueOlderPromptAsync(default));

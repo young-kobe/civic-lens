@@ -150,7 +150,7 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
                 AND d.session_number = c.session_number AND d.roll_call_number = c.roll_call_number
             JOIN vote_revisions r ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
             WHERE c.candidate_id = ANY({candidateIds})
-              AND (d.review_status IN ('AwaitingReviewWithConcerns', 'ApprovalWithdrawn') OR r.revision_json::jsonb ->> 'textOrigin' = 'Person')
+              AND (d.review_status IN ('AwaitingReviewWithConcerns', 'ChangesRequested', 'ApprovalWithdrawn') OR r.revision_json::jsonb ->> 'textOrigin' = 'Person')
             """).ToArrayAsync(cancellationToken);
 
     private static async Task<VoteDraftPage?> ReadBillDetailAsync(CollectionAttemptDbContext db, VoteCandidateRow candidate,
