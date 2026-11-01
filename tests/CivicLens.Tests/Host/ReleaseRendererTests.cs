@@ -641,7 +641,7 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task AnActionPageLabelsCodeWrittenWordingWithItsSourceAndNeverCallsItAnAiSummary()
     {
-        var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action() with { TextOrigin = PublishedTextOrigin.Code }, [],
+        var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action() with { TextOrigin = PublishedTextOrigin.Code }, null, [],
             PublicationCatalogs.None, CancellationToken.None);
 
         Assert.Contains("Wording", html, StringComparison.Ordinal);
@@ -654,8 +654,8 @@ public sealed class ReleaseRendererTests
     public async Task AnActionPageSaysAModelChoseTheIssuesOnlyBesideCodeWrittenWordingAndOnlyWhenTheRecordHasIssues()
     {
         var codeWithoutIssues = await new ReleaseRenderer(null, null).RenderActionAsync(
-            Action() with { TextOrigin = PublishedTextOrigin.Code, TrackedIssueIds = [] }, [], PublicationCatalogs.None, CancellationToken.None);
-        var modelText = await new ReleaseRenderer(null, null).RenderActionAsync(Action(), [], PublicationCatalogs.None, CancellationToken.None);
+            Action() with { TextOrigin = PublishedTextOrigin.Code, TrackedIssueIds = [] }, null, [], PublicationCatalogs.None, CancellationToken.None);
+        var modelText = await new ReleaseRenderer(null, null).RenderActionAsync(Action(), null, [], PublicationCatalogs.None, CancellationToken.None);
 
         Assert.DoesNotContain(PublishedRecordLabels.ModelChosenIssues, codeWithoutIssues, StringComparison.Ordinal);
         Assert.DoesNotContain(PublishedRecordLabels.ModelChosenIssues, modelText, StringComparison.Ordinal);
