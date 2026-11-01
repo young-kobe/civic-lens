@@ -89,7 +89,7 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
                     ValidateDecision(draft, history, approval, verified!, allowedOfficialIds, allowedIssueIds);
                     return Task.CompletedTask;
                 },
-                afterDecision), cancellationToken);
+                afterDecision, current => AiProposedDate.IsProposed(current.AuthorSubject, current.ChangeDate)), cancellationToken);
     }
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision,

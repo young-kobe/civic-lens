@@ -115,6 +115,9 @@ public abstract class ReviewRecordPage : ComponentBase
                 statusMessage = messages.Conflict;
                 await reloadAfterConflict();
                 break;
+            case ReviewCommandFailure.NothingToSave:
+                error = new NothingToSaveException().Message;
+                break;
             case ReviewCommandFailure.Invalid:
                 error = messages.Invalid;
                 break;

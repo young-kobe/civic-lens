@@ -518,6 +518,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM statement_revisions WHERE candidate_id = '{candidate}'"));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM statement_review_decisions"));
         var saved = await Save.ExecuteAsync(Owner, unticked with { StatementDateChecked = true, IdempotencyKey = "ticked" });
+        Assert.Equal(2, saved.RevisionNumber);
         Assert.NotNull(saved.StatementDate);
         Assert.Equal(ReviewStatus.Approved, (await reviews.GetAsync(candidate, default))!.Review.CurrentStatus);
     }

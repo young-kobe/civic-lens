@@ -2,8 +2,10 @@ namespace CivicLens.Core.Review;
 
 public static class AiProposedDate
 {
+    public static bool IsProposed(string authorSubject, DateOnly? date) => ReviewAuthor.IsAnalysis(authorSubject) && date is not null;
+
     public static bool IsUnconfirmedCarryOver(string previousAuthorSubject, DateOnly? previousDate, DateOnly? date, bool dateChecked) =>
-        ReviewAuthor.IsAnalysis(previousAuthorSubject) && previousDate is not null && date == previousDate && !dateChecked;
+        IsProposed(previousAuthorSubject, previousDate) && date == previousDate && !dateChecked;
 
     public static void RequireCheckedOrCleared(string previousAuthorSubject, DateOnly? previousDate, DateOnly? date, bool dateChecked,
         string dateName)
@@ -14,7 +16,7 @@ public static class AiProposedDate
 
     public static void RequireConfirmed(string authorSubject, DateOnly? date, string dateName)
     {
-        if (ReviewAuthor.IsAnalysis(authorSubject) && date is not null)
+        if (IsProposed(authorSubject, date))
             throw new ArgumentException($"A person must confirm the AI-proposed {dateName} by saving a revision before approval.");
     }
 }

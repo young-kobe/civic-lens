@@ -155,7 +155,7 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
             BriefWorldSeeder.Binding(PublishedRecordKind.DocumentChange, saved.DraftId, 3));
         await briefs.FinishedWeekAsync(BriefFixtures.Week);
         Assert.Equal("Succeeded:3", await briefs.BriefQueueStatusAsync(BriefFixtures.Week));
-        var request = SaveRequest(saved, "save-and-approve") with { Approval = new(0, null, [], null) };
+        var request = SaveRequest(saved, "save-and-approve") with { Headline = "Typed headline", Approval = new(0, null, [], null) };
 
         await new SaveDocumentChangeDraft(reviews, catalog).ExecuteAsync(actor, request);
 

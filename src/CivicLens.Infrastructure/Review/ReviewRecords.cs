@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Runtime.ExceptionServices;
+using System.Text.Json.Nodes;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
@@ -32,13 +33,18 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         }, cancellationToken);
     }
 
-    /// <summary>The approval that a save carries. It runs in the save transaction, on the revision that the save wrote.</summary>
+    private static readonly string[] IdentityProperties = ["revisionNumber", "authorSubject", "authorKind", "createdAtUtc", "textOrigin"];
+
+    /// <summary>The approval that a save carries. It runs in the save transaction, on the revision that the save wrote.
+    /// <paramref name="MustWriteRevision"/> tells that an unchanged input still needs a new person revision.</summary>
     public sealed record ApprovalAfterSave(ReviewDecision Decision,
         Func<CollectionAttemptDbContext, TDraftRow, ReviewHistory<TRevision>, Task> Validate,
-        Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> AfterDecision);
+        Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> AfterDecision,
+        Func<TRevision, bool>? MustWriteRevision = null);
 
     /// <summary>Saves a revision. With an approval, the same transaction then approves the saved revision with every check of a
-    /// separate decision. A failed check rolls the saved revision back.</summary>
+    /// separate decision. A failed check rolls the saved revision back. When the input equals the current revision, no revision is
+    /// written and the approval binds to the current one. That refuses when the current revision is already approved.</summary>
     public async Task<TRevision> SaveRevisionAsync(IDbContextFactory<CollectionAttemptDbContext> contextFactory, string actorSubject,
         TRevision revision, int expectedRevisionNumber, string operation, string idempotencyKey, string payloadHash,
         Func<CollectionAttemptDbContext, TDraftRow, TRevision, Task<TRevision>> prepareAndList, Func<TRevision, TRevisionRow> toRow,
@@ -57,12 +63,29 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
             var current = await FindRevisionAsync(db, draft.RecordId, draft.CurrentRevisionNumber, cancellationToken)
                 ?? throw new InvalidOperationException("Current draft revision is missing.");
             var saved = await prepareAndList(db, draft, current);
+            if (approval is not null && !(approval.MustWriteRevision?.Invoke(current) ?? false) && HasSameContent(current, saved))
+            {
+                if (draft.ReviewStatus == ReviewStatus.Approved) throw new NothingToSaveException();
+                await ApproveSavedAsync(db, approval with { Decision = approval.Decision with { RevisionNumber = current.RevisionNumber } },
+                    cancellationToken);
+                return current;
+            }
             AppendRevision(db, draft, saved, toRow(saved), cycle);
             if (approval is null) return saved;
             await db.SaveChangesAsync(cancellationToken);
             await ApproveSavedAsync(db, approval, cancellationToken);
             return saved;
         }, cancellationToken);
+    }
+
+    private static bool HasSameContent(TRevision current, TRevision saved) =>
+        JsonNode.DeepEquals(WithoutIdentity(current), WithoutIdentity(saved));
+
+    private static JsonObject WithoutIdentity(TRevision revision)
+    {
+        var node = ReviewJson.ToObject(revision);
+        foreach (var property in IdentityProperties) node.Remove(property);
+        return node;
     }
 
     private Task<ReviewDecision> ApproveSavedAsync(CollectionAttemptDbContext db, ApprovalAfterSave approval,

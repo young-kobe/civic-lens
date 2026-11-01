@@ -74,7 +74,8 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
                 return saved;
             }, saved => StatementDraftRows.NewRevision(saved, null),
             approval is null ? null : new(approval,
-                (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, approvalSelections, cancellationToken), afterDecision),
+                (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, approvalSelections, cancellationToken), afterDecision,
+                current => AiProposedDate.IsProposed(current.AuthorSubject, current.StatementDate)),
             cancellationToken);
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,

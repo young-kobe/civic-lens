@@ -345,6 +345,53 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task SaveAndApproveWithNoEditApprovesTheCurrentRevisionAndKeepsItsNumberOriginAndAuthor()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        var before = (await ActionReviews().GetRevisionAsync(RecordId, 1, default))!;
+
+        var result = await SaveUnchangedAndApproveAsync(before, "no-edit");
+
+        var after = (await ActionReviews().GetRevisionAsync(RecordId, 1, default))!;
+        Assert.Equal((1, before.TextOrigin, before.AuthorSubject), (result.RevisionNumber, after.TextOrigin, after.AuthorSubject));
+        Assert.NotEqual(ReviewTextOrigin.Person, after.TextOrigin);
+        Assert.Equal(1, await ScalarAsync($"SELECT current_revision_number FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM action_revisions WHERE record_id = '{RecordId}'"));
+        Assert.Equal((1, Reviewer.Subject), ((int)(await ScalarAsync("SELECT revision_number FROM action_review_decisions WHERE kind = 'Approve'"))!,
+            (string)(await ScalarAsync("SELECT actor_subject FROM action_review_decisions WHERE kind = 'Approve'"))!));
+    }
+
+    [Fact]
+    public async Task SaveAndApproveWithNoEditRefusesWhenTheRevisionIsAlreadyApprovedBecauseThereIsNothingToSave()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        var before = (await ActionReviews().GetRevisionAsync(RecordId, 1, default))!;
+        await SaveUnchangedAndApproveAsync(before, "first");
+
+        await Assert.ThrowsAsync<NothingToSaveException>(() => SaveUnchangedAndApproveAsync(before, "again", stateVersion: 1));
+
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_review_decisions"));
+        Assert.Equal(1, await ScalarAsync($"SELECT current_revision_number FROM action_drafts WHERE record_id = '{RecordId}'"));
+    }
+
+    [Fact]
+    public async Task SaveAndApproveWithAnEditWritesAPersonRevisionAndApprovesIt()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        var before = (await ActionReviews().GetRevisionAsync(RecordId, 1, default))!;
+
+        var result = await new SaveActionDraft(ActionReviews()).ExecuteAsync(Reviewer, new(RecordId, 1, before.Headline + " edited",
+            before.Summary, SuggestionChoice.Keep, "edit", new ApprovalWithSave(0, null, [], null)));
+
+        Assert.Equal((2, ReviewTextOrigin.Person, Reviewer.Subject), (result.RevisionNumber, result.TextOrigin, result.AuthorSubject));
+        Assert.Equal(2, await ScalarAsync("SELECT revision_number FROM action_review_decisions WHERE kind = 'Approve'"));
+    }
+
+    private Task<ActionDraftRevision> SaveUnchangedAndApproveAsync(ActionDraftRevision current, string key, int stateVersion = 0) =>
+        new SaveActionDraft(ActionReviews()).ExecuteAsync(Reviewer, new(RecordId, current.RevisionNumber, current.Headline, current.Summary,
+            SuggestionChoice.Keep, key, new ApprovalWithSave(stateVersion, null, [], null)));
+
+    [Fact]
     public async Task APersonSaveMayKeepOrClearTheSuggestionButTheStoreRefusesAChangedOne()
     {
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);

@@ -11,7 +11,7 @@
     <ApprovalInputs Prefix="Approval" Concerns="Concerns" ResolvedIds="Approval?.ResolvedDecisionIds" CorrectionNote="@Approval?.CorrectionNote" />
     <div class="actions">
         <Button Variant="ButtonVariant.Primary" Type="submit" name="approve" value="true">Save and approve</Button>
-        <span class="actions-hint">@Hint @(PublishesSoon ? "Publishes soon." : "")</span>
+        <span class="actions-hint">If you change nothing, it approves this revision as it is. @Hint @(PublishesSoon ? "Publishes soon." : "")</span>
     </div>
 </section>
 
