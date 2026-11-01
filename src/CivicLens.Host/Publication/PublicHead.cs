@@ -10,6 +10,7 @@ internal static partial class PublicHead
 
     public static string DocumentTitle(string pageName, int page, int pageCount)
     {
+        if (pageName == SiteName) return SiteName;
         var name = Excerpt(pageName, MaximumTitleLength);
         return pageCount > 1 ? $"{name}, page {page} of {pageCount} | {SiteName}" : $"{name} | {SiteName}";
     }

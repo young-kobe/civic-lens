@@ -1787,11 +1787,62 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task HomeSaysSoWhenNoBriefExistsInsteadOfShowingAnEmptyPanel()
+    public async Task HomeHidesTheBriefingPanelWhenNoBriefExistsInsteadOfShowingAnEmptyPanel()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+
+        var with = new HtmlParser().ParseDocument(await renderer.RenderHomeAsync(ReleaseOf(1), Brief(), NoFacets, NoHighlights(ReleaseOf(1)), CancellationToken.None));
+        var without = new HtmlParser().ParseDocument(await renderer.RenderHomeAsync(ReleaseOf(1), null, NoFacets, NoHighlights(ReleaseOf(1)), CancellationToken.None));
+
+        Assert.Contains("A week of <housing> news", with.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("A week of <housing> news", without.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("briefing", without.QuerySelector("main")!.TextContent, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task TheUnderstandABillButtonLandsOnTheBillsAndCongressGroupOfTheGlossaryInsteadOfTheTopOfALongPage()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var home = new HtmlParser().ParseDocument(await renderer.RenderHomeAsync(ReleaseOf(1), null, NoFacets, NoHighlights(ReleaseOf(1)), CancellationToken.None));
+        var glossary = new HtmlParser().ParseDocument(await renderer.RenderGlossaryAsync(CancellationToken.None));
+
+        var anchor = home.QuerySelector(".home-actions a[href^='glossary.html#']")!.GetAttribute("href")!.Split('#')[1];
+
+        Assert.Equal("Bills and Congress", glossary.QuerySelector($"h2[id='{anchor}']")!.TextContent);
+    }
+
+    [Fact]
+    public async Task HomeLabelsTheBriefPanelAsAWeeklyBriefOnlyWhenABriefExists()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+
+        var with = new HtmlParser().ParseDocument(await renderer.RenderHomeAsync(ReleaseOf(1), Brief(), NoFacets, NoHighlights(ReleaseOf(1)), CancellationToken.None));
+        var without = new HtmlParser().ParseDocument(await renderer.RenderHomeAsync(ReleaseOf(1), null, NoFacets, NoHighlights(ReleaseOf(1)), CancellationToken.None));
+
+        Assert.Equal("A week of <housing> news", with.QuerySelectorAll("main p.muted.small").Single(label => label.TextContent == "Weekly brief").NextElementSibling!.QuerySelector("h2")!.TextContent);
+        Assert.DoesNotContain("Weekly brief", without.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheMethodPageSaysThatTheClosestVoteCardDoesNotAppearWhenNoVoteFitsInsteadOfClaimingItSaysSo()
+    {
+        var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None)).QuerySelector("main")!.TextContent;
+
+        Assert.Contains("It names the dates. With no such vote in these dates, the card does not appear.", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HomeSaysWhatTheSiteIsAndOffersThreeFirstStepsSoANewReaderKnowsWhereToStart()
     {
         var html = await new ReleaseRenderer(null, null).RenderHomeAsync(ReleaseOf(1), null, NoFacets, NoHighlights(ReleaseOf(1)), CancellationToken.None);
 
-        Assert.Contains("No briefing yet", html, StringComparison.Ordinal);
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.Equal("Civic Lens", document.Title);
+        Assert.Equal("Civic Lens", document.QuerySelector("h1")!.TextContent);
+        Assert.Equal("Civic Lens shows what U.S. officials say and do, using official records you can check yourself.", document.QuerySelector(".home-lead")!.TextContent);
+        Assert.Equal([("Find your representative or senators", "officials.html"), ("Understand a bill", "glossary.html#glossary-group-bills-and-congress"), ("Search all records", "search.html")],
+            document.QuerySelectorAll(".home-actions a").Select(link => (link.TextContent, link.GetAttribute("href")!)));
+        Assert.Matches("^Release 4, published ", document.QuerySelector(".home-lead + p.small")!.TextContent);
     }
 
     [Fact]
@@ -2252,7 +2303,8 @@ public sealed class ReleaseRendererTests
             var description = head.QuerySelector("meta[name='description']")!.GetAttribute("content")!;
             Assert.InRange(description.Length, 10, 160);
             Assert.Equal(description, head.QuerySelector("meta[property='og:description']")!.GetAttribute("content"));
-            Assert.EndsWith(" | Civic Lens", head.QuerySelector("title")!.TextContent, StringComparison.Ordinal);
+            var title = head.QuerySelector("title")!.TextContent;
+            Assert.True(title == "Civic Lens" || title.EndsWith(" | Civic Lens", StringComparison.Ordinal), title);
             Assert.Equal(head.QuerySelector("title")!.TextContent, head.QuerySelector("meta[property='og:title']")!.GetAttribute("content"));
             Assert.Equal("Civic Lens", head.QuerySelector("meta[property='og:site_name']")!.GetAttribute("content"));
             Assert.Contains("favicon.svg", head.QuerySelector("link[rel='icon']")!.GetAttribute("href"), StringComparison.Ordinal);
@@ -2376,7 +2428,7 @@ public sealed class ReleaseRendererTests
             var links = document.QuerySelectorAll("nav[aria-label='Site'] a, nav[aria-label='Footer'] a")
                 .Select(link => link.GetAttribute("href")!).ToList();
 
-            Assert.Equal(9, links.Count);
+            Assert.Equal(11, links.Count);
             Assert.All(links, href => Assert.True(WrittenRootPages.Contains(ReleasePath(pagePath, href)), $"{name}: {href}"));
         }
     }
@@ -2463,8 +2515,8 @@ public sealed class ReleaseRendererTests
             ("board", OfficialBoard.All[0].PagePath, await renderer.RenderBoardAsync(OfficialBoardPage.All([], []).First(), CancellationToken.None), "Officials"),
             ("search", PublicationProtocol.SearchPagePath, await renderer.RenderSearchAsync(release, facets, CancellationToken.None), "Search"),
             ("method", PublicationProtocol.MethodPagePath, await renderer.RenderMethodAsync(CancellationToken.None), null),
-            ("about", PublicationProtocol.AboutPagePath, await renderer.RenderAboutAsync(CancellationToken.None), null),
-            ("glossary", PublicationProtocol.GlossaryPagePath, await renderer.RenderGlossaryAsync(CancellationToken.None), null),
+            ("about", PublicationProtocol.AboutPagePath, await renderer.RenderAboutAsync(CancellationToken.None), "About"),
+            ("glossary", PublicationProtocol.GlossaryPagePath, await renderer.RenderGlossaryAsync(CancellationToken.None), "Glossary"),
             ("report", PublicationProtocol.ReportPagePath, await renderer.RenderReportAsync(CancellationToken.None), null)
         ];
     }

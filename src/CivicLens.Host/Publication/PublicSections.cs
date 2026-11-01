@@ -12,7 +12,9 @@ internal static class PublicSections
         new(PublicSection.Issues, "Issues", PublicationProtocol.FacetsPath),
         new(PublicSection.Briefs, "Briefs", PublicationProtocol.BriefsPagePath(1)),
         new(PublicSection.AllRecords, "All records", PublicationProtocol.AllRecordsPagePath(1)),
-        new(PublicSection.Search, "Search", PublicationProtocol.SearchPagePath)
+        new(PublicSection.Search, "Search", PublicationProtocol.SearchPagePath),
+        new(PublicSection.About, "About", PublicationProtocol.AboutPagePath),
+        new(PublicSection.Glossary, "Glossary", PublicationProtocol.GlossaryPagePath)
     ];
 
     public static Link Of(PublicSection section) => All.Single(link => link.Section == section);
