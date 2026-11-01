@@ -21,7 +21,7 @@ public sealed class PublishedOfficialPageTests
         var records = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-records']")!;
         Assert.Equal([new string('2', 64), new string('3', 64), new string('1', 64), new string('4', 64)],
             records.QuerySelectorAll("a.cell-title").Select(link => link.GetAttribute("href")!.Replace("../records/", "").Replace(".html", "")));
-        Assert.Equal(["2026-05-01", "2026-04-01", "2026-03-01", "2025-12-01"], records.QuerySelectorAll("tbody td.num").Select(cell => cell.TextContent));
+        Assert.Equal(["1 May 2026", "1 Apr 2026", "1 Mar 2026", "1 Dec 2025"], records.QuerySelectorAll("tbody td.num").Select(cell => cell.TextContent));
         Assert.Contains("House roll call 100, Congress 119, session 1, HR 7, Congress 119. Result of the vote: Passed", records.TextContent, StringComparison.Ordinal);
         Assert.Contains("Yea", records.TextContent, StringComparison.Ordinal);
     }
@@ -104,7 +104,7 @@ public sealed class PublishedOfficialPageTests
         Assert.Equal("Mayor Example", document.QuerySelector("h1")!.TextContent);
         Assert.Equal(["Representative for WA, district 1", "Secretary of State"],
             document.QuerySelectorAll("[aria-labelledby='panel-offices'] tbody tr td:first-child").Select(cell => cell.TextContent));
-        Assert.Equal(["2025-01-03", "Present"], document.QuerySelectorAll("[aria-labelledby='panel-offices'] tbody tr td[data-label='To']").Select(cell => cell.TextContent));
+        Assert.Equal(["3 Jan 2025", "Present"], document.QuerySelectorAll("[aria-labelledby='panel-offices'] tbody tr td[data-label='To']").Select(cell => cell.TextContent));
         Assert.All(document.QuerySelectorAll("table"), table => Assert.NotNull(table.QuerySelector("caption")));
         Assert.Contains("href=\"../officials.html\"", html, StringComparison.Ordinal);
         Assert.Contains("href=\"../assets/css/theme.css\"", html, StringComparison.Ordinal);
@@ -150,8 +150,8 @@ public sealed class PublishedOfficialPageTests
 
         var offices = document.QuerySelector("[aria-labelledby='panel-offices']")!;
         Assert.Same(offices, document.QuerySelectorAll("main section.panel").Last());
-        Assert.Equal(["1997-01-07"], offices.QuerySelectorAll("tbody td[data-label='From']").Select(cell => cell.TextContent));
-        Assert.Equal(["2001-01-03"], offices.QuerySelectorAll("tbody td[data-label='To']").Select(cell => cell.TextContent));
+        Assert.Equal(["7 Jan 1997"], offices.QuerySelectorAll("tbody td[data-label='From']").Select(cell => cell.TextContent));
+        Assert.Equal(["3 Jan 2001"], offices.QuerySelectorAll("tbody td[data-label='To']").Select(cell => cell.TextContent));
         Assert.Contains("Each row is one unbroken stretch in the same office.", offices.TextContent, StringComparison.Ordinal);
     }
 
@@ -188,7 +188,7 @@ public sealed class PublishedOfficialPageTests
     {
         var rows = await OfficeRowsAsync(Seat(new(1993, 1, 5), new(1995, 1, 3)), Seat(new(1995, 1, 4), new(1997, 1, 3)), Seat(new(1997, 1, 7), new(2027, 1, 3)));
 
-        Assert.Equal(["1993-01-05 to 2027-01-03"], rows);
+        Assert.Equal(["5 Jan 1993 to 3 Jan 2027"], rows);
     }
 
     [Fact]
@@ -196,7 +196,7 @@ public sealed class PublishedOfficialPageTests
     {
         var rows = await OfficeRowsAsync(Seat(new(2001, 1, 3), new(2003, 1, 3)), Seat(new(2003, 1, 11), new(2005, 1, 3)));
 
-        Assert.Equal(["2001-01-03 to 2003-01-03", "2003-01-11 to 2005-01-03"], rows);
+        Assert.Equal(["3 Jan 2001 to 3 Jan 2003", "11 Jan 2003 to 3 Jan 2005"], rows);
     }
 
     [Theory]
@@ -511,7 +511,7 @@ public sealed class PublishedOfficialPageTests
             panel.QuerySelectorAll("p").Select(paragraph => paragraph.TextContent.Trim()));
         var table = panel.QuerySelector("table")!;
         Assert.Equal(["Date", "Vote", "Their vote", "Most House Republicans", "Result"], table.QuerySelectorAll("th").Select(cell => cell.TextContent.Trim()));
-        Assert.Equal(["2026-04-03", "2026-04-02"], table.QuerySelectorAll("tbody tr").Select(row => row.QuerySelector("td")!.TextContent.Trim()));
+        Assert.Equal(["3 Apr 2026", "2 Apr 2026"], table.QuerySelectorAll("tbody tr").Select(row => row.QuerySelector("td")!.TextContent.Trim()));
         var first = table.QuerySelector("tbody tr")!.QuerySelectorAll("td");
         Assert.Equal(["Vote b", "Nay", "Yea", "Passed"], first.Skip(1).Select(cell => cell.ShownText().Trim()));
         Assert.EndsWith(PublicationProtocol.RecordPagePath(new string('b', 64)), first[1].QuerySelector("a")!.GetAttribute("href"));
@@ -964,7 +964,7 @@ public sealed class PublishedOfficialPageTests
     {
         var rows = await OfficeRowsAsync(Seat(new(2025, 1, 3), new(2027, 1, 3)), new PublishedOfficeTerm { Office = "Mayor", Kind = PublishedOfficeKind.Other, Start = new(2027, 1, 20) });
 
-        Assert.Equal(["2025-01-03 to 2027-01-03"], rows);
+        Assert.Equal(["3 Jan 2025 to 3 Jan 2027"], rows);
     }
 
     [Fact]
@@ -1046,8 +1046,8 @@ public sealed class PublishedOfficialPageTests
         var panel = document.QuerySelector("[aria-labelledby='panel-what-they-said-and-what-they-did']")!;
         Assert.Equal(["Statement date", "What they said", "Link", "What they did", "Their vote"], panel.QuerySelectorAll("thead th").Select(cell => cell.TextContent.Trim()));
         var rows = panel.QuerySelectorAll("tbody tr").Select(row => row.QuerySelectorAll("td").Select(cell => cell.TextContent.Trim()).ToArray()).ToArray();
-        Assert.Equal(["2026-04-05", "Statement 2", "Statement about a vote", "Official title a", "Nay"], rows[0]);
-        Assert.Equal(["2026-03-01", "Statement 1", "States position on", "Official title b", "Not a vote"], rows[1]);
+        Assert.Equal(["5 Apr 2026", "Statement 2", "Statement about a vote", "Official title a", "Nay"], rows[0]);
+        Assert.Equal(["1 Mar 2026", "Statement 1", "States position on", "Official title b", "Not a vote"], rows[1]);
         Assert.Equal([$"../records/{new string('2', 64)}.html", $"../records/{new string('a', 64)}.html"],
             panel.QuerySelectorAll("tbody tr")[0].QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
         Assert.Contains("A reviewer approved each link. A link does not mean the vote or bill matches the statement.", panel.TextContent, StringComparison.Ordinal);

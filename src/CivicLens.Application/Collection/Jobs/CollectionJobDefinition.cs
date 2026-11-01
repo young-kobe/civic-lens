@@ -120,6 +120,7 @@ public sealed record CollectionJobDefinition
             ApiParser.CongressLegislatorsExecutive => resource == Collection.ApiResource.ExecutiveRoster && url == source.Url,
             ApiParser.FederalRegisterDocuments => MatchesFederalRegisterResource(resource, source.Url, url),
             ApiParser.MemberPhotos => resource == Collection.ApiResource.MemberPhoto && MemberPhotoUrl.TryReadBioguideId(source.Url, url) is not null,
+            ApiParser.CongressBillText => resource == Collection.ApiResource.BillText && BillTextUrl.TryReadPackageId(source.Url, url) is not null,
             _ => false
         };
 
@@ -129,7 +130,7 @@ public sealed record CollectionJobDefinition
             Collection.ApiResource.BillList => BillStreamWindow.IsRequestUrl(sourceUrl, url),
             Collection.ApiResource.Bill => CongressBillListItem.IsDetailUrl(sourceUrl, url),
             Collection.ApiResource.BillCosponsors or Collection.ApiResource.BillActions or
-            Collection.ApiResource.BillSummaries or Collection.ApiResource.BillSubjects =>
+            Collection.ApiResource.BillSummaries or Collection.ApiResource.BillSubjects or Collection.ApiResource.BillTextVersions =>
                 BillPageUrl.TryRead(sourceUrl, resource, url) is not null,
             _ => false
         };

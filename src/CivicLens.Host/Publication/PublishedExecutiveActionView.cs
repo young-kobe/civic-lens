@@ -17,8 +17,8 @@ internal static class PublishedExecutiveActionView
         new Fact("Type", PublishedRecordLabels.ExecutiveActionKind(action.Kind)) { TermKey = PublishedRecordLabels.ExecutiveActionTermKey(action.Kind) }
             .CitedAt(AnchorOf(action, ExecutiveActionFacts.Type)),
         .. PublishedRecordView.Officials("President", [action.President]).Select(fact => fact.CitedAt(AnchorOf(action, ExecutiveActionFacts.President))),
-        new Fact("Signed", Moment.Iso(action.SignedOn)).CitedAt(AnchorOf(action, ExecutiveActionFacts.Signed)),
-        new Fact("Published in the Federal Register", Moment.Iso(action.PublishedOn)).CitedAt(AnchorOf(action, ExecutiveActionFacts.Published)),
+        new Fact("Signed", Moment.Day(action.SignedOn)).CitedAt(AnchorOf(action, ExecutiveActionFacts.Signed)),
+        new Fact("Published in the Federal Register", Moment.Day(action.PublishedOn)).CitedAt(AnchorOf(action, ExecutiveActionFacts.Published)),
         new Fact("Federal Register citation", action.FederalRegisterCitation).CitedAt(AnchorOf(action, ExecutiveActionFacts.Citation)),
         new Fact("Federal Register document number", action.DocumentNumber).CitedAt(AnchorOf(action, ExecutiveActionFacts.DocumentNumber)),
         .. action.Facts.Where(fact => fact.Label == ExecutiveActionFacts.PresidentialNumber).Select(fact => new Fact(fact.Label, fact.Value).CitedAt(Anchor(action, fact))),
@@ -39,7 +39,7 @@ internal static class PublishedExecutiveActionView
 
     private static (string Text, bool IsLink)[] CorrectionParts(PublishedExecutiveActionNotice notice) =>
     [
-        ($"The Federal Register published a correction on {Moment.Iso(notice.PublishedOn)}. This page shows the original document. ", false),
+        ($"The Federal Register published a correction on {Moment.Day(notice.PublishedOn)}. This page shows the original document. ", false),
         ("Open the correction", true),
         (" to see what changed.", false)
     ];

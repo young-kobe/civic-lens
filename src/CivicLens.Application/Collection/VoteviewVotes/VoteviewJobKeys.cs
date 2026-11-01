@@ -11,7 +11,5 @@ public static class VoteviewJobKeys
 
     public static string Votes(string sourceId, string membersJobId) => $"{Prefix}{sourceId}/votes/{membersJobId}";
 
-    public static string ParentJobId(string key) => key[(key.LastIndexOf('/') + 1)..];
-
     public static int CurrentCongress(DateOnly today) => VoteSession.ForYear(today.Year).Congress;
 }

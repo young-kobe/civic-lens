@@ -37,4 +37,8 @@ internal sealed class BriefRecordLoader(IBriefReviewStore briefs)
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
             (_, cancellationToken) => build.Renderer.RenderBriefAsync(record, cancellationToken));
     }
+
+    public override Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
+        CancellationToken cancellationToken) =>
+        build.Renderer.RenderBriefAsync(Parse<PublishedBrief>(json), cancellationToken);
 }

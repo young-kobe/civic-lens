@@ -1,11 +1,11 @@
 @using CivicLens.Host.Components.Layout
 @using CivicLens.Publication.Contracts
 
-<PublicPage CanonicalPath="@PublicationProtocol.GlossaryPagePath" Title="Glossary" Description="What each term means and why it matters." Crumbs="Crumbs">
+<PublicPage Section="PublicSection.Glossary" CanonicalPath="@PublicationProtocol.GlossaryPagePath" Title="Glossary" Description="What each term means and why it matters." Crumbs="Crumbs">
     <PageHeader Title="Glossary" />
     @foreach (var group in Glossary.Groups)
     {
-        <Panel Title="@group.Title" Padded="true">
+        <Panel Title="@group.Title" Id="@group.AnchorId" Padded="true">
             @foreach (var term in group.Terms)
             {
                 <section class="glossary-term" aria-labelledby="@term.AnchorId">
@@ -41,5 +41,5 @@
 </PublicPage>
 
 @code {
-    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), new("Glossary")];
+    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), PublicCrumbs.Current(PublicSection.Glossary)];
 }

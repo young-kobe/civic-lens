@@ -120,6 +120,8 @@ public sealed partial class PostgresCollectionJobStore
         if (row.HasSubjectsChain)
             jobs.Add(source.CreateFirstPageJob(ApiResource.BillSubjects, IdentityOf(bill), bill.UpdateDate, Today(now)));
         if (gate.IsPassed) jobs.AddRange(PassedFirstPages(source, row, now));
+        if (!row.HasSummariesChain && source.EnabledBillTextSource() is not null)
+            jobs.Add(source.CreateFirstPageJob(ApiResource.BillTextVersions, IdentityOf(bill), bill.UpdateDate, Today(now)));
         return jobs;
     }
 

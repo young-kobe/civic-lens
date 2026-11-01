@@ -17,7 +17,7 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
     public bool IsConfigured(string officialId) => configuredIds.Contains(officialId);
 
     internal async Task<IReadOnlyList<RosterMember>> ReadRosterAsync(CancellationToken cancellationToken) =>
-        configuration.RosterSourceOf(ApiParser.CongressLegislators) is { } source
+        configuration.SourceOf(ApiParser.CongressLegislators) is { } source
             ? await members.ReadLatestAsync(source.Id, cancellationToken)
             : [];
 
@@ -46,7 +46,7 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
 
     private async Task<Dictionary<string, PublishedOfficeTerm[]>> ReadExecutiveTermsAsync(bool needed, CancellationToken cancellationToken)
     {
-        if (!needed || configuration.RosterSourceOf(ApiParser.CongressLegislatorsExecutive) is not { } source) return [];
+        if (!needed || configuration.SourceOf(ApiParser.CongressLegislatorsExecutive) is not { } source) return [];
         var roster = await executives.ReadLatestAsync(source.Id, cancellationToken);
         return roster.Where(official => official.WikidataId is not null)
             .ToDictionary(official => official.WikidataId!, official => official.Terms.Select(ToTerm).ToArray(), StringComparer.Ordinal);

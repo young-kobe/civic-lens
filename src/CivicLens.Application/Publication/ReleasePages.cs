@@ -1,32 +1,50 @@
+using System.Text.Json;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
-/// <summary>Renders every page that this publish writes. A page lists the related records of the new release.</summary>
+/// <summary>Plans every page that this publish writes. A page lists the related records of the new release.</summary>
 internal sealed class ReleasePages(IReleaseDirectory releases, PublishedRecordLoaders loaders)
 {
-    public async Task<IReadOnlyDictionary<string, string>> RenderAsync(PublicationBuild build, IReadOnlyList<PendingRecord> additions,
+    // A page reads and renders when the staging writes it, so one page text is in memory at a time. ReleaseLinks.all still holds the carried relationships.
+    public async Task<IReadOnlyDictionary<string, StagedPage>> PlanAsync(PublicationBuild build, IReadOnlyList<PendingRecord> additions,
+        bool rewriteAll, CancellationToken cancellationToken)
+    {
+        var changedWithoutLinks = await CarriedWithChangedFactsAsync(build, additions, rewriteAll, cancellationToken);
+        var links = await ReleaseLinks.LoadAsync(releases, build, loaders.Relationships, additions, changedWithoutLinks, cancellationToken);
+        var carriedPages = CarriedToRender(links, changedWithoutLinks, build, additions).ToList();
+        var carriedVotes = carriedPages.Where(carried => carried.Kind == PublishedRecordKind.Vote).Select(carried => carried.RecordId).ToHashSet(StringComparer.Ordinal);
+        var withBills = build.WithVoteBillActions(await loaders.Votes.BillActionRecordIdsAsync(
+            [.. build.ReleaseRecords.Where(record => record.Kind == PublishedRecordKind.Vote && carriedVotes.Contains(record.RecordId))], cancellationToken));
+        var pages = new Dictionary<string, StagedPage>(StringComparer.Ordinal);
+        foreach (var addition in additions)
+            pages[addition.RecordId] = token => addition.RenderPage(links.Citing(addition.Entry.Kind, addition.RecordId), token);
+        foreach (var carried in carriedPages)
+            pages[carried.RecordId] = token => RenderCarriedAsync(carried, links, withBills, token);
+        return pages;
+    }
+
+    private async Task<string> RenderCarriedAsync(PublishedRecordReference carried, ReleaseLinks links, PublicationBuild build,
         CancellationToken cancellationToken)
     {
-        var changedWithoutLinks = await CarriedWithChangedFactsAsync(build, additions, cancellationToken);
-        var links = await ReleaseLinks.LoadAsync(releases, build, loaders.Relationships, additions, changedWithoutLinks, cancellationToken);
-        var pages = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var addition in additions)
-            pages[addition.RecordId] = await addition.RenderPage(links.Citing(addition.Entry.Kind, addition.RecordId), cancellationToken);
-        foreach (var carried in CarriedToRender(links, changedWithoutLinks, build, additions))
+        try
         {
             var json = await releases.ReadFileAsync(build.Previous.DirectoryName!, PublicationProtocol.RecordDataPath(carried.RecordId),
                 PublishedRecordFiles.MaximumCitedRecordBytes, cancellationToken);
-            pages[carried.RecordId] = await loaders.Carried(carried.Kind).RenderCarriedAsync(carried.RecordId, json, links, build, cancellationToken);
+            return await loaders.For(carried.Kind).RenderCarriedAsync(carried.RecordId, json, links, build, cancellationToken);
         }
-        return pages;
+        catch (Exception exception) when (exception is JsonException or InvalidDataException)
+        {
+            throw new ReleaseRewriteException($"The {carried.Kind} {carried.RecordId} is invalid, so its page cannot be rendered again.", exception);
+        }
     }
 
     // A carried page changes when a link of its related panel changes, when its bill link points at an action that this publish withdraws or returns,
     // or when its bill status changed. The links of these pages must load too, so the Related panel stays.
     private async Task<IReadOnlyList<PublishedRecordReference>> CarriedWithChangedFactsAsync(PublicationBuild build,
-        IReadOnlyList<PendingRecord> additions, CancellationToken cancellationToken)
+        IReadOnlyList<PendingRecord> additions, bool rewriteAll, CancellationToken cancellationToken)
     {
+        if (rewriteAll) return AllCarried(build, additions);
         var returnedActions = build.Returned.Where(record => record.Kind == PublishedRecordKind.Action).Select(record => record.RecordId);
         var votesOnChangedBills = await loaders.Votes.FindOnBillsOfActionsAsync(
             build.Removed.Where(record => record.Kind == PublishedRecordKind.Action).Select(record => record.RecordId).Concat(returnedActions),
@@ -38,6 +56,13 @@ internal sealed class ReleasePages(IReleaseDirectory releases, PublishedRecordLo
             .Concat(build.ReleaseRecords.Where(record => record.Kind == PublishedRecordKind.Vote && votesOnChangedBills.Contains(record.RecordId))
                 .Select(record => new PublishedRecordReference(record.Kind, record.RecordId)))
             .Where(record => !skipped.Contains((record.Kind, record.RecordId))).Distinct()];
+    }
+
+    private static IReadOnlyList<PublishedRecordReference> AllCarried(PublicationBuild build, IReadOnlyList<PendingRecord> additions)
+    {
+        var skipped = SkippedRecords(build, additions);
+        return [.. build.ReleaseRecords.Select(record => new PublishedRecordReference(record.Kind, record.RecordId))
+            .Where(record => !skipped.Contains((record.Kind, record.RecordId)))];
     }
 
     private static IEnumerable<PublishedRecordReference> CarriedToRender(ReleaseLinks links, IReadOnlyList<PublishedRecordReference> changedWithoutLinks,

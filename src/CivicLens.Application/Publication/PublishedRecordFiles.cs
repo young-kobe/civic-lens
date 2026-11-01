@@ -13,7 +13,7 @@ public static class PublishedRecordFiles
     internal static readonly JsonSerializerOptions PartialReadOptions =
         new(PublicationProtocol.JsonOptions) { UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip, RespectRequiredConstructorParameters = true };
 
-    // An action embeds the most sources. JSON escapes one character into at most six bytes.
+    // An executive action embeds the most sources (9), an action 8. The citation allowance covers the extra source. JSON escapes one character into at most six bytes.
     public const int MaximumCitedRecordBytes =
         PublishedAction.MaximumSources * DocumentExtraction.MaximumTextLength * MaximumBytesPerCharacter + CitationAllowance;
 }

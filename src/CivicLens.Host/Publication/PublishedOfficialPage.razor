@@ -83,7 +83,7 @@
                     <DataTable Roles="true" Items="withParty.Breaks" Caption="@($"Votes of {Page.Profile.Name} against most {PublishedOfficialView.PartyOf(withParty)}")" DefaultOrder="@PublishedRecordLabels.NewestFirst">
                         <Head><TableCell Header Class="fit num" Sort="SortKind.Date">@PublicColumn.Date</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.Vote</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.TheirVote</TableCell><TableCell Header Sort="SortKind.Text">Most @PublishedOfficialView.PartyOf(withParty)</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.Result</TableCell></Head>
                         <Row Context="vote">
-                            <TableCell Class="fit num" Label="@PublicColumn.Date" SortValue="@Moment.Iso(vote.VotedOn)">@Moment.Iso(vote.VotedOn)</TableCell>
+                            <TableCell Class="fit num" Label="@PublicColumn.Date" SortValue="@Moment.Iso(vote.VotedOn)">@Moment.Day(vote.VotedOn)</TableCell>
                             <TableCell Main><PublishedRecordTitle RecordId="@vote.RecordId" RootPath="@Page.RootPath">@vote.Headline</PublishedRecordTitle></TableCell>
                             <TableCell Label="@PublicColumn.TheirVote" SortValue="@vote.Cast"><CastWord Cast="@vote.Cast" /></TableCell>
                             <TableCell Label="@($"Most {PublishedOfficialView.PartyOf(withParty)}")" SortValue="@vote.PartyMajority"><CastWord Cast="@(vote.PartyMajority ?? string.Empty)" /></TableCell>
@@ -118,7 +118,7 @@
         <DataTable Roles="true" Items="Rows" RowClass="PublishedOfficialView.RowClass" RowFilterKeys="@(row => row.FilterKeys)" Caption="@($"Published records of {Page.Profile.Name}")" DefaultOrder="@PublishedRecordLabels.NewestFirst">
             <Head><TableCell Header Class="fit num" Sort="SortKind.Date">@PublicColumn.Date</TableCell><TableCell Header Sort="SortKind.Text">Record</TableCell>@if (HasCast){<TableCell Header Sort="SortKind.Text">@PublicColumn.Cast</TableCell>}</Head>
             <Row Context="row">
-                <TableCell Class="fit num" Label="@PublicColumn.Date" SortValue="@Moment.Iso(row.Date)">@Moment.Iso(row.Date)</TableCell>
+                <TableCell Class="fit num" Label="@PublicColumn.Date" SortValue="@Moment.Iso(row.Date)">@Moment.Day(row.Date)</TableCell>
                 <TableCell Main SortValue="@row.Headline">
                     <PublishedRecordTitle RecordId="@row.RecordId" RootPath="@Page.RootPath">@row.Headline</PublishedRecordTitle>
                     <StatusBadge Text="@row.Badge" />
@@ -146,8 +146,8 @@
                     {
                         <TableCell Label="@PublicColumn.Party">@stretch.Latest.Party</TableCell>
                     }
-                    <TableCell Class="fit num" Label="@PublicColumn.From" SortValue="@Moment.Iso(stretch.Start)">@Moment.Iso(stretch.Start)</TableCell>
-                    <TableCell Class="fit num" Label="@PublicColumn.To">@(stretch.End is { } end ? Moment.Iso(end) : "Present")</TableCell>
+                    <TableCell Class="fit num" Label="@PublicColumn.From" SortValue="@Moment.Iso(stretch.Start)">@Moment.Day(stretch.Start)</TableCell>
+                    <TableCell Class="fit num" Label="@PublicColumn.To">@(stretch.End is { } end ? Moment.Day(end) : "Present")</TableCell>
                 </Row>
                 <Empty><EmptyState Title="No office on record" Text="@NoOfficeText" /></Empty>
             </DataTable>

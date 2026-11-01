@@ -12,6 +12,8 @@ public enum ApiResource
     BillActions,
     BillSummaries,
     BillSubjects,
+    BillTextVersions,
+    BillText,
     HouseVoteList,
     HouseVoteDetail,
     HouseVoteMembers,

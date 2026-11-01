@@ -88,9 +88,13 @@ internal sealed class PublicationScenario
 
     public PublicBaseUrl? BaseUrl { get; set; }
 
+    public string PageLayout { get; set; } = "";
+
+    public string? RenderFailureOfStatement { get; set; }
+
     public HomeHighlights? Highlights { get; private set; }
 
-    public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events, OfficialPages = OfficialPages, PublicBaseUrl = BaseUrl, HomeSeen = seen => Highlights = seen }, Loaders(),
+    public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events, Layout = PageLayout, FailOnStatement = RenderFailureOfStatement, OfficialPages = OfficialPages, PublicBaseUrl = BaseUrl, HomeSeen = seen => Highlights = seen }, Loaders(),
         new PublicationCatalog(OfficialNames, Issues), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, Photos, () => PhotoReads++), new FixedExecutiveRoster(ExecutiveOfficials)),
         Captures.Photos("artifacts"), Clock, new PruneReleases(Publications, Releases, NullLogger<PruneReleases>.Instance));
 
@@ -428,28 +432,30 @@ internal sealed class PublicationScenario
 internal sealed class FakeRenderer : IReleaseRenderer
 {
     public List<string>? Events { get; init; }
+    public string Layout { get; init; } = "";
+    public string? FailOnStatement { get; init; }
     public List<ReleaseOfficialPage>? OfficialPages { get; init; }
     public IReadOnlyList<ReleaseAsset> Assets { get; } = [new("assets/site.css", [1, 2, 3])];
     public PublicBaseUrl? PublicBaseUrl { get; init; }
     public Task<string> RenderNotFoundAsync(CancellationToken cancellationToken) => Task.FromResult("<html>not found</html>");
     public Task<string> RenderRecordAsync(PublishedDocumentChange record, PublicationCatalog catalog, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>{record.RecordId}</html>");
+        Task.FromResult($"<html>{record.RecordId}{Layout}</html>");
     public Task<string> RenderStatementAsync(PublishedStatement record, ImmutableArray<PublishedRelationship> related, PublicationCatalog catalog,
         CancellationToken cancellationToken) =>
-        Logged($"render {record.RecordId[..1]}", $"<html>statement {record.RecordId}{Related(related)}</html>");
+        Logged($"render {record.RecordId[..1]}", record.RecordId == FailOnStatement ? throw new InvalidOperationException("render failed") : $"<html>statement {record.RecordId}{Related(related)}{Layout}</html>");
     public Task<string> RenderActionAsync(PublishedAction record, PublishedBillStatus? billStatus, ImmutableArray<PublishedRelationship> related,
         PublicationCatalog catalog, CancellationToken cancellationToken) =>
-        Logged($"render {record.RecordId[..1]}", $"<html>action {record.RecordId}{Related(related)}{Corrections(record.Corrections)}{StatusText(billStatus)}</html>");
+        Logged($"render {record.RecordId[..1]}", $"<html>action {record.RecordId}{Related(related)}{Corrections(record.Corrections)}{StatusText(billStatus)}{Layout}</html>");
     private static string StatusText(PublishedBillStatus? status) => status is null ? "" : $" status {status.Text} {status.Date:yyyy-MM-dd}";
     public Task<string> RenderVoteAsync(PublishedVote record, string? billActionRecordId, ImmutableArray<PublishedRelationship> related,
         PublicationCatalog catalog, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>vote {record.RecordId} bill {billActionRecordId}{Related(related)}</html>");
+        Task.FromResult($"<html>vote {record.RecordId} bill {billActionRecordId}{Related(related)}{Layout}</html>");
     public Task<string> RenderExecutiveActionAsync(PublishedExecutiveAction record, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>executive action {record.RecordId}</html>");
+        Task.FromResult($"<html>executive action {record.RecordId}{Layout}</html>");
     public Task<string> RenderRelationshipAsync(PublishedRelationship record, PublicationCatalog catalog, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>relationship {record.RecordId}</html>");
+        Task.FromResult($"<html>relationship {record.RecordId}{Layout}</html>");
     public Task<string> RenderBriefAsync(PublishedBrief record, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>brief {record.RecordId}</html>");
+        Task.FromResult($"<html>brief {record.RecordId}{Layout}</html>");
     public Task<string> RenderWithdrawalAsync(PublishedWithdrawal withdrawal, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>withdrawn {withdrawal.RecordId} {withdrawal.Note}{PublicBaseUrl?.Join(string.Empty)}</html>");
     public Action<HomeHighlights>? HomeSeen { get; init; }

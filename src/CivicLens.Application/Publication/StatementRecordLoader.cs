@@ -6,8 +6,7 @@ using CivicLens.Publication.Contracts;
 namespace CivicLens.Application.Publication;
 
 internal sealed class StatementRecordLoader(IStatementReviewStore statements)
-    : PublishedRecordLoader<UnpublishedApprovedStatement, PublishableStatement>(PublishedRecordKind.Statement, "Statement"),
-      ICarriedPageLoader
+    : PublishedRecordLoader<UnpublishedApprovedStatement, PublishableStatement>(PublishedRecordKind.Statement, "Statement")
 {
     public override void ValidateId(string recordId) => ReviewValidation.ValidateCandidateId(recordId);
 
@@ -38,7 +37,7 @@ internal sealed class StatementRecordLoader(IStatementReviewStore statements)
             (related, cancellationToken) => build.Renderer.RenderStatementAsync(record, related, build.Catalog, cancellationToken));
     }
 
-    public Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
+    public override Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
         CancellationToken cancellationToken) =>
         build.Renderer.RenderStatementAsync(Parse<PublishedStatement>(json), links.Citing(Kind, recordId), build.Catalog, cancellationToken);
 }

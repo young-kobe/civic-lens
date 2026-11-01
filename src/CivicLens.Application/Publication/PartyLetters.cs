@@ -13,4 +13,12 @@ public static class PartyLetters
         "I" => Independent,
         _ => null
     };
+
+    public static string? LetterOf(string name) => name switch
+    {
+        PublishedPartyMajority.Republican => "R",
+        PublishedPartyMajority.Democrat => "D",
+        Independent => "I",
+        _ => null
+    };
 }

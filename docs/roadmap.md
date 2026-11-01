@@ -38,13 +38,6 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 
 **Public site**
 
-- R-44: Finish the public UI gaps from the release 32 check. The PRs are: vote result labels, then count units and two line bill titles, then Congress tabs in the header with the footer panel deleted, then one date form ("27 Mar 2026"), then the profile header layout. Build the date PR alone, because it touches most files. New vote kinds and treaty votes wait for a contract choice. Depends on: none. [Publication](architecture/publication.md#limits-and-planned-work)
-  - [x] Vote result labels (#235)
-  - [x] Count units and two line bill titles (#236)
-  - [x] Congress tabs in the header (#237)
-  - [x] All records links to search by kind (#243)
-  - [x] Profile header layout (#245)
-  - [ ] One date form
 - R-45: Publish on change. An approval sends `pg_notify`. The worker groups approvals for about 1 minute and then publishes. The hourly timer stays as a fallback. The static release flow stays. The scale problem of the full `records_json` in each `publication_releases` row is fixed: the table `publication_record_states` holds the records of each release. Depends on: none. [Publication](architecture/publication.md#limits-and-planned-work)
   - [x] Keep releases by age and count (#238)
   - [x] Add the per-record table (#242)
@@ -124,7 +117,7 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 
 **Operations**
 
-- R-59: Deploy from GitHub Actions. First, the host and worker refuse to start on a missing or unknown `CIVIC_LENS_*` variable. Then a release job, gated by an owner click, reaches a forced command on the host through the tunnel. That command accepts only a full SHA on main, then updates and checks the live site. Depends on: R-44. [Host](architecture/host.md#limits-and-planned-work)
+- R-59: Deploy from GitHub Actions. First, the host and worker refuse to start on a missing or unknown `CIVIC_LENS_*` variable. Then a release job, gated by an owner click, reaches a forced command on the host through the tunnel. That command accepts only a full SHA on main, then updates and checks the live site. Depends on: none. [Host](architecture/host.md#limits-and-planned-work)
 - R-60: Small open items. Add worker health to the alert script. Fix the flaky tests. Check the Fischer source URL. Add Senate press email lists, if a terms check allows them. Obfuscate the email address on the About page. Add donations. Depends on: none. [Host](architecture/host.md#limits-and-planned-work)
 
 ### Next

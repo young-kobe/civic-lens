@@ -6,5 +6,7 @@ public enum PublicSection
     Issues,
     Briefs,
     AllRecords,
-    Search
+    Search,
+    About,
+    Glossary
 }
