@@ -53,7 +53,7 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [x] Drop `records_json` and the drift check (#276)
   - [ ] Check the row count inside each publish, after `records_json` is dropped
   - [ ] `pg_notify` on approval, after the action draft drain
-- R-47: Insight boards. One contract PR adds vote fields to vote entries, a per-official summary roll-up, and a cosponsor field on action entries. Then build boards for party breakers, loyalists, and missed votes, as static pages for each chamber and party. Then add list badges and home cards for the closest vote, the most breaks, and the newest executive actions. Then add a bill status line, sponsored bills that moved, and bipartisan cosponsorship. Depends on: R-46. [Publication](architecture/publication.md#limits-and-planned-work)
+- R-47: Insight boards. One contract PR adds vote fields to vote entries, a per-official summary roll-up, and a cosponsor field on action entries. Then build boards for party breakers, loyalists, and missed votes, as static pages for each chamber and party. Then add list badges and home cards for the closest vote, the most breaks, and the newest executive actions. Then add a bill status line, sponsored bills that moved, and bipartisan cosponsorship. Depends on: none stated. [Publication](architecture/publication.md#limits-and-planned-work)
   - [x] Contract PR (#258), with one operator rewrite of carried entries and no reset, not yet run
   - [x] Boards (#269)
   - [x] List badges and home cards (#273)
