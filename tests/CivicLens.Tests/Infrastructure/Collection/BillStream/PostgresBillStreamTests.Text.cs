@@ -182,15 +182,13 @@ public sealed partial class PostgresBillStreamTests
     {
         await AdmitTextAsync(await StartTextJobAsync(), 10, 10);
 
-        await InsertVariantAsync("version_type", "'Reported in House'");
+        await InsertVariantAsync(("version_type", "'Reported in House'"));
 
         Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM bill_text_versions"));
     }
 
     [Theory]
     [InlineData("chars_total", "30")]
-    [InlineData("chars_read", "60001")]
-    [InlineData("chars_read", "0")]
     [InlineData("version_type", "' '")]
     [InlineData("source_url", "'https://example.com/119/bills/hr7/BILLS-119hr7rh.htm'")]
     [InlineData("package_id", "'BILLS-119hr8ih'")]
@@ -200,9 +198,35 @@ public sealed partial class PostgresBillStreamTests
     {
         await AdmitTextAsync(await StartTextJobAsync(), 10, 10);
 
-        var refusal = await Assert.ThrowsAsync<PostgresException>(() => InsertVariantAsync(column, valueSql));
+        var refusal = await Assert.ThrowsAsync<PostgresException>(() => InsertVariantAsync((column, valueSql)));
 
         Assert.Equal(CheckViolation, refusal.SqlState);
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(60001, 70000)]
+    public async Task TheDatabaseRefusesATextWindowOutsideOneToTheWindowLengthEvenWhenItMatchesTheTotal(int charsRead, int charsTotal)
+    {
+        await AdmitTextAsync(await StartTextJobAsync(), 10, 10);
+
+        var refusal = await Assert.ThrowsAsync<PostgresException>(() =>
+            InsertVariantAsync(("chars_read", charsRead.ToString()), ("chars_total", charsTotal.ToString())));
+
+        Assert.Equal(CheckViolation, refusal.SqlState);
+    }
+
+    [Theory]
+    [InlineData("PLAW-119publ21")]
+    [InlineData("PLAW-119pvtl1")]
+    public async Task ALawPackageOfTheBillsCongressIsAcceptedAndTheGateCanPointAtIt(string packageId)
+    {
+        var law = IntroducedText with { PackageId = packageId, Type = "Law" };
+        var textJob = await StartTextJobAsync(law);
+
+        await store.AdmitTextAsync(textJob, TextEvidence(law, await ExtractionAsync(textJob), 4, 4), default);
+
+        Assert.Equal(packageId, await ScalarAsync("SELECT text_package_id FROM bill_gates WHERE text_state = 'Read'"));
     }
 
     [Fact]
@@ -277,12 +301,12 @@ public sealed partial class PostgresBillStreamTests
             ExecuteAsync(connectionString, $"UPDATE bill_text_versions SET extraction_id = '{new string('0', 64)}'"));
     }
 
-    private Task InsertVariantAsync(string column, string valueSql)
+    private Task InsertVariantAsync(params (string Column, string ValueSql)[] overrides)
     {
         string[] columns = ["congress", "bill_type", "bill_number", "package_id", "version_type", "version_date", "source_url",
             "extraction_id", "chars_total", "chars_read"];
         var select = string.Join(", ", columns.Select(name =>
-            name == column ? $"{valueSql} AS {name}" : name == "package_id" ? "'BILLS-119hr7rh' AS package_id" : name));
+            overrides.FirstOrDefault(change => change.Column == name) is { Column: not null } change ? $"{change.ValueSql} AS {name}" : name == "package_id" ? "'BILLS-119hr7rh' AS package_id" : name));
         return ExecuteAsync(connectionString,
             $"INSERT INTO bill_text_versions ({string.Join(", ", columns)}) SELECT {select} FROM bill_text_versions");
     }

@@ -140,7 +140,7 @@ public sealed class JobPreparationTests
     [Fact]
     public async Task TheBillTextIsRenderedWithTheVersionOfItsVersionsPageSavedAsOneExtractionAndPassedToTheStoreWithTheCaptureHash()
     {
-        var result = await Prepare(ApiResource.BillText, BillTextFixtures.PackageUrl(), "<pre>Section 1.</pre>", null, fragmentText: "Section 1.");
+        var result = await Prepare(ApiResource.BillText, BillTextFixtures.PackageUrl(), "<pre>Section 1.</pre>", null, extractedText: "Section 1.");
 
         Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
         var saved = Assert.Single(extractions.Saved);
@@ -720,7 +720,7 @@ public sealed class JobPreparationTests
     [MemberData(nameof(EveryResource))]
     public async Task ApiJobsNeverGetAnExtractionStage(ApiResource? resource, string url, string body)
     {
-        var result = await Prepare(resource, url, body, BillGateFixtures.Revision());
+        var result = await Prepare(resource, url, body, BillGateFixtures.Revision(), extractedText: "Section 1.");
 
         Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
         Assert.Equal(0, processing.EnsureCalls);
@@ -728,12 +728,13 @@ public sealed class JobPreparationTests
 
     private async Task<JobPreparationResult?> Prepare(ApiResource? resource, string url, string body,
         IssueConfigurationRevision? issues, string? fragmentText = null, byte[]? bytes = null, string? contentType = null,
-        CollectionConfiguration? rosterConfiguration = null, string? versionsBody = null, bool withVersionsJob = true)
+        CollectionConfiguration? rosterConfiguration = null, string? versionsBody = null, bool withVersionsJob = true,
+        string? extractedText = null)
     {
         var isPhoto = resource == ApiResource.MemberPhoto;
         bytes ??= isPhoto ? MemberPhotoFixtures.Jpeg() : Encoding.UTF8.GetBytes(body);
         contentType ??= isPhoto ? "image/jpeg" : "application/json";
-        var textExtractor = new FakeTextExtractor(fragmentText);
+        var textExtractor = new FakeTextExtractor(fragmentText, extractedText);
         var configured = resource switch
         {
             ApiResource.MemberRoster => new ConfiguredCollectionSource(rosterConfiguration ?? RosterFixtures.Configuration(), RosterFixtures.SourceId, Backfill),
@@ -985,12 +986,12 @@ public sealed class JobPreparationTests
         }
     }
 
-    private sealed class FakeTextExtractor(string? fragmentText = null) : IDocumentTextExtractor
+    private sealed class FakeTextExtractor(string? fragmentText = null, string? extractedText = null) : IDocumentTextExtractor
     {
         public string ExtractionVersion => "fake-extraction";
 
         public Task<string> ExtractAsync(CapturedAttemptResult attempt, string artifactRoot, DocumentContentProfile? profile,
-            CancellationToken cancellationToken) => Task.FromResult(fragmentText ?? "extracted text");
+            CancellationToken cancellationToken) => Task.FromResult(extractedText ?? throw new InvalidOperationException("Test set no extracted text."));
 
         public Task<string> ExtractHtmlFragmentAsync(string markup, CancellationToken cancellationToken) =>
             Task.FromResult(fragmentText ?? "text of " + markup);

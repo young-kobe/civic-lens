@@ -52,6 +52,16 @@ public sealed class CongressBillTextVersionsParserTests
     }
 
     [Fact]
+    public void ThePrivateLawIsChosenLikeAPublicLawBecauseItIsTheFinalTextOfTheBill()
+    {
+        string[] versions = [.. EnrolledBillWithoutPublicLaw(), Version("Private Law", "2025-07-05T04:00:00Z", PrivateLawId, url: PrivateLawUrl)];
+
+        var newest = Parse(Versions(versions)).Newest!;
+
+        Assert.Equal((PrivateLawId, "Private Law"), (newest.PackageId, newest.Type));
+    }
+
+    [Fact]
     public void AnUndatedVersionThatIsNotAnEnrolledBillCountsAsOldestSoItNeverBeatsADatedVersion()
     {
         var page = Parse(Versions(
@@ -68,6 +78,15 @@ public sealed class CongressBillTextVersionsParserTests
             Version("Public Law", "2025-07-05T04:00:00Z", PublicLawId, url: PublicLawUrl))).Versions).PackageId);
         Assert.Throws<InvalidDataException>(() => Parse(Versions(
             Version("Public Law", "2025-07-05T04:00:00Z", "PLAW-118publ21", url: "https://www.congress.gov/118/plaws/publ21/PLAW-118publ21.htm"))));
+    }
+
+    [Fact]
+    public void APrivateLawPackageIsTiedToTheCongressOnlyLikeAPublicLawPackage()
+    {
+        Assert.Equal(PrivateLawId, Assert.Single(Parse(Versions(
+            Version("Private Law", "2025-07-05T04:00:00Z", PrivateLawId, url: PrivateLawUrl))).Versions).PackageId);
+        Assert.Throws<InvalidDataException>(() => Parse(Versions(
+            Version("Private Law", "2025-07-05T04:00:00Z", "PLAW-118pvtl1", url: "https://www.congress.gov/118/plaws/pvtl1/PLAW-118pvtl1.htm"))));
     }
 
     [Fact]
@@ -170,6 +189,7 @@ public sealed class CongressBillTextVersionsParserTests
         Assert.Null(BillTextUrl.TryReadPackageId(SourceUrl, SourceUrl + "/BILLS-119hr7ih/pdf"));
         Assert.Null(BillTextUrl.TryReadPackageId(SourceUrl, SourceUrl + "/BILLS-119hr7ih/htm?x=1"));
         Assert.Equal(PublicLawId, BillTextUrl.TryReadPackageId(SourceUrl, BillTextUrl.Package(SourceUrl, PublicLawId)));
+        Assert.Equal(PrivateLawId, BillTextUrl.TryReadPackageId(SourceUrl, BillTextUrl.Package(SourceUrl, PrivateLawId)));
         Assert.Null(BillTextUrl.TryReadPackageId(SourceUrl, SourceUrl + "/PLAW-119/htm"));
         Assert.Null(BillTextUrl.TryReadPackageId(SourceUrl, "https://www.congress.gov/packages/BILLS-119hr7ih/htm"));
     }

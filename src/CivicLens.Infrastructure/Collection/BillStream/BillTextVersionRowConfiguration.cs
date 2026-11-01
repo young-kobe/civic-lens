@@ -13,7 +13,7 @@ internal sealed class BillTextVersionRowConfiguration : IEntityTypeConfiguration
         {
             table.HasCheckConstraint("ck_bill_text_versions_bill", "congress >= 1 AND bill_number >= 1");
             table.HasCheckConstraint("ck_bill_text_versions_package",
-                "package_id ~ ('^BILLS-' || congress || bill_type || bill_number || '[a-z]+$') OR package_id ~ ('^PLAW-' || congress || 'publ[0-9]+$')");
+                "package_id ~ ('^BILLS-' || congress || bill_type || bill_number || '[a-z]+$') OR package_id ~ ('^PLAW-' || congress || '(publ|pvtl)[0-9]+$')");
             table.HasCheckConstraint("ck_bill_text_versions_type", "version_type = btrim(version_type) AND char_length(version_type) >= 1");
             table.HasCheckConstraint("ck_bill_text_versions_chars",
                 $"chars_read >= 1 AND chars_read <= {CongressBillRenderer.TextWindowLength} AND chars_read <= chars_total AND " +

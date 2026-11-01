@@ -45,7 +45,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     table.PrimaryKey("PK_bill_text_versions", x => new { x.congress, x.bill_type, x.bill_number, x.package_id });
                     table.CheckConstraint("ck_bill_text_versions_bill", "congress >= 1 AND bill_number >= 1");
                     table.CheckConstraint("ck_bill_text_versions_chars", "chars_read >= 1 AND chars_read <= 60000 AND chars_read <= chars_total AND (chars_read = chars_total OR chars_total > 60000)");
-                    table.CheckConstraint("ck_bill_text_versions_package", "package_id ~ ('^BILLS-' || congress || bill_type || bill_number || '[a-z]+$') OR package_id ~ ('^PLAW-' || congress || 'publ[0-9]+$')");
+                    table.CheckConstraint("ck_bill_text_versions_package", "package_id ~ ('^BILLS-' || congress || bill_type || bill_number || '[a-z]+$') OR package_id ~ ('^PLAW-' || congress || '(publ|pvtl)[0-9]+$')");
                     table.CheckConstraint("ck_bill_text_versions_type", "version_type = btrim(version_type) AND char_length(version_type) >= 1");
                     table.CheckConstraint("ck_bill_text_versions_url", "source_url LIKE 'https://www.congress.gov/%'");
                     table.ForeignKey(

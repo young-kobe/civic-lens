@@ -237,15 +237,15 @@ public sealed class JobPreparation(
         CancellationToken cancellationToken)
     {
         var packageId = BillTextUrl.ReadPackageId(ConfiguredSourceOf(job).SourceUrl, job.Definition.Url);
-        var versionsJob = await ReadParentJobAsync(ApiJobKeys.ParentJobId(job.IdempotencyKey), ApiResource.BillTextVersions, cancellationToken);
+        var versionsJob = await ReadParentJobAsync(job.IdempotencyKey, ApiResource.BillTextVersions, cancellationToken);
         if (versionsJob is null) return JobPreparationResult.Blocked(BillTextVersionsMissing);
         var (bill, page) = CongressBillTextVersionsJob.Parse(versionsJob, await responses.ReadAsync(versionsJob, artifactRoot, cancellationToken));
         var version = page.Versions.FirstOrDefault(candidate => candidate.PackageId == packageId)
             ?? throw new InvalidDataException("Bill text job names a package that is not in its versions page.");
-        var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
-        var text = await textExtractor.ExtractAsync(response.Captured, artifactRoot, null, cancellationToken);
+        var capture = await responses.ReadCaptureAsync(job, cancellationToken);
+        var text = await textExtractor.ExtractAsync(capture.Captured, artifactRoot, null, cancellationToken);
         var reading = CongressBillRenderer.RenderText(bill, version, text);
-        var extractionId = await SaveExtractionAsync(response.Captured, CongressBillTextParser.ExtractionVersion(textExtractor),
+        var extractionId = await SaveExtractionAsync(capture.Captured, CongressBillTextParser.ExtractionVersion(textExtractor),
             reading.Text, cancellationToken);
         await billAdmissions.AdmitTextAsync(job.JobId,
             new CongressBillTextEvidence(version, reading, extractionId), cancellationToken);
@@ -322,9 +322,9 @@ public sealed class JobPreparation(
     {
         var configured = ConfiguredSourceOf(job);
         var congress = VoteviewUrl.ReadCongress(configured.SourceUrl, ApiResource.VoteviewVotes, job.Definition.Url);
-        var members = await ReadParentJobAsync(ApiJobKeys.ParentJobId(job.IdempotencyKey), ApiResource.VoteviewMembers, cancellationToken);
+        var members = await ReadParentJobAsync(job.IdempotencyKey, ApiResource.VoteviewMembers, cancellationToken);
         if (members is null) return JobPreparationResult.Blocked(VoteviewJobMissing);
-        var rollCalls = await ReadParentJobAsync(ApiJobKeys.ParentJobId(members.IdempotencyKey), ApiResource.VoteviewRollCalls, cancellationToken);
+        var rollCalls = await ReadParentJobAsync(members.IdempotencyKey, ApiResource.VoteviewRollCalls, cancellationToken);
         if (rollCalls is null) return JobPreparationResult.Blocked(VoteviewJobMissing);
         var chain = new VoteviewChain(congress, rollCalls.JobId, members.JobId, job.JobId);
         var rollCallsCapture = await responses.ReadCaptureAsync(rollCalls, cancellationToken);
@@ -353,9 +353,9 @@ public sealed class JobPreparation(
         return prepared with { ErrorCode = VoteviewCountMismatch };
     }
 
-    private async Task<CollectionJobRecord?> ReadParentJobAsync(string parentJobId, ApiResource expected, CancellationToken cancellationToken)
+    private async Task<CollectionJobRecord?> ReadParentJobAsync(string childKey, ApiResource expected, CancellationToken cancellationToken)
     {
-        var parent = await jobs.GetAsync(parentJobId, cancellationToken);
+        var parent = await jobs.GetAsync(ApiJobKeys.ParentJobId(childKey), cancellationToken);
         return parent is { State: CollectionJobState.Succeeded } && parent.Definition.ApiResource == expected ? parent : null;
     }
 

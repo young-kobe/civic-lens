@@ -13,6 +13,8 @@ internal static class BillTextFixtures
     public const string PackageId = "BILLS-119hr7ih";
     public const string PublicLawId = "PLAW-119publ21";
     public const string PublicLawUrl = "https://www.congress.gov/119/plaws/publ21/PLAW-119publ21.htm";
+    public const string PrivateLawId = "PLAW-119pvtl1";
+    public const string PrivateLawUrl = "https://www.congress.gov/119/plaws/pvtl1/PLAW-119pvtl1.htm";
     public const string VersionsUrl = "https://api.congress.gov/v3/bill/119/hr/7/text?format=json&limit=250";
 
     public static string PackageUrl(string packageId = PackageId) => BillTextUrl.Package(SourceUrl, packageId);
