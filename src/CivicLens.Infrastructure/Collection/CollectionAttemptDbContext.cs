@@ -14,5 +14,6 @@ public sealed class CollectionAttemptDbContext(DbContextOptions<CollectionAttemp
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(CollectionAttemptDbContext).Assembly);
         ReviewDecisionTableConfiguration.ConfigureAllResolutions(modelBuilder);
+        TimestampTickChecks.Apply(modelBuilder);
     }
 }

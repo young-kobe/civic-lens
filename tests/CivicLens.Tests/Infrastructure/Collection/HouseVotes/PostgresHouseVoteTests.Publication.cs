@@ -227,6 +227,7 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     private Task InsertActionDraftAsync(string recordId, string billType, int billNumber) => ExecuteAsync($"""
+        SET session_replication_role = replica;
         INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, review_state_version,
             review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
         VALUES ('{recordId}', 'congress-bills', 119, '{billType}', {billNumber}, 1, 0, 'AwaitingReview', 1, 1)

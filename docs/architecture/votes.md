@@ -56,6 +56,7 @@ The votes feature collects House roll-call votes from the Congress.gov `house-vo
 
 Each line gives the rule, what enforces it, and the test that protects it. Cross-feature invariants are in [architecture](../architecture.md#invariants).
 
+- A draft names a candidate that exists. Enforced by `FK_vote_drafts_vote_candidates_candidate_id`, which restricts deletes. The column default of an empty string stays for test fixtures that insert a draft with the key relaxed. Test: `TickBoundsAndKeysMigrationTests.AKeyedColumnRefusesAValueThatNoParentRowHoldsAndNeverDeletesAParentWithChildren`.
 - The event date of a vote is its vote day. The draft row copies it, the candidate ID, the tracked issue IDs, and the member person IDs from the current revision at each append. Enforced by `VoteDraftRows.Revised`. Test: `PostgresHouseVoteTests.EachWorkerRevisionReplacesTheListedColumnsWithThoseOfTheCurrentRevision`.
 - A votes job that skips roll calls for a count mismatch still succeeds, with the code `voteviewCountMismatch`. A warning names the Congress and the number skipped. Enforced by `JobPreparation`. Test: `JobPreparationTests.ARollCallWhoseCountsDisagreeGivesTheMismatchCodeAndALogWithTheCountWhileTheOtherRollCallsStillAdmit`.
 - A Voteview votes job whose parent job is missing or not Succeeded is Blocked with `voteviewJobMissing`. Enforced by `JobPreparation`. No test.

@@ -9,10 +9,7 @@ internal sealed class AttemptRowConfiguration : IEntityTypeConfiguration<Attempt
     {
         builder.ToTable("collection_attempts", table =>
         {
-            table.HasCheckConstraint("ck_collection_attempts_observed_ticks", "observed_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
             table.HasCheckConstraint("ck_collection_attempts_identity", "length(btrim(attempt_id)) > 0 AND length(btrim(source_id)) > 0 AND length(btrim(requested_url)) > 0 AND length(btrim(final_url)) > 0");
-            table.HasCheckConstraint("ck_collection_attempts_response_ticks", "response_last_modified_utc_ticks IS NULL OR response_last_modified_utc_ticks BETWEEN 0 AND 3155378975999999999");
-            table.HasCheckConstraint("ck_collection_attempts_sent_ticks", "sent_last_modified_utc_ticks IS NULL OR sent_last_modified_utc_ticks BETWEEN 0 AND 3155378975999999999");
             table.HasCheckConstraint("ck_collection_attempts_robots_delay", "robots_crawl_delay_milliseconds IS NULL OR robots_crawl_delay_milliseconds BETWEEN 0 AND 922337203685000");
             table.HasCheckConstraint("ck_collection_attempts_retry_ticks", "retry_delay_ticks IS NULL OR retry_delay_ticks >= 0");
             table.HasCheckConstraint("ck_collection_attempts_outcome", """

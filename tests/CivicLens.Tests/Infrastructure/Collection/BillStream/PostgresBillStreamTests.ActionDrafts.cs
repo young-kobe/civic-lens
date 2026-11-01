@@ -655,8 +655,8 @@ public sealed partial class PostgresBillStreamTests
         var codeRun = await InsertRunAsync(candidate, ActionDraftTask.PromptVersion, 1, "Bypassed", ActionDraftErrorCodes.CodeWritten);
         await ExecuteAsync(connectionString, $"""
             INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, review_state_version,
-                review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
-            VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0)
+                review_status, created_at_utc_ticks, last_revised_at_utc_ticks, candidate_id)
+            VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0, (SELECT min(candidate_id) FROM action_candidates))
             """);
 
         await Assert.ThrowsAsync<PostgresException>(() => InsertRevisionAsync("Code", "civic-lens:code", null));
@@ -680,8 +680,8 @@ public sealed partial class PostgresBillStreamTests
     {
         await ExecuteAsync(connectionString, $"""
             INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, review_state_version,
-                review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
-            VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0)
+                review_status, created_at_utc_ticks, last_revised_at_utc_ticks, candidate_id)
+            VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0, (SELECT min(candidate_id) FROM action_candidates))
             """);
         await InsertRevisionAsync(authorKind, authorSubject, runId);
     }
@@ -758,8 +758,8 @@ public sealed partial class PostgresBillStreamTests
         var runId = await ReserveAsync(store, claim);
         await ExecuteAsync(connectionString, $"""
             INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, review_state_version,
-                review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
-            VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0);
+                review_status, created_at_utc_ticks, last_revised_at_utc_ticks, candidate_id)
+            VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0, (SELECT min(candidate_id) FROM action_candidates));
             INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
             VALUES ('{RecordId}', 1, 'auth0|editor', 'Person', NULL, 'x', 0)
             """);
@@ -784,8 +784,8 @@ public sealed partial class PostgresBillStreamTests
         var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
         await ExecuteAsync(connectionString, $"""
             INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, review_state_version,
-                review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
-            VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0);
+                review_status, created_at_utc_ticks, last_revised_at_utc_ticks, candidate_id)
+            VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0, (SELECT min(candidate_id) FROM action_candidates));
             INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
             VALUES ('{RecordId}', 1, 'auth0|editor', 'Person', NULL, 'x', 0)
             """);
@@ -859,8 +859,8 @@ public sealed partial class PostgresBillStreamTests
         await CandidateWithoutSummariesAsync();
         await ExecuteAsync(connectionString, $"""
             INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, review_state_version,
-                review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
-            VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0)
+                review_status, created_at_utc_ticks, last_revised_at_utc_ticks, candidate_id)
+            VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0, (SELECT min(candidate_id) FROM action_candidates))
             """);
 
         await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, $"""
@@ -874,8 +874,8 @@ public sealed partial class PostgresBillStreamTests
     {
         await CandidateWithoutSummariesAsync();
         const string insert = "INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, " +
-            "review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)";
-        await ExecuteAsync(connectionString, $"{insert} VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0)");
+            "review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks, candidate_id)";
+        await ExecuteAsync(connectionString, $"{insert} VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0, (SELECT min(candidate_id) FROM action_candidates))");
 
         await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, $"{insert} VALUES ('{new string('a', 64)}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0)"));
         await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, $"{insert} VALUES ('NOT-A-HASH', '{SourceId}', 119, 'hr', 8, 1, 0, 'AwaitingReview', 0)"));

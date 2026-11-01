@@ -75,8 +75,8 @@ public sealed partial class PostgresBillStreamTests
             CREATE TEMP TABLE seeded AS
             SELECT md5(n::text) || md5('x' || n::text) AS record_id, n FROM generate_series(1, 15000) n;
             INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks,
-                last_revised_at_utc_ticks, review_state_version, review_status)
-            SELECT record_id, 'bulk', 119, 'hr', n, 1, 0, 0, 1, 'Approved' FROM seeded;
+                last_revised_at_utc_ticks, review_state_version, review_status, candidate_id)
+            SELECT record_id, 'bulk', 119, 'hr', n, 1, 0, 0, 1, 'Approved', (SELECT min(candidate_id) FROM action_candidates) FROM seeded;
             INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
             SELECT record_id, 1, 'bulk', 'Person', '{}', 0 FROM seeded;
             INSERT INTO action_review_decisions (decision_id, record_id, revision_number, review_state_version, decision_json, kind,

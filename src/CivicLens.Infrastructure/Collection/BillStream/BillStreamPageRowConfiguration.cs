@@ -10,7 +10,6 @@ internal sealed class BillStreamPageRowConfiguration : IEntityTypeConfiguration<
     {
         builder.ToTable("bill_stream_pages", table =>
         {
-            table.HasCheckConstraint("ck_bill_stream_pages_recorded", "recorded_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
             table.HasCheckConstraint("ck_bill_stream_pages_unknown_types", "unknown_type_count >= 0");
         });
         builder.Property(row => row.ListJobId).HasColumnName("list_job_id").HasMaxLength(128);

@@ -9,7 +9,7 @@ internal sealed class RelationshipAnalysisRowConfiguration : IEntityTypeConfigur
 {
     public void Configure(EntityTypeBuilder<RelationshipAnalysisRow> builder)
     {
-        AnalysisTableConfiguration.ConfigureQueue(builder, "relationship_analysis", nameof(RelationshipAnalysisRow.PairId), "pair_id");
+        AnalysisTableConfiguration.ConfigureQueue<RelationshipAnalysisRow, RelationshipAnalysisRunRow>(builder, "relationship_analysis", nameof(RelationshipAnalysisRow.PairId), "pair_id");
         builder.ToTable("relationship_analysis", table =>
         {
             table.HasCheckConstraint("ck_relationship_analysis_pair", "pair_id ~ '^[0-9a-f]{64}$'");

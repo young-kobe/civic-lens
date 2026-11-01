@@ -9,7 +9,6 @@ internal sealed class BillStreamCursorRowConfiguration : IEntityTypeConfiguratio
     {
         builder.ToTable("bill_stream_cursors", table =>
         {
-            table.HasCheckConstraint("ck_bill_stream_cursors_updated", "updated_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
             table.HasCheckConstraint("ck_bill_stream_cursors_pass_admitted_bills", "pass_admitted_bills >= 0");
         });
         builder.Property(row => row.SourceId).HasColumnName("source_id").HasMaxLength(128);

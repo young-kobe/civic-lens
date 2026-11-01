@@ -148,6 +148,7 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
     public async Task ACommitOfFifteenThousandRecordsStaysFastBecauseTheDiffReadsOneReleaseAndWritesInTwoStatements()
     {
         await ExecuteAsync("""
+            SET session_replication_role = replica;
             INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks,
                 last_revised_at_utc_ticks, review_state_version, review_status)
             SELECT md5(n::text) || md5('x' || n::text), 'bulk', 119, 'hr', n, 1, 0, 0, 1, 'Approved' FROM generate_series(1, 15000) n
@@ -200,6 +201,7 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
     {
         foreach (var (id, index) in ids.Select((id, index) => (id, index)))
             await ExecuteAsync($"""
+                SET session_replication_role = replica;
                 INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks,
                     last_revised_at_utc_ticks, review_state_version, review_status)
                 VALUES ('{id}', 'congress-bills', 119, 'hr', {index + 1}, 1, 0, 0, 1, 'Approved')
