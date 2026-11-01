@@ -113,14 +113,13 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         draft.ReviewStatus = ReviewPolicy.GetCurrentStatus(draft.CurrentRevisionNumber, cycle.Add(decision));
     }
 
-    /// <summary>The one writer of decision columns. The columns and the JSON come from the same decision, so they cannot differ.</summary>
+    /// <summary>The one writer of decision columns.</summary>
     private static TDecisionRow NewDecisionRow(ReviewDecision decision) => new()
     {
         DecisionId = decision.DecisionId,
         RecordId = decision.DraftId,
         RevisionNumber = decision.RevisionNumber,
         ReviewStateVersion = decision.ReviewStateVersion,
-        DecisionJson = ReviewJson.Serialize(decision),
         Kind = decision.Kind,
         ActorSubject = decision.ActorSubject,
         Note = decision.Note,

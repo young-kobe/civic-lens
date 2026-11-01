@@ -12,6 +12,5 @@ internal interface IReviewDecisionRow
     string ActorSubject { get; set; }
     string? Note { get; set; }
     string? CorrectionNote { get; set; }
-    string DecisionJson { get; set; }
     long CreatedAtUtcTicks { get; set; }
 }

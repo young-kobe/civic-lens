@@ -501,7 +501,7 @@ public sealed partial class PostgresHouseVoteTests
         WITH removed AS (
             DELETE FROM vote_review_decisions d USING vote_drafts r
              WHERE d.record_id = r.record_id AND d.record_id = '{recordId}' AND d.review_state_version = r.review_state_version
-               AND d.decision_json::jsonb ->> 'actorSubject' = '{ReviewAuthor.CodeSubject}'
+               AND d.actor_subject = '{ReviewAuthor.CodeSubject}'
          RETURNING 1)
         UPDATE vote_drafts SET review_state_version = review_state_version - 1, review_status = 'AwaitingReview'
          WHERE record_id = '{recordId}' AND EXISTS (SELECT 1 FROM removed)

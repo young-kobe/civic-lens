@@ -312,7 +312,7 @@ public sealed partial class ReviewDecisionColumnsMigrationTests(PostgresCollecti
     private async Task MigrateForwardAsync()
     {
         await using var db = NewContext();
-        await db.Database.MigrateAsync();
+        await db.GetService<IMigrator>().MigrateAsync(Migration);
         migrated = true;
     }
 

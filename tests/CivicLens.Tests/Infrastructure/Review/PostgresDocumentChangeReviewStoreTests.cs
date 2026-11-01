@@ -234,7 +234,7 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
     }
 
     [Fact]
-    public async Task ReadsTakeTheDecisionFromItsColumnsAndResolutionRowsSoAStaleJsonCopyChangesNothing()
+    public async Task ReadsTakeTheDecisionFromItsColumnsAndResolutionRows()
     {
         var (actor, catalog, saved) = await SavedDraftAsync();
         var decide = new DecideDocumentChangeReview(reviews, catalog);
@@ -244,8 +244,7 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""
             UPDATE document_change_review_decisions
-            SET actor_subject = 'auth0|column', note = 'Column note.', correction_note = 'Column correction.', created_at_utc_ticks = @ticks,
-                decision_json = (decision_json::jsonb || '{"actorSubject":"auth0|json","note":"Json note.","correctionNote":"Json correction.","createdAtUtc":"2020-05-06T07:08:09+00:00"}'::jsonb)::text
+            SET actor_subject = 'auth0|column', note = 'Column note.', correction_note = 'Column correction.', created_at_utc_ticks = @ticks
             WHERE decision_id = @id
             """, connection);
         command.Parameters.AddWithValue("id", concern.DecisionId);
@@ -510,28 +509,21 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
     }
 
     [Fact]
-    public async Task TheDecisionColumnsAndTheResolvedConcernsEqualTheJsonOfEveryDecisionBecauseOneStepWritesBoth()
+    public async Task TheDecisionColumnsAndTheResolutionRowsHoldEveryFieldOfEveryDecision()
     {
         var (actor, catalog, saved) = await SavedDraftAsync();
         var decide = new DecideDocumentChangeReview(reviews, catalog);
         var concern = await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 0, ReviewDecisionKind.RequestChanges, "Context missing.", [], "concern"));
         await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 1, ReviewDecisionKind.Approve, "Resolved.", [concern.DecisionId], "approve", "Date corrected."));
 
-        var fromColumns = await ReadRowsAsync("""
+        var columns = await ReadRowsAsync("""
             SELECT d.kind || '|' || d.actor_subject || '|' || coalesce(d.note, '<null>') || '|' || coalesce(d.correction_note, '<null>') || '|'
                 || coalesce((SELECT string_agg(r.resolved_decision_id, ',') FROM document_change_review_decision_resolutions r
                     WHERE r.decision_id = d.decision_id), '')
             FROM document_change_review_decisions d ORDER BY d.review_state_version
             """);
-        var fromJson = await ReadRowsAsync("""
-            SELECT CASE j ->> 'kind' WHEN '0' THEN 'Approve' WHEN '1' THEN 'RequestChanges' ELSE 'WithdrawApproval' END
-                || '|' || (j ->> 'actorSubject') || '|' || coalesce(j ->> 'note', '<null>') || '|' || coalesce(j ->> 'correctionNote', '<null>') || '|'
-                || coalesce((SELECT string_agg(x, ',') FROM jsonb_array_elements_text(j -> 'resolvedDecisionIds') x), '')
-            FROM (SELECT decision_json::jsonb AS j, review_state_version FROM document_change_review_decisions) d ORDER BY review_state_version
-            """);
 
-        Assert.Equal(fromJson, fromColumns);
-        Assert.Equal(["RequestChanges|auth0|owner|Context missing.|<null>|", $"Approve|auth0|owner|Resolved.|Date corrected.|{concern.DecisionId}"], fromColumns);
+        Assert.Equal(["RequestChanges|auth0|owner|Context missing.|<null>|", $"Approve|auth0|owner|Resolved.|Date corrected.|{concern.DecisionId}"], columns);
     }
 
     // The migration checks every old decision, so a row from the production writer must pass the check after a rollback.

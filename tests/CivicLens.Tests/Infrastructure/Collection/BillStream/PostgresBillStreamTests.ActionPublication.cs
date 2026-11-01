@@ -79,9 +79,9 @@ public sealed partial class PostgresBillStreamTests
             SELECT record_id, 'bulk', 119, 'hr', n, 1, 0, 0, 1, 'Approved' FROM seeded;
             INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
             SELECT record_id, 1, 'bulk', 'Person', '{}', 0 FROM seeded;
-            INSERT INTO action_review_decisions (decision_id, record_id, revision_number, review_state_version, decision_json, kind,
+            INSERT INTO action_review_decisions (decision_id, record_id, revision_number, review_state_version, kind,
                 actor_subject, created_at_utc_ticks)
-            SELECT md5(record_id), record_id, 1, 1, '{"actorSubject":"civic-lens:code"}', 'Approve', 'civic-lens:code', 0 FROM seeded;
+            SELECT md5(record_id), record_id, 1, 1, 'Approve', 'civic-lens:code', 0 FROM seeded;
             INSERT INTO publication_record_states (kind, record_id, revision_number, first_release)
             SELECT 'action', record_id, 1, 1 FROM seeded;
             """);
