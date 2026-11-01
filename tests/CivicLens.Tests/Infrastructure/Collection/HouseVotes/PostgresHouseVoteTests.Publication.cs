@@ -68,6 +68,22 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
+    public async Task PublicationReadHoldsOnlyTheLastApprovedAndTheCurrentRevisionSoTheReplacedPublishedRevisionComesFromTheReleaseFile()
+    {
+        var first = await PendingCandidateAsync();
+        await SettleAsync(first, await RevisionAsync(first, 1));
+        var recordId = await RecordIdAsync(first);
+        var second = await PendingCandidateAsync(Updated.AddDays(1));
+        await SettleAsync(second, await RevisionAsync(second, 2));
+        var third = await PendingCandidateAsync(Updated.AddDays(2));
+        await SettleAsync(third, await RevisionAsync(third, 3));
+
+        var review = (await VoteReviews().GetForPublicationAsync([recordId], default))[recordId].Review;
+
+        Assert.Equal([3], review.Revisions.Select(revision => revision.RevisionNumber));
+    }
+
+    [Fact]
     public async Task FindBillActionRecordIdsReturnsTheActionRecordsOfEachNamedBillWithoutReadingTheVoteRows()
     {
         var match = new string('7', 64);

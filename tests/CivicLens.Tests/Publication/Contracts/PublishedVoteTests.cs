@@ -497,6 +497,36 @@ public sealed class PublishedVoteTests
         };
     }
 
+    [Fact]
+    public void OnlyANewHeadlineOrSummaryWithTheSameIssuesIsATextRewriteSoNoVoteFactHidesBehindTheLabel()
+    {
+        var earlier = Vote();
+
+        Assert.True((earlier with { RevisionNumber = 2, Summary = "New." }).IsTextRewriteOf(earlier));
+        Assert.True((earlier with { Headline = "New" }).IsTextRewriteOf(earlier));
+        Assert.False(earlier.IsTextRewriteOf(earlier));
+        Assert.False((earlier with { Summary = "New.", TrackedIssueIds = ["other"] }).IsTextRewriteOf(earlier));
+    }
+
+    [Fact]
+    public void ComputedPartyDataAndEveryOtherVoteFieldCountAsFactsSoTheLabelNeverHidesAChange()
+    {
+        var earlier = Vote();
+        var rewritten = earlier with { Summary = "New." };
+        var changes = new Func<PublishedVote, PublishedVote>[]
+        {
+            vote => vote with { Members = [vote.Members[0] with { Party = "Independent" }, vote.Members[1]] },
+            vote => vote with { Totals = vote.Totals! with { Yea = 2 } },
+            vote => vote with { PartyMajorities = [PublishedPartyMajority.Of("Democrat", 1, 0), vote.PartyMajorities[1]] },
+            vote => vote with { Result = "Failed" },
+            vote => vote with { Members = [vote.Members[0] with { Cast = "Nay" }, vote.Members[1]] },
+            vote => vote with { RollCallNumber = 101 },
+            vote => vote with { Facts = [.. vote.Facts, Fact("Extra")] }
+        };
+
+        foreach (var change in changes) Assert.False(change(rewritten).IsTextRewriteOf(earlier));
+    }
+
     private static PublishedVote Vote() => new()
     {
         Corrections = [],

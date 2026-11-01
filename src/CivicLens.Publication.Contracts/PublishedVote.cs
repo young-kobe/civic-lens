@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 
 namespace CivicLens.Publication.Contracts;
 
@@ -52,6 +53,23 @@ public sealed record PublishedVote
         return texts.Any(text => text.StartsWith(CandidateTotalPrefix, StringComparison.Ordinal)) &&
             !texts.Any(text => text.StartsWith(PartyTotalPrefix, StringComparison.Ordinal));
     }
+
+    /// <summary>True when only the headline or the summary differs from the earlier revision of the same record. Computed party data counts as a vote fact.</summary>
+    public bool IsTextRewriteOf(PublishedVote earlier) =>
+        TrackedIssueIds.SequenceEqual(earlier.TrackedIssueIds) && (Headline != earlier.Headline || Summary != earlier.Summary) &&
+        FactsKey(this) == FactsKey(earlier);
+
+    private static string FactsKey(PublishedVote vote) => JsonSerializer.Serialize(vote with
+    {
+        RevisionNumber = 0,
+        Headline = "",
+        Summary = "",
+        TextOrigin = default,
+        TrackedIssueIds = [],
+        ApprovedAtUtc = default,
+        FirstPublishedAtUtc = default,
+        Corrections = []
+    }, PublicationProtocol.JsonOptions);
 
     public bool IsSplit() => SubstantiveMajorities() is { } pair && pair.Democrat != pair.Republican;
 
