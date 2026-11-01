@@ -281,23 +281,6 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
     }
 
     [Fact]
-    public async Task ReadsTakeTheResolvedConcernsFromTheResolutionRowsSoAnApprovalWithoutRowsNamesNoResolvedConcern()
-    {
-        var (actor, catalog, saved) = await SavedDraftAsync();
-        var decide = new DecideDocumentChangeReview(reviews, catalog);
-        var concern = await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 0, ReviewDecisionKind.RequestChanges, "Context missing.", [], "concern"));
-        await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 1, ReviewDecisionKind.Approve, "Resolved.", [concern.DecisionId], "approve"));
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand("DELETE FROM document_change_review_decision_resolutions", connection);
-        Assert.Equal(1, await command.ExecuteNonQueryAsync());
-
-        var review = (await reviews.GetAsync(saved.DraftId, default))!;
-
-        Assert.Empty(Assert.Single(review.Decisions).ResolvedDecisionIds);
-    }
-
-    [Fact]
     public async Task ReadsLoadOneReviewCycleSoARecordWithMoreDecisionsInTotalThanACycleHoldsStillReadsAndAcceptsDecisions()
     {
         var (actor, catalog, revision) = await SavedDraftAsync();
@@ -514,21 +497,24 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         var (actor, catalog, saved) = await SavedDraftAsync();
         var decide = new DecideDocumentChangeReview(reviews, catalog);
         var concern = await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 0, ReviewDecisionKind.RequestChanges, "Context missing.", [], "concern"));
-        await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 1, ReviewDecisionKind.Approve, "Resolved.", [concern.DecisionId], "approve", "Date corrected."));
+        var approval = await decide.ExecuteAsync(actor, new(saved.DraftId, 2, 1, ReviewDecisionKind.Approve, "Resolved.", [concern.DecisionId], "approve", "Date corrected."));
 
         var columns = await ReadRowsAsync("""
-            SELECT d.kind || '|' || d.actor_subject || '|' || coalesce(d.note, '<null>') || '|' || coalesce(d.correction_note, '<null>') || '|'
+            SELECT d.decision_id || '|' || d.revision_number || '|' || d.review_state_version || '|' || d.kind || '|' || d.actor_subject || '|'
+                || coalesce(d.note, '<null>') || '|' || coalesce(d.correction_note, '<null>') || '|' || d.created_at_utc_ticks || '|'
                 || coalesce((SELECT string_agg(r.resolved_decision_id, ',') FROM document_change_review_decision_resolutions r
                     WHERE r.decision_id = d.decision_id), '')
             FROM document_change_review_decisions d ORDER BY d.review_state_version
             """);
 
-        Assert.Equal(["RequestChanges|auth0|owner|Context missing.|<null>|", $"Approve|auth0|owner|Resolved.|Date corrected.|{concern.DecisionId}"], columns);
+        Assert.Equal([
+            $"{concern.DecisionId}|2|1|RequestChanges|auth0|owner|Context missing.|<null>|{concern.CreatedAtUtc.UtcTicks}|",
+            $"{approval.DecisionId}|2|2|Approve|auth0|owner|Resolved.|Date corrected.|{approval.CreatedAtUtc.UtcTicks}|{concern.DecisionId}"], columns);
     }
 
-    // The migration checks every old decision, so a row from the production writer must pass the check after a rollback.
+    // The migration DropDecisionJson checks every decision that Down rebuilds, so a row from the production writer must pass both checks.
     [Fact]
-    public async Task DecisionsFromTheProductionWriterPassTheMigrationChecksWhenTheMigrationRunsAgain()
+    public async Task TheJsonThatDownRebuildsFromDecisionsOfTheProductionWriterPassesTheChecksOfBothMigrationsWhenTheyRunAgain()
     {
         var (actor, catalog, saved) = await SavedDraftAsync();
         var decide = new DecideDocumentChangeReview(reviews, catalog);
@@ -538,9 +524,10 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
         var migrator = db.GetService<IMigrator>();
 
         await migrator.MigrateAsync(db.Database.GetMigrations().TakeWhile(id => id != ReviewDecisionColumnsMigrationTests.Migration).Last());
-        await migrator.MigrateAsync(ReviewDecisionColumnsMigrationTests.Migration);
+        await migrator.MigrateAsync(DropDecisionJsonMigrationTests.Migration);
 
         Assert.Equal(["2"], await ReadRowsAsync("SELECT count(*)::text FROM document_change_review_decisions"));
+        Assert.Empty(await ReadRowsAsync("SELECT 1::text FROM information_schema.columns WHERE column_name = 'decision_json'"));
     }
 
     private async Task<List<string>> ReadRowsAsync(string sql)

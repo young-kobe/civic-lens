@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Tests.Infrastructure.Collection;
@@ -13,7 +14,7 @@ namespace CivicLens.Tests.Infrastructure.Review;
 [Trait("Category", "Postgres")]
 public sealed class DropDecisionJsonMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private const string Migration = "20261101195619_DropDecisionJson";
+    public const string Migration = "20261101195619_DropDecisionJson";
     private static readonly string Concern = new('c', 32);
     private static readonly string Approval = new('a', 32);
     private static readonly DateTimeOffset CreatedAt = new DateTimeOffset(2026, 10, 19, 1, 2, 3, TimeSpan.Zero).AddTicks(1_234_567);
@@ -79,6 +80,51 @@ public sealed class DropDecisionJsonMigrationTests(PostgresCollection postgres) 
     }
 
     [Theory]
+    [MemberData(nameof(TableData))]
+    public async Task AnIdColumnThatDiffersFromTheJsonFailsTheMigrationBecauseTheRecordIdIsADecisionField(string prefix, string idColumn)
+    {
+        await InsertConcernAndApprovalAsync(prefix, idColumn);
+        await ExecuteAsync($"SET session_replication_role = replica; UPDATE {prefix}_review_decisions SET {idColumn} = 'r2' WHERE decision_id = '{Concern}'");
+
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => MigrateToAsync(Migration));
+
+        Assert.Contains($"{prefix}_review_decisions", failure.MessageText);
+        Assert.Contains(Concern, failure.MessageText);
+    }
+
+    [Fact]
+    public async Task ADecisionIdThatDiffersFromTheJsonFailsTheMigrationAndNamesTheColumnValueBecauseTheIdIsADecisionField()
+    {
+        var other = new string('f', 32);
+        await InsertConcernAndApprovalAsync("brief", "record_id");
+        await ExecuteAsync($"SET session_replication_role = replica; UPDATE brief_review_decisions SET decision_id = '{other}' WHERE decision_id = '{Concern}'");
+
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => MigrateToAsync(Migration));
+
+        Assert.Contains(other, failure.MessageText);
+        Assert.Equal(Tables.Length, (await ReadAsync("SELECT 1 FROM information_schema.columns WHERE column_name = 'decision_json'")).Count);
+    }
+
+    // These shapes are valid data, so a check that is too strict would stop the production migration.
+    [Fact]
+    public async Task ACodeApprovalWithoutANoteAnOlderRowWithoutACorrectionNoteKeyAndANoteWithNonAsciiTextAndAnApostropheMigrate()
+    {
+        var older = new string('d', 32);
+        var text = new string('e', 32);
+        await InsertAsync("vote", "record_id", Decision(Approval, 1, ReviewDecisionKind.Approve, null, [], null) with { ActorSubject = "civic-lens:code" });
+        await InsertAsync("vote", "record_id", Decision(older, 2, ReviewDecisionKind.RequestChanges, "Older row.", [], null), json => json.Remove("correctionNote"));
+        await InsertAsync("vote", "record_id", Decision(text, 3, ReviewDecisionKind.RequestChanges, "Caf\u00e9 d'accord \u00f1 \u65e5\u672c.", [], "L'\u00e9t\u00e9."));
+
+        await MigrateToAsync(Migration);
+
+        Assert.Equal(["<null>|civic-lens:code|<null>", "Older row.|auth0|reviewer|<null>", "Caf\u00e9 d'accord \u00f1 \u65e5\u672c.|auth0|reviewer|L'\u00e9t\u00e9."],
+            await ReadAsync("""
+                SELECT coalesce(note, '<null>') || '|' || actor_subject || '|' || coalesce(correction_note, '<null>')
+                FROM vote_review_decisions ORDER BY review_state_version
+                """));
+    }
+
+    [Theory]
     [InlineData("DELETE FROM brief_review_decision_resolutions")]
     [InlineData("UPDATE brief_review_decision_resolutions SET resolved_decision_id = decision_id")]
     public async Task AResolutionRowThatDiffersFromTheJsonFailsTheMigrationBecauseTheResolvedConcernsAreADecisionField(string change)
@@ -114,12 +160,14 @@ public sealed class DropDecisionJsonMigrationTests(PostgresCollection postgres) 
         await InsertAsync(prefix, idColumn, Decision(Approval, 2, ReviewDecisionKind.Approve, "Fixed.", [Concern], "Date corrected."));
     }
 
-    private static ReviewDecision Decision(string id, int version, ReviewDecisionKind kind, string note, string[] resolved, string? correctionNote) =>
+    private static ReviewDecision Decision(string id, int version, ReviewDecisionKind kind, string? note, string[] resolved, string? correctionNote) =>
         new(id, "r1", 1, version, kind, "auth0|reviewer", note, [.. resolved], CreatedAt, correctionNote);
 
-    private Task InsertAsync(string prefix, string idColumn, ReviewDecision decision)
+    private Task InsertAsync(string prefix, string idColumn, ReviewDecision decision, Action<JsonObject>? editJson = null)
     {
-        var json = JsonSerializer.Serialize(decision, JsonSerializerOptions.Web).Replace("'", "''", StringComparison.Ordinal);
+        var node = JsonSerializer.SerializeToNode(decision, JsonSerializerOptions.Web)!.AsObject();
+        editJson?.Invoke(node);
+        var json = Quote(node.ToJsonString());
         var resolutions = string.Concat(decision.ResolvedDecisionIds.Select(resolved => $"""
             INSERT INTO {prefix}_review_decision_resolutions (decision_id, {idColumn}, resolved_decision_id) VALUES ('{decision.DecisionId}', 'r1', '{resolved}');
             """));
@@ -127,11 +175,13 @@ public sealed class DropDecisionJsonMigrationTests(PostgresCollection postgres) 
             SET session_replication_role = replica;
             INSERT INTO {prefix}_review_decisions (decision_id, {idColumn}, revision_number, review_state_version, decision_json, kind,
                 actor_subject, note, correction_note, created_at_utc_ticks)
-            VALUES ('{decision.DecisionId}', 'r1', 1, {decision.ReviewStateVersion}, '{json}', '{decision.Kind}', '{decision.ActorSubject}',
-                '{decision.Note}', {(decision.CorrectionNote is null ? "NULL" : $"'{decision.CorrectionNote}'")}, {decision.CreatedAtUtc.UtcTicks});
+            VALUES ('{decision.DecisionId}', 'r1', 1, {decision.ReviewStateVersion}, {json}, '{decision.Kind}', '{decision.ActorSubject}',
+                {Quote(decision.Note)}, {Quote(decision.CorrectionNote)}, {decision.CreatedAtUtc.UtcTicks});
             {resolutions}
             """);
     }
+
+    private static string Quote(string? value) => value is null ? "NULL" : $"'{value.Replace("'", "''", StringComparison.Ordinal)}'";
 
     private string Before() => NewContext().Database.GetMigrations().TakeWhile(id => id != Migration).Last();
 

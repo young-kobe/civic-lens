@@ -319,7 +319,7 @@ public sealed partial class PostgresHouseVoteTests
         return recordId;
     }
 
-    private Task<IReadOnlyList<ReviewDecision>> VoteDecisionsAsync() => ReviewDecisionRows.ReadAsync(connectionString, "vote_review_decisions");
+    private Task<IReadOnlyList<StoredDecision>> VoteDecisionsAsync() => ReviewDecisionRows.ReadAsync(connectionString, "vote_review_decisions");
 
     private PostgresVoteReviewStore VoteReviews() => new(new PooledDbContextFactory<CollectionAttemptDbContext>(
         new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options));

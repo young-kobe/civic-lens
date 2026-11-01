@@ -415,7 +415,7 @@ public sealed partial class PostgresBillStreamTests
         Assert.Empty((await RunActionWorkerAsync(new FakeHeadlineSummaryModel())).Requests);
     }
 
-    private Task<IReadOnlyList<ReviewDecision>> ActionDecisionsAsync() => ReviewDecisionRows.ReadAsync(connectionString, "action_review_decisions");
+    private Task<IReadOnlyList<StoredDecision>> ActionDecisionsAsync() => ReviewDecisionRows.ReadAsync(connectionString, "action_review_decisions");
 
     private async Task DraftForReviewAsync(DateTimeOffset updatedAt, string output, string? title = null)
     {
