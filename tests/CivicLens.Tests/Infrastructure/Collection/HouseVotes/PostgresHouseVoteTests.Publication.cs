@@ -2,6 +2,7 @@ using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Application.Publication;
 
 namespace CivicLens.Tests.Infrastructure.Collection.HouseVotes;
@@ -95,6 +96,35 @@ public sealed partial class PostgresHouseVoteTests
 
         Assert.Equal([sameBill], [.. found[recordId]]);
         Assert.Empty(await VoteReviews().FindBillActionRecordIdsOfVotesAsync([], default));
+    }
+
+    [Fact]
+    public async Task FindBillActionRecordIdsOfVotesLeavesOutAVoteWithNoBillAndStillAnswersTheVoteWithABill()
+    {
+        var withBill = await ApprovedVoteAsync();
+        var match = new string('7', 64);
+        await InsertActionDraftAsync(match, "hconres", 14);
+        var noBill = HouseVoteFixtures.Vote(101, Updated, billType: null, billNumber: null);
+        var (_, members) = await DetailWithMembersJobAsync(noBill);
+        await AdmitMembersAsync(members, noBill);
+        var noBillCandidate = (string)(await ScalarAsync("SELECT candidate_id FROM vote_candidates WHERE bill_type IS NULL"))!;
+        await SettleAsync(noBillCandidate, await RevisionAsync(noBillCandidate, 1));
+        var noBillRecord = await RecordIdAsync(noBillCandidate);
+
+        var found = await VoteReviews().FindBillActionRecordIdsOfVotesAsync(
+            [new(PublishedRecordKind.Vote, withBill, 1), new(PublishedRecordKind.Vote, noBillRecord, 1)], default);
+
+        Assert.Equal([match], [.. found[withBill]]);
+        Assert.False(found.ContainsKey(noBillRecord));
+    }
+
+    [Fact]
+    public async Task FindBillActionRecordIdsOfVotesThrowsForAnUnstoredRevisionBecauseAReleaseNeverNamesOne()
+    {
+        var recordId = await ApprovedVoteAsync();
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            VoteReviews().FindBillActionRecordIdsOfVotesAsync([new(PublishedRecordKind.Vote, recordId, 7)], default));
     }
 
     [Fact]

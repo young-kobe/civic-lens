@@ -138,8 +138,15 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
     {
         if (revisions.IsEmpty) return ImmutableDictionary<string, ImmutableArray<string>>.Empty;
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var json = await CitedRevisions.ReadRevisionJsonAsync(db, PublishedRecordKind.Vote, revisions, cancellationToken);
-        var bills = json.Select(item => VoteBill.Of(ReviewJson.Deserialize<VoteDraftRevision>(item, "vote revision"))).OfType<VoteBill>();
+        var requested = revisions.Distinct().ToArray();
+        var stored = await db.Database.SqlQueryRaw<StoredVoteBill>("""
+                SELECT r.record_id AS "VoteRecordId", (r.revision_json::jsonb ->> 'congress')::int AS "Congress",
+                       r.revision_json::jsonb ->> 'billType' AS "BillType", (r.revision_json::jsonb ->> 'billNumber')::int AS "BillNumber"
+                FROM vote_revisions r JOIN unnest({0}, {1}) AS k(id, number) ON r.record_id = k.id AND r.revision_number = k.number
+                """, requested.Select(binding => binding.RecordId).ToArray(), requested.Select(binding => binding.RevisionNumber).ToArray())
+            .ToArrayAsync(cancellationToken);
+        if (stored.Length != requested.Length) throw new InvalidDataException("A named Vote revision is not stored.");
+        var bills = stored.Select(row => VoteBill.Of(row.VoteRecordId, row.Congress, row.BillType, row.BillNumber)).OfType<VoteBill>();
         return await ReadBillActionRecordIdsAsync(db, [.. bills], cancellationToken);
     }
 
@@ -170,9 +177,10 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
                 keys.Select(key => key.Congress).ToArray(), keys.Select(key => key.BillType).ToArray(),
                 keys.Select(key => key.BillNumber).ToArray())
             .AsNoTracking().Select(row => new { row.RecordId, row.Congress, row.BillType, row.BillNumber }).ToArrayAsync(cancellationToken);
+        var byBill = actions.ToLookup(action => (action.Congress, action.BillType, action.BillNumber));
         return bills.ToDictionary(bill => bill.VoteRecordId, bill =>
-            actions.Where(action => action.Congress == bill.Congress && action.BillType == bill.BillType && action.BillNumber == bill.BillNumber)
-                .Select(action => action.RecordId).Order(StringComparer.Ordinal).ToImmutableArray(), StringComparer.Ordinal);
+            byBill[(bill.Congress, bill.BillType, bill.BillNumber)].Select(action => action.RecordId).Order(StringComparer.Ordinal).ToImmutableArray(),
+            StringComparer.Ordinal);
     }
 
     private static VoteReview ToReview(VoteDraftRow draft, ReviewHistory<VoteDraftRevision> history) =>
@@ -196,4 +204,6 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
             .ToDictionaryAsync(row => row.CandidateId, row => row.ConfigurationRevisionId, StringComparer.Ordinal, cancellationToken);
         return await ConfiguredPersonNames.ReadAsync(db, candidateIds, revisionIds, cancellationToken);
     }
+
+    private sealed record StoredVoteBill(string VoteRecordId, int Congress, string? BillType, int? BillNumber);
 }

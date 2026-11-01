@@ -36,8 +36,7 @@ internal sealed class ReleaseLinks
         var citing = await relationships.FindCitingAsync(carriedIds, RenderedRecords(additions, carriedToRender, [.. added, .. withdrawn]), cancellationToken);
         var carried = new List<PublishedRelationship>();
         foreach (var recordId in citing.Order(StringComparer.Ordinal))
-            carried.Add(Parse(await releases.ReadFileAsync(build.Previous.DirectoryName!, PublicationProtocol.RecordDataPath(recordId),
-                PublishedRelationship.MaximumFileBytes, cancellationToken)));
+            carried.Add(await ReadCarriedAsync(releases, build, recordId, cancellationToken));
         return new([.. carried, .. added], [.. added.Concat(withdrawn).SelectMany(link => new[] { link.Statement, link.Target })]);
     }
 
@@ -46,9 +45,22 @@ internal sealed class ReleaseLinks
     {
         var withdrawn = new List<PublishedRelationship>();
         foreach (var removed in build.Removed.Where(removed => removed.Kind == PublishedRecordKind.Relationship))
-            withdrawn.Add(Parse(await releases.ReadFileAsync(build.Previous.DirectoryName!, PublicationProtocol.RecordDataPath(removed.RecordId),
-                PublishedRelationship.MaximumFileBytes, cancellationToken)));
+            withdrawn.Add(await ReadCarriedAsync(releases, build, removed.RecordId, cancellationToken));
         return [.. withdrawn];
+    }
+
+    private static async Task<PublishedRelationship> ReadCarriedAsync(IReleaseDirectory releases, PublicationBuild build, string recordId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Parse(await releases.ReadFileAsync(build.Previous.DirectoryName!, PublicationProtocol.RecordDataPath(recordId),
+                PublishedRelationship.MaximumFileBytes, cancellationToken));
+        }
+        catch (Exception exception) when (exception is JsonException or InvalidDataException)
+        {
+            throw new ReleaseRewriteException($"The record file of Relationship {recordId} is invalid, so its link cannot be read.", exception);
+        }
     }
 
     public ImmutableArray<PublishedRelationship> Citing(PublishedRecordKind kind, string recordId) =>

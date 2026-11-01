@@ -264,6 +264,33 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
+    public async Task ARewriteOfPagesThatFindsAnInvalidRelationshipFilePrintsTheRelationshipIdAndExitsWithOne()
+    {
+        var scenario = new PublicationScenario();
+        var statement = scenario.AddStatement('a');
+        var action = scenario.AddAction('b');
+        var relationship = scenario.AddRelationship('e', statement, action);
+        await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", $"statement:{statement}", $"action:{action}", $"relationship:{relationship}"],
+            scenario.Publisher(), null!, null!, null!, PublicationScenario.Owner, CancellationToken.None);
+        scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName][PublicationProtocol.RecordDataPath(relationship)] = "not json"u8.ToArray();
+        var error = new StringWriter();
+        var original = Console.Error;
+        Console.SetError(error);
+        try
+        {
+            var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", "--rewrite-pages"], scenario.Publisher(), null!, null!, null!,
+                PublicationScenario.Owner, CancellationToken.None);
+
+            Assert.Equal(1, exit);
+            Assert.Contains($"Relationship {relationship}", error.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Console.SetError(original);
+        }
+    }
+
+    [Fact]
     public async Task TheRewriteEntriesAndRewriteOfficialsOptionsRunTogetherAsInTheRunbookAndFillEntriesAndSummaries()
     {
         var scenario = new PublicationScenario();

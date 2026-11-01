@@ -35,7 +35,7 @@ internal sealed class ReleasePages(IReleaseDirectory releases, PublishedRecordLo
         }
         catch (Exception exception) when (exception is JsonException or InvalidDataException)
         {
-            throw new ReleaseRewriteException($"The record file of {carried.Kind} {carried.RecordId} is invalid, so its page cannot be rendered again.", exception);
+            throw new ReleaseRewriteException($"The {carried.Kind} {carried.RecordId} is invalid, so its page cannot be rendered again.", exception);
         }
     }
 
