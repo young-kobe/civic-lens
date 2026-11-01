@@ -9,9 +9,10 @@ public static class ActionDraftErrorCodes
     public const string TooManySponsorships = "tooManySponsorships";
     public const string TitleTooLong = "titleTooLong";
     public const string NoTrackedOfficial = "noTrackedOfficial";
-    public const string SummaryOmitted = "summaryOmitted";
     public const string Unchanged = "unchanged";
     public const string SponsorshipsChanged = "sponsorshipsChanged";
+    public const string CodeWritten = "codeWritten";
+    public const string TextKept = "textKept";
     public const string SupersededByNewerCandidate = "supersededByNewerCandidate";
     public const string RevisionConflict = "revisionConflict";
 }

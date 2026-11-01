@@ -10,8 +10,8 @@ internal sealed class ActionRevisionRowConfiguration : IEntityTypeConfiguration<
         builder.ToTable("action_revisions", table =>
         {
             table.HasCheckConstraint("ck_action_revisions_number", "revision_number >= 1");
-            table.HasCheckConstraint("ck_action_revisions_author_kind", "author_kind IN ('Person','Analysis')");
-            table.HasCheckConstraint("ck_action_revisions_run", "(author_kind = 'Analysis') = (run_id IS NOT NULL)");
+            table.HasCheckConstraint("ck_action_revisions_author_kind", "author_kind IN ('Person','Analysis','Code')");
+            table.HasCheckConstraint("ck_action_revisions_run", "(author_kind <> 'Person') = (run_id IS NOT NULL)");
         });
         builder.HasKey(row => new { row.RecordId, row.RevisionNumber });
         builder.Property(row => row.RecordId).HasColumnName("record_id").HasMaxLength(64);

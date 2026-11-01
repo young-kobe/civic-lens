@@ -12,12 +12,50 @@ public sealed class PublishedActionTests
     private const string CosponsorsText = "Cosponsor: C000001, 2026-01-05\n";
 
     [Fact]
+    public void ABillCitationCitesTheSourceThatOnlyTheBillTextUsesSoEverySourceIsCited()
+    {
+        var cosponsorOnly = Action() with
+        {
+            PolicyArea = null,
+            PolicyAreaId = null,
+            PolicyAreaCitation = null,
+            Sponsorships = [Action().Sponsorships[1]]
+        };
+        var withBill = cosponsorOnly with { BillCitation = Cite(DetailId, DetailText, "Sponsor: M000001") };
+
+        Assert.Throws<InvalidDataException>(cosponsorOnly.Validate);
+        withBill.Validate();
+        Assert.Contains(withBill.BillCitation, withBill.Citations());
+        Assert.Throws<InvalidDataException>((withBill with { BillCitation = withBill.BillCitation! with { Quote = "other" } }).Validate);
+    }
+
+    [Fact]
+    public void ARecordWrittenBeforeTheBillCitationReadsBackUnchangedBecauseTheFieldIsOptional()
+    {
+        var json = JsonSerializer.Serialize(Action(), PublicationProtocol.JsonOptions);
+
+        var read = JsonSerializer.Deserialize<PublishedAction>(json, PublicationProtocol.JsonOptions)!;
+
+        Assert.Null(read.BillCitation);
+        read.Validate();
+    }
+
+    [Fact]
+    public void CodeTextOriginWritesAsCodeAndReadsBackBecauseTheOriginIsPartOfTheContract()
+    {
+        var json = JsonSerializer.Serialize(Action() with { TextOrigin = PublishedTextOrigin.Code }, PublicationProtocol.JsonOptions);
+
+        Assert.Contains("\"textOrigin\":\"code\"", json, StringComparison.Ordinal);
+        Assert.Equal(PublishedTextOrigin.Code, JsonSerializer.Deserialize<PublishedAction>(json, PublicationProtocol.JsonOptions)!.TextOrigin);
+    }
+
+    [Fact]
     public void PublishedActionJsonMatchesPinnedSchemaVersion()
     {
         var json = JsonSerializer.Serialize(Action(), PublicationProtocol.JsonOptions);
 
         Assert.Equal(1, PublicationProtocol.SchemaVersion);
-        Assert.True(json == """{"recordId":"5555555555555555555555555555555555555555555555555555555555555555","revisionNumber":1,"headline":"Headline","summary":"Summary","textOrigin":"model","congress":119,"billType":"hr","billNumber":7,"billTitle":"A housing bill","policyArea":"Housing","policyAreaId":"housing-area","policyAreaCitation":{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","start":17,"length":20,"quote":"Policy area: Housing"},"trackedIssueIds":["housing"],"summaryCitation":null,"sponsorships":[{"official":{"id":"mayor","name":"Mayor Example"},"role":"sponsor","isOriginal":false,"sponsoredOn":"2026-01-03","withdrawnOn":null,"citations":[{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","start":0,"length":16,"quote":"Sponsor: M000001"}]},{"official":{"id":"chair","name":"Chair Example"},"role":"cosponsor","isOriginal":true,"sponsoredOn":"2026-01-05","withdrawnOn":"2026-01-20","citations":[{"extractionId":"2222222222222222222222222222222222222222222222222222222222222222","start":0,"length":30,"quote":"Cosponsor: C000001, 2026-01-05"}]}],"sources":[{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","url":"https://api.congress.gov/v3/bill/119/hr/7","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Sponsor: M000001\nPolicy area: Housing\n"},{"extractionId":"2222222222222222222222222222222222222222222222222222222222222222","url":"https://api.congress.gov/v3/bill/119/hr/7/cosponsors","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Cosponsor: C000001, 2026-01-05\n"}],"approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00","corrections":[]}""",
+        Assert.True(json == """{"recordId":"5555555555555555555555555555555555555555555555555555555555555555","revisionNumber":1,"headline":"Headline","summary":"Summary","textOrigin":"model","congress":119,"billType":"hr","billNumber":7,"billTitle":"A housing bill","policyArea":"Housing","policyAreaId":"housing-area","policyAreaCitation":{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","start":17,"length":20,"quote":"Policy area: Housing"},"trackedIssueIds":["housing"],"summaryCitation":null,"billCitation":null,"sponsorships":[{"official":{"id":"mayor","name":"Mayor Example"},"role":"sponsor","isOriginal":false,"sponsoredOn":"2026-01-03","withdrawnOn":null,"citations":[{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","start":0,"length":16,"quote":"Sponsor: M000001"}]},{"official":{"id":"chair","name":"Chair Example"},"role":"cosponsor","isOriginal":true,"sponsoredOn":"2026-01-05","withdrawnOn":"2026-01-20","citations":[{"extractionId":"2222222222222222222222222222222222222222222222222222222222222222","start":0,"length":30,"quote":"Cosponsor: C000001, 2026-01-05"}]}],"sources":[{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","url":"https://api.congress.gov/v3/bill/119/hr/7","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Sponsor: M000001\nPolicy area: Housing\n"},{"extractionId":"2222222222222222222222222222222222222222222222222222222222222222","url":"https://api.congress.gov/v3/bill/119/hr/7/cosponsors","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Cosponsor: C000001, 2026-01-05\n"}],"approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00","corrections":[]}""",
             "The published action JSON changed. Bump PublicationProtocol.SchemaVersion, update the version table " +
             "in docs/architecture.md, then update this test. Actual: " + json);
     }

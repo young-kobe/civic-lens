@@ -5,6 +5,7 @@ using CivicLens.Application.Collection.Bills;
 using CivicLens.Infrastructure.Actions.Persistence;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Relationships;
+using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.BillStream;
@@ -53,9 +54,12 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
         var revisions = await StoredJobDefinition.LoadRevisionsAsync(db, [row.ConfigurationRevisionId], cancellationToken);
         var candidate = new ActionDraftCandidate(row.CandidateId, recordId, row.SourceId, row.Congress, row.BillType, row.BillNumber,
             new DateTimeOffset(row.UpdateDateUtcTicks, TimeSpan.Zero), row.IncludesSummaries, row.IncludesSubjects);
+        var current = await ActionDraftRows.ReadCurrentAsync(db, recordId, cancellationToken);
+        var hasNewerCandidate = await ActionDraftRows.HasNewerCandidateAsync(db, candidate, cancellationToken);
+        var hasOlderPromptDraft = current is not null && !hasNewerCandidate &&
+            (await StaleCandidateIdsAsync(db, [candidateId], cancellationToken)).Contains(candidateId);
         return new(candidate, StoredJobDefinition.Find(revisions, row.ConfigurationRevisionId), await ReadPagesAsync(db, row.DetailJobId, row.IncludesSummaries, row.IncludesSubjects, cancellationToken),
-            await ActionDraftRows.ReadCurrentAsync(db, recordId, cancellationToken),
-            await ActionDraftRows.HasNewerCandidateAsync(db, candidate, cancellationToken));
+            current, hasNewerCandidate, hasOlderPromptDraft);
     }
 
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) =>
@@ -97,7 +101,14 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
         CancellationToken cancellationToken)
     {
         var stale = await (from candidate in db.Set<ActionCandidateRow>().AsNoTracking()
-                           where candidateIds.Contains(candidate.CandidateId)
+                           where candidateIds.Contains(candidate.CandidateId) && !(
+                               from draft in db.Set<ActionDraftRow>().AsNoTracking()
+                               join revision in db.Set<ActionRevisionRow>().AsNoTracking()
+                                   on new { draft.RecordId, Number = draft.CurrentRevisionNumber } equals new { revision.RecordId, Number = revision.RevisionNumber }
+                               where draft.SourceId == candidate.SourceId && draft.Congress == candidate.Congress &&
+                                   draft.BillType == candidate.BillType && draft.BillNumber == candidate.BillNumber &&
+                                   revision.AuthorKind == ReviewAuthorKind.Code
+                               select draft.RecordId).Any()
                            let newestDraftPrompt = (from run in db.Set<ActionAnalysisRunRow>()
                                                     join sibling in db.Set<ActionCandidateRow>() on run.CandidateId equals sibling.CandidateId
                                                     where run.Task == ActionDraftTask.Task && run.Outcome == AnalysisRunOutcome.Drafted &&
@@ -105,7 +116,7 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
                                                         sibling.BillType == candidate.BillType && sibling.BillNumber == candidate.BillNumber
                                                     orderby run.StartedAtUtcTicks descending
                                                     select run.PromptVersion).FirstOrDefault()
-                           where newestDraftPrompt != null && newestDraftPrompt != ActionDraftTask.PromptVersion
+                           where newestDraftPrompt != null && !ActionDraftTask.CurrentPromptVersions.Contains(newestDraftPrompt)
                            select candidate.CandidateId).ToArrayAsync(cancellationToken);
         return stale.ToHashSet(StringComparer.Ordinal);
     }
