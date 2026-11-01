@@ -104,13 +104,13 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                 ? new Dictionary<string, JobRow>(StringComparer.Ordinal) :
                 await db.Set<JobRow>().Where(row => existingJobIds.Contains(row.JobId))
                     .ToDictionaryAsync(row => row.JobId, cancellationToken);
+            var admissible = new List<(string Url, string Hash, bool IsRecheck)>();
             var candidateIndex = 0;
             foreach (var url in discovery.Urls)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var hash = candidateHashes[candidateIndex++];
-                var definition = request.ArticleTemplate with { Url = url };
-                if (definition.IsListingPage())
+                if ((request.ArticleTemplate with { Url = url }).IsListingPage())
                 {
                     duplicates++;
                     continue;
@@ -133,12 +133,18 @@ public sealed partial class PostgresCollectionJobStore : IDiscoveryAdmissionStor
                     }
                 }
 
+                admissible.Add((url, hash, existing is not null));
+            }
+
+            foreach (var (url, hash, _) in admissible.OrderBy(candidate => candidate.IsRecheck))
+            {
                 if (!budget.TryReserve())
                 {
                     deferred++;
                     continue;
                 }
 
+                var definition = request.ArticleTemplate with { Url = url };
                 var job = await jobWriter.AddJobAsync(DiscoveryAdmissionKeyPrefix + Guid.NewGuid().ToString("N"),
                     definition, cancellationToken);
                 if (existingCandidates.TryGetValue(hash, out var candidateRow))
