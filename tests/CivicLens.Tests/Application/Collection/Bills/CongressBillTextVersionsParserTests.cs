@@ -22,16 +22,51 @@ public sealed class CongressBillTextVersionsParserTests
         Assert.Equal("BILLS-119hr7rh", Parse(Versions(reported, introduced)).Newest!.PackageId);
     }
 
+    // Shapes below come from a live sample of 10 bills of the 119th Congress (H.R. 1 and H.R. 3424).
+    private static string[] EnrolledBillWithoutPublicLaw() =>
+    [
+        Version("Enrolled Bill", null, "BILLS-119hr7enr"),
+        Version("Engrossed Amendment Senate", "2025-07-01T04:00:00Z", "BILLS-119hr7eas"),
+        Version("Engrossed in House", "2025-05-22T04:00:00Z", "BILLS-119hr7eh"),
+        Version("Reported in House", "2025-05-20T04:00:00Z", "BILLS-119hr7rh")
+    ];
+
     [Fact]
-    public void AVersionWithNoDateLosesToADatedVersionBecauseItsAgeIsUnknown()
+    public void AnEnrolledBillWithNoDateIsChosenWhenNoPublicLawExistsBecauseItIsTheFinalTextEvenThoughCongressGovGivesItNoDate()
     {
-        var undated = Version("Public Law", null, "BILLS-119hr7enr");
-        var dated = Version("Introduced in House", "2025-03-01T05:00:00Z", "BILLS-119hr7ih");
+        var page = Parse(Versions(EnrolledBillWithoutPublicLaw()));
 
-        var page = Parse(Versions(undated, dated));
+        var newest = page.Newest!;
+        Assert.Equal(("BILLS-119hr7enr", null), (newest.PackageId, newest.Date));
+    }
 
-        Assert.Equal("BILLS-119hr7ih", page.Newest!.PackageId);
-        Assert.Null(page.Versions.Single(version => version.PackageId == "BILLS-119hr7enr").Date);
+    [Fact]
+    public void ThePublicLawIsChosenOverTheUndatedEnrolledBillBecauseItIsLaterAndListedLast()
+    {
+        string[] versions = [.. EnrolledBillWithoutPublicLaw(), Version("Public Law", "2025-07-05T04:00:00Z", "BILLS-119hr7pl")];
+
+        Assert.Equal("BILLS-119hr7pl", Parse(Versions(versions)).Newest!.PackageId);
+    }
+
+    [Fact]
+    public void ATieOnTheNewestDateKeepsTheFirstListedVersionBecauseCongressGovListsTheLaterStageFirst()
+    {
+        var page = Parse(Versions(
+            Version("Reported in House", "2025-09-08T04:00:00Z", "BILLS-119hr7rh"),
+            Version("Engrossed in House", "2025-09-08T04:00:00Z", "BILLS-119hr7eh"),
+            Version("Introduced in House", "2025-06-01T04:00:00Z", "BILLS-119hr7ih")));
+
+        Assert.Equal("BILLS-119hr7rh", page.Newest!.PackageId);
+    }
+
+    [Fact]
+    public void AnEnrolledBillWithNoFormattedTextIsSkippedSoTheNewestDatedVersionWins()
+    {
+        var page = Parse(Versions(
+            Version("Enrolled Bill", null, "BILLS-119hr7enr", withFormattedText: false),
+            Version("Engrossed in House", "2025-05-22T04:00:00Z", "BILLS-119hr7eh")));
+
+        Assert.Equal("BILLS-119hr7eh", page.Newest!.PackageId);
     }
 
     [Fact]
