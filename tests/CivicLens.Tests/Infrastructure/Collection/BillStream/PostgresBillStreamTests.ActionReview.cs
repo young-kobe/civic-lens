@@ -327,6 +327,24 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task ASaveWhoseApprovalFailsBecauseAConcernIsOpenWritesNoRevisionAndNoApproval()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        var concern = await DecideAsync(1, 0, ReviewDecisionKind.RequestChanges, "Fix the summary.");
+        var request = new SaveActionDraftRequest(RecordId, 1, "Typed headline", "Typed summary.", SuggestionChoice.Keep, "blocked",
+            new ApprovalWithSave(1, "Fixed.", [], null));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => new SaveActionDraft(ActionReviews()).ExecuteAsync(Reviewer, request));
+
+        Assert.Equal(1, await ScalarAsync($"SELECT current_revision_number FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_review_decisions"));
+        var saved = await new SaveActionDraft(ActionReviews()).ExecuteAsync(Reviewer,
+            request with { IdempotencyKey = "resolved", Approval = new(1, "Fixed.", [concern.DecisionId], null) });
+        Assert.Equal(2, saved.RevisionNumber);
+        Assert.Equal(2, await ScalarAsync("SELECT revision_number FROM action_review_decisions WHERE kind = 'Approve'"));
+    }
+
+    [Fact]
     public async Task APersonSaveMayKeepOrClearTheSuggestionButTheStoreRefusesAChangedOne()
     {
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);

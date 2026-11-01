@@ -93,6 +93,7 @@ else
                             {
                                 <form id="draft-form" class="form" method="post" @formname="save" @onsubmit="SaveAsync"
                                       data-unsaved-form data-recovered-unsaved="@(hasUnsavedInput ? "true" : "false")">
+                                    <NoImplicitSubmit />
                                     <AntiforgeryToken />
                                     <input type="hidden" name="expectedRevisionNumber" value="@Revision.RevisionNumber" />
                                     <input type="hidden" name="idempotencyKey" value="@saveKey" />
@@ -104,7 +105,7 @@ else
                                     </Field>
                                     @if (HasUnconfirmedAiDate)
                                     {
-                                        <Notice Tone="Tone.Warn" id="unconfirmed-statement-date">Unverified statement date. The AI drafter proposed it. Check it against its cited passage, then tick Date checked and save. A save without the tick removes the date. Approval stays blocked until a person saves.</Notice>
+                                        <Notice Tone="Tone.Warn" id="unconfirmed-statement-date">Unverified statement date. The AI drafter proposed it. Check it against its cited passage, then tick Date checked and press Save and approve. Save and approve without the tick is refused. Any other save without the tick removes the date.</Notice>
                                         <Chip Name="Input.StatementDateChecked" Value="true" Text="Date checked" Checked="@(Input.StatementDateChecked == true)" />
                                     }
                                     <Field Label="Statement date" For="Input_StatementDate" Optional="true" Hint="Leave it empty unless the article shows when the statement was made.">
@@ -167,14 +168,13 @@ else
                                             }
                                         </ul>
                                     </FieldSet>
-                                    <SaveAndApproveFields ReviewStateVersion="review.ReviewStateVersion" Concerns="concerns" Approval="Approval">
+                                    <SaveAndApproveFields ReviewStateVersion="review.ReviewStateVersion" Concerns="concerns" TakeOff="TakeOffView.Status" Approval="Approval">
                                         <Checklist>
-                                        <ul class="checklist">
-                                            <li>Does each quotation appear in the article as written?</li>
-                                            <li>Does each speaker match the article?</li>
-                                            <li>Is the statement date, if any, supported by its evidence?</li>
-                                        </ul>
-                
+                                            <ul class="checklist">
+                                                <li>Does each quotation appear in the article as written?</li>
+                                                <li>Does each speaker match the article?</li>
+                                                <li>Is the statement date, if any, supported by its evidence?</li>
+                                            </ul>
                                         </Checklist>
                                     </SaveAndApproveFields>
                                 </form>
@@ -197,7 +197,7 @@ else
         @if (Revision is not null)
         {
             <ReviewDecisionPanel RevisionNumber="Revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="status"
-                                 Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" CorrectionNote="@Decision?.CorrectionNote" WithdrawnRevisionNumber="TakeOffView.Status.WithdrawnRevisionNumber" CanApprove="false" OnDecide="DecideAsync" />
+                                 Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" WithdrawnRevisionNumber="TakeOffView.Status.WithdrawnRevisionNumber" CanApprove="false" OnDecide="DecideAsync" />
 
             <TakeOffSitePanel View="TakeOffView" RevisionNumber="Revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion"
                               IdempotencyKey="@TakeOffFormKey" Note="@TakeOffNote" Refusal="@takeOffRefusal" OnSubmit="TakeOffSiteAsync" />

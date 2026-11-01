@@ -93,6 +93,7 @@ else
                         {
                             <form id="draft-form" class="form" method="post" @formname="save" @onsubmit="SaveAsync"
                                   data-unsaved-form data-recovered-unsaved="@(hasUnsavedInput ? "true" : "false")">
+                                <NoImplicitSubmit />
                                 <AntiforgeryToken />
                                 <input type="hidden" name="expectedRevisionNumber" value="@revision.RevisionNumber" />
                                 <input type="hidden" name="idempotencyKey" value="@saveKey" />
@@ -125,14 +126,13 @@ else
                                         </div>
                                     </section>
                                 }
-                                <SaveAndApproveFields ReviewStateVersion="review.ReviewStateVersion" Concerns="concerns" Approval="Approval" Hint="A person edits the text and the citations of each paragraph, not the records.">
+                                <SaveAndApproveFields ReviewStateVersion="review.ReviewStateVersion" Concerns="concerns" TakeOff="TakeOffView.Status" Approval="Approval" Hint="A person edits the text and the citations of each paragraph, not the records.">
                                     <Checklist>
-                                    <ul class="checklist">
-                                        <li>Does each paragraph say only what the records it cites say?</li>
-                                        <li>Does the text name only officials in the cited records?</li>
-                                        <li>Does the coverage line show what the brief leaves out?</li>
-                                    </ul>
-            
+                                        <ul class="checklist">
+                                            <li>Does each paragraph say only what the records it cites say?</li>
+                                            <li>Does the text name only officials in the cited records?</li>
+                                            <li>Does the coverage line show what the brief leaves out?</li>
+                                        </ul>
                                     </Checklist>
                                 </SaveAndApproveFields>
                             </form>
@@ -165,7 +165,7 @@ else
         </div>
 
         <ReviewDecisionPanel RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="review.CurrentStatus"
-                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" CorrectionNote="@Decision?.CorrectionNote" WithdrawnRevisionNumber="TakeOffView.Status.WithdrawnRevisionNumber" CanApprove="false" OnDecide="DecideAsync" />
+                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" WithdrawnRevisionNumber="TakeOffView.Status.WithdrawnRevisionNumber" CanApprove="false" OnDecide="DecideAsync" />
 
         <TakeOffSitePanel View="TakeOffView" RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion"
                           IdempotencyKey="@TakeOffFormKey" Note="@TakeOffNote" Refusal="@takeOffRefusal" OnSubmit="TakeOffSiteAsync" />

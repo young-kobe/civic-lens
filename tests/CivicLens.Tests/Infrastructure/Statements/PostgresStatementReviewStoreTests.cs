@@ -217,6 +217,35 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     }
 
     [Fact]
+    public async Task SavingAndApprovingAStatementQueuesItsRelationshipPairsInTheSameTransaction()
+    {
+        var candidate = await StartedAsync();
+        await Relationships.ActionAsync(RelationshipFixtures.Action(title: Quote));
+        Assert.Equal(0, await CountRowsAsync("relationship_analysis"));
+        var request = await SaveRequestAsync(candidate, 1, "save-and-approve") with { Approval = new(0, null, [], null) };
+
+        await Save.ExecuteAsync(Owner, request);
+
+        Assert.Equal([["Pending", candidate, "Action"]], await Relationships.ReadAsync(
+            "SELECT status, statement_candidate_id, target_kind FROM relationship_analysis"));
+    }
+
+    [Fact]
+    public async Task ASaveWhoseApprovalFailsBecauseAConcernIsOpenWritesNoRevisionAndNoApprovalOrQueuedPair()
+    {
+        var candidate = await ApprovableAsync();
+        await Relationships.ActionAsync(RelationshipFixtures.Action(title: Quote));
+        await Decide.ExecuteAsync(Owner, new(candidate, 2, 0, ReviewDecisionKind.RequestChanges, "Cite it.", [], "concern"));
+        var request = await SaveRequestAsync(candidate, 2, "blocked") with { Approval = new(1, "Fixed.", [], null) };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => Save.ExecuteAsync(Owner, request));
+
+        Assert.Equal(2L, await ScalarAsync($"SELECT current_revision_number FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM statement_review_decisions"));
+        Assert.Equal(0, await CountRowsAsync("relationship_analysis"));
+    }
+
+    [Fact]
     public async Task ADecisionWakesAnIdleRelationshipWorkerSoANewApprovalIsDraftedWithoutAnyOtherEvent()
     {
         var candidate = await ApprovableAsync();
@@ -475,6 +504,22 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         await Assert.ThrowsAsync<ArgumentException>(() => reviews.DecideAsync(Owner.Subject, decision, 2, 0, withoutWarren,
             "direct", new string('a', 64), default));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM statement_review_decisions"));
+    }
+
+    [Fact]
+    public async Task SaveAndApproveRefusesAnAiDateThatIsNotTickedAndKeepsTheRevisionUntouchedBecauseTheTypedTextMustNotLoseTheDateSilently()
+    {
+        var candidate = await AiDraftedCandidateAsync();
+        var unticked = await SaveFromAiAsync(candidate, statementDateChecked: false) with { Approval = new(0, null, [], null) };
+
+        var refusal = await Assert.ThrowsAsync<ArgumentException>(() => Save.ExecuteAsync(Owner, unticked));
+
+        Assert.Contains("Tick Date checked", refusal.Message, StringComparison.Ordinal);
+        Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM statement_revisions WHERE candidate_id = '{candidate}'"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM statement_review_decisions"));
+        var saved = await Save.ExecuteAsync(Owner, unticked with { StatementDateChecked = true, IdempotencyKey = "ticked" });
+        Assert.NotNull(saved.StatementDate);
+        Assert.Equal(ReviewStatus.Approved, (await reviews.GetAsync(candidate, default))!.Review.CurrentStatus);
     }
 
     [Fact]

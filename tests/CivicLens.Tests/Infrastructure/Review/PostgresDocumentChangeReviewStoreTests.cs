@@ -147,6 +147,22 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
     }
 
     [Fact]
+    public async Task SavingAndApprovingTheActiveRevisionOfADocumentChangeMarksTheBriefOfItsWeekStale()
+    {
+        var (actor, catalog, saved) = await SavedDraftAsync();
+        var briefs = new BriefWorldSeeder(connectionString);
+        await briefs.ReleaseWithoutApprovalsAsync(1, BriefFixtures.InWeek, active: true,
+            BriefWorldSeeder.Binding(PublishedRecordKind.DocumentChange, saved.DraftId, 3));
+        await briefs.FinishedWeekAsync(BriefFixtures.Week);
+        Assert.Equal("Succeeded:3", await briefs.BriefQueueStatusAsync(BriefFixtures.Week));
+        var request = SaveRequest(saved, "save-and-approve") with { Approval = new(0, null, [], null) };
+
+        await new SaveDocumentChangeDraft(reviews, catalog).ExecuteAsync(actor, request);
+
+        Assert.Equal("Pending:0", await briefs.BriefQueueStatusAsync(BriefFixtures.Week));
+    }
+
+    [Fact]
     public async Task ASaveWhoseApprovalFailsLeavesNoNewRevisionAndAnOpenConcernBlocksIt()
     {
         var (actor, catalog, saved) = await SavedDraftAsync();

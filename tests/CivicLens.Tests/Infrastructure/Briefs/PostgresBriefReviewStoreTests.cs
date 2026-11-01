@@ -233,6 +233,20 @@ public sealed class PostgresBriefReviewStoreTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task ASaveWhoseApprovalFailsBecauseACitationLeftTheActiveReleaseWritesNoRevisionAndNoDecision()
+    {
+        await ChangeCitedStatementAsync("absent");
+        var request = new SaveBriefDraftRequest(RecordId, 1, "Typed headline", ReviewableRevision().Paragraphs, SuggestionChoice.Keep,
+            "save-and-approve", new ApprovalWithSave(0, null, [], null));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => new SaveBriefDraft(reviews).ExecuteAsync(Reviewer, request));
+
+        Assert.Equal(1, await ScalarAsync($"SELECT current_revision_number FROM brief_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM brief_review_decisions"));
+        Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM brief_revisions WHERE record_id = '{RecordId}'"));
+    }
+
+    [Fact]
     public async Task ApprovingTheCitedRecordAgainClearsTheFlagAndLetsTheBriefBeApproved()
     {
         await ChangeCitedStatementAsync("withdrawn");

@@ -66,6 +66,8 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
         Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
             payloadHash, async (db, draft, current) =>
             {
+                if (approval is not null)
+                    AiProposedDate.RequireCheckedOrCleared(current.AuthorSubject, current.StatementDate, revision.StatementDate, statementDateChecked, "statement date");
                 var saved = revision.KeepingAiStatementDateOnlyIfChecked(current, statementDateChecked);
                 saved.ValidateShape();
                 StatementDraftRows.SetListing(draft, saved, await StatementDraftRows.RequireCandidateExtractionAsync(db, saved, cancellationToken));

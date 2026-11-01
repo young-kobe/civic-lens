@@ -1,4 +1,5 @@
 @using System.Collections.Immutable
+@using CivicLens.Application.Publication
 @using CivicLens.Core.Review
 
 <section class="stack" id="save-and-approve">
@@ -10,11 +11,14 @@
     <ApprovalInputs Prefix="Approval" Concerns="Concerns" ResolvedIds="Approval?.ResolvedDecisionIds" CorrectionNote="@Approval?.CorrectionNote" />
     <div class="actions">
         <Button Variant="ButtonVariant.Primary" Type="submit" name="approve" value="true">Save and approve</Button>
-        <span class="actions-hint">@Hint Publishes soon.</span>
+        <span class="actions-hint">@Hint @(PublishesSoon ? "Publishes soon." : "")</span>
     </div>
 </section>
 
 @code {
+    private bool PublishesSoon => (!TakeOff.CanTakeOff && !TakeOff.TakenOff) || !string.IsNullOrWhiteSpace(Approval?.CorrectionNote);
+
+    [Parameter] public TakeOffSiteStatus TakeOff { get; set; } = TakeOffSiteStatus.NotPublished;
     [Parameter, EditorRequired] public int ReviewStateVersion { get; set; }
     [Parameter, EditorRequired] public ImmutableArray<ReviewDecision> Concerns { get; set; }
     [Parameter] public ReviewDecisionInput? Approval { get; set; }

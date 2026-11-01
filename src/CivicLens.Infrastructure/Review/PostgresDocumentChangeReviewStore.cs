@@ -69,17 +69,28 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
     public Task<DocumentChangeDraftRevision> SaveRevisionAsync(string actorSubject,
         DocumentChangeDraftRevision revision, int expectedRevisionNumber, bool changeDateChecked,
         ReviewDecision? approval, ImmutableHashSet<string> allowedOfficialIds, ImmutableHashSet<string> allowedIssueIds,
-        string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
-        Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
+        string idempotencyKey, string payloadHash, CancellationToken cancellationToken)
+    {
+        VerifiedComparison? verified = null;
+        return Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
             payloadHash, async (db, _, current) =>
             {
+                if (approval is not null)
+                    AiProposedDate.RequireCheckedOrCleared(current.AuthorSubject, current.ChangeDate, revision.ChangeDate, changeDateChecked, "change date");
                 var saved = revision.KeepingAiChangeDateOnlyIfChecked(current, changeDateChecked) with { ComparisonId = current.ComparisonId };
-                await ValidateRevisionAgainstEvidenceAsync(db, saved, cancellationToken);
+                verified = await ReadVerifiedComparisonAsync(db, saved.ComparisonId, cancellationToken)
+                    ?? throw new ArgumentException("Drafts must reference a complete comparison containing a text change.", nameof(revision));
+                ValidateRevisionAgainstEvidence(saved, verified);
                 return saved;
             }, NewRevisionRow,
             approval is null ? null : new(approval,
-                (db, draft, history) => ValidateDecisionAsync(db, draft, history, approval, allowedOfficialIds, allowedIssueIds, cancellationToken),
+                (_, draft, history) =>
+                {
+                    ValidateDecision(draft, history, approval, verified!, allowedOfficialIds, allowedIssueIds);
+                    return Task.CompletedTask;
+                },
                 afterDecision), cancellationToken);
+    }
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision,
         int expectedRevisionNumber, int expectedReviewStateVersion, string idempotencyKey,
@@ -87,15 +98,17 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
         CancellationToken cancellationToken) =>
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
             idempotencyKey, payloadHash,
-            (db, draft, history) => ValidateDecisionAsync(db, draft, history, decision, allowedOfficialIds, allowedIssueIds, cancellationToken),
+            async (db, draft, history) => ValidateDecision(draft, history, decision,
+                await ReadVerifiedComparisonAsync(db, draft.ComparisonId, cancellationToken)
+                    ?? throw new InvalidOperationException("Retained draft comparison is no longer valid."),
+                allowedOfficialIds, allowedIssueIds),
             afterDecision, cancellationToken);
 
-    private static async Task ValidateDecisionAsync(CollectionAttemptDbContext db, DocumentChangeDraftRow draft,
-        ReviewHistory<DocumentChangeDraftRevision> history, ReviewDecision decision, ImmutableHashSet<string> allowedOfficialIds,
-        ImmutableHashSet<string> allowedIssueIds, CancellationToken cancellationToken)
+    private static void ValidateDecision(DocumentChangeDraftRow draft, ReviewHistory<DocumentChangeDraftRevision> history,
+        ReviewDecision decision, VerifiedComparison verified, ImmutableHashSet<string> allowedOfficialIds,
+        ImmutableHashSet<string> allowedIssueIds)
     {
-        var comparisons = await ReadVerifiedComparisonsAsync(db, [draft.ComparisonId], cancellationToken);
-        ValidateAgainstEvidence(draft, history, comparisons);
+        ValidateAgainstEvidence(draft, history, new(StringComparer.Ordinal) { [draft.ComparisonId] = verified });
         if (decision.Kind != ReviewDecisionKind.Approve) return;
         var current = history.CurrentRevision!;
         if (current.OfficialIds.Any(id => !allowedOfficialIds.Contains(id)) || current.IssueIds.Any(id => !allowedIssueIds.Contains(id)))

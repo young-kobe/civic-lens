@@ -165,6 +165,53 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
+    public async Task TheFirstSubmitButtonOfTheEditFormIsDisabledSoEnterInAFieldNeverApprovesAsync()
+    {
+        await SaveComparisonAsync("Before policy.\n", "After policy.\n");
+        SignIn(Owner);
+        var editor = await host.GetDocumentAsync(await StartFirstDraftAsync());
+
+        var first = editor.QuerySelectorAll("#draft-form button[type='submit'], #draft-form input[type='submit']").First();
+
+        Assert.True(first.HasAttribute("disabled"));
+        Assert.Equal("Save and approve", editor.QuerySelector("#draft-form button[name='approve']")!.TextContent.Trim());
+    }
+
+    [Fact]
+    public async Task SaveAndApproveRefusesAnAiChangeDateThatIsNotTickedAndSavesNothingAsync()
+    {
+        var comparison = await SaveComparisonAsync("Deadline: October 15.\n", "Updated 2026-10-03. Deadline: October 30.\n");
+        SignIn(Owner);
+        var analysis = PostgresDocumentChangeAnalysisStore.FromConnectionString(host.ConnectionString);
+        var status = PostgresAnalysisStatusStore.FromConnectionString(host.ConnectionString);
+        await status.RecordStartAsync(50_000, default);
+        var model = new FakeDocumentChangeDraftModel().Draft(FakeDocumentChangeDraftModel.Output("Deadline moves to October 30",
+            [("h1", "after", "Updated 2026-10-03.")], changeDate: new { date = "2026-10-03", citationIndex = 0, confidence = 0.9 }));
+        await AnalysisWorkers.Drafting(analysis, status, model, new DocumentChangeDraftSettings(1_000_000, concurrency: 1),
+            [], TimeProvider.System).ExecuteAsync(once: true);
+        var draftId = Assert.Single(await analysis.GetByComparisonIdsAsync([comparison.ComparisonId], default)).DraftId!;
+        var editorUrl = "/Review/" + draftId;
+        Assert.NotNull((await host.GetDocumentAsync(editorUrl)).QuerySelector("#unconfirmed-change-date"));
+
+        var form = (await host.GetDocumentAsync(editorUrl)).QuerySelector("#draft-form")!;
+        var fields = Fields(form);
+        fields.Add(new("Input.DateEvidenceSelection", form.QuerySelector("#Input_DateEvidenceSelection option[selected]")!.GetAttribute("value")!));
+        fields.Add(new("approve", "true"));
+
+        using var refused = await host.Client.PostAsync(editorUrl, new FormUrlEncodedContent(fields));
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Equal(1, (await ReadCurrentRevisionAsync(editorUrl)).RevisionNumber);
+        var kept = await ParseAsync(refused);
+        Assert.Equal("Deadline moves to October 30", kept.QuerySelector("#Input_Headline")!.GetAttribute("value"));
+
+        fields.Add(new("Input.ChangeDateChecked", "true"));
+        using var approved = await host.Client.PostAsync(editorUrl, new FormUrlEncodedContent(fields));
+        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+        Assert.Equal(new DateOnly(2026, 10, 3), (await ReadCurrentRevisionAsync(editorUrl)).ChangeDate);
+    }
+
+    [Fact]
     public async Task StaleSaveKeepsUnsavedWordingApartFromTheApprovalTargetAndBlocksDecisionsAsync()
     {
         await SaveComparisonAsync("Before policy.\n", "After policy.\n");
@@ -405,7 +452,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.Null(editor.QuerySelector("#take-off-site"));
         Assert.Equal("This record is off the public site. It returns only when a person approves a newer revision with a correction note.",
             editor.QuerySelector("[aria-labelledby='decision'] #take-off-site-off")!.TextContent);
-        Assert.Contains("Publishes soon.", editor.QuerySelector("#save-and-approve .actions-hint")!.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("Publishes soon.", editor.QuerySelector("#save-and-approve .actions-hint")!.TextContent, StringComparison.Ordinal);
         Assert.Equal([ReviewDecisionKind.Approve, ReviewDecisionKind.WithdrawApproval], await DecisionKindsAsync(draftId));
 
         using var repeated = await host.Client.PostAsync(draftUrl, new FormUrlEncodedContent(fields));
