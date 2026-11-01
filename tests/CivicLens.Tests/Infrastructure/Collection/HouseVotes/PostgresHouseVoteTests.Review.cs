@@ -256,7 +256,7 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Null(cleared.Suggestion);
         var forged = cleared with { RevisionNumber = 6, CreatedAtUtc = DateTimeOffset.UtcNow, Suggestion = withSuggestion.Suggestion with { Headline = "Forged" } };
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            VoteReviews().SaveRevisionAsync(Reviewer.Subject, forged, 5, "save-6", new string('6', 64), default));
+            VoteReviews().SaveRevisionAsync(Reviewer.Subject, forged, 5, null, "save-6", new string('6', 64), default));
         Assert.Equal(5, await ScalarAsync($"SELECT current_revision_number FROM vote_drafts WHERE record_id = '{recordId}'"));
     }
 

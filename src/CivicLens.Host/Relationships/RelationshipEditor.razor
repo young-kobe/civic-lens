@@ -90,7 +90,7 @@ else
         </div>
 
         <Panel Label="Relationship" Padded="true">
-            <TabSet Label="Relationship views" Selected="@SelectedTab" Tabs="RecordTabs">
+            <TabSet Label="Relationship views" Selected="edit" Tabs="RecordTabs">
                 <TabPane Key="saved" Label="@($"Saved revision {revision.RevisionNumber}")">
                     <RecordView Id="saved-approval-target" Headline="@RelationshipLabels.Type(revision.Type)" Summary="@revision.Reason" Facts="SavedFacts(revision)" />
                 </TabPane>
@@ -139,10 +139,16 @@ else
                                     }
                                 </ul>
                             </FieldSet>
-                            <div class="actions">
-                                <Button Variant="ButtonVariant.Primary" Type="submit">Save revision @(revision.RevisionNumber + 1)</Button>
-                                <span class="actions-hint">Approval applies only to saved wording. A person cannot change the pair or the matched words. To reject a false pair, request changes with a note.</span>
-                            </div>
+                            <SaveAndApproveFields ReviewStateVersion="review.ReviewStateVersion" Concerns="concerns" Approval="Approval" Hint="A person cannot change the pair or the matched words. To reject a false pair, request changes with a note.">
+                                <Checklist>
+                                <ul class="checklist">
+                                    <li>Does the quote say what the reason claims about this record?</li>
+                                    <li>Is the type the one that the quote supports?</li>
+                                    <li>Do the statement and the record share the bill, and are they about the same thing?</li>
+                                </ul>
+            
+                                </Checklist>
+                            </SaveAndApproveFields>
                         </form>
                     }
                 </TabPane>
@@ -150,15 +156,7 @@ else
         </Panel>
 
         <ReviewDecisionPanel RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="review.CurrentStatus"
-                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" CorrectionNote="@Decision?.CorrectionNote" WithdrawnRevisionNumber="TakeOffView.Status.WithdrawnRevisionNumber" OnDecide="DecideAsync">
-            <Checklist>
-                <ul class="checklist">
-                    <li>Does the quote say what the reason claims about this record?</li>
-                    <li>Is the type the one that the quote supports?</li>
-                    <li>Do the statement and the record share the bill, and are they about the same thing?</li>
-                </ul>
-            </Checklist>
-        </ReviewDecisionPanel>
+                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" CorrectionNote="@Decision?.CorrectionNote" WithdrawnRevisionNumber="TakeOffView.Status.WithdrawnRevisionNumber" CanApprove="false" OnDecide="DecideAsync" />
 
         <TakeOffSitePanel View="TakeOffView" RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion"
                           IdempotencyKey="@TakeOffFormKey" Note="@TakeOffNote" Refusal="@takeOffRefusal" OnSubmit="TakeOffSiteAsync" />

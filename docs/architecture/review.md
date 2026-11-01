@@ -26,6 +26,7 @@ The review feature is the private editorial workspace. People draft, revise, and
 - One step appends a revision and computes `review_status` again. Person saves and analysis appends both use it. One step records a decision, and the person path and the code path both use it.
 - `review_status` and `has_changes` are stored columns that C# computes. SQL filters read them, so SQL keeps no copy of the policy.
 - Autosave and live preview are not part of the first workflow.
+- A person saves and approves in one step. The record editor opens with the edit form. The button "Save and approve" writes the new revision and the approval in one transaction. The approval runs every check of a separate approval on the new revision. A failed check rolls the revision back, so no revision stays that nobody approved. The page keeps the typed text. Enforced by `ReviewRecords.SaveRevisionAsync` with its `ApprovalAfterSave`, which calls the same step as `ReviewRecords.DecideAsync`. Tests: `PostgresDocumentChangeReviewStoreTests.SaveAndApproveWritesTheNewRevisionAndItsApprovalInOneStep`, `ASaveWhoseApprovalFailsLeavesNoNewRevisionAndAnOpenConcernBlocksIt`, `AStalePageCannotApproveANewerRevisionOrANewerReviewState` and `ReviewWorkspaceTests.DecisionsFollowTheReviewRulesAndInvalidOnesRedisplayTheSavedRevisionAsync`.
 
 ## Invariants
 
@@ -121,6 +122,8 @@ Each explicit save keeps an immutable revision of the wording, attribution, issu
 
 Editing an approved revision creates a new unapproved revision. The historical approval and any published record do not change. The UI warns before a person leaves unsaved edits.
 
+The record editors of document changes, statements, actions, votes, relationships, and briefs open with the edit form. Under the form, "Save and approve" takes a note, the open concerns that the person resolved, and a correction note. It saves the typed wording as the next revision and approves that revision. The approval binds to the new revision number and to the review state version that the page showed. The editor still has the suggestion buttons, which save with no approval. "Request changes" and "Withdraw approval" stay in the decision panel and apply to the saved revision. The executive action editor has no edit form, so its decision panel keeps "Approve".
+
 Review shows a revision beside the supporting before and after passages. Technical identifiers stay in the evidence details.
 
 Initial citations select positive ranges from the first 32 comparison hunks. The editor offers all hunks for explicit selection within the citation limit.
@@ -172,6 +175,7 @@ A review cycle starts at the latest approval of a record. A record with no appro
 
 - A draft save checks the expected current revision atomically.
 - A stale save returns a conflict. It keeps the unsaved text of the operator for comparison with the latest revision.
+- A stale "Save and approve" saves and approves nothing. The save step checks the expected revision first. The approval step checks the review state version.
 - A review decision checks the expected current revision and the review-state version atomically. A changed revision or an intervening decision needs a refresh before the person decides.
 - An idempotent retry of the same successful request returns the original outcome. It creates no duplicate revision or decision.
 - Keys are scoped to the authenticated actor and operation and bound to the request payload. Reuse with a conflicting payload is rejected.
@@ -236,7 +240,7 @@ The editor shows the saved account and its exact selected passages as the approv
 
 `ReviewCommand` maps a conflict, a bad request, and an operational failure to a status code and a message. An unauthorized actor goes to the access-denied page.
 
-The workspace keeps conflicting edits. It disables decisions for unsaved, failed, or conflicting forms. Every mutation uses an antiforgery token. The reader preview updates on the server render after an explicit save.
+The workspace keeps conflicting edits. It disables the decision panel for unsaved, failed, or conflicting forms. Every mutation uses an antiforgery token. The reader preview updates on the server render after an explicit save.
 
 ### Evidence verification
 

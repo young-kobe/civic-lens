@@ -90,7 +90,7 @@ else
 
         <div class="split">
             <Panel Label="Action record" Padded="true">
-                <TabSet Label="Action record views" Selected="@SelectedTab" Tabs="RecordTabs">
+                <TabSet Label="Action record views" Selected="edit" Tabs="RecordTabs">
                     <TabPane Key="saved" Label="@($"Saved revision {revision.RevisionNumber}")">
                         <RecordView Id="saved-approval-target" Headline="@revision.Headline" Summary="@revision.Summary" Facts="FactsOf(revision)" />
                     </TabPane>
@@ -120,10 +120,16 @@ else
                                         </div>
                                     </section>
                                 }
-                                <div class="actions">
-                                    <Button Variant="ButtonVariant.Primary" Type="submit">Save revision @(revision.RevisionNumber + 1)</Button>
-                                    <span class="actions-hint">Approval applies only to saved wording. A person cannot edit the sponsorships.</span>
-                                </div>
+                                <SaveAndApproveFields ReviewStateVersion="review.ReviewStateVersion" Concerns="concerns" Approval="Approval" Hint="A person cannot edit the sponsorships.">
+                                    <Checklist>
+                                    <ul class="checklist">
+                                        <li>Does the headline name only officials in the sponsorships?</li>
+                                        <li>Does the summary match the cited sponsorship dates?</li>
+                                        <li>Does the summary present a sponsorship as a proposal, not as a law?</li>
+                                    </ul>
+            
+                                    </Checklist>
+                                </SaveAndApproveFields>
                             </form>
                         }
                     </TabPane>
@@ -176,15 +182,7 @@ else
         </Panel>
 
         <ReviewDecisionPanel RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="review.CurrentStatus"
-                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" CorrectionNote="@Decision?.CorrectionNote" WithdrawnRevisionNumber="TakeOffView.Status.WithdrawnRevisionNumber" OnDecide="DecideAsync">
-            <Checklist>
-                <ul class="checklist">
-                    <li>Does the headline name only officials in the sponsorships?</li>
-                    <li>Does the summary match the cited sponsorship dates?</li>
-                    <li>Does the summary present a sponsorship as a proposal, not as a law?</li>
-                </ul>
-            </Checklist>
-        </ReviewDecisionPanel>
+                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" CorrectionNote="@Decision?.CorrectionNote" WithdrawnRevisionNumber="TakeOffView.Status.WithdrawnRevisionNumber" CanApprove="false" OnDecide="DecideAsync" />
 
         <TakeOffSitePanel View="TakeOffView" RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion"
                           IdempotencyKey="@TakeOffFormKey" Note="@TakeOffNote" Refusal="@takeOffRefusal" OnSubmit="TakeOffSiteAsync" />

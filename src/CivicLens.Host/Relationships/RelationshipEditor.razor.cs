@@ -61,7 +61,7 @@ public sealed partial class RelationshipEditor
     private async Task<string?> TrySaveAsync()
     {
         if (detail is null) return null;
-        var target = await RunCommandAsync(PersistDraftAsync, SaveFailures, ReloadAfterSaveConflictAsync);
+        var target = await RunCommandAsync(PersistDraftAsync, SaveMessages, ReloadAfterSaveConflictAsync);
         hasUnsavedInput = target is null;
         return target;
     }
@@ -71,14 +71,14 @@ public sealed partial class RelationshipEditor
         if (SaveExpectedRevision != Revision.RevisionNumber)
             throw new ReviewConflictException("The relationship has a newer revision. Refresh before saving.");
         _ = await SaveDraft.ExecuteAsync(actor, BuildSaveRequest(Input ?? new RelationshipInput()), RequestAborted);
-        return RelationshipRoutes.Editor(RecordId, "saved");
+        return RelationshipRoutes.Editor(RecordId, SavedStatus);
     }
 
     private SaveRelationshipDraftRequest BuildSaveRequest(RelationshipInput input) =>
         new(RecordId, SaveExpectedRevision, RelationshipTypes.Parse(input.Type, Revision.Target.Kind)
             ?? throw new ArgumentException("Choose a type that fits the target.", nameof(input)), input.Reason ?? "",
             QuoteOf(input.QuoteSelection) ?? throw new ArgumentException("Choose one of the offered passages.", nameof(input)),
-            input.FactId ?? "", SaveKey ?? "");
+            input.FactId ?? "", SaveKey ?? "", ApprovalOfSave());
 
     private SourceSpan? QuoteOf(string? key) =>
         detail!.Options.Quotes.FirstOrDefault(quote => StatementSelectableSpan.KeyOf(quote.Span) == key)?.Span;

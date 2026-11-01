@@ -105,7 +105,7 @@ public sealed class PostgresBriefReviewStoreTests(PostgresCollection postgres) :
         forged.ValidateShape();
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            reviews.SaveRevisionAsync(Reviewer.Subject, forged, 1, "save-2", new string('6', 64), default));
+            reviews.SaveRevisionAsync(Reviewer.Subject, forged, 1, null, "save-2", new string('6', 64), default));
 
         Assert.Equal(1, await ScalarAsync($"SELECT current_revision_number FROM brief_drafts WHERE record_id = '{RecordId}'"));
     }
@@ -138,7 +138,7 @@ public sealed class PostgresBriefReviewStoreTests(PostgresCollection postgres) :
             Suggestion = third.Suggestion! with { Headline = "A forged suggestion" }
         };
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            reviews.SaveRevisionAsync(Reviewer.Subject, forged, 5, "save-6", new string('6', 64), default));
+            reviews.SaveRevisionAsync(Reviewer.Subject, forged, 5, null, "save-6", new string('6', 64), default));
         Assert.Equal(5, await ScalarAsync($"SELECT current_revision_number FROM brief_drafts WHERE record_id = '{RecordId}'"));
     }
 
@@ -176,7 +176,7 @@ public sealed class PostgresBriefReviewStoreTests(PostgresCollection postgres) :
             Citations = [.. suggestion.Citations.Select(citation => citation with { RevisionNumber = citation.RevisionNumber + 1 })]
         };
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            reviews.SaveRevisionAsync(Reviewer.Subject, forged, 3, "save-6", new string('6', 64), default));
+            reviews.SaveRevisionAsync(Reviewer.Subject, forged, 3, null, "save-6", new string('6', 64), default));
         Assert.Equal(3, await ScalarAsync($"SELECT current_revision_number FROM brief_drafts WHERE record_id = '{RecordId}'"));
         await Assert.ThrowsAsync<ArgumentException>(() =>
             SaveAsync(1, "Headline", ReviewableRevision().Paragraphs, "save-7", SuggestionChoice.Use));

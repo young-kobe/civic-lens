@@ -132,6 +132,65 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
     }
 
     [Fact]
+    public async Task SaveAndApproveWritesTheNewRevisionAndItsApprovalInOneStep()
+    {
+        var (actor, catalog, saved) = await SavedDraftAsync();
+        var request = SaveRequest(saved, "save-and-approve") with { Headline = "Typed headline", Approval = new(0, null, [], null) };
+
+        var revision = await new SaveDocumentChangeDraft(reviews, catalog).ExecuteAsync(actor, request);
+
+        var review = (await reviews.GetAsync(saved.DraftId, default))!;
+        var approval = Assert.Single(review.Decisions);
+        Assert.Equal((3, 3, ReviewDecisionKind.Approve), (revision.RevisionNumber, approval.RevisionNumber, approval.Kind));
+        Assert.Equal("Typed headline", review.CurrentRevision.Headline);
+        Assert.Equal(ReviewStatus.Approved, (await StatusAsync(saved.DraftId)).Status);
+    }
+
+    [Fact]
+    public async Task ASaveWhoseApprovalFailsLeavesNoNewRevisionAndAnOpenConcernBlocksIt()
+    {
+        var (actor, catalog, saved) = await SavedDraftAsync();
+        var concern = await new DecideDocumentChangeReview(reviews, catalog).ExecuteAsync(actor,
+            new(saved.DraftId, 2, 0, ReviewDecisionKind.RequestChanges, "Context missing.", [], "concern"));
+        var save = new SaveDocumentChangeDraft(reviews, catalog);
+        var request = SaveRequest(saved, "blocked") with { Headline = "Typed headline", Approval = new(1, "Fixed.", [], null) };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => save.ExecuteAsync(actor, request));
+
+        var blocked = (await reviews.GetAsync(saved.DraftId, default))!;
+        Assert.Equal(2, blocked.CurrentRevision.RevisionNumber);
+        Assert.Equal("Headline", blocked.CurrentRevision.Headline);
+        Assert.Equal(concern.DecisionId, Assert.Single(blocked.Decisions).DecisionId);
+
+        var resolved = await save.ExecuteAsync(actor,
+            request with { IdempotencyKey = "resolved", Approval = new(1, "Fixed.", [concern.DecisionId], null) });
+        Assert.Equal(3, resolved.RevisionNumber);
+        Assert.Equal(ReviewStatus.Approved, (await StatusAsync(saved.DraftId)).Status);
+    }
+
+    [Fact]
+    public async Task AStalePageCannotApproveANewerRevisionOrANewerReviewState()
+    {
+        var (actor, catalog, saved) = await SavedDraftAsync();
+        var save = new SaveDocumentChangeDraft(reviews, catalog);
+        var approval = new ApprovalWithSave(0, null, [], null);
+        await save.ExecuteAsync(actor, SaveRequest(saved, "newer") with { Headline = "Someone else" });
+
+        await Assert.ThrowsAsync<ReviewConflictException>(() =>
+            save.ExecuteAsync(actor, SaveRequest(saved, "stale-revision") with { Approval = approval }));
+
+        var current = (await reviews.GetAsync(saved.DraftId, default))!.CurrentRevision;
+        await new DecideDocumentChangeReview(reviews, catalog).ExecuteAsync(actor,
+            new(saved.DraftId, 3, 0, ReviewDecisionKind.RequestChanges, "Cite it.", [], "later-decision"));
+        await Assert.ThrowsAsync<ReviewConflictException>(() =>
+            save.ExecuteAsync(actor, SaveRequest(current, "stale-state") with { Approval = approval }));
+
+        var review = (await reviews.GetAsync(saved.DraftId, default))!;
+        Assert.Equal(3, review.CurrentRevision.RevisionNumber);
+        Assert.Equal(ReviewDecisionKind.RequestChanges, Assert.Single(review.Decisions).Kind);
+    }
+
+    [Fact]
     public async Task ComparisonPagesTraverseIneligibleRowsWithoutOmissionsOrDuplicates()
     {
         var expected = new HashSet<string>(StringComparer.Ordinal);

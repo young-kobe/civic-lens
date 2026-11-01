@@ -38,7 +38,7 @@ public sealed class PostgresRelationshipReviewStore(IDbContextFactory<Collection
     }
 
     public Task<RelationshipRevision> SaveRevisionAsync(string actorSubject, RelationshipRevision revision, int expectedRevisionNumber,
-        string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
+        ReviewDecision? approval, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
         Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
             payloadHash, async (db, _, current) =>
             {
@@ -46,19 +46,27 @@ public sealed class PostgresRelationshipReviewStore(IDbContextFactory<Collection
                 var (statement, target) = await RelationshipCitedReader.ReadCitedAsync(db, current, cancellationToken);
                 RelationshipEditOptions.For(current, statement, target).Require(revision);
                 return revision;
-            }, saved => RelationshipDraftRows.NewRevision(saved, null), cancellationToken);
+            }, saved => RelationshipDraftRows.NewRevision(saved, null),
+            approval is null ? null : new(approval, (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken),
+                NoAfterDecision), cancellationToken);
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
         int expectedReviewStateVersion, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
-            idempotencyKey, payloadHash, async (db, _, history) =>
-            {
-                if (decision.Kind != ReviewDecisionKind.Approve) return;
-                var current = history.CurrentRevision!;
-                current.ValidateForApproval();
-                if ((await RelationshipCitedReader.FindChangedAsync(db, [current.Statement, current.Target], cancellationToken)).Count > 0)
-                    throw new ArgumentException("Approval needs the cited statement and the cited target to be at their approved revisions.");
-            }, (_, _, _, _) => Task.CompletedTask, cancellationToken);
+            idempotencyKey, payloadHash, (db, _, history) => decision.Kind == ReviewDecisionKind.Approve
+                ? ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken)
+                : Task.CompletedTask, NoAfterDecision, cancellationToken);
+
+    private static Task NoAfterDecision(CollectionAttemptDbContext db, string recordId, int revisionNumber, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
+
+    private static async Task ValidateApprovalAsync(CollectionAttemptDbContext db, RelationshipRevision current,
+        CancellationToken cancellationToken)
+    {
+        current.ValidateForApproval();
+        if ((await RelationshipCitedReader.FindChangedAsync(db, [current.Statement, current.Target], cancellationToken)).Count > 0)
+            throw new ArgumentException("Approval needs the cited statement and the cited target to be at their approved revisions.");
+    }
 
     public async Task<RelationshipReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken)
     {

@@ -97,7 +97,7 @@ public sealed partial class StatementEditor
     private async Task<string?> TrySaveAsync()
     {
         if (detail is null) return null;
-        var target = await RunCommandAsync(PersistDraftAsync, SaveFailures, ReloadAfterSaveConflictAsync);
+        var target = await RunCommandAsync(PersistDraftAsync, SaveMessages, ReloadAfterSaveConflictAsync);
         hasUnsavedInput = target is null;
         return target;
     }
@@ -107,7 +107,7 @@ public sealed partial class StatementEditor
         if (SaveExpectedRevision != Revision!.RevisionNumber)
             throw new ReviewConflictException("The draft has a newer revision. Refresh before saving.");
         _ = await SaveDraft.ExecuteAsync(actor, BuildSaveRequest(Input ?? new StatementInput()), RequestAborted);
-        return StatementRoutes.Editor(CandidateId, "saved");
+        return StatementRoutes.Editor(CandidateId, SavedStatus);
     }
 
     private Task ReloadAfterSaveConflictAsync()
@@ -123,7 +123,8 @@ public sealed partial class StatementEditor
             ?? throw new ArgumentException("Select the article passage that supports the statement date.");
         return new SaveStatementDraftRequest(CandidateId, SaveExpectedRevision, input.Headline ?? "", input.Summary ?? "", date, evidence,
             [.. input.SpeakerOfficialIds ?? []], OtherSpeakersOf(input), [.. input.IssueIds ?? []], [.. input.PolicyAreaIds ?? []],
-            ResolveQuotations(input.QuotationSelection), SaveKey ?? "", input.StatementDateChecked == true);
+            ResolveQuotations(input.QuotationSelection), SaveKey ?? "", input.StatementDateChecked == true,
+            ApprovalOfSave());
     }
 
     private static DateOnly? ParseDate(string? text)

@@ -84,7 +84,7 @@ else
             else
             {
                 <Panel Label="Statement" Padded="true">
-                    <TabSet Label="Statement views" Selected="@SelectedTab" Tabs="StatementTabs">
+                    <TabSet Label="Statement views" Selected="edit" Tabs="StatementTabs">
                         <TabPane Key="saved" Label="@($"Saved revision {Revision.RevisionNumber}")">
                             <StatementRecord Id="saved-approval-target" Content="SavedContent" />
                         </TabPane>
@@ -167,10 +167,16 @@ else
                                             }
                                         </ul>
                                     </FieldSet>
-                                    <div class="actions">
-                                        <Button Variant="ButtonVariant.Primary" Type="submit">Save revision @(Revision.RevisionNumber + 1)</Button>
-                                        <span class="actions-hint">Approval applies only to saved wording.</span>
-                                    </div>
+                                    <SaveAndApproveFields ReviewStateVersion="review.ReviewStateVersion" Concerns="concerns" Approval="Approval">
+                                        <Checklist>
+                                        <ul class="checklist">
+                                            <li>Does each quotation appear in the article as written?</li>
+                                            <li>Does each speaker match the article?</li>
+                                            <li>Is the statement date, if any, supported by its evidence?</li>
+                                        </ul>
+                
+                                        </Checklist>
+                                    </SaveAndApproveFields>
                                 </form>
                             }
                         </TabPane>
@@ -191,15 +197,7 @@ else
         @if (Revision is not null)
         {
             <ReviewDecisionPanel RevisionNumber="Revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="status"
-                                 Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" CorrectionNote="@Decision?.CorrectionNote" WithdrawnRevisionNumber="TakeOffView.Status.WithdrawnRevisionNumber" OnDecide="DecideAsync">
-                <Checklist>
-                    <ul class="checklist">
-                        <li>Does each quotation appear in the article as written?</li>
-                        <li>Does each speaker match the article?</li>
-                        <li>Is the statement date, if any, supported by its evidence?</li>
-                    </ul>
-                </Checklist>
-            </ReviewDecisionPanel>
+                                 Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" CorrectionNote="@Decision?.CorrectionNote" WithdrawnRevisionNumber="TakeOffView.Status.WithdrawnRevisionNumber" CanApprove="false" OnDecide="DecideAsync" />
 
             <TakeOffSitePanel View="TakeOffView" RevisionNumber="Revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion"
                               IdempotencyKey="@TakeOffFormKey" Note="@TakeOffNote" Refusal="@takeOffRefusal" OnSubmit="TakeOffSiteAsync" />
