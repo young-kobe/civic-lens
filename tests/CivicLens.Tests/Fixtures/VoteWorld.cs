@@ -79,7 +79,7 @@ internal sealed class VoteWorld
         var membersBody = MembersBody(members ?? DefaultMembers);
         world.Add("members", ApiResource.HouseVoteMembers, HouseVoteRollUrl.Members(HouseVoteFixtures.SourceUrl, roll), membersBody,
             HouseVoteRenderer.RenderMembers(HouseVoteMembersParser.Parse(Encoding.UTF8.GetBytes(membersBody), roll)));
-        var bill = new CongressBill(119, "hconres", 14, billTitle, ActionBillWorld.Backfill, BillUpdatedAt, policyArea, [], 0, 1, 0, subjects is null ? 0 : subjects.Length + 1);
+        var bill = new CongressBill(119, "hconres", 14, billTitle, ActionBillWorld.Backfill, BillUpdatedAt, policyArea, [], 0, 1, 0, subjects is null ? 0 : subjects.Length + 1, null);
         var billBody = ActionBillWorld.DetailBody(bill);
         var billUrl = $"{ActionBillWorld.SourceUrl}/119/hconres/14?format=json";
         world.Add("bill", ApiResource.Bill, billUrl, billBody,

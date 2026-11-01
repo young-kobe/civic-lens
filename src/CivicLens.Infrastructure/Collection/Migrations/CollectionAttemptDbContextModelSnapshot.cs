@@ -1443,6 +1443,20 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("issue_revision_id");
 
+                    b.Property<DateOnly?>("LatestActionDate")
+                        .HasColumnType("date")
+                        .HasColumnName("latest_action_date");
+
+                    b.Property<bool>("LatestActionRead")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("latest_action_read");
+
+                    b.Property<string>("LatestActionText")
+                        .HasColumnType("text")
+                        .HasColumnName("latest_action_text");
+
                     b.Property<string>("PolicyArea")
                         .HasColumnType("text")
                         .HasColumnName("policy_area");
@@ -1487,6 +1501,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_bill_gates_decided", "(decision = 'Pending') = (decided_at_utc_ticks IS NULL) AND (decided_at_utc_ticks IS NULL OR decided_at_utc_ticks BETWEEN 0 AND 3155378975999999999)");
 
                             t.HasCheckConstraint("ck_bill_gates_issue_revision", "issue_revision_id ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_bill_gates_latest_action", "(latest_action_date IS NULL) = (latest_action_text IS NULL) AND (latest_action_text IS NULL OR latest_action_read AND char_length(latest_action_text) BETWEEN 1 AND 1000 AND latest_action_text = btrim(latest_action_text))");
 
                             t.HasCheckConstraint("ck_bill_gates_reason", "(decision = 'Pending' AND reason IS NULL) OR (decision = 'Passed' AND reason IS NOT NULL AND reason IN ('CoveredSponsor','TrackedPolicyArea','CoveredCosponsor')) OR (decision = 'NotRelevant' AND reason IS NOT NULL AND reason IN ('NoPolicyArea','UntrackedPolicyArea'))");
 

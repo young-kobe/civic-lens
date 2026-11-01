@@ -31,10 +31,13 @@ internal sealed class ActionRecordLoader(IActionReviewStore actions)
         RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build);
         var record = new PublishedActionBuilder(build.Rules).Build(addition, build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId, review.CurrentRevision.RevisionNumber, review.Decisions), build.Now);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
-            (related, cancellationToken) => build.Renderer.RenderActionAsync(record, related, build.Catalog, cancellationToken));
+            (related, cancellationToken) => build.Renderer.RenderActionAsync(record, build.BillStatuses.GetValueOrDefault(recordId), related, build.Catalog, cancellationToken));
     }
+
+    public Task<IReadOnlyList<PublishedBillStatus>> BillStatusesAsync(ImmutableArray<string> recordIds, CancellationToken cancellationToken) =>
+        actions.ReadBillStatusesAsync(recordIds, cancellationToken);
 
     public Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
         CancellationToken cancellationToken) =>
-        build.Renderer.RenderActionAsync(Parse<PublishedAction>(json), links.Citing(Kind, recordId), build.Catalog, cancellationToken);
+        build.Renderer.RenderActionAsync(Parse<PublishedAction>(json), build.BillStatuses.GetValueOrDefault(recordId), links.Citing(Kind, recordId), build.Catalog, cancellationToken);
 }

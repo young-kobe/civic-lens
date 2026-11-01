@@ -18,7 +18,7 @@ public sealed class ActionCodeTextTests
     private static ActionBillSnapshot Snapshot(string title, string type = "hr", int summaryCount = 0, params (string Id, ActionSponsorshipRole Role)[] sponsorships)
     {
         var span = new SourceSpan(new string('a', 64), 0, 5);
-        return new(new CongressBill(119, type, 3567, title, new DateOnly(2025, 5, 21), DateTimeOffset.UnixEpoch, null, [], 0, 0, summaryCount, 0),
+        return new(new CongressBill(119, type, 3567, title, new DateOnly(2025, 5, 21), DateTimeOffset.UnixEpoch, null, [], 0, 0, summaryCount, 0, null),
             [.. sponsorships.Select(item => new ActionSponsorship(item.Id, "B000001", item.Role, false, new DateOnly(2025, 5, 21), null, [span]))],
             new string('b', 64), [], null, null, null, null, Names, [], span);
     }

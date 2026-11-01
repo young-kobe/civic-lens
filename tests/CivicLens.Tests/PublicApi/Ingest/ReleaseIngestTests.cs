@@ -54,6 +54,16 @@ public sealed class ReleaseIngestTests(PostgresCollection postgres) : IAsyncLife
     }
 
     [Fact]
+    public async Task TheBillStatusFileOfAReleaseIsNeverFetchedSoAStatusLineCostsTheSearchIndexNothing()
+    {
+        world.Site.Publish(1, PublishedSamples.Statement('a', "Rent cap"));
+
+        await world.IngestAsync();
+
+        Assert.DoesNotContain(PublicationProtocol.BillStatusPath, world.Site.Requests);
+    }
+
+    [Fact]
     public async Task AnUnchangedManifestAnswers304AndTheIngestFetchesNoRecord()
     {
         world.Site.Publish(1, PublishedSamples.Statement('a', "Rent cap"));

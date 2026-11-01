@@ -1,4 +1,6 @@
 using System.Globalization;
+using CivicLens.Publication.Contracts;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Application.Collection.Bills;
 
@@ -6,7 +8,7 @@ public static class CongressBillParser
 {
     public const string ExtractionVersion = "congress-bill-detail-v1";
     private static readonly string[] UpdateDateFormats = ["yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:sszzz"];
-    public static CongressBill Parse(ReadOnlySpan<byte> json, CongressBillListItem expected)
+    public static CongressBill Parse(ReadOnlySpan<byte> json, CongressBillListItem expected, ILogger? logger = null)
     {
         ArgumentNullException.ThrowIfNull(expected);
         var bill = CongressApiJson.Deserialize<WireDetail>(json, "Bill detail").Bill
@@ -24,7 +26,7 @@ public static class CongressBillParser
         return new CongressBill(bill.Congress.Value, type, bill.Number.Value, bill.Title, bill.IntroducedDate.Value,
             ReadUpdateDate(bill.UpdateDate), ReadPolicyArea(bill.PolicyArea), ReadSponsors(bill.Sponsors),
             ReadCosponsorCount(bill.Cosponsors), ReadCount(bill.Actions, "action"), ReadCount(bill.Summaries, "summary"),
-            ReadCount(bill.Subjects, "subject"));
+            ReadCount(bill.Subjects, "subject"), ReadLatestAction(bill.LatestAction, expected, logger));
     }
 
     internal static DateTimeOffset ReadUpdateDate(string updateDate) =>
@@ -46,6 +48,19 @@ public static class CongressBillParser
         _ => throw new InvalidDataException($"Bill detail {name} count is invalid.")
     };
 
+    // A status is extra. An unusable latestAction never blocks the bill: it gives no status and one warning.
+    private static CongressBillLatestAction? ReadLatestAction(WireLatestAction? latestAction, CongressBillListItem bill, ILogger? logger)
+    {
+        if (latestAction is null) return null;
+        var text = latestAction.Text?.Trim();
+        if (DateOnly.TryParseExact(latestAction.ActionDate, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) &&
+            !string.IsNullOrEmpty(text) && text.Length <= PublishedBillStatus.MaximumTextLength && !text.Any(char.IsControl))
+            return new CongressBillLatestAction(date, text);
+        logger?.LogWarning("Bill {Congress} {Type} {Number} has a latestAction with no usable date or text, so it has no status.",
+            bill.Congress, bill.Type, bill.Number);
+        return null;
+    }
+
     private static string? ReadPolicyArea(WirePolicyArea? policyArea) =>
         string.IsNullOrWhiteSpace(policyArea?.Name) ? null : policyArea.Name.Trim();
 
@@ -57,7 +72,8 @@ public static class CongressBillParser
     private sealed record WireDetail(WireBill? Bill);
     private sealed record WireBill(int? Congress, string? Type, int? Number, string? Title, DateOnly? IntroducedDate,
         string? UpdateDate, WirePolicyArea? PolicyArea, WireSponsor?[]? Sponsors, WireCosponsors? Cosponsors,
-        WireCount? Actions, WireCount? Summaries, WireCount? Subjects);
+        WireCount? Actions, WireCount? Summaries, WireCount? Subjects, WireLatestAction? LatestAction);
+    private sealed record WireLatestAction(string? ActionDate, string? Text);
     private sealed record WirePolicyArea(string? Name);
     private sealed record WireSponsor(string? BioguideId);
     private sealed record WireCount(int? Count);

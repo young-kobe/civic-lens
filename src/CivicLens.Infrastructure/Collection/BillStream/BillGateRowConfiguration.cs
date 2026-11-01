@@ -14,6 +14,8 @@ internal sealed class BillGateRowConfiguration : IEntityTypeConfiguration<BillGa
             table.HasCheckConstraint("ck_bill_gates_cosponsor_count", "cosponsor_count >= 0");
             table.HasCheckConstraint("ck_bill_gates_summary_count", "summary_count >= 0");
             table.HasCheckConstraint("ck_bill_gates_subject_count", "subject_count >= 0");
+            table.HasCheckConstraint("ck_bill_gates_latest_action",
+                "(latest_action_date IS NULL) = (latest_action_text IS NULL) AND (latest_action_text IS NULL OR latest_action_read AND char_length(latest_action_text) BETWEEN 1 AND 1000 AND latest_action_text = btrim(latest_action_text))");
             table.HasCheckConstraint("ck_bill_gates_update", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
             table.HasCheckConstraint("ck_bill_gates_created", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
             table.HasCheckConstraint("ck_bill_gates_decided",
@@ -34,6 +36,9 @@ internal sealed class BillGateRowConfiguration : IEntityTypeConfiguration<BillGa
         builder.Property(row => row.CosponsorCount).HasColumnName("cosponsor_count");
         builder.Property(row => row.SummaryCount).HasColumnName("summary_count");
         builder.Property(row => row.SubjectCount).HasColumnName("subject_count");
+        builder.Property(row => row.LatestActionRead).HasColumnName("latest_action_read").HasDefaultValue(false);
+        builder.Property(row => row.LatestActionDate).HasColumnName("latest_action_date");
+        builder.Property(row => row.LatestActionText).HasColumnName("latest_action_text");
         builder.Property(row => row.IssueRevisionId).HasColumnName("issue_revision_id").HasMaxLength(64);
         builder.Property(row => row.HasTrackedIssue).HasColumnName("has_tracked_issue");
         builder.Property(row => row.Decision).HasColumnName("decision").HasMaxLength(32)

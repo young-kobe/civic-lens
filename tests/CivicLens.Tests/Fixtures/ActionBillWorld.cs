@@ -58,7 +58,7 @@ internal sealed class ActionBillWorld
 
     public static ActionBillWorld Create(string[]? sponsors = null, CosponsorSpec[][]? cosponsorPages = null, SummarySpec[]? summaries = null,
         string? policyArea = BillGateFixtures.TrackedPolicyArea, DateTimeOffset? updatedAt = null, string title = "A housing bill", int extraPeople = 0,
-        string warrenPersonId = "warren", string[][]? subjectPages = null)
+        string warrenPersonId = "warren", string[][]? subjectPages = null, CongressBillLatestAction? latestAction = null)
     {
         var world = new ActionBillWorld(CollectionConfigurationRevision.Create(Configuration(extraPeople, warrenPersonId)));
         sponsors ??= [Warren];
@@ -66,7 +66,7 @@ internal sealed class ActionBillWorld
         summaries ??= [];
         subjectPages ??= [];
         var bill = new CongressBill(119, "hr", 1, title, Backfill, updatedAt ?? UpdatedAt, policyArea, sponsors, cosponsorPages.Sum(page => page.Length), 1,
-            summaries.Length, subjectPages.Length == 0 ? 0 : subjectPages.Sum(page => page.Length) + 1);
+            summaries.Length, subjectPages.Length == 0 ? 0 : subjectPages.Sum(page => page.Length) + 1, latestAction);
         world.Add(ApiResource.Bill, "detail", $"{SourceUrl}/119/hr/1?format=json", DetailBody(bill));
         for (var index = 0; index < cosponsorPages.Length; index++)
             world.Add(ApiResource.BillCosponsors, $"cosponsors-{index}", PageUrl("cosponsors", index, 250),
@@ -178,7 +178,8 @@ internal sealed class ActionBillWorld
                 cosponsors = new { countIncludingWithdrawnCosponsors = bill.CosponsorCount },
                 actions = new { count = bill.ActionCount },
                 summaries = new { count = bill.SummaryCount },
-                subjects = new { count = bill.SubjectCount }
+                subjects = new { count = bill.SubjectCount },
+                latestAction = bill.LatestAction is null ? null : new { actionDate = bill.LatestAction.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), text = bill.LatestAction.Text }
             }
         });
 

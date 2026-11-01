@@ -186,7 +186,7 @@ public sealed class PublishOfficialPhotosTests
         var error = await Assert.ThrowsAsync<ArgumentException>(() =>
             scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2")));
 
-        Assert.Contains("Nothing to publish: no record and no official changed.", error.Message, StringComparison.Ordinal);
+        Assert.Contains("Nothing to publish: no record, official, or bill status changed.", error.Message, StringComparison.Ordinal);
         Assert.Single(scenario.Publications.Committed);
         Assert.Single(scenario.Releases.Directories);
         Assert.Equal(discarded + 1, scenario.Releases.DiscardedStagings);

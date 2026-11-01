@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Roster;
+using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
@@ -9,9 +10,13 @@ internal sealed record PublicationBuild(PreviousRelease Previous, DateTimeOffset
     public ImmutableArray<PublishedRevisionBinding> ReleaseRecords { get; private init; } =
         [.. Previous.Entries.Select(PublishedRevisionBinding.Of)];
 
+    public IReadOnlyDictionary<string, PublishedBillStatus> BillStatuses { get; private init; } = new Dictionary<string, PublishedBillStatus>();
+
     public ImmutableArray<PublishedRecordReference> Removed { get; private init; } = [];
 
     public ImmutableArray<PublishedRecordReference> Returned { get; private init; } = [];
+
+    public PublicationBuild WithBillStatuses(IReadOnlyDictionary<string, PublishedBillStatus> statuses) => this with { BillStatuses = statuses };
 
     public PublicationBuild WithReturned(ImmutableArray<PublishedRecordReference> returned) => this with { Returned = returned };
 

@@ -163,7 +163,7 @@ public sealed class JobPreparation(
         var expected = CongressBillListItem.TryReadDetailUrl(configured.SourceUrl, job.Definition.Url)
             ?? throw new InvalidDataException("Bill detail job URL is not a bill detail URL.");
         var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
-        var bill = CongressBillParser.Parse(response.Body, expected);
+        var bill = CongressBillParser.Parse(response.Body, expected, logger);
         var extractionId = await SaveExtractionAsync(response.Captured, CongressBillParser.ExtractionVersion,
             CongressBillRenderer.RenderDetail(bill), cancellationToken);
         var covered = configured.CoveredBioguideIdsOn(BillGate.DayOf(bill.UpdateDate));

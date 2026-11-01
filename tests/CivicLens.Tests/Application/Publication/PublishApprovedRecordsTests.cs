@@ -87,6 +87,66 @@ public sealed class PublishApprovedRecordsTests
     }
 
     [Fact]
+    public async Task ATickWithNoReadyRecordPublishesOneReleaseWhenABillStatusChangedAndThenStopsSoAMovedBillReachesTheSite()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('a', ApprovedByCode('a'));
+        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.");
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, action)], "k1"));
+        scenario.Actions.BillStatuses[action] = Status(action, "Became Public Law No: 119-1.");
+
+        Assert.Equal(0, await Publisher(scenario).ExecuteAsync(default));
+        Assert.Equal(0, await Publisher(scenario).ExecuteAsync(default));
+
+        Assert.Equal(2, scenario.Publications.Committed.Count);
+        var row = JsonSerializer.Deserialize<PublishedBillStatuses>(
+            scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName][PublicationProtocol.BillStatusPath], PublicationProtocol.JsonOptions)!.Records.Single();
+        Assert.Equal("Became Public Law No: 119-1.", row.Text);
+    }
+
+    [Fact]
+    public async Task ATickWithNoReadyRecordAndNoStatusChangeMakesNoReleaseAndStagesNothing()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('a', ApprovedByCode('a'));
+        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.");
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, action)], "k1"));
+        var begun = scenario.Releases.BeginCount;
+
+        Assert.Equal(0, await Publisher(scenario).ExecuteAsync(default));
+
+        Assert.Single(scenario.Publications.Committed);
+        Assert.Equal(begun, scenario.Releases.BeginCount);
+    }
+
+    [Fact]
+    public async Task TheCodeSubjectCannotPublishAnEmptyRequestThatIsNotAStatusOnlyRequest()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('a', ApprovedByCode('a'));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, action)], "k1"));
+        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.");
+
+        await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(Code, new([], "k2")));
+        var summary = await scenario.Publisher().ExecuteAsync(Code, new([], "k3") { StatusOnly = true });
+
+        Assert.Equal(2, summary.ReleaseNumber);
+    }
+
+    [Fact]
+    public void TheStatusOnlyFlagStaysOutOfTheRequestHashWhenItIsOffSoTheKeyOfAnEarlierRequestStillReplays()
+    {
+        var request = new PublishReleaseRequest([new(PublishedRecordKind.Action, new string('a', 64))], "k");
+
+        var earlier = JsonSerializer.Serialize(new { request.Records, request.IdempotencyKey, request.Withdrawals, request.RewriteOfficials, request.RewriteEntries });
+        Assert.Equal(earlier, JsonSerializer.Serialize(request));
+        Assert.NotEqual(earlier, JsonSerializer.Serialize(request with { StatusOnly = true }));
+    }
+
+    private static PublishedBillStatus Status(string recordId, string text) =>
+        new() { RecordId = recordId, Text = text, Date = new DateOnly(2026, 1, 28), ObservedAtUtc = new DateTimeOffset(2026, 1, 30, 9, 0, 0, TimeSpan.Zero) };
+
+    [Fact]
     public async Task NothingReadyMakesNoRelease()
     {
         var scenario = new PublicationScenario();

@@ -24,16 +24,16 @@ internal sealed class ReleaseLinks
 
     // The database names the carried relationships that cite a record this publish renders. The files stay the source of the text.
     public static async Task<ReleaseLinks> LoadAsync(IReleaseDirectory releases, PublicationBuild build, RelationshipRecordLoader relationships,
-        IReadOnlyList<PendingRecord> additions, CancellationToken cancellationToken)
+        IReadOnlyList<PendingRecord> additions, IReadOnlyList<PublishedRecordReference> carriedToRender, CancellationToken cancellationToken)
     {
         var withdrawn = await ReadWithdrawnAsync(releases, build, cancellationToken);
-        if (withdrawn.IsEmpty && !additions.Any(addition => ListsRelated(addition.Entry.Kind))) return None;
+        if (withdrawn.IsEmpty && carriedToRender.Count == 0 && !additions.Any(addition => ListsRelated(addition.Entry.Kind))) return None;
         ImmutableArray<PublishedRelationship> added = [.. additions.Where(addition => addition.Entry.Kind == PublishedRecordKind.Relationship)
             .Select(addition => Parse(addition.Json))];
         var replaced = added.Select(link => link.RecordId).ToHashSet(StringComparer.Ordinal);
         var carriedIds = build.ReleaseRecords.Where(record => record.Kind == PublishedRecordKind.Relationship && !replaced.Contains(record.RecordId))
             .Select(record => record.RecordId).ToImmutableArray();
-        var citing = await relationships.FindCitingAsync(carriedIds, RenderedRecords(additions, [.. added, .. withdrawn]), cancellationToken);
+        var citing = await relationships.FindCitingAsync(carriedIds, RenderedRecords(additions, carriedToRender, [.. added, .. withdrawn]), cancellationToken);
         var carried = new List<PublishedRelationship>();
         foreach (var recordId in citing.Order(StringComparer.Ordinal))
             carried.Add(Parse(await releases.ReadFileAsync(build.Previous.DirectoryName!, PublicationProtocol.RecordDataPath(recordId),
@@ -58,9 +58,11 @@ internal sealed class ReleaseLinks
     private static bool ListsRelated(PublishedRecordKind kind) =>
         PublishedRelationship.IsCitedKind(kind) || kind == PublishedRecordKind.Relationship;
 
-    private static List<PublishedRecordReference> RenderedRecords(IReadOnlyList<PendingRecord> additions, ImmutableArray<PublishedRelationship> added) =>
+    private static List<PublishedRecordReference> RenderedRecords(IReadOnlyList<PendingRecord> additions,
+        IReadOnlyList<PublishedRecordReference> carriedToRender, ImmutableArray<PublishedRelationship> added) =>
         [.. additions.Where(addition => PublishedRelationship.IsCitedKind(addition.Entry.Kind))
             .Select(addition => new PublishedRecordReference(addition.Entry.Kind, addition.RecordId))
+            .Concat(carriedToRender.Where(record => PublishedRelationship.IsCitedKind(record.Kind)))
             .Concat(added.SelectMany(link => new[] { link.Statement, link.Target }).Select(cited => new PublishedRecordReference(cited.Kind, cited.RecordId)))
             .Distinct()];
 

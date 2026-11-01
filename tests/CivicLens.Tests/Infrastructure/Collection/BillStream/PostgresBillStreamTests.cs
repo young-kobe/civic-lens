@@ -1176,8 +1176,9 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     private static readonly DateTimeOffset UpdatedAt = new(2025, 3, 3, 12, 0, 0, TimeSpan.Zero);
 
     private static CongressBill DetailBill(DateTimeOffset updatedAt, int cosponsors,
-        string? policyArea = BillGateFixtures.TrackedPolicyArea, int summaries = 0, int subjects = 0, int number = 7) =>
-        new(119, "hr", number, "A bill", Backfill, updatedAt, policyArea, ["Z000009"], cosponsors, 1, summaries, subjects);
+        string? policyArea = BillGateFixtures.TrackedPolicyArea, int summaries = 0, int subjects = 0, int number = 7,
+        CongressBillLatestAction? latestAction = null) =>
+        new(119, "hr", number, "A bill", Backfill, updatedAt, policyArea, ["Z000009"], cosponsors, 1, summaries, subjects, latestAction);
 
     private static string SummariesNext(int offset) =>
         $"https://api.congress.gov/v3/bill/119/hr/7/summaries?offset={offset}&limit=1&format=json";

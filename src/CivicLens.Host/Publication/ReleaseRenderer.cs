@@ -47,14 +47,16 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
         });
     }
 
-    public Task<string> RenderActionAsync(PublishedAction record, ImmutableArray<PublishedRelationship> related,
+    public Task<string> RenderActionAsync(PublishedAction record, PublishedBillStatus? billStatus, ImmutableArray<PublishedRelationship> related,
         PublicationCatalog catalog, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(record);
         record.Validate();
+        billStatus?.Validate();
         return RenderAsync<PublishedActionPage>(new Dictionary<string, object?>
         {
             [nameof(PublishedActionPage.Record)] = record,
+            [nameof(PublishedActionPage.BillStatus)] = billStatus,
             [nameof(PublishedActionPage.Related)] = related,
             [nameof(PublishedActionPage.Catalog)] = catalog
         });

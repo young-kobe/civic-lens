@@ -569,7 +569,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
 
         await SucceededJobs.MarkSucceededAsync(connectionString, detail.JobId);
         var extractionId = await SaveSeededExtractionAsync(detail.JobId);
-        var bill = new CongressBill(119, "hr", 1, "A bill", today, ObservationEpoch, "Taxation", ["A000001"], 2, 1, 1, 0);
+        var bill = new CongressBill(119, "hr", 1, "A bill", today, ObservationEpoch, "Taxation", ["A000001"], 2, 1, 1, 0, null);
         var followOns = (await jobs.AdmitDetailAsync(source, detail.JobId, bill,
             BillGateOutcome.Passed(BillGateReason.CoveredSponsor), BillGateFixtures.Revision().Id, extractionId, default)).Jobs;
         seededBillJobIds.UnionWith(followOns.Select(job => job.JobId));

@@ -195,6 +195,65 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task TheGateStoresTheLatestActionOfTheDetailAndMarksItReadAlsoWhenTheDetailHasNoneSoNoBackfillListsItAgain()
+    {
+        var withAction = await EnqueueDetailAsync("with-action", 11);
+        await AdmitDetailAsync(withAction, DetailBill(UpdatedAt, cosponsors: 0, number: 11, latestAction: new(new DateOnly(2025, 3, 2), "Passed House.")), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+        var without = await EnqueueDetailAsync("without-action", 12);
+        await AdmitDetailAsync(without, DetailBill(UpdatedAt, cosponsors: 0, number: 12), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+
+        Assert.Equal("Passed House.", await ScalarAsync($"SELECT latest_action_text FROM bill_gates WHERE detail_job_id = '{withAction}'"));
+        Assert.Equal("2025-03-02", await ScalarAsync($"SELECT latest_action_date::text FROM bill_gates WHERE detail_job_id = '{withAction}'"));
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM bill_gates WHERE latest_action_read"));
+        Assert.Equal(DBNull.Value, await ScalarAsync($"SELECT latest_action_text FROM bill_gates WHERE detail_job_id = '{without}'"));
+        Assert.Empty(await ((IBillStatusBackfillStore)store).ListNewestBillsWithoutStatusAsync(10, default));
+    }
+
+    [Fact]
+    public async Task ABillThatFailsTheGateStillStoresItsLatestActionButHasNoActionRecordSoNoPageEverShowsIt()
+    {
+        var detail = await EnqueueDetailAsync("not-relevant");
+        await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 0, policyArea: null, latestAction: new(new DateOnly(2025, 3, 2), "Passed House.")), BillGateOutcome.NotRelevant(BillGateReason.NoPolicyArea));
+
+        Assert.Equal("Passed House.", await ScalarAsync($"SELECT latest_action_text FROM bill_gates WHERE detail_job_id = '{detail}' AND decision = 'NotRelevant'"));
+        Assert.Empty(await ActionReviews().ReadBillStatusesAsync([RecordId], default));
+    }
+
+    [Fact]
+    public async Task TheStatusBackfillListsOnlyTheNewestUnreadVersionRecordsItOnceAndNeverListsItAgain()
+    {
+        var older = await EnqueueDetailAsync("older");
+        await AdmitDetailAsync(older, DetailBill(UpdatedAt.AddDays(-1), cosponsors: 0), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+        var newest = await EnqueueDetailAsync("newest");
+        await AdmitDetailAsync(newest, DetailBill(UpdatedAt, cosponsors: 0), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+        await ExecuteAsync(connectionString, "UPDATE bill_gates SET latest_action_read = false");
+        var backfill = (IBillStatusBackfillStore)store;
+        var latest = new CongressBillLatestAction(new DateOnly(2025, 3, 2), "Passed House.");
+
+        Assert.Equal([newest], await backfill.ListNewestBillsWithoutStatusAsync(10, default));
+        var recorded = await backfill.RecordStatusAsync(newest, latest, default);
+        var replay = await backfill.RecordStatusAsync(newest, null, default);
+
+        Assert.True(recorded);
+        Assert.False(replay);
+        Assert.Equal("Passed House.", await ScalarAsync($"SELECT latest_action_text FROM bill_gates WHERE detail_job_id = '{newest}'"));
+        Assert.Empty(await backfill.ListNewestBillsWithoutStatusAsync(10, default));
+    }
+
+    [Fact]
+    public async Task TheDatabaseRefusesALatestActionWithOnlyADateOrWithBlankOrPaddedTextSoNoHalfStatusIsStored()
+    {
+        var first = await EnqueueDetailAsync("first");
+        await AdmitDetailAsync(first, DetailBill(UpdatedAt, cosponsors: 0), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+
+        foreach (var set in new[] { "latest_action_date = '2025-03-02'", "latest_action_text = 'Passed House.'",
+                     "latest_action_date = '2025-03-02', latest_action_text = ' '", "latest_action_date = '2025-03-02', latest_action_text = ' Passed House.'",
+                     "latest_action_read = false, latest_action_date = '2025-03-02', latest_action_text = 'Passed House.'" })
+            Assert.Equal("ck_bill_gates_latest_action",
+                (await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, "UPDATE bill_gates SET " + set))).ConstraintName);
+    }
+
+    [Fact]
     public async Task TheBackfillOfAPolicyOnlyBillAdmitsNothingButRecordsTheCountSoItIsNotListedAgain()
     {
         var first = await EnqueueDetailAsync("first");

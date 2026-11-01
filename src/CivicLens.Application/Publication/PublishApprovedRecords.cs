@@ -21,7 +21,11 @@ public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationS
             var state = await publications.GetStateAsync(cancellationToken);
             if (state.Active?.ReleaseNumber != state.LatestReleaseNumber && state.LatestReleaseNumber > 0) return published;
             var ready = await ListReadyAsync(skipped, cancellationToken);
-            if (ready.IsEmpty) return published;
+            if (ready.IsEmpty)
+            {
+                await PublishStatusChangesAsync(state, cancellationToken);
+                return published;
+            }
             PublicationReleaseSummary summary;
             try
             {
@@ -47,6 +51,19 @@ public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationS
             // A release that is not new replayed a stored one, and the same batch would list again.
             if (summary.ReleaseNumber <= state.LatestReleaseNumber) return published;
             published += ready.Length;
+        }
+    }
+
+    // A bill can move while no record is ready. One release then shows the new status. The key names the release it builds on.
+    private async Task PublishStatusChangesAsync(PublicationState state, CancellationToken cancellationToken)
+    {
+        if (!await publish.HasBillStatusChangeAsync(cancellationToken)) return;
+        try
+        {
+            _ = await publish.ExecuteAsync(Actor, new([], $"status-after-{state.LatestReleaseNumber}") { StatusOnly = true }, cancellationToken);
+        }
+        catch (PublicationConflictException)
+        {
         }
     }
 

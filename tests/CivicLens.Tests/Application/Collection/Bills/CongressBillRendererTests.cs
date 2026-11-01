@@ -10,7 +10,7 @@ public sealed class CongressBillRendererTests
     private static CongressBill Bill(string title = "A bill", string? policyArea = "Immigration", string[]? sponsors = null,
         DateTimeOffset? updated = null) =>
         new(119, "hr", 1234, title, new DateOnly(2026, 3, 2), updated ?? new DateTimeOffset(2026, 10, 6, 14, 3, 0, TimeSpan.Zero),
-            policyArea, sponsors ?? ["L000595"], 12, 71, 3, 0);
+            policyArea, sponsors ?? ["L000595"], 12, 71, 3, 0, null);
 
     [Fact]
     public void DetailIsOneFactPerLineInAFixedOrderSoEachFactIsACleanCitationSpan()

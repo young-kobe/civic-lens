@@ -7,13 +7,14 @@ internal sealed class PreviousRelease
 {
     private PreviousRelease(string? directoryName, IReadOnlyList<PublishedRecordEntry> entries,
         IReadOnlyList<PublishedWithdrawal> withdrawals, IReadOnlyDictionary<string, PublishedOfficialProfile> officials,
-        IReadOnlyDictionary<string, PublishedOfficialSummary> summaries)
+        IReadOnlyDictionary<string, PublishedOfficialSummary> summaries, IReadOnlyDictionary<string, PublishedBillStatus> billStatuses)
     {
         DirectoryName = directoryName;
         Entries = entries;
         Withdrawals = withdrawals;
         Officials = officials;
         Summaries = summaries;
+        BillStatuses = billStatuses;
     }
 
     public string? DirectoryName { get; }
@@ -26,13 +27,15 @@ internal sealed class PreviousRelease
 
     public IReadOnlyDictionary<string, PublishedOfficialSummary> Summaries { get; }
 
+    public IReadOnlyDictionary<string, PublishedBillStatus> BillStatuses { get; }
+
     public static async Task<PreviousRelease> LoadAsync(IReleaseDirectory releases, PublicationReleaseSummary? active,
         CancellationToken cancellationToken)
     {
-        if (active is null) return new(null, [], [], new Dictionary<string, PublishedOfficialProfile>(), new Dictionary<string, PublishedOfficialSummary>());
+        if (active is null) return new(null, [], [], new Dictionary<string, PublishedOfficialProfile>(), new Dictionary<string, PublishedOfficialSummary>(), new Dictionary<string, PublishedBillStatus>());
         var manifest = await LoadManifestAsync(releases, active, cancellationToken);
         return new(active.DirectoryName, manifest.Records, manifest.Withdrawals, await ReadOfficialsAsync(releases, active.DirectoryName, cancellationToken),
-            await ReadSummariesAsync(releases, active.DirectoryName, cancellationToken));
+            await ReadSummariesAsync(releases, active.DirectoryName, cancellationToken), await ReadBillStatusesAsync(releases, active.DirectoryName, cancellationToken));
     }
 
     public static async Task<PublicationRelease> LoadManifestAsync(IReleaseDirectory releases, PublicationReleaseSummary active,
@@ -96,6 +99,26 @@ internal sealed class PreviousRelease
             ?? throw new InvalidDataException("Release official summaries file is empty.");
         summaries.Validate();
         return summaries.Officials.ToDictionary(official => official.Id, StringComparer.Ordinal);
+    }
+
+    // A release from before the status line holds no status file. Every action then counts as having no earlier status.
+    private static async Task<Dictionary<string, PublishedBillStatus>> ReadBillStatusesAsync(IReleaseDirectory releases,
+        string directoryName, CancellationToken cancellationToken)
+    {
+        byte[] bytes;
+        try
+        {
+            bytes = await releases.ReadFileAsync(directoryName, PublicationProtocol.BillStatusPath, PublishedBillStatuses.MaximumBytes,
+                cancellationToken);
+        }
+        catch (FileNotFoundException)
+        {
+            return [];
+        }
+        var statuses = JsonSerializer.Deserialize<PublishedBillStatuses>(bytes, PublicationProtocol.JsonOptions)
+            ?? throw new InvalidDataException("Release bill status file is empty.");
+        statuses.Validate();
+        return statuses.Records.ToDictionary(status => status.RecordId, StringComparer.Ordinal);
     }
 
     public bool IsWithdrawn(string recordId) => FindWithdrawal(recordId) is not null;

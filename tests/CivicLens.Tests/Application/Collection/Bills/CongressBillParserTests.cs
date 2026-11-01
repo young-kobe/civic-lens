@@ -1,5 +1,8 @@
 using System.Text;
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Tests.Application.Collection.Bills;
 
@@ -36,6 +39,47 @@ public sealed class CongressBillParserTests
 
         Assert.Null(bill.PolicyArea);
         Assert.Empty(bill.SponsorBioguideIds);
+    }
+
+    [Fact]
+    public void TheLatestActionKeepsItsDateAndTrimmedTextSoThePublishedStatusLineStatesWhatCongressGovListed()
+    {
+        var bill = Parse(Valid.Replace("\"summaries\"", "\"latestAction\":{\"actionDate\":\"2025-07-04\",\"text\":\" Became Public Law No: 119-21. \"},\"summaries\""));
+
+        Assert.Equal(new CongressBillLatestAction(new DateOnly(2025, 7, 4), "Became Public Law No: 119-21."), bill.LatestAction);
+    }
+
+    [Fact]
+    public void ADetailWithNoLatestActionHasNoStatusSoNoReaderSeesAFalseNoActionLine()
+    {
+        Assert.Null(Parse(Valid).LatestAction);
+    }
+
+    [Theory]
+    [InlineData("{\"text\":\"Introduced in House\"}")]
+    [InlineData("{\"actionDate\":\"2025-07-04\"}")]
+    [InlineData("{\"actionDate\":\"2025-07-04\",\"text\":\"  \"}")]
+    [InlineData("{\"actionDate\":\"not a date\",\"text\":\"Introduced in House\"}")]
+    [InlineData("{\"actionDate\":\"2025-07-04\",\"text\":\"Introduced\\u0000 in House\"}")]
+    public void AnUnusableLatestActionGivesNoStatusAndOneWarningAndNeverBlocksTheBill(string latestAction)
+    {
+        var logger = new CapturingLogger<CongressBillParserTests>();
+
+        var bill = CongressBillParser.Parse(Encoding.UTF8.GetBytes(Valid.Replace("\"summaries\"", "\"latestAction\":" + latestAction + ",\"summaries\"")), Expected, logger);
+
+        Assert.Null(bill.LatestAction);
+        Assert.Equal("A bill", bill.Title);
+        Assert.Equal(LogLevel.Warning, Assert.Single(logger.Entries).Level);
+    }
+
+    [Fact]
+    public void ALatestActionTextOverTheCapGivesNoStatusBecauseThePublishedFileBoundsItsSize()
+    {
+        var text = new string('a', PublishedBillStatus.MaximumTextLength + 1);
+
+        var bill = Parse(Valid.Replace("\"summaries\"", "\"latestAction\":{\"actionDate\":\"2025-07-04\",\"text\":\"" + text + "\"},\"summaries\""));
+
+        Assert.Null(bill.LatestAction);
     }
 
     [Fact]

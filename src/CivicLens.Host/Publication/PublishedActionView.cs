@@ -1,6 +1,7 @@
 using System.Globalization;
 using CivicLens.Application.Publication;
 using CivicLens.Host.Actions;
+using CivicLens.Host.Collection;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Publication.Contracts;
@@ -9,10 +10,11 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublishedActionView
 {
-    public static IReadOnlyList<Fact> Facts(PublishedAction action, PublicationCatalog catalog) =>
+    public static IReadOnlyList<Fact> Facts(PublishedAction action, PublishedBillStatus? billStatus, PublicationCatalog catalog) =>
     [
         new("Bill", ActionLabels.Bill(action.Congress, action.BillType, action.BillNumber)),
         new("Title", action.BillTitle),
+        .. LatestAction(action, billStatus),
         .. PolicyArea(action, catalog),
         .. PublishedRecordView.Issues("Tracked issues", action.TrackedIssueIds, catalog),
         new("Published", $"From the official record, checked {Moment.Full(action.ApprovedAtUtc)}; first published {Moment.Full(action.FirstPublishedAtUtc)}"),
@@ -20,6 +22,17 @@ internal static class PublishedActionView
         .. IssueWording(action),
         new("Revision", action.RevisionNumber.ToString(CultureInfo.InvariantCulture))
     ];
+
+    private static IEnumerable<Fact> LatestAction(PublishedAction action, PublishedBillStatus? billStatus)
+    {
+        if (billStatus is null) return [];
+        return
+        [
+            new("Latest action on Congress.gov", $"{BillStatusMeaning.Of(billStatus.Text, action.BillType)} Action date: {Moment.Iso(billStatus.Date)}."),
+            new("Status read on", $"{Moment.Full(billStatus.ObservedAtUtc)}. The bill can change after this time."),
+            Fact.LinkList("Official bill page", [new FactLink("Bill on Congress.gov", SourcePages.Bill(action.Congress, action.BillType, action.BillNumber))])
+        ];
+    }
 
     private static IEnumerable<Fact> IssueWording(PublishedAction action) =>
         action.TextOrigin == PublishedTextOrigin.Code && action.TrackedIssueIds.Length > 0 ? [new("Issues", PublishedRecordLabels.ModelChosenIssues)] : [];
