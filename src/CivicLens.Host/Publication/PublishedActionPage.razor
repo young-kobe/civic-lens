@@ -15,8 +15,8 @@
                 <TableCell Main><PublishedOfficialName Official="sponsorship.Official" Linked="@(sponsorship.Role == PublishedSponsorshipRole.Sponsor)" /></TableCell>
                 <TableCell Label="@PublicColumn.Role">@PublishedRecordLabels.Role(sponsorship.Role)</TableCell>
                 <TableCell Label="@PublicColumn.Original">@(sponsorship.IsOriginal ? "Yes" : "No")</TableCell>
-                <TableCell Class="fit num" Label="@PublicColumn.Sponsored">@Moment.Iso(sponsorship.SponsoredOn)</TableCell>
-                <TableCell Class="fit num" Label="@PublicColumn.Withdrawn">@(sponsorship.WithdrawnOn is { } withdrawn ? Moment.Iso(withdrawn) : "None")</TableCell>
+                <TableCell Class="fit num" Label="@PublicColumn.Sponsored">@Moment.Day(sponsorship.SponsoredOn)</TableCell>
+                <TableCell Class="fit num" Label="@PublicColumn.Withdrawn">@(sponsorship.WithdrawnOn is { } withdrawn ? Moment.Day(withdrawn) : "None")</TableCell>
                 <TableCell Label="@PublicColumn.Source">
                     @for (var index = 0; index < sponsorship.Citations.Length; index++)
                     {

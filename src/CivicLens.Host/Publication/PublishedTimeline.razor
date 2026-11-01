@@ -4,7 +4,7 @@
     <DataTable Roles="true" Items="Events" Caption="Dated events of this record">
         <Head><TableCell Header Class="fit num">@PublicColumn.Date</TableCell><TableCell Header>Event</TableCell></Head>
         <Row Context="item">
-            <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Iso(item.Day)</TableCell>
+            <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Day(item.Day)</TableCell>
             <TableCell Main>@item.Text</TableCell>
         </Row>
     </DataTable>

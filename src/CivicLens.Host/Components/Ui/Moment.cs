@@ -10,7 +10,7 @@ public static class Moment
 
     public static string Day(DateOnly value) => value.ToString("d MMM yyyy", CultureInfo.InvariantCulture);
 
-    public static string Full(DateTimeOffset value) => Format(value, "yyyy-MM-dd HH:mm 'UTC'");
+    public static string Full(DateTimeOffset value) => Format(value, "d MMM yyyy, HH:mm 'UTC'");
 
     public static string Iso(DateOnly value) => value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 

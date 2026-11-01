@@ -96,15 +96,15 @@ public sealed class ReleaseRendererTests
             Record() with { ChangeDate = null, ChangeDateEvidence = null }, PublicationCatalogs.None, CancellationToken.None);
 
         Assert.Contains("Actual change date", withDate, StringComparison.Ordinal);
-        Assert.Contains("2026-03-01", withDate, StringComparison.Ordinal);
+        Assert.Contains("1 Mar 2026", withDate, StringComparison.Ordinal);
         Assert.Contains("cite-change-date", withDate, StringComparison.Ordinal);
         Assert.DoesNotContain("Actual change date", withoutDate, StringComparison.Ordinal);
         foreach (var html in new[] { withDate, withoutDate })
         {
-            Assert.Contains("Earlier version 2026-04-02 09:30 UTC", html, StringComparison.Ordinal);
-            Assert.Contains("later version 2026-05-03 10:45 UTC", html, StringComparison.Ordinal);
-            Assert.Contains("Approved 2026-05-10", html, StringComparison.Ordinal);
-            Assert.Contains("first published 2026-05-11", html, StringComparison.Ordinal);
+            Assert.Contains("Earlier version 2 Apr 2026, 09:30 UTC", html, StringComparison.Ordinal);
+            Assert.Contains("later version 3 May 2026, 10:45 UTC", html, StringComparison.Ordinal);
+            Assert.Contains("Approved 10 May 2026", html, StringComparison.Ordinal);
+            Assert.Contains("first published 11 May 2026", html, StringComparison.Ordinal);
         }
     }
 
@@ -267,6 +267,24 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task EveryPublicPageShowsDatesInTheOneDayMonthYearForm()
+    {
+        var pages = await RenderEveryPageTypeAsync();
+        var shown = 0;
+        foreach (var (name, _, html, _) in pages)
+        {
+            var document = new HtmlParser().ParseDocument(html);
+            foreach (var hidden in document.QuerySelectorAll("script, style, template").ToList()) hidden.Remove();
+            var text = document.Body!.TextContent;
+
+            Assert.False(Regex.IsMatch(text, @"\b\d{4}-\d{2}-\d{2}\b"), $"{name} shows a numeric date");
+            shown += Regex.Count(text, @"\b\d{1,2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4}\b");
+        }
+
+        Assert.True(shown > 0);
+    }
+
+    [Fact]
     public async Task MainTakesFocusFromTheSkipLinkOnEveryPageType()
     {
         foreach (var (name, _, html, _) in await RenderEveryPageTypeAsync())
@@ -395,18 +413,18 @@ public sealed class ReleaseRendererTests
             .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.ShownText());
         Assert.Equal("Jane <Doe>", facts["Speakers"]);
         Assert.Equal("Aide One", facts["Other people quoted, named as the article writes them"]);
-        Assert.Equal("2026-05-01", facts["Statement date"]);
+        Assert.Equal("1 May 2026", facts["Statement date"]);
         Assert.Equal("housing, transit", facts["Issues"]);
         Assert.False(facts.ContainsKey("Policy areas"));
         Assert.Equal("HB 12", facts["Bill numbers"]);
         Assert.Equal(["Inside quotation marks", "Not in quotation marks"],
             document.QuerySelectorAll("[aria-labelledby='quotations-title'] .badge").Select(badge => badge.TextContent));
         Assert.Equal("<b>a rent cap</b>", document.QuerySelector("mark#cite-1")!.TextContent);
-        Assert.Equal("Signed 2026-05-01.", document.QuerySelector("mark#cite-2")!.TextContent);
-        Assert.Equal("Signed 2026-05-01.", document.QuerySelector("mark#cite-statement-date")!.TextContent);
+        Assert.Equal("Signed 1 May 2026.", document.QuerySelector("mark#cite-2")!.TextContent);
+        Assert.Equal("Signed 1 May 2026.", document.QuerySelector("mark#cite-statement-date")!.TextContent);
         Assert.Contains("Evidence for the statement date", html, StringComparison.Ordinal);
         Assert.Contains("href=\"https://example.gov/story\"", html, StringComparison.Ordinal);
-        Assert.Contains("Observed 2026-05-03 10:45 UTC", html, StringComparison.Ordinal);
+        Assert.Contains("Observed 3 May 2026, 10:45 UTC", html, StringComparison.Ordinal);
         Assert.Contains("It does not show when the statement was first made.", html, StringComparison.Ordinal);
         Assert.DoesNotContain("when or why the source changed", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<script>", html, StringComparison.Ordinal);
@@ -434,8 +452,8 @@ public sealed class ReleaseRendererTests
 
         var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
         Assert.Contains(PublishedRecordLabels.StatementModelWording, text, StringComparison.Ordinal);
-        Assert.Contains("Checked by code on 2026-05-10 12:00 UTC", text, StringComparison.Ordinal);
-        Assert.Contains("Checked by code, 2026-05-10 12:00 UTC", text, StringComparison.Ordinal);
+        Assert.Contains("Checked by code on 10 May 2026, 12:00 UTC", text, StringComparison.Ordinal);
+        Assert.Contains("Checked by code, 10 May 2026, 12:00 UTC", text, StringComparison.Ordinal);
         Assert.Contains("Policy areas (chosen by AI)", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Approved 20", text, StringComparison.Ordinal);
     }
@@ -446,7 +464,7 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer(null, null).RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None);
 
         var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
-        Assert.Contains("Approved 2026-05-10 12:00 UTC", text, StringComparison.Ordinal);
+        Assert.Contains("Approved 10 May 2026, 12:00 UTC", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Checked by code", text, StringComparison.Ordinal);
         Assert.DoesNotContain("AI summary", text, StringComparison.Ordinal);
         Assert.DoesNotContain("chosen by AI", text, StringComparison.Ordinal);
@@ -462,7 +480,7 @@ public sealed class ReleaseRendererTests
         var document = new HtmlParser().ParseDocument(html);
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
             .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.ShownText());
-        Assert.Equal("2026-05-01. " + PublishedRecordLabels.CodeReadDate + ".", facts["Statement date"]);
+        Assert.Equal("1 May 2026. " + PublishedRecordLabels.CodeReadDate + ".", facts["Statement date"]);
     }
 
     [Fact]
@@ -481,7 +499,7 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer(null, null).RenderStatementAsync(statement, [], PublicationCatalogs.None, CancellationToken.None);
 
         var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
-        Assert.Contains("Approved 2026-05-10 12:00 UTC", text, StringComparison.Ordinal);
+        Assert.Contains("Approved 10 May 2026, 12:00 UTC", text, StringComparison.Ordinal);
         Assert.DoesNotContain("AI summary", text, StringComparison.Ordinal);
     }
 
@@ -516,8 +534,8 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action(), status, [], PublicationCatalogs.None, CancellationToken.None);
 
         var facts = new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts dd").Select(dd => dd.TextContent).ToList();
-        Assert.Contains("Latest official action: Passed House. Action date: 2026-01-28.", facts);
-        Assert.Contains("2026-01-30 09:00 UTC. The bill can change after this time.", facts);
+        Assert.Contains("Latest official action: Passed House. Action date: 28 Jan 2026.", facts);
+        Assert.Contains("30 Jan 2026, 09:00 UTC. The bill can change after this time.", facts);
         var link = new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts a").Single(anchor => anchor.TextContent == "Bill on Congress.gov");
         Assert.StartsWith("https://www.congress.gov/bill/119th-congress/", link.GetAttribute("href"), StringComparison.Ordinal);
     }
@@ -530,7 +548,7 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action(), status, [], PublicationCatalogs.None, CancellationToken.None);
 
         var facts = new HtmlParser().ParseDocument(html).QuerySelectorAll(".facts dd").Select(dd => dd.TextContent).ToList();
-        Assert.Contains("Became law: Public Law 119-21. Action date: 2026-01-28.", facts);
+        Assert.Contains("Became law: Public Law 119-21. Action date: 28 Jan 2026.", facts);
         Assert.DoesNotContain("Became Public Law No", html, StringComparison.Ordinal);
     }
 
@@ -597,7 +615,7 @@ public sealed class ReleaseRendererTests
         Assert.Equal("Housing costs", facts["Tracked issues"]);
         var rows = document.QuerySelectorAll("[aria-labelledby='sponsorships-title'] tbody tr")
             .Select(row => string.Join("|", row.QuerySelectorAll("td").Select(cell => cell.ShownText().Trim())));
-        Assert.Equal(["Jane <Doe>|Sponsor|No|2026-01-03|None|", "Ann Roe|Cosponsor|Yes|2026-01-05|2026-01-20|"], rows);
+        Assert.Equal(["Jane <Doe>|Sponsor|No|3 Jan 2026|None|", "Ann Roe|Cosponsor|Yes|5 Jan 2026|20 Jan 2026|"], rows);
         Assert.Equal(["Source line: Jane <Doe>, sponsorship", "Source line: Ann Roe, sponsorship"],
             document.QuerySelectorAll("[aria-labelledby='sponsorships-title'] a.source-line").Select(link => link.TextContent));
         Assert.Contains("Summary version: 00 <i>funds</i> rent aid.", document.QuerySelector("[aria-labelledby='bill-evidence-title']")!.TextContent,
@@ -716,7 +734,7 @@ public sealed class ReleaseRendererTests
         var document = new HtmlParser().ParseDocument(html);
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
             .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.ShownText());
-        Assert.Equal("2025-04-10", facts["Voted on"]);
+        Assert.Equal("10 Apr 2025", facts["Voted on"]);
         Assert.Equal("Passage", facts["Kind"]);
         Assert.Equal("On Passage", facts["Question"]);
         Assert.Equal("House", facts["Chamber"]);
@@ -939,7 +957,7 @@ public sealed class ReleaseRendererTests
         var renderer = new ReleaseRenderer(null, null);
         var pages = new[]
         {
-            (await renderer.RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None), "Signed 2026-05-01."),
+            (await renderer.RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None), "Signed 1 May 2026."),
             (await renderer.RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None), Record().ChangeDateEvidence!.Quote)
         };
 
@@ -1387,7 +1405,7 @@ public sealed class ReleaseRendererTests
         var targetLink = rows[0].QuerySelectorAll("a");
         Assert.Equal(($"../records/{action.RecordId}.html", "Housing bill funds rent aid"), (targetLink[0].GetAttribute("href"), targetLink[0].TextContent));
         Assert.Equal($"../records/{actionLink.RecordId}.html", targetLink[1].GetAttribute("href"));
-        Assert.Contains("Action, Describes own bill, statement of 2026-05-01", rows[0].TextContent, StringComparison.Ordinal);
+        Assert.Contains("Action, Describes own bill, statement of 1 May 2026", rows[0].TextContent, StringComparison.Ordinal);
         Assert.Contains("Vote, Statement about a vote", rows[1].TextContent, StringComparison.Ordinal);
         var onAction = Assert.Single(actionPage.QuerySelectorAll("[aria-labelledby='related-title'] li"));
         Assert.Equal(($"../records/{statement.RecordId}.html", "Doe backs a rent cap"), (onAction.QuerySelector("a")!.GetAttribute("href"), onAction.QuerySelector("a")!.TextContent));
@@ -1445,7 +1463,7 @@ public sealed class ReleaseRendererTests
         Assert.Equal("A week of <housing> news", document.QuerySelector("h1")!.TextContent);
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
             .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.ShownText());
-        Assert.Equal("Starts Monday 2026-10-05, New York time", facts["Week"]);
+        Assert.Equal("Starts Monday 5 Oct 2026, New York time", facts["Week"]);
         Assert.Equal("3", facts["Cutoff release"]);
         Assert.Equal(("5", "4", "2"), (facts["Records considered"], facts["Records sent to the drafting model"], facts["Records cited"]));
         var citations = document.QuerySelectorAll("[aria-labelledby='citations-title'] li")
@@ -1793,7 +1811,7 @@ public sealed class ReleaseRendererTests
         var rows = document.QuerySelectorAll("tbody tr").ToList();
         Assert.Equal(new[] { 2, 1, 0 }.Select(index => $"records/{index:x64}.html"), rows.Select(row => row.QuerySelector("a.cell-title")!.GetAttribute("href")));
         Assert.Equal(["Brief 2", "Brief 1", "Brief 0"], rows.Select(row => row.QuerySelector("a.cell-title")!.TextContent));
-        Assert.Equal(["2026-01-19", "2026-01-12", "2026-01-05"], rows.Select(row => row.QuerySelector("td[data-label='Week of']")!.TextContent.Trim()));
+        Assert.Equal(["19 Jan 2026", "12 Jan 2026", "5 Jan 2026"], rows.Select(row => row.QuerySelector("td[data-label='Week of']")!.TextContent.Trim()));
         Assert.Equal(["Record", "Week of", "First published"], document.QuerySelectorAll("thead th").Select(header => header.TextContent.Trim()));
         Assert.Empty(document.QuerySelectorAll("tbody .badge"));
     }
@@ -1992,8 +2010,8 @@ public sealed class ReleaseRendererTests
 
         var rows = new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody tr")
             .Select(row => string.Join("|", row.QuerySelectorAll("td").Select(cell => cell.TextContent.Trim())));
-        Assert.Equal(["Headline c Document change||2026-05-12", "Headline d Document change|Ann Roe|2026-05-10",
-            "Headline b Document change|Jane Doe|2026-05-10", "Headline a Document change|Jane Doe, Ann Roe|2026-01-02"], rows);
+        Assert.Equal(["Headline c Document change||12 May 2026", "Headline d Document change|Ann Roe|10 May 2026",
+            "Headline b Document change|Jane Doe|10 May 2026", "Headline a Document change|Jane Doe, Ann Roe|2 Jan 2026"], rows);
     }
 
     [Fact]
@@ -2007,18 +2025,18 @@ public sealed class ReleaseRendererTests
             Relationship(PublishedRecordKind.Action, new string('a', 64), '7') with { StatementDate = new DateOnly(2026, 2, 3) }, PublicationCatalogs.None, CancellationToken.None));
         var brief = await TimelineOf(renderer => renderer.RenderBriefAsync(Brief(), CancellationToken.None));
 
-        Assert.Equal(["2026-05-01|Statement made", "2026-05-03|Source observed, 2026-05-03 10:45 UTC",
-            "2026-05-10|Approved, 2026-05-10 12:00 UTC", "2026-05-11|First published, 2026-05-11 08:00 UTC"], statement);
-        Assert.Equal(["2026-03-01|The source changed", "2026-04-02|Earlier version observed, 2026-04-02 09:30 UTC",
-            "2026-05-03|Later version observed, 2026-05-03 10:45 UTC", "2026-05-10|Approved, 2026-05-10 12:00 UTC",
-            "2026-05-11|First published, 2026-05-11 08:00 UTC"], change);
-        Assert.Equal(["2026-01-03|Sponsored by Jane <Doe> (sponsor)", "2026-01-05|Sponsored by Ann Roe (cosponsor)",
-            "2026-01-20|Withdrawn by Ann Roe (cosponsor)", "2026-01-22|Approved, 2026-01-22 12:00 UTC",
-            "2026-01-23|First published, 2026-01-23 08:00 UTC"], action);
-        Assert.Equal(["2025-04-10|Vote held", "2026-01-22|Approved, 2026-01-22 12:00 UTC", "2026-01-23|First published, 2026-01-23 08:00 UTC"], vote);
-        Assert.Equal(["2026-02-03|Statement made", "2026-02-04|Approved, 2026-02-04 12:00 UTC", "2026-02-05|First published, 2026-02-05 08:00 UTC"],
+        Assert.Equal(["1 May 2026|Statement made", "3 May 2026|Source observed, 3 May 2026, 10:45 UTC",
+            "10 May 2026|Approved, 10 May 2026, 12:00 UTC", "11 May 2026|First published, 11 May 2026, 08:00 UTC"], statement);
+        Assert.Equal(["1 Mar 2026|The source changed", "2 Apr 2026|Earlier version observed, 2 Apr 2026, 09:30 UTC",
+            "3 May 2026|Later version observed, 3 May 2026, 10:45 UTC", "10 May 2026|Approved, 10 May 2026, 12:00 UTC",
+            "11 May 2026|First published, 11 May 2026, 08:00 UTC"], change);
+        Assert.Equal(["3 Jan 2026|Sponsored by Jane <Doe> (sponsor)", "5 Jan 2026|Sponsored by Ann Roe (cosponsor)",
+            "20 Jan 2026|Withdrawn by Ann Roe (cosponsor)", "22 Jan 2026|Approved, 22 Jan 2026, 12:00 UTC",
+            "23 Jan 2026|First published, 23 Jan 2026, 08:00 UTC"], action);
+        Assert.Equal(["10 Apr 2025|Vote held", "22 Jan 2026|Approved, 22 Jan 2026, 12:00 UTC", "23 Jan 2026|First published, 23 Jan 2026, 08:00 UTC"], vote);
+        Assert.Equal(["3 Feb 2026|Statement made", "4 Feb 2026|Approved, 4 Feb 2026, 12:00 UTC", "5 Feb 2026|First published, 5 Feb 2026, 08:00 UTC"],
             relationship);
-        Assert.Equal(["2026-10-05|Week starts", "2026-10-06|Approved, 2026-10-06 12:00 UTC", "2026-10-07|First published, 2026-10-07 08:00 UTC"], brief);
+        Assert.Equal(["5 Oct 2026|Week starts", "6 Oct 2026|Approved, 6 Oct 2026, 12:00 UTC", "7 Oct 2026|First published, 7 Oct 2026, 08:00 UTC"], brief);
     }
 
     [Fact]
@@ -2038,12 +2056,12 @@ public sealed class ReleaseRendererTests
         {
             var entries = new HtmlParser().ParseDocument(html).QuerySelectorAll("ul.corrections > li")
                 .Select(item => (item.QuerySelector("strong")!.ShownText(), item.QuerySelector("p")?.TextContent)).ToArray();
-            Assert.Equal(("Correction, 2026-02-04. Replaces revision 2.", "Fixed the <sponsor> date."), entries[0]);
-            Assert.Equal(("Updated from the source, 2026-02-02. Replaces revision 1.", null), entries[1]);
+            Assert.Equal(("Correction, 4 Feb 2026. Replaces revision 2.", "Fixed the <sponsor> date."), entries[0]);
+            Assert.Equal(("Updated from the source, 2 Feb 2026. Replaces revision 1.", null), entries[1]);
         }
         var timeline = await TimelineOf(renderer => renderer.RenderActionAsync(action, null, [], PublicationCatalogs.None, CancellationToken.None));
-        Assert.Contains("2026-02-04|Correction, replaces revision 2, 2026-02-04 09:00 UTC", timeline);
-        Assert.Contains("2026-02-02|Updated from the source, replaces revision 1, 2026-02-02 09:00 UTC", timeline);
+        Assert.Contains("4 Feb 2026|Correction, replaces revision 2, 4 Feb 2026, 09:00 UTC", timeline);
+        Assert.Contains("2 Feb 2026|Updated from the source, replaces revision 1, 2 Feb 2026, 09:00 UTC", timeline);
     }
 
     [Fact]
@@ -2058,9 +2076,9 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
 
         var entry = new HtmlParser().ParseDocument(html).QuerySelector("ul.corrections > li strong")!.ShownText();
-        Assert.Equal("Summary rewritten by the AI model, 2026-02-02. Replaces revision 1. The vote facts did not change.", entry);
+        Assert.Equal("Summary rewritten by the AI model, 2 Feb 2026. Replaces revision 1. The vote facts did not change.", entry);
         var timeline = await TimelineOf(renderer => renderer.RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None));
-        Assert.Contains("2026-02-02|Summary rewritten by the AI model, replaces revision 1, 2026-02-02 09:00 UTC. The vote facts did not change.", timeline);
+        Assert.Contains("2 Feb 2026|Summary rewritten by the AI model, replaces revision 1, 2 Feb 2026, 09:00 UTC. The vote facts did not change.", timeline);
     }
 
     [Fact]
@@ -2082,10 +2100,10 @@ public sealed class ReleaseRendererTests
         var document = new HtmlParser().ParseDocument(html);
         var text = document.QuerySelector("main")!.TextContent;
         Assert.Equal("This record was withdrawn", document.QuerySelector("h1")!.TextContent);
-        foreach (var expected in new[] { "Action", new string('c', 64), "3", "2026-02-01 08:00 UTC", "2026-02-09 09:30 UTC", "Wrong <bill>." })
+        foreach (var expected in new[] { "Action", new string('c', 64), "3", "1 Feb 2026, 08:00 UTC", "9 Feb 2026, 09:30 UTC", "Wrong <bill>." })
             Assert.Contains(expected, text, StringComparison.Ordinal);
         Assert.Contains("Wrong &lt;bill&gt;.", html, StringComparison.Ordinal);
-        Assert.Equal("Correction, 2026-02-04. Replaces revision 2.", document.QuerySelector("ul.corrections > li strong")!.ShownText());
+        Assert.Equal("Correction, 4 Feb 2026. Replaces revision 2.", document.QuerySelector("ul.corrections > li strong")!.ShownText());
         Assert.Empty(document.QuerySelectorAll("main a[href*='report.html?']"));
     }
 
@@ -2121,7 +2139,7 @@ public sealed class ReleaseRendererTests
 
         var events = await TimelineOf(renderer => renderer.RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None));
 
-        Assert.Equal(["2025-04-10|Vote held", "2026-01-22|First published, 2026-01-22 08:00 UTC", "2026-01-22|Approved, 2026-01-22 12:00 UTC"], events);
+        Assert.Equal(["10 Apr 2025|Vote held", "22 Jan 2026|First published, 22 Jan 2026, 08:00 UTC", "22 Jan 2026|Approved, 22 Jan 2026, 12:00 UTC"], events);
     }
 
     private static async Task<string[]> TimelineOf(Func<ReleaseRenderer, Task<string>> render)
@@ -3036,9 +3054,9 @@ public sealed class ReleaseRendererTests
 
     private static PublishedStatement Statement()
     {
-        const string text = "Jane said <b>a rent cap</b> helps tenants. Signed 2026-05-01. <script>x</script>";
+        const string text = "Jane said <b>a rent cap</b> helps tenants. Signed 1 May 2026. <script>x</script>";
         var cap = text.IndexOf("<b>a rent cap</b>", StringComparison.Ordinal);
-        var signed = text.IndexOf("Signed 2026-05-01.", StringComparison.Ordinal);
+        var signed = text.IndexOf("Signed 1 May 2026.", StringComparison.Ordinal);
         return new PublishedStatement
         {
             Corrections = [],
@@ -3048,7 +3066,7 @@ public sealed class ReleaseRendererTests
             Summary = "Doe supports a cap.",
             TextOrigin = PublishedTextOrigin.Person,
             StatementDate = new DateOnly(2026, 5, 1),
-            StatementDateEvidence = new PublishedCitation { ExtractionId = AfterId, Start = signed, Length = 18, Quote = "Signed 2026-05-01." },
+            StatementDateEvidence = new PublishedCitation { ExtractionId = AfterId, Start = signed, Length = 18, Quote = "Signed 1 May 2026." },
             Speakers = [new PublishedOfficial { Id = "o1", Name = "Jane <Doe>" }],
             OtherSpeakers = ["Aide One"],
             IssueIds = ["housing", "transit"],
@@ -3057,7 +3075,7 @@ public sealed class ReleaseRendererTests
             Quotations =
             [
                 new PublishedQuotation { ExtractionId = AfterId, Start = cap, Length = 17, Quote = "<b>a rent cap</b>", Kind = PublishedQuotationKind.DirectQuotation },
-                new PublishedQuotation { ExtractionId = AfterId, Start = signed, Length = 18, Quote = "Signed 2026-05-01.", Kind = PublishedQuotationKind.ReleaseText }
+                new PublishedQuotation { ExtractionId = AfterId, Start = signed, Length = 18, Quote = "Signed 1 May 2026.", Kind = PublishedQuotationKind.ReleaseText }
             ],
             Source = new PublishedDocumentVersion
             {
