@@ -10,5 +10,6 @@ public enum ApiParser
     CongressLegislators,
     CongressLegislatorsExecutive,
     MemberPhotos,
+    CongressBillText,
     FederalRegisterDocuments
 }

@@ -39,7 +39,7 @@ public sealed class VoteviewUrlTests
         var members = VoteviewJobKeys.Members(VoteviewVoteFixtures.SourceId, "rollcalls-job");
         var votes = VoteviewJobKeys.Votes(VoteviewVoteFixtures.SourceId, "members-job");
 
-        Assert.Equal(["rollcalls-job", "rollcalls-job", "members-job"], new[] { nextRollCalls, members, votes }.Select(VoteviewJobKeys.ParentJobId));
+        Assert.Equal(["rollcalls-job", "rollcalls-job", "members-job"], new[] { nextRollCalls, members, votes }.Select(ApiJobKeys.ParentJobId));
         Assert.Equal(3, new[] { nextRollCalls, members, votes }.Distinct().Count());
     }
 }

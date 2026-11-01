@@ -24,6 +24,25 @@ public sealed class CaptureDocumentTextExtractorTests
     }
 
     [Fact]
+    public async Task AGovinfoPreBodyOverTheWindowFlattensToSpacesAndTheRendererStillCutsItAtASpaceWithHonestCounts()
+    {
+        var lines = Enumerable.Range(1, 17_816).Select(number => $"  SEC. {number}. SHORT TITLE OF THE ACT.");
+        await using var capture = await TestCapture.CreateAsync(Encoding.UTF8.GetBytes(
+            "<html><body><pre>" + string.Join('\n', lines) + "</pre></body></html>"), "text/html");
+
+        var text = await capture.Extractor.ExtractAsync(capture.Attempt, capture.Root, null, CancellationToken.None);
+        var bill = new CongressBillListItem(119, "hr", 1, default);
+        var version = new CongressBillTextVersion("BILLS-119hr1enr", "Enrolled Bill", null, "https://www.congress.gov/119/bills/hr1/BILLS-119hr1enr.htm");
+        var reading = CongressBillRenderer.RenderText(bill, version, text);
+
+        Assert.DoesNotContain('\n', text);
+        Assert.True(text.Length > CongressBillRenderer.TextWindowLength);
+        Assert.Equal(text.Length, reading.CharsTotal);
+        Assert.True(reading.CharsRead is > 0 and <= CongressBillRenderer.TextWindowLength && text[reading.CharsRead] == ' ');
+        Assert.EndsWith(text[..reading.CharsRead], reading.Text);
+    }
+
+    [Fact]
     public async Task ExtractionOutputMatchesPinnedExtractionVersion()
     {
         var bump = "Extraction output changed. Bump CaptureDocumentTextExtractor.ExtractionVersion, " +

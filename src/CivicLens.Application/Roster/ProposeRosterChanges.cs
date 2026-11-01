@@ -9,7 +9,7 @@ public sealed partial class ProposeRosterChanges(IMemberRosterStore roster)
 {
     public async Task<RosterProposal?> ExecuteAsync(CollectionConfiguration configuration, CancellationToken cancellationToken)
     {
-        var source = configuration.RosterSourceOf(ApiParser.CongressLegislators)
+        var source = configuration.SourceOf(ApiParser.CongressLegislators)
             ?? throw new ArgumentException("The configuration has no member roster source.");
         var members = await roster.ReadLatestAsync(source.Id, cancellationToken);
         if (members.Count == 0) return null;
