@@ -371,6 +371,20 @@ public sealed class PublishReleaseTests
     }
 
     [Fact]
+    public async Task AStateMismatchDeletesTheBuiltDirectoryBecauseNoReleaseWasCommitted()
+    {
+        var scenario = new PublicationScenario();
+        var draft = scenario.AddDraft('a');
+        scenario.Publications.FailOnCommit = new PublicationStateMismatchException("Counts differ.");
+
+        await Assert.ThrowsAsync<PublicationStateMismatchException>(() =>
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft)));
+
+        Assert.Single(scenario.Releases.Deleted);
+        Assert.Empty(scenario.Releases.Directories);
+    }
+
+    [Fact]
     public async Task CleanupFailureDoesNotHideTheConflictThatCausedIt()
     {
         var scenario = new PublicationScenario();

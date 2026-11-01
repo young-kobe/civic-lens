@@ -45,7 +45,7 @@ internal static class PublicationRecordStates
             .CountAsync(row => row.FirstRelease <= commit.ReleaseNumber && (row.LastRelease == null || row.LastRelease >= commit.ReleaseNumber),
                 cancellationToken);
         if (rows != commit.Records.Length)
-            throw new InvalidOperationException(
+            throw new PublicationStateMismatchException(
                 $"Release {commit.ReleaseNumber} lists {commit.Records.Length} records, but the state table holds {rows} rows for it.");
     }
 
