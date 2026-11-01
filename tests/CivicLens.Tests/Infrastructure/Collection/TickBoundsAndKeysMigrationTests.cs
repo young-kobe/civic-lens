@@ -15,6 +15,22 @@ public sealed class TickBoundsAndKeysMigrationTests(PostgresCollection postgres)
     private const string ForeignKeyViolation = "23503";
     private const long LastTick = 3155378975999999999;
     private static readonly string Hash = new('a', 64);
+    private const string NewKeys = """
+        SELECT k.conname FROM pg_constraint k
+          JOIN pg_class c ON c.oid = k.conrelid
+          JOIN pg_attribute a ON a.attrelid = k.conrelid AND a.attnum = ANY (k.conkey)
+         WHERE k.contype = 'f'
+           AND (a.attname = 'retry_of_run_id'
+             OR (c.relname = 'evidence_processing' AND a.attname IN ('extraction_id', 'comparison_id'))
+             OR (c.relname IN ('vote_drafts', 'action_drafts') AND a.attname = 'candidate_id'))
+        """;
+    private static readonly string[] EarlierChecks =
+    [
+        "ck_action_candidates_created", "ck_action_candidates_update", "ck_bill_gates_created", "ck_bill_gates_decided", "ck_bill_gates_update",
+        "ck_bill_stream_cursors_updated", "ck_bill_stream_pages_recorded", "ck_collection_attempts_observed_ticks", "ck_collection_attempts_response_ticks",
+        "ck_collection_attempts_sent_ticks", "ck_collection_source_schedules_due", "ck_publication_releases_published", "ck_reader_reports_received",
+        "ck_vote_candidates_created", "ck_vote_candidates_update", "ck_vote_versions_update"
+    ];
 
     private string connectionString = null!;
 
@@ -48,6 +64,31 @@ public sealed class TickBoundsAndKeysMigrationTests(PostgresCollection postgres)
 
         Assert.Equal(ForeignKeyViolation, failure.SqlState);
         Assert.Equal("FK_evidence_processing_document_extractions_extraction_id", failure.ConstraintName);
+    }
+
+    // A rollback must restore the 16 earlier checks and drop the new ones, the keys included. The valid rows must stay valid both ways.
+    [Fact]
+    public async Task TheMigrationGoesDownToTheEarlierChecksWithoutKeysAndUpAgainBecauseARollbackMustWork()
+    {
+        await ExecuteAsync("INSERT INTO worker_heartbeat (loop, beat_at_utc_ticks) VALUES ('review', 100)");
+        await InsertEvidenceProcessingAsync("j1");
+
+        await MigrateForwardAsync();
+        await MigrateBackAsync();
+
+        Assert.Equal(EarlierChecks.Order(), await ReadAsync("SELECT conname FROM pg_constraint WHERE conname = ANY (@names) ORDER BY 1", EarlierChecks));
+        Assert.Empty(await ReadAsync(@"SELECT conname FROM pg_constraint WHERE conname LIKE 'ck\_%\_utc\_ticks'"));
+        Assert.Empty(await ReadAsync(NewKeys));
+        Assert.Equal(["review"], await ReadAsync("SELECT loop FROM worker_heartbeat"));
+        Assert.Equal(["j1"], await ReadAsync("SELECT job_id FROM evidence_processing"));
+
+        await MigrateForwardAsync();
+
+        Assert.Equal(["ck_bill_gates_decided"], await ReadAsync("SELECT conname FROM pg_constraint WHERE conname = ANY (@names)", EarlierChecks));
+        Assert.DoesNotContain(LastTick.ToString(), Assert.Single(await ReadAsync("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'ck_bill_gates_decided'")));
+        Assert.Equal(75, (await ReadAsync(@"SELECT conname FROM pg_constraint WHERE conname LIKE 'ck\_%\_utc\_ticks'")).Count);
+        Assert.Equal(10, (await ReadAsync(NewKeys)).Count);
+        Assert.Equal(["review"], await ReadAsync("SELECT loop FROM worker_heartbeat"));
     }
 
     [Fact]
@@ -174,6 +215,12 @@ public sealed class TickBoundsAndKeysMigrationTests(PostgresCollection postgres)
         await db.Database.MigrateAsync();
     }
 
+    private async Task MigrateBackAsync()
+    {
+        await using var db = NewContext();
+        await db.GetService<IMigrator>().MigrateAsync(db.Database.GetMigrations().TakeWhile(id => id != Migration).Last());
+    }
+
     private async Task ExecuteAsync(string sql)
     {
         await using var connection = await OpenAsync();
@@ -193,12 +240,13 @@ public sealed class TickBoundsAndKeysMigrationTests(PostgresCollection postgres)
         return connection;
     }
 
-    private async Task<List<string>> ReadAsync(string sql) => [.. (await ReadRowsAsync(sql)).Select(row => row[0])];
+    private async Task<List<string>> ReadAsync(string sql, string[]? names = null) => [.. (await ReadRowsAsync(sql, names)).Select(row => row[0])];
 
-    private async Task<List<string[]>> ReadRowsAsync(string sql)
+    private async Task<List<string[]>> ReadRowsAsync(string sql, string[]? names = null)
     {
         await using var connection = await OpenAsync();
         await using var command = new NpgsqlCommand(sql, connection);
+        if (names is not null) command.Parameters.AddWithValue("names", names);
         await using var reader = await command.ExecuteReaderAsync();
         var rows = new List<string[]>();
         while (await reader.ReadAsync())

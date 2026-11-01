@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace CivicLens.Infrastructure;
 
-/// <summary>Owns the range check of every column that stores a UTC time as .NET ticks.</summary>
+/// <summary>Owns the range check of every column with the `_utc_ticks` suffix.</summary>
 internal static class TimestampTickChecks
 {
     private const string ColumnSuffix = "_utc_ticks";

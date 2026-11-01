@@ -877,8 +877,12 @@ public sealed partial class PostgresBillStreamTests
             "review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks, candidate_id)";
         await ExecuteAsync(connectionString, $"{insert} VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0, (SELECT min(candidate_id) FROM action_candidates))");
 
-        await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, $"{insert} VALUES ('{new string('a', 64)}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0)"));
-        await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, $"{insert} VALUES ('NOT-A-HASH', '{SourceId}', 119, 'hr', 8, 1, 0, 'AwaitingReview', 0)"));
+        string Values(string recordId, int billNumber) =>
+            $"{insert} VALUES ('{recordId}', '{SourceId}', 119, 'hr', {billNumber}, 1, 0, 'AwaitingReview', 0, 0, (SELECT min(candidate_id) FROM action_candidates))";
+        var duplicate = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, Values(new string('a', 64), 7)));
+        var badId = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, Values("NOT-A-HASH", 8)));
+
+        Assert.Equal([PostgresErrorCodes.UniqueViolation, PostgresErrorCodes.CheckViolation], [duplicate.SqlState, badId.SqlState]);
     }
 
     private static readonly string DraftableOutput = HeadlineSummaryOutputs.Output(headline: "A sponsored a housing measure", summary: "A filed this measure.", issueIds: ["rent"]);

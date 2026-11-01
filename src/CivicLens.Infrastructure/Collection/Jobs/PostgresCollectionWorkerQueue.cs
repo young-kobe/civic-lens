@@ -51,7 +51,7 @@ public sealed class PostgresCollectionWorkerQueue(IDbContextFactory<CollectionAt
     {
         if (cursor is null) return;
         if (!CollectionJobPriority.IsValid(cursor.Priority) ||
-            cursor.CreatedAtUtcTicks is < 0 or > 3155378975999999999 ||
+            cursor.CreatedAtUtcTicks is < 0 || cursor.CreatedAtUtcTicks > DateTime.MaxValue.Ticks ||
             string.IsNullOrWhiteSpace(cursor.JobId) || cursor.JobId.Length > 128)
             throw new ArgumentException("Worker queue cursor is invalid.", nameof(cursor));
     }
