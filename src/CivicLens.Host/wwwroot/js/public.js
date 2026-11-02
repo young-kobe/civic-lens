@@ -43,6 +43,10 @@
             }
             return item;
         };
+        const resultCountText = (count, hasMore) => {
+            if (count === 0) return "No records match.";
+            return `${count} ${count === 1 ? "result" : "results"}${hasMore ? " so far" : ""}`;
+        };
         const failure = response => response.status === 429 ? "Too many searches. Try again in a minute."
             : response.status === 404 ? "This release is not indexed yet."
             : response.status === 400 ? "This search link has words or filters that search cannot use. Change them and search again."
@@ -80,7 +84,7 @@
             nextCursor = page.nextCursor;
             more.hidden = nextCursor === null;
             none.hidden = results.children.length > 0;
-            status.textContent = results.children.length === 0 ? "No records match." : `Showing ${results.children.length} records from release ${page.release}.`;
+            status.textContent = resultCountText(results.children.length, nextCursor !== null);
         };
         let address = location.search;
         const writeAddress = (params, replace) => {
