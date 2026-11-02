@@ -102,6 +102,41 @@ public sealed class VoteCommandTests(PostgresCollection postgres) : IAsyncLifeti
         Assert.Contains("The configured actor is not the owner.", result.Error, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task RevisionBackfillAndVerifyReportZeroOnAnEmptyDatabaseSoTheDocumentedCommandsRun()
+    {
+        var backfill = await RunAsync("auth0|owner", "votes", "revisions", "backfill", "5");
+        var verify = await RunAsync("auth0|owner", "votes", "revisions", "verify");
+
+        Assert.Equal(0, backfill.ExitCode);
+        Assert.Contains("\"examined\":0", backfill.Output, StringComparison.Ordinal);
+        Assert.Equal(0, verify.ExitCode);
+        Assert.Contains("\"mismatched\":0", verify.Output, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("votes", "revisions", "backfill")]
+    [InlineData("votes", "revisions", "backfill", "many")]
+    [InlineData("votes", "revisions", "backfill", "0")]
+    [InlineData("votes", "revisions", "verify", "now")]
+    public async Task RevisionCommandsRefuseABadLimitOrExtraArgument(params string[] arguments)
+    {
+        var result = await RunAsync("auth0|owner", arguments);
+
+        Assert.Equal(2, result.ExitCode);
+    }
+
+    [Theory]
+    [InlineData("backfill", "5")]
+    [InlineData("verify")]
+    public async Task TheAiDrafterCannotRunTheRevisionCommands(params string[] command)
+    {
+        var result = await RunAsync("civic-lens:analysis", ["votes", "revisions", .. command]);
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("The configured actor is not the owner.", result.Error, StringComparison.Ordinal);
+    }
+
     private Task<(int ExitCode, string Output, string Error)> RunAsync(string owner, params string[] arguments) =>
         HostProcess.RunWithEnvironmentAsync(connectionString, null,
             new Dictionary<string, string> { ["CIVIC_LENS_REVIEW_OWNER"] = owner }, arguments);
