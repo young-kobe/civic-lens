@@ -138,8 +138,9 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
                                    FROM jsonb_array_elements(r.revision_json::jsonb -> 'members') e) m ON true
                 """, requested.Select(binding => binding.RecordId).ToArray(), requested.Select(binding => binding.RevisionNumber).ToArray())
             .ToArrayAsync(cancellationToken);
-        if (rows.Any(row => !row.IsStored)) throw new InvalidDataException("A named Vote revision is not stored.");
-        return [.. rows.Where(row => row.PersonId is not null).Select(row => new VoteMembership(row.VoteRecordId, row.PersonId!))];
+        if (rows.Any(row => !row.IsStored)) throw CitedRevisions.NotStored(PublishedRecordKind.Vote);
+        return [.. rows.Select(row => new VoteMembership(row.VoteRecordId,
+            row.PersonId ?? throw new InvalidDataException("A stored vote revision names no member.")))];
     }
 
     public async Task<IReadOnlyDictionary<string, ImmutableArray<string>>> FindBillActionRecordIdsOfVotesAsync(
@@ -154,27 +155,9 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
                 FROM vote_revisions r JOIN unnest({0}, {1}) AS k(id, number) ON r.record_id = k.id AND r.revision_number = k.number
                 """, requested.Select(binding => binding.RecordId).ToArray(), requested.Select(binding => binding.RevisionNumber).ToArray())
             .ToArrayAsync(cancellationToken);
-        if (stored.Length != requested.Length) throw new InvalidDataException("A named Vote revision is not stored.");
+        if (stored.Length != requested.Length) throw CitedRevisions.NotStored(PublishedRecordKind.Vote);
         var bills = stored.Select(row => VoteBill.Of(row.VoteRecordId, row.Congress, row.BillType, row.BillNumber)).OfType<VoteBill>();
         return await ReadBillActionRecordIdsAsync(db, [.. bills], cancellationToken);
-    }
-
-    public async Task<IReadOnlySet<string>> FindVoteRecordIdsOnBillsOfActionsAsync(ImmutableArray<string> actionRecordIds,
-        ImmutableArray<PublishedRevisionBinding> voteRevisions, CancellationToken cancellationToken)
-    {
-        if (actionRecordIds.IsEmpty || voteRevisions.IsEmpty) return new HashSet<string>();
-        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var requested = voteRevisions.Distinct().ToArray();
-        var found = await db.Database.SqlQueryRaw<string>("""
-                SELECT DISTINCT r.record_id AS "Value"
-                FROM unnest({1}, {2}) AS k(id, number)
-                JOIN vote_revisions r ON r.record_id = k.id AND r.revision_number = k.number
-                JOIN action_drafts a ON a.congress = (r.revision_json::jsonb ->> 'congress')::int
-                  AND a.bill_type = r.revision_json::jsonb ->> 'billType' AND a.bill_number = (r.revision_json::jsonb ->> 'billNumber')::int
-                WHERE a.record_id = ANY({0})
-                """, (object)actionRecordIds.ToArray(), requested.Select(binding => binding.RecordId).ToArray(),
-                requested.Select(binding => binding.RevisionNumber).ToArray()).ToArrayAsync(cancellationToken);
-        return found.ToHashSet(StringComparer.Ordinal);
     }
 
     private static async Task<Dictionary<string, ImmutableArray<string>>> ReadBillActionRecordIdsAsync(CollectionAttemptDbContext db,

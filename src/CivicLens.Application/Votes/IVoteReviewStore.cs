@@ -33,8 +33,4 @@ public interface IVoteReviewStore
     /// <summary>The action records on the bill of each named published vote revision. A vote with no bill is not in the result.</summary>
     Task<IReadOnlyDictionary<string, ImmutableArray<string>>> FindBillActionRecordIdsOfVotesAsync(ImmutableArray<PublishedRevisionBinding> revisions,
         CancellationToken cancellationToken);
-
-    /// <summary>The vote records among the named published revisions on the bill of each named action record. A vote counts by the bill of its published revision.</summary>
-    Task<IReadOnlySet<string>> FindVoteRecordIdsOnBillsOfActionsAsync(ImmutableArray<string> actionRecordIds,
-        ImmutableArray<PublishedRevisionBinding> voteRevisions, CancellationToken cancellationToken);
 }
