@@ -85,6 +85,24 @@ public sealed partial class PostgresHouseVoteTests
         await AssertColumnsEqualAsync(first);
     }
 
+    // The list ID hashes the citation too, so a member list never silently points to a different extraction.
+    [Fact]
+    public async Task EqualCastsWithANewExtractionMakeANewListBecauseTheCitationIsPartOfTheListIdentity()
+    {
+        var older = await PendingCandidateAsync();
+        var first = await RevisionAsync(older, 1);
+        await SettleAsync(older, first);
+        var newer = await PendingCandidateAsync(Updated.AddDays(1));
+        var second = await RevisionAsync(newer, 2);
+        var recited = first.Members[0] with { Citation = second.Members[0].Citation };
+        Assert.NotEqual(first.Members[0].Citation.ExtractionId, recited.Citation.ExtractionId);
+
+        await SettleAsync(newer, second with { Members = [recited] });
+
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM vote_member_lists"));
+        Assert.Equal(2L, await ScalarAsync("SELECT count(DISTINCT member_list_id) FROM vote_revisions"));
+    }
+
     [Fact]
     public async Task ANewerCandidateMayChangeTheBillSoTheBillStaysOffTheRollIdentityKey()
     {
@@ -128,17 +146,22 @@ public sealed partial class PostgresHouseVoteTests
     [InlineData("vote_revisions", "subjects_hash = 'xyz'", "ck_vote_revisions_subjects_hash")]
     [InlineData("vote_revisions", "candidate_update_utc_ticks = -1", "ck_vote_revisions_candidate_update_utc_ticks")]
     [InlineData("vote_revisions", "headline = NULL", "ck_vote_revisions_columns_written")]
+    [InlineData("vote_revisions", "chamber = 'Other'", "ck_vote_revisions_chamber")]
+    [InlineData("vote_revisions", "chamber = 'Senate', vote_source = 'Bogus'", "ck_vote_revisions_vote_source")]
     [InlineData("vote_member_lists", "member_count = 601", "ck_vote_member_lists_count")]
+    [InlineData("vote_member_lists", "list_id = 'xyz'", "ck_vote_member_lists_id")]
     [InlineData("vote_member_lists", "created_at_utc_ticks = -1", "ck_vote_member_lists_created_at_utc_ticks")]
     [InlineData("vote_member_list_entries", "position = -1", "ck_vote_member_list_entries_position")]
     [InlineData("vote_member_list_entries", "vote_cast = ' '", "ck_vote_member_list_entries_member")]
     [InlineData("vote_member_list_entries", "citation_length = 0", "ck_vote_member_list_entries_citation")]
     [InlineData("vote_revision_facts", "fact_text = ''", "ck_vote_revision_facts_text")]
     [InlineData("vote_revision_facts", "citation_start = -1", "ck_vote_revision_facts_citation")]
+    [InlineData("vote_revision_issues", "position = -1", "ck_vote_revision_issues_position")]
+    [InlineData("vote_revision_issues", "issue_id = ' '", "ck_vote_revision_issues_issue")]
     public async Task TheDatabaseRefusesAColumnValueThatBreaksARuleOfTheRevision(string table, string assignment, string constraint)
     {
         var candidate = await PendingCandidateAsync();
-        await SettleAsync(candidate, await RevisionAsync(candidate, 1));
+        await SettleAsync(candidate, (await RevisionAsync(candidate, 1)) with { IssueCandidateIds = ["issue-a"], TrackedIssueIds = ["issue-a"] });
 
         var failure = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync($"UPDATE {table} SET {assignment}"));
 
