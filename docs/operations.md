@@ -1129,7 +1129,7 @@ The first backup run by hand also proves the credentials. The timer runs at 03:3
 
 **Restore.** Test this procedure once before you need it, on a spare machine or directory.
 
-1. Stop the backup timer and the services that use the databases: `sudo systemctl stop civic-lens-backup.timer` and `sudo deploy/scripts/compose.sh stop worker review search search-postgres`.
+1. Stop the backup and health timers and the services that use the databases: `sudo systemctl stop civic-lens-backup.timer civic-lens-health.timer` and `sudo deploy/scripts/compose.sh stop worker review search search-postgres`.
 2. Restore the snapshot to a work directory: `sudo deploy/scripts/compose.sh run --rm -v /srv/restore:/restore restic restore latest --target /restore`. The files keep their full paths, for example `/srv/restore/srv/civic-lens/captures`.
 3. Drop and create the operational database again. A restore into the old database would keep the tables of newer migrations. Start Postgres if it is down. Then run:
 
@@ -1157,7 +1157,7 @@ sudo install -d -m 700 -o 70 -g 70 /srv/civic-lens/postgres/search
 
 6. Start the services with `update.sh`. The search service ingests the active release when it starts, and then every 30 seconds. Wait for one poll, then search on the site.
 7. Run `sudo deploy/scripts/install-operator-access.sh "<agent public key>"` again, because the restore leaves out the grants of the read-only role.
-8. Start the timer: `sudo systemctl start civic-lens-backup.timer`. When the site works, delete `/srv/restore` and the `.old` folders.
+8. Start the timers: `sudo systemctl start civic-lens-backup.timer civic-lens-health.timer`. When the site works, delete `/srv/restore` and the `.old` folders.
 
 The dump file stays in `/srv/civic-lens/backup`, mode 700, until the next run replaces it.
 
@@ -1195,11 +1195,11 @@ If `civic-lens-backup.service` fails, systemd starts `civic-lens-alert@civic-len
 
 ### Health alerts
 
-`civic-lens-health.timer` runs `deploy/scripts/check-health.sh` every 10 minutes. The script sends one email when `worker health` exits with a non-zero status. It sends one email when free space under `/srv/civic-lens` is below 10 GB (`min_free_gb` in the script). The 10 GB value is a guess, not a measurement. A failed `docker compose` call also counts as an unhealthy worker. The email holds the host name, the time, and a fixed sentence. It holds no output from the worker.
+`civic-lens-health.timer` runs `deploy/scripts/check-health.sh` every 10 minutes. The script sends one email when `worker health` exits with a non-zero status. It sends one email when free space under `/srv/civic-lens` is below 10 GB (`min_free_gb` in the script). The 10 GB value is a guess, not a measurement. A failed `docker compose` call also counts as an unhealthy worker. The email holds a fixed sentence, the host name, and the time. It holds no output from the worker. The check measures only the filesystem that holds `/srv/civic-lens`. It does not measure `/var/lib/docker` or `/tmp` if they sit on another filesystem. The worker check stops after 120 seconds and does not start stopped services.
 
 The script writes a marker file in `/run/civic-lens` for each problem that it reported. While the marker exists, the script sends no more email for that problem. When the check passes, the script removes the marker, so the next failure sends a new email. A reboot clears `/run`, so a problem that lasts through a reboot sends one new email. If a send fails, the script writes no marker and tries again on the next tick. A failure of the check itself starts the failure alert for `civic-lens-health.service`.
 
-A deploy restarts the worker. `worker health` can report no heartbeat until every loop has started, so a deploy can send one health email that clears by itself. See [Managed collection jobs](#managed-collection-jobs) for the rules.
+A worker beat can be up to 10 minutes old before it fails health, and the timer runs every 10 minutes. So a dead worker sends an email 10 to 20 minutes after it stops. Each documented worker stop, such as the withdraw test or a long rewrite, can send one email if it lasts that long. A deploy restarts the worker. `worker health` can report no heartbeat until every loop has started, so a deploy can send one health email that clears by itself. See [Managed collection jobs](#managed-collection-jobs) for the rules.
 
 Install it after the failure alert works. The unit files link from the checkout:
 
@@ -1208,7 +1208,7 @@ sudo systemctl link /opt/civic-lens/deploy/systemd/civic-lens-health.service /op
 sudo systemctl enable --now civic-lens-health.timer
 ```
 
-Test the worker path: run `sudo deploy/scripts/compose.sh stop worker`, then `sudo systemctl start civic-lens-health.service`, and read the email. Then run `sudo deploy/scripts/compose.sh start worker`. Test the disk path with `sudo CIVIC_LENS_HEALTH_STATE=/tmp/civic-lens-test deploy/scripts/check-health.sh` after you edit `min_free_gb` to a value above the free space, then undo the edit. Check `systemctl list-timers civic-lens-health.timer` every week.
+Test the worker path: run `sudo deploy/scripts/compose.sh stop worker`, wait more than 10 minutes, run `sudo systemctl start civic-lens-health.service`, and read the email. Then run `sudo deploy/scripts/compose.sh start worker`. The marker stops a second email, so run `sudo rm /run/civic-lens/worker.alerted` before you test again. Test the disk path the same way: edit `min_free_gb` in `/opt/civic-lens/deploy/scripts/check-health.sh` to a value above the free space, run `sudo systemctl start civic-lens-health.service`, then undo the edit. Check `systemctl list-timers civic-lens-health.timer` every week.
 
 ### No page logs
 

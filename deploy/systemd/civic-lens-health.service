@@ -1,12 +1,13 @@
 [Unit]
 Description=Civic Lens worker and disk check
-Requires=docker.service
-After=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
 OnFailure=civic-lens-alert@%n.service
 
 [Service]
 Type=oneshot
 ExecStart=/opt/civic-lens/deploy/scripts/check-health.sh
 TimeoutStartSec=5min
+PrivateTmp=yes
 RuntimeDirectory=civic-lens
 RuntimeDirectoryPreserve=yes

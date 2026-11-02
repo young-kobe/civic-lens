@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sends one alert email through Resend. The callers pass a plain subject and text with no quote or backslash.
+# Sends one alert email through Resend. It adds the host name and the time to the text.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
@@ -22,6 +22,12 @@ umask 077
 header_file=$(mktemp)
 trap 'rm -f "$header_file"' EXIT
 echo "Authorization: Bearer ${RESEND_API_KEY:?}" > "$header_file"
+
+if [[ $subject$text == *[\"\\]* ]]; then
+  echo "The subject or text has a quote or a backslash." >&2
+  exit 1
+fi
+text="$text Host $(hostname), time $(date --utc +%Y-%m-%dT%H:%M:%SZ)."
 
 body="{\"from\":\"alerts@civic-lens.info\",\"to\":[\"$ALERT_TO\"],\"subject\":\"$subject\",\"text\":\"$text\"}"
 

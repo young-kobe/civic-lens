@@ -34,6 +34,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A post without a valid antiforgery token changes nothing. Enforced by ASP.NET Core antiforgery. Test: `ReviewWorkspaceTests.ForgedPostsCachedPagesAndForeignHostsAreRefusedAsync`.
 - A reviewer cannot publish. Enforced by `ReviewAuthorization.RequireOwner` in `PublishRelease`. Test: `PublishReleaseTests.ReviewerCannotPublishBecauseOnlyTheOwnerSpeaksForTheSite`.
 - Retained evidence renders as text, never as markup. Enforced by Razor encoding. Test: `ReviewWorkspaceTests.RetainedEvidenceIsShownAsTextNeverAsMarkupAsync`.
+- Only `worker health` defines a healthy worker. The host alert script uses its exit status and has no second rule. Enforced by `deploy/scripts/check-health.sh`. No test.
 - Markup has no inline styles. Enforced by `PresentationArchitectureTests`. Test: `PresentationArchitectureTests.MarkupCannotStyleItselfSoComponentsStayTheOnlyStyleOwners`.
 
 ## Behavior

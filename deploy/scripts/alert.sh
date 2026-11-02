@@ -9,9 +9,7 @@ if [[ ! $unit =~ ^[A-Za-z0-9@:._-]+$ ]]; then
   exit 1
 fi
 
-host=$(hostname)
-time=$(date --utc +%Y-%m-%dT%H:%M:%SZ)
-text="The unit $unit failed on $host at $time. Read the log with: journalctl -u $unit"
+text="The unit $unit failed. Read the log with: journalctl -u $unit."
 
 if ! "$script_directory/send-alert.sh" "Civic Lens: $unit failed" "$text"; then
   echo "The alert email for $unit was not sent." >&2
