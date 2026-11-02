@@ -39,17 +39,17 @@ public sealed class PublicFoundationTests
             Assert.NotEmpty(new HtmlParser().ParseFragment(await RenderAsync<Icon>(new() { [nameof(Icon.Name)] = name }), null!)
                 .OfType<AngleSharp.Dom.IElement>().Single().QuerySelectorAll("path, circle, rect"));
 
-        Assert.Equal("", await RenderAsync<Icon>(new() { [nameof(Icon.IssueId)] = "an-issue-added-later" }));
-        Assert.Contains("<path", await RenderAsync<Icon>(new() { [nameof(Icon.IssueId)] = "firearms" }), StringComparison.Ordinal);
+        Assert.Equal("", await RenderAsync<IssueIcon>(new() { [nameof(IssueIcon.IssueId)] = "an-issue-added-later" }));
+        Assert.Contains("<path", await RenderAsync<IssueIcon>(new() { [nameof(IssueIcon.IssueId)] = "firearms" }), StringComparison.Ordinal);
     }
 
     [Fact]
-    public void EveryConfiguredIssueHasOneIconAndNoIconBelongsToAnUnknownIssue()
+    public void NoIssueIconNamesAnIssueThatTheConfigurationLacksSoAConfigOnlyNewIssueNeverFailsTheBuild()
     {
         using var config = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "config", "issues.json")));
         var ids = config.RootElement.GetProperty("issues").EnumerateArray().Select(issue => issue.GetProperty("id").GetString()!);
 
-        Assert.Equal(ids.Order(StringComparer.Ordinal), IssueIcons.Paths.Keys.Order(StringComparer.Ordinal));
+        Assert.Empty(IssueIcons.Paths.Keys.Except(ids));
     }
 
     [Fact]
@@ -80,7 +80,8 @@ public sealed class PublicFoundationTests
         var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None));
 
         var table = document.QuerySelector("table[data-paged]")!;
-        Assert.Equal(DataTable<int>.PagedRowCount.ToString(CultureInfo.InvariantCulture), table.GetAttribute("data-paged"));
+        Assert.Equal("15", table.GetAttribute("data-paged"));
+        Assert.Equal(15, DataTable<int>.PagedRowCount);
         Assert.Equal("records", table.GetAttribute("data-rows-noun"));
         Assert.Equal(40, table.QuerySelectorAll("tbody tr").Length);
         Assert.Empty(table.QuerySelectorAll("tbody tr[hidden]"));
@@ -88,28 +89,88 @@ public sealed class PublicFoundationTests
     }
 
     [Fact]
-    public void ThePublicTokensReachFourAndAHalfToOneInBothThemes()
+    public async Task APagedTableWithoutACaptionIsRefusedBecauseItsPagerHasNoNameToUse()
+    {
+        var parameters = new Dictionary<string, object?>
+        {
+            [nameof(DataTable<int>.Items)] = (IReadOnlyList<int>)[1],
+            [nameof(DataTable<int>.Head)] = (RenderFragment)(builder => builder.AddContent(0, "")),
+            [nameof(DataTable<int>.Row)] = (RenderFragment<int>)(_ => builder => builder.AddContent(0, "")),
+            [nameof(DataTable<int>.PagedRows)] = "rows"
+        };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => RenderAsync<DataTable<int>>(parameters));
+    }
+
+    [Fact]
+    public void TheReleaseShipsTheLicenseOfEveryFontItShips()
+    {
+        var assets = new ReleaseRenderer(null, null).Assets;
+
+        Assert.All(assets, asset => Assert.Matches("^[a-z0-9._-]{1,80}(/[a-z0-9._-]{1,80})*$", asset.RelativePath));
+        Assert.All(new[] { "assets/fonts/ofl-schibsted-grotesk.txt", "assets/fonts/ofl-newsreader.txt" }, path => Assert.Contains("SIL OPEN FONT LICENSE", System.Text.Encoding.UTF8.GetString(assets.Single(asset => asset.RelativePath == path).Content), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ThePublicTokensReachFourAndAHalfToOneInBothThemesOnTheSurfacesThatShowThem()
     {
         var theme = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "src", "CivicLens.Host", "wwwroot", "css", "theme.css"));
-        var block = theme[theme.IndexOf("body.public {", StringComparison.Ordinal)..];
-        block = block[..block.IndexOf('}', StringComparison.Ordinal)];
-        var tokens = Regex.Matches(block, @"(--[a-z0-9-]+):\s*([^;]+);").ToDictionary(match => match.Groups[1].Value, match => match.Groups[2].Value);
-        string[] textOnSurfaces = ["--ink", "--ink-2", "--muted", "--info"];
-        string[] surfaces = ["--ground", "--surface", "--raised", "--info-bg"];
+        var supports = theme[theme.IndexOf("@supports (color: light-dark", StringComparison.Ordinal)..];
+        supports = supports[..supports.IndexOf("@media", StringComparison.Ordinal)];
+        var fallback = Declarations(theme[theme.IndexOf("body.public {", StringComparison.Ordinal)..theme.IndexOf("@supports (color: light-dark", StringComparison.Ordinal)]);
+        var publicTokens = fallback.Concat(Declarations(supports)).GroupBy(token => token.Key).ToDictionary(group => group.Key, group => group.Last().Value);
+        var lightRoot = Declarations(theme[..theme.IndexOf("body.public {", StringComparison.Ordinal)]);
+        var darkRoot = Declarations(theme[theme.IndexOf(":root[data-theme=\"dark\"] {", StringComparison.Ordinal)..]);
 
-        foreach (var theme2 in new[] { 0, 1 })
+        foreach (var (name, value) in publicTokens.Where(token => token.Value.StartsWith("light-dark", StringComparison.Ordinal)))
+            Assert.Equal(Split(value)[0], fallback[name]);
+
+        for (var dark = 0; dark < 2; dark++)
         {
-            string Value(string name) => Regex.IsMatch(tokens[name], "^light-dark")
-                ? Regex.Match(tokens[name], @"^light-dark\((.+?),\s*(?=(?:#|rgba))(.+)\)$").Groups[theme2 + 1].Value
-                : tokens[name];
-            var ground = Color.Parse(Value("--ground"), null);
-            foreach (var text in textOnSurfaces)
-                foreach (var surface in surfaces.Where(surface => !(text != "--info" && surface == "--info-bg")))
-                    Assert.True(Color.Parse(Value(text), ground).ContrastWith(Color.Parse(Value(surface), ground)) >= 4.5, $"{text} on {surface}, theme {theme2}");
-            Assert.True(Color.Parse(Value("--primary-ink"), ground).ContrastWith(Color.Parse(Value("--primary"), ground)) >= 4.5, $"button, theme {theme2}");
-            Assert.True(Color.Parse(Value("--bar-ink"), ground).ContrastWith(Color.Parse(Value("--bar"), ground)) >= 4.5, $"header, theme {theme2}");
-            Assert.True(Color.Parse(Value("--bar-muted"), ground).ContrastWith(Color.Parse(Value("--bar"), ground)) >= 4.5, $"header muted, theme {theme2}");
+            string Value(string name) => publicTokens.TryGetValue(name, out var token) && token.StartsWith("light-dark", StringComparison.Ordinal) ? Split(token)[dark]
+                : publicTokens.TryGetValue(name, out token) ? token
+                : dark == 1 && darkRoot.TryGetValue(name, out token) ? token : lightRoot[name];
+            foreach (var surfaceName in new[] { "--ground", "--surface" })
+            {
+                var surface = Color.Parse(Value(surfaceName), null);
+                void Reaches(string text, string background, Color under)
+                {
+                    var back = Color.Parse(Value(background), under);
+                    Assert.True(Color.Parse(Value(text), back).ContrastWith(back) >= 4.5, $"{text} on {background} over {surfaceName}, theme {dark}");
+                }
+
+                foreach (var text in new[] { "--ink", "--ink-2", "--muted", "--info" })
+                {
+                    Reaches(text, "--ground", surface);
+                    Reaches(text, "--surface", surface);
+                    Reaches(text, "--raised", surface);
+                }
+
+                foreach (var text in new[] { "--ink", "--ink-2", "--muted", "--info" })
+                    Reaches(text, "--info-bg", surface);
+                Reaches("--ins", "--ins-bg", surface);
+                Reaches("--del", "--del-bg", surface);
+                Reaches("--warn", "--warn-bg", surface);
+                Reaches("--primary-ink", "--primary", surface);
+            }
+
+            var bar = Color.Parse(Value("--bar"), null);
+            foreach (var text in new[] { "--bar-ink", "--bar-muted" })
+            {
+                Assert.True(Color.Parse(Value(text), bar).ContrastWith(bar) >= 4.5, $"{text} on --bar, theme {dark}");
+                var field = Color.Parse(Value("--bar-field"), bar);
+                Assert.True(Color.Parse(Value(text), field).ContrastWith(field) >= 4.5, $"{text} on --bar-field, theme {dark}");
+            }
         }
+    }
+
+    private static Dictionary<string, string> Declarations(string css) =>
+        Regex.Matches(css, @"(--[a-z0-9-]+):\s*([^;]+);").GroupBy(match => match.Groups[1].Value).ToDictionary(group => group.Key, group => group.Last().Groups[2].Value);
+
+    private static string[] Split(string lightDark)
+    {
+        var match = Regex.Match(lightDark, @"^light-dark\((.+?),\s*(?=(?:#|rgba))(.+)\)$");
+        return [match.Groups[1].Value, match.Groups[2].Value];
     }
 
     private static PublishedOfficialVote Vote(int index) => new()

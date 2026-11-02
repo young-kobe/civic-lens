@@ -1,0 +1,9 @@
+@if (IssueIcons.PathOf(IssueId) is { } path)
+{
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="@path" /></svg>
+}
+
+@code {
+    /// <summary>A configured issue ID. An ID with no icon renders nothing.</summary>
+    [Parameter, EditorRequired] public string IssueId { get; set; } = string.Empty;
+}

@@ -1,11 +1,5 @@
-@if (IssueId is null || issuePath is not null)
-{
 <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    @if (issuePath is not null)
-    {
-        <path d="@issuePath" />
-    }
-    else switch (Name)
+    @switch (Name)
     {
         case IconName.Review:
             <path d="M3 13h5l1.5 3h5L16 13h5" /><path d="M5 5h14l2 8v6H3v-6z" />
@@ -58,14 +52,7 @@
             break;
     }
 </svg>
-}
 
 @code {
-    /// <summary>The icon of a named kind. Leave it unset when <see cref="IssueId"/> is set.</summary>
-    [Parameter] public IconName Name { get; set; }
-
-    /// <summary>A configured issue ID. An ID with no icon renders nothing.</summary>
-    [Parameter] public string? IssueId { get; set; }
-
-    private string? issuePath => IssueId is null ? null : IssueIcons.PathOf(IssueId);
+    [Parameter, EditorRequired] public IconName Name { get; set; }
 }

@@ -2536,7 +2536,7 @@ public sealed class ReleaseRendererTests
             var current = new HtmlParser().ParseDocument(html).QuerySelectorAll("nav[aria-label='Site'] [aria-current], nav[aria-label='Footer'] [aria-current]");
             var linkText = section switch { "All records" => "Votes and bills", "Briefs" => "Weekly briefs", _ => section };
 
-            Assert.True(section is null || section == "Search" ? current.Length == 0 : current.Length == 1 && current[0].TextContent == linkText, name);
+            Assert.True(section is null ? current.Length == 0 : current.Length == 1 && current[0].TextContent == linkText, name);
         }
     }
 
@@ -2634,7 +2634,7 @@ public sealed class ReleaseRendererTests
             ("past congress", pastOfficial.PagePath, await renderer.RenderOfficialAsync(pastOfficial, PublicationCatalogs.None, CancellationToken.None), "Officials"),
             ("officials", PublicationProtocol.OfficialsPagePath, await renderer.RenderOfficialsAsync([new OfficialListing(profile, 0)], DateTimeOffset.UnixEpoch, CancellationToken.None), "Officials"),
             ("board", OfficialBoard.All[0].PagePath, await renderer.RenderBoardAsync(OfficialBoardPage.All([], []).First(), CancellationToken.None), "Officials"),
-            ("search", PublicationProtocol.SearchPagePath, await renderer.RenderSearchAsync(release, facets, CancellationToken.None), "Search"),
+            ("search", PublicationProtocol.SearchPagePath, await renderer.RenderSearchAsync(release, facets, CancellationToken.None), null),
             ("method", PublicationProtocol.MethodPagePath, await renderer.RenderMethodAsync(CancellationToken.None), null),
             ("about", PublicationProtocol.AboutPagePath, await renderer.RenderAboutAsync(CancellationToken.None), "About"),
             ("glossary", PublicationProtocol.GlossaryPagePath, await renderer.RenderGlossaryAsync(CancellationToken.None), "Glossary"),

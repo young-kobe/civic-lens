@@ -43,6 +43,12 @@ else
 
     public const int PagedRowCount = 15;
 
+    protected override void OnParametersSet()
+    {
+        if (PagedRows is not null && Caption is null)
+            throw new ArgumentException("A paged table needs a caption to name its pager.", nameof(Caption));
+    }
+
     private string? RowGroupRole => Roles ? "rowgroup" : null;
     private string? RowRole => Roles ? "row" : null;
 }

@@ -202,25 +202,37 @@
     };
 
     const pagers = new WeakMap();
+    const pagedTables = [];
+    let printing = false;
     const showRows = (table, toFirstPage) => {
         const rows = Array.from(table.tBodies[0].rows);
         const matching = rows.filter(row => !row.hasAttribute("data-filtered-out"));
         const pager = pagers.get(table);
         if (pager && toFirstPage) pager.page = 0;
-        const size = pager?.size ?? Infinity;
+        const size = pager && !printing ? pager.size : Infinity;
         const pageCount = Math.max(1, Math.ceil(matching.length / size));
-        if (pager) pager.page = Math.min(pager.page, pageCount - 1);
-        const first = pager ? pager.page * size : 0;
+        if (pager && !printing) pager.page = Math.min(pager.page, pageCount - 1);
+        const first = pager && !printing ? pager.page * size : 0;
         const visible = new Set(matching.slice(first, first + size));
         for (const row of rows) row.hidden = !visible.has(row);
         pager?.update(matching.length, first, visible.size, pageCount);
     };
 
+    const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+    const showAllRowsWhilePrinting = isPrinting => {
+        printing = isPrinting;
+        for (const table of pagedTables) showRows(table, false);
+    };
+    window.addEventListener("beforeprint", () => showAllRowsWhilePrinting(true));
+    window.addEventListener("afterprint", () => showAllRowsWhilePrinting(false));
+
     const initPaged = table => {
         const noun = table.dataset.rowsNoun;
         const nav = document.createElement("nav");
         nav.className = "pager";
-        nav.setAttribute("aria-label", `Pages of ${table.caption.textContent.replace(`. ${table.dataset.defaultOrder}.`, "")}`);
+        const caption = (table.caption?.textContent ?? "").replace(`. ${table.dataset.defaultOrder}.`, "");
+        nav.setAttribute("aria-label", caption === "" ? "Pages" : `Pages of ${caption}`);
+        table.tabIndex = -1;
         const summary = document.createElement("p");
         summary.setAttribute("role", "status");
         const links = document.createElement("div");
@@ -247,11 +259,13 @@
         const turn = (button, step) => button.addEventListener("click", () => {
             pager.page += step;
             showRows(table, false);
-            if (button.disabled) (button === previous ? next : previous).focus();
+            table.scrollIntoView({ block: "start", behavior: reducedMotion.matches ? "auto" : "smooth" });
+            table.focus({ preventScroll: true });
         });
         turn(previous, -1);
         turn(next, 1);
         pagers.set(table, pager);
+        pagedTables.push(table);
         table.closest(".table-wrap").after(nav);
         showRows(table, true);
     };

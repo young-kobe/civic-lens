@@ -1,4 +1,5 @@
 :where(.public-main, .public-footer) a { color: var(--info); }
+html:has(body.public) { scroll-padding-top: var(--s3); }
 .public { font-variant-numeric: normal; }
 .public .table .num, .public .table .time { font-variant-numeric: tabular-nums; }
 .public .panel { box-shadow: 0 0 0 1px var(--line); }
@@ -46,7 +47,7 @@
 .public-brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font-size: 1.25rem; font-weight: 800; text-decoration: none; }
 .public-brand svg { width: 26px; height: 26px; color: var(--marigold); }
 .public-header .topbar-tools { margin-left: 0; }
-.public-nav { display: flex; }
+.public-nav { display: flex; flex-wrap: wrap; }
 .public-nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--s2); color: var(--ink); font-weight: 500; text-decoration: none; }
 .public-nav a:hover { text-decoration: underline; text-decoration-color: var(--marigold); text-decoration-thickness: 2px; text-underline-offset: 6px; }
 .public-nav a[aria-current="page"] { text-decoration: underline; text-decoration-color: var(--marigold); text-decoration-thickness: 3px; text-underline-offset: 6px; }
@@ -113,7 +114,7 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .public-main .segmented { gap: var(--s2); padding: 0; background: none; box-shadow: none; }
 .public-main .segmented-thumb { display: none; }
 .public-main .segmented-item { min-height: 44px; padding: 0 var(--s4); border-radius: var(--r-control); box-shadow: inset 0 0 0 1px var(--control-line); color: var(--ink); font-size: var(--t-sm); }
-.public-main .segmented-item[aria-pressed="true"], .public-main .segmented-item[aria-current="true"] { background: var(--primary); color: var(--primary-ink); box-shadow: none; }
+.public-main .segmented-item[aria-pressed="true"], .public-main .segmented-item[aria-current="true"], .public-main .segmented:not(.is-measured) .segmented-item[aria-pressed="true"], .public-main .segmented:not(.is-measured) .segmented-item[aria-current="true"] { background: var(--primary); color: var(--primary-ink); box-shadow: none; }
 .public-main .segmented-item::after { display: none; }
 .public-main .segmented-count { color: inherit; }
 .pager .btn { min-width: 104px; min-height: 44px; }
