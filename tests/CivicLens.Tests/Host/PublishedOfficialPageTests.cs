@@ -133,7 +133,7 @@ public sealed class PublishedOfficialPageTests
 
         var records = await PanelAsync(page, "panel-records");
 
-        Assert.Equal("This list holds 5 published records: 1 statement, 2 bills and resolutions and 2 votes in the 119th Congress. Rows are newest first.", records.QuerySelector("p.muted")!.TextContent);
+        Assert.Equal("This list holds 5 published records: 1 statement, 2 bills and resolutions, and 2 votes in the 119th Congress. Rows are newest first.", records.QuerySelector("p.muted")!.TextContent);
     }
 
     [Fact]

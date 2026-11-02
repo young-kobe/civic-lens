@@ -9,14 +9,14 @@
         {
             case RecordTableColumns.Facet:
                 <TableCell Header>@PublicColumn.Officials</TableCell>
-                <TableCell Header Class="fit num" Sort="@Sortable(SortKind.Date)" SortKey="@Key("date")">@PublicColumn.Date</TableCell>
+                <TableCell Header Class="fit num" Sort="@Sortable(SortKind.Date)" SortKey="@Key("date")" DefaultSort="@(Sort is not null)">@PublicColumn.Date</TableCell>
                 break;
             case RecordTableColumns.Week:
                 <TableCell Header Class="fit num">@PublicColumn.WeekOf</TableCell>
                 <TableCell Header Class="fit num">@PublicColumn.FirstPublished</TableCell>
                 break;
             case RecordTableColumns.Dated:
-                <TableCell Header Class="fit num" Sort="@Sortable(SortKind.Date)" SortKey="@Key("date")">@PublicColumn.Date</TableCell>
+                <TableCell Header Class="fit num" Sort="@Sortable(SortKind.Date)" SortKey="@Key("date")" DefaultSort="@(Sort is not null)">@PublicColumn.Date</TableCell>
                 break;
         }
     </Head>

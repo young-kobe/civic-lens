@@ -117,7 +117,12 @@ internal static class PublishedOfficialView
 
     public static string Counted(int count, string singular) => $"{count} {Noun(count, singular)}";
 
-    private static string JoinAnd(List<string> parts) => parts.Count == 1 ? parts[0] : $"{string.Join(", ", parts[..^1])} and {parts[^1]}";
+    private static string JoinAnd(List<string> parts) => parts.Count switch
+    {
+        1 => parts[0],
+        2 => $"{parts[0]} and {parts[1]}",
+        _ => $"{string.Join(", ", parts[..^1])}, and {parts[^1]}"
+    };
 
     public static string PartyLine(string party, string? caucus) =>
         caucus is null || caucus == party ? $"Party: {party}" : $"Party: {party}, caucuses with {Members(caucus)}";

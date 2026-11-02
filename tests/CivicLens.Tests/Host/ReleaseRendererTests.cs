@@ -1603,6 +1603,7 @@ public sealed class ReleaseRendererTests
         Assert.Equal([("text", "headline"), ("date", "date")],
             document.QuerySelectorAll("thead th").Select(header => (header.GetAttribute("data-sort")!, header.GetAttribute("data-sort-key")!)));
         Assert.Equal("Published records. Newest first.", document.QuerySelector("caption")!.TextContent);
+        Assert.True(document.QuerySelectorAll("thead th")[1].HasAttribute("data-sort-default"));
         var source = System.Text.Json.JsonDocument.Parse(document.QuerySelector("table")!.GetAttribute("data-sort-source")!).RootElement;
         Assert.Equal(("https://api.test", 120, "documentChange"), (source.GetProperty("api").GetString(), source.GetProperty("total").GetInt32(),
             source.GetProperty("kinds").EnumerateObject().Single(kind => kind.Value.GetString() == "Document change").Name));
@@ -1748,14 +1749,29 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task HomeDatesARecordByItsOwnEventDayNotByTheDayTheSiteAddedIt()
     {
-        var release = ReleaseOf(1);
-        release = release with { Records = [release.Records[0] with { EventDate = new DateOnly(2025, 3, 2), FirstPublishedAtUtc = new DateTimeOffset(2026, 11, 1, 8, 0, 0, TimeSpan.Zero) }] };
+        var release = ReleaseOf(2);
+        var published = new DateTimeOffset(2026, 11, 1, 8, 0, 0, TimeSpan.Zero);
+        release = release with
+        {
+            Records = [release.Records[0] with { EventDate = new DateOnly(2025, 3, 2), FirstPublishedAtUtc = published },
+                release.Records[1] with { EventDate = null, FirstPublishedAtUtc = published }]
+        };
 
         var html = await new ReleaseRenderer(null, null).RenderHomeAsync(release, null, NoFacets, NoHighlights(release), CancellationToken.None);
 
         var table = new HtmlParser().ParseDocument(html).QuerySelector("table")!;
         Assert.Equal(["Record", "Date"], table.QuerySelectorAll("thead th").Select(header => header.TextContent.Trim()));
-        Assert.Equal("2 Mar 2025", table.QuerySelector("tbody td[data-label='Date']")!.TextContent.Trim());
+        Assert.Equal(["2 Mar 2025", "1 Nov 2026"], table.QuerySelectorAll("tbody td[data-label='Date']").Select(cell => cell.TextContent.Trim()));
+    }
+
+    [Fact]
+    public async Task TheIssueIndexSaysWhoChoosesIssuesAndWhoNamesPolicyAreas()
+    {
+        var release = ReleaseOf(1);
+
+        var html = await new ReleaseRenderer(null, null).RenderFacetsAsync(ReleaseFacets.From(release, PublicationCatalogs.None), CancellationToken.None);
+
+        Assert.Contains("Issues are topics we chose. Policy areas are Congress.gov's own labels.", new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1930,7 +1946,7 @@ public sealed class ReleaseRendererTests
         Assert.NotNull(document.QuerySelector("main a[href='report.html']"));
         Assert.Contains(PublishedRecordLabels.ModelWording, html, StringComparison.Ordinal);
         Assert.Contains(PublishedRecordLabels.CodeWording, html, StringComparison.Ordinal);
-        Assert.Contains("On an action page or a vote page, a summary that a model wrote has the label \"An AI summary of the official record\". " +
+        Assert.Contains("On a bill or resolution page or a vote page, a summary that a model wrote has the label \"An AI summary of the official record\". " +
             "Wording that code wrote from the bill title, the sponsor, and the introduction date has the label \"Written automatically from Congress.gov data, with no AI\".",
             new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain("unreviewed", html, StringComparison.OrdinalIgnoreCase);
