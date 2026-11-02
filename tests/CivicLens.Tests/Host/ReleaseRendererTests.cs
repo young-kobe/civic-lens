@@ -223,6 +223,15 @@ public sealed class ReleaseRendererTests
         Assert.Equal("Choose the record first", panel.QuerySelector("h3")!.TextContent);
         Assert.Contains($"use the link \"{PublishedRecordLabels.ReportRecordLink}\"", panel.TextContent, StringComparison.Ordinal);
         Assert.Equal($"mailto:{PublishedRecordLabels.ContactEmail}", document.QuerySelector("main a[href^='mailto:']")!.GetAttribute("href"));
+        AssertMailtoPanelIsAlwaysShown(document);
+        AssertMailtoPanelIsAlwaysShown(new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderReportAsync(CancellationToken.None)));
+    }
+
+    private static void AssertMailtoPanelIsAlwaysShown(AngleSharp.Dom.IDocument document)
+    {
+        var panel = document.QuerySelector($"main a[href='mailto:{PublishedRecordLabels.ContactEmail}']")!.Closest("section")!;
+        Assert.False(panel.HasAttribute("hidden"));
+        Assert.False(panel.HasAttribute("data-report-missing"));
     }
 
     [Fact]
@@ -230,10 +239,19 @@ public sealed class ReleaseRendererTests
     {
         var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderAboutAsync(CancellationToken.None)).QuerySelector("main")!.ShownText();
 
-        Assert.Contains("Here, code means software that we wrote. It follows fixed rules and uses no AI.", text, StringComparison.Ordinal);
-        Assert.Contains("Code also approves a statement when the statement comes from the own website of the office of that official, names no other speaker", text, StringComparison.Ordinal);
+        Assert.Contains("Here, code means software that we wrote. It follows fixed rules. No AI decides an approval.", text, StringComparison.Ordinal);
+        Assert.Contains("Code also approves a statement when the statement comes from the own website of the office of that official and names no other speaker. An AI model drafts these statements, finds their issues, and proposes their date. Code then checks the quote and the date against the saved page.", text, StringComparison.Ordinal);
+        Assert.Contains("On a statement page, a summary that a model wrote has the label \"An AI summary of this release.\"", text, StringComparison.Ordinal);
         Assert.Contains($"within {StatementCodeApproval.DateWindowDays} days before Civic Lens saved the page", text, StringComparison.Ordinal);
         Assert.Contains("and each statement that code does not approve", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheMethodPageSaysThatNoPersonChecksTheIssuesOfACodeApprovedStatementAndThatCodeChecksOnlyTheQuote()
+    {
+        var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None)).QuerySelector("main")!.ShownText();
+
+        Assert.Contains("For the other statements, an AI model finds the issues and quotes the article. Code checks that the quote is in the article. No person checks that pick.", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -245,8 +263,10 @@ public sealed class ReleaseRendererTests
 
         Assert.Contains("votes with most of their party on 45. The page shows 45 of 48.", method.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
         Assert.Equal("How the counts work", method.QuerySelector("h1")!.TextContent);
-        var unavailable = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderReportAsync(CancellationToken.None));
-        Assert.NotNull(unavailable.QuerySelector($"main a[href='mailto:{PublishedRecordLabels.ContactEmail}']"));
+        Assert.Equal("Yea", method.QuerySelectorAll("main section").Single(panel => panel.QuerySelector("h2")!.TextContent == "Votes with their party")
+            .QuerySelectorAll("p")[1].QuerySelector("button.term")!.TextContent);
+        Assert.Equal("statement", about.QuerySelectorAll("main section").Single(panel => panel.QuerySelector("h2")!.TextContent == "Who approves a record")
+            .QuerySelector("button.term")!.TextContent);
         Assert.Equal("How the counts work", method.QuerySelector(".public-footer-nav a[href='method.html']")!.TextContent);
         Assert.Equal("How the counts work", about.QuerySelector("main a[href='method.html']")!.TextContent);
     }
