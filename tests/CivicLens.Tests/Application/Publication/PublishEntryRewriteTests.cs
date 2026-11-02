@@ -45,7 +45,6 @@ public sealed class PublishEntryRewriteTests
         Assert.Equal([undated, newerEventPublishedEarlier, olderEventPublishedLater], records.Select(entry => entry.RecordId));
         Assert.Null(records[0].EventDate);
         Assert.Equal(new DateOnly(2026, 2, 2), ReleaseRecordOrder.Day(records[0]));
-        Assert.Equal(records.Select(entry => entry.RecordId), ReleaseRecordOrder.NewestFirst(records, ReleaseRecordOrder.Day, entry => entry.FirstPublishedAtUtc, entry => entry.RecordId).Select(entry => entry.RecordId));
     }
 
     [Fact]

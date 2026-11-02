@@ -320,6 +320,7 @@ public sealed class PublishRelationshipTests
         Assert.Equal(["read", "render", "read", "render"], carried.Select(entry => entry.Split(' ')[0]));
         Assert.Equal(carried[0].Split(' ')[1], carried[1].Split(' ')[1]);
         Assert.Equal(carried[2].Split(' ')[1], carried[3].Split(' ')[1]);
+        Assert.NotEqual(carried[0].Split(' ')[1], carried[2].Split(' ')[1]);
     }
 
     [Fact]

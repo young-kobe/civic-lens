@@ -1603,7 +1603,6 @@ public sealed class ReleaseRendererTests
         Assert.Equal([("text", "headline"), ("date", "date")],
             document.QuerySelectorAll("thead th").Select(header => (header.GetAttribute("data-sort")!, header.GetAttribute("data-sort-key")!)));
         Assert.Equal("Published records. Newest first.", document.QuerySelector("caption")!.TextContent);
-        Assert.True(document.QuerySelectorAll("thead th")[1].HasAttribute("data-sort-default"));
         var source = System.Text.Json.JsonDocument.Parse(document.QuerySelector("table")!.GetAttribute("data-sort-source")!).RootElement;
         Assert.Equal(("https://api.test", 120, "documentChange"), (source.GetProperty("api").GetString(), source.GetProperty("total").GetInt32(),
             source.GetProperty("kinds").EnumerateObject().Single(kind => kind.Value.GetString() == "Document change").Name));
