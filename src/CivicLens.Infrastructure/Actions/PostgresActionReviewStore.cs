@@ -120,7 +120,7 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
             draft => new PublishableAction(ToReview(draft, histories[draft.RecordId]), extractions), StringComparer.Ordinal);
     }
 
-    public async Task<IReadOnlyList<PublishedBillStatus>> ReadBillStatusesAsync(ImmutableArray<string> recordIds,
+    public async Task<IReadOnlyList<ActionBillStatus>> ReadBillStatusesAsync(ImmutableArray<string> recordIds,
         CancellationToken cancellationToken)
     {
         if (recordIds.IsDefaultOrEmpty) return [];
@@ -128,7 +128,8 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
         var rows = await db.Database.SqlQueryRaw<BillStatusRow>("""
                 SELECT * FROM (
                     SELECT DISTINCT ON (a.record_id) a.record_id AS "RecordId", g.latest_action_text AS "Text",
-                           g.latest_action_date AS "Date", g.created_at_utc_ticks AS "ObservedAtUtcTicks"
+                           g.latest_action_date AS "Date", g.created_at_utc_ticks AS "ObservedAtUtcTicks",
+                           a.bill_type AS "BillType"
                     FROM action_drafts a
                     JOIN bill_gates g ON g.source_id = a.source_id AND g.congress = a.congress
                                      AND g.bill_type = a.bill_type AND g.bill_number = a.bill_number
@@ -137,16 +138,16 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
                 WHERE "Text" IS NOT NULL
                 ORDER BY "RecordId"
                 """, (object)recordIds.ToArray()).ToArrayAsync(cancellationToken);
-        return [.. rows.Select(row => new PublishedBillStatus
+        return [.. rows.Select(row => new ActionBillStatus(new PublishedBillStatus
         {
             RecordId = row.RecordId,
             Text = row.Text!,
             Date = row.Date!.Value,
             ObservedAtUtc = new DateTimeOffset(row.ObservedAtUtcTicks, TimeSpan.Zero)
-        })];
+        }, row.BillType))];
     }
 
-    private sealed record BillStatusRow(string RecordId, string? Text, DateOnly? Date, long ObservedAtUtcTicks);
+    private sealed record BillStatusRow(string RecordId, string? Text, DateOnly? Date, long ObservedAtUtcTicks, string BillType);
 
     private static ActionReview ToReview(ActionDraftRow draft, ReviewHistory<ActionDraftRevision> history) =>
         new(draft.RecordId, history.CurrentRevision!, history.LastApprovedRevision, history.LoadedRevisions, draft.ReviewStateVersion,

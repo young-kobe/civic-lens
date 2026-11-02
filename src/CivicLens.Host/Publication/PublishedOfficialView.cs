@@ -1,4 +1,5 @@
 using System.Globalization;
+using CivicLens.Application.Actions;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Roster;
 using CivicLens.Core.Relationships;
@@ -148,10 +149,13 @@ internal static class PublishedOfficialView
     public static IReadOnlyList<PublishedOfficialRow> Rows(ReleaseOfficialPage page)
     {
         var countKeys = page.TalkAndAction?.CountKeysByRecord();
-        return [.. ReleaseRecordOrder.NewestFirst(page.Records.Select(PublishedOfficialRow.Of).Concat(page.Votes.Select(PublishedOfficialRow.Of))
+        return [.. ReleaseRecordOrder.NewestFirst(page.Records.Select(entry => PublishedOfficialRow.Of(entry, page.BillStatuses?.GetValueOrDefault(entry.RecordId))).Concat(page.Votes.Select(PublishedOfficialRow.Of))
             .Select(row => row with { FilterKeys = countKeys is null ? null : string.Join(' ', countKeys[row.RecordId].Order(StringComparer.Ordinal)) }),
             row => row.Date, row => row.PublishedAtUtc, row => row.RecordId)];
     }
+
+    public static string StatusLine(ActionBillStatus billStatus) =>
+        $"Latest official action (read from Congress.gov on {Moment.Day(billStatus.Status.ObservedAtUtc)}): {BillStatusMeaning.Plain(billStatus.Status.Text, billStatus.BillType)}";
 
     private const string AgainstPartyClass = "against-party";
 

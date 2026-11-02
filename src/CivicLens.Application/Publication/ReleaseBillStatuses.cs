@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using CivicLens.Application.Actions;
 using System.Text.Json;
 using CivicLens.Publication.Contracts;
 
@@ -11,19 +12,19 @@ namespace CivicLens.Application.Publication;
 /// </summary>
 internal static class ReleaseBillStatuses
 {
-    public static async Task<IReadOnlyDictionary<string, PublishedBillStatus>> LoadAsync(ActionRecordLoader actions, PreviousRelease previous,
+    public static async Task<IReadOnlyDictionary<string, ActionBillStatus>> LoadAsync(ActionRecordLoader actions, PreviousRelease previous,
         ImmutableArray<PublishedRecordReference> references, CancellationToken cancellationToken)
     {
         ImmutableArray<string> ids = [.. ActionIdsOf(previous.Entries).Concat(references.Where(record => record.Kind == PublishedRecordKind.Action)
             .Select(record => record.RecordId)).Distinct(StringComparer.Ordinal)];
         return (await actions.BillStatusesAsync(ids, cancellationToken))
-            .Select(read => previous.BillStatuses.TryGetValue(read.RecordId, out var shown) && !Differs(shown, read) ? shown : read)
-            .ToDictionary(status => status.RecordId, StringComparer.Ordinal);
+            .Select(read => previous.BillStatuses.TryGetValue(read.Status.RecordId, out var shown) && !Differs(shown, read.Status) ? read with { Status = shown } : read)
+            .ToDictionary(read => read.Status.RecordId, StringComparer.Ordinal);
     }
 
     public static IEnumerable<string> ChangedActionIds(IEnumerable<string> actionIds, PreviousRelease previous,
-        IReadOnlyDictionary<string, PublishedBillStatus> statuses) =>
-        actionIds.Where(id => Differs(previous.BillStatuses.GetValueOrDefault(id), statuses.GetValueOrDefault(id)));
+        IReadOnlyDictionary<string, ActionBillStatus> statuses) =>
+        actionIds.Where(id => Differs(previous.BillStatuses.GetValueOrDefault(id), statuses.GetValueOrDefault(id)?.Status));
 
     public static IEnumerable<string> ActionIdsOf(IEnumerable<PublishedRecordEntry> entries) =>
         entries.Where(entry => entry.Kind == PublishedRecordKind.Action).Select(entry => entry.RecordId);
@@ -32,11 +33,11 @@ internal static class ReleaseBillStatuses
         bindings.Where(binding => binding.Kind == PublishedRecordKind.Action).Select(binding => binding.RecordId);
 
     public static Task WriteAsync(IReleaseStaging staging, IEnumerable<string> actionIds,
-        IReadOnlyDictionary<string, PublishedBillStatus> statuses, CancellationToken cancellationToken)
+        IReadOnlyDictionary<string, ActionBillStatus> statuses, CancellationToken cancellationToken)
     {
         var file = new PublishedBillStatuses
         {
-            Records = [.. actionIds.Select(id => statuses.GetValueOrDefault(id)).OfType<PublishedBillStatus>()
+            Records = [.. actionIds.Select(id => statuses.GetValueOrDefault(id)?.Status).OfType<PublishedBillStatus>()
                 .OrderBy(status => status.RecordId, StringComparer.Ordinal)]
         };
         file.Validate();

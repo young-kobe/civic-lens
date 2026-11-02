@@ -477,8 +477,11 @@ internal sealed class FakeRenderer : IReleaseRenderer
     public Task<string> RenderOfficialAsync(ReleaseOfficialPage page, PublicationCatalog catalog, CancellationToken cancellationToken)
     {
         OfficialPages?.Add(page);
-        return Task.FromResult($"<html>official {page.Profile.Id} {(page.IsTracked ? "tracked" : "untracked")} {(page.IsCurrent ? "current" : "past")} {page.Congress} congresses [{string.Join(',', page.Congresses)}] records [{string.Join(',', page.Records.Select(entry => entry.RecordId))}] votes [{string.Join(',', page.Votes.Select(vote => vote.RecordId))}]</html>");
+        return Task.FromResult($"<html>official {page.Profile.Id} {(page.IsTracked ? "tracked" : "untracked")} {(page.IsCurrent ? "current" : "past")} {page.Congress} congresses [{string.Join(',', page.Congresses)}] records [{string.Join(',', page.Records.Select(entry => entry.RecordId))}] votes [{string.Join(',', page.Votes.Select(vote => vote.RecordId))}]{StatusSuffix(page)}</html>");
     }
+    private static string StatusSuffix(ReleaseOfficialPage page) =>
+        page.BillStatuses is { Count: > 0 } ? $" statuses [{string.Join(',', page.BillStatuses.Select(pair => $"{pair.Key[0]}:{pair.Value.Status.Text}"))}]" : "";
+
     public Task<string> RenderOfficialsAsync(IReadOnlyList<OfficialListing> officials, DateTimeOffset publishedAtUtc, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>officials {string.Join(',', officials.Select(official => $"{official.Profile.Id}:{official.RecordCount}"))}</html>");
     public Task<string> RenderBoardAsync(OfficialBoardPage page, CancellationToken cancellationToken) =>

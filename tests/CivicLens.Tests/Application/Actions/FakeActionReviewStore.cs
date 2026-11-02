@@ -54,6 +54,6 @@ internal sealed class FakeActionReviewStore : IActionReviewStore
 
     public Dictionary<string, PublishedBillStatus> BillStatuses { get; } = [];
 
-    public Task<IReadOnlyList<PublishedBillStatus>> ReadBillStatusesAsync(ImmutableArray<string> recordIds, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<PublishedBillStatus>>([.. recordIds.Where(BillStatuses.ContainsKey).Select(id => BillStatuses[id])]);
+    public Task<IReadOnlyList<ActionBillStatus>> ReadBillStatusesAsync(ImmutableArray<string> recordIds, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<ActionBillStatus>>([.. recordIds.Where(BillStatuses.ContainsKey).Select(id => new ActionBillStatus(BillStatuses[id], "hr"))]);
 }
