@@ -11,7 +11,7 @@ namespace CivicLens.Tests.Infrastructure.Review;
 [Trait("Category", "Postgres")]
 public sealed class RejectDecisionMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private const string Migration = "20261102180637_RejectDecision";
+    private const string Migration = "20261102193151_RejectDecision";
 
     private string connectionString = null!;
 

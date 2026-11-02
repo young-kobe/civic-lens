@@ -64,6 +64,18 @@ public sealed class ReviewQueueItemTests
     }
 
     [Fact]
+    public async Task TheRejectedListLogsAnUnreadableRecordLikeTheQueueBecauseBothUseOneReader()
+    {
+        var cause = new InvalidOperationException("Stored revision is invalid.");
+        var page = new ReviewQueuePage([ReviewQueueItem.Unreadable(PublishedRecordKind.Vote, "vote-1", DateTimeOffset.UnixEpoch, cause)], 1, null, null);
+        var logger = new CapturingLogger<ListReviewQueue>();
+
+        await new ListReviewQueue(new StubStore(page), logger).ExecuteRejectedAsync(new ReviewActor("auth0|reviewer", ReviewRole.Reviewer), null);
+
+        Assert.Same(cause, Assert.Single(logger.Entries).Exception);
+    }
+
+    [Fact]
     public async Task TheQueueHandlerLogsEachUnreadableRecordWithItsIdBecauseTheRowHidesTheCause()
     {
         var cause = new InvalidOperationException("Stored revision is invalid.");
@@ -92,6 +104,8 @@ public sealed class ReviewQueueItemTests
     private sealed class StubStore(ReviewQueuePage page) : IReviewQueueStore
     {
         public Task<ReviewQueuePage> ListAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken) => Task.FromResult(page);
+
+        public Task<ReviewQueuePage> ListRejectedAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken) => Task.FromResult(page);
 
         public Task<ReviewQueuePage> ListUnmatchedApprovedLinksAsync(int limit, IReadOnlyCollection<string> excludedRecordIds,
             CancellationToken cancellationToken) => Task.FromResult(page);

@@ -1,4 +1,6 @@
+using CivicLens.Application.Review;
 using CivicLens.Core.Review;
+using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using Npgsql;
@@ -16,14 +18,29 @@ public sealed class RejectDecisionColumnsTests(PostgresCollection postgres) : IA
 
     public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
 
+    public static TheoryData<string, string> Tables
+    {
+        get
+        {
+            TheoryData<string, string> tables = [];
+            foreach (var row in Kinds) tables.Add((string)row[0], (string)row[1]);
+            return tables;
+        }
+    }
+
+    public static TheoryData<string, string, PublishedRecordKind> Kinds => new()
+    {
+        { "document_change", "draft_id", PublishedRecordKind.DocumentChange },
+        { "statement", "candidate_id", PublishedRecordKind.Statement },
+        { "action", "record_id", PublishedRecordKind.Action },
+        { "vote", "record_id", PublishedRecordKind.Vote },
+        { "executive_action", "record_id", PublishedRecordKind.ExecutiveAction },
+        { "relationship", "record_id", PublishedRecordKind.Relationship },
+        { "brief", "record_id", PublishedRecordKind.Brief }
+    };
+
     [Theory]
-    [InlineData("document_change", "draft_id")]
-    [InlineData("statement", "candidate_id")]
-    [InlineData("action", "record_id")]
-    [InlineData("vote", "record_id")]
-    [InlineData("executive_action", "record_id")]
-    [InlineData("relationship", "record_id")]
-    [InlineData("brief", "record_id")]
+    [MemberData(nameof(Tables))]
     public async Task ARejectionWithoutAReasonCodeFailsTheDatabaseCheckOfEveryKindBecauseRejectionsAreCountedByCause(string prefix, string idColumn)
     {
         var failure = await Assert.ThrowsAsync<PostgresException>(() => InsertAsync(prefix, idColumn, ReviewDecisionKind.Reject, null));
@@ -33,13 +50,7 @@ public sealed class RejectDecisionColumnsTests(PostgresCollection postgres) : IA
     }
 
     [Theory]
-    [InlineData("document_change", "draft_id")]
-    [InlineData("statement", "candidate_id")]
-    [InlineData("action", "record_id")]
-    [InlineData("vote", "record_id")]
-    [InlineData("executive_action", "record_id")]
-    [InlineData("relationship", "record_id")]
-    [InlineData("brief", "record_id")]
+    [MemberData(nameof(Tables))]
     public async Task AReasonCodeOnAnotherDecisionKindFailsTheDatabaseCheckOfEveryKind(string prefix, string idColumn)
     {
         var failure = await Assert.ThrowsAsync<PostgresException>(() =>
@@ -50,13 +61,7 @@ public sealed class RejectDecisionColumnsTests(PostgresCollection postgres) : IA
     }
 
     [Theory]
-    [InlineData("document_change", "draft_id")]
-    [InlineData("statement", "candidate_id")]
-    [InlineData("action", "record_id")]
-    [InlineData("vote", "record_id")]
-    [InlineData("executive_action", "record_id")]
-    [InlineData("relationship", "record_id")]
-    [InlineData("brief", "record_id")]
+    [MemberData(nameof(Tables))]
     public async Task AReasonCodeThatTheEnumLacksFailsTheDatabaseCheckOfEveryKind(string prefix, string idColumn)
     {
         var failure = await Assert.ThrowsAsync<PostgresException>(() => InsertAsync(prefix, idColumn, ReviewDecisionKind.Reject, "Bogus"));
@@ -66,19 +71,25 @@ public sealed class RejectDecisionColumnsTests(PostgresCollection postgres) : IA
     }
 
     [Theory]
-    [InlineData("document_change", "draft_id")]
-    [InlineData("statement", "candidate_id")]
-    [InlineData("action", "record_id")]
-    [InlineData("vote", "record_id")]
-    [InlineData("executive_action", "record_id")]
-    [InlineData("relationship", "record_id")]
-    [InlineData("brief", "record_id")]
-    public async Task EveryReasonCodeOfTheEnumIsStoredForARejectionOfEveryKind(string prefix, string idColumn)
+    [MemberData(nameof(Kinds))]
+    public async Task EveryReasonCodeOfTheKindIsStoredForARejectionOfThatKind(string prefix, string idColumn, PublishedRecordKind kind)
     {
-        foreach (var code in Enum.GetNames<ReviewReasonCode>())
-            await InsertAsync(prefix, idColumn, ReviewDecisionKind.Reject, code, Guid.NewGuid().ToString("N"));
+        foreach (var code in ReviewReasons.For(kind))
+            await InsertAsync(prefix, idColumn, ReviewDecisionKind.Reject, code.ToString(), Guid.NewGuid().ToString("N"));
 
-        Assert.Equal(Enum.GetNames<ReviewReasonCode>().Length, await CountAsync(prefix));
+        Assert.Equal(ReviewReasons.For(kind).Length, await CountAsync(prefix));
+    }
+
+    [Theory]
+    [MemberData(nameof(Kinds))]
+    public async Task AReasonCodeThatAnotherKindOwnsFailsTheDatabaseCheckOfThisKindBecauseEachKindHasItsOwnList(string prefix, string idColumn,
+        PublishedRecordKind kind)
+    {
+        var foreign = Enum.GetValues<ReviewReasonCode>().First(code => !ReviewReasons.For(kind).Contains(code));
+
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => InsertAsync(prefix, idColumn, ReviewDecisionKind.Reject, foreign.ToString()));
+
+        Assert.Equal($"ck_{prefix}_review_decisions_reason_code", failure.ConstraintName);
     }
 
     // The reason code names a cause and holds no person, so reports of rejections by cause may read it.

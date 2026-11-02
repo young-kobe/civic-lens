@@ -87,7 +87,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         home = await host.GetDocumentAsync("/Review");
         Assert.Empty(ChangeIds(home));
         Assert.Equal([editorUrl], QueueUrls(home));
-        Assert.Equal("No new changes", home.QuerySelector(".empty h3")!.TextContent);
+        Assert.Equal("No new changes", home.QuerySelector("[aria-labelledby='new-changes'] .empty h3")!.TextContent);
         Assert.Contains("You started an untitled draft.", home.QuerySelector(".feed")!.TextContent, StringComparison.Ordinal);
     }
 
@@ -312,8 +312,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         await SaveReadyRevisionAsync(editorUrl, "Office hours shortened");
 
         var before = await host.GetDocumentAsync(editorUrl);
-        Assert.Equal(["Choose a reason", "Not a statement", "Wrong speaker", "Index or menu page", "Too little substance",
-            "Summary does not match the source", "Duplicate of another record"],
+        Assert.Equal(["Choose a reason", "Summary does not match the source", "Duplicate of another record", "Too little substance"],
             before.QuerySelectorAll("#Decision_ReasonCode option").Select(option => option.TextContent));
 
         using var withoutReason = await DecideAsync(editorUrl, "Reject");
@@ -321,21 +320,31 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         var invalid = await ParseAsync(withoutReason);
         Assert.Contains("Rejecting needs a reason from the list.", invalid.QuerySelector(".notice")!.TextContent, StringComparison.Ordinal);
 
-        using var rejected = await DecideAsync(editorUrl, "Reject", reasonCode: "IndexPage");
+        using var rejected = await DecideAsync(editorUrl, "Reject", reasonCode: "LowSubstance");
         Assert.Equal(HttpStatusCode.Redirect, rejected.StatusCode);
 
         var editor = await host.GetDocumentAsync(editorUrl);
         Assert.Equal("Rejected", editor.QuerySelector(".page-header .badge")!.TextContent);
         Assert.Contains("badge-neutral", editor.QuerySelector(".page-header .badge")!.ClassName, StringComparison.Ordinal);
         Assert.Contains("badge-neutral", editor.QuerySelector("[aria-labelledby='history'] .badge")!.ClassName, StringComparison.Ordinal);
+        Assert.Equal("Save a change to send this record back to review. Save and approve to reverse the rejection.",
+            editor.QuerySelector("#decision-next-step")!.TextContent);
+        Assert.Null(editor.QuerySelector("#reject-live-warning"));
+        var home = (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='rejected']")!;
+        Assert.Contains("Reason: Too little substance.", home.TextContent, StringComparison.Ordinal);
+        Assert.Contains(editorUrl, home.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
+        Assert.DoesNotContain("Office hours shortened", (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='needs-a-person']")!.TextContent, StringComparison.Ordinal);
         Assert.Null(editor.QuerySelector("#decision-form button[value='Reject']"));
         Assert.Null(editor.QuerySelector("#Decision_ReasonCode"));
-        Assert.Contains("Reason: Index or menu page.", editor.QuerySelector("[aria-labelledby='history'] tbody")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Reason: Too little substance.", editor.QuerySelector("[aria-labelledby='history'] tbody")!.TextContent, StringComparison.Ordinal);
 
         await ApproveAsync(editorUrl);
 
         editor = await host.GetDocumentAsync(editorUrl);
         Assert.Equal("Approved, private", editor.QuerySelector(".page-header .badge")!.TextContent);
+        Assert.Equal("To reject this record, withdraw the approval first.", editor.QuerySelector("#decision-next-step")!.TextContent);
+        Assert.Null(editor.QuerySelector("#Decision_ReasonCode"));
+        Assert.Null((await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='rejected'] tbody a"));
     }
 
     [Fact]

@@ -2,6 +2,8 @@ using CivicLens.Application.Actions;
 using CivicLens.Application.Review;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Review;
+using CivicLens.Infrastructure.Analysis;
+using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Publication.Contracts;
@@ -302,6 +304,8 @@ public sealed partial class PostgresBillStreamTests
 
         Assert.Equal("Rejected", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
         Assert.Equal("InaccurateSummary", await ScalarAsync("SELECT reason_code FROM action_review_decisions WHERE kind = 'Reject'"));
+        var listed = Assert.Single((await new PostgresReviewQueueStore(AnalysisDbContextFactory.Create(connectionString)).ListRejectedAsync(null, 10, default)).Items);
+        Assert.Equal((PublishedRecordKind.Action, RecordId, ReviewReasonCode.InaccurateSummary), (listed.Kind, listed.RecordId, listed.RejectReason));
         Assert.Empty(await ActionReviews().ListUnpublishedApprovedAsync(10, [], default));
 
         await DecideAsync(2, 2, ReviewDecisionKind.Approve);
@@ -315,7 +319,7 @@ public sealed partial class PostgresBillStreamTests
     public async Task ARejectedRecordStaysRejectedWhenTheWorkerDraftsAgainBecauseTheWorkerCannotReopenAPersonDecision()
     {
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);
-        await DecideAsync(1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.LowSubstance);
+        await DecideAsync(1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
 
         await AddSponsorAsync(UpdatedAt.AddDays(1));
 

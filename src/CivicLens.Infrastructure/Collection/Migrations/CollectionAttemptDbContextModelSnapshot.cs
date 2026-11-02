@@ -481,7 +481,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_action_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval', 'Reject')");
 
-                            t.HasCheckConstraint("ck_action_review_decisions_reason_code", "reason_code IN ('NotAStatement', 'WrongSpeaker', 'IndexPage', 'LowSubstance', 'InaccurateSummary', 'Duplicate')");
+                            t.HasCheckConstraint("ck_action_review_decisions_reason_code", "reason_code IN ('InaccurateSummary', 'Duplicate')");
 
                             t.HasCheckConstraint("ck_action_review_decisions_reason_code_kind", "(kind = 'Reject') = (reason_code IS NOT NULL)");
 
@@ -1273,7 +1273,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_brief_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval', 'Reject')");
 
-                            t.HasCheckConstraint("ck_brief_review_decisions_reason_code", "reason_code IN ('NotAStatement', 'WrongSpeaker', 'IndexPage', 'LowSubstance', 'InaccurateSummary', 'Duplicate')");
+                            t.HasCheckConstraint("ck_brief_review_decisions_reason_code", "reason_code IN ('InaccurateSummary', 'Duplicate', 'LowSubstance')");
 
                             t.HasCheckConstraint("ck_brief_review_decisions_reason_code_kind", "(kind = 'Reject') = (reason_code IS NOT NULL)");
 
@@ -2940,7 +2940,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_executive_action_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval', 'Reject')");
 
-                            t.HasCheckConstraint("ck_executive_action_review_decisions_reason_code", "reason_code IN ('NotAStatement', 'WrongSpeaker', 'IndexPage', 'LowSubstance', 'InaccurateSummary', 'Duplicate')");
+                            t.HasCheckConstraint("ck_executive_action_review_decisions_reason_code", "reason_code IN ('InaccurateSummary', 'Duplicate')");
 
                             t.HasCheckConstraint("ck_executive_action_review_decisions_reason_code_kind", "(kind = 'Reject') = (reason_code IS NOT NULL)");
 
@@ -3480,7 +3480,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_relationship_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval', 'Reject')");
 
-                            t.HasCheckConstraint("ck_relationship_review_decisions_reason_code", "reason_code IN ('NotAStatement', 'WrongSpeaker', 'IndexPage', 'LowSubstance', 'InaccurateSummary', 'Duplicate')");
+                            t.HasCheckConstraint("ck_relationship_review_decisions_reason_code", "reason_code IN ('NotRelated', 'Duplicate')");
 
                             t.HasCheckConstraint("ck_relationship_review_decisions_reason_code_kind", "(kind = 'Reject') = (reason_code IS NOT NULL)");
 
@@ -3991,7 +3991,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_document_change_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval', 'Reject')");
 
-                            t.HasCheckConstraint("ck_document_change_review_decisions_reason_code", "reason_code IN ('NotAStatement', 'WrongSpeaker', 'IndexPage', 'LowSubstance', 'InaccurateSummary', 'Duplicate')");
+                            t.HasCheckConstraint("ck_document_change_review_decisions_reason_code", "reason_code IN ('InaccurateSummary', 'Duplicate', 'LowSubstance')");
 
                             t.HasCheckConstraint("ck_document_change_review_decisions_reason_code_kind", "(kind = 'Reject') = (reason_code IS NOT NULL)");
 
@@ -5332,7 +5332,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_vote_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval', 'Reject')");
 
-                            t.HasCheckConstraint("ck_vote_review_decisions_reason_code", "reason_code IN ('NotAStatement', 'WrongSpeaker', 'IndexPage', 'LowSubstance', 'InaccurateSummary', 'Duplicate')");
+                            t.HasCheckConstraint("ck_vote_review_decisions_reason_code", "reason_code IN ('InaccurateSummary', 'Duplicate')");
 
                             t.HasCheckConstraint("ck_vote_review_decisions_reason_code_kind", "(kind = 'Reject') = (reason_code IS NOT NULL)");
 

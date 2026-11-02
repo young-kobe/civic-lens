@@ -40,12 +40,16 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
 
     private static readonly Dictionary<string, QueueKind> KindsByCode = Kinds.ToDictionary(kind => kind.Code);
 
-    private static readonly string NeedsAPerson = string.Join("\nUNION ALL\n", Kinds.Select(kind => $"""
+    private static string KeysWhere(string statusFilter) => string.Join("\nUNION ALL\n", Kinds.Select(kind => $"""
         SELECT '{kind.Code}' AS "KindCode", {kind.IdColumn} AS "RecordId", '{kind.Code}-' || {kind.IdColumn} AS "QueueId",
                last_revised_at_utc_ticks AS "LastRevisedAtUtcTicks"
         FROM {kind.Table}
-        WHERE {ReviewDraftTableConfiguration.NeedsAPersonFilter} AND current_revision_number >= 1
+        WHERE {statusFilter} AND current_revision_number >= 1
         """));
+
+    private static readonly string NeedsAPerson = KeysWhere(ReviewDraftTableConfiguration.NeedsAPersonFilter);
+
+    private static readonly string Rejected = KeysWhere("review_status = 'Rejected'");
 
     private const string UnmatchedApprovedLinks = """
         SELECT 're' AS "KindCode", record_id AS "RecordId", 're-' || record_id AS "QueueId",
@@ -65,12 +69,18 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
             AND to_tsvector('english', revision.revision_json::jsonb ->> '{kind.HeadlineProperty}') @@ websearch_to_tsquery('english', {SearchTextParameter})
         """));
 
-    public async Task<ReviewQueuePage> ListAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken)
+    public Task<ReviewQueuePage> ListAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken) =>
+        ListKeysAsync(NeedsAPerson, cursor, limit, cancellationToken);
+
+    public Task<ReviewQueuePage> ListRejectedAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken) =>
+        ListKeysAsync(Rejected, cursor, limit, cancellationToken);
+
+    private async Task<ReviewQueuePage> ListKeysAsync(string keysSql, PageCursor? cursor, int limit, CancellationToken cancellationToken)
     {
         PageLimit.Validate(limit);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var queue = db.Database.SqlQueryRaw<QueueKey>(NeedsAPerson);
+        var queue = db.Database.SqlQueryRaw<QueueKey>(keysSql);
         var fetched = await ReviewKeyset.Page(queue, cursor, key => key.LastRevisedAtUtcTicks, key => key.QueueId)
             .Take(limit + 1).ToArrayAsync(cancellationToken);
         var slice = KeysetSlice<QueueKey>.Create(fetched, limit, cursor, key => (key.LastRevisedAtUtcTicks, key.QueueId));
@@ -144,7 +154,7 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
         return draft.UnreadableCause is { } cause
             ? ReviewQueueItem.Unreadable(kind, key.RecordId, revisedAt, cause)
             : new(kind, key.RecordId, draft.Headline, draft.Status, draft.OpenConcerns, draft.HeldReason, revisedAt, draft.EditedByPerson,
-                draft.LinkType);
+                draft.LinkType, RejectReason: draft.RejectReason);
     }
 
     private sealed record QueueKind(PublishedRecordKind Kind, string Code, string Table,

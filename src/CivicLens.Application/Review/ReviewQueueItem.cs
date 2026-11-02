@@ -10,7 +10,7 @@ namespace CivicLens.Application.Review;
 /// The cause is for the log, not for the page.</summary>
 public sealed record ReviewQueueItem(PublishedRecordKind Kind, string RecordId, string Headline, ReviewStatus Status, int OpenConcerns,
     string? HeldReason, DateTimeOffset LastRevisedAtUtc, bool EditedByPerson = false, RelationshipType? LinkType = null,
-    Exception? UnreadableCause = null)
+    Exception? UnreadableCause = null, ReviewReasonCode? RejectReason = null)
 {
     public bool IsUnreadable => UnreadableCause is not null;
 

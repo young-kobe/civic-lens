@@ -144,7 +144,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
             migrationBuilder.AddCheckConstraint(
                 name: "ck_vote_review_decisions_reason_code",
                 table: "vote_review_decisions",
-                sql: "reason_code IN ('NotAStatement', 'WrongSpeaker', 'IndexPage', 'LowSubstance', 'InaccurateSummary', 'Duplicate')");
+                sql: "reason_code IN ('InaccurateSummary', 'Duplicate')");
 
             migrationBuilder.AddCheckConstraint(
                 name: "ck_vote_review_decisions_reason_code_kind",
@@ -198,7 +198,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
             migrationBuilder.AddCheckConstraint(
                 name: "ck_relationship_review_decisions_reason_code",
                 table: "relationship_review_decisions",
-                sql: "reason_code IN ('NotAStatement', 'WrongSpeaker', 'IndexPage', 'LowSubstance', 'InaccurateSummary', 'Duplicate')");
+                sql: "reason_code IN ('NotRelated', 'Duplicate')");
 
             migrationBuilder.AddCheckConstraint(
                 name: "ck_relationship_review_decisions_reason_code_kind",
@@ -225,7 +225,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
             migrationBuilder.AddCheckConstraint(
                 name: "ck_executive_action_review_decisions_reason_code",
                 table: "executive_action_review_decisions",
-                sql: "reason_code IN ('NotAStatement', 'WrongSpeaker', 'IndexPage', 'LowSubstance', 'InaccurateSummary', 'Duplicate')");
+                sql: "reason_code IN ('InaccurateSummary', 'Duplicate')");
 
             migrationBuilder.AddCheckConstraint(
                 name: "ck_executive_action_review_decisions_reason_code_kind",
@@ -252,7 +252,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
             migrationBuilder.AddCheckConstraint(
                 name: "ck_document_change_review_decisions_reason_code",
                 table: "document_change_review_decisions",
-                sql: "reason_code IN ('NotAStatement', 'WrongSpeaker', 'IndexPage', 'LowSubstance', 'InaccurateSummary', 'Duplicate')");
+                sql: "reason_code IN ('InaccurateSummary', 'Duplicate', 'LowSubstance')");
 
             migrationBuilder.AddCheckConstraint(
                 name: "ck_document_change_review_decisions_reason_code_kind",
@@ -279,7 +279,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
             migrationBuilder.AddCheckConstraint(
                 name: "ck_brief_review_decisions_reason_code",
                 table: "brief_review_decisions",
-                sql: "reason_code IN ('NotAStatement', 'WrongSpeaker', 'IndexPage', 'LowSubstance', 'InaccurateSummary', 'Duplicate')");
+                sql: "reason_code IN ('InaccurateSummary', 'Duplicate', 'LowSubstance')");
 
             migrationBuilder.AddCheckConstraint(
                 name: "ck_brief_review_decisions_reason_code_kind",
@@ -306,7 +306,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
             migrationBuilder.AddCheckConstraint(
                 name: "ck_action_review_decisions_reason_code",
                 table: "action_review_decisions",
-                sql: "reason_code IN ('NotAStatement', 'WrongSpeaker', 'IndexPage', 'LowSubstance', 'InaccurateSummary', 'Duplicate')");
+                sql: "reason_code IN ('InaccurateSummary', 'Duplicate')");
 
             migrationBuilder.AddCheckConstraint(
                 name: "ck_action_review_decisions_reason_code_kind",

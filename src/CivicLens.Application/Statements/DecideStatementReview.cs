@@ -1,5 +1,6 @@
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
+using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Statements;
 
@@ -12,6 +13,7 @@ public sealed class DecideStatementReview(IStatementReviewStore store, Statement
         ArgumentNullException.ThrowIfNull(request);
         ReviewValidation.ValidateIdempotencyKey(request.IdempotencyKey);
         var candidateId = ReviewValidation.ValidateCandidateId(request.CandidateId);
+        ReviewReasons.Require(PublishedRecordKind.Statement, request.ReasonCode);
         var decision = ReviewValidation.CreateDecision(actor, candidateId, request.ExpectedRevisionNumber,
             request.ExpectedReviewStateVersion, request.Kind, request.Note, request.ResolvedDecisionIds, request.CorrectionNote, request.ReasonCode);
         var approvalSelections = request.Kind == ReviewDecisionKind.Approve

@@ -34,6 +34,7 @@ public sealed partial class ReviewHome
     private SourceHealthReport? health;
     private PublicationReleaseList? releases;
     private ReviewQueuePage? queue;
+    private ReviewQueuePage? rejected;
     private IReadOnlyList<BlockedPublishedRecord>? blocked;
     private ReviewQueuePage? unmatched;
     private int openReports;
@@ -62,6 +63,7 @@ public sealed partial class ReviewHome
     [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = default!;
 
     [SupplyParameterFromQuery(Name = "queue")] private string? QueueCursor { get; set; }
+    [SupplyParameterFromQuery(Name = "rejected")] private string? RejectedCursor { get; set; }
     [SupplyParameterFromQuery(Name = "changes")] private string? ChangesCursor { get; set; }
     [SupplyParameterFromQuery(Name = "results")] private string? ResultsCursor { get; set; }
     [SupplyParameterFromQuery(Name = "status")] private string? Status { get; set; }
@@ -84,7 +86,7 @@ public sealed partial class ReviewHome
         if (HttpMethods.IsPost(HttpContext.Request.Method)) return;
         var cancellationToken = HttpContext.RequestAborted;
         if (Find is not null) lookupMessage = await FindDraftAsync(cancellationToken);
-        if (!new[] { ChangesCursor, QueueCursor, ResultsCursor }.All(IsValidCursor))
+        if (!new[] { ChangesCursor, QueueCursor, RejectedCursor, ResultsCursor }.All(IsValidCursor))
         {
             error = "This page link is no longer valid. Go back to the first page of the list.";
             return;
@@ -98,6 +100,7 @@ public sealed partial class ReviewHome
                 [.. changes.Items.Select(item => item.ComparisonId)], cancellationToken);
             analysisStatus = await GetAnalysisStatus.ExecuteAsync(actor, cancellationToken);
             queue = await ListQueue.ExecuteAsync(actor, QueueCursor, PageSize, cancellationToken);
+            rejected = await ListQueue.ExecuteRejectedAsync(actor, RejectedCursor, PageSize, cancellationToken);
             openReports = await CountReports.ExecuteAsync(actor, cancellationToken);
             if (collection is not null)
             {
@@ -235,18 +238,23 @@ public sealed partial class ReviewHome
         catch (ArgumentException) { return false; }
     }
 
-    private string FirstQueueHref => PageHref("needs-a-person", null, ChangesCursor, ResultsCursor);
+    private IReadOnlyList<QueueRow> RejectedRows => [.. rejected!.Items.Select(QueueRow.OfRejected)];
 
-    private string? QueueHref(string? cursor) => cursor is null ? null : PageHref("needs-a-person", cursor, ChangesCursor, ResultsCursor);
+    private string FirstQueueHref => PageHref("needs-a-person", null, ChangesCursor, ResultsCursor, RejectedCursor);
 
-    private string? ChangesHref(string? cursor) => cursor is null ? null : PageHref("new-changes", QueueCursor, cursor, ResultsCursor);
+    private string? QueueHref(string? cursor) => cursor is null ? null : PageHref("needs-a-person", cursor, ChangesCursor, ResultsCursor, RejectedCursor);
 
-    private string? ResultsHref(string? cursor) => cursor is null ? null : PageHref("search-results", QueueCursor, ChangesCursor, cursor);
+    private string? ChangesHref(string? cursor) => cursor is null ? null : PageHref("new-changes", QueueCursor, cursor, ResultsCursor, RejectedCursor);
 
-    private string PageHref(string fragment, string? queueCursor, string? changesCursor, string? resultsCursor)
+    private string? ResultsHref(string? cursor) => cursor is null ? null : PageHref("search-results", QueueCursor, ChangesCursor, cursor, RejectedCursor);
+
+    private string? RejectedHref(string? cursor) => cursor is null ? null : PageHref("rejected", QueueCursor, ChangesCursor, ResultsCursor, cursor);
+
+    private string PageHref(string fragment, string? queueCursor, string? changesCursor, string? resultsCursor, string? rejectedCursor)
     {
         var query = new List<string>();
         if (queueCursor is not null) query.Add("queue=" + Uri.EscapeDataString(queueCursor));
+        if (rejectedCursor is not null) query.Add("rejected=" + Uri.EscapeDataString(rejectedCursor));
         if (changesCursor is not null) query.Add("changes=" + Uri.EscapeDataString(changesCursor));
         if (Search is not null) query.Add("q=" + Uri.EscapeDataString(Search));
         if (resultsCursor is not null) query.Add("results=" + Uri.EscapeDataString(resultsCursor));

@@ -234,7 +234,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         {
             var history = histories[draft.RecordId];
             return new QueueRead<TRevision>(history.CurrentRevision!, history.CurrentStatus, history.UnresolvedConcerns.Length,
-                (draft as IHeldDraftRow)?.HeldReason);
+                (draft as IHeldDraftRow)?.HeldReason, history.RejectReason);
         }, StringComparer.Ordinal);
         return (readable, errors);
     }

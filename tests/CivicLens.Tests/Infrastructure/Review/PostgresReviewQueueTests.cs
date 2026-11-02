@@ -106,6 +106,9 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
         var page = await store.ListAsync(null, 10, default);
         Assert.Equal(6, page.Total);
         Assert.DoesNotContain(kind, page.Items.Select(item => item.Kind));
+        var rejected = await store.ListRejectedAsync(null, 10, default);
+        Assert.Equal(kind, Assert.Single(rejected.Items).Kind);
+        Assert.Equal(1, rejected.Total);
     }
 
     [Fact]

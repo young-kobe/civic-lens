@@ -42,6 +42,7 @@ internal static class DraftStatusDisplay
         ReviewReasonCode.LowSubstance => "Too little substance",
         ReviewReasonCode.InaccurateSummary => "Summary does not match the source",
         ReviewReasonCode.Duplicate => "Duplicate of another record",
+        ReviewReasonCode.NotRelated => "These records are not related",
         _ => throw new ArgumentOutOfRangeException(nameof(code))
     };
 
