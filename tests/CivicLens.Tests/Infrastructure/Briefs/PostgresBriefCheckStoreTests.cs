@@ -184,6 +184,14 @@ public sealed class PostgresBriefCheckStoreTests(PostgresCollection postgres) : 
         await RunCheckWorkerAsync(model);
         await seeder.ExecuteAsync("UPDATE brief_analysis SET retry_of_run_id = (SELECT run_id FROM brief_analysis_runs WHERE outcome = 'Drafted' AND task = 'brief-check') WHERE task = 'brief-check'");
         await new PostgresAnalysisStatusStore(factory, BriefCheckTask.Task).RecordStartAsync(10_000_000, default);
+        await seeder.ExecuteAsync("""
+            INSERT INTO brief_analysis_runs (run_id, record_id, task, task_version, model, prompt_version, schema_version, input_hash, outcome,
+                input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, charged_tokens, started_at_utc_ticks, finished_at_utc_ticks)
+            SELECT repeat('d', 32), record_id, 'brief-draft', task_version, model, prompt_version, schema_version, input_hash, 'Bypassed',
+                0, 0, 0, 0, 0, started_at_utc_ticks, finished_at_utc_ticks
+            FROM brief_analysis_runs WHERE outcome = 'Drafted' AND task = 'brief-check'
+            """);
+        await seeder.ExecuteAsync("UPDATE brief_analysis_runs SET previous_run_id = (SELECT run_id FROM brief_analysis_runs WHERE outcome = 'Drafted' AND task = 'brief-check') WHERE outcome = 'Bypassed' AND task = 'brief-check'");
 
         await using (var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options))
             await db.GetService<IMigrator>().MigrateAsync(db.Database.GetMigrations().TakeWhile(id => !id.EndsWith("_BriefCheck", StringComparison.Ordinal)).Last());
@@ -191,6 +199,22 @@ public sealed class PostgresBriefCheckStoreTests(PostgresCollection postgres) : 
         foreach (var table in new[] { "brief_analysis", "brief_analysis_runs", "brief_analysis_budget", "document_change_analysis_status" })
             Assert.Equal(0, await ScalarAsync($"SELECT count(*)::int FROM {table} WHERE task = 'brief-check'"));
         Assert.Equal(1, await ScalarAsync("SELECT count(*)::int FROM brief_analysis WHERE task = 'brief-draft'"));
+        Assert.Equal(1, await ScalarAsync("SELECT count(*)::int FROM brief_analysis_runs WHERE task = 'brief-draft'"));
+    }
+
+    [Fact]
+    public async Task AnEditWithApprovalRequeuesASucceededCheckToPendingWithNoAttemptsAndKeepsOneRow()
+    {
+        _ = await SaveAsync(1, "Person headline", "save-2");
+        await seeder.ExecuteAsync("UPDATE brief_analysis SET status = 'Succeeded', attempts = 3 WHERE task = 'brief-check'");
+        var request = new SaveBriefDraftRequest(RecordId, 2, "Edited headline", PersonParagraphs, SuggestionChoice.Keep, "edit-and-approve",
+            new ApprovalWithSave(0, null, [], null));
+
+        _ = await new SaveBriefDraft(reviews).ExecuteAsync(Reviewer, request);
+
+        Assert.Equal($"Pending|0|{Week:yyyy-MM-dd}", await CheckRowAsync());
+        Assert.Equal(1, await ScalarAsync("SELECT count(*)::int FROM brief_analysis WHERE task = 'brief-check'"));
+        Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM brief_drafts WHERE record_id = '{RecordId}'"));
     }
 
     [Fact]
