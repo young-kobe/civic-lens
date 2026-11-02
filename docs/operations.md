@@ -810,7 +810,7 @@ To list the published records that cannot move on, run `releases blocked`. It pr
 
 To write the pages of all officials again, add `--rewrite-officials`. The publish then treats every official as touched. The option itself adds no record. It keeps the release history, the withdrawals, and the first publication date of each record. A rewrite with no named record needs an active release. Use it once after a deploy that changes the layout of the official pages. Until then an untouched official keeps its old page. On a commit conflict, run the same command again. A stop that names a record kind and ID does not clear on a retry. Compare that record file with its manifest entry, and send the message to the developer. Do not publish around it. A worker publish that commits while a long rewrite runs makes the commit conflict. Run the command again. If conflicts repeat, stop the worker first with `sudo deploy/scripts/compose.sh stop worker`, run the command, and start the worker again. See the [publication limits](architecture/publication.md#limits-and-planned-work).
 
-After the deploy that ships the Congress tabs, run this once:
+After the deploy that ships the Congress tabs and the bill status lines on the official pages, run this once:
 
 ```sh
 sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> --rewrite-officials
