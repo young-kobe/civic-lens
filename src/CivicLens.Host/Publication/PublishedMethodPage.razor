@@ -2,8 +2,8 @@
 @using CivicLens.Host.Components.Layout
 @using CivicLens.Publication.Contracts
 
-<PublicPage CanonicalPath="@PublicationProtocol.MethodPagePath" Title="How the official page counts work" Description="How Civic Lens builds the counts on each official page. Code builds them from published records. No model is used." Crumbs="Crumbs">
-    <PageHeader Title="How the official page counts work" Lede="Code builds the counts on the page of each member of Congress. No model is used. An official outside Congress, such as the President, casts no votes in Congress. Their page lists only their published records." />
+<PublicPage CanonicalPath="@PublicationProtocol.MethodPagePath" Title="How the counts work" Description="How Civic Lens builds the counts on each official page. Our software builds them from published records. No model is used." Crumbs="Crumbs">
+    <PageHeader Title="How the counts work" Lede="Our software builds the counts on the page of each member of Congress. No model is used. An official outside Congress, such as the President, casts no votes in Congress. Their page lists only their published records." />
     <Panel Title="What the issue counts mean" Padded="true">
         <p>The panel "Issues they work on" has one row for each tracked issue. Each row has three counts.</p>
         <ul>
@@ -19,7 +19,9 @@
         <p>The page shows a share only when the total is at least @TalkAndActionProfile.MinimumRecordsForShare roll calls.</p>
     </Panel>
     <Panel Title="Votes with their party" Padded="true">
-        <p>@PublishedOfficialView.SplitVoteMeaning The majority of a party is the <Term Key="yea">Yea</Term> or <Term Key="nay">Nay</Term> cast that more of its members made. A party with equal Yea and Nay counts has no majority, so its roll call is not a split vote. A vote for a candidate, such as the election of the Speaker, is never a split vote.</p>
+        <p>@PublishedOfficialView.SplitVoteMeaning</p>
+        <p>Example: a member casts Yea or Nay on 48 split votes and votes with most of their party on 45. The page shows 45 of 48.</p>
+        <p>The majority of a party is the <Term Key="yea">Yea</Term> or <Term Key="nay">Nay</Term> cast that more of its members made. A party with equal Yea and Nay counts has no majority, so its roll call is not a split vote. A vote for a candidate, such as the election of the Speaker, is never a split vote.</p>
         <p>The page counts only split votes where the official cast Yea or Nay. Aye counts as Yea and No counts as Nay. The official votes with the party when the cast equals the majority of the official party in the same chamber. The party is the party of the official on the day of the vote, or the party they caucus with.</p>
         <p>A cast of <Term Key="present">Present</Term> or Not Voting is not in either number. The page states how many split votes it left out. It shows a percent only when the official cast Yea or Nay on at least @TalkAndActionProfile.MinimumRecordsForShare split votes.</p>
         <p>An independent who caucuses with the @(PublishedPartyMajority.Democrat)s or the @(PublishedPartyMajority.Republican)s, which means they work with that party in Congress, counts with that party. The page leaves out votes that the official cast while in another party and not caucusing with either. For a member who has left Congress, the page uses the party letter in the vote record, so the page does not count the votes of an independent who left.</p>
@@ -43,30 +45,30 @@
         <p>A vote is substantive when its kind is one of these: @SubstantiveKinds. The count of votes they cast leaves out all other kinds, such as rules, <Term Key="cloture">cloture</Term>, and motions. These are procedural votes.</p>
     </Panel>
     <Panel Title="The picks on the home page" Id="home-picks" Padded="true">
-        <p>Code picks the cards on the home page from the published records. No model picks them. The same records on the same release day give the same picks. A vote headline on a card can be an AI summary of the official record. The vote page says so.</p>
+        <p>Our software picks the cards on the home page from the published records. No model picks them. The same records on the same release day give the same picks. A vote headline on a card can be an AI summary of the official record. The vote page says so.</p>
         <p>The closest vote card looks at the substantive roll call votes of the House and the Senate in which both the Democrats and the Republicans voted. They must be dated in the @HomeHighlights.WindowDays days that end on the day of the release. Procedural votes, such as rules and motions, are out. It picks the vote with the smallest difference between the Yea count and the Nay count. When two votes tie, it picks the one with the lower record ID. The card counts the casts of all members of the chamber who voted Yea or Nay. The gap ignores thresholds such as 60 votes in the Senate or two thirds of a chamber. The card does not say what the vote decided. It names the dates. With no such vote in these dates, the card does not appear.</p>
         <p>The party card names, for each chamber and party, the member with the highest share of split votes cast against most of the party. It uses the figures of the official pages for the newest Congress with vote figures in that chamber. It counts only members with at least @OfficialBoardPage.MinimumSplitVotes split votes cast with Yea or Nay and at least one vote against the party. A member with no such record is not named. An independent who caucuses with a party counts with that party and can be named. A former member who sat as an independent counts with no party and is never named. A member with no vote figures on this site is not counted, so the card cannot tell a member with no breaks from a member with no figures.</p>
-        <p>The executive action card lists the newest executive actions on this site by their date. Code picks them, and the title of each is the title from the Federal Register.</p>
+        <p>The executive action card lists the newest executive actions on this site by their date. Our software picks them, and the title of each is the title from the Federal Register.</p>
     </Panel>
     <Panel Title="Vote badges in lists" Id="vote-badges" Padded="true">
         <p>A vote row in a list shows a badge when the vote is substantive and both the Democrats and the Republicans have a majority on one side. The badge says whether the two majorities took opposite sides or the same side. A row has no badge when the vote is procedural, when the vote is for a candidate, as in the election of the Speaker, or when one of the two parties has no majority. A row has no badge either when the record lacks a party row for the Democrats or the Republicans. The line with the Yea and Nay counts shows in a row of the page when the list entry holds the counts. A row that the browser builds after a sort leaves out the party badge and the vote counts.</p>
     </Panel>
     <Panel Title="Presidential documents" Padded="true">
         <p>The page of a President lists the <Term Key="executive-order">executive orders</Term>, <Term Key="proclamation">proclamations</Term>, <Term Key="presidential-notice">notices</Term>, and <Term Key="memorandum">memoranda</Term> that the <Term Key="federal-register">Federal Register</Term> published. The counts above do not include them.</p>
-        <p>Each record shows the title and the facts from the Federal Register. Code checks the facts against the saved record. No person or model summarizes the document.</p>
+        <p>Each record shows the title and the facts from the Federal Register. Our software checks the facts against the saved record. No person or model summarizes the document.</p>
     </Panel>
     <Panel Title="Where the issues come from" Id="issue-tags" Padded="true">
         <p>A person reviews the issue tags of a statement and approves them. Some tags can still be wrong. For a sponsored bill or a vote on a bill, the policy area in Congress.gov gives the possible issues. An AI model chooses the issues of a bill or vote. It reads the title, the policy area, and the subjects that Congress.gov lists for the bill, when there are any. A bill with no fitting issue shows no issue. Subjects cover only some bills. No person checks that pick. Older records list every possible issue.</p>
     </Panel>
     <Panel Title="Where the Senate votes come from" Padded="true">
         <p>Senate votes come from @PublishedRecordLabels.Voteview. Each vote page also links the official roll call page on senate.gov.</p>
-        <p>Code checks the Voteview counts against the casts of the senators before it keeps a roll call. It skips a roll call whose counts differ.</p>
+        <p>Our software checks the Voteview counts against the casts of the senators before it keeps a roll call. It skips a roll call whose counts differ.</p>
         <p>Voteview does not list a Vice President tie-break vote. A roll call that ended 50 to 50 shows the result of the vote without the vote of the Vice President. The official roll call page on senate.gov shows that vote.</p>
     </Panel>
 </PublicPage>
 
 @code {
-    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), new("How the official page counts work")];
+    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), new("How the counts work")];
 
     private static string SubstantiveKinds => string.Join(", ", Enum.GetValues<PublishedVoteKind>()
         .Where(kind => kind.IsSubstantive()).Select(PublishedRecordLabels.VoteKind));

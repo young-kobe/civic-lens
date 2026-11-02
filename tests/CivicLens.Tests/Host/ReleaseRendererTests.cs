@@ -1,6 +1,7 @@
 using CivicLens.Core.ExecutiveActions;
 using CivicLens.Application.Issues;
 using System.Text.RegularExpressions;
+using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
 using AngleSharp.Html.Parser;
 using CivicLens.Application.Publication;
@@ -194,6 +195,43 @@ public sealed class ReleaseRendererTests
         foreach (var (recordId, revision, html) in pages)
             Assert.Equal($"../report.html?recordId={recordId}&revision={revision}",
                 new HtmlParser().ParseDocument(html).QuerySelector("a[href^='../report.html']")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task ARecordPageOffersTheReportLinkAboveAndBelowTheRecordSoAReaderFindsItWithoutScrolling()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None);
+
+        var links = new HtmlParser().ParseDocument(html).QuerySelectorAll("main a[href^='../report.html']");
+
+        Assert.Equal(2, links.Length);
+        Assert.All(links, link => Assert.Equal("Report a problem with this record", link.TextContent));
+        Assert.True(links[0].CompareDocumentPosition(links[1]).HasFlag(DocumentPositions.Following));
+    }
+
+    [Fact]
+    public async Task TheReportPageWithNoRecordSaysWhichLinkToUseAndGivesTheSiteContactAddress()
+    {
+        var html = await new ReleaseRenderer("https://api.example.test", "site-key-1").RenderReportAsync(CancellationToken.None);
+
+        var panel = new HtmlParser().ParseDocument(html).QuerySelector("[data-report-missing]")!;
+
+        Assert.Equal("Choose the record first", panel.QuerySelector("h3")!.TextContent);
+        Assert.Contains("use the link \"Report a problem with this record\"", panel.TextContent, StringComparison.Ordinal);
+        Assert.Equal($"mailto:{PublishedRecordLabels.ContactEmail}", panel.QuerySelector("a[href^='mailto:']")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task TheMethodPageGivesAWorkedExampleOfTheVotesWithTheirPartyCountAndEveryPageLinksItByItsTitle()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var method = new HtmlParser().ParseDocument(await renderer.RenderMethodAsync(CancellationToken.None));
+        var about = new HtmlParser().ParseDocument(await renderer.RenderAboutAsync(CancellationToken.None));
+
+        Assert.Contains("votes with most of their party on 45. The page shows 45 of 48.", method.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
+        Assert.Equal("How the counts work", method.QuerySelector("h1")!.TextContent);
+        Assert.Equal("How the counts work", method.QuerySelector(".public-footer-nav a[href='method.html']")!.TextContent);
+        Assert.Equal("How the counts work", about.QuerySelector("main a[href='method.html']")!.TextContent);
     }
 
     [Fact]
@@ -1918,7 +1956,7 @@ public sealed class ReleaseRendererTests
         Assert.Contains(PublishedRecordLabels.ModelWording, html, StringComparison.Ordinal);
         Assert.Contains(PublishedRecordLabels.CodeWording, html, StringComparison.Ordinal);
         Assert.Contains("On an action page or a vote page, a summary that a model wrote has the label \"An AI summary of the official record\". " +
-            "Wording that code wrote from the bill title, the sponsor, and the introduction date has the label \"Written automatically from Congress.gov data, with no AI\".",
+            "Wording that our software wrote from the bill title, the sponsor, and the introduction date has the label \"Written automatically from Congress.gov data, with no AI\".",
             new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain("unreviewed", html, StringComparison.OrdinalIgnoreCase);
     }
@@ -2531,7 +2569,7 @@ public sealed class ReleaseRendererTests
         AssertTrail(pages["search"], ["Home|index.html", "Search records"]);
         AssertTrail(pages["officials"], ["Home|index.html", "Officials"]);
         AssertTrail(pages["board"], ["Home|index.html", "Officials|officials.html", "House Democrats"]);
-        AssertTrail(pages["method"], ["Home|index.html", "How the official page counts work"]);
+        AssertTrail(pages["method"], ["Home|index.html", "How the counts work"]);
         AssertTrail(pages["report"], ["Home|index.html", "Report a problem"]);
         AssertTrail(pages["briefs"], ["Home|index.html", "Briefs"]);
         AssertTrail(pages["about"], ["Home|index.html", "About"]);
