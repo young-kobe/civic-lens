@@ -21,6 +21,13 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
+                name: "input_fingerprint",
+                table: "brief_analysis_runs",
+                type: "character varying(64)",
+                maxLength: 64,
+                nullable: true);
+
+            migrationBuilder.AddColumn<string>(
                 name: "recommendation",
                 table: "brief_analysis_runs",
                 type: "character varying(32)",
@@ -74,6 +81,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 name: "ck_brief_analysis_runs_check",
                 table: "brief_analysis_runs",
                 sql: "(checked_revision_number IS NULL) = (recommendation IS NULL) AND (checked_revision_number IS NULL OR (checked_revision_number >= 1 AND task = 'brief-check' AND recommendation IN ('ApproveRecommended','NeedsAttention'))) AND (source_run_id IS NOT NULL) = (task = 'brief-check' AND outcome = 'Bypassed')");
+
+            migrationBuilder.AddCheckConstraint(
+                name: "ck_brief_analysis_runs_fingerprint",
+                table: "brief_analysis_runs",
+                sql: "(input_fingerprint IS NOT NULL) = (task = 'brief-check' AND outcome = 'Drafted') AND (input_fingerprint IS NULL OR input_fingerprint ~ '^[0-9a-f]{64}$')");
 
             migrationBuilder.CreateIndex(
                 name: "ux_brief_analysis_week",
@@ -134,12 +146,20 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 name: "ck_brief_analysis_runs_check",
                 table: "brief_analysis_runs");
 
+            migrationBuilder.DropCheckConstraint(
+                name: "ck_brief_analysis_runs_fingerprint",
+                table: "brief_analysis_runs");
+
             migrationBuilder.DropIndex(
                 name: "ux_brief_analysis_week",
                 table: "brief_analysis");
 
             migrationBuilder.DropColumn(
                 name: "checked_revision_number",
+                table: "brief_analysis_runs");
+
+            migrationBuilder.DropColumn(
+                name: "input_fingerprint",
                 table: "brief_analysis_runs");
 
             migrationBuilder.DropColumn(

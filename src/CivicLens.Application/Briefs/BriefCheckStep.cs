@@ -14,7 +14,7 @@ public sealed class BriefCheckStep(IBriefCheckStore store, IBriefCheckModel mode
 
     public AnalysisTaskIdentity Identity => BriefCheckTask.Identity;
 
-    public BriefCheckRun Wrap(AnalysisRun run) => new(run, null, null, null);
+    public BriefCheckRun Wrap(AnalysisRun run) => new(run, null, null, null, null);
 
     public async Task<bool> RunAsync(IAnalysisAttempt<BriefCheckRun> attempt, CancellationToken cancellationToken)
     {
@@ -24,14 +24,13 @@ public sealed class BriefCheckStep(IBriefCheckStore store, IBriefCheckModel mode
             .Sent.Select(item => item.Record).ToImmutableArray();
         var first = Prompt(evidence, notCited, default);
         if (first is null) return await attempt.CompleteAsync(State.Blocked, BriefDraftErrorCodes.OverByteCap, cancellationToken);
-        attempt.ContextJson = BriefCheckPrompt.SerializeContext(evidence.Revision, notCited, Omitted(evidence, notCited),
-            first.InputHash);
+        attempt.ContextJson = BriefCheckPrompt.SerializeContext(evidence.Revision, notCited, Omitted(evidence, notCited));
         if (evidence.Settled?.Fingerprint == first.InputHash) return await SettleUnchangedAsync(attempt, evidence.Settled, cancellationToken);
-        return await CheckAsync(attempt, evidence, notCited, cancellationToken);
+        return await CheckAsync(attempt, evidence, notCited, first.InputHash, cancellationToken);
     }
 
     private async Task<bool> CheckAsync(IAnalysisAttempt<BriefCheckRun> attempt, BriefCheckEvidence evidence,
-        ImmutableArray<BriefRecord> notCited, CancellationToken cancellationToken)
+        ImmutableArray<BriefRecord> notCited, string fingerprint, CancellationToken cancellationToken)
     {
         var loop = new AnalysisValidationLoop<BriefCheckRun, BriefCheckResult>(Wrap, attempt, AnalysisRunOutcome.Drafted,
             BriefCheckTask.MaximumValidationPasses, errors => Prompt(evidence, notCited, errors), model.CheckAsync,
@@ -40,7 +39,7 @@ public sealed class BriefCheckStep(IBriefCheckStore store, IBriefCheckModel mode
         var result = await loop.RunAsync(cancellationToken);
         return result.End switch
         {
-            AnalysisLoopEnd.Accepted => await attempt.SettleAsync(new BriefCheckRun(result.Run!, null, result.Accepted, null), State.Succeeded, null,
+            AnalysisLoopEnd.Accepted => await attempt.SettleAsync(new BriefCheckRun(result.Run!, null, result.Accepted, null, fingerprint), State.Succeeded, null,
                 cancellationToken),
             AnalysisLoopEnd.NotSent when result.Run is null =>
                 await attempt.CompleteAsync(State.Blocked, BriefDraftErrorCodes.OverByteCap, cancellationToken),
@@ -63,7 +62,7 @@ public sealed class BriefCheckStep(IBriefCheckStore store, IBriefCheckModel mode
         CancellationToken cancellationToken)
     {
         var run = attempt.BypassRun(BriefCheckTask.Model, settled.Fingerprint, null);
-        return attempt.SettleAsync(new BriefCheckRun(run, BriefDraftErrorCodes.Unchanged, null, settled.RunId), State.Succeeded,
+        return attempt.SettleAsync(new BriefCheckRun(run, BriefDraftErrorCodes.Unchanged, null, settled.RunId, null), State.Succeeded,
             BriefDraftErrorCodes.Unchanged, cancellationToken);
     }
 }

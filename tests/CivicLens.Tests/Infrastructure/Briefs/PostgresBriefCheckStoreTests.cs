@@ -293,6 +293,19 @@ public sealed class PostgresBriefCheckStoreTests(PostgresCollection postgres) : 
         Assert.Equal("ck_brief_analysis_runs_check", failure.ConstraintName);
     }
 
+    [Theory]
+    [InlineData("UPDATE brief_analysis_runs SET input_fingerprint = NULL WHERE recommendation IS NOT NULL")]
+    [InlineData("UPDATE brief_analysis_runs SET input_fingerprint = 'abc' WHERE recommendation IS NOT NULL")]
+    [InlineData("UPDATE brief_analysis_runs SET task = 'brief-draft', checked_revision_number = NULL, recommendation = NULL WHERE recommendation IS NOT NULL")]
+    public async Task OnlyADraftedCheckRunHasAFingerprintAndItIsAHash(string update)
+    {
+        _ = await CheckedRunAsync();
+
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => seeder.ExecuteAsync(update));
+
+        Assert.Equal("ck_brief_analysis_runs_fingerprint", failure.ConstraintName);
+    }
+
     [Fact]
     public async Task TheReadOnlyRoleCanReadTheModelNoteOfAFlagBecauseItIsNotAReviewerNote()
     {

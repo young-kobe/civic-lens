@@ -1032,6 +1032,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("finished_at_utc_ticks");
 
+                    b.Property<string>("InputFingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("input_fingerprint");
+
                     b.Property<string>("InputHash")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -1143,6 +1148,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.ToTable("brief_analysis_runs", null, t =>
                         {
                             t.HasCheckConstraint("ck_brief_analysis_runs_check", "(checked_revision_number IS NULL) = (recommendation IS NULL) AND (checked_revision_number IS NULL OR (checked_revision_number >= 1 AND task = 'brief-check' AND recommendation IN ('ApproveRecommended','NeedsAttention'))) AND (source_run_id IS NOT NULL) = (task = 'brief-check' AND outcome = 'Bypassed')");
+
+                            t.HasCheckConstraint("ck_brief_analysis_runs_fingerprint", "(input_fingerprint IS NOT NULL) = (task = 'brief-check' AND outcome = 'Drafted') AND (input_fingerprint IS NULL OR input_fingerprint ~ '^[0-9a-f]{64}$')");
 
                             t.HasCheckConstraint("ck_brief_analysis_runs_finished_at_utc_ticks", "finished_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 

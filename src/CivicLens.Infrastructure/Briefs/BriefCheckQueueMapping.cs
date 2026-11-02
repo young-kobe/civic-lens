@@ -25,13 +25,14 @@ internal sealed class BriefCheckQueueMapping : IAnalysisQueueMapping<BriefAnalys
 
     public AnalysisRun RunOf(BriefCheckRun run) => run.Run;
 
-    public BriefCheckRun WrapInterrupted(AnalysisRun run) => new(run, null, null, null);
+    public BriefCheckRun WrapInterrupted(AnalysisRun run) => new(run, null, null, null, null);
 
     public void AddRun(CollectionAttemptDbContext db, BriefAnalysisRow row, BriefCheckRun run)
     {
         var runRow = AnalysisRunRows.Create<BriefAnalysisRunRow>(run.Run);
         runRow.Reason = run.Reason;
         runRow.SourceRunId = run.SourceRunId;
+        runRow.InputFingerprint = run.InputFingerprint;
         if (run.Result is { } result)
         {
             runRow.CheckedRevisionNumber = result.RevisionNumber;

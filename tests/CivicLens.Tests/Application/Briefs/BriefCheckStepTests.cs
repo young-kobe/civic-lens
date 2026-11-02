@@ -58,7 +58,7 @@ public sealed class BriefCheckStepTests
         var bad = Output("NeedsAttention", (7, "overstated", null, Note));
         var (first, _) = await RunAsync(BriefCheckFixtures.Evidence(), new FakeBriefCheckModel().Check(bad).Check(Output("ApproveRecommended")));
         var drafted = first.Runs.Single(run => run.Result is not null);
-        Assert.NotEqual(BriefCheckPrompt.ReadFingerprint(drafted.Run.ContextJson!), drafted.Run.InputHash);
+        Assert.NotEqual(drafted.InputFingerprint, drafted.Run.InputHash);
 
         var (second, model) = await RunAsync(BriefCheckFixtures.Evidence(SettledBy(drafted)), new FakeBriefCheckModel());
 
@@ -139,7 +139,7 @@ public sealed class BriefCheckStepTests
     }
 
     private static BriefCheckSettled SettledBy(BriefCheckRun drafted) =>
-        new(drafted.Run.RunId, BriefCheckPrompt.ReadFingerprint(drafted.Run.ContextJson!)!);
+        new(drafted.Run.RunId, drafted.InputFingerprint!);
 
     private static async Task<(FakeBriefCheckStore Store, FakeBriefCheckModel Model)> RunAsync(BriefCheckEvidence? evidence,
         FakeBriefCheckModel model, BriefCheckSettings? settings = null)

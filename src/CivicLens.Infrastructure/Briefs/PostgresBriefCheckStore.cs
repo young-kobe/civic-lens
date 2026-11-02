@@ -30,7 +30,7 @@ public sealed class PostgresBriefCheckStore : PostgresAnalysisStore<BriefCheckRu
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var row = await db.Set<BriefAnalysisRunRow>().AsNoTracking()
             .SingleOrDefaultAsync(candidate => candidate.RunId == runId && candidate.Task == BriefCheckTask.Task, cancellationToken);
-        return row is null ? null : new(AnalysisRunRows.ToRun(row), row.Reason, null, row.SourceRunId);
+        return row is null ? null : new(AnalysisRunRows.ToRun(row), row.Reason, null, row.SourceRunId, row.InputFingerprint);
     }
 
     public async Task<BriefCheckEvidence?> ReadEvidenceAsync(string recordId, CancellationToken cancellationToken)
@@ -53,9 +53,7 @@ public sealed class PostgresBriefCheckStore : PostgresAnalysisStore<BriefCheckRu
         var last = await db.Set<BriefAnalysisRunRow>().AsNoTracking()
             .Where(row => row.RecordId == recordId && row.Task == BriefCheckTask.Task && row.Outcome == AnalysisRunOutcome.Drafted)
             .OrderByDescending(row => row.FinishedAtUtcTicks).ThenByDescending(row => row.RunId)
-            .Select(row => new { row.RunId, row.ContextJson }).FirstOrDefaultAsync(cancellationToken);
-        return last?.ContextJson is { } context && BriefCheckPrompt.ReadFingerprint(context) is { } fingerprint
-            ? new(last.RunId, fingerprint)
-            : null;
+            .Select(row => new { row.RunId, row.InputFingerprint }).FirstOrDefaultAsync(cancellationToken);
+        return last is { InputFingerprint: { } fingerprint } ? new(last.RunId, fingerprint) : null;
     }
 }

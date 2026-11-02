@@ -49,18 +49,14 @@ public static class BriefCheckPrompt
             bytes + (long)BriefCheckTask.MaximumOutputTokens);
     }
 
-    public static string SerializeContext(BriefRevision revision, ImmutableArray<BriefRecord> notCited, int omittedNotCited,
-        string fingerprint) =>
+    public static string SerializeContext(BriefRevision revision, ImmutableArray<BriefRecord> notCited, int omittedNotCited) =>
         JsonSerializer.Serialize(new
         {
-            fingerprint,
             revisionNumber = revision.RevisionNumber,
             citations = revision.Citations.Select(citation => new { id = citation.Id, kind = KindOf(citation.Kind), recordId = citation.RecordId, revisionNumber = citation.RevisionNumber }),
             notCited = notCited.Select(record => new { kind = KindOf(record.Kind), recordId = record.RecordId, revisionNumber = record.RevisionNumber }),
             omittedNotCited
         }, AnalysisPromptText.CompactJson);
-
-    public static string? ReadFingerprint(string contextJson) => JsonNode.Parse(contextJson)?["fingerprint"]?.GetValue<string>();
 
     private static string BuildUserPrompt(BriefRevision revision, IReadOnlyDictionary<string, BriefRecord> cited,
         ImmutableArray<BriefRecord> notCited, int omittedNotCited, ImmutableArray<string> previousErrors)
