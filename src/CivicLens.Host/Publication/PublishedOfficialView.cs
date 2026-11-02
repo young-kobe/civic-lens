@@ -155,7 +155,7 @@ internal static class PublishedOfficialView
     }
 
     public static string StatusLine(ActionBillStatus billStatus) =>
-        $"Latest official action (read from Congress.gov on {Moment.Day(billStatus.Status.ObservedAtUtc)}): {BillStatusMeaning.Plain(billStatus.Status.Text, billStatus.BillType)}";
+        $"Latest official action on {Moment.Day(billStatus.Status.Date)} (read from Congress.gov on {Moment.Day(billStatus.Status.ObservedAtUtc)}): {BillStatusMeaning.Plain(billStatus.Status.Text, billStatus.BillType)}";
 
     private const string AgainstPartyClass = "against-party";
 

@@ -28,14 +28,14 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task ASponsoredBillRowShowsTheReadDateAndThePlainMeaningOfItsLatestAction()
+    public async Task ASponsoredBillRowShowsTheActionDateTheReadDateAndThePlainMeaningOfItsLatestAction()
     {
         var bill = Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1));
         var page = Current([bill], []) with { BillStatuses = Statuses(bill, "Referred to the Committee on Armed Services.", "hr") };
 
         var records = await PanelAsync(page, "panel-records");
 
-        Assert.Equal("Latest official action (read from Congress.gov on 30 Jan 2026): In committee: sent to the Committee on Armed Services.",
+        Assert.Equal("Latest official action on 28 Jan 2026 (read from Congress.gov on 30 Jan 2026): In committee: sent to the Committee on Armed Services.",
             records.QuerySelector("tbody .muted.small")!.TextContent);
     }
 
@@ -49,7 +49,7 @@ public sealed class PublishedOfficialPageTests
 
         var records = await PanelAsync(page, "panel-records");
 
-        Assert.Equal($"Latest official action (read from Congress.gov on 30 Jan 2026): {meaning}", records.QuerySelector("tbody .muted.small")!.TextContent);
+        Assert.Equal($"Latest official action on 28 Jan 2026 (read from Congress.gov on 30 Jan 2026): {meaning}", records.QuerySelector("tbody .muted.small")!.TextContent);
     }
 
     [Fact]
@@ -60,7 +60,7 @@ public sealed class PublishedOfficialPageTests
 
         var records = await PanelAsync(page, "panel-records");
 
-        Assert.Equal("Latest official action (read from Congress.gov on 30 Jan 2026): Introduced in House.", records.QuerySelector("tbody .muted.small")!.TextContent);
+        Assert.Equal("Latest official action on 28 Jan 2026 (read from Congress.gov on 30 Jan 2026): Introduced in House.", records.QuerySelector("tbody .muted.small")!.TextContent);
     }
 
     [Fact]
