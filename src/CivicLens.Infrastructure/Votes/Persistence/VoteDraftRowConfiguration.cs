@@ -37,5 +37,7 @@ internal sealed class VoteDraftRowConfiguration : IEntityTypeConfiguration<VoteD
         builder.HasOne<VoteCandidateRow>().WithMany().HasForeignKey(row => row.CandidateId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(row => new { row.SourceId, row.Chamber, row.Congress, row.SessionNumber, row.RollCallNumber }).IsUnique()
             .HasDatabaseName("ux_vote_drafts_roll");
+        builder.HasAlternateKey(row => new { row.RecordId, row.SourceId, row.Chamber, row.Congress, row.SessionNumber, row.RollCallNumber })
+            .HasName("ux_vote_drafts_record_roll");
     }
 }
