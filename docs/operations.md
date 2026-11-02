@@ -725,6 +725,18 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- br
 
 The [live test](#verification) for brief drafting sends one paid request.
 
+### Brief checking
+
+The `worker` command also checks the current revision of each brief when both required variables below are set. The check gives advice only. [Briefs](architecture/briefs.md#brief-check) holds the rules. A limit without `ANTHROPIC_API_KEY` stops the worker with exit code 2. With no limit, the check stays off and no call is made. Entries still queue, so the first start with a limit set checks each queued brief.
+
+| Variable | Meaning |
+|---|---|
+| `ANTHROPIC_API_KEY` | Claude API key, shared with the other stages |
+| `CIVIC_LENS_BRIEF_CHECKING_DAILY_TOKENS` | Daily token limit for brief check calls, per UTC day. It is separate from the other limits. |
+| `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
+
+The check uses Claude Sonnet 5.5. No automated test sends a paid request for it.
+
 ### Member roster
 
 Enable the source `congress-members` in the collection configuration to capture the public member file once a day. It needs no credential. The command below needs `CIVIC_LENS_DATABASE`. It reads the latest snapshot and writes nothing.

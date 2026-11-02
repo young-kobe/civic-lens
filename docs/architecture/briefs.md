@@ -45,6 +45,7 @@ The feature stores, queues, selects, drafts, and reviews briefs. A person edits,
 - A flagged brief that is approved stays approved. This differs on purpose from actions, where a worker revision gets a new code approval when the rules allow it. The approval of a brief covers the text of the reviewer, which a record change does not rewrite.
 - The remedy for a flagged approved brief is a person Withdraw. The editor shows the flag. Publication of briefs refuses a flagged brief; see [Publication](#publication).
 - A reviewer reads each brief before approval.
+- A second task, `brief-check`, gives advice on the current revision of a brief. It is not a decision. It never changes a revision and never blocks an approval. See [Brief check](#brief-check).
 
 ## Invariants
 
@@ -80,6 +81,15 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A review decision on the revision that the active release holds requeues the brief of the week of the record, in the same transaction. A decision on any other revision does not. Enforced by `BriefStaleness.AfterDecision`, which each review store passes to `ReviewRecords.DecideAsync`. Tests: `PostgresStatementReviewStoreTests.WithdrawingAnApprovalRequeuesTheBriefOfTheWeekAndTheRedraftLeavesTheRecordOut`, `PostgresStatementReviewStoreTests.ApprovingTheSameRevisionAgainAfterAWithdrawalRequeuesTheBriefAndTheRecordReturns`, `PostgresStatementReviewStoreTests.RequestingChangesAfterAnApprovalOfThePublishedRevisionRequeuesTheBriefAndTheRecordLeavesIt`, `PostgresStatementReviewStoreTests.ARecordWithdrawnApprovedAgainAndPublishedAtANewRevisionReturnsToTheBrief`, `PostgresStatementReviewStoreTests.ADecisionOnARevisionThatTheActiveReleaseDoesNotServeLeavesTheBriefAlone`, `PostgresDocumentChangeReviewStoreTests.ADecisionOnTheRevisionThatTheActiveReleaseServesRequeuesTheBriefOfItsWeek`, and `PostgresBillStreamTests.ADecisionOnTheRevisionThatTheActiveReleaseServesRequeuesTheBriefOfItsWeek`.
 - Week selection and staleness read only the kinds that a brief can cite. A published brief is never a new record of a week, and it never requeues a week. `BriefCitationKinds.IsCitable` is the one owner of the citable kinds. Enforced by `PostgresBriefDraftStore.ReadNewRecordsAsync` and `BriefStaleness.RequeueWeeksOfAsync`. Tests: `PostgresBriefPublicationTests.ABriefInTheReleaseIsNeverANewRecordOfItsWeekSoPublishingItDoesNotChangeTheBriefOfItsOwnWeek`, `PostgresBriefPublicationTests.ActivatingAReleaseThatAddsABriefRequeuesNoWeekBecauseAPublishedBriefIsNotACitableRecord`, and `PostgresBriefPublicationTests.ActivatingAReleaseThatChangesACitableRecordStillRequeuesItsWeek`.
 - The record reader refuses a kind that a brief cannot cite. It never reads the action tables for it. Enforced by the `BriefCitationKind` parameter type of `BriefRecordReader.SourceOf`. No test.
+- A brief check never changes a revision, a review status, or a decision, and approval needs no check. Enforced by `BriefCheckQueueMapping`, which writes only runs and flags, and by `PostgresBriefReviewStore.ValidateApprovalAsync`, which reads no check. Tests: `PostgresBriefCheckStoreTests.ACheckKeepsItsFlagsOnTheRevisionItCheckedAndChangesNothingInTheBriefOrItsReview` and `PostgresBriefCheckStoreTests.ApprovalStillWorksWhenTheCheckSaysNeedsAttentionBecauseTheCheckIsAdvice`.
+- Each new revision queues a check, from a person or from the worker. Enforced by `BriefCheckQueue.QueueAsync`. Tests: `PostgresBriefCheckStoreTests.APersonRevisionQueuesACheckForItsWeekAndEachNewRevisionQueuesItAgain` and `PostgresBriefCheckStoreTests.AWorkerRevisionQueuesACheckLikeAPersonRevision`.
+- The same input makes no model call, and a new text makes a new call. Enforced by `BriefCheckStep` through the input hash of the prompt. Tests: `BriefCheckStepTests.TheSameInputAsTheLastCheckMakesNoCallBecauseTheFingerprintIsTheInputHash`, `PostgresBriefCheckStoreTests.ACheckOfTheSameInputMakesNoSecondCallAndKeepsTheFirstFlags`, and `BriefCheckPromptGoldenTests.TheInputHashIgnoresTheRevisionNumberSoAnUnchangedTextIsNotCheckedTwice`.
+- The check rejects a paragraph index outside the brief and a code outside the list. It rejects a citation ID outside the revision. It also rejects a recommendation that disagrees with its flags, and a bad note. Enforced by `BriefCheckResolver`. Tests: `BriefCheckResolverTests.AParagraphIndexOutsideTheBriefIsRejectedBecauseTheFlagWouldPointAtNoText`, `BriefCheckResolverTests.ACodeOutsideTheClosedListIsRejectedBecauseThePanelNamesOnlyKnownProblems`, `BriefCheckResolverTests.AnIdTheBriefDoesNotListIsACitationErrorSoTheRunShowsTheCitationOutcome`, `BriefCheckResolverTests.ARecommendationToApproveWithFlagsIsRejectedBecauseThePanelCouldNotSayWhichToTrust`, and `BriefCheckResolverTests.ANoteOverTheLimitIsRejectedAndANoteAtTheLimitPasses`.
+- The flag table refuses an out-of-range paragraph, an unknown code, and an empty or long note. Enforced by `ck_brief_check_flags_paragraph`, `ck_brief_check_flags_code`, and `ck_brief_check_flags_note`. Tests: `PostgresBriefCheckStoreTests.TheFlagTableRefusesAnOutOfRangeParagraphAnUnknownCodeAndAnEmptyNote` and `PostgresBriefCheckStoreTests.TheFlagTableRefusesANoteOverTheLimit`.
+- A flag binds to the revision that the check read. Enforced by `BriefCheckResolver`, which takes the revision number from the checked revision, and by the foreign keys of `brief_check_flags`. Tests: `PostgresBriefCheckStoreTests.AFlagOfARevisionThatDoesNotExistIsRefusedByTheForeignKey` and `PostgresBriefCheckStoreTests.ANewRevisionWithNewTextMakesANewCallAndItsFlagsBindToTheNewRevision`.
+- Only a check run carries a recommendation and a checked revision. Enforced by `ck_brief_analysis_runs_check`. Test: `PostgresBriefCheckStoreTests.OnlyACheckRunMayCarryARecommendationBecauseADraftRunChecksNoRevision`.
+- The note of a flag is hidden from the read-only role. Enforced by the column pattern in `deploy/scripts/readonly-grants.sql`. Test: `PostgresBriefCheckStoreTests.TheNoteOfAFlagIsHiddenFromTheReadOnlyRoleAndTheStructuralColumnsAreNot`.
+- `BriefCheckTask` pins the prompt, the schema, and the closed lists. Enforced by the `BriefCheckTask` versions. Test: `BriefCheckPromptGoldenTests.ThePromptAndSchemaMatchTheirPinnedVersions`.
 - Brief publication rules, the brief file shape, and the contract limits are in [publication](publication.md#invariants).
 - The public page names the week, the cutoff release, the coverage counts, and the sample note, and it links each citation to its record page. Enforced by `PublishedBriefPage`. Test: `ReleaseRendererTests.BriefPageShowsEachCitationAsALinkToItsRecordPageWithTheCopiedHeadlineTheWeekTheCutoffAndTheSampleNote`.
 - A brief that is approved is never requeued by any of the three events. Enforced by the review status filter of `BriefStaleness`. Tests: `BriefStalenessTests.ABriefThatIsApprovedIsNeverRequeuedByAPublishOrARollbackBecauseAReviewerHasAlreadyTakenResponsibilityForIt` and `PostgresStatementReviewStoreTests.ADecisionLeavesAnApprovedBriefAloneBecauseAReviewerAlreadyOwnsIt`.
@@ -120,7 +130,7 @@ The step runs on the shared analysis owners: `AnalysisWorker<TRun>`, `AnalysisVa
 
 ### Queue
 
-`brief_analysis` has one entry for each week, with the task `brief-draft`. The key is the record ID, because every run must belong to a 64-character hex subject. The entry has a unique `week_start`.
+`brief_analysis` has one entry for each week, with the task `brief-draft`. The key is the record ID, because every run must belong to a 64-character hex subject. The entry has a unique `(week_start, task)`, because the task `brief-check` adds a second entry for the same week.
 
 At the start of each pass, `AnalysisWorker` calls the hook `beforeEachPass`. The brief composition passes `PostgresBriefDraftStore.EnqueueClosedWeeksAsync`. The method does these steps:
 
@@ -191,6 +201,38 @@ A citation error gives the run the outcome `CitationRejected`. Any other error g
 The worker appends a new revision to the brief of the week, written by `civic-lens:analysis` with its run ID. `BriefDraftResolver` builds the revision. The citation list holds the sent records that a paragraph cites, in ID order. If the current revision has the origin `Person`, the new revision keeps that text and its citations and stores the model text as the suggestion.
 
 The settlement takes the queue row lock and then `civic-lens-brief-review`. `BriefDraftRows.AppendAnalysisRevisionAsync` returns a refusal code or appends through `ReviewRecords.AppendRevision`. If the current revision number is not one less than the new one, the run is kept as `DraftDiscarded`. The entry moves to RetryWaiting with the code `revisionConflict`. If the brief is approved, the refusal code is `alreadyApproved`. The run is kept as `DraftDiscarded` and the entry settles as Succeeded with `unchanged`. The approved revision stays as it is.
+
+### Brief check
+
+The brief check is an AI review that gives advice on the current revision of a brief. It runs as the task `brief-check` on the `brief_analysis` queue. It has one entry for each brief, keyed by the record ID and the task. It uses `brief_analysis_budget` under its own task and its own daily limit; see [operations](../operations.md#brief-checking). It follows the statement gate. The gate is a second task on a queue table that already exists. The check has its own step, mapping, composition, and status row.
+
+**Advice only.** The check never writes to a revision. It is never a review decision, and it never blocks an approval. The approval gate and the publication gate do not read it. A person decides.
+
+**Queue.** Each new revision queues a check, whether a person or the worker wrote it. `BriefCheckQueue.QueueAsync` inserts the entry when none exists. It then moves a Succeeded, Running, Blocked, or Failed entry back to Pending with `PostgresAnalysisQueue.RequeueInAsync`. The caller is `BriefDraftQueueMapping.PrepareSettlementAsync` for the worker, and `PostgresBriefReviewStore.SaveRevisionAsync` for a person. Both run in the transaction that writes the revision. The queue row lock comes after the brief key; see [architecture](../architecture.md#invariants) for the lock order. The entry is queued whether or not the check is enabled.
+
+**Step.** `BriefCheckStep` does these checks in order:
+
+1. No current revision for the record: Blocked as `evidenceUnavailable`.
+2. The prompt does not fit the byte cap: Blocked as `overByteCap`.
+3. The input hash of the prompt equals that of the last Drafted check run: Succeeded as `unchanged`. The step writes a Bypassed run and makes no call.
+4. Otherwise the step calls the model with the validation loop and settles with the result.
+
+The input hash covers the model and the prompt text. The prompt holds the headline, the paragraphs with their citation IDs, the cited records, and the not-cited records. It does not hold the revision number. A new revision with the same text therefore makes no call. The result stays on the revision that it checked.
+
+**Input.** `PostgresBriefCheckStore.ReadEvidenceAsync` takes the current revision and the records of the week from `PostgresBriefDraftStore.ReadEvidenceAsync`. It reads the exact cited revisions with `BriefRecordReader.ReadExactAsync`. The records of the week that no citation names are the not-cited records. `BriefSelection` ranks them, and the step fills the prompt with whole groups up to the byte cap.
+
+**Prompt and output.** The request uses model `claude-sonnet-5-5`, effort `medium`, and at most 4,000 output tokens. The system prompt in `BriefCheckPrompt` tells the model to judge only what code cannot judge. It must flag only the listed problems. Its recommendation must agree with its flags. Structured outputs fix a `recommendation` (`ApproveRecommended` or `NeedsAttention`) and a list of `flags`. Each flag has a `paragraphIndex`, a `citationId` or null, and a `note`. It also has a `code`: `unsupportedByCitation`, `overstated`, `statesBillStatus`, `loadedWording`, `omitsNotableRecord`, or `other`. The output has no confidence.
+
+**Checks.** Code rejects the whole answer on any of these. The loop then gives one more call with the reasons.
+
+- The recommendation or a code is not in its closed list.
+- The recommendation is `ApproveRecommended` and the list holds a flag, or it is `NeedsAttention` and the list is empty.
+- The list holds more than 24 flags.
+- A paragraph index is not a paragraph of the revision.
+- A citation ID is not a citation of the revision. This is a citation error.
+- A note is empty, has more than 300 characters, or has a NUL.
+
+**Storage.** A Drafted run stores `checked_revision_number` and `recommendation` in `brief_analysis_runs`. It stores the raw output in `output_json`. Each flag is a row in `brief_check_flags`, keyed by the run ID and the flag number. A flag holds the record ID, the revision number, the paragraph index, the code, the citation ID, and the note. A foreign key binds `(record_id, revision_number)` to `brief_revisions`, and a second key binds the run ID to the run. The run also has a foreign key to the checked revision.
 
 ### Brief review
 
@@ -278,7 +320,7 @@ This is an owner command. It prints the count of entries that it queued or moved
 ## Storage and contracts
 
 - The generated [briefs schema](schema/briefs.md) lists every table, column, key, check, index, and trigger.
-- Eight tables hold weekly briefs: `brief_analysis`, `brief_analysis_runs`, `brief_analysis_budget`, `brief_schedule`, `brief_drafts`, `brief_revisions`, `brief_review_decisions`, and `brief_review_decision_resolutions`.
+- Nine tables hold weekly briefs: `brief_analysis`, `brief_analysis_runs`, `brief_analysis_budget`, `brief_schedule`, `brief_drafts`, `brief_revisions`, `brief_review_decisions`, `brief_review_decision_resolutions`, and `brief_check_flags`.
 - The commands use the replay receipt table with the operations `brief-save` and `brief-decide`.
 - The review of briefs adds no lock. It uses `brief_drafts`, `brief_revisions`, `brief_review_decisions`, and `brief_review_decision_resolutions`.
 - The citations of a brief stay in `revision_json`. No table indexes them.
@@ -287,7 +329,7 @@ This is an owner command. It prints the count of entries that it queued or moved
 - `BriefRevision` holds the record ID, the revision number, the author, the creation time, the window, and the fingerprint. It also holds the headline, `textOrigin`, an optional `suggestion`, the paragraphs, the citations, and the coverage.
 - The window holds the week start, the start and end ticks in UTC, the first release number, and the cutoff release number.
 - A paragraph holds its text and its citation IDs. A citation holds its ID, its kind (`DocumentChange`, `Statement`, or `Action`), its record ID, and its revision number.
-- Brief drafting has its own budget, separate from the other budgets.
+- Brief drafting and brief checking each have their own daily limit. Both charge `brief_analysis_budget`, one row for each day and task.
 - Version constants are listed in [Behavior versions](../architecture.md#behavior-versions).
 
 ## Code map
@@ -309,6 +351,10 @@ This is an owner command. It prints the count of entries that it queued or moved
 | Week SQL and record read | `src/CivicLens.Infrastructure/Briefs/BriefWeekSql.cs`, `src/CivicLens.Infrastructure/Briefs/BriefRecordReader.cs`, `src/CivicLens.Infrastructure/Review/ReviewQueries.cs` |
 | Staleness | `src/CivicLens.Infrastructure/Briefs/BriefStaleness.cs`, `src/CivicLens.Infrastructure/Review/ReviewRecords.cs`, `src/CivicLens.Infrastructure/Publication/PostgresPublicationStore.cs` |
 | Tables | `src/CivicLens.Infrastructure/Briefs/Persistence/` |
+| Check step and prompt | `src/CivicLens.Application/Briefs/BriefCheckStep.cs`, `src/CivicLens.Application/Briefs/BriefCheckPrompt.cs`, `src/CivicLens.Application/Briefs/BriefCheckResolver.cs`, `src/CivicLens.Application/Briefs/BriefCheckTask.cs`, `src/CivicLens.Application/Briefs/BriefCheckLifecycle.cs`, `src/CivicLens.Application/Briefs/BriefCheckSettings.cs` |
+| Check results and ports | `src/CivicLens.Application/Briefs/BriefCheckResult.cs`, `src/CivicLens.Application/Briefs/BriefCheckFlag.cs`, `src/CivicLens.Application/Briefs/BriefCheckRun.cs`, `src/CivicLens.Application/Briefs/BriefCheckEvidence.cs`, `src/CivicLens.Application/Briefs/IBriefCheckStore.cs`, `src/CivicLens.Application/Briefs/IBriefCheckModel.cs` |
+| Check store, queue, and model | `src/CivicLens.Infrastructure/Briefs/PostgresBriefCheckStore.cs`, `src/CivicLens.Infrastructure/Briefs/BriefCheckQueue.cs`, `src/CivicLens.Infrastructure/Briefs/BriefCheckQueueMapping.cs`, `src/CivicLens.Infrastructure/Briefs/AnthropicBriefCheckModel.cs` |
+| Check composition | `src/CivicLens.Host/Briefs/BriefCheckComposition.cs`, `src/CivicLens.Host/Briefs/BriefCheckConfiguration.cs` |
 | CLI and composition | `src/CivicLens.Host/Briefs/BriefCommand.cs`, `src/CivicLens.Host/Briefs/BriefDraftComposition.cs`, `src/CivicLens.Host/Briefs/BriefDraftConfiguration.cs` |
 
 ## Limits and planned work
@@ -323,4 +369,7 @@ This is an owner command. It prints the count of entries that it queued or moved
 - An approved brief whose cited record changed shows only in its editor. No queue row names it until the planned citation rows land. The ready list leaves out such an unpublished brief, and a publish by ID refuses it. A release that already holds it keeps it until a person withdraws it.
 - A published brief page links to the current page of each cited record. A newer revision of a cited record can replace the cited one in a later release. The page then shows the revision number that the brief cited, and the linked page shows the newer text.
 - The cited-record texts on the editor come from one read per page load. A cited record can change while the page is open. The flag shows at the next load.
+- The brief check prompt is not measured. A live measure against past person edits is planned, with the owner. Until then the flags are unproven advice.
+- The check queues for every new revision, also while it is off. The first worker start with a check limit set checks the current revision of each queued brief. The daily limit bounds the cost.
+- The editor does not show the check yet. The panel and the queue reason are planned.
 - News coverage in briefs is deferred; see [roadmap](../roadmap.md#deferred).

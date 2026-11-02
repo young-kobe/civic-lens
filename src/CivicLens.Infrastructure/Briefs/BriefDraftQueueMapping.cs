@@ -4,11 +4,14 @@ using CivicLens.Core.Analysis;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Briefs.Persistence;
 using CivicLens.Infrastructure.Collection;
+using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Briefs;
 
-internal sealed class BriefDraftQueueMapping : IAnalysisQueueMapping<BriefAnalysisRow, BriefDraftRun>
+internal sealed class BriefDraftQueueMapping(IDbContextFactory<CollectionAttemptDbContext> contexts) : IAnalysisQueueMapping<BriefAnalysisRow, BriefDraftRun>
 {
+    private readonly PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefCheckRun> checkQueue = BriefCheckQueue.Create(contexts);
+
     public string Table => PostgresBriefDraftStore.Table;
 
     public string KeyColumn => "record_id";
@@ -44,7 +47,11 @@ internal sealed class BriefDraftQueueMapping : IAnalysisQueueMapping<BriefAnalys
         if (run.Run.Outcome != AnalysisRunOutcome.Drafted)
             throw new ArgumentException("A revision needs its drafted run.", nameof(settlement));
         var refusal = await BriefDraftRows.AppendAnalysisRevisionAsync(db, revision, run.Run.RunId, cancellationToken);
-        if (refusal is null) return settlement;
+        if (refusal is null)
+        {
+            await BriefCheckQueue.QueueAsync(checkQueue, db, revision, cancellationToken);
+            return settlement;
+        }
         var discarded = run with { Run = run.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded } };
         if (refusal == BriefDraftErrorCodes.AlreadyApproved)
             return new(checkpoint with { ErrorCode = BriefDraftErrorCodes.Unchanged, Revision = null }, discarded);

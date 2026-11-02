@@ -1,3 +1,4 @@
+using CivicLens.Application.Briefs;
 using CivicLens.Core.Analysis;
 using CivicLens.Infrastructure.Analysis.Persistence;
 
@@ -16,6 +17,8 @@ internal sealed class BriefAnalysisRunRow : IAnalysisRunRow
     public string? PreviousRunId { get; set; }
     public AnalysisRunOutcome Outcome { get; set; }
     public string? Reason { get; set; }
+    public int? CheckedRevisionNumber { get; set; }
+    public BriefCheckRecommendation? Recommendation { get; set; }
     public long InputTokens { get; set; }
     public long OutputTokens { get; set; }
     public long CacheReadTokens { get; set; }

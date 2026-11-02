@@ -968,7 +968,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("RetryOfRunId");
 
-                    b.HasIndex("WeekStart")
+                    b.HasIndex("WeekStart", "Task")
                         .IsUnique()
                         .HasDatabaseName("ux_brief_analysis_week");
 
@@ -1019,6 +1019,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<long>("ChargedTokens")
                         .HasColumnType("bigint")
                         .HasColumnName("charged_tokens");
+
+                    b.Property<int?>("CheckedRevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("checked_revision_number");
 
                     b.Property<string>("ContextJson")
                         .HasColumnType("text")
@@ -1079,6 +1083,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("reason");
 
+                    b.Property<string>("Recommendation")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("recommendation");
+
                     b.Property<string>("RecordId")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -1120,10 +1129,14 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("PreviousRunId");
 
+                    b.HasIndex("RecordId", "CheckedRevisionNumber");
+
                     b.HasIndex("RecordId", "Task", "StartedAtUtcTicks");
 
                     b.ToTable("brief_analysis_runs", null, t =>
                         {
+                            t.HasCheckConstraint("ck_brief_analysis_runs_check", "(checked_revision_number IS NULL) = (recommendation IS NULL) AND (checked_revision_number IS NULL OR (checked_revision_number >= 1 AND task = 'brief-check' AND recommendation IN ('ApproveRecommended','NeedsAttention')))");
+
                             t.HasCheckConstraint("ck_brief_analysis_runs_finished_at_utc_ticks", "finished_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_brief_analysis_runs_ids", "run_id ~ '^[0-9a-f]{32}$' AND input_hash ~ '^[0-9a-f]{64}$' AND (previous_run_id IS NULL OR previous_run_id ~ '^[0-9a-f]{32}$')");
@@ -1137,6 +1150,64 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_brief_analysis_runs_times", "finished_at_utc_ticks >= started_at_utc_ticks");
 
                             t.HasCheckConstraint("ck_brief_analysis_runs_tokens", "input_tokens >= 0 AND output_tokens >= 0 AND cache_read_tokens >= 0 AND cache_write_tokens >= 0 AND charged_tokens >= input_tokens + output_tokens + cache_read_tokens + cache_write_tokens");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Briefs.Persistence.BriefCheckFlagRow", b =>
+                {
+                    b.Property<string>("RunId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("run_id");
+
+                    b.Property<int>("FlagNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("flag_number");
+
+                    b.Property<string>("CitationId")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("citation_id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("code");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("note");
+
+                    b.Property<int>("ParagraphIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("paragraph_index");
+
+                    b.Property<string>("RecordId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.HasKey("RunId", "FlagNumber");
+
+                    b.HasIndex("RecordId", "RevisionNumber");
+
+                    b.ToTable("brief_check_flags", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_brief_check_flags_code", "code IN ('UnsupportedByCitation','Overstated','StatesBillStatus','LoadedWording','OmitsNotableRecord','Other')");
+
+                            t.HasCheckConstraint("ck_brief_check_flags_note", "char_length(note) BETWEEN 1 AND 300");
+
+                            t.HasCheckConstraint("ck_brief_check_flags_number", "flag_number BETWEEN 1 AND 24");
+
+                            t.HasCheckConstraint("ck_brief_check_flags_paragraph", "paragraph_index BETWEEN 0 AND 11");
                         });
                 });
 
@@ -5451,9 +5522,29 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasForeignKey("PreviousRunId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("CivicLens.Infrastructure.Briefs.Persistence.BriefRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("RecordId", "CheckedRevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("CivicLens.Infrastructure.Briefs.Persistence.BriefAnalysisRow", null)
                         .WithMany()
                         .HasForeignKey("RecordId", "Task")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Briefs.Persistence.BriefCheckFlagRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Briefs.Persistence.BriefAnalysisRunRow", null)
+                        .WithMany()
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Briefs.Persistence.BriefRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("RecordId", "RevisionNumber")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

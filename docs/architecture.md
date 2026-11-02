@@ -214,6 +214,8 @@ An analysis settlement can add a draft row or append a revision. It then takes i
 
 A review decision on a statement, an action, or a vote finds the relationship pairs of its record. It saves the decision first. It holds the key of its own record kind, and a record that is not approved ends the hook. Otherwise it locks only the relationship queue rows of its record in pair key order. Then it takes the relationship key. The brief hook comes last, with the brief rows and the brief key. For these three stores, the decision and draft writes happen before the brief locks. `AfterDecisionHooks.InOrder` keeps this order. A settlement that appends a relationship revision locks its own row and then takes the relationship key.
 
+A new brief revision, from a person or from the worker, queues a brief check. The caller already holds the brief key. It then locks the check queue row of its brief (`BriefCheckQueue`). This is the one queue row lock that comes after the brief key. No check settlement takes a review key or another queue row after its own row, so no lock cycle exists.
+
 The requeue of stale briefs takes the brief key last. A review decision takes the key of its own record kind first. The requeue changes only the queue rows of finished weeks, which no worker holds.
 
 ## Invariants
@@ -294,6 +296,9 @@ The protocol, configuration, schema, parser, and behavior versions start at the 
 | Brief draft task | `brief-draft-v1` | `src/CivicLens.Application/Briefs/BriefDraftTask.cs` | Brief analysis runs | Task flow or output handling changes |
 | Brief draft prompt | `brief-draft-prompt-v1` | same file | Brief analysis runs | Prompt text or input framing changes |
 | Brief draft schema | `brief-draft-schema-v1` | same file | Brief analysis runs | The model output schema changes |
+| Brief check task | `brief-check-v1` | `src/CivicLens.Application/Briefs/BriefCheckTask.cs` | Brief analysis runs | Task flow or output handling changes |
+| Brief check prompt | `brief-check-prompt-v1` | same file | Brief analysis runs | Prompt text or input framing changes |
+| Brief check schema | `brief-check-schema-v1` | same file | Brief analysis runs | The model output schema changes |
 | Brief fingerprint | `brief-fingerprint-v1` | `src/CivicLens.Application/Briefs/BriefFingerprint.cs` | The fingerprint in each brief revision | The canonical text of the fingerprint changes |
 | Gate task | `statement-gate-v1` | `src/CivicLens.Application/Statements/StatementGateTask.cs` | Statement analysis runs | Task flow or output handling changes |
 | Gate prompt | `statement-gate-prompt-v1` | same file | Statement analysis runs | Prompt text or input framing changes |
@@ -400,8 +405,9 @@ This is the only navigation index.
 | Brief staleness after a publication, an activation, or a review decision | [Briefs](architecture/briefs.md#staleness) | `src/CivicLens.Infrastructure/Briefs/BriefStaleness.cs` |
 | Brief publication: ready list, citation recheck, record, and page | [Briefs](architecture/briefs.md#publication) | `src/CivicLens.Application/Publication/BriefRecordLoader.cs` |
 | Brief commands | [Briefs](architecture/briefs.md#commands) | `src/CivicLens.Host/Briefs/BriefCommand.cs` |
+| Brief check: advice flags on a revision | [Briefs](architecture/briefs.md#brief-check) | `src/CivicLens.Application/Briefs/BriefCheckStep.cs` |
 | Brief queue outcomes and codes | [Briefs](architecture/briefs.md#outcomes) | `src/CivicLens.Application/Briefs/BriefDraftErrorCodes.cs` |
-| Brief tables: queue, runs, budget, status, drafts, revisions, citations | [Briefs](architecture/briefs.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Briefs/` |
+| Brief tables: queue, runs, budget, status, drafts, revisions, citations, check flags | [Briefs](architecture/briefs.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Briefs/` |
 | Text extraction, profiles, citations | [Documents](architecture/documents.md#extraction) | `src/CivicLens.Application/Documents/ExtractDocument.cs` |
 | Document history and comparisons | [Documents](architecture/documents.md#history) | `src/CivicLens.Core/Documents/DocumentComparison.cs` |
 | Evidence pages under `/Documents` | [Documents](architecture/documents.md#evidence-pages) | `src/CivicLens.Host/Documents/ComparisonPage.razor` |
