@@ -85,7 +85,7 @@ else
 
         <div class="split">
             <Panel Label="Vote record" Padded="true">
-                <TabSet Label="Vote record views" Selected="@SelectedTab" Tabs="RecordTabs">
+                <TabSet Label="Vote record views" Selected="edit" Tabs="RecordTabs">
                     <TabPane Key="saved" Label="@($"Saved revision {revision.RevisionNumber}")">
                         <RecordView Id="saved-approval-target" Headline="@revision.Headline" Summary="@revision.Summary" Facts="FactsOf(revision)" />
                     </TabPane>
@@ -94,6 +94,7 @@ else
                         {
                             <form id="draft-form" class="form" method="post" @formname="save" @onsubmit="SaveAsync"
                                   data-unsaved-form data-recovered-unsaved="@(hasUnsavedInput ? "true" : "false")">
+                                <NoImplicitSubmit />
                                 <AntiforgeryToken />
                                 <input type="hidden" name="expectedRevisionNumber" value="@revision.RevisionNumber" />
                                 <input type="hidden" name="idempotencyKey" value="@saveKey" />
@@ -115,10 +116,15 @@ else
                                         </div>
                                     </section>
                                 }
-                                <div class="actions">
-                                    <Button Variant="ButtonVariant.Primary" Type="submit">Save revision @(revision.RevisionNumber + 1)</Button>
-                                    <span class="actions-hint">Approval applies only to saved wording. A person cannot edit the member votes.</span>
-                                </div>
+                                <SaveAndApproveFields ReviewStateVersion="review.ReviewStateVersion" RevisionNumber="revision.RevisionNumber" Concerns="concerns" View="TakeOffView" Approval="Approval" Hint="A person cannot edit the member votes.">
+                                    <Checklist>
+                                        <ul class="checklist">
+                                            <li>Does the headline match the result and the vote kind?</li>
+                                            <li>Does the summary use only the cited facts and name no member?</li>
+                                            <li>Does each member vote match its cited line?</li>
+                                        </ul>
+                                    </Checklist>
+                                </SaveAndApproveFields>
                             </form>
                         }
                     </TabPane>
@@ -158,15 +164,7 @@ else
         </Panel>
 
         <ReviewDecisionPanel RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="review.CurrentStatus"
-                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" CorrectionNote="@Decision?.CorrectionNote" WithdrawnRevisionNumber="TakeOffView.Status.WithdrawnRevisionNumber" OnDecide="DecideAsync">
-            <Checklist>
-                <ul class="checklist">
-                    <li>Does the headline match the result and the vote kind?</li>
-                    <li>Does the summary use only the cited facts and name no member?</li>
-                    <li>Does each member vote match its cited line?</li>
-                </ul>
-            </Checklist>
-        </ReviewDecisionPanel>
+                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" WithdrawnRevisionNumber="TakeOffView.Status.WithdrawnRevisionNumber" CanApprove="false" OnDecide="DecideAsync" />
 
         <TakeOffSitePanel View="TakeOffView" RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion"
                           IdempotencyKey="@TakeOffFormKey" Note="@TakeOffNote" Refusal="@takeOffRefusal" OnSubmit="TakeOffSiteAsync" />

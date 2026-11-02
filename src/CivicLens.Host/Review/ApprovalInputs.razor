@@ -1,0 +1,33 @@
+@using System.Collections.Immutable
+@using CivicLens.Core.Review
+@using CivicLens.Publication.Contracts
+
+@if (Concerns.Length > 0)
+{
+    <FieldSet Legend="Open concerns" Hint="Select each concern you resolved, and say how in the note.">
+        <ul class="choices">
+            @foreach (var concern in Concerns)
+            {
+                <li>
+                    <Choice Name="@($"{Prefix}.ResolvedDecisionIds")" Value="@concern.DecisionId" Checked="@Resolved.Contains(concern.DecisionId)"
+                            Label="@(string.IsNullOrWhiteSpace(concern.Note) ? "Concern without a note" : concern.Note)">
+                        <span class="muted small">Raised on revision @concern.RevisionNumber</span>
+                    </Choice>
+                </li>
+            }
+        </ul>
+    </FieldSet>
+}
+<Field Label="Correction note" For="@($"{Prefix}_CorrectionNote")" Hint="Needed if this record replaces or returns a public one. Without it, the public page does not change.">
+    <textarea id="@($"{Prefix}_CorrectionNote")" class="plain" name="@($"{Prefix}.CorrectionNote")" maxlength="@PublishedCorrection.MaximumNoteLength"
+              aria-describedby="@($"{Prefix}_CorrectionNote-hint")" value="@CorrectionNote"></textarea>
+</Field>
+
+@code {
+    [Parameter, EditorRequired] public string Prefix { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public ImmutableArray<ReviewDecision> Concerns { get; set; }
+    [Parameter] public string[]? ResolvedIds { get; set; }
+    [Parameter] public string? CorrectionNote { get; set; }
+
+    private IReadOnlyCollection<string> Resolved => ResolvedIds ?? [];
+}

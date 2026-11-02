@@ -10,7 +10,8 @@ public interface IDocumentChangeReviewStore
         string idempotencyKey, string payloadHash, CancellationToken cancellationToken);
 
     Task<DocumentChangeDraftRevision> SaveRevisionAsync(string actorSubject, DocumentChangeDraftRevision revision,
-        int expectedRevisionNumber, bool changeDateChecked, string idempotencyKey, string payloadHash, CancellationToken cancellationToken);
+        int expectedRevisionNumber, bool changeDateChecked, ReviewDecision? approval,
+        ImmutableHashSet<string> allowedOfficialIds, ImmutableHashSet<string> allowedIssueIds, string idempotencyKey, string payloadHash, CancellationToken cancellationToken);
 
     Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision,
         int expectedRevisionNumber, int expectedReviewStateVersion, string idempotencyKey,
