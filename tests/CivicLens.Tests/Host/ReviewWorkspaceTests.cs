@@ -326,6 +326,8 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
 
         var editor = await host.GetDocumentAsync(editorUrl);
         Assert.Equal("Rejected", editor.QuerySelector(".page-header .badge")!.TextContent);
+        Assert.Contains("badge-neutral", editor.QuerySelector(".page-header .badge")!.ClassName, StringComparison.Ordinal);
+        Assert.Contains("badge-neutral", editor.QuerySelector("[aria-labelledby='history'] .badge")!.ClassName, StringComparison.Ordinal);
         Assert.Null(editor.QuerySelector("#decision-form button[value='Reject']"));
         Assert.Null(editor.QuerySelector("#Decision_ReasonCode"));
         Assert.Contains("Reason: Index or menu page.", editor.QuerySelector("[aria-labelledby='history'] tbody")!.TextContent, StringComparison.Ordinal);

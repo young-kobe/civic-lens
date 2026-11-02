@@ -152,6 +152,7 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal("Rejected", await ScalarAsync($"SELECT review_status FROM vote_drafts WHERE record_id = '{recordId}'"));
         Assert.Equal(1, await ScalarAsync($"SELECT current_revision_number FROM vote_drafts WHERE record_id = '{recordId}'"));
         Assert.Equal(ReviewDecisionKind.Reject, Assert.Single(await VoteDecisionsAsync()).Kind);
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_analysis_runs WHERE outcome = 'DraftDiscarded'"));
     }
 
     [Fact]

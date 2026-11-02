@@ -126,8 +126,8 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
     public async Task<StatementReviewCounts> CountAsync(CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var (needsAction, approved) = await Records.CountAsync(db, cancellationToken);
-        return new(needsAction, approved);
+        var (all, needsAction, approved) = await Records.CountAsync(db, cancellationToken);
+        return new(all, needsAction, approved);
     }
 
     public async Task<StatementNotInReviewPage> ListNotInReviewAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken)

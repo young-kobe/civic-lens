@@ -35,6 +35,8 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
             return await attempt.CompleteAsync(State.Blocked, read.ErrorCode!, cancellationToken);
         var choice = BillIssueChoice.For(snapshot.Bill.PolicyArea, snapshot.Subjects, BillGate.DayOf(snapshot.Bill.UpdateDate), issueConfiguration);
         attempt.ContextJson = ActionDraftPrompt.SerializeContext(snapshot, choice, issues.Id);
+        if (evidence.IsRejected)
+            return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken);
         if (snapshot.Sponsorships.IsEmpty)
             return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.NoTrackedOfficial, cancellationToken);
         if (snapshot.Sponsorships.Length > ActionDraftRevision.MaximumSponsorships)

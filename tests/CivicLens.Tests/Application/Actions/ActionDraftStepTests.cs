@@ -1281,6 +1281,20 @@ public sealed class ActionDraftStepTests
         Assert.Single(store.Revisions);
     }
 
+    [Fact]
+    public async Task ARejectedRecordSettlesAsUnchangedWithoutACallEvenWhenTheBillChangedBecauseTheTokensWouldBeWasted()
+    {
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
+        var drafted = Assert.Single(first.Revisions);
+
+        var (rejected, model) = await RunAsync(Create(title: "A renamed bill"), new FakeHeadlineSummaryModel(), drafted,
+            shape: evidence => evidence with { IsRejected = true });
+
+        Assert.Empty(model.Requests);
+        Assert.Empty(rejected.Revisions);
+        Assert.Equal((State.Succeeded, ActionDraftErrorCodes.Unchanged), (rejected.Entries[0].Status, rejected.Entries[0].ErrorCode));
+    }
+
     private static async Task<(FakeActionDraftStore Store, FakeHeadlineSummaryModel Model)> RunAsync(ActionBillWorld world,
         FakeHeadlineSummaryModel model, ActionDraftRevision? current = null, DateTimeOffset? updatedAt = null, ActionDraftSettings? settings = null,
         IssueConfigurationRevision? issues = null, bool hasNewerCandidate = false, bool hasOlderPromptDraft = false,

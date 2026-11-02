@@ -325,6 +325,36 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task ARejectionThatLandsWhileTheModelRunsDiscardsTheDraftBecauseTheAppendStepRefusesARejectedRecord()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        _ = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(1), title: "A renamed bill");
+        var model = new FakeHeadlineSummaryModel().Reply(async _ =>
+        {
+            await ExecuteAsync(connectionString, $"UPDATE action_drafts SET review_status = 'Rejected' WHERE record_id = '{RecordId}'");
+            return new("end_turn", DraftableOutput, new(900, 100, 0, 0), "req_fixture");
+        });
+
+        Assert.Single((await RunActionWorkerAsync(model)).Requests);
+
+        Assert.Equal("Rejected", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Equal(1, await ScalarAsync("SELECT current_revision_number FROM action_drafts"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_analysis_runs WHERE outcome = 'DraftDiscarded'"));
+    }
+
+    [Fact]
+    public async Task ARejectedRecordGetsNoModelCallForANewCandidateBecauseTheTokensWouldBeWasted()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await DecideAsync(1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
+        _ = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(1), title: "A renamed bill");
+
+        Assert.Empty((await RunActionWorkerAsync(new FakeHeadlineSummaryModel())).Requests);
+
+        Assert.Equal(1, await ScalarAsync("SELECT current_revision_number FROM action_drafts"));
+    }
+
+    [Fact]
     public async Task APersonCannotActAsTheCodeSubject()
     {
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);

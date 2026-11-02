@@ -45,8 +45,12 @@ internal static class DraftStatusDisplay
         _ => throw new ArgumentOutOfRangeException(nameof(code))
     };
 
-    public static Tone Tone(ReviewDecisionKind kind) =>
-        kind == ReviewDecisionKind.Approve ? Components.Ui.Tone.Ok : Components.Ui.Tone.Warn;
+    public static Tone Tone(ReviewDecisionKind kind) => kind switch
+    {
+        ReviewDecisionKind.Approve => Components.Ui.Tone.Ok,
+        ReviewDecisionKind.Reject => Tone(ReviewStatus.Rejected),
+        _ => Components.Ui.Tone.Warn
+    };
 
     public static string DraftName(string headline) =>
         string.IsNullOrWhiteSpace(headline) ? "Untitled draft" : headline;

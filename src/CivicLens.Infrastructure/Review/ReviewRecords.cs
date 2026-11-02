@@ -214,8 +214,9 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         };
     }
 
-    public async Task<(int NeedsAction, int Approved)> CountAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken) =>
-        (await Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken),
+    public async Task<(int All, int NeedsAction, int Approved)> CountAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken) =>
+        (await Drafts(db, DraftStatusFilter.All).CountAsync(cancellationToken),
+            await Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken),
             await Drafts(db, DraftStatusFilter.Approved).CountAsync(cancellationToken));
 
     public Task<TDraftRow[]> ReadDraftsAsync(CollectionAttemptDbContext db, string[] recordIds, CancellationToken cancellationToken) =>
@@ -341,7 +342,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         var resolutions = await db.Set<ReviewDecisionResolutionRow<TDecisionRow>>().AsNoTracking()
             .Where(resolution => approvalIds.Contains(resolution.DecisionId))
             .OrderBy(resolution => resolution.DecisionId).ThenBy(resolution => resolution.ResolvedDecisionId)
-            .Take(approvalIds.Length * ReviewPolicy.MaximumOpenConcerns).ToArrayAsync(cancellationToken);
+            .Take(approvalIds.Length * ReviewPolicy.MaximumBlockersPerCycle).ToArrayAsync(cancellationToken);
         return resolutions.ToLookup(resolution => resolution.DecisionId, resolution => resolution.ResolvedDecisionId, StringComparer.Ordinal);
     }
 

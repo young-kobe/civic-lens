@@ -32,6 +32,8 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
             return await attempt.CompleteAsync(State.Blocked, read.ErrorCode!, cancellationToken);
         var choice = BillIssueChoice.For(snapshot.PolicyArea, snapshot.Subjects, snapshot.Day, issueConfiguration);
         attempt.ContextJson = VoteDraftPrompt.SerializeContext(snapshot, choice, issues.Id);
+        if (evidence.IsRejected)
+            return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, VoteDraftErrorCodes.Unchanged, cancellationToken);
         if (snapshot.Members.IsEmpty)
             return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, VoteDraftErrorCodes.NoTrackedMember, cancellationToken);
         if (snapshot.Members.Length > VoteDraftRevision.MaximumMembers)

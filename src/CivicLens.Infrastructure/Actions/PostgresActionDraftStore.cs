@@ -59,7 +59,7 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
         var hasOlderPromptDraft = current is not null && !hasNewerCandidate &&
             (await StaleCandidateIdsAsync(db, [candidateId], cancellationToken)).Contains(candidateId);
         return new(candidate, StoredJobDefinition.Find(revisions, row.ConfigurationRevisionId), await ReadPagesAsync(db, row.DetailJobId, row.IncludesSummaries, row.IncludesSubjects, cancellationToken),
-            current, hasNewerCandidate, hasOlderPromptDraft);
+            current, hasNewerCandidate, hasOlderPromptDraft, await ActionDraftRows.IsRejectedAsync(db, recordId, cancellationToken));
     }
 
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) =>
@@ -107,7 +107,7 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
                                    on new { draft.RecordId, Number = draft.CurrentRevisionNumber } equals new { revision.RecordId, Number = revision.RevisionNumber }
                                where draft.SourceId == candidate.SourceId && draft.Congress == candidate.Congress &&
                                    draft.BillType == candidate.BillType && draft.BillNumber == candidate.BillNumber &&
-                                   revision.AuthorKind == ReviewAuthorKind.Code
+                                   (revision.AuthorKind == ReviewAuthorKind.Code || draft.ReviewStatus == ReviewStatus.Rejected)
                                select draft.RecordId).Any()
                            let newestDraftPrompt = (from run in db.Set<ActionAnalysisRunRow>()
                                                     join sibling in db.Set<ActionCandidateRow>() on run.CandidateId equals sibling.CandidateId

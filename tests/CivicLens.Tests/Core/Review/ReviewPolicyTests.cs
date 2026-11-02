@@ -52,7 +52,7 @@ public sealed class ReviewPolicyTests
         }
 
         var full = Review(draftId, 1, cycle.Length, cycle);
-        Assert.Throws<ArgumentException>(() => Validate(full,
+        Assert.Throws<ReviewCycleFullException>(() => Validate(full,
             Decision(draftId, 1, cycle.Length + 1, ReviewDecisionKind.RequestChanges, "One more.")));
         Validate(full, Decision(draftId, 1, cycle.Length + 1, ReviewDecisionKind.Approve, "Resolved.",
             [.. cycle.Skip(1).Select(item => item.DecisionId)]));
@@ -178,7 +178,7 @@ public sealed class ReviewPolicyTests
     {
         var draftId = new string('7', 32);
         var cycle = ImmutableArray<ReviewDecision>.Empty;
-        for (var revision = 1; cycle.Length < ReviewPolicy.MaximumOpenConcerns; revision++)
+        for (var revision = 1; cycle.Length < ReviewPolicy.MaximumBlockersPerCycle; revision++)
         {
             var rejection = Decision(draftId, revision, cycle.Length + 1, ReviewDecisionKind.Reject, null, reason: ReviewReasonCode.Duplicate);
             Validate(Review(draftId, revision, cycle.Length, cycle), rejection);
@@ -186,11 +186,25 @@ public sealed class ReviewPolicyTests
         }
 
         var full = Review(draftId, 65, cycle.Length, cycle);
-        Assert.Throws<ArgumentException>(() => Validate(full,
+        var refused = Assert.Throws<ReviewCycleFullException>(() => Validate(full,
             Decision(draftId, 65, cycle.Length + 1, ReviewDecisionKind.Reject, null, reason: ReviewReasonCode.Duplicate)));
-        Assert.Throws<ArgumentException>(() => Validate(full,
+        Assert.Contains("Approve the record to start a new cycle", refused.Message);
+        Assert.Throws<ReviewCycleFullException>(() => Validate(full,
             Decision(draftId, 65, cycle.Length + 1, ReviewDecisionKind.RequestChanges, "One more.")));
         Validate(full, Decision(draftId, 65, cycle.Length + 1, ReviewDecisionKind.Approve, null));
+    }
+
+    [Fact]
+    public void ARequestForChangesOnARejectedRevisionReopensItBecauseAPersonChoseToAskAgain()
+    {
+        var draftId = new string('8', 32);
+        var rejection = Decision(draftId, 1, 1, ReviewDecisionKind.Reject, null, reason: ReviewReasonCode.LowSubstance);
+        var changes = Decision(draftId, 1, 2, ReviewDecisionKind.RequestChanges, "Look again.");
+
+        Validate(Review(draftId, 1, 1, [rejection]), changes);
+
+        Assert.Equal(ReviewStatus.ChangesRequested, ReviewPolicy.GetCurrentStatus(1, [rejection, changes]));
+        Assert.Same(changes, Assert.Single(ReviewPolicy.GetUnresolvedConcerns([rejection, changes])));
     }
 
     private static State Review(string recordId, int revisionNumber, int version, ImmutableArray<ReviewDecision> decisions) =>

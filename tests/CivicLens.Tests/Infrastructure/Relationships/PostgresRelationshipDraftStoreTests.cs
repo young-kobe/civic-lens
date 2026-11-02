@@ -404,13 +404,41 @@ public sealed class PostgresRelationshipDraftStoreTests(PostgresCollection postg
         var settled = (await store.ReadEvidenceAsync(pair.PairId, default))!.SettledFingerprint;
         await seeder.StatementAsync(Statement(revision: 2));
 
-        await RunWorkerAsync(new ApprovingModel(seeder, pair.PairId, Output()));
+        await RunWorkerAsync(new StatusSettingModel(seeder, pair.PairId, Output()));
 
         Assert.Equal([["1"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions"));
         Assert.Equal([["Approved"]], await seeder.ReadAsync("SELECT review_status FROM relationship_drafts"));
         Assert.Equal([["Succeeded", "unchanged"]], await seeder.ReadAsync("SELECT status, error_code FROM relationship_analysis"));
         Assert.Equal([["1"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_analysis_runs WHERE outcome = 'DraftDiscarded' AND reason IS NULL"));
         Assert.Equal(settled, (await store.ReadEvidenceAsync(pair.PairId, default))!.SettledFingerprint);
+    }
+
+    [Fact]
+    public async Task ARejectionThatLandsWhileTheModelRunsLeavesTheRejectedRevisionAndSettlesTheRunAsUnchanged()
+    {
+        var pair = await SeedApprovedPairAsync();
+        await RunWorkerAsync(new FakeRelationshipDraftModel().Draft(Output()));
+        await seeder.StatementAsync(Statement(revision: 2));
+
+        await RunWorkerAsync(new StatusSettingModel(seeder, pair.PairId, Output(), "Rejected"));
+
+        Assert.Equal([["1"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions"));
+        Assert.Equal([["Rejected"]], await seeder.ReadAsync("SELECT review_status FROM relationship_drafts"));
+        Assert.Equal([["Succeeded", "unchanged"]], await seeder.ReadAsync("SELECT status, error_code FROM relationship_analysis"));
+        Assert.Equal([["1"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_analysis_runs WHERE outcome = 'DraftDiscarded' AND reason IS NULL"));
+    }
+
+    [Fact]
+    public async Task ARejectedRelationshipIsNeverRequeuedEvenWhenACitedRevisionChanged()
+    {
+        var pair = await SeedApprovedPairAsync();
+        await store.RefreshPairsAsync(default);
+        await seeder.SettledRowAsync(pair, "Succeeded", null, RelationshipFingerprint.Compute(pair), "Rejected");
+
+        await seeder.ActionAsync(Action(revision: 2));
+        await store.RefreshPairsAsync(default);
+
+        Assert.Equal([["Succeeded"]], await seeder.ReadAsync("SELECT status FROM relationship_analysis"));
     }
 
     [Fact]
@@ -534,12 +562,12 @@ public sealed class PostgresRelationshipDraftStoreTests(PostgresCollection postg
             new RelationshipDraftSettings(10_000_000, concurrency: 1), Officials, TimeProvider.System).ExecuteAsync(once: true);
     }
 
-    private sealed class ApprovingModel(RelationshipWorldSeeder seeder, string recordId, string reply) : IRelationshipDraftModel
+    private sealed class StatusSettingModel(RelationshipWorldSeeder seeder, string recordId, string reply, string status = "Approved") : IRelationshipDraftModel
     {
         public async Task<CivicLens.Application.Analysis.AnalysisModelResponse> DraftAsync(CivicLens.Application.Analysis.AnalysisModelRequest request,
             CancellationToken cancellationToken)
         {
-            await seeder.ExecuteAsync("UPDATE relationship_drafts SET review_status = 'Approved' WHERE record_id = @id", ("id", recordId));
+            await seeder.ExecuteAsync($"UPDATE relationship_drafts SET review_status = '{status}' WHERE record_id = @id", ("id", recordId));
             return new("end_turn", reply, new(900, 100, 0, 0), "req_fixture");
         }
     }

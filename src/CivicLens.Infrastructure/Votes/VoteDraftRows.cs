@@ -32,6 +32,9 @@ internal static class VoteDraftRows
         return null;
     }
 
+    public static Task<bool> IsRejectedAsync(CollectionAttemptDbContext db, string recordId, CancellationToken cancellationToken) =>
+        db.Set<VoteDraftRow>().AsNoTracking().AnyAsync(draft => draft.RecordId == recordId && draft.ReviewStatus == ReviewStatus.Rejected, cancellationToken);
+
     public static Task<bool> HasNewerCandidateAsync(CollectionAttemptDbContext db, string sourceId, Chamber chamber, int congress,
         int sessionNumber, int rollCallNumber, long updateDateUtcTicks, CancellationToken cancellationToken) =>
         db.Set<VoteCandidateRow>().AsNoTracking().AnyAsync(newer => newer.SourceId == sourceId && newer.Chamber == chamber && newer.Congress == congress &&

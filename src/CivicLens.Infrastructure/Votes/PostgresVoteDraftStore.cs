@@ -66,7 +66,8 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
             await ReadBillDetailAsync(db, row, cancellationToken),
             hasNewerCandidate ? [] : await ReadBillSubjectsAsync(db, row, cancellationToken),
             await VoteDraftRows.ReadCurrentAsync(db, recordId, cancellationToken), hasNewerCandidate,
-            !hasNewerCandidate && (await StaleCandidateIdsAsync(db, [candidateId], cancellationToken)).Contains(candidateId));
+            !hasNewerCandidate && (await StaleCandidateIdsAsync(db, [candidateId], cancellationToken)).Contains(candidateId),
+            await VoteDraftRows.IsRejectedAsync(db, recordId, cancellationToken));
     }
 
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) =>
