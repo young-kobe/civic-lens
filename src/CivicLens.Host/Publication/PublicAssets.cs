@@ -15,12 +15,12 @@ internal static class PublicAssets
 
     public const string Favicon = "assets/favicon.svg";
 
-    public const string InstrumentSansFont = "assets/fonts/instrument-sans.woff2";
+    public const string SchibstedGroteskFont = "assets/fonts/schibsted-grotesk.woff2";
 
     public const string NewsreaderFont = "assets/fonts/newsreader.woff2";
 
     public static IReadOnlyList<ReleaseAsset> Load() =>
-        [.. Stylesheets.Append(ThemeScript).Append(Script).Append(PublicScript).Append(Favicon).Append(InstrumentSansFont).Append(NewsreaderFont).Select(path => new ReleaseAsset(path, Read(path)))];
+        [.. Stylesheets.Append(ThemeScript).Append(Script).Append(PublicScript).Append(Favicon).Append(SchibstedGroteskFont).Append(NewsreaderFont).Select(path => new ReleaseAsset(path, Read(path)))];
 
     private static byte[] Read(string path)
     {

@@ -7,7 +7,7 @@
 else
 {
     <div class="@(Scroll ? "table-wrap table-wrap-scroll" : "table-wrap")">
-        <table class="table" role="@(Roles ? "table" : null)" data-default-order="@DefaultOrder" @attributes="TableAttributes">
+        <table class="table" role="@(Roles ? "table" : null)" data-default-order="@DefaultOrder" data-paged="@(PagedRows is null ? null : PagedRowCount)" data-rows-noun="@PagedRows" @attributes="TableAttributes">
             @if (Caption is not null)
             {
                 <caption class="visually-hidden">@Caption@(DefaultOrder is null ? null : $". {DefaultOrder}.")</caption>
@@ -36,7 +36,12 @@ else
     [Parameter] public Func<TItem, string?>? RowFilterKeys { get; set; }
     [Parameter] public bool Roles { get; set; }
     [Parameter] public string? DefaultOrder { get; set; }
+
+    /// <summary>The plural noun of the rows. When set, a script shows <see cref="PagedRowCount"/> rows a page. Without the script every row shows.</summary>
+    [Parameter] public string? PagedRows { get; set; }
     [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? TableAttributes { get; set; }
+
+    public const int PagedRowCount = 15;
 
     private string? RowGroupRole => Roles ? "rowgroup" : null;
     private string? RowRole => Roles ? "row" : null;

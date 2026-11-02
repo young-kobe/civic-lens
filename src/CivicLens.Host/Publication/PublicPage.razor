@@ -23,7 +23,7 @@
         <meta name="robots" content="noindex" />
     }
     <link rel="icon" type="image/svg+xml" href="@(RootPath + PublicAssets.Favicon)" />
-    <link rel="preload" href="@(RootPath + PublicAssets.InstrumentSansFont)" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="@(RootPath + PublicAssets.SchibstedGroteskFont)" as="font" type="font/woff2" crossorigin />
     @if (UsesRecordFont)
     {
         <link rel="preload" href="@(RootPath + PublicAssets.NewsreaderFont)" as="font" type="font/woff2" crossorigin />
@@ -40,27 +40,22 @@
         <script src="@ExternalScript" async defer></script>
     }
 </head>
-<body>
+<body class="public">
     <a class="skip" href="#main">Skip to content</a>
     <header class="public-header">
         <a class="public-brand" href="@(RootPath + PublicationProtocol.HomePath)"><BrandMark />Civic Lens</a>
-        <nav class="public-nav" aria-label="Site">
-            @foreach (var link in PublicSections.All)
-            {
-                <a href="@(RootPath + link.Path)" aria-current="@(link.Section == Section ? "page" : null)">@link.Label</a>
-            }
-        </nav>
+        <nav class="public-nav" aria-label="Site">@NavLinks(PublicSections.Header)</nav>
+        <form class="public-search" role="search" action="@(RootPath + PublicationProtocol.SearchPagePath)" method="get">
+            <label class="visually-hidden" for="site-search">Search records</label>
+            <Icon Name="IconName.Search" />
+            <input id="site-search" type="search" name="q" maxlength="200" placeholder="Search bills, votes, people" />
+        </form>
         <div class="topbar-tools"><ThemeToggle /></div>
     </header>
     <main class="public-main" id="main" tabindex="-1"><div class="content"><PublicBreadcrumb Crumbs="Crumbs" /><CascadingValue Value="glossaryUse" IsFixed="true">@ChildContent</CascadingValue></div></main>
     <footer class="public-footer">
         <p>Each record shows its sources and the exact text it cites.</p>
-        <nav class="public-footer-nav" aria-label="Footer">
-            <a href="@(RootPath + PublicationProtocol.MethodPagePath)">How the counts work</a>
-            <a href="@(RootPath + PublicationProtocol.AboutPagePath)">About</a>
-            <a href="@(RootPath + PublicationProtocol.GlossaryPagePath)">Glossary</a>
-            <a href="@(RootPath + PublicationProtocol.ReportPagePath)">Report a problem</a>
-        </nav>
+        <nav class="public-footer-nav" aria-label="Footer">@NavLinks(PublicSections.Footer)</nav>
     </footer>
 </body>
 </html>
@@ -84,6 +79,13 @@
     [Parameter] public string RootPath { get; set; } = string.Empty;
     [Parameter] public IReadOnlyList<Crumb> Crumbs { get; set; } = [];
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private RenderFragment NavLinks(IReadOnlyList<PublicSections.NavLink> links) => @<text>
+        @foreach (var link in links)
+        {
+            <a href="@(RootPath + link.Path)" aria-current="@(link.Section is { } section && section == Section ? "page" : null)">@link.Text</a>
+        }
+    </text>;
 
     [Inject] private IServiceProvider Services { get; set; } = default!;
 

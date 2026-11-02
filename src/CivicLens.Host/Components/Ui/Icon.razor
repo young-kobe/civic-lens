@@ -1,5 +1,11 @@
+@if (IssueId is null || issuePath is not null)
+{
 <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    @switch (Name)
+    @if (issuePath is not null)
+    {
+        <path d="@issuePath" />
+    }
+    else switch (Name)
     {
         case IconName.Review:
             <path d="M3 13h5l1.5 3h5L16 13h5" /><path d="M5 5h14l2 8v6H3v-6z" />
@@ -28,9 +34,38 @@
         case IconName.SignOut:
             <path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10" />
             break;
+        case IconName.Vote:
+            <path d="M4 4h16v16H4zM8 12l3 3 5-6" />
+            break;
+        case IconName.Bill:
+        case IconName.ExecutiveAction:
+            <path d="M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7" />
+            break;
+        case IconName.Brief:
+            <path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h4" />
+            break;
+        case IconName.Relationship:
+            <path d="M9.5 14.5l5-5M8 11l-2 2a3.5 3.5 0 0 0 5 5l2-2M16 13l2-2a3.5 3.5 0 0 0-5-5l-2 2" />
+            break;
+        case IconName.DocumentChange:
+            <path d="M8 3h7l4 4v11H8zM5 7v14h11" />
+            break;
+        case IconName.Info:
+            <circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" />
+            break;
+        case IconName.Search:
+            <circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" />
+            break;
     }
 </svg>
+}
 
 @code {
-    [Parameter, EditorRequired] public IconName Name { get; set; }
+    /// <summary>The icon of a named kind. Leave it unset when <see cref="IssueId"/> is set.</summary>
+    [Parameter] public IconName Name { get; set; }
+
+    /// <summary>A configured issue ID. An ID with no icon renders nothing.</summary>
+    [Parameter] public string? IssueId { get; set; }
+
+    private string? issuePath => IssueId is null ? null : IssueIcons.PathOf(IssueId);
 }

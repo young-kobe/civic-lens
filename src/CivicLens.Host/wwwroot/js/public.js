@@ -201,7 +201,63 @@
         apply();
     };
 
+    const pagers = new WeakMap();
+    const showRows = (table, toFirstPage) => {
+        const rows = Array.from(table.tBodies[0].rows);
+        const matching = rows.filter(row => !row.hasAttribute("data-filtered-out"));
+        const pager = pagers.get(table);
+        if (pager && toFirstPage) pager.page = 0;
+        const size = pager?.size ?? Infinity;
+        const pageCount = Math.max(1, Math.ceil(matching.length / size));
+        if (pager) pager.page = Math.min(pager.page, pageCount - 1);
+        const first = pager ? pager.page * size : 0;
+        const visible = new Set(matching.slice(first, first + size));
+        for (const row of rows) row.hidden = !visible.has(row);
+        pager?.update(matching.length, first, visible.size, pageCount);
+    };
+
+    const initPaged = table => {
+        const noun = table.dataset.rowsNoun;
+        const nav = document.createElement("nav");
+        nav.className = "pager";
+        nav.setAttribute("aria-label", `Pages of ${table.caption.textContent.replace(`. ${table.dataset.defaultOrder}.`, "")}`);
+        const summary = document.createElement("p");
+        summary.setAttribute("role", "status");
+        const links = document.createElement("div");
+        links.className = "pager-links";
+        const [previous, next] = ["Previous", "Next"].map(text => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "btn btn-small";
+            button.textContent = text;
+            return button;
+        });
+        links.append(previous, next);
+        nav.append(summary, links);
+        const pager = {
+            page: 0,
+            size: Number(table.dataset.paged),
+            update: (total, first, shown, pageCount) => {
+                nav.hidden = pageCount === 1;
+                summary.textContent = `Showing ${first + 1} to ${first + shown} of ${total.toLocaleString("en-US")} ${noun}`;
+                previous.disabled = pager.page === 0;
+                next.disabled = pager.page === pageCount - 1;
+            }
+        };
+        const turn = (button, step) => button.addEventListener("click", () => {
+            pager.page += step;
+            showRows(table, false);
+            if (button.disabled) (button === previous ? next : previous).focus();
+        });
+        turn(previous, -1);
+        turn(next, 1);
+        pagers.set(table, pager);
+        table.closest(".table-wrap").after(nav);
+        showRows(table, true);
+    };
+
     const initRecordFilters = panel => {
+        const table = panel.querySelector("table");
         const rows = Array.from(panel.querySelectorAll("tbody tr"));
         if (rows.length === 0) return;
         const tabs = panel.querySelector("[data-record-filters]");
@@ -214,11 +270,9 @@
         const hides = row => (kind !== "" && !row.classList.contains(kind))
             || (issue !== null && !(row.dataset.filterKeys ?? "").split(" ").includes(issue.dataset.countFilter));
         const apply = () => {
-            let shown = 0;
-            for (const row of rows) {
-                row.hidden = hides(row);
-                if (!row.hidden) shown++;
-            }
+            for (const row of rows) row.toggleAttribute("data-filtered-out", hides(row));
+            const shown = rows.filter(row => !row.hasAttribute("data-filtered-out")).length;
+            showRows(table, true);
             for (const button of kindButtons) button.setAttribute("aria-pressed", String(button.dataset.filterValue === kind));
             for (const count of counts) count.querySelector("button").setAttribute("aria-pressed", String(count === issue));
             if (notice) {
@@ -345,6 +399,7 @@
         const restore = () => {
             running++;
             body.replaceChildren(...staticRows);
+            showRows(table, true);
             more.hidden = true;
             if (pager) pager.hidden = false;
             status.textContent = "";
@@ -362,6 +417,7 @@
                 return sign * kind.compare(left, right);
             };
             body.replaceChildren(...[...staticRows].sort((a, b) => compare(a, b) || order.get(a) - order.get(b)));
+            showRows(table, true);
             status.textContent = `Sorted by ${label(current.header, current.direction)}`;
         };
         const fetchRows = async (state, append) => {
@@ -419,6 +475,7 @@
         commit(null);
     };
 
+    document.querySelectorAll("table[data-paged]").forEach(initPaged);
     document.querySelectorAll("[data-records]").forEach(initRecordFilters);
     document.querySelectorAll("[data-officials-filters]").forEach(initOfficialsFilter);
     document.querySelectorAll("[data-search-api]").forEach(initSearchService);
