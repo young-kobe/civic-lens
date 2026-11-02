@@ -38,14 +38,6 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 
 **Public site**
 
-- R-45: Publish on change. An approval sends `pg_notify`. The worker groups approvals for about 1 minute and then publishes. The hourly timer stays as a fallback. The static release flow stays. The scale problem of the full `records_json` in each `publication_releases` row is fixed: the table `publication_record_states` holds the records of each release. Depends on: none. [Publication](architecture/publication.md#limits-and-planned-work)
-  - [x] Keep releases by age and count (#238)
-  - [x] Add the per-record table (#242)
-  - [x] Page cache of 60 seconds and search poll of 30 seconds (#246)
-  - [x] Move readers to the per-record table (#251)
-  - [x] Drop `records_json` and the drift check (#276)
-  - [x] Check the row count inside each publish, after `records_json` is dropped (#287)
-  - [ ] `pg_notify` on approval, after the action draft drain
 - R-47: Insight boards. One contract PR adds vote fields to vote entries, a per-official summary roll-up, and a cosponsor field on action entries. Then build boards for party breakers, loyalists, and missed votes, as static pages for each chamber and party. Then add list badges and home cards for the closest vote, the most breaks, and the newest executive actions. Then add a bill status line, sponsored bills that moved, and bipartisan cosponsorship. Depends on: none stated. [Publication](architecture/publication.md#limits-and-planned-work)
   - [x] Contract PR (#258), with one operator rewrite of carried entries and no reset, not yet run
   - [x] Boards (#269)
@@ -109,7 +101,7 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [x] Agree the direction
   - [x] Stop parsing JSON where a column already holds the value (#261)
   - [x] Move review decisions to columns, and read them there (#266, #272)
-  - [ ] Drop the decision JSON, after a read-only check of production rows
+  - [x] Drop the decision JSON (#295)
   - [ ] Add tick bounds and missing foreign keys, after a read-only check of production rows
   - [ ] Agree the table design from one pilot on vote revisions, with measured row counts
   - [ ] Move vote revisions

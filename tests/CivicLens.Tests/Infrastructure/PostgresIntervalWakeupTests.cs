@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using CivicLens.Infrastructure;
 using CivicLens.Tests.Infrastructure.Collection;
 using Npgsql;
@@ -22,6 +23,50 @@ public sealed class PostgresIntervalWakeupTests(PostgresCollection postgres) : I
     [Fact]
     public async Task TheFiveMinuteWakeupDoesNotReturnBeforeItsDeadlineBecauseNothingNotifiesIt() =>
         await AssertSleepsAsync(TimeSpan.FromMinutes(5));
+
+    [Fact]
+    public async Task ABurstOfApprovalNotificationsWakesOnceAtTheEarliestDeadlineBecauseTheDeadlineMustNotSlide()
+    {
+        if (await SecondsToTheNextBoundaryAsync(TimeSpan.FromHours(1)) < SafeSecondsToTheBoundary) return;
+        await using var wakeup = PostgresIntervalWakeup.FromConnectionString(connectionString, "civic_lens_burst_test", TimeSpan.FromHours(1));
+        await wakeup.ConnectAsync(default);
+        foreach (var seconds in new[] { 1.5, 2.5, 3.5 })
+            await NotifyDeadlineAsync("civic_lens_burst_test", seconds);
+        var stopwatch = Stopwatch.StartNew();
+
+        await wakeup.WaitAsync(new CancellationTokenSource(TimeSpan.FromSeconds(10)).Token);
+
+        Assert.InRange(stopwatch.Elapsed, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2.5));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => wakeup.WaitAsync(timeout.Token));
+    }
+
+    [Fact]
+    public async Task ALostNotificationStillWakesAtTheIntervalDeadlineBecauseTheTimerIsTheFallback()
+    {
+        var interval = TimeSpan.FromSeconds(2);
+        await using var wakeup = PostgresIntervalWakeup.FromConnectionString(connectionString, "civic_lens_lost_test", interval);
+        await NotifyDeadlineAsync("civic_lens_lost_test", 0.1);
+        await wakeup.ConnectAsync(default);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var stopwatch = Stopwatch.StartNew();
+
+        await wakeup.WaitAsync(timeout.Token);
+
+        Assert.InRange(stopwatch.Elapsed, TimeSpan.Zero, interval + TimeSpan.FromSeconds(1));
+    }
+
+    private async Task NotifyDeadlineAsync(string channel, double secondsFromNow)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            $"SELECT pg_notify(@channel, ((EXTRACT(EPOCH FROM clock_timestamp())::numeric + @seconds) * 10000000 + 621355968000000000)::bigint::text)",
+            connection);
+        command.Parameters.AddWithValue("channel", channel);
+        command.Parameters.AddWithValue("seconds", (decimal)secondsFromNow);
+        await command.ExecuteNonQueryAsync();
+    }
 
     private async Task AssertSleepsAsync(TimeSpan interval)
     {
