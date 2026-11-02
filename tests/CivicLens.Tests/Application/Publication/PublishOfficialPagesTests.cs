@@ -14,6 +14,83 @@ public sealed class PublishOfficialPagesTests
     private static readonly string ChairPage = PublicationProtocol.OfficialPagePath("chair");
 
     [Fact]
+    public async Task AChangedBillStatusRewritesTheCurrentPageOfTheSponsorOnlySoTheLineNeverShowsAnOldStatus()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c');
+        var statement = scenario.AddStatement('b', speakerIds: ["chair"]);
+        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.");
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Action, action), new PublishedRecordReference(PublishedRecordKind.Statement, statement)));
+        scenario.Actions.BillStatuses[action] = Status(action, "Became Public Law No: 119-1.");
+        scenario.OfficialPages.Clear();
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2"));
+
+        var rewritten = Assert.Single(scenario.OfficialPages);
+        Assert.Equal(("mayor", true), (rewritten.Profile.Id, rewritten.IsCurrent));
+        Assert.Equal("Became Public Law No: 119-1.", rewritten.BillStatuses![action].Status.Text);
+        Assert.Contains("statuses [c:Became Public Law No: 119-1.]", Page(scenario.Releases.Directories[summary.DirectoryName], MayorPage));
+    }
+
+    [Fact]
+    public async Task AStatusCheckThatChangesNeitherTextNorDateLeavesTheSponsorPageLinked()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c');
+        var other = scenario.AddAction('d', sponsorId: "chair");
+        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.");
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Action, action)));
+        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.") with { ObservedAtUtc = Observed.AddDays(2) };
+        scenario.OfficialPages.Clear();
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", new PublishedRecordReference(PublishedRecordKind.Action, other)));
+
+        Assert.DoesNotContain(scenario.OfficialPages, page => page.Profile.Id == "mayor");
+    }
+
+    [Fact]
+    public async Task AChangedBillStatusRewritesThePageOfEverySponsorOfTheBill()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c', cosponsorWithdrawn: false, chairSponsors: true);
+        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.");
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Action, action)));
+        scenario.Actions.BillStatuses[action] = Status(action, "Became Public Law No: 119-1.");
+        scenario.OfficialPages.Clear();
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2"));
+
+        Assert.Equal(["chair", "mayor"], scenario.OfficialPages.Where(page => page.IsCurrent).Select(page => page.Profile.Id).Order().ToArray());
+    }
+
+    [Fact]
+    public async Task ARewrittenSponsorPageKeepsTheFirstReadTimeOfAnUnchangedBillSoOnlyTheMovedBillShowsANewTime()
+    {
+        var scenario = new PublicationScenario();
+        var moved = scenario.AddAction('c');
+        var steady = scenario.AddAction('d');
+        scenario.Actions.BillStatuses[moved] = Status(moved, "Passed House.");
+        scenario.Actions.BillStatuses[steady] = Status(steady, "Passed House.");
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Action, moved), new PublishedRecordReference(PublishedRecordKind.Action, steady)));
+        scenario.Actions.BillStatuses[moved] = Status(moved, "Became Public Law No: 119-1.") with { ObservedAtUtc = Observed.AddDays(3) };
+        scenario.Actions.BillStatuses[steady] = Status(steady, "Passed House.") with { ObservedAtUtc = Observed.AddDays(3) };
+        scenario.OfficialPages.Clear();
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2"));
+
+        var page = Assert.Single(scenario.OfficialPages, page => page.Profile.Id == "mayor" && page.IsCurrent);
+        Assert.Equal(Observed.AddDays(3), page.BillStatuses![moved].Status.ObservedAtUtc);
+        Assert.Equal(Observed, page.BillStatuses[steady].Status.ObservedAtUtc);
+    }
+
+    private static readonly DateTimeOffset Observed = new(2026, 1, 30, 9, 0, 0, TimeSpan.Zero);
+
+    private static PublishedBillStatus Status(string recordId, string text) =>
+        new() { RecordId = recordId, Text = text, Date = new DateOnly(2026, 1, 28), ObservedAtUtc = Observed };
+
+    [Fact]
     public async Task AnOfficialWithNoPublishedRecordGetsNoPageSoNoEmptyProfileExists()
     {
         var scenario = new PublicationScenario();
@@ -118,6 +195,103 @@ public sealed class PublishOfficialPagesTests
 
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", scenario.AddDraft('b'))));
+    }
+
+    [Fact]
+    public async Task TheSummaryRowOfAnOfficialWithTwoCongressesHoldsThePreviousCongressSoABoardCanKeepShowingItAndAOneCongressRowHoldsNone()
+    {
+        var scenario = new PublicationScenario();
+        var older = scenario.AddVote('a', congress: 118);
+        var newer = scenario.AddVote('b');
+        var chairOnly = scenario.AddVote('c', memberIds: ["chair"]);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k",
+            new PublishedRecordReference(PublishedRecordKind.Vote, older), new PublishedRecordReference(PublishedRecordKind.Vote, newer),
+            new PublishedRecordReference(PublishedRecordKind.Vote, chairOnly)));
+
+        var rows = Summaries(scenario, summary);
+        var previous = rows["mayor"].Previous!;
+        Assert.Equal((119, 118), (rows["mayor"].Congress, previous.Congress));
+        Assert.Equal(1, Assert.Single(previous.Attendance).Held);
+        var party = Assert.Single(previous.PartyVotes);
+        Assert.Equal((0, 0), (party.SplitVotesCast, party.Breaks));
+        Assert.Null(rows["chair"].Previous);
+    }
+
+    [Fact]
+    public async Task ATouchedOfficialReusesTheCarriedPreviousFiguresWhenTheOlderCongressFileIsUnchangedAndComputesThemAgainWhenTheCarriedRowIsOutOfStep()
+    {
+        var scenario = new PublicationScenario();
+        var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('a', congress: 118)),
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('b'))));
+        var truth = Summaries(scenario, first)["mayor"].Previous!;
+        var marked = truth with { Attendance = [.. truth.Attendance.Select(row => row with { Held = 99 })] };
+        TamperPrevious(scenario, first, marked);
+
+        var reused = await PublishAsync(scenario, "k2", PublishedRecordKind.Vote, scenario.AddVote('c'));
+        Assert.Equal(99, Assert.Single(Summaries(scenario, reused)["mayor"].Previous!.Attendance).Held);
+
+        TamperPrevious(scenario, reused, marked with { Congress = 117 });
+        var recomputed = await PublishAsync(scenario, "k3", PublishedRecordKind.Vote, scenario.AddVote('d'));
+        Assert.Equal(truth.Congress, Summaries(scenario, recomputed)["mayor"].Previous!.Congress);
+        Assert.Equal(1, Assert.Single(Summaries(scenario, recomputed)["mayor"].Previous!.Attendance).Held);
+    }
+
+    [Fact]
+    public async Task ANewVoteInTheOlderCongressChangesThePreviousFiguresAndAReplacementThatRemovesOneOfHerVotesLowersThemSoACarriedRowNeverGoesStale()
+    {
+        var scenario = new PublicationScenario();
+        var older = scenario.AddVote('a', congress: 118);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Vote, older), new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('b'))));
+
+        var added = await PublishAsync(scenario, "k2", PublishedRecordKind.Vote, scenario.AddVote('c', congress: 118));
+        Assert.Equal(2, Assert.Single(Summaries(scenario, added)["mayor"].Previous!.Attendance).Held);
+
+        var review = scenario.Votes.Publishable[older].Review;
+        var revised = review.CurrentRevision with { RevisionNumber = 2, Members = [review.CurrentRevision.Members[0] with { PersonId = "chair" }] };
+        scenario.Votes.Publishable[older] = scenario.Votes.Publishable[older] with
+        {
+            Review = review with
+            {
+                CurrentRevision = revised,
+                Revisions = review.Revisions.Add(revised),
+                Decisions = review.Decisions.Add(PublicationScenario.Decision(older, 2, ReviewDecisionKind.Approve, 2) with { CorrectionNote = PublicationScenario.PersonNote }),
+                ReviewStateVersion = 2
+            }
+        };
+        var replaced = await ReplaceAsync(scenario, "k3", PublishedRecordKind.Vote, older);
+
+        Assert.Equal(1, Assert.Single(Summaries(scenario, replaced)["mayor"].Previous!.Attendance).Held);
+        Assert.Equal(118, Summaries(scenario, replaced)["chair"].Congress);
+    }
+
+    [Fact]
+    public async Task ARewriteOfAllOfficialsComputesThePreviousFiguresAgainSoItCorrectsACarriedRow()
+    {
+        var scenario = new PublicationScenario();
+        var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('a', congress: 118)),
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('b'))));
+        var truth = Summaries(scenario, first)["mayor"].Previous!;
+        TamperPrevious(scenario, first, truth with { Attendance = [.. truth.Attendance.Select(row => row with { Held = 99 })] });
+
+        var rewritten = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteOfficials = true });
+
+        Assert.Equal(1, Assert.Single(Summaries(scenario, rewritten)["mayor"].Previous!.Attendance).Held);
+    }
+
+    private static Dictionary<string, PublishedOfficialSummary> Summaries(PublicationScenario scenario, PublicationReleaseSummary release) =>
+        JsonSerializer.Deserialize<PublishedOfficialSummaries>(
+            scenario.Releases.Directories[release.DirectoryName][PublicationProtocol.OfficialSummariesPath], PublicationProtocol.JsonOptions)!.Officials.ToDictionary(row => row.Id);
+
+    private static void TamperPrevious(PublicationScenario scenario, PublicationReleaseSummary release, PublishedVoteFigures previous)
+    {
+        var rows = Summaries(scenario, release);
+        rows["mayor"] = rows["mayor"] with { Previous = previous };
+        scenario.Releases.Directories[release.DirectoryName][PublicationProtocol.OfficialSummariesPath] =
+            JsonSerializer.SerializeToUtf8Bytes(new PublishedOfficialSummaries { Officials = [.. rows.Values] }, PublicationProtocol.JsonOptions);
     }
 
     [Fact]

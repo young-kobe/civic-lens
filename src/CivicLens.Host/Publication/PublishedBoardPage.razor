@@ -7,9 +7,13 @@
     <FilterTabs Label="@PublishedBoardView.TabsLabel" Tabs="PublishedBoardView.Tabs(Board)" />
     @if (Page.Congress is { } congress)
     {
+        @if (Page.NewerCongress is { } newer)
+        {
+            <p>@PublishedBoardView.KeptCongress(newer, congress)</p>
+        }
         @if (Page.NewestRollCall is { } newest)
         {
-            <p class="muted small">@PublishedBoardView.NewestRollCall(newest)</p>
+            <p class="muted small">@PublishedBoardView.NewestRollCall(congress, newest)</p>
         }
         <Panel Title="@PublishedBoardView.BreakersTitle(Board)" Padded="true">
             <p>@PublishedOfficialView.SplitVoteMeaning</p>
@@ -26,7 +30,7 @@
             <DataTable Roles="true" Items="Page.MostMissed" Caption="@PublishedBoardView.MissedTitle(Board)" DefaultOrder="@PublishedBoardView.MostMissedOrder">
                 <Head><TableCell Header Sort="SortKind.Text">Official</TableCell><TableCell Header Sort="SortKind.Number" DefaultSort="true">Missed votes</TableCell></Head>
                 <Row Context="member">
-                    <TableCell Main><CellTitle Href="@member.Official.PagePath">@member.Official.Profile.Name</CellTitle></TableCell>
+                    <TableCell Main><CellTitle Href="@member.PagePath">@member.Official.Profile.Name</CellTitle></TableCell>
                     <TableCell Label="Missed votes" SortValue="@member.Missed!.Missed.ToString()">@PublishedOfficialView.MissedVotes(member.Missed, congress)</TableCell>
                 </Row>
                 <Empty><EmptyState Title="No roll calls yet" Text="@PublishedBoardView.NoMissedList(Board)" /></Empty>
@@ -39,7 +43,7 @@
                 <ul>
                     @foreach (var member in Page.TooFewSplitVotes)
                     {
-                        <li><a href="@member.Official.PagePath">@member.Official.Profile.Name</a>: @member.Cast split @PublishedOfficialView.Noun(member.Cast, "vote") cast</li>
+                        <li><a href="@member.PagePath">@member.Official.Profile.Name</a>: @member.Cast split @PublishedOfficialView.Noun(member.Cast, "vote") cast</li>
                     }
                 </ul>
             </Panel>
@@ -67,7 +71,7 @@
         <DataTable Roles="true" Items="members" Caption="@caption" DefaultOrder="@PublishedBoardView.ShareOrder">
             <Head><TableCell Header Sort="SortKind.Text">Official</TableCell><TableCell Header Sort="SortKind.Number" SortLabel="@PublishedBoardView.ShareSortName" DefaultSort="true">@header</TableCell></Head>
             <Row Context="member">
-                <TableCell Main><CellTitle Href="@member.Official.PagePath">@member.Official.Profile.Name</CellTitle></TableCell>
+                <TableCell Main><CellTitle Href="@member.PagePath">@member.Official.Profile.Name</CellTitle></TableCell>
                 <TableCell Label="@header" SortValue="@PublishedBoardView.SortShare(share(member))">@PublishedOfficialView.SplitVoteCount(counted(member), member.Cast)</TableCell>
             </Row>
             <Empty><EmptyState Title="No ranked members" Text="@PublishedBoardView.NoRankedMembers(Board, congress)" /></Empty>

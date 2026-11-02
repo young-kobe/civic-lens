@@ -126,8 +126,10 @@ public sealed partial class PostgresBillStreamTests
 
         var statuses = await ActionReviews().ReadBillStatusesAsync([RecordId, new string('f', 64)], default);
 
-        var status = Assert.Single(statuses);
+        var read = Assert.Single(statuses);
+        var status = read.Status;
         Assert.Equal((RecordId, "Passed House.", new DateOnly(2025, 3, 2)), (status.RecordId, status.Text, status.Date));
+        Assert.Equal("hr", read.BillType);
         Assert.Equal((long)(await ScalarAsync("SELECT created_at_utc_ticks FROM bill_gates"))!, status.ObservedAtUtc.UtcTicks);
         var newer = await EnqueueDetailAsync("newer");
         await AdmitDetailAsync(newer, DetailBill(UpdatedAt.AddDays(1), cosponsors: 0), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));

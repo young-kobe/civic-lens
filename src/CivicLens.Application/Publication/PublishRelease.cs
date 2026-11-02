@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
+using CivicLens.Application.Actions;
 using CivicLens.Application.Review;
 using CivicLens.Application.Roster;
 using CivicLens.Core.Review;
@@ -151,7 +152,7 @@ public sealed class PublishRelease
 
     private async Task<(string Directory, List<PublishedRecordEntry> Entries)> StageAsync(int number, DateTimeOffset now,
         PreviousRelease previous, List<PublishedRecordEntry> carried, List<PendingRecord> additions,
-        List<PublishedRecordEntry> removed, List<PublishedWithdrawal> withdrawals, IReadOnlyDictionary<string, StagedPage> pages, IReadOnlyDictionary<string, PublishedBillStatus> statuses, IReadOnlyList<RosterMember> roster,
+        List<PublishedRecordEntry> removed, List<PublishedWithdrawal> withdrawals, IReadOnlyDictionary<string, StagedPage> pages, IReadOnlyDictionary<string, ActionBillStatus> statuses, IReadOnlyList<RosterMember> roster,
         IReadOnlyList<OfficialPhoto> photos, bool rewriteOfficials, bool rewriteEntries, bool rewritePages, CancellationToken cancellationToken)
     {
         List<PublishedRecordEntry> entries = [.. carried, .. additions.Select(addition => addition.Entry)];
@@ -199,7 +200,7 @@ public sealed class PublishRelease
         if (additions.Count == 0 && removed.Count == 0 && !rewriteOfficials && !rewriteEntries && !rewritePages && !ReleaseOfficialPages.ChangesProfiles(previous, officials) &&
             !ReleaseBillStatuses.ChangedActionIds(ReleaseBillStatuses.ActionIdsOf(manifest.Records), previous, statuses).Any())
             throw new ArgumentException("Nothing to publish: no record, official, or bill status changed.");
-        var boards = await officialPages.WriteAsync(staging, manifest, officials, additions, removed, previous, rewriteOfficials, cancellationToken);
+        var boards = await officialPages.WriteAsync(staging, manifest, officials, additions, removed, previous, statuses, rewriteOfficials, cancellationToken);
         await indexPages.WriteHomeAsync(staging, manifest, facets, HomeHighlights.From(manifest, boards), additions, previous, cancellationToken);
         await staging.WriteSiteFilesAsync(manifest, cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestPath, manifestJson, cancellationToken);

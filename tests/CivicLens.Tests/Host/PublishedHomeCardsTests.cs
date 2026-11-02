@@ -54,10 +54,21 @@ public sealed class PublishedHomeCardsTests
         var main = await HomeAsync(ReleaseOf(), [Leader()]);
 
         var item = main.QuerySelector("li")!;
-        Assert.Equal("Jane Doe (D, Texas) sided against most House Democrats on 12 of 40 votes where the parties split.", item.TextContent);
+        Assert.Equal("Jane Doe (D, Texas) sided against most House Democrats on 12 of 40 votes where the parties split in the 119th Congress.", item.TextContent);
         Assert.Equal("officials/doe.html", item.QuerySelector("a")!.GetAttribute("href"));
         Assert.Contains("A chamber and party with no line has no member with vote figures on this site who meets these rules.", main.TextContent, StringComparison.Ordinal);
         Assert.Contains("at least 25 split votes", main.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ABreakLineFromAKeptBoardNamesItsEarlierCongressAndLinksThePageOfThatCongressSoTheCountsCanBeChecked()
+    {
+        var kept = Leader() with { Congress = 118, PagePath = "officials/doe/118.html" };
+
+        var item = (await HomeAsync(ReleaseOf(), [kept])).QuerySelector("li")!;
+
+        Assert.Equal("Jane Doe (D, Texas) sided against most House Democrats on 12 of 40 votes where the parties split in the 118th Congress.", item.TextContent);
+        Assert.Equal("officials/doe/118.html", item.QuerySelector("a")!.GetAttribute("href"));
     }
 
     [Fact]
@@ -74,7 +85,7 @@ public sealed class PublishedHomeCardsTests
     {
         var main = await HomeAsync(ReleaseOf(), [Leader([Term("Democrat", "TX", startYear: 2021), Term("Republican", "FL", startYear: 2025)])]);
 
-        Assert.Equal("Jane Doe (D, Texas) sided against most House Democrats on 12 of 40 votes where the parties split.", main.QuerySelector("li")!.TextContent);
+        Assert.Equal("Jane Doe (D, Texas) sided against most House Democrats on 12 of 40 votes where the parties split in the 119th Congress.", main.QuerySelector("li")!.TextContent);
     }
 
     [Fact]
@@ -82,7 +93,7 @@ public sealed class PublishedHomeCardsTests
     {
         var main = await HomeAsync(ReleaseOf(), [Leader([Term("Democrat", "TX", startYear: 2021), Term("Democrat", null, startYear: 2025, kind: PublishedOfficeKind.Executive)])]);
 
-        Assert.Equal("Jane Doe (D, Texas) sided against most House Democrats on 12 of 40 votes where the parties split.", main.QuerySelector("li")!.TextContent);
+        Assert.Equal("Jane Doe (D, Texas) sided against most House Democrats on 12 of 40 votes where the parties split in the 119th Congress.", main.QuerySelector("li")!.TextContent);
     }
 
     [Fact]
@@ -90,7 +101,7 @@ public sealed class PublishedHomeCardsTests
     {
         var main = await HomeAsync(ReleaseOf(), [Leader([Term("Democrat", "TX", startYear: 2021), Term("Democrat", "NM", startYear: 2025, kind: PublishedOfficeKind.Senator)])]);
 
-        Assert.Equal("Jane Doe (D, Texas) sided against most House Democrats on 12 of 40 votes where the parties split.", main.QuerySelector("li")!.TextContent);
+        Assert.Equal("Jane Doe (D, Texas) sided against most House Democrats on 12 of 40 votes where the parties split in the 119th Congress.", main.QuerySelector("li")!.TextContent);
     }
 
     [Fact]
@@ -100,7 +111,7 @@ public sealed class PublishedHomeCardsTests
 
         var main = await HomeAsync(ReleaseOf(), [Leader(terms, PublishedChamber.Senate)]);
 
-        Assert.Equal("Jane Doe (D, New Mexico) sided against most Senate Democrats on 12 of 40 votes where the parties split.", main.QuerySelector("li")!.TextContent);
+        Assert.Equal("Jane Doe (D, New Mexico) sided against most Senate Democrats on 12 of 40 votes where the parties split in the 119th Congress.", main.QuerySelector("li")!.TextContent);
     }
 
     [Theory]
@@ -121,7 +132,7 @@ public sealed class PublishedHomeCardsTests
     {
         var main = await HomeAsync(ReleaseOf(), [Leader(terms: [])]);
 
-        Assert.Equal("Jane Doe sided against most House Democrats on 12 of 40 votes where the parties split.", main.QuerySelector("li")!.TextContent);
+        Assert.Equal("Jane Doe sided against most House Democrats on 12 of 40 votes where the parties split in the 119th Congress.", main.QuerySelector("li")!.TextContent);
     }
 
     [Fact]
@@ -188,7 +199,7 @@ public sealed class PublishedHomeCardsTests
     }
 
     private static BreakLeader Leader(PublishedOfficeTerm[]? terms = null, PublishedChamber chamber = PublishedChamber.House) => new(chamber, PublishedPartyMajority.Democrat,
-        new OfficialListing(new PublishedOfficialProfile { Id = "doe", Name = "Jane Doe", Terms = terms ?? [Term("Democrat", "TX")] }, 0), 40, 12);
+        new OfficialListing(new PublishedOfficialProfile { Id = "doe", Name = "Jane Doe", Terms = terms ?? [Term("Democrat", "TX")] }, 0), 40, 12, 119, "officials/doe.html");
 
     private static PublishedOfficeTerm Term(string? party, string? state, string? caucus = null, int startYear = 2025, PublishedOfficeKind kind = PublishedOfficeKind.Representative) => new()
     {

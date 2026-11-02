@@ -798,7 +798,7 @@ To list the published records that cannot move on, run `releases blocked`. It pr
 
 To write the pages of all officials again, add `--rewrite-officials`. The publish then treats every official as touched. The option itself adds no record. It keeps the release history, the withdrawals, and the first publication date of each record. A rewrite with no named record needs an active release. Use it once after a deploy that changes the layout of the official pages. Until then an untouched official keeps its old page. On a commit conflict, run the same command again. A stop that names a record kind and ID does not clear on a retry. Compare that record file with its manifest entry, and send the message to the developer. Do not publish around it. A worker publish that commits while a long rewrite runs makes the commit conflict. Run the command again. If conflicts repeat, stop the worker first with `sudo deploy/scripts/compose.sh stop worker`, run the command, and start the worker again. See the [publication limits](architecture/publication.md#limits-and-planned-work).
 
-After the deploy that ships the Congress tabs, run this once:
+After the deploy that ships the Congress tabs and the bill status lines on the official pages, run this once:
 
 ```sh
 sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> --rewrite-officials
@@ -810,13 +810,13 @@ A page layout change, such as a new source link, reaches only the pages that a p
 
 Every publish writes `officials-summary.json`, the roll-up of the figures that rankings need. A touched official gets new figures. An untouched official keeps the figures of the previous release. A release from before the roll-up has none, so its untouched officials have no vote figures until `--rewrite-officials` runs. The four board pages are partial until then. A board leaves out an official with no vote figures and says so. The cosponsor counts come from the manifest entries of every publish. The count is null until `--rewrite-entries` gives every carried action its cosponsor data. A reader must not read null as 0.
 
-After the deploy that ships the vote fields, the cosponsor field, and the roll-up, run this once. After `releases activate` of a release older than this rewrite, run it again. Use a new key each time, because the same key and payload replay the old result with no rewrite:
+After the deploy that ships the vote fields, the cosponsor field, and the roll-up, run this once. The rewrite also fills `previous` in each summary row. The voting boards need `previous` to keep an earlier Congress. Until it runs, a board shows the newest Congress, and a row without `previous` leaves its member off a kept board. After `releases activate` of a release older than this rewrite, run it again. Use a new key each time, because the same key and payload replay the old result with no rewrite:
 
 ```sh
 sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> --rewrite-entries --rewrite-officials
 ```
 
-An image from before this change cannot read a release that the new image made, because it refuses the new entry members. To go back to that image, first activate a release that it made. See the [publication limits](architecture/publication.md#limits-and-planned-work).
+An image from before this change cannot read a release that the new image made, because it refuses the new entry members and the `previous` member of a summary row. To go back to that image, first activate a release that it made. See the [publication limits](architecture/publication.md#limits-and-planned-work).
 
 ### Take a record off the site
 
@@ -1175,7 +1175,7 @@ To end the access, delete `/etc/sudoers.d/civic-lens-operator` and the `authoriz
 
 The installer refuses a checkout that anyone other than root can write, because the commands run scripts from it as root. Run the same install command again after a migration, because a new table or column stays unreadable until then. Run it again after a restore too, because the restore leaves out the grants of the read-only role. Run it again when one of the scripts or `readonly-grants.sql` changes, because the installed copies and the grants do not follow the checkout. The commands expect the checkout at `/opt/civic-lens` and the data root at `/srv/civic-lens`. The `origin` remote must use HTTPS, because root has no SSH key for `deploy`.
 
-**Read-only SQL.** `/usr/local/bin/civic-lens-sql` reads SQL from stdin and runs it as the Postgres role `civic_lens_readonly`. The role has no write privilege on any table and cannot create temp objects. A statement stops after 30 seconds by default, but a query can change that limit, and a long query can delay a migration. The role cannot read review notes, reviewer identity, credentials, or raw collector requests. `deploy/scripts/readonly-grants.sql` owns that list of hidden columns. Revision JSON is hidden too. `readonly_access.revisions('vote_revisions')` returns each revision row and its JSON without the author. The command refuses a backslash, because a psql command can run a shell.
+**Read-only SQL.** `/usr/local/bin/civic-lens-sql` reads SQL from stdin and runs it as the Postgres role `civic_lens_readonly`. The role has no write privilege on any table and cannot create temp objects. A statement stops after 30 seconds by default, but a query can change that limit, and a long query can delay a migration. The role cannot read review notes, reviewer identity, credentials, or raw collector requests. `deploy/scripts/readonly-grants.sql` owns that list of hidden columns. Revision JSON is hidden too. So are the headline, summary, fact text, and suggestion columns of vote revisions. `readonly_access.revisions('vote_revisions')` returns each revision row and its JSON without the author. It is the one exception: its `row_data` holds the vote revision text columns, the same text as the JSON. The command refuses a backslash, because a psql command can run a shell.
 
 Every result that an agent reads goes to its model vendor, so add a column to the hidden list before it holds private text.
 

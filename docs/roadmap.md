@@ -44,7 +44,7 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [x] List badges and home cards (#273)
   - [x] Bill status line (#281)
   - [ ] The remaining items
-  - [ ] Show the prior Congress on the vote boards until a new Congress has votes
+  - [x] Show the prior Congress on the vote boards until a new Congress has votes. One `releases publish <key> --rewrite-officials` fills `previous` in the summary rows.
 - R-48: What an official said and how they voted. The profile lists pairs, not totals: the quote with its date, then the cast with its question, date, and result. It shows no Yea or Nay totals and no talk against action quadrant, because a bare total lacks context. Depends on: R-47. [Publication](architecture/publication.md#limits-and-planned-work)
   - [ ] Said and voted pairs on the profile
 - R-64: What officials did on an issue. Today a bill or vote links to an issue with no direction, so no official position can be derived. Add a row for what a bill does on an issue, with citations, and a row for what a Yea does on each vote, such as pass, amend, table, or proceed. Code then lists each official's casts with that evidence. The page shows no score and no "pro" or "anti" label. Effect on an issue starts with facts only: bill status, vote result, and whether the bill became law. Start with one tracked issue and measure accuracy and review load. The schema design goes to the owner first. Depends on: R-48, and the action redraft. [Publication](architecture/publication.md#limits-and-planned-work)
@@ -103,8 +103,11 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [x] Move review decisions to columns, and read them there (#266, #272)
   - [x] Drop the decision JSON (#295)
   - [ ] Add tick bounds and missing foreign keys, after a read-only check of production rows
-  - [ ] Agree the table design from one pilot on vote revisions, with measured row counts
-  - [ ] Move vote revisions
+  - [x] Agree the table design from one pilot on vote revisions, with measured row counts
+  - [ ] Vote pilot 1: write both, so every vote revision writes columns and child rows beside its JSON
+  - [ ] Vote pilot 2: backfill old vote revisions and verify them with a C# command that compares each revision to its JSON
+  - [ ] Vote pilot 3: move the vote readers to the columns
+  - [ ] Vote pilot 4: drop the vote revision JSON, after the read-only function stops reading it
   - [ ] Move the other revision kinds, one PR for each
 
 **Operations**

@@ -462,10 +462,10 @@ public sealed partial class PostgresHouseVoteTests
 
     private static string SqlLiteral(string? value) => value is null ? "NULL" : $"'{value}'";
 
-    private async Task InsertRunAsync(string candidate, string promptVersion, long startedAtTicks, string outcome = "Drafted") => await ExecuteAsync($"""
+    private async Task InsertRunAsync(string candidate, string promptVersion, long startedAtTicks, string outcome = "Drafted", string? runId = null) => await ExecuteAsync($"""
         INSERT INTO vote_analysis_runs (run_id, candidate_id, task, task_version, model, prompt_version, schema_version, input_hash, outcome,
             input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, charged_tokens, started_at_utc_ticks, finished_at_utc_ticks)
-        VALUES ('{Guid.NewGuid():N}', '{candidate}', '{VoteDraftTask.Task}', '{VoteDraftTask.TaskVersion}', '{VoteDraftTask.Model}', '{promptVersion}',
+        VALUES ('{runId ?? Guid.NewGuid().ToString("N")}', '{candidate}', '{VoteDraftTask.Task}', '{VoteDraftTask.TaskVersion}', '{VoteDraftTask.Model}', '{promptVersion}',
             '{VoteDraftTask.SchemaVersion}', '{new string('1', 64)}', '{outcome}', 0, 0, 0, 0, 0, {startedAtTicks}, {startedAtTicks})
         """);
 
