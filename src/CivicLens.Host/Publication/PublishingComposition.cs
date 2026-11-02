@@ -25,8 +25,8 @@ internal sealed record PublishingComposition(AnalysisStage Stage, IWorkerWakeup 
         var publications = PostgresPublicationStore.FromConnectionString(connectionString);
         var (publish, loaders) = PublicationComposition.Create(connectionString, publications, new FileReleaseDirectory(releaseRoot),
             collection, PublicationComposition.RequireIssues(issues), artifactRoot, loggers);
-        var wakeup = PostgresIntervalWakeup.FromConnectionString(connectionString, "civic_lens_publishing", TimeSpan.FromHours(1));
-        var publishApproved = new PublishApprovedRecords(publish, publications, loaders, loggers.CreateLogger<PublishApprovedRecords>(), beat);
+        var wakeup = PostgresPublishingWakeup.FromConnectionString(connectionString, PublishApprovedRecords.ReleaseGap);
+        var publishApproved = new PublishApprovedRecords(publish, publications, loaders, loggers.CreateLogger<PublishApprovedRecords>(), beat, TimeProvider.System);
         var worker = new StageWorker(WorkerLoopNames.Publishing, publishApproved.ExecuteAsync, wakeup, loggers.CreateLogger<StageWorker>(), beat);
         return new(new AnalysisStage(WorkerLoopNames.Publishing, worker.ExecuteAsync), wakeup);
     }

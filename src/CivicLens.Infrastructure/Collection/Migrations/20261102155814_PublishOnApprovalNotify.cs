@@ -8,8 +8,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
     public partial class PublishOnApprovalNotify : Migration
     {
         private const int GroupingSeconds = 60;
-        private const int ReleaseSpacingSeconds = 600;
-
         private static readonly string[] DraftTables =
         [
             "action_drafts",
@@ -26,13 +24,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
         {
             migrationBuilder.Sql($$"""
                 CREATE FUNCTION civic_lens_notify_publishing_approval() RETURNS trigger AS $$
-                DECLARE
-                    now_ticks bigint := (EXTRACT(EPOCH FROM clock_timestamp())::numeric * 10000000 + 621355968000000000)::bigint;
-                    last_release_ticks bigint := COALESCE((SELECT max(published_at_utc_ticks) FROM publication_releases), 0);
                 BEGIN
                     PERFORM pg_notify('civic_lens_publishing',
-                        GREATEST(now_ticks + {{GroupingSeconds}} * 10000000::bigint,
-                            last_release_ticks + {{ReleaseSpacingSeconds}} * 10000000::bigint)::text);
+                        ((EXTRACT(EPOCH FROM clock_timestamp() + interval '{{GroupingSeconds}} seconds')::numeric * 10000000
+                            + 621355968000000000)::bigint)::text);
                     RETURN NEW;
                 END;
                 $$ LANGUAGE plpgsql;

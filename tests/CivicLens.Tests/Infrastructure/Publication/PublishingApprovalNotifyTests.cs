@@ -116,58 +116,6 @@ public sealed class PublishingApprovalNotifyTests(PostgresCollection postgres) :
         Assert.Single(await notifications.DrainAsync());
     }
 
-    [Fact]
-    public async Task ALoneApprovalAfterAQuietPeriodPublishesAboutAMinuteLaterBecauseTheLastReleaseIsOld()
-    {
-        await ExecuteAsync(Inserts["action_drafts"]);
-        await InsertReleaseAsync(TimeSpan.FromHours(1));
-        await using var notifications = await PublishingNotifications.ListenAsync(connectionString);
-
-        var before = TicksNow();
-        await ExecuteAsync("UPDATE action_drafts SET review_status = 'Approved'");
-
-        AssertGroupingDeadline(Assert.Single(await notifications.DrainAsync()), before);
-    }
-
-    [Fact]
-    public async Task ABurstAfterARecentReleaseWaitsUntilTenMinutesAfterThatReleaseBecausePublishesCostDisk()
-    {
-        await ExecuteAsync(Inserts["action_drafts"]);
-        await ExecuteAsync(Inserts["vote_drafts"]);
-        var releaseTicks = await InsertReleaseAsync(TimeSpan.FromMinutes(1));
-        await using var notifications = await PublishingNotifications.ListenAsync(connectionString);
-
-        await ExecuteAsync("UPDATE action_drafts SET review_status = 'Approved'");
-        await ExecuteAsync("UPDATE vote_drafts SET review_status = 'Approved'");
-
-        var payloads = await notifications.DrainAsync();
-        Assert.Equal(2, payloads.Count);
-        Assert.All(payloads, payload => Assert.Equal(releaseTicks + TimeSpan.FromMinutes(10).Ticks, long.Parse(payload, CultureInfo.InvariantCulture)));
-    }
-
-    [Fact]
-    public async Task ARestartedWorkerStillSeesTheGapBecauseTheLastReleaseIsStoredInTheDatabase()
-    {
-        await ExecuteAsync(Inserts["action_drafts"]);
-        var releaseTicks = await InsertReleaseAsync(TimeSpan.FromMinutes(5));
-        await using (await PublishingNotifications.ListenAsync(connectionString)) { }
-        await using var restarted = await PublishingNotifications.ListenAsync(connectionString);
-
-        await ExecuteAsync("UPDATE action_drafts SET review_status = 'Approved'");
-
-        Assert.Equal(releaseTicks + TimeSpan.FromMinutes(10).Ticks, long.Parse(Assert.Single(await restarted.DrainAsync()), CultureInfo.InvariantCulture));
-    }
-
-    private async Task<long> InsertReleaseAsync(TimeSpan age)
-    {
-        var published = TicksNow() - age.Ticks;
-        await ExecuteAsync($"""
-            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
-            VALUES (1, '000001-{ShortId}', 'owner', {published}, 1, true)
-            """);
-        return published;
-    }
-
     private static void AssertGroupingDeadline(string payload, long before)
     {
         var deadline = long.Parse(payload, CultureInfo.InvariantCulture);

@@ -525,6 +525,10 @@ internal sealed class FakePublicationStore : IPublicationStore
     public bool InsidePrune { get; private set; }
     public int? PrunedKeep { get; private set; }
 
+    public TimeSpan? AgeOfNewestRelease { get; set; }
+
+    public Task<TimeSpan?> ReadAgeOfNewestReleaseAsync(CancellationToken cancellationToken) => Task.FromResult(AgeOfNewestRelease);
+
     public Task<PublicationState> GetStateAsync(CancellationToken cancellationToken) =>
         Task.FromResult(new PublicationState(Committed.Select(item => item.ReleaseNumber).DefaultIfEmpty().Max(),
             Committed.SingleOrDefault(item => item.ReleaseNumber == ActiveReleaseNumber)));

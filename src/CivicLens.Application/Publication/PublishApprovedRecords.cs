@@ -6,25 +6,51 @@ using Microsoft.Extensions.Logging;
 namespace CivicLens.Application.Publication;
 
 public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationStore publications, PublishedRecordLoaders loaders,
-    ILogger<PublishApprovedRecords> logger, WorkerBeat beat)
+    ILogger<PublishApprovedRecords> logger, WorkerBeat beat, TimeProvider clock)
 {
+    /// <summary>The least time between two releases of the stage. The database clock measures it from the stored time of the newest
+    /// release. A failed or conflicted tick starts the same gap on the clock of this process.</summary>
+    public static readonly TimeSpan ReleaseGap = TimeSpan.FromMinutes(10);
+
     private static readonly ReviewActor Actor = new(ReviewAuthor.CodeSubject, ReviewRole.Owner);
+
+    private long? failedAt;
 
     public async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
-        var published = 0;
+        await beat.BeatIfDueAsync(cancellationToken);
+        if (await IsInsideGapAsync(cancellationToken)) return 0;
+        try
+        {
+            return await PublishOneReleaseAsync(cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            failedAt = clock.GetTimestamp();
+            throw;
+        }
+    }
+
+    private async Task<bool> IsInsideGapAsync(CancellationToken cancellationToken)
+    {
+        if (failedAt is { } failure && clock.GetElapsedTime(failure) < ReleaseGap) return true;
+        return await publications.ReadAgeOfNewestReleaseAsync(cancellationToken) < ReleaseGap;
+    }
+
+    private async Task<int> PublishOneReleaseAsync(CancellationToken cancellationToken)
+    {
         var skipped = new HashSet<string>();
         while (true)
         {
             await beat.BeatIfDueAsync(cancellationToken);
             // After a rollback the active release is not the latest. The stage waits until the owner activates the latest release.
             var state = await publications.GetStateAsync(cancellationToken);
-            if (state.Active?.ReleaseNumber != state.LatestReleaseNumber && state.LatestReleaseNumber > 0) return published;
+            if (state.Active?.ReleaseNumber != state.LatestReleaseNumber && state.LatestReleaseNumber > 0) return 0;
             var ready = await ListReadyAsync(skipped, cancellationToken);
             if (ready.IsEmpty)
             {
                 await PublishStatusChangesAsync(state, cancellationToken);
-                return published;
+                return 0;
             }
             PublicationReleaseSummary summary;
             try
@@ -33,7 +59,8 @@ public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationS
             }
             catch (PublicationConflictException)
             {
-                return published;
+                failedAt = clock.GetTimestamp();
+                return 0;
             }
             catch (Exception exception) when (exception is WithdrawnRecordException or MissingCorrectionNoteException or CorrectionLimitException)
             {
@@ -49,8 +76,7 @@ public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationS
                 continue;
             }
             // A release that is not new replayed a stored one, and the same batch would list again.
-            if (summary.ReleaseNumber <= state.LatestReleaseNumber) return published;
-            published += ready.Length;
+            return summary.ReleaseNumber <= state.LatestReleaseNumber ? 0 : ready.Length;
         }
     }
 

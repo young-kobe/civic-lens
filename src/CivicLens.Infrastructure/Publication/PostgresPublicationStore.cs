@@ -59,6 +59,14 @@ public sealed class PostgresPublicationStore : IPublicationStore
         return new(latest, active is null ? null : ToSummary(active));
     }
 
+    public async Task<TimeSpan?> ReadAgeOfNewestReleaseAsync(CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var now = await DatabaseClock.ReadAsync(db, cancellationToken);
+        var newest = await db.Set<PublicationReleaseRow>().AsNoTracking().MaxAsync(row => (long?)row.PublishedAtUtcTicks, cancellationToken);
+        return newest is null ? null : TimeSpan.FromTicks(now.Ticks - newest.Value);
+    }
+
     public async Task<IReadOnlyList<PublicationReleaseSummary>> ListAsync(int limit, CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
