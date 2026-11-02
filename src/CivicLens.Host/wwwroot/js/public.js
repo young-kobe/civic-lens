@@ -72,12 +72,14 @@
             none.hidden = true;
             if (params.toString() === "") { status.textContent = ""; return; }
             status.textContent = "Searching.";
-            let response;
-            try { response = await fetch(`${api}/v1/search?${params}`); }
+            let page;
+            try {
+                const response = await fetch(`${api}/v1/search?${params}`);
+                if (mine !== running) return;
+                if (!response.ok) { status.textContent = failure(response); return; }
+                page = await response.json();
+            }
             catch { if (mine === running) status.textContent = failure({ status: 0 }); return; }
-            if (mine !== running) return;
-            if (!response.ok) { status.textContent = failure(response); return; }
-            const page = await response.json();
             if (mine !== running) return;
             const items = page.hits.map(resultItem);
             if (append) results.append(...items); else results.replaceChildren(...items);
@@ -108,7 +110,12 @@
         writeAddress(formParams(), true);
         window.addEventListener("popstate", () => { if (location.search !== address) restoreFromAddress(); });
         form.addEventListener("submit", event => { event.preventDefault(); writeAddress(formParams()); run(false); });
-        form.addEventListener("input", () => { running++; dropCursor(); });
+        form.addEventListener("input", () => {
+            running++;
+            dropCursor();
+            status.textContent = "";
+            hint.hidden = results.children.length > 0 || !none.hidden;
+        });
         more.addEventListener("click", () => run(true));
     };
 

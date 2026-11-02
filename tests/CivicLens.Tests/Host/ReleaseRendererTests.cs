@@ -163,7 +163,7 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer("https://api.example.test", null).RenderSearchAsync(ReleaseWithFilters(), SearchFacets(), CancellationToken.None);
         var document = new HtmlParser().ParseDocument(html);
 
-        Assert.Equal("Type a topic or a bill number, or choose an official below.", document.QuerySelector("form [data-search-hint]")!.TextContent);
+        Assert.Equal("Type a topic or a bill number, or choose an official above.", document.QuerySelector("form [data-search-hint]")!.TextContent);
         Assert.True(document.QuerySelector("form [data-search-none]")!.HasAttribute("hidden"));
         Assert.Equal(2, document.QuerySelectorAll("form [data-search-none] a").Length);
         var noscriptStart = html.IndexOf("<noscript>", StringComparison.Ordinal);
