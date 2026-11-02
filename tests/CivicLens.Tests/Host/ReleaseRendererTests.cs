@@ -2534,7 +2534,7 @@ public sealed class ReleaseRendererTests
         foreach (var (name, _, html, section) in await RenderEveryPageTypeAsync())
         {
             var current = new HtmlParser().ParseDocument(html).QuerySelectorAll("nav[aria-label='Site'] [aria-current], nav[aria-label='Footer'] [aria-current]");
-            var linkText = section switch { "All records" => "Votes and bills", "Briefs" => "Weekly briefs", _ => section };
+            var linkText = section == "Briefs" ? "Weekly briefs" : section;
 
             Assert.True(section is null ? current.Length == 0 : current.Length == 1 && current[0].TextContent == linkText, name);
         }

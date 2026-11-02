@@ -21,7 +21,7 @@ public sealed class PublicFoundationTests
     {
         var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None));
 
-        Assert.Equal(["Officials", "Issues", "Votes and bills"], document.QuerySelectorAll("nav[aria-label='Site'] a").Select(link => link.TextContent));
+        Assert.Equal(["Officials", "Issues", "All records"], document.QuerySelectorAll("nav[aria-label='Site'] a").Select(link => link.TextContent));
         Assert.Equal(["Weekly briefs", "How the counts work", "Glossary", "About", "Report a problem"],
             document.QuerySelectorAll("nav[aria-label='Footer'] a").Select(link => link.TextContent));
         var form = document.QuerySelector("header form[role='search']")!;

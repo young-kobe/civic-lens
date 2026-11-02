@@ -20,21 +20,21 @@ internal static class PublicSections
 
     public static readonly IReadOnlyList<NavLink> Header =
     [
-        Nav(PublicSection.Officials, "Officials"),
-        Nav(PublicSection.Issues, "Issues"),
-        Nav(PublicSection.AllRecords, "Votes and bills")
+        Nav(PublicSection.Officials),
+        Nav(PublicSection.Issues),
+        Nav(PublicSection.AllRecords)
     ];
 
     public static readonly IReadOnlyList<NavLink> Footer =
     [
         Nav(PublicSection.Briefs, "Weekly briefs"),
         new(null, "How the counts work", PublicationProtocol.MethodPagePath),
-        Nav(PublicSection.Glossary, "Glossary"),
-        Nav(PublicSection.About, "About"),
+        Nav(PublicSection.Glossary),
+        Nav(PublicSection.About),
         new(null, "Report a problem", PublicationProtocol.ReportPagePath)
     ];
 
     public static Link Of(PublicSection section) => All.Single(link => link.Section == section);
 
-    private static NavLink Nav(PublicSection section, string text) => new(section, text, Of(section).Path);
+    private static NavLink Nav(PublicSection section, string? text = null) => new(section, text ?? Of(section).Label, Of(section).Path);
 }

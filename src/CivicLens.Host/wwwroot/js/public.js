@@ -294,7 +294,7 @@
             }
             const total = rows.length;
             const filtered = kind !== "" || issue !== null;
-            status.textContent = !filtered ? "" : `Showing ${shown.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} ${total === 1 ? "record" : "records"}`
+            status.textContent = !filtered ? "" : `${shown.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} ${total === 1 ? "record matches" : "records match"}`
                 + (shown === 0 ? `. No record matches both filters. Use ${clearButton.textContent} to see every record.` : "");
         };
         for (const count of counts) {
