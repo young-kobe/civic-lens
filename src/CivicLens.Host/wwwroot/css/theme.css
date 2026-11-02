@@ -155,6 +155,18 @@ body.public {
     }
 }
 
+@supports not (color: light-dark(#000000, #ffffff)) {
+    body.public {
+        color-scheme: light;
+        --del: #9e2b2b;
+        --del-bg: #fbeceb;
+        --ins: #1b6a43;
+        --ins-bg: #e3f2e8;
+        --warn: #7a4d00;
+        --warn-bg: #fcf0d9;
+    }
+}
+
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
         color-scheme: dark;

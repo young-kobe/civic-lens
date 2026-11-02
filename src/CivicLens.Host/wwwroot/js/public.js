@@ -230,8 +230,7 @@
         const noun = table.dataset.rowsNoun;
         const nav = document.createElement("nav");
         nav.className = "pager";
-        const caption = (table.caption?.textContent ?? "").replace(`. ${table.dataset.defaultOrder}.`, "");
-        nav.setAttribute("aria-label", caption === "" ? "Pages" : `Pages of ${caption}`);
+        nav.setAttribute("aria-label", `Pages of ${table.caption.textContent.replace(`. ${table.dataset.defaultOrder}.`, "")}`);
         table.tabIndex = -1;
         const summary = document.createElement("p");
         summary.setAttribute("role", "status");

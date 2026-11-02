@@ -108,7 +108,14 @@ public sealed class PublicFoundationTests
         var assets = new ReleaseRenderer(null, null).Assets;
 
         Assert.All(assets, asset => Assert.Matches("^[a-z0-9._-]{1,80}(/[a-z0-9._-]{1,80})*$", asset.RelativePath));
-        Assert.All(new[] { "assets/fonts/ofl-schibsted-grotesk.txt", "assets/fonts/ofl-newsreader.txt" }, path => Assert.Contains("SIL OPEN FONT LICENSE", System.Text.Encoding.UTF8.GetString(assets.Single(asset => asset.RelativePath == path).Content), StringComparison.Ordinal));
+        var licenseOf = new Dictionary<string, string>
+        {
+            ["assets/fonts/schibsted-grotesk.woff2"] = "assets/fonts/ofl-schibsted-grotesk.txt",
+            ["assets/fonts/newsreader.woff2"] = "assets/fonts/ofl-newsreader.txt"
+        };
+        var fonts = assets.Where(asset => asset.RelativePath.EndsWith(".woff2", StringComparison.Ordinal)).Select(asset => asset.RelativePath);
+        Assert.Equal(licenseOf.Keys.Order(StringComparer.Ordinal), fonts.Order(StringComparer.Ordinal));
+        Assert.All(licenseOf.Values, path => Assert.Contains("SIL OPEN FONT LICENSE", System.Text.Encoding.UTF8.GetString(assets.Single(asset => asset.RelativePath == path).Content), StringComparison.Ordinal));
     }
 
     [Fact]
@@ -116,12 +123,15 @@ public sealed class PublicFoundationTests
     {
         var theme = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "src", "CivicLens.Host", "wwwroot", "css", "theme.css"));
         var supports = theme[theme.IndexOf("@supports (color: light-dark", StringComparison.Ordinal)..];
-        supports = supports[..supports.IndexOf("@media", StringComparison.Ordinal)];
+        var noSupport = supports[supports.IndexOf("@supports not", StringComparison.Ordinal)..supports.IndexOf("@media", StringComparison.Ordinal)];
+        supports = supports[..supports.IndexOf("@supports not", StringComparison.Ordinal)];
         var fallback = Declarations(theme[theme.IndexOf("body.public {", StringComparison.Ordinal)..theme.IndexOf("@supports (color: light-dark", StringComparison.Ordinal)]);
         var publicTokens = fallback.Concat(Declarations(supports)).GroupBy(token => token.Key).ToDictionary(group => group.Key, group => group.Last().Value);
         var lightRoot = Declarations(theme[..theme.IndexOf("body.public {", StringComparison.Ordinal)]);
         var darkRoot = Declarations(theme[theme.IndexOf(":root[data-theme=\"dark\"] {", StringComparison.Ordinal)..]);
 
+        foreach (var name in new[] { "--ins", "--ins-bg", "--del", "--del-bg", "--warn", "--warn-bg" })
+            Assert.Equal(lightRoot[name], Declarations(noSupport)[name]);
         foreach (var (name, value) in publicTokens.Where(token => token.Value.StartsWith("light-dark", StringComparison.Ordinal)))
             Assert.Equal(Split(value)[0], fallback[name]);
 
