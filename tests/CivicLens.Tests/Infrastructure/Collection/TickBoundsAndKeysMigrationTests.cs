@@ -22,6 +22,7 @@ public sealed class TickBoundsAndKeysMigrationTests(PostgresCollection postgres)
          WHERE k.contype = 'f'
            AND (a.attname = 'retry_of_run_id'
              OR (c.relname = 'evidence_processing' AND a.attname IN ('extraction_id', 'comparison_id'))
+             OR (c.relname = 'statement_gate_labels' AND a.attname = 'extraction_id')
              OR (c.relname IN ('vote_drafts', 'action_drafts') AND a.attname = 'candidate_id'))
         """;
     private static readonly string[] EarlierChecks =
@@ -87,7 +88,7 @@ public sealed class TickBoundsAndKeysMigrationTests(PostgresCollection postgres)
         Assert.Equal(["ck_bill_gates_decided"], await ReadAsync("SELECT conname FROM pg_constraint WHERE conname = ANY (@names)", EarlierChecks));
         Assert.DoesNotContain(LastTick.ToString(), Assert.Single(await ReadAsync("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'ck_bill_gates_decided'")));
         Assert.Equal(75, (await ReadAsync(@"SELECT conname FROM pg_constraint WHERE conname LIKE 'ck\_%\_utc\_ticks'")).Count);
-        Assert.Equal(10, (await ReadAsync(NewKeys)).Count);
+        Assert.Equal(11, (await ReadAsync(NewKeys)).Count);
         Assert.Equal(["review"], await ReadAsync("SELECT loop FROM worker_heartbeat"));
     }
 
@@ -133,6 +134,7 @@ public sealed class TickBoundsAndKeysMigrationTests(PostgresCollection postgres)
 
     [Theory]
     [InlineData("evidence_processing", "extraction_id", "document_extractions")]
+    [InlineData("statement_gate_labels", "extraction_id", "document_extractions")]
     [InlineData("evidence_processing", "comparison_id", "document_comparisons")]
     [InlineData("vote_drafts", "candidate_id", "vote_candidates")]
     [InlineData("action_drafts", "candidate_id", "action_candidates")]

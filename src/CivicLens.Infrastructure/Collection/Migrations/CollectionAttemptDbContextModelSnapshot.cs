@@ -4708,6 +4708,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("LabelId");
 
+                    b.HasIndex("ExtractionId");
+
                     b.HasIndex("RunId")
                         .IsUnique();
 
@@ -6143,6 +6145,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementCandidateRow", null)
                         .WithMany()
                         .HasForeignKey("CandidateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ExtractionId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 

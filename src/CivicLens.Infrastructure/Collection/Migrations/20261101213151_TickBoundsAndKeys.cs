@@ -504,6 +504,19 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 table: "action_analysis",
                 sql: "reserved_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
+            migrationBuilder.CreateIndex(
+                name: "IX_statement_gate_labels_extraction_id",
+                table: "statement_gate_labels",
+                column: "extraction_id");
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_statement_gate_labels_document_extractions_extraction_id",
+                table: "statement_gate_labels",
+                column: "extraction_id",
+                principalTable: "document_extractions",
+                principalColumn: "extraction_id",
+                onDelete: ReferentialAction.Restrict);
+
             migrationBuilder.AddForeignKey(
                 name: "FK_action_analysis_action_analysis_runs_retry_of_run_id",
                 table: "action_analysis",
@@ -588,6 +601,14 @@ namespace CivicLens.Infrastructure.Collection.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropForeignKey(
+                name: "FK_statement_gate_labels_document_extractions_extraction_id",
+                table: "statement_gate_labels");
+
+            migrationBuilder.DropIndex(
+                name: "IX_statement_gate_labels_extraction_id",
+                table: "statement_gate_labels");
+
             migrationBuilder.DropForeignKey(
                 name: "FK_action_analysis_action_analysis_runs_retry_of_run_id",
                 table: "action_analysis");

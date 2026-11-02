@@ -56,6 +56,7 @@ The statements feature finds articles that may hold an official's statement and 
 
 Each line gives the rule, what enforces it, and the test that protects it. Cross-feature invariants are in [architecture](../architecture.md#invariants).
 
+- A gate label cites an extraction that exists. Enforced by `FK_statement_gate_labels_document_extractions_extraction_id`, which restricts deletes. `PostgresGateLabelStore.AddAsync` already requires the extraction of the candidate, and that candidate has its own key to `document_extractions`. Test: `TickBoundsAndKeysMigrationTests.AKeyedColumnRefusesAValueThatNoParentRowHoldsAndNeverDeletesAParentWithChildren`.
 - The event date of a statement is its statement date, or else the capture date of its candidate (`statement_candidates.created_at_utc_ticks`, as a UTC date). Enforced by `StatementDraftRevision.EventOn`. Test: `StatementDraftRevisionTests.TheEventDateIsTheStatementDateElseTheCaptureDate`.
 - A count equals the total of its list filter, so a draft with no revision needs action. Enforced by `PostgresStatementReviewStore.CountAsync` and `ReviewRecords.Drafts`. Test: `PostgresStatementReviewStoreTests.CountsUseTheSameStatusRuleAsTheListFiltersSoADraftWithoutARevisionNeedsAction`.
 - A statement candidate is the source plus the URL, and it never repeats. Enforced by the primary key of `statement_candidates`. Test: `PostgresStatementCandidateRegistrationTests.ConcurrentSavesForTheSameSourceAndUrlLeaveOneCandidate`.
