@@ -1199,7 +1199,7 @@ If `civic-lens-backup.service` fails, systemd starts `civic-lens-alert@civic-len
 
 The script writes a marker file in `/run/civic-lens` for each problem that it reported. While the marker exists, the script sends no more email for that problem. When the check passes, the script removes the marker, so the next failure sends a new email. A reboot clears `/run`, so a problem that lasts through a reboot sends one new email. If a send fails, the script writes no marker and tries again on the next tick. A failure of the check itself starts the failure alert for `civic-lens-health.service`.
 
-A worker beat can be up to 10 minutes old before it fails health, and the timer runs every 10 minutes. So a dead worker sends an email 10 to 20 minutes after it stops. Each documented worker stop, such as the withdraw test or a long rewrite, can send one email if it lasts that long. A deploy restarts the worker. `worker health` can report no heartbeat until every loop has started, so a deploy can send one health email that clears by itself. See [Managed collection jobs](#managed-collection-jobs) for the rules.
+A worker beat can be up to 10 minutes old before it fails health, and the timer runs every 10 minutes. So a dead worker sends an email 10 to 20 minutes after it stops. Each documented worker stop, such as the withdraw test or a long rewrite, can send one email if it lasts that long. A deploy or a reboot restarts the worker. `worker health` can report no heartbeat until every loop has started, so a deploy or a reboot can send one health email that clears by itself. See [Managed collection jobs](#managed-collection-jobs) for the rules.
 
 Install it after the failure alert works. The unit files link from the checkout:
 

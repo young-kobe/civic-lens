@@ -18,7 +18,7 @@ report() {
   if [[ -e $marker ]]; then
     return
   fi
-  if "$(dirname "${BASH_SOURCE[0]}")/send-alert.sh" "$subject" "$text"; then
+  if "$deploy_directory/scripts/send-alert.sh" "$subject" "$text"; then
     touch "$marker"
   else
     send_failed=yes
@@ -34,7 +34,12 @@ report disk "$disk_failed" "Civic Lens: disk space low" \
   "Free space under $CIVIC_LENS_ROOT is $free_gb GB. The limit is $min_free_gb GB."
 
 worker_failed=no
-timeout 120 "$(dirname "${BASH_SOURCE[0]}")/compose.sh" run --rm --no-deps -T cli worker health || worker_failed=yes
+worker_status=0
+timeout --kill-after=10 120 "${compose_command[@]}" run --rm --no-deps -T cli worker health || worker_status=$?
+if ((worker_status != 0)); then
+  worker_failed=yes
+  echo "worker health exit status $worker_status (124 means the 120 second limit)" >&2
+fi
 report worker "$worker_failed" "Civic Lens: worker unhealthy" \
   "The command worker health failed. Run civic-lens-ops worker health to read its line."
 
