@@ -1,6 +1,6 @@
 using System.Collections.Immutable;
-using CivicLens.Application.Actions;
 using System.Text.Json;
+using CivicLens.Application.Actions;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;

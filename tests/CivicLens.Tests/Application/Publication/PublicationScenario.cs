@@ -237,7 +237,7 @@ internal sealed class PublicationScenario
 
     // The sponsor cites the detail page and the cosponsor cites a second API page, so the record has two sources.
     public string AddAction(char id, ImmutableArray<ReviewDecision>? decisions = null, string sponsorId = "mayor",
-        string? policyAreaId = "housing-development", bool personText = false, bool cosponsorWithdrawn = true)
+        string? policyAreaId = "housing-development", bool personText = false, bool cosponsorWithdrawn = true, bool chairSponsors = false)
     {
         var recordId = new string(id, 64);
         var detail = Extraction(ActionDetail, $"action-detail-{id}", "https://api.congress.gov/v3/bill/119/hr/7");
@@ -249,7 +249,7 @@ internal sealed class PublicationScenario
             [
                 new(sponsorId, "M000001", ActionSponsorshipRole.Sponsor, false, new DateOnly(2026, 1, 3), null,
                     [DetailLine("Sponsor: M000001"), DetailLine("Introduced: 2026-01-03")]),
-                new("chair", "C000001", ActionSponsorshipRole.Cosponsor, true, new DateOnly(2026, 1, 5), cosponsorWithdrawn ? new DateOnly(2026, 1, 20) : null,
+                new("chair", "C000001", chairSponsors ? ActionSponsorshipRole.Sponsor : ActionSponsorshipRole.Cosponsor, true, new DateOnly(2026, 1, 5), cosponsorWithdrawn ? new DateOnly(2026, 1, 20) : null,
                     [new(cosponsors.ExtractionId, ActionCosponsors.IndexOf("Cosponsor", StringComparison.Ordinal),
                         ActionCosponsors.Length - ActionCosponsors.IndexOf("Cosponsor", StringComparison.Ordinal) - 1)])
             ], "A housing bill");
@@ -480,7 +480,8 @@ internal sealed class FakeRenderer : IReleaseRenderer
         return Task.FromResult($"<html>official {page.Profile.Id} {(page.IsTracked ? "tracked" : "untracked")} {(page.IsCurrent ? "current" : "past")} {page.Congress} congresses [{string.Join(',', page.Congresses)}] records [{string.Join(',', page.Records.Select(entry => entry.RecordId))}] votes [{string.Join(',', page.Votes.Select(vote => vote.RecordId))}]{StatusSuffix(page)}</html>");
     }
     private static string StatusSuffix(ReleaseOfficialPage page) =>
-        page.BillStatuses is { Count: > 0 } ? $" statuses [{string.Join(',', page.BillStatuses.Select(pair => $"{pair.Key[0]}:{pair.Value.Status.Text}"))}]" : "";
+        page.BillStatuses?.Where(pair => page.Records.Any(entry => entry.RecordId == pair.Key)).ToArray() is { Length: > 0 } shown
+            ? $" statuses [{string.Join(',', shown.Select(pair => $"{pair.Key[0]}:{pair.Value.Status.Text}"))}]" : "";
 
     public Task<string> RenderOfficialsAsync(IReadOnlyList<OfficialListing> officials, DateTimeOffset publishedAtUtc, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>officials {string.Join(',', officials.Select(official => $"{official.Profile.Id}:{official.RecordCount}"))}</html>");

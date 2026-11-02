@@ -83,10 +83,6 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
             .SelectMany(entry => entry.Officials.Select(official => official.Id));
     }
 
-    private static Dictionary<string, ActionBillStatus> StatusesOf(ImmutableArray<PublishedRecordEntry> entries,
-        IReadOnlyDictionary<string, ActionBillStatus> statuses) =>
-        entries.Where(entry => statuses.ContainsKey(entry.RecordId)).ToDictionary(entry => entry.RecordId, entry => statuses[entry.RecordId], StringComparer.Ordinal);
-
     private async Task LinkAsync(IReleaseStaging staging, string officialId, PreviousRelease previous, CancellationToken cancellationToken)
     {
         var files = await votes.ListAsync(previous, officialId, cancellationToken);
@@ -143,7 +139,7 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
         await WriteAsync(staging, PublicationProtocol.OfficialPagePath(profile.Id), await renderer.RenderOfficialAsync(
             new(profile, tracked, current, true, newestFirst, entries, currentRows, publishedAtUtc, talkAndAction,
                 current is { } newestCongress ? LinkedPair.In(profile.Id, newestCongress, entries, release, currentRows) : [],
-                StatusesOf(entries, statuses)), catalog, cancellationToken), cancellationToken);
+                statuses), catalog, cancellationToken), cancellationToken);
         return ReleaseOfficialSummaries.Of(profile.Id, current, talkAndAction);
     }
 

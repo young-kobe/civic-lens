@@ -31,6 +31,14 @@ public sealed class BillStatusMeaningTests
         Assert.Equal(expected, BillStatusMeaning.Plain(text, "hr"));
     }
 
+    [Theory]
+    [InlineData("Received in the Senate.", "hr", "Passed the House. Now in the Senate.")]
+    [InlineData("Received in the House.", "s", "Passed the Senate. Now in the House.")]
+    public void ThePlainFormNamesTheChamberFromTheBillType(string text, string billType, string expected)
+    {
+        Assert.Equal(expected, BillStatusMeaning.Plain(text, billType));
+    }
+
     [Fact]
     public void ASubcommitteeReferralNamesTheSubcommitteeAndIsNotReadAsACommitteeReferral()
     {

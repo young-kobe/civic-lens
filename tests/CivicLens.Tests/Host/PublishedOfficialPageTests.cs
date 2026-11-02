@@ -28,7 +28,7 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task ASponsoredBillRowShowsTheReadDateAndThePlainMeaningOfItsLatestActionSoNoReaderMeetsRawCongressText()
+    public async Task ASponsoredBillRowShowsTheReadDateAndThePlainMeaningOfItsLatestAction()
     {
         var bill = Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1));
         var page = Current([bill], []) with { BillStatuses = Statuses(bill, "Referred to the Committee on Armed Services.", "hr") };
@@ -37,6 +37,19 @@ public sealed class PublishedOfficialPageTests
 
         Assert.Equal("Latest official action (read from Congress.gov on 30 Jan 2026): In committee: sent to the Committee on Armed Services.",
             records.QuerySelector("tbody .muted.small")!.TextContent);
+    }
+
+    [Theory]
+    [InlineData("Received in the Senate.", "hr", "Passed the House. Now in the Senate.")]
+    [InlineData("Received in the House.", "s", "Passed the Senate. Now in the House.")]
+    public async Task AReceivedActionNamesTheChamberThatPassedTheBillFromTheBillTypeOfTheRowSoTheLineSaysWhereTheBillIs(string text, string billType, string meaning)
+    {
+        var bill = Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1));
+        var page = Current([bill], []) with { BillStatuses = Statuses(bill, text, billType) };
+
+        var records = await PanelAsync(page, "panel-records");
+
+        Assert.Equal($"Latest official action (read from Congress.gov on 30 Jan 2026): {meaning}", records.QuerySelector("tbody .muted.small")!.TextContent);
     }
 
     [Fact]
