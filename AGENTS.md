@@ -8,7 +8,7 @@ Entry points: src/CivicLens.Host/Program.cs and src/CivicLens.Collector/Program.
 
 ## Product and ownership
 
-Civic Lens collects evidence for statements/actions, document changes, and weekly briefs. Officials, issues, and supported sources are configuration, never per-person branches. Collection, review, and public serving all run in the cloud; the dev machine runs them only during development. Public serving reads published releases only.
+Civic Lens collects evidence for statements/actions, document changes, and weekly briefs. Officials, issues, and supported sources are configuration, never per-person branches. Collection, review, and public serving all run in the cloud; the dev machine runs them only during development. Public serving reads published data only: published releases today, and the `public_api` views when they exist.
 
 Keep these dependencies acyclic and exact (enforced by tests):
 
@@ -18,9 +18,9 @@ Keep these dependencies acyclic and exact (enforced by tests):
 - Infrastructure: Application (other dependencies only through an explicitly reviewed boundary change).
 - Host: Application, Infrastructure.
 - Collector: Collection.Contracts only. No database, AI, editorial, or publishing dependencies.
-- PublicApi: Publication.Contracts and Npgsql only. It reads published releases and its own search database, never operational storage.
+- PublicApi: Publication.Contracts and Npgsql only. It reads published releases and its own search database. The planned public read path reads only the `public_api` views, through a database role that can read nothing else. It never reads any other operational storage.
 
-Local CLI, review UI, and local MCP will call shared application handlers. Public MCP must live in a separate deployment and consume published contracts only. It must never reach operational storage, credentials, job handlers, or unpublished evidence.
+Local CLI, review UI, and local MCP will call shared application handlers. Public MCP must live in a separate deployment and consume published contracts only. It must never reach operational storage outside the `public_api` views, credentials, job handlers, or unpublished evidence.
 
 ## Implementation
 
