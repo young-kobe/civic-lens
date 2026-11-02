@@ -1,5 +1,5 @@
-using System.Collections.Concurrent;
 using System.Globalization;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using Npgsql;
 
@@ -52,6 +52,8 @@ public sealed class PublishingApprovalNotifyTests(PostgresCollection postgres) :
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
         await ExecuteAsync("""
+            ALTER TABLE action_drafts DROP CONSTRAINT "FK_action_drafts_action_candidates_candidate_id";
+            ALTER TABLE vote_drafts DROP CONSTRAINT "FK_vote_drafts_vote_candidates_candidate_id";
             ALTER TABLE document_change_drafts DROP CONSTRAINT "FK_document_change_drafts_document_comparisons_comparison_id";
             ALTER TABLE statement_drafts DROP CONSTRAINT "FK_statement_drafts_statement_candidates_candidate_id";
             """);
@@ -64,47 +66,112 @@ public sealed class PublishingApprovalNotifyTests(PostgresCollection postgres) :
     public async Task ApprovingARecordSendsTheGroupingDeadlineBecauseTheWorkerPublishesOnlyAfterTheGroupingWindow(string table)
     {
         await ExecuteAsync(Inserts[table]);
-        await using var listener = await ListenAsync();
+        await using var notifications = await PublishingNotifications.ListenAsync(connectionString);
 
         var before = TicksNow();
         await ExecuteAsync($"UPDATE {table} SET review_status = 'Approved'");
-        var payloads = await ReadPayloadsAsync(listener);
 
-        var deadline = long.Parse(Assert.Single(payloads), CultureInfo.InvariantCulture);
-        Assert.InRange(deadline, before + TimeSpan.FromSeconds(55).Ticks, TicksNow() + TimeSpan.FromSeconds(61).Ticks);
+        AssertGroupingDeadline(Assert.Single(await notifications.DrainAsync()), before);
     }
 
     [Theory]
     [MemberData(nameof(DraftTables))]
-    public async Task OnlyTheChangeToApprovedNotifiesBecauseOtherStatusChangesLeaveNothingToPublish(string table)
+    public async Task ANewRecordThatIsApprovedOnInsertSendsTheDeadlineBecauseCodeApprovesAFactRecordInItsFirstWrite(string table)
+    {
+        await using var notifications = await PublishingNotifications.ListenAsync(connectionString);
+
+        var before = TicksNow();
+        await ExecuteAsync(Inserts[table].Replace("'AwaitingReview'", "'Approved'"));
+
+        AssertGroupingDeadline(Assert.Single(await notifications.DrainAsync()), before);
+    }
+
+    [Theory]
+    [MemberData(nameof(DraftTables))]
+    public async Task ANewRevisionOfAnApprovedRecordSendsTheDeadlineBecauseTheStatusStaysApprovedWhenCodeApprovesIt(string table)
+    {
+        await ExecuteAsync(Inserts[table].Replace("'AwaitingReview'", "'Approved'"));
+        await using var notifications = await PublishingNotifications.ListenAsync(connectionString);
+
+        var before = TicksNow();
+        await ExecuteAsync($"UPDATE {table} SET current_revision_number = 2");
+
+        AssertGroupingDeadline(Assert.Single(await notifications.DrainAsync()), before);
+    }
+
+    [Theory]
+    [MemberData(nameof(DraftTables))]
+    public async Task OnlyAnApprovedRevisionOrStatusNotifiesBecauseOtherChangesLeaveNothingToPublish(string table)
     {
         await ExecuteAsync(Inserts[table]);
-        await using var listener = await ListenAsync();
+        await using var notifications = await PublishingNotifications.ListenAsync(connectionString);
 
         await ExecuteAsync($"UPDATE {table} SET review_status = 'ChangesRequested'");
         await ExecuteAsync($"UPDATE {table} SET review_status = 'AwaitingReviewWithConcerns', review_state_version = 1");
-        Assert.Empty(await ReadPayloadsAsync(listener));
+        await ExecuteAsync($"UPDATE {table} SET current_revision_number = 2");
+        Assert.Empty(await notifications.DrainAsync());
 
         await ExecuteAsync($"UPDATE {table} SET review_status = 'Approved'");
         await ExecuteAsync($"UPDATE {table} SET review_status = 'Approved', review_state_version = 2");
-        Assert.Single(await ReadPayloadsAsync(listener));
+        Assert.Single(await notifications.DrainAsync());
     }
 
-    private async Task<NpgsqlConnection> ListenAsync()
+    [Fact]
+    public async Task ALoneApprovalAfterAQuietPeriodPublishesAboutAMinuteLaterBecauseTheLastReleaseIsOld()
     {
-        var listener = new NpgsqlConnection(connectionString);
-        await listener.OpenAsync();
-        await using var command = new NpgsqlCommand("LISTEN civic_lens_publishing", listener);
-        await command.ExecuteNonQueryAsync();
-        return listener;
+        await ExecuteAsync(Inserts["action_drafts"]);
+        await InsertReleaseAsync(TimeSpan.FromHours(1));
+        await using var notifications = await PublishingNotifications.ListenAsync(connectionString);
+
+        var before = TicksNow();
+        await ExecuteAsync("UPDATE action_drafts SET review_status = 'Approved'");
+
+        AssertGroupingDeadline(Assert.Single(await notifications.DrainAsync()), before);
     }
 
-    private static async Task<List<string>> ReadPayloadsAsync(NpgsqlConnection listener)
+    [Fact]
+    public async Task ABurstAfterARecentReleaseWaitsUntilTenMinutesAfterThatReleaseBecausePublishesCostDisk()
     {
-        var payloads = new ConcurrentQueue<string>();
-        listener.Notification += (_, eventArgs) => payloads.Enqueue(eventArgs.Payload);
-        while (await listener.WaitAsync(500)) { }
-        return [.. payloads];
+        await ExecuteAsync(Inserts["action_drafts"]);
+        await ExecuteAsync(Inserts["vote_drafts"]);
+        var releaseTicks = await InsertReleaseAsync(TimeSpan.FromMinutes(1));
+        await using var notifications = await PublishingNotifications.ListenAsync(connectionString);
+
+        await ExecuteAsync("UPDATE action_drafts SET review_status = 'Approved'");
+        await ExecuteAsync("UPDATE vote_drafts SET review_status = 'Approved'");
+
+        var payloads = await notifications.DrainAsync();
+        Assert.Equal(2, payloads.Count);
+        Assert.All(payloads, payload => Assert.Equal(releaseTicks + TimeSpan.FromMinutes(10).Ticks, long.Parse(payload, CultureInfo.InvariantCulture)));
+    }
+
+    [Fact]
+    public async Task ARestartedWorkerStillSeesTheGapBecauseTheLastReleaseIsStoredInTheDatabase()
+    {
+        await ExecuteAsync(Inserts["action_drafts"]);
+        var releaseTicks = await InsertReleaseAsync(TimeSpan.FromMinutes(5));
+        await using (await PublishingNotifications.ListenAsync(connectionString)) { }
+        await using var restarted = await PublishingNotifications.ListenAsync(connectionString);
+
+        await ExecuteAsync("UPDATE action_drafts SET review_status = 'Approved'");
+
+        Assert.Equal(releaseTicks + TimeSpan.FromMinutes(10).Ticks, long.Parse(Assert.Single(await restarted.DrainAsync()), CultureInfo.InvariantCulture));
+    }
+
+    private async Task<long> InsertReleaseAsync(TimeSpan age)
+    {
+        var published = TicksNow() - age.Ticks;
+        await ExecuteAsync($"""
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+            VALUES (1, '000001-{ShortId}', 'owner', {published}, 1, true)
+            """);
+        return published;
+    }
+
+    private static void AssertGroupingDeadline(string payload, long before)
+    {
+        var deadline = long.Parse(payload, CultureInfo.InvariantCulture);
+        Assert.InRange(deadline, before + TimeSpan.FromSeconds(55).Ticks, TicksNow() + TimeSpan.FromSeconds(61).Ticks);
     }
 
     private static long TicksNow() => DateTime.UtcNow.Ticks;

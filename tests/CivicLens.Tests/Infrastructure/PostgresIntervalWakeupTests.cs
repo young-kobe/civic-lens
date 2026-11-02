@@ -30,14 +30,15 @@ public sealed class PostgresIntervalWakeupTests(PostgresCollection postgres) : I
         if (await SecondsToTheNextBoundaryAsync(TimeSpan.FromHours(1)) < SafeSecondsToTheBoundary) return;
         await using var wakeup = PostgresIntervalWakeup.FromConnectionString(connectionString, "civic_lens_burst_test", TimeSpan.FromHours(1));
         await wakeup.ConnectAsync(default);
-        foreach (var seconds in new[] { 1.5, 2.5, 3.5 })
-            await NotifyDeadlineAsync("civic_lens_burst_test", seconds);
         var stopwatch = Stopwatch.StartNew();
+        foreach (var seconds in new[] { 3.0, 6.0, 9.0 })
+            await NotifyDeadlineAsync("civic_lens_burst_test", seconds);
+        using var firstWake = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
-        await wakeup.WaitAsync(new CancellationTokenSource(TimeSpan.FromSeconds(10)).Token);
+        await wakeup.WaitAsync(firstWake.Token);
 
-        Assert.InRange(stopwatch.Elapsed, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2.5));
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        Assert.InRange(stopwatch.Elapsed, TimeSpan.FromSeconds(2.9), TimeSpan.FromSeconds(5.5));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(6));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => wakeup.WaitAsync(timeout.Token));
     }
 
