@@ -552,7 +552,7 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task ACodeApprovedStatementWithADateSaysCodeReadItBecauseAReaderMustKnowNoPersonConfirmedTheDate()
+    public async Task ACodeApprovedStatementWithADateSaysAModelFoundItAndCodeCheckedItBecauseAReaderMustKnowNoPersonConfirmedTheDate()
     {
         var statement = Statement() with { TextOrigin = PublishedTextOrigin.Model, ApprovedBy = PublishedApprover.Code };
 
@@ -561,7 +561,7 @@ public sealed class ReleaseRendererTests
         var document = new HtmlParser().ParseDocument(html);
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
             .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.ShownText());
-        Assert.Equal("1 May 2026. " + PublishedRecordLabels.CodeReadDate + ".", facts["Statement date"]);
+        Assert.Equal("1 May 2026. " + PublishedRecordLabels.ModelDateCheckedByCode + ".", facts["Statement date"]);
     }
 
     [Fact]
@@ -569,7 +569,7 @@ public sealed class ReleaseRendererTests
     {
         var html = await new ReleaseRenderer(null, null).RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None);
 
-        Assert.DoesNotContain(PublishedRecordLabels.CodeReadDate, html, StringComparison.Ordinal);
+        Assert.DoesNotContain(PublishedRecordLabels.ModelDateCheckedByCode, html, StringComparison.Ordinal);
     }
 
     [Fact]
