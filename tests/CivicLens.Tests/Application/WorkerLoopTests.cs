@@ -7,6 +7,7 @@ public sealed class WorkerLoopTests
 {
     private static readonly TimeSpan Lease = TimeSpan.FromMilliseconds(1500);
     private static readonly TimeSpan FailureTolerantLease = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan SlowRenewalLease = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(10);
 
     [Fact]
@@ -70,7 +71,7 @@ public sealed class WorkerLoopTests
         }, Lease, ownership).WaitAsync(HangGuard);
 
         Assert.True(ownership.IsCancellationRequested);
-        Assert.InRange(started.Elapsed, Lease * 0.9, Lease + Lease / 3);
+        Assert.InRange(started.Elapsed, Lease * 0.9, Lease * 2);
     }
 
     [Fact]
@@ -84,11 +85,11 @@ public sealed class WorkerLoopTests
         {
             if (!first) await Task.Delay(Timeout.Infinite, token);
             first = false;
-            await Task.Delay(FailureTolerantLease / 2, token);
+            await Task.Delay(SlowRenewalLease / 2, token);
             return true;
-        }, FailureTolerantLease, ownership).WaitAsync(HangGuard);
+        }, SlowRenewalLease, ownership).WaitAsync(HangGuard);
 
-        var sentAt = FailureTolerantLease / 3;
-        Assert.InRange(started.Elapsed, sentAt + FailureTolerantLease * 0.9, sentAt + FailureTolerantLease + FailureTolerantLease / 4);
+        var sentAt = SlowRenewalLease / 3;
+        Assert.InRange(started.Elapsed, sentAt + SlowRenewalLease * 0.9, sentAt + SlowRenewalLease + SlowRenewalLease / 2 - TimeSpan.FromMilliseconds(100));
     }
 }

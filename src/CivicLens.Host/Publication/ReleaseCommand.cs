@@ -16,7 +16,7 @@ public static class ReleaseCommand
 
     public static Task<int> ExecuteAsync(string[] args, PublishRelease publish,
         ListPublicationReleases list, ListBlockedPublished blocked, ActivatePublicationRelease activate, ReviewActor owner,
-        CancellationToken cancellationToken) =>
+        TextWriter output, TextWriter error, CancellationToken cancellationToken) =>
         OwnerCommand.RunAsync(async () =>
         {
             try
@@ -24,31 +24,31 @@ public static class ReleaseCommand
                 switch (args)
                 {
                     case ["releases", "publish", var key, .. var arguments]:
-                        CommandOutput.Write(await publish.ExecuteAsync(owner, ParsePublish(key, arguments), cancellationToken));
+                        CommandOutput.Write(output, await publish.ExecuteAsync(owner, ParsePublish(key, arguments), cancellationToken));
                         return 0;
                     case ["releases", "list"]:
-                        CommandOutput.Write(await list.ExecuteAsync(owner, DefaultListLimit, cancellationToken));
+                        CommandOutput.Write(output, await list.ExecuteAsync(owner, DefaultListLimit, cancellationToken));
                         return 0;
                     case ["releases", "list", var limitText] when TryParsePositive(limitText, out var limit):
-                        CommandOutput.Write(await list.ExecuteAsync(owner, limit, cancellationToken));
+                        CommandOutput.Write(output, await list.ExecuteAsync(owner, limit, cancellationToken));
                         return 0;
                     case ["releases", "blocked"]:
-                        CommandOutput.Write(await blocked.ExecuteAsync(owner, cancellationToken));
+                        CommandOutput.Write(output, await blocked.ExecuteAsync(owner, cancellationToken));
                         return 0;
                     case ["releases", "activate", var numberText] when TryParsePositive(numberText, out var number):
-                        CommandOutput.Write(await activate.ExecuteAsync(owner, number, cancellationToken));
+                        CommandOutput.Write(output, await activate.ExecuteAsync(owner, number, cancellationToken));
                         return 0;
                     default:
-                        Console.Error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, or releases activate <release-number>.");
+                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, or releases activate <release-number>.");
                         return 2;
                 }
             }
             catch (Exception exception) when (exception is PublicationConflictException or PublicationStateMismatchException or ReleaseRewriteException)
             {
-                Console.Error.WriteLine(exception.Message);
+                error.WriteLine(exception.Message);
                 return 1;
             }
-        });
+        }, error);
 
     private static PublishReleaseRequest ParsePublish(string key, string[] arguments)
     {
