@@ -83,10 +83,10 @@ public static class PublishedRecordLabels
     public static IEnumerable<Fact> StatementWording(PublishedStatement statement) =>
         statement.ApprovedBy == PublishedApprover.Code ? Wording(statement.TextOrigin, StatementModelWording) : [];
 
-    public const string CodeReadDate = "Date read from the release by code";
+    public const string ModelDateCheckedByCode = "Date found by an AI model and checked by code against the quote";
 
     public static string StatementDate(PublishedStatement statement, string date) =>
-        statement.ApprovedBy == PublishedApprover.Code && statement.StatementDateEvidence is not null ? $"{date}. {CodeReadDate}." : date;
+        statement.ApprovedBy == PublishedApprover.Code && statement.StatementDateEvidence is not null ? $"{date}. {ModelDateCheckedByCode}." : date;
 
     public const string PersonApproval = "Approved";
 
@@ -115,6 +115,10 @@ public static class PublishedRecordLabels
         PublishedRelationshipType.StatementAboutVote => "Statement about a vote",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Relationship type has no label.")
     };
+
+    public const string ReportRecordLink = "Report a problem with this record";
+
+    public const string ContactEmail = "contact@civic-lens.info";
 
     public const string Voteview = "Voteview, an academic database at UCLA";
 

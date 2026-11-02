@@ -80,7 +80,7 @@ else
 
         <div class="split">
             <Panel Label="Account" Padded="true">
-                <TabSet Label="Account views" Selected="@SelectedTab" Tabs="AccountTabs">
+                <TabSet Label="Account views" Selected="edit" Tabs="AccountTabs">
                     <TabPane Key="saved" Label="@($"Saved revision {revision.RevisionNumber}")">
                         <RecordView Id="saved-approval-target" Headline="@Headline" Summary="@revision.Summary"
                                     Significance="@revision.Significance" Limits="@revision.Limits" Facts="SavedFacts" />
@@ -113,6 +113,7 @@ else
                         {
                             <form id="draft-form" class="form" method="post" @formname="save" @onsubmit="SaveAsync"
                                   data-unsaved-form data-recovered-unsaved="@(hasUnsavedInput ? "true" : "false")">
+                                <NoImplicitSubmit />
                                 <AntiforgeryToken />
                                 <input type="hidden" name="expectedRevisionNumber" value="@revision.RevisionNumber" />
                                 <input type="hidden" name="idempotencyKey" value="@saveKey" />
@@ -130,7 +131,7 @@ else
                                 </Field>
                                 @if (HasUnconfirmedAiChangeDate)
                                 {
-                                    <Notice Tone="Tone.Warn" id="unconfirmed-change-date">Unverified change date. The AI drafter proposed it. Check it against its cited passage, then tick Date checked and save. A save without the tick removes the date. Approval stays blocked until a person saves.</Notice>
+                                    <Notice Tone="Tone.Warn" id="unconfirmed-change-date">Unverified change date. The AI drafter proposed it. Check it against its cited passage, then tick Date checked and press Save and approve. Save and approve without the tick is refused. Any other save without the tick removes the date.</Notice>
                                     <Chip Name="Input.ChangeDateChecked" Value="true" Text="Date checked" Checked="@(Input.ChangeDateChecked == true)" />
                                 }
                                 <div class="field-row">
@@ -187,10 +188,15 @@ else
                                         }
                                     </ul>
                                 </FieldSet>
-                                <div class="actions">
-                                    <Button Variant="ButtonVariant.Primary" Type="submit">Save revision @(revision.RevisionNumber + 1)</Button>
-                                    <span class="actions-hint">Approval applies only to saved wording.</span>
-                                </div>
+                                <SaveAndApproveFields ReviewStateVersion="review.ReviewStateVersion" RevisionNumber="revision.RevisionNumber" Concerns="concerns" View="TakeOffView" Approval="Approval">
+                                    <Checklist>
+                                        <ul class="checklist">
+                                            <li>Is this a substantive edit, not navigation churn or a processing difference?</li>
+                                            <li>Do the citations support every claim?</li>
+                                            <li>Are capture times kept apart from the edit date?</li>
+                                        </ul>
+                                    </Checklist>
+                                </SaveAndApproveFields>
                             </form>
                         }
                     </TabPane>
@@ -220,15 +226,7 @@ else
         </div>
 
         <ReviewDecisionPanel RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="status"
-                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" CorrectionNote="@Decision?.CorrectionNote" WithdrawnRevisionNumber="TakeOffView.Status.WithdrawnRevisionNumber" OnDecide="DecideAsync">
-            <Checklist>
-                <ul class="checklist">
-                    <li>Is this a substantive edit, not navigation churn or a processing difference?</li>
-                    <li>Do the citations support every claim?</li>
-                    <li>Are capture times kept apart from the edit date?</li>
-                </ul>
-            </Checklist>
-        </ReviewDecisionPanel>
+                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" WithdrawnRevisionNumber="TakeOffView.Status.WithdrawnRevisionNumber" CanApprove="false" OnDecide="DecideAsync" />
 
         <TakeOffSitePanel View="TakeOffView" RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion"
                           IdempotencyKey="@TakeOffFormKey" Note="@TakeOffNote" Refusal="@takeOffRefusal" OnSubmit="TakeOffSiteAsync" />

@@ -16,6 +16,13 @@ public sealed partial record BriefRevision(string RecordId, int RevisionNumber, 
 
     public ReviewAuthorKind AuthorKind => ReviewAuthor.KindOf(AuthorSubject);
 
+    public BriefRevision ComparableForm() => this with
+    {
+        Headline = ComparableText.Lines(Headline),
+        Paragraphs = [.. Paragraphs.Select(paragraph => new BriefParagraph(ComparableText.Lines(paragraph.Text),
+            ComparableText.Sorted(paragraph.CitationIds)))]
+    };
+
     public void ValidateShape()
     {
         ValidateIdentity();

@@ -2,15 +2,18 @@
 @using CivicLens.Publication.Contracts
 
 <PublicPage Section="Section" Title="@Headline" Description="@(string.IsNullOrWhiteSpace(Summary) ? Headline : Summary)" CanonicalPath="@PublicationProtocol.RecordPagePath(RecordId)" IsArticle="true" UsesRecordFont="true" RootPath="../" Crumbs="Crumbs">
+    @ReportLink
     <RecordView HeadingLevel="1" Headline="@Headline" Summary="@Summary" Significance="@Significance"
                 Limits="@Limits" Facts="Facts" />
     <PublishedCorrectionList Corrections="Corrections" />
     @ChildContent
     <Caveat>@Caveat</Caveat>
-    <p class="muted small"><a href="@("../" + PublicationProtocol.ReportPageLink(RecordId, RevisionNumber))">Report a problem with this record</a></p>
+    @ReportLink
 </PublicPage>
 
 @code {
+    private RenderFragment ReportLink => @<p class="muted small"><a href="@("../" + PublicationProtocol.ReportPageLink(RecordId, RevisionNumber))">@PublishedRecordLabels.ReportRecordLink</a></p>;
+
     private IReadOnlyList<Crumb> Crumbs => [PublicCrumbs.Home("../"), SectionCrumb, new(Headline)];
 
     private Crumb SectionCrumb => PublicCrumbs.Section(Section == PublicSection.Briefs ? PublicSection.Briefs : PublicSection.AllRecords, "../");

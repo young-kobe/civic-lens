@@ -51,6 +51,17 @@ public sealed record StatementDraftRevision(string CandidateId, int RevisionNumb
 
     public void RequireConfirmedDate() => AiProposedDate.RequireConfirmed(AuthorSubject, StatementDate, "statement date");
 
+    public StatementDraftRevision ComparableForm() => this with
+    {
+        Headline = ComparableText.Lines(Headline),
+        Summary = ComparableText.Lines(Summary),
+        SpeakerOfficialIds = ComparableText.Sorted(SpeakerOfficialIds),
+        IssueIds = ComparableText.Sorted(IssueIds),
+        PolicyAreaIds = ComparableText.Sorted(PolicyAreaIds),
+        Quotations = [.. Quotations.OrderBy(quotation => quotation.Span.ExtractionId, StringComparer.Ordinal)
+            .ThenBy(quotation => quotation.Span.Start).ThenBy(quotation => quotation.Span.Length)]
+    };
+
     public void ValidateShape()
     {
         if (!ReviewAuthor.IsValidRevisionHeader(RevisionNumber, AuthorSubject, CreatedAtUtc))

@@ -131,7 +131,7 @@ public sealed partial class DraftEditor
     private async Task<string?> TrySaveAsync()
     {
         if (review is null) return null;
-        var target = await RunCommandAsync(PersistDraftAsync, SaveFailures, ReloadAfterSaveConflictAsync);
+        var target = await RunCommandAsync(PersistDraftAsync, SaveMessages, ReloadAfterSaveConflictAsync);
         hasUnsavedInput = target is null;
         return target;
     }
@@ -140,7 +140,7 @@ public sealed partial class DraftEditor
     {
         if (comparison is null) throw new ArgumentException("The saved comparison is unavailable.");
         _ = await SaveDraft.ExecuteAsync(actor, BuildSaveRequest(Input ?? new DraftInput()), RequestAborted);
-        return DocumentRoutes.Editor(DraftId, "saved");
+        return DocumentRoutes.Editor(DraftId, SavedStatus);
     }
 
     private Task ReloadAfterSaveConflictAsync()
@@ -171,7 +171,8 @@ public sealed partial class DraftEditor
         }
         return new SaveDocumentChangeDraftRequest(DraftId, SaveExpectedRevision, input.Headline ?? "", input.Summary ?? "",
             EmptyToNull(input.Significance), EmptyToNull(input.Limits), input.Institution ?? "", changeDate, changeDateEvidence,
-            [.. input.OfficialIds ?? []], [.. input.IssueIds ?? []], citations, SaveKey ?? "", input.ChangeDateChecked == true);
+            [.. input.OfficialIds ?? []], [.. input.IssueIds ?? []], citations, SaveKey ?? "", input.ChangeDateChecked == true,
+            ApprovalOfSave());
     }
 
     private ImmutableArray<SourceSpan> ResolveCitations(string[]? keys)
